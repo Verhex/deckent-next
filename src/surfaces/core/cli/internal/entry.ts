@@ -31,7 +31,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
   inventory: runInventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
   inference: inferenceCommand, operation: operationCommand, decide: decisionCommand,
-  policy: (argv, context) => (argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' ? policyGrantsCommand : runKernelCommand)(argv, context),
+  policy: (argv, context) => (argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' ? policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
@@ -66,7 +66,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     context.initialize?.();
-    const interactive = (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
+    const terminalFlags = argv[0] === '--scope';
+    const interactive = terminalFlags || (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
     // identity check (config, init) or need no installation (policy vocabulary) declare it in the catalog and are not gated here.
     if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))

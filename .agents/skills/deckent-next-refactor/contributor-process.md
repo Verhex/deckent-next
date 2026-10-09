@@ -182,7 +182,7 @@ is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and
 are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
 safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
 The `pilot` scope and local source catalog are development fixtures, not an installed default.
-DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
+DOGFOOD is owner-approved (2026-10-09; see internal-contract.md). Changing MCP configuration requires reconnecting already-open clients.
 
 The process board (`node .agents/refactor/board.mjs show`) owns who holds what and the next step;
 [PLAN.md](../../../PLAN.md) owns admitted work. The board is host coordination data outside Git/npm,

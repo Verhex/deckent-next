@@ -14,6 +14,16 @@ const xterm = (index: number) => {
 };
 
 describe('terminal themes (T2 T-READABLE)', () => {
+  it('model blue and provider purple both reach 4.5:1 in truecolor and ansi256 on dark/light reference backgrounds', () => {
+    for (const theme of PALETTE_THEMES) for (const role of ['model', 'provider'] as const) {
+      const entry = THEME_PALETTES[theme][role];
+      for (const background of THEME_BACKGROUNDS[theme]) {
+        expect(contrast(entry.hex!, background)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(xterm(entry.ansi256!), background)).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(resolveWorklinePalette('none', theme)[role]).toEqual({});
+    }
+  });
   it('every truecolor text role reaches 4.5:1 and every border role 3:1 on each reference background of its theme', () => {
     const failures: string[] = [];
     for (const theme of PALETTE_THEMES) for (const [role, entry] of Object.entries(THEME_PALETTES[theme])) {

@@ -47,13 +47,13 @@ async function countPrepared(prepared: PreparedAnthropicRequest, options: Anthro
   } catch { return null; }
 }
 
-async function sendPrepared(prepared: PreparedAnthropicRequest, options: AnthropicMessagesNativeOptions, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink, onFinalUsage?: (usage: AnthropicUsage) => void) {
+async function sendPrepared(prepared: PreparedAnthropicRequest, options: AnthropicMessagesNativeOptions, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink, onFinalUsage?: (usage: AnthropicUsage) => void, onFinalUsageWithdrawn?: () => void) {
   try {
     const definition = { endpoint: prepared.definition.endpoint, authentication: prepared.definition.authentication,
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) };
     return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body, adapter, headers: VERSION_HEADERS },
       prepared.request.stream === true
-        ? { ...options, stream: createAnthropicMessagesStream(prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }, onFinalUsage), ...(onDelta ? { onDelta } : {}) }
+        ? { ...options, stream: createAnthropicMessagesStream(prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }, onFinalUsage, onFinalUsageWithdrawn), ...(onDelta ? { onDelta } : {}) }
         : { ...options, parseResponse: body => parseAnthropicMessageResponse(body, prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }) }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;
@@ -121,7 +121,7 @@ export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNa
     },
     async send(token: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult> {
       const prepared = read(token); tokens.delete(token as object);
-      const result = await sendPrepared(prepared, options, signal, onDelta, value => { const normalized = anthropicUsageForSpending(value); if (normalized) usage.set(token as object, normalized); });
+      const result = await sendPrepared(prepared, options, signal, onDelta, value => { const normalized = anthropicUsageForSpending(value); if (normalized) usage.set(token as object, normalized); }, () => usage.delete(token as object));
       if (!('kind' in result)) responses.set(token as object, modelInvocationResponseContentDescriptor(result).digest);
       return result;
     },

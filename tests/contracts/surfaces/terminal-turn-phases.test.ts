@@ -6,6 +6,10 @@ import { AssistantLive, fitStatusRow, footerText, openAssistantStream, reasoning
   type AssistantRenderLabels, type AssistantStreamStep, type FooterUnit } from '#surfaces/core/terminal-render/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
+// CONVO-PARSERS (A06-A08): `/reasoning off` needs the pinned model's reasoning-off capability (lane precedent: terminal-slash-session-windows).
+const reasoningModel = { ports: { model: { inspect: async () => ({ title: '', choices: [], notes: [], defaultBlocked: null }), reasoningOffSupported: async () => true } },
+  labels: terminalPanelLabels('en') };
 
 // TL-A (D1 + D5 + D6, owner 2026-09-27 night): the silent parts of a turn are visible (summarizing, the model preparing an answer),
 // a cancel says which part it stopped, a finished summary survives the cancel, and the reasoning text shows as a dim, sanitized preview.
@@ -200,7 +204,7 @@ describe('workline (D5 + D6)', () => {
       await settle(80);
       yield { kind: 'text' as const, text: `answer-${turn}` }; yield { kind: 'done' as const, finish: 'stop' as const };
     };
-    const view = mountWorkline({ streamTurn }); mounted.push(view);
+    const view = mountWorkline({ streamTurn, panels: reasoningModel }); mounted.push(view);
     await settle(20); view.stdin.write('one\r');
     await until(() => view.stdout.text.includes('answer-1'), 'first answer');
     expect(view.stdout.text).toContain('PREVIEW-1');
@@ -221,7 +225,7 @@ describe('workline (D5 + D6)', () => {
       asked.push(options?.reasoning ? { reasoning: options.reasoning } : null); await settle(120);
       yield { kind: 'text' as const, text: `answer-${asked.length}` }; yield { kind: 'done' as const, finish: 'stop' as const };
     };
-    const view = mountWorkline({ streamTurn }); mounted.push(view);
+    const view = mountWorkline({ streamTurn, panels: reasoningModel }); mounted.push(view);
     await settle(20); view.stdin.write('one\r'); await settle(30);
     view.stdin.write('/reasoning off\r'); await settle(10); view.stdin.write('two\r');
     await until(() => view.stdout.text.includes('answer-2'), 'queued turn answered');

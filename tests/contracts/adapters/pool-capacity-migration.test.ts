@@ -15,7 +15,7 @@ async function fixture() {
   db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('p', 'original-policy'); return { path, backups, db };
 }
 it('upgrades v46 through v47 with a backup, preserving all original pool bytes; readers never migrate and newer schemas refuse', async () => {
-  expect(PREVIOUS_LEDGER_VERSION).toBe(48); expect(CURRENT_LEDGER_VERSION).toBe(49); expect(POOL_CAPACITY_LEDGER_VERSION).toBe(47);
+  expect(PREVIOUS_LEDGER_VERSION).toBe(49); expect(CURRENT_LEDGER_VERSION).toBe(50); expect(POOL_CAPACITY_LEDGER_VERSION).toBe(47);
   const f = await fixture(); f.db.close(); expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgraded = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-03T09:00:00Z')); expect(upgraded).toMatchObject({ from: 46, to: CURRENT_LEDGER_VERSION });
   expect((await stat(upgraded!.backupPath)).isFile()).toBe(true);

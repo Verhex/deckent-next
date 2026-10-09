@@ -2,11 +2,10 @@
 // Single entry point for local and CI builds. No staging/quarantine machinery: dist is disposable.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
+import { stageBubblewrap } from './stage-bubblewrap.mjs';
 import { buildTypeScript } from './build-typescript.mjs';
 import { writeBuildIdentity } from './build-identity.mjs';
 
@@ -68,38 +67,6 @@ function buildNative() {
   return copied ? 'built' : 'absent';
 }
 
-/**
- * BWRAP-SELECT (lead 2026-09-29): the bundled bubblewrap is part of the normal build, so src-mode tests and dist run the same locked build
- * the package ships. `src/…/bundled/` (gitignored) must be exactly the locked build; when it is absent or stale it is staged from a
- * build-bwrap output that verifies against the lock — `DECKENT_BWRAP_BUILD=<dir>`, else the newest matching `.pack/bwrap/<dir>/`. A wrong
- * staged tree fails the build; no verifiable output at all is said loudly (the real-sandbox guard test then fails on a sandbox-capable
- * host instead of the bubblewrap tests silently skipping). build-dist still gates releases on its own `--bwrap` input.
- */
-function stageBubblewrap() {
-  const lock = JSON.parse(readFileSync(join(ROOT, 'packaging', 'bwrap', 'bwrap.lock.json'), 'utf8'));
-  const target = join(SRC, BUNDLED_DIR);
-  const verifies = dir => lock.shipArches.every(arch => { const file = join(dir, 'out', arch, 'bwrap'); return existsSync(file) && createHash('sha256').update(readFileSync(file)).digest('hex') === lock.outputs[arch].sha256; });
-  let state = 'present';
-  if (bundleProblems(target, lock).length) {
-    const packs = join(ROOT, '.pack', 'bwrap');
-    const candidates = process.env.DECKENT_BWRAP_BUILD ? [resolve(process.env.DECKENT_BWRAP_BUILD)]
-      : existsSync(packs) ? readdirSync(packs).map(name => join(packs, name)).filter(dir => existsSync(join(dir, 'out'))).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs) : [];
-    const source = candidates.find(verifies);
-    if (source) { stageBundle(source, target, lock); state = `staged from ${relative(ROOT, source) || source}`; }
-    else if (existsSync(target)) throw new Error(`${relative(ROOT, target)} is not the locked bubblewrap build (${bundleProblems(target, lock).join('; ')}) and no build-bwrap output verifies against the lock: `
-      + 'run `node scripts/build-bwrap.mjs` (Docker) or set DECKENT_BWRAP_BUILD=<build-bwrap output>');
-    else if (process.platform !== 'linux') return 'absent (not Linux)';
-    else {
-      process.stderr.write(['', '!'.repeat(100), `!! BUBBLEWRAP NOT STAGED: no locked bubblewrap ${lock.version} build (sha256 ${lock.shipArches.map(arch => lock.outputs[arch].sha256.slice(0, 12)).join(', ')}) found.`,
-        '!! dist has no bundled launcher: on a host whose system bwrap is older than 0.12 the bubblewrap realm is unusable, and the real-sandbox',
-        '!! guard test (tests/contracts/adapters/bwrap-real-sandbox-guard.test.ts) FAILS on a host with user namespaces. Fix: `node scripts/build-bwrap.mjs`',
-        '!! (Docker), or `DECKENT_BWRAP_BUILD=<build-bwrap output> npm run build`, or `node scripts/build-bwrap.mjs --stage-dev <output>`.', '!'.repeat(100), ''].join('\n'));
-      return 'ABSENT';
-    }
-  }
-  cpSync(target, join(DIST, BUNDLED_DIR), { recursive: true });
-  return state;
-}
 
 const started = performance.now();
 rmSync(DIST, { recursive: true, force: true });
@@ -110,6 +77,6 @@ for (const bin of BINS) {
   if (existsSync(path) && statSync(path).isFile()) chmodSync(path, 0o755);
 }
 const native = buildNative();
-const bundled = stageBubblewrap();
+const bundled = stageBubblewrap({ root: ROOT, run });
 const identity = writeBuildIdentity(ROOT, walk(SRC), DIST);
 process.stdout.write(`build ok: ${identity.sourceFileCount} source files, ${assets} assets, native=${native}, bubblewrap=${bundled}, ${Math.round(performance.now() - started)}ms\n`);

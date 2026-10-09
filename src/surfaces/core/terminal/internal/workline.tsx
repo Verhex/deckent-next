@@ -72,6 +72,7 @@ export interface WorklineProps {
   /** Window of the plain (non-streaming) path only; the agent path sends the whole conversation (T-L5, Astra 2091 R1). */
   readonly historyMessages: number;
   readonly model?: string;
+  readonly provider?: string;
   readonly completeTurn: WorklineCompleteTurn;
   readonly errorText: WorklineErrorText;
   readonly ledger?: WorklineLedgerPorts;
@@ -115,6 +116,8 @@ export interface WorklineProps {
   readonly panels?: WorklinePanels;
   /** SW-1: bare `/help`, `/status`, `/usage`, `/doctor`, `/scope`, `/context` open information windows (typed models; one summary line on close). Absent: text. */
   readonly info?: WorklineInfo;
+  /** Spend refusal recovery, through the host's governed account/management ports. */
+  readonly spending?: () => Promise<import('#surfaces/core/terminal-window/index.js').InfoView>;
   /** `/clear` erases the screen and the terminal's scrollback; false where escape sequences must not be sent (TERM=dumb, NO_COLOR — owner
    *  2026-10-08). A non-TTY output is never cleared. */
   readonly clearScreen?: boolean;
@@ -234,19 +237,22 @@ export function WorklineApp(props: WorklineProps) {
   // conversation's own pin, or none (the configured model) — never another conversation's.
   const [, setModelGeneration] = useState(0);
   const pinnedModels = useRef(new Map<string, ModelPanelReference>());
+  const pinnedLabels = useRef(new Map<string, { model: string; provider: string }>());
   // CACHE-SLICE1: a switch over a large context asks first (registry threshold); "new context" keeps the person's own instructions, never silently.
   const sessionModel = useMemo(() => ({ pinned: () => pinnedModels.current.get(sessionId()) ?? null,
     largeContext: () => { const tokens = sessionNow.current.measuredPrompt(); return tokens !== null && tokens >= MODEL_SWITCH.askFreshContextAtTokens ? tokens : null; },
     pin: (choice: ModelPanelChoice, fresh?: boolean) => {
-      if (fresh) { history.current = freshContextHistory(history.current); sessionNow.current.forgetContext(); }
-      pinnedModels.current.set(sessionId(), choice.reference); setModelGeneration(value => value + 1);
+      if (fresh) history.current = freshContextHistory(history.current);
+      sessionNow.current.forgetContext();
+      pinnedModels.current.set(sessionId(), choice.reference);
+      pinnedLabels.current.set(sessionId(), { model: choice.label, provider: choice.providerLabel ?? choice.group }); setModelGeneration(value => value + 1);
     } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
   const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
-    ...(props.streamTurn ? { sessionModel } : {}),
+    ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
 
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
@@ -287,12 +293,15 @@ export function WorklineApp(props: WorklineProps) {
         let state = opened.state, answer = '';
         setLive({ step: opened, lead: true }); setTurnRunning(true);
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
+        const turnIdentity = pinnedLabels.current.get(execution.input.context.sessionId)
+          ?? (props.model && props.provider ? { model: props.model, provider: props.provider } : undefined);
         // Forward the session and reasoning choices with the composition's generated binding callback.
         for await (const delta of props.streamTurn(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
           ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
-          session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId; usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, delta)); }
+          session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId;
+            usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, { ...delta, identity: turnIdentity })); }
           if (delta.kind === 'approval') {
             stream.approval(delta);
             if (delta.phase === 'settled' && delta.outcome === 'unsettled') work.noteUnsettled(delta.approvalId);
@@ -318,13 +327,19 @@ export function WorklineApp(props: WorklineProps) {
       }
     } catch (error) {
       history.current = messages;
-      push([notice('error', errorText(error))]); throw error;
+      push([notice('error', errorText(error))]);
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+      if (props.spending && props.info && !signal.aborted && (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN')) {
+        try { await infoWindow.show(await props.spending(), props.info.labels, signal); }
+        catch (failure) { push([notice('error', errorText(failure))]); }
+      }
+      throw error;
     } finally {
       setLive(null); setTurnRunning(false);
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work, panel]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
@@ -345,8 +360,13 @@ export function WorklineApp(props: WorklineProps) {
       if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
     }
     if (slash.command === 'reasoning') {
-      if (!rich) { reasoning.run(slash.args); return true; }
-      const choice = await windows.ask(reasoningSpec(rich, reasoning));
+      const offSupported = await props.panels?.ports.model?.reasoningOffSupported?.(sessionModel.pinned()).catch(() => false) ?? false;
+      if (!rich) {
+        const wantsOff = slash.args.trim().toLowerCase() === 'off' || (!slash.args.trim() && reasoning.current.current);
+        if (wantsOff && !offSupported) { push([notice('error', labels.reasoning?.unsupported ?? labels.ledgerUnavailable)]); return true; }
+        reasoning.run(slash.args); return true;
+      }
+      const choice = await windows.ask(reasoningSpec(rich, reasoning, offSupported));
       if (isReasoningChoice(choice)) reasoning.set(choice);
       return true;
     }
@@ -363,7 +383,7 @@ export function WorklineApp(props: WorklineProps) {
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, usage, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: liveWin, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable })) return true;
     // T4: `/provider` is a window only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
-    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
+    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || slash.command === 'policy' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
       try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }
@@ -492,7 +512,8 @@ export function WorklineApp(props: WorklineProps) {
       {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
       {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
       <Text {...palette.accent}>{labels.banner}</Text>
-      <StatusStrip target={target} model={pinnedModels.current.get(sessionId())?.modelId ?? props.model} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
+      <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
+        state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
         selfSource={props.selfSource} cancellable={turnRunning && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
       {/* T3 L4 (owner 2026-10-07): while the session holds full access one standing line above the composer says so (text and mark; colour is a hint). */}

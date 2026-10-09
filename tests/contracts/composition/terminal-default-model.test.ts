@@ -113,6 +113,10 @@ describe('terminal.defaultModel through the governed writer', () => {
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({}));
     clearConfigCache();
     expect(await describeTerminalChat(root, options)).toMatchObject({ status: 'ready', reference: ref('mine'), source: 'user-default', maxCompletionTokens: 64 });
+    // INS-04: selecting a default supplies chat limits even when neither layer authored terminal.chat.
+    await writeFile(globalPath, JSON.stringify({ terminal: { defaultModel: ref('mine') }, provider_catalog: catalog }));
+    clearConfigCache();
+    expect(await describeTerminalChat(root, options)).toMatchObject({ status: 'ready', reference: ref('mine'), source: 'user-default', maxCompletionTokens: 16384 });
   });
 });
 

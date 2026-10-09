@@ -63,6 +63,8 @@ export function layoutWindowRows(lines: readonly WindowLine[], width: number): R
 }
 
 export interface WindowProps {
+  /** A settings window may bound its width even on a wide terminal. */
+  readonly maxColumns?: number;
   /** Observation frames register no input owner; the composer keeps the keyboard. */
   readonly interactive?: boolean;
   readonly title: readonly Span[];
@@ -88,9 +90,9 @@ export interface WindowProps {
  * A bounded modal window in the live area (owner 2026-10-07): frame, title left and status right, a body capped to the terminal's rows
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
-export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true }: WindowProps) {
+export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
-  const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
+  const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
@@ -123,7 +125,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const titleRoom = Math.max(1, width - (statusText ? cells(statusText) + 1 : 0));
   const titleText = plainText(title), titleFits = cells(titleText) <= titleRoom;
   return (
-    <Box flexDirection="column" borderStyle={glyphs.ascii ? 'classic' : 'round'} {...(palette.windowBorder.color ? { borderColor: palette.windowBorder.color } : {})} paddingX={1} flexShrink={0}>
+    <Box flexDirection="column" {...(maxColumns === undefined ? {} : { width: columns })} borderStyle={glyphs.ascii ? 'classic' : 'round'} {...(palette.windowBorder.color ? { borderColor: palette.windowBorder.color } : {})} paddingX={1} flexShrink={0}>
       <Box flexDirection="row" justifyContent="space-between">
         <Text {...(focused ? palette.windowTitle : palette.muted)} wrap="truncate">{titleFits ? <SpanText spans={title} /> : truncateEnd(titleText, titleRoom, glyphs.ellipsis)}</Text>
         {statusText ? <Text {...palette.muted} wrap="truncate">{statusText}</Text> : null}

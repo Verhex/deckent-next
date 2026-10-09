@@ -5,6 +5,11 @@ description: Guide owner-admitted Deckent Next development, fixes, refactoring, 
 
 # Deckent Next development workflow
 
+Before following this workflow or acting on an internal Next card, read
+[internal-contract.md](internal-contract.md) in full. It retains the complete internal
+operating contract moved from the root guidance. If it is missing or unreadable,
+stop internal work and report the missing contract. Reuse the read only while it is unchanged.
+
 ## Purpose and authority
 
 This is the shared development entry point for Codex, Claude and Cursor. Its retained name
@@ -63,8 +68,11 @@ historical proof and current verification.
   it selects the Next execution/configuration roots. Reading this instruction does not admit a run.
 - Preserve concurrent edits, worktrees, identity stores, keyrings, audit keys and retained effects.
   Historical MASTER, DIRECTIVES, runtime receipts or fixed session/model identities admit no new work.
-- Follow the current owner-admitted dogfood scope in PLAN and live instructions. Continuous DOGFOOD
-  remains OFF without explicit admission; a bounded trial or historical receipt grants no broader access.
+- Follow the current owner-admitted dogfood scope in PLAN and live instructions. DOGFOOD is owner-approved
+  (2026-10-09): it opens at the first possible moment, then 4–8 workers run continuously (Codex → Cursor →
+  Sonnet 5.5 → Haiku 5.5; at 92% of a 5h subscription window wait for the reset). The lead lands after Astra PASS
+  and runs N1/live switches itself (verified backup → health check → rollback on failure); steps that need a human stay
+  with the owner. A historical receipt grants no broader access.
 - Evaluate work against the north star and current architecture: customer-installed, secure standalone
   Core; separately distributed proprietary Enterprise; reusable ERP/Enterprise contracts; one typed
   application contract and transition owner; pure domain and explicit ports/composition.

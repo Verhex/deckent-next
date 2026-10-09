@@ -182,9 +182,9 @@ describe('/provider port: connect a model (T4-B)', () => {
     expect(kinds.map(kind => [kind.id, kind.models, kind.modelBlocked])).toEqual([
       ['openai-api', [{ id: 'seed:gpt-6-luna', label: 'GPT-6 Luna', detail: 'gpt-6-luna' },
         { id: 'seed:gpt-6-astra', label: 'GPT-6 Astra', detail: 'gpt-6-astra', blocked: 'Price not verified — paid calls are refused.' }], 'Store its key first (Connect).'],
-      // The generic row lists only declared models speaking its family (never the Anthropic one); owner 2026-10-08: it waits for a verified price.
+      // Without a discovery host this fixture uses declared models in the same protocol family; the adapter gates pricing after address selection.
       ['openai-compatible', [{ id: 'ref:vendor-a@1/a@1', label: 'a', detail: 'vendor-a@1/a@1' }],
-        'A remote address needs a verified price first; declaring one here is not available yet (paid calls are refused).']]);
+        null]]);
     // The model list locks the unpriced row with the same words (picker `blocked`).
     expect(providerModelTree(kinds[0]!, { modelTitle: '{kind}' } as never).items.map(item => [item.id, 'blocked' in item ? item.blocked : null])).toEqual([
       ['seed:gpt-6-luna', null], ['seed:gpt-6-astra', { reason: 'Price not verified — paid calls are refused.' }]]);
@@ -197,6 +197,25 @@ describe('/provider port: connect a model (T4-B)', () => {
     port = providerPanelPort(root, 'scope', { ...store.host, ...extra, providerConnect: connect }, options, 'en', errorText);
     await port.connect({ kind: 'openai-compatible', endpoint: 'https://llm.example.com', key: CANARY });
     expect(store.sets).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_OAICOMPAT_LLM_EXAMPLE_COM', value: CANARY }]);
+  });
+
+  it('offers seedless discovery after the chosen address, preserves exact ids and locks only unpriced models in EN/TR', async () => {
+    const { root, options } = await project({});
+    const { connect, extra } = host([]), seen: unknown[] = [];
+    connect.discoverModels = async (_root, scope, kind, endpoint) => {
+      seen.push({ scope, kind, endpoint });
+      return [{ nativeId: 'Org/Model:Q4_K_M', displayName: 'Org/Model:Q4_K_M', priced: true }, { nativeId: 'unpriced', displayName: 'unpriced', priced: false }];
+    };
+    for (const locale of ['en', 'tr'] as const) {
+      const port = providerPanelPort(root, 'scope', { ...secrets([]).host, ...extra, providerConnect: connect }, options, locale, errorText);
+      const kind = (await port.inspect()).kinds.find(kind => kind.id === 'openai-compatible')!;
+      expect(kind.discoversModels).toBe(true); expect(kind.modelBlocked).toBeNull();
+      const rows = await port.listModels!('openai-compatible', 'http://localhost:9000/v1');
+      expect(rows[0]).toEqual({ id: 'seed:Org/Model:Q4_K_M', label: 'Org/Model:Q4_K_M', detail: 'Org/Model:Q4_K_M' });
+      expect(rows[1]!.blocked).toContain(locale === 'en' ? 'verified published price' : 'doğrulanmış yayımlanmış fiyat');
+      expect(rows[1]!.blocked).toContain(locale === 'en' ? 'loopback' : 'yerel sunucu');
+    }
+    expect(seen).toEqual(Array(2).fill({ scope: 'scope', kind: 'openai-compatible', endpoint: 'http://localhost:9000/v1' }));
   });
 
   it('connects through models.connect: rows and one summary; a pending approval keeps its command id for the retry; never a key value', async () => {
@@ -240,7 +259,7 @@ describe('/model source', () => {
     const host: Parameters<typeof modelPanelSource>[2] = {
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
       inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed',
-        activation: active.has(query.reference.modelId) ? { state: 'active', revision: 1 } : query.reference.modelId === 'coder' ? { state: 'inactive', revision: 3 } : null }) as never,
+        activation: active.has(query.reference.modelId) ? { state: 'active', revision: 1, catalogRevision: 'catalog-1', binding: { digest: 'd'.repeat(64) } } : query.reference.modelId === 'coder' ? { state: 'inactive', revision: 3 } : null }) as never,
       inspectModelBinding: async (_root, query) => ({ schemaVersion: 1, reference: query, availability: 'not-observed', status: 'declared', catalogRevision: 'catalog-1',
         definition: {}, binding: { encodingVersion: 1, algorithm: 'sha256', digest: 'd'.repeat(64) } }) as never,
       describeTerminalChatPlan: async () => ({ schemaVersion: 1, status: 'ready', reference: ref('chat'), catalogRevision: 'catalog-1', maxCompletionTokens: 1, historyMessages: 1 }),
@@ -316,7 +335,7 @@ describe('/model source', () => {
     const { root, options } = await project({ provider_spending: null, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile(ref('chat'), null)] } });
     const view = await modelPanelSource(root, 'scope', {
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
-      inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1 } }) as never,
+      inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1, catalogRevision: 'catalog-1', binding: { digest: 'd'.repeat(64) } } }) as never,
     }, options, 'en').inspect();
     expect(view.choices.every(choice => choice.blocked === 'No spending budget for this scope (PROVIDER_SPEND_UNAVAILABLE): Create budget first.')).toBe(true);
     // Stage 1: the next step is the window's own "Create budget" row, or the governed CLI command (never hand-written JSON).
@@ -328,7 +347,8 @@ describe('/model source', () => {
     const inspectProviderSpendAccount = async (_root: string, query: unknown) => { expect(query).toEqual({ schemaVersion: 1, scopeId: 'scope', current: true });
       return { checkpoint: { account: {} } } as never; };
     const opened = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
-      inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1 } }) as never,
+      inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1, catalogRevision: 'catalog-1', binding: { digest: 'd'.repeat(64) } } }) as never,
+      inspectModelBinding: async () => ({ status: 'declared', catalogRevision: 'catalog-1', binding: { digest: 'd'.repeat(64) } }) as never,
       inspectProviderSpendAccount }, options, 'en').inspect();
     // The connected model is ready; the others keep their own (non-budget) reasons.
     expect(opened.choices.find(choice => choice.reference.modelId === 'chat')!.blocked).toBeNull();

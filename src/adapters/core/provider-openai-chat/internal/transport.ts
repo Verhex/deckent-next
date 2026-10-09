@@ -1,19 +1,24 @@
 import { z } from 'zod';
+import { responseDialect, finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
 import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_DEFAULT_DIALECT, isOpenAiChatHttpAdapter, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
-  openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
+  openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
   type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
 import { createOpenAiChatStream } from './stream.js';
 import { checkedToolCalls } from './tool-calls.js';
+import { responsesBody, rememberResponsesOutput } from './responses-body.js';
+import { parseResponsesResponse } from './responses-response.js';
+import { createResponsesStream } from './responses-stream.js';
 
-/** The adapter identity recorded in the evidence: the version of the profile that was served (a v5 definition carries its dialect, a v4 one none). */
-const adapterOf = (definition: OpenAiChatHttpDefinition) => ({ id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: definition.dialect ? OPENAI_CHAT_HTTP_ADAPTER_VERSION : 4 });
+/** Evidence names the served profile version: v4 default chat, v5 chat dialect, v6 Responses dialect. */
+const adapterOf = (definition: OpenAiChatHttpDefinition) => ({ id: OPENAI_CHAT_HTTP_ADAPTER_ID,
+  version: definition.dialect?.protocol === 'responses' ? 6 : definition.dialect ? OPENAI_CHAT_HTTP_ADAPTER_VERSION : 4 });
 export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDefinition; limits: OpenAiChatHttpLimits;
-  request: OpenAiChatTextRequest; body: string }>;
+  request: OpenAiChatTextRequest; body: string; scopeId?: string; reasoningInputTokensUpperBound?: number }>;
 interface ProviderRequestFields {
   readonly provider: JsonObject;
   readonly modalities: readonly ['text'];
@@ -32,10 +37,10 @@ export interface OpenAiChatNativePortOptions {
    * prefix-cache-salt: without it, or when it fails, nothing is sent (fail closed, never a derivable salt). */
   readonly cacheSalt?: (scopeId: string) => Promise<string>;
 }
-const finishReason = openAiChatFinishReasonSchema, usageSchema = openAiChatUsageSchema;
+const finishReason = z.string(), usageSchema = openAiChatUsageSchema;
 const messageSchema = z.object({ role: z.literal('assistant'), content: z.string().nullable(), refusal: z.string().nullable().optional() }).passthrough();
 const choiceSchema = z.object({ index: z.literal(0), finish_reason: finishReason, message: messageSchema }).passthrough();
-const responseSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion'), created: z.number().int().nonnegative().safe(),
+const responseSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion').optional(), created: z.number().int().nonnegative().safe(),
   model: z.string().min(1), choices: z.array(choiceSchema).length(1), usage: z.unknown().optional() }).passthrough();
 
 /** Largest `/tokenize` answer read (the server lists every token id: ~7 bytes each, so a 131k-token prompt is about 1 MiB). */
@@ -86,13 +91,17 @@ async function secretCacheSalt(options: OpenAiChatNativePortOptions, scopeId: st
 
 /** Pure preparation: it has no network, credential, or profile-resolution effect. */
 export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInput: unknown, nativeRequestInput: unknown, cacheSalt?: string,
-  providerFields?: ProviderRequestFields): PreparedOpenAiChatRequest {
+  providerFields?: ProviderRequestFields, scopeId?: string): PreparedOpenAiChatRequest {
   const definition = parseOpenAiChatHttpDefinition(definitionInput), limits = parseOpenAiChatHttpLimits(limitsInput);
   const nativeRequest = parseOpenAiChatTextRequest(nativeRequestInput, definition);
   const streamed = nativeRequest.stream === true, dialect = definition.dialect ?? OPENAI_CHAT_DEFAULT_DIALECT;
   // K1 (v5): the provider's documented dialect shapes the wire; the admitted request (and its digest) is the same for every provider.
   if (nativeRequest.tool_choice && !dialect.toolChoice.includes(nativeRequest.tool_choice)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
-  const body = JSON.stringify({ model: nativeRequest.model, messages: nativeRequest.messages,
+  const responses = dialect.protocol === 'responses';
+  if (!responses && (nativeRequest.reasoning_effort !== undefined || nativeRequest.service_tier !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+  if (responses && (cacheSalt !== undefined || providerFields !== undefined || definition.tokenizeEndpoint !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+  const encoded = responses ? responsesBody(definition, nativeRequest, scopeId) : null;
+  const body = JSON.stringify(encoded ? encoded.body : { model: nativeRequest.model, messages: nativeRequest.messages,
     [dialect.tokenLimitField]: nativeRequest.max_completion_tokens, stream: streamed,
     ...(streamed && dialect.streamUsage === 'include' ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
     ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}),
@@ -100,7 +109,8 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
     ...(cacheSalt ? { cache_salt: cacheSalt } : {}), ...(providerFields ?? {}) });
   if ((definition.tariff.kind === 'openrouter-endpoint') !== (providerFields !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
-  return Object.freeze({ definition, limits, request: nativeRequest, body });
+  return Object.freeze({ definition, limits, request: nativeRequest, body, ...(scopeId ? { scopeId } : {}),
+    ...(encoded ? { reasoningInputTokensUpperBound: encoded.reasoningInputTokensUpperBound } : {}) });
 }
 
 function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { response: OpenAiChatHttpResponse } | { reason: 'invalid-response' | 'model-mismatch' | 'response-limit' } {
@@ -113,7 +123,9 @@ function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { res
   if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > prepared.limits.responseMaxBytes) {
     return { reason: 'response-limit' };
   }
-  const choice = parsed.data.choices[0]!;
+  const choice = parsed.data.choices[0]!, dialect = responseDialect(prepared.definition);
+  if ((!parsed.data.object && dialect.responseObject !== 'optional') || !finishReasonAccepted(choice.finish_reason, dialect)
+    || (choice.message['reasoning_details'] != null && !reasoningDetailsSchema.safeParse(choice.message['reasoning_details']).success)) return { reason: 'invalid-response' };
   // Servers such as vLLM always send these keys, as null, when there is none. The legacy function_call is never accepted;
   // tool_calls only when the request declared tools, and only for declared names (T-L2).
   if ((choice.message['function_call'] ?? null) !== null) return { reason: 'invalid-response' };
@@ -134,12 +146,31 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) };
     // Only the transport's own options cross into it (the salt port is a preparation input, not a transport option).
     const transport = options.resolveCredential ? { resolveCredential: options.resolveCredential } : {};
+    const remember = (output: readonly Record<string, unknown>[], message: unknown) => {
+      if (prepared.scopeId) rememberResponsesOutput(prepared.scopeId, prepared.definition, prepared.request, output, message);
+    };
+    if (prepared.definition.dialect?.protocol === 'responses') {
+      return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body, adapter: adapterOf(prepared.definition) },
+        prepared.request.stream === true ? { ...transport, stream: createResponsesStream(prepared.request, prepared.limits,
+          (usage, tier) => options.onFinalUsage?.(prepared, usage, tier), () => options.onFinalUsageWithdrawn?.(prepared), remember),
+          ...(onDelta ? { onDelta } : {}) } : { ...transport, parseResponse: body => {
+            let raw: unknown;
+            try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)); } catch { return { reason: 'invalid-response' }; }
+            const result = parseResponsesResponse(raw, prepared.request, prepared.limits);
+            if ('response' in result) {
+              const value = raw as { output: Record<string, unknown>[] };
+              remember(value.output, (result.response.native['choices'] as unknown as { message: unknown }[])[0]?.message);
+              options.onResponse?.(prepared, body, result.response);
+            }
+            return result;
+          } }, signal);
+    }
     return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body,
       adapter: adapterOf(prepared.definition) },
     // A streamed request is parsed incrementally whether or not a caller observes its deltas.
     prepared.request.stream === true
       ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, (usage, serviceTier, frame) => options.onFinalUsage?.(prepared, usage, serviceTier, frame),
-        () => options.onFinalUsageWithdrawn?.(prepared), prepared.definition.dialect), ...(onDelta ? { onDelta } : {}) }
+        () => options.onFinalUsageWithdrawn?.(prepared), responseDialect(prepared.definition)), ...(onDelta ? { onDelta } : {}) }
       : { ...transport, parseResponse: body => { const result = parseResponse(body, prepared);
         if ('response' in result) options.onResponse?.(prepared, body, result.response); return result; } }, signal);
   } catch (error) {
@@ -178,7 +209,8 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
       catch { throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID'); }
       const adapterDefinition = parseOpenAiChatHttpDefinition(parsedProfile.data.adapter.definition);
       // v5 carries its dialect; v4 never does (its wire is the OpenAI one, unchanged).
-      if ((parsedProfile.data.adapter.version === OPENAI_CHAT_HTTP_ADAPTER_VERSION) !== (adapterDefinition.dialect !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
+      if ((parsedProfile.data.adapter.version === 4) !== (adapterDefinition.dialect === undefined)
+        || (parsedProfile.data.adapter.version === 6) !== (adapterDefinition.dialect?.protocol === 'responses')) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
       const request = parseOpenAiChatTextRequest(nativeRequest, adapterDefinition);
       if (request.model !== binding.model.nativeId) throw new OpenAiChatHttpError('OPENAI_CHAT_MODEL_MISMATCH');
       const declares = (id: string) => binding.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
@@ -188,7 +220,7 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
         || (request.chat_template_kwargs && !declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request,
         declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? await secretCacheSalt(options, parsedProfile.data.scopeId) : undefined,
-        options.providerRequestFields?.(adapterDefinition, request));
+        options.providerRequestFields?.(adapterDefinition, request), parsedProfile.data.scopeId);
       preparedTokens.add(prepared);
       // A counter is used only for a model whose binding declares it (catalog data) and a profile that names its endpoint.
       if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(prepared);

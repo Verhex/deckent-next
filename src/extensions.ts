@@ -2,9 +2,11 @@
 // Core without editing it. Registration is open until the composition root seals the registries at the first composed entry (any SDK call,
 // a CLI command, the runtime service); afterwards it is the typed `RegistryError('REGISTRY_SEALED')`. Registration grants nothing: the
 // installation's configuration selects targets and backends, and policy decides every operation. The SDK entry (`deckent`) exports no
-// registration function of these registries (lint-arch G-i). Inventory: tests/contracts/composition/extensions-public-exports.test.ts.
+// registration function of these registries (lint-arch G-i). Inventory: tests/contracts/composition/extensions-entry.test.ts.
 export { registerOperationAdapterModule, registerSecretStoreBackend } from '#adapters/index.js';
 export { CORE_API_VERSION, RegistryError } from '#domain/index.js';
+export { registerMcpCapabilityGroup } from '#engine/index.js';
+export type { McpCapabilityGroup } from '#domain/index.js';
 export type { AdapterModuleManifest, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 export { EffectTargetError, SECRET_STORE_ID_PATTERN } from '#engine/index.js';
 export type { AdapterModuleRegistration, TargetAdapterFactory, TargetAdapterOptions, EffectTarget, EffectApplyRequest, SecretStore, SecretStoreContext,

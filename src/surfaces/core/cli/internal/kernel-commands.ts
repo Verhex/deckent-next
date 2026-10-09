@@ -56,6 +56,8 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;
   upgradePolicyTemplate?: import('./policy-grants.js').PolicyUpgradeHandler;
+  mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
+  inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/doctor/index.js').InstallationStartabilityView>;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
@@ -162,10 +164,12 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const installationBinding = context.inspectInstallationBinding ? await context.inspectInstallationBinding(root, options) : null;
   const recoveryFiles = context.inspectRecoveryFiles ? await context.inspectRecoveryFiles(root, options).catch(() => null) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
+  const startability = context.inspectInstallationStartability ? await context.inspectInstallationStartability(root, { ...options, env: { ...env, DECKENT_LANGUAGE: locale } }) : null;
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, startability, status: startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
+  if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
 }

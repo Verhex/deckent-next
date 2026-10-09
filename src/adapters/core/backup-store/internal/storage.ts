@@ -2,7 +2,7 @@ import { lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
-import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
+import { acquireLedgerLock, runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
 import { ConfigValidationError, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
@@ -88,7 +88,7 @@ export class FileBackupStorage implements BackupStoragePort {
     // S1 D2: every existing directory this restore writes into is checked before staging, custody or any write.
     for (const directory of new Set([dirname(hold), ...paths.map(path => dirname(path)), productResourcePath(layout, 'approvals'), ...(exists ? [] : [dirname(target)])]))
       await ownerOnlyWritable(directory);
-    const socket = productResourcePath(layout, 'runtimeSocket');
+    const socket = runtimeSocketLocation(layout);
     if (await lstat(socket).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SERVICE_RUNNING');
     if (!exists) { await privateDirectory(dirname(target)); await mkdir(target, { mode: 0o700 }); }
     await privateDirectory(dirname(productResourcePath(layout, 'ledger')));

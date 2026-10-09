@@ -1,3 +1,4 @@
+export interface InstallationStartabilityView { readonly status: 'ready' | 'blocked'; readonly endpoint: string | null; readonly checks: readonly { readonly code: string; readonly message: string }[] }
 import { t, type Locale } from '#platform/index.js';
 import type { ToolchainCurrencyReport } from '#engine/index.js';
 
@@ -19,6 +20,7 @@ export interface RecoveryFilesDoctorView { readonly leftovers: readonly string[]
 
 /** What the human rendering reads from the collected doctor report; the pool readiness lines arrive already rendered. */
 export interface DoctorRenderInput {
+  readonly startability?: InstallationStartabilityView | null;
   readonly platform: string;
   readonly host: { readonly cpuCores: number; readonly totalMemMB: number; readonly recommendedMaxWorkers: number };
   readonly company: { readonly companyId: string };
@@ -59,6 +61,8 @@ function secretStoreCustodyLine(backend: string, locale: Locale): readonly strin
 export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale): string {
   return [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
+  ...(result.startability ? [t('doctor.startability', { status: result.startability.status, endpoint: result.startability.endpoint ?? '-' }, locale),
+    ...result.startability.checks.map(check => `[${check.code}] ${check.message}`)] : []),
   ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
     ...result.toolchains.providers.map(entry => t('doctor.toolchains.entry', { provider: entry.provider, status: entry.reason ? `${entry.status} (${entry.reason})` : entry.status,
       admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : []),

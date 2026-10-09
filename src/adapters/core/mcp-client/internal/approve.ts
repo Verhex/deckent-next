@@ -127,7 +127,8 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
       throw ErrorRegistry.createError('MCP_SANDBOX_COMMAND_UNREACHABLE', { cause: shown, params: { name: server.name, kind: shown.kind,
         ...(shown.kind === 'path-hidden' ? { role: shown.role, path: shown.path, target: shown.target ?? '' } : { runner: shown.runner }) } });
     }
-    if (!state.ok) throw fail(state.reason === 'sandbox-unavailable' ? 'MCP_SANDBOX_UNAVAILABLE' : 'MCP_SERVER_START_FAILED', state.detail ?? state.reason);
+    if (!state.ok && state.reason === 'sandbox-unavailable') throw ErrorRegistry.createError('MCP_SANDBOX_UNAVAILABLE', { params: { name: server.name, realm: launch.realm, reason: state.detail ?? state.reason } });
+    if (!state.ok) throw fail('MCP_SERVER_START_FAILED', state.detail ?? state.reason);
     const live = state.tools.filter(tool => tool.digest !== null);
     for (const name of options.alwaysAsk ?? []) if (!live.some(tool => tool.name === name)) throw fail('MCP_TOOL_UNKNOWN', name);
     const tools = live.map(tool => ({ name: tool.name, digest: tool.digest!, description: tool.description ?? null, annotations: tool.annotations ?? null,

@@ -187,7 +187,8 @@
         "src/domain/core/model-invocation",
         "src/engine/core/authentication",
         "src/engine/core/runtime",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/platform/core/host"
       ],
       "plan": "EXECUTION"
     },
@@ -400,7 +401,8 @@
     "src/composition/core/root": {
       "dependencies": [
         "src/adapters/core/contract",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/engine/core/approval"
       ],
       "plan": "FOUNDATION"
     },
@@ -537,7 +539,9 @@
         "src/composition/core/root",
         "src/composition/core/backup",
         "src/engine/core/backup",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/platform/core/i18n",
+        "src/adapters/core/installation-files"
       ],
       "plan": "EXECUTION"
     },
@@ -876,7 +880,9 @@
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/monitor",
         "src/surfaces/core/terminal-picker",
-        "src/surfaces/core/terminal-panels"
+        "src/surfaces/core/terminal-panels",
+        "src/domain/core/policy",
+        "src/platform/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -1241,7 +1247,13 @@
         "src/platform/core/host",
         "src/platform/core/config",
         "src/platform/core/utils",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/adapters/core/sqlite-ledger",
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/adapters/core/file-policy",
+        "src/platform/core/i18n",
+        "src/platform/core/errors"
       ],
       "plan": "INSTALLATION"
     },
@@ -1364,6 +1376,7 @@
       "dependencies": [
         "src/domain/core/model-activation",
         "src/engine/core/model-activation",
+        "src/engine/core/policy",
         "src/engine/core/audit",
         "src/engine/core/config",
         "src/engine/core/model-invocation",
@@ -1377,7 +1390,13 @@
         "src/composition/core/scoped-request",
         "src/composition/core/query-errors",
         "src/composition/core/model-invocation",
-        "src/composition/core/model-activation"
+        "src/composition/core/model-activation",
+        "src/composition/core/root",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/provider-anthropic-messages",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/contract"
       ],
       "plan": "PROVIDERS"
     },
@@ -1400,7 +1419,8 @@
         "src/engine/core/model-activation",
         "src/engine/core/provider-catalog",
         "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/domain/core/agent-tool"
       ],
       "plan": "PROVIDERS"
     },
@@ -1500,6 +1520,7 @@
         "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
         "src/engine/core/model-invocation",
+        "src/engine/core/model-activation",
         "src/engine/core/policy",
         "src/engine/core/provider-catalog",
         "src/engine/core/provider-spend",
@@ -1554,6 +1575,7 @@
     },
     "src/adapters/core/provider-connect": {
       "dependencies": [
+        "src/domain/core/model-invocation",
         "src/engine/core/agent-turn",
         "src/domain/core/provider-catalog",
         "src/domain/core/primitives",
@@ -1873,7 +1895,8 @@
         "src/engine/core/effect",
         "src/domain/core/audit",
         "src/platform/core/redaction",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/domain/core/adapter-registry"
       ],
       "plan": "SECURITY"
     },
@@ -1915,7 +1938,10 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/contract",
         "src/adapters/core/attempt-store",
-        "src/composition/core/policy"
+        "src/composition/core/policy",
+        "src/domain/core/policy",
+        "src/composition/core/root",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "SECURITY"
     },
@@ -2047,6 +2073,7 @@
     },
     "src/domain/core/agent-turn": {
       "dependencies": [
+        "src/domain/core/model-invocation",
         "src/domain/core/agent-tool",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog"
@@ -2664,9 +2691,9 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 26000,
+      "adapters": 26300,
       "surfaces": 45000,
-      "composition": 6500
+      "composition": 6700
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
@@ -3465,6 +3492,21 @@
           "file": "src/platform/core/i18n/locales/tr/tui.json",
           "count": 1,
           "reason": "tui.slash.desc.cd example path names the frozen reference checkout; use a neutral example and remove."
+        },
+        {
+          "file": "src/engine/core/approval/internal/mcp-capabilities.json",
+          "count": 3,
+          "reason": "Owner W5 2026-10-09 explicitly requests Dogfood worker as a selectable, proposed capability preset; catalog/UI naming only, no host execution coupling."
+        },
+        {
+          "file": "src/platform/core/i18n/locales/en/cli.json",
+          "count": 4,
+          "reason": "Owner W5 2026-10-09 explicitly requests Dogfood worker as a selectable, proposed capability preset; catalog/UI naming only, no host execution coupling."
+        },
+        {
+          "file": "src/platform/core/i18n/locales/tr/cli.json",
+          "count": 4,
+          "reason": "Owner W5 2026-10-09 explicitly requests Dogfood worker as a selectable, proposed capability preset; catalog/UI naming only, no host execution coupling."
         }
       ]
     },

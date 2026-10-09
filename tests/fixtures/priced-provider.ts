@@ -2,6 +2,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 export { createLocalTls as createPricedProviderTls } from './local-tls.js';
 
+/** ORPRIVACY-STATUS: pricing also reads the official endpoint-level ZDR inventory; the fixture lists its one endpoint (a separate GET, never a metadata count). */
+export function replyPricedProviderPrivacy(request: IncomingMessage, response: ServerResponse): boolean {
+  if (request.method !== 'GET' || request.url !== '/api/v1/endpoints/zdr') return false;
+  response.writeHead(200, { 'content-type': 'application/json' });
+  response.end(JSON.stringify({ data: [{ model_id: 'vendor/model', tag: 'provider/region' }] }));
+  return true;
+}
+
 export function replyPricedProviderMetadata(request: IncomingMessage, response: ServerResponse): boolean {
   if (request.method !== 'GET' || request.url !== '/api/v1/models/vendor/model/endpoints') return false;
   response.writeHead(200, { 'content-type': 'application/json' });

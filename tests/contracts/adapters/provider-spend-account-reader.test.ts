@@ -119,7 +119,7 @@ it('rejects an old ledger without changing its bytes', async () => {
 
 it('rejects a genuine schema-21 ledger without an audit table or changing bytes', async () => {
   const path = await ledger(), db = new DatabaseSync(path);
-  try { db.exec('DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=21'); } finally { db.close(); }
+  try { db.exec('DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=21'); } finally { db.close(); }
   const before = await readFile(path);
   await expect(openSqliteProviderSpendAccountReader(path, readerOptions)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   await expect(readFile(path)).resolves.toEqual(before);

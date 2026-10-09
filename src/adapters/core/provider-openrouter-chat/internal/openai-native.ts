@@ -94,6 +94,7 @@ export function createOpenRouterOpenAiPricedNative(options: OpenRouterNativeOpti
       || !isDeepStrictEqual(prepared.request, parseOpenAiChatTextRequest(input.command.nativeRequest, prepared.definition))) throw new OpenRouterChatError('TARIFF_CONFLICT');
     const reservation = fresh(prepared), observation = observations.get(prepared)!;
     const evidence = { schemaVersion: 1, sourceEndpoint: observation.sourceEndpoint, observedAtMs: observation.observedAtMs,
+      privacySourceEndpoint: observation.privacySourceEndpoint ?? null, privacyBodyDigest: observation.privacyBodyDigest ?? null,
       sourceBodyDigest: observation.sourceBodyDigest, tariffDigest: reservation.tariffDigest,
       bodyDigest: createHash('sha256').update(prepared.body).digest('hex'), reservation,
       calculation: { inputBound: 'published-endpoint-prompt-or-context-including-tools', outputBound: 'requested-output-tokens', requestCount: 1 } };

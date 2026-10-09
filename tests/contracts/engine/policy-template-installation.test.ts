@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { InstallationPublicationError, PolicyTemplateInstallationApplication, preparePolicyTemplateInstallation,
   type PolicyTemplatePublishTarget, type PreparedPolicyTemplateInstallation } from '#engine/core/installation/index.js';
@@ -140,4 +141,23 @@ it('control: a forward-moving clock is recorded as observed, not frozen at creat
   await new PolicyTemplateInstallationApplication(memory.ports).apply(source);
   expect(memory.writes.map(write => write.updatedAtMs)).toEqual([T, T + 10, T + 20, T + 30]);
   expect(memory.state.record).toMatchObject({ phase: 'committed', createdAtMs: T, updatedAtMs: T + 30 });
+});
+
+it('first-session config and ledger are retained under the same journal; an interrupted ledger publication retries the exact plan', async () => {
+  const content = '{}\n', digest = createHash('sha256').update(content).digest('hex');
+  const firstSessionTargets = (['ledger', 'config'] as const).map(resource => ({ resource, path: `/project/.deckent/${resource}`, content, digest }));
+  const plan = preparePolicyTemplateInstallation({ scopeId: 'installation', principal: { issuer: 'host', subject: '1000' },
+    paths: { policy: '/project/.deckent/policy.json', bindings: '/project/.deckent/bindings.json' }, toolNames, firstSessionTargets });
+  const memory = memoryPorts(); let fail = true;
+  const application = new PolicyTemplateInstallationApplication({ ...memory.ports, async publish(target, transactionId) {
+    expect(memory.state.record?.phase).toBe('pending');
+    await memory.ports.publish(target, transactionId);
+    if (fail && target.resource === 'ledger') { fail = false; throw new Error('after-ledger'); }
+  } });
+  await expect(application.apply(plan)).rejects.toThrow('after-ledger');
+  expect(memory.state.record?.recovery).toMatchObject({ firstSessionTargets });
+  expect(memory.state.record?.phase).toBe('pending');
+  expect((await application.apply(plan)).status).toBe('installed');
+  expect(memory.state.record?.resources.map(item => item.resource)).toEqual(['policy', 'bindings', 'ledger', 'config']);
+  expect((await application.apply(plan)).status).toBe('replayed');
 });

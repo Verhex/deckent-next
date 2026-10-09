@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { agentToolDiagnosticSchema } from '#domain/index.js';
-import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
+import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, agentTurnInterruptedNote, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
   type AgentTurnToolCallRecord } from '#engine/index.js';
 
 const id = z.string().min(1).max(256), count = z.number().int().nonnegative().safe(), digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -83,7 +83,7 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
       if (updated.changes !== 1) throw new AgentTurnStoreError('AGENT_TURN_CONFLICT');
     }));
   }
-  async interruptRunning(atMs: number) {
+  async interruptRunning(atMs: number, language?: import('#platform/index.js').Locale) {
     return this.guard(() => this.transaction(() => {
       const rows = this.db.prepare("SELECT scope_id,turn_id FROM agent_turns WHERE state='running'").all() as { scope_id: string; turn_id: string }[];
       const corrupt: { scopeId: string; turnId: string }[] = [];
@@ -95,7 +95,7 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
           corrupt.push(Object.freeze({ scopeId: row.scope_id, turnId: row.turn_id })); continue;
         }
         const calls = (this.db.prepare('SELECT count(*) AS n FROM agent_turn_tool_calls WHERE scope_id=? AND turn_id=?').get(row.scope_id, row.turn_id) as { n: number }).n;
-        const finished = turnSchema.parse({ ...turn, finishedAtMs: atMs, outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE, rounds: 0, toolCalls: calls,
+        const finished = turnSchema.parse({ ...turn, finishedAtMs: atMs, outcome: { finish: 'error', note: agentTurnInterruptedNote(language), rounds: 0, toolCalls: calls,
           answer: null, answerBytes: 0, appendedDigest: null } });
         this.db.prepare("UPDATE agent_turns SET state='finished',record=? WHERE scope_id=? AND turn_id=? AND state='running'").run(JSON.stringify(finished), row.scope_id, row.turn_id);
       }
@@ -103,4 +103,3 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
     }));
   }
 }
-

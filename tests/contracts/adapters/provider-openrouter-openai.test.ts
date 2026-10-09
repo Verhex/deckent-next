@@ -32,6 +32,9 @@ async function fixture(answer: string, streamed: boolean, status = 200, requestM
     max_prompt_tokens: 100, max_completion_tokens: 10, status: 0, supported_parameters: ['max_tokens', 'tools', 'tool_choice'],
     pricing: { prompt: '0.01', completion: '0.02', request: '0', input_cache_read: '0', input_cache_write: '0', internal_reasoning: '0' } }] } };
   const server = createServer({ ca: caPem, cert: caPem, key }, (req, res) => {
+    if (req.url === '/api/v1/endpoints/zdr') { res.writeHead(200, { 'content-type': 'application/json' });
+      const data = (metadata as { data: { endpoints: { model_id: string; tag: string }[] } }).data.endpoints;
+      res.end(JSON.stringify({ data: data.filter(e => e.tag === tag || e.tag.startsWith(`${tag}/`)).map(e => ({ model_id: e.model_id, tag: e.tag })) })); return; }
     if (req.url === metadataPath) { metadataGets++; res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(metadata)); return; }
     posts++;
     req.setEncoding('utf8'); req.on('data', text => { sent += text; }); req.on('end', () => {
@@ -79,7 +82,7 @@ it.each([
   if ('kind' in response) throw new Error(JSON.stringify(response));
   expect(f.counts()).toEqual([1, 1]);
   expect(f.seen()).toMatchObject({ model: document.data.id, tools, modalities: ['text'],
-    plugins: expect.arrayContaining([{ id: 'web', enabled: false }]), provider: { only: [tag], allow_fallbacks: false, require_parameters: true } });
+    plugins: expect.arrayContaining([{ id: 'web', enabled: false }]), provider: { only: (document as { data: { endpoints: { tag: string }[] } }).data.endpoints.filter(e => e.tag === tag || e.tag.startsWith(`${tag}/`)).map(e => e.tag).sort(), data_collection: 'deny', zdr: true, allow_fallbacks: false, require_parameters: true } });
   const measurement = f.priced.native.observeSpending!(f.prepared, response)!;
   expect(measurement).toMatchObject({ basis: 'provider-reported', exactMinorUnits: exactCents, source: { numericSource: cost } });
   expect(settleProviderSpend(f.reserved!.account, f.reserved!.reservation, { kind: 'provider-reported', measurement: measurement as never,
@@ -99,7 +102,7 @@ it.each([false, true])('reserves tools and stream=%s, settles raw usage.cost as 
     evidenceDigest: 'b'.repeat(64) }).account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: exactCents, frozen: false });
   expect(f.seen()).toMatchObject({ max_tokens: 10, tools, modalities: ['text'], plugins: expect.arrayContaining([
     { id: 'web', enabled: false }, { id: 'file-parser', enabled: false }, { id: 'fusion', enabled: false },
-  ]), provider: { only: [tag], allow_fallbacks: false, require_parameters: true } });
+  ]), provider: { only: [tag], data_collection: 'deny', zdr: true, allow_fallbacks: false, require_parameters: true } }); // the default metadata has one endpoint under the tag
   expect((f.seen()['plugins'] as { enabled: boolean }[]).every(plugin => plugin.enabled === false)).toBe(true);
   expect(f.seen()).not.toHaveProperty('max_completion_tokens'); expect(f.seen()).not.toHaveProperty('stream_options');
   if (streamed) expect(deltas).toEqual([{ kind: 'text', text: 'ok' }]);

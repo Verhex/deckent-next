@@ -278,7 +278,7 @@ it('migrates schema13 to current without changing activation rows and read-only 
   const current = await openSqliteModelActivationStore(path, options); current.close();
   const db = new DatabaseSync(path);
   // Reconstruct a complete v13 ledger, including its existing execution/receipt tables.
-  db.exec(`DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations;
+  db.exec(`DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations;
     DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints;
     DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
     DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges;

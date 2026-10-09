@@ -23,6 +23,7 @@ export interface OpenRouterTextReservation {
   readonly metadataDigest: string; readonly tariffDigest: string; readonly maxPromptTokens: number; readonly maxCompletionTokens: number;
   readonly requestControls: typeof openRouterRequestControls;
   readonly provider: Readonly<{ only: readonly string[]; allow_fallbacks: false; require_parameters: true;
+    data_collection: 'deny'; zdr: true;
     max_price: Readonly<{ prompt: string; completion: string; request: string }> }>;
 }
 
@@ -50,7 +51,7 @@ export function quoteOpenRouterText(tariff: OpenRouterTariff, input: unknown, no
   return Object.freeze({ schemaVersion: 2, currency: 'USD', maxChargeMinorUnits: sumCeilUsdCents(dimensions),
     metadataDigest: tariff.metadataDigest, tariffDigest: tariff.tariffDigest, maxPromptTokens: tariff.maxPromptTokens, maxCompletionTokens,
     requestControls: openRouterRequestControls,
-    provider: Object.freeze({ only: Object.freeze([tariff.selection.endpointTag]), allow_fallbacks: false, require_parameters: true,
+    provider: Object.freeze({ only: tariff.routeTags, allow_fallbacks: false, require_parameters: true, data_collection: 'deny', zdr: true,
       // Metadata is USD/token; routing max_price is USD/million tokens (request remains USD/request).
       max_price: Object.freeze({ prompt: decimalText(multiplyRate(rates.prompt, 1_000_000)),
         completion: decimalText(multiplyRate(rates.completion, 1_000_000)), request: decimalText(rates.request) }) }) });

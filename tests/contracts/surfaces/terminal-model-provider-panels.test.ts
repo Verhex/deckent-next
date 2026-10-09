@@ -70,7 +70,7 @@ describe('/model window', () => {
     const view = mount(element, 60, 40, true);
     await settle(80);
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(60);
-    expect(view.frame()).toContain('chat · default');
+    expect(view.frame()).toContain('chat (local-openai) · default');
     await view.press(DOWN);
     expect(view.frame()).toMatch(/x coder/u); expect(view.frame()).toContain('NOT-ACTIVE');
     // The exact reference and the fixing command are shown only for the focused row (dimmed), never in the row itself.
@@ -83,14 +83,14 @@ describe('/model window', () => {
     expect(view.frame()).toContain('This session, and make it my default');
     await view.press(ENTER);
     expect(pins).toEqual(['fast']); expect(calls.closed).toBe(1);
-    expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast from the next turn')]);
+    expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast (local-openai) from the next turn')]);
   });
 
   it('"also make default" is locked with its reason when the host binds no default write', () => {
     const labels = terminalPanelLabels('en').model;
     const tree = modelPanelTree({ ...MODELS, defaultBlocked: 'DECISION-PENDING' }, null, labels, 'T', false);
     expect(tree.scopes).toEqual([{ id: 'session', label: labels.session }, { id: 'default', label: labels.sessionAndDefault, blocked: { reason: 'DECISION-PENDING' } }]);
-    expect(modelPanelTree(MODELS, ref('fast'), labels, 'T', true).items.map(item => item.label)).toEqual(['chat · default', 'coder', 'fast · this session']);
+    expect(modelPanelTree(MODELS, ref('fast'), labels, 'T', true).items.map(item => item.label)).toEqual(['chat (local-openai) · default', 'coder (local-openai)', 'fast (local-openai) · this session']);
     // More than one provider: one section per provider.
     const two = modelPanelTree({ ...MODELS, choices: [...MODELS.choices, { ...MODELS.choices[0]!, reference: ref('chat', 'anthropic'), group: 'anthropic' }] }, null, labels, 'T', true);
     expect(two.items.map(item => [item.label, item.children?.length])).toEqual([['local-openai', 3], ['anthropic', 1]]);
@@ -301,6 +301,44 @@ describe('/provider window', () => {
   });
 });
 
+describe('/provider seedless discovery window', () => {
+  it.each(['en', 'tr'] as const)('seedless %s: choose address before discovering models; select exact id; an unpriced row stays locked', async locale => {
+    const { port } = providerPort();
+    const original = (await port.inspect()).kinds.find(kind => kind.id === 'local-openai')!;
+    const target = { ...original, keyStored: false, models: [], modelBlocked: null, discoversModels: true };
+    const listed: unknown[] = [], connected: unknown[] = [];
+    const dynamic: ProviderPanelPort = { ...port, inspect: async () => ({ title: 'Providers', kinds: [target], notes: [] }),
+      listModels: async (kind, endpoint) => { listed.push({ kind, endpoint }); return [
+        { id: 'seed:Org/Exact:Q4', label: 'Org/Exact:Q4', detail: 'Org/Exact:Q4' },
+        { id: 'seed:unpriced', label: 'Unpriced', detail: 'unpriced', blocked: 'PRICE REQUIRED: choose a priced provider or loopback' }]; },
+      connectModel: async request => { connected.push(request); return { connected: true, title: 'Connected exact ID', lines: [], summary: 'Exact ID connected', approvalId: null }; } };
+    const { element, calls } = panel('provider', { provider: dynamic }, locale), screen = mount(element, 100, 40);
+    await settle(80); await screen.press(`${ENTER}${DOWN}${ENTER}`, 80);
+    expect(listed).toEqual([]); // opening the address picker grants no request
+    await screen.press(ENTER, 100);
+    expect(listed).toEqual([{ kind: 'local-openai', endpoint: original.endpointChoices[0]!.url }]);
+    expect(screen.frame()).toContain('Org/Exact:Q4');
+    await screen.press(`${DOWN}${ENTER}`, 60);
+    expect(screen.frame()).toContain('PRICE REQUIRED'); expect(connected).toEqual([]);
+    await screen.press(`${'\u001b[A'}${ENTER}`, 100);
+    expect(connected).toEqual([{ kind: 'local-openai', endpoint: original.endpointChoices[0]!.url, model: 'seed:Org/Exact:Q4' }]);
+    expect(screen.frame()).toContain('Connected exact ID'); expect(calls.notices).toEqual([]);
+    await screen.press(ENTER, 80); expect(calls.notices).toEqual([{ level: 'info', text: 'Exact ID connected' }]);
+  });
+
+  it('a failed discovery reports the error and returns to the provider list without a connection', async () => {
+    const { port } = providerPort(), original = (await port.inspect()).kinds.find(kind => kind.id === 'local-openai')!;
+    const { element, calls } = panel('provider', { provider: { ...port,
+      inspect: async () => ({ title: 'Providers', kinds: [{ ...original, keyStored: false, models: [], modelBlocked: null, discoversModels: true }], notes: [] }),
+      listModels: async () => { throw Object.assign(new Error('unreachable'), { code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' }); } } });
+    const screen = mount(element); await settle(80);
+    await screen.press(`${ENTER}${DOWN}${ENTER}${ENTER}`, 100);
+    expect(calls.errors).toMatchObject([{ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' }]);
+    expect(calls.notices).toEqual([]); expect(screen.frame()).toContain('Providers');
+  });
+
+});
+
 describe('/model in the workline: the pin rides on the next turn', () => {
   it('a bare /model opens the window; the chosen model is the next turn\'s exact reference, and later turns keep it', async () => {
     const { port } = modelPort(MODELS);
@@ -318,7 +356,7 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     await settleWorkline(60);
     for (const key of [DOWN, DOWN, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
     view.stdin.write(ENTER);
-    await until(() => view.stdout.text.includes('This session uses fast from the next turn'), 'pinned');
+    await until(() => view.stdout.text.includes('This session uses fast (local-openai) from the next turn'), 'pinned');
     view.stdin.write(`again${ENTER}`);
     await until(() => seen.length === 2, 'second turn');
     view.stdin.write(`and again${ENTER}`);
@@ -357,7 +395,7 @@ describe('/model in the workline: the pin rides on the next turn', () => {
       await settleWorkline(60);
       for (const key of [...keys, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
       view.stdin.write(ENTER);
-      await until(() => view.stdout.text.includes(`This session uses ${model} from the next turn`), `pinned ${model}`);
+      await until(() => view.stdout.text.includes(`This session uses ${model} (${MODELS.choices.find(choice => choice.label === model)!.group}) from the next turn`), `pinned ${model}`);
       await until(() => !view.stdout.frame.includes('Models · scope'), 'window closed');
     };
     const say = async (text: string, count: number) => { view.stdin.write(`${text}${ENTER}`); await until(() => turns.length === count, text); await settleWorkline(40); };
@@ -389,7 +427,7 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     // The window shows the resumed conversation's own pin.
     view.stdin.write(`/model${ENTER}`);
     await until(() => view.stdout.frame.includes('Models · scope'), 'model window again'); await settleWorkline(60);
-    expect(view.stdout.frame).toContain('fast · this session'); expect(view.stdout.frame).not.toContain('chat · default · this session');
+    expect(view.stdout.frame).toContain('fast (local-openai) · this session'); expect(view.stdout.frame).not.toContain('chat (local-openai) · default · this session');
   });
 
   it('/provider without its port says the part is unavailable here (no chat turn)', async () => {
@@ -482,6 +520,19 @@ describe('stage 1 budget window (/model and /provider)', () => {
 });
 
 describe('CACHE-SLICE1: the governed cache migration row and the model-switch question', () => {
+  it('Responses migration in /model shows a Turkish preview, writes once on confirmation and opens an existing approval; cancel writes nothing', async () => {
+    for (const confirm of [true, false]) {
+      const { port, pins } = modelPort(MODELS), applied: number[] = [];
+      const protocol = { inspect: async () => ({ detail: '1 model Responses kullanabilir', lines: [{ label: 'GPT-6.1 Sol', text: 'Chat Completions → Responses; API anahtarı korunur.' }] }),
+        apply: async (): Promise<ConfigPanelOutcome> => { applied.push(1); return { status: 'approval-pending', lines: ['Onay bekleniyor.'], approvalId: 'protocol-approval' }; } };
+      const { element, calls } = panel('model', { model: { ...port, protocol } }, 'tr');
+      const screen = mount(element, 140, 40); await settle(80);
+      expect(screen.frame()).toContain('Güncel protokole geç');
+      await screen.press(ENTER); expect(screen.frame()).toContain('API anahtarı korunur'); expect(applied).toEqual([]);
+      await screen.press(confirm ? ENTER : ESC, 80);
+      expect(applied).toEqual(confirm ? [1] : []); expect(calls.approvals).toEqual(confirm ? ['protocol-approval'] : []); expect(pins).toEqual([]);
+    }
+  });
   const COST = { detail: '1 model(s) without a cache choice', lines: [{ label: '', text: 'WHAT-CHANGES' },
     { label: 'claude-sonnet-5-5', text: 'a cache write costs 1.25× the input price, a cache read 0.05×; it pays back after 1 reuse(s) within 5 minutes' }] };
   const cachePort = (status: 'applied' | 'approval-pending' = 'applied') => {
@@ -526,29 +577,26 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
       pin: (choice, fresh) => { pins.push({ model: choice.reference.modelId, fresh }); } };
     return { port, pins };
   };
-  it('a switch over a large context asks "new context / continue" before it pins; Esc pins nothing; the current model or a small context never asks', async () => {
-    for (const [answer, fresh] of [[ENTER, true], [`${DOWN}${ENTER}`, false]] as const) {
+  it('large context and scope use one confirmation; Esc never pins; small context stays fluent', async () => {
+    for (const [answer, fresh] of [[`${DOWN}${DOWN}${ENTER}`, true], [ENTER, false]] as const) {
       const { port, pins } = switchPort(60_000), { element, calls } = panel('model', { model: port });
       const screen = mount(element, 140, 40); await settle(80);
-      // Rows: chat (configured), coder (locked), fast. Pick fast for this session.
-      await screen.press(`${DOWN}${DOWN}${ENTER}${ENTER}`);
-      expect(screen.frame()).toContain('fast: this conversation is 60000 tokens'); expect(pins).toEqual([]);
+      await screen.press(`${DOWN}${DOWN}${ENTER}`);
+      expect(pins).toEqual([]);
+      expect(screen.frame()).toContain('New context');
+      expect(screen.frame()).toContain('Continue (the whole history');
       await screen.press(answer, 60);
       expect(pins).toEqual([{ model: 'fast', fresh }]);
       expect(calls.notices.map(item => item.text).join('\n')).toContain(fresh ? 'New context for fast' : 'fast continues with the whole history');
     }
     const esc = switchPort(60_000), escaped = panel('model', { model: esc.port });
     const screen = mount(escaped.element, 140, 40); await settle(80);
-    await screen.press(`${DOWN}${DOWN}${ENTER}${ENTER}`); await screen.press(ESC, 60);
+    await screen.press(`${DOWN}${DOWN}${ENTER}${ESC}`, 60);
     expect(esc.pins).toEqual([]);
     const small = switchPort(null), quiet = panel('model', { model: small.port });
     const other = mount(quiet.element, 140, 40); await settle(80);
     await other.press(`${DOWN}${DOWN}${ENTER}${ENTER}`, 60);
-    expect(small.pins).toEqual([{ model: 'fast', fresh: false }]); expect(other.all()).not.toContain('cold cache');
-    const same = switchPort(60_000), current = panel('model', { model: same.port });
-    const again = mount(current.element, 140, 40); await settle(80);
-    await again.press(`${ENTER}${ENTER}`, 60);
-    expect(same.pins).toEqual([{ model: 'chat', fresh: false }]);
+    expect(small.pins).toEqual([{ model: 'fast', fresh: false }]);
   });
 
   it('in the workline, "new context" keeps the person\'s own messages and leaves answers behind; the next turn carries the new pin', async () => {
@@ -566,9 +614,9 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     view.stdin.write(`/model${ENTER}`);
     await until(() => view.stdout.frame.includes('Models · scope'), 'model window');
     await settleWorkline(60);
-    for (const key of [DOWN, DOWN, ENTER, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
-    await until(() => view.stdout.frame.includes('this conversation is 60000 tokens'), 'switch question');
-    view.stdin.write(ENTER);
+    for (const key of [DOWN, DOWN, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
+    await until(() => view.stdout.frame.includes('New context'), 'single switch confirmation');
+    for (const key of [DOWN, DOWN, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
     await until(() => view.stdout.text.includes('New context for fast'), 'fresh context notice');
     view.stdin.write(`next${ENTER}`);
     await until(() => turns.length === 2, 'second turn');

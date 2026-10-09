@@ -52,7 +52,12 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       preset: t('tui.panel.budget.preset', {}, locale), other: t('tui.panel.budget.other', {}, locale), stepperTitle: t('tui.panel.budget.stepperTitle', {}, locale),
       hints: t('tui.panel.budget.hints', {}, locale), confirmTitle: t('tui.panel.budget.confirmTitle', {}, locale), confirm: t('tui.panel.budget.confirm', {}, locale),
       confirmUnfreeze: t('tui.panel.budget.confirmUnfreeze', {}, locale), cancel: t('tui.panel.budget.cancel', {}, locale), belowSettled: t('tui.panel.budget.belowSettled', {}, locale) },
+    policy: { title: t('policy.mcp.title', {}, locale), scope: t('policy.mcp.scope', {}, locale), groups: t('policy.mcp.groups', {}, locale), preview: t('policy.mcp.preview', {}, locale),
+      grant: t('policy.mcp.grant', {}, locale), revoke: t('policy.mcp.revoke', {}, locale), confirm: t('policy.mcp.confirm', {}, locale), back: t('policy.mcp.back', {}, locale),
+      hints: t('policy.mcp.hints', {}, locale), empty: t('policy.mcp.empty', {}, locale) },
     cache: { entry: t('tui.panel.cache.entry', {}, locale), title: t('tui.panel.cache.title', {}, locale), confirm: t('tui.panel.cache.confirm', {}, locale),
+      cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },
+    protocol: { entry: t('tui.panel.protocol.entry', {}, locale), title: t('tui.panel.protocol.title', {}, locale), confirm: t('tui.panel.protocol.confirm', {}, locale),
       cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },
   };
 }

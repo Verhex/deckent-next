@@ -12,10 +12,10 @@ export type WorklinePanels = Readonly<{ ports: Omit<PanelPorts, 'mode' | 'model'
 /** T4 MODEL-SWITCH: the session's pinned model, read when a turn starts (the next turn carries it). */
 export type WorklineSessionModel = Readonly<{ pinned: () => ModelPanelReference | null; pin: (choice: ModelPanelChoice, fresh?: boolean) => void;
   /** CACHE-SLICE1: the conversation's measured context at or above the registry threshold, else null. */
-  largeContext?: () => number | null }>;
+  largeContext?: () => number | null; reasoning?: () => 'off' | undefined }>;
 type Mode = Readonly<{ stop: PermissionModeStop | undefined; select: (stop: PermissionModeStop) => Promise<void> }>;
 
-const PANEL_COMMANDS: readonly PanelKind[] = ['mode', 'config', 'mcp', 'model', 'provider'];
+const PANEL_COMMANDS: readonly PanelKind[] = ['mode', 'config', 'mcp', 'model', 'provider', 'policy'];
 /**
  * The settings window a `/mode`, `/config`, `/mcp`, `/model` or `/provider` opens, when its port is here. The rich workline already runs a
  * typed slash command bare (I-1, with its one-time note); CS-1: `/config` opens its panel even with a typed argument (never a typed write),
@@ -49,6 +49,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
       inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
     // The host's whole `/model` source (budget window, shadow answers) plus the session pin; dropping an optional port hides its rows.
     ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
+      ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice, sessionModel.current?.reasoning?.()) } : {}),
       ...(model.budget ? { budget: model.budget } : {}), ...(model.cache ? { cache: model.cache } : {}),
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
       ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),
@@ -71,7 +72,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
   const window = kind && ports && panels && !input.blocked
     // SLASH-WINDOWS: what a settings window reports when it closes (a `/model` pin, a `/config` or `/mcp` outcome, a `/provider` result) is the
     // one system summary line, never a chat notice.
-    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => systemSummaryEntry(item.text, item.level)))}
+    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => ({ ...systemSummaryEntry(item.text, item.level), ...(item.identity ? { identity: item.identity } : {}) })))}
       onError={error => push([systemSummaryEntry(errorText(error), 'error')])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
       onClose={() => { panel.choose(handle.current, 'close'); }} /> : null;
   return { open, openKind: kind, window };

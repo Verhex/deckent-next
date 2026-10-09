@@ -1,0 +1,547 @@
+{
+  "schemaVersion": 1,
+  "groups": [
+    {
+      "schemaVersion": 1,
+      "id": "work",
+      "version": 1,
+      "labelKey": "policy.mcp.group.work",
+      "noteKey": "policy.mcp.note.work",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "run",
+          "tools": {
+            "create_run": [
+              "create"
+            ],
+            "reserve_run_tasks": [
+              "reserve"
+            ],
+            "request_run_cancellation": [
+              "cancel"
+            ],
+            "deliver_run_cancellation": [
+              "cancel"
+            ],
+            "inspect_run": [
+              "inspect"
+            ]
+          },
+          "actions": [
+            "create",
+            "inspect",
+            "reserve",
+            "cancel"
+          ],
+          "resource": {
+            "kind": "run",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "attempt",
+          "tools": {
+            "execute_task": [
+              "execute",
+              "read-output"
+            ],
+            "evaluate_task": [
+              "evaluate",
+              "read-output",
+              "recover-output"
+            ],
+            "reconcile_attempt": [
+              "reconcile"
+            ],
+            "deliver_run_cancellation": [
+              "cancel"
+            ],
+            "inspect_run": [
+              "read-output"
+            ]
+          },
+          "actions": [
+            "execute",
+            "evaluate",
+            "reconcile",
+            "cancel",
+            "read-output",
+            "recover-output"
+          ],
+          "resource": {
+            "kind": "attempt",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "pool",
+          "tools": {
+            "create_run": [
+              "use"
+            ],
+            "reserve_run_tasks": [
+              "use"
+            ]
+          },
+          "actions": [
+            "use"
+          ],
+          "resource": {
+            "kind": "pool",
+            "ids": "all"
+          },
+          "scope": "selected",
+          "source": "owned-pools"
+        },
+        {
+          "id": "target",
+          "tools": {
+            "create_run": [
+              "use"
+            ],
+            "reserve_run_tasks": [
+              "use"
+            ],
+            "execute_task": [
+              "use"
+            ],
+            "evaluate_task": [
+              "use"
+            ]
+          },
+          "actions": [
+            "use"
+          ],
+          "resource": {
+            "kind": "work-target",
+            "ids": "all"
+          },
+          "scope": "selected",
+          "source": "configured-target"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "operations",
+      "version": 1,
+      "labelKey": "policy.mcp.group.operations",
+      "noteKey": "policy.mcp.note.operations",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "operation",
+          "tools": {
+            "execute_operation": [
+              "execute"
+            ],
+            "compensate_operation": [
+              "compensate"
+            ],
+            "inspect_operation": [
+              "inspect"
+            ]
+          },
+          "actions": [
+            "execute",
+            "compensate",
+            "inspect"
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": "all"
+          },
+          "scope": "selected"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "models",
+      "version": 1,
+      "labelKey": "policy.mcp.group.models",
+      "noteKey": "policy.mcp.note.models",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "invocation",
+          "tools": {
+            "invoke_model": [
+              "invoke"
+            ],
+            "purge_model_invocation_content": [
+              "purge-content"
+            ],
+            "cancel_model_invocation": [
+              "cancel-invocation"
+            ],
+            "inspect_model_invocation": [
+              "inspect",
+              "inspect-content"
+            ]
+          },
+          "actions": [
+            "invoke",
+            "inspect",
+            "inspect-content",
+            "purge-content",
+            "cancel-invocation"
+          ],
+          "resource": {
+            "kind": "model-invocation",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "activation",
+          "tools": {
+            "admit_model_activation": [
+              "activate",
+              "deactivate"
+            ],
+            "apply_model_catalog": [
+              "activate",
+              "deactivate"
+            ],
+            "connect_model": [
+              "activate",
+              "inspect"
+            ]
+          },
+          "actions": [
+            "activate",
+            "deactivate",
+            "inspect"
+          ],
+          "resource": {
+            "kind": "model-activation",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "catalog",
+          "tools": {
+            "apply_model_catalog": [
+              "activate"
+            ],
+            "connect_model": [
+              "activate"
+            ]
+          },
+          "actions": [
+            "activate"
+          ],
+          "resource": {
+            "kind": "model-activation",
+            "ids": "all"
+          },
+          "scope": "installation"
+        },
+        {
+          "id": "config-project",
+          "tools": {
+            "connect_model": [
+              "write"
+            ]
+          },
+          "actions": [
+            "write"
+          ],
+          "resource": {
+            "kind": "config",
+            "ids": [
+              "project:provider_catalog",
+              "project:provider_invocation_profiles"
+            ]
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "config-global",
+          "tools": {
+            "connect_model": [
+              "write"
+            ]
+          },
+          "actions": [
+            "write"
+          ],
+          "resource": {
+            "kind": "config",
+            "ids": [
+              "global:provider_catalog",
+              "global:provider_invocation_profiles"
+            ]
+          },
+          "scope": "installation"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "pools",
+      "version": 1,
+      "labelKey": "policy.mcp.group.pools",
+      "noteKey": "policy.mcp.note.pools",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "inspect",
+          "tools": {
+            "inspect_pool_capacity": [
+              "inspect"
+            ],
+            "inspect_pool_hold": [
+              "inspect"
+            ]
+          },
+          "actions": [
+            "inspect"
+          ],
+          "resource": {
+            "kind": "pool",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "control",
+          "tools": {
+            "apply_pool_capacity": [
+              "set-capacity"
+            ],
+            "apply_pool_hold": [
+              "hold",
+              "resume"
+            ]
+          },
+          "actions": [
+            "set-capacity",
+            "hold",
+            "resume"
+          ],
+          "resource": {
+            "kind": "pool",
+            "ids": "all"
+          },
+          "scope": "installation"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "spend",
+      "version": 1,
+      "labelKey": "policy.mcp.group.spend",
+      "noteKey": "policy.mcp.note.spend",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "spend",
+          "tools": {
+            "manage_provider_spending": [
+              "budget-revision",
+              "reconcile"
+            ],
+            "audit_provider_spending": [
+              "inspect",
+              "audit"
+            ]
+          },
+          "actions": [
+            "budget-revision",
+            "reconcile",
+            "inspect",
+            "audit"
+          ],
+          "resource": {
+            "kind": "provider-spend-account",
+            "ids": "all"
+          },
+          "scope": "selected"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "approvals",
+      "version": 1,
+      "labelKey": "policy.mcp.group.approvals",
+      "noteKey": "policy.mcp.note.approvals",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "renew",
+          "tools": {
+            "renew_approval": [
+              "renew"
+            ]
+          },
+          "actions": [
+            "renew"
+          ],
+          "resource": {
+            "kind": "approval",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "decision",
+          "tools": {
+            "inspect_decision": [
+              "inspect"
+            ]
+          },
+          "actions": [
+            "inspect"
+          ],
+          "resource": {
+            "kind": "decision",
+            "ids": "all"
+          },
+          "scope": "selected"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "service",
+      "version": 1,
+      "labelKey": "policy.mcp.group.service",
+      "noteKey": "policy.mcp.note.service",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "shutdown",
+          "tools": {
+            "shutdown_runtime_service": [
+              "shutdown"
+            ]
+          },
+          "actions": [
+            "shutdown"
+          ],
+          "resource": {
+            "kind": "service",
+            "ids": "all"
+          },
+          "scope": "selected"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "dogfood-worker",
+      "version": 1,
+      "labelKey": "policy.mcp.group.dogfood-worker",
+      "noteKey": "policy.mcp.note.dogfood-worker",
+      "proposed": true,
+      "cells": [
+        {
+          "id": "run",
+          "tools": {
+            "create_run": [
+              "create"
+            ],
+            "reserve_run_tasks": [
+              "reserve"
+            ],
+            "inspect_run": [
+              "inspect"
+            ]
+          },
+          "actions": [
+            "create",
+            "inspect",
+            "reserve"
+          ],
+          "resource": {
+            "kind": "run",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "attempt",
+          "tools": {
+            "execute_task": [
+              "execute",
+              "read-output"
+            ],
+            "evaluate_task": [
+              "evaluate",
+              "read-output",
+              "recover-output"
+            ],
+            "inspect_run": [
+              "read-output"
+            ]
+          },
+          "actions": [
+            "execute",
+            "evaluate",
+            "read-output",
+            "recover-output"
+          ],
+          "resource": {
+            "kind": "attempt",
+            "ids": "all"
+          },
+          "scope": "selected"
+        },
+        {
+          "id": "pool",
+          "tools": {
+            "create_run": [
+              "use"
+            ],
+            "reserve_run_tasks": [
+              "use"
+            ]
+          },
+          "actions": [
+            "use"
+          ],
+          "resource": {
+            "kind": "pool",
+            "ids": "all"
+          },
+          "scope": "selected",
+          "source": "owned-pools"
+        },
+        {
+          "id": "target",
+          "tools": {
+            "create_run": [
+              "use"
+            ],
+            "reserve_run_tasks": [
+              "use"
+            ],
+            "execute_task": [
+              "use"
+            ],
+            "evaluate_task": [
+              "use"
+            ]
+          },
+          "actions": [
+            "use"
+          ],
+          "resource": {
+            "kind": "work-target",
+            "ids": "all"
+          },
+          "scope": "selected",
+          "source": "configured-target"
+        }
+      ]
+    }
+  ]
+}

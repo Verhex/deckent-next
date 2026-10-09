@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { immutableJsonObjectSchema, parseProviderSpendAccountQuery, PROVIDER_SPEND_SCOPE_BUDGET_ID,
+import { immutableJsonObjectSchema, parseProviderSpendAccountQuery, PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_HOLD_PAGE_MAX,
   type ProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { parseProviderSpendAuditReceipt, type ProviderSpendAuditReceipt } from './audit-receipt.js';
@@ -13,19 +13,24 @@ export interface ProviderSpendAccountAuthorizer {
 export interface ProviderSpendAccountReader {
   loadSnapshot(query: ProviderSpendExactAccountQuery): Promise<Readonly<{
     checkpoint: ProviderSpendCheckpoint | null; audit: ProviderSpendAuditReceipt | null;
+    holds?: ProviderSpendHoldPage;
   }>>;
   close(): void;
 }
 /** Settled totals may combine local calculations and provider-reported charges; source subtotals are not exposed.
  * Reserved amounts include held reservations; hold-reason breakdown is not exposed. Neither total is an invoice.
  * reservationCount counts financial records, not model-call quota. Checksums do not constitute a history audit. */
-export type ProviderSpendAccountInspection = Readonly<{ schemaVersion: 2; scopeId: string; budgetId: string;
+const holdPageSchema = z.object({ entries: z.array(z.object({ invocationId: z.string().min(1), amountMinorUnits: z.number().int().nonnegative().safe(),
+  reason: z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).max(PROVIDER_SPEND_HOLD_PAGE_MAX),
+  nextAfterInvocationId: z.string().min(1).nullable() }).strict().readonly();
+export type ProviderSpendHoldPage = z.infer<typeof holdPageSchema>;
+export type ProviderSpendAccountInspection = Readonly<{ schemaVersion: 2 | 3; scopeId: string; budgetId: string;
   budgetRevision: number; checkpoint: ProviderSpendCheckpoint | null; audit: ProviderSpendAuditReceipt | null;
-  spendingHistoryIntegrity: 'not-recorded' | 'consistent' | 'stale' }>;
+  spendingHistoryIntegrity: 'not-recorded' | 'consistent' | 'stale'; holds?: ProviderSpendHoldPage | undefined }>;
 
-const resultSchema = immutableJsonObjectSchema.pipe(z.object({ schemaVersion: z.literal(2), scopeId: z.string(),
+const resultSchema = immutableJsonObjectSchema.pipe(z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), scopeId: z.string(),
   budgetId: z.string(), budgetRevision: z.number(), checkpoint: z.unknown().nullable(),
-  audit: z.unknown().nullable(), spendingHistoryIntegrity: z.enum(['not-recorded', 'consistent', 'stale']) }).strict().readonly());
+  audit: z.unknown().nullable(), spendingHistoryIntegrity: z.enum(['not-recorded', 'consistent', 'stale']), holds: holdPageSchema.optional() }).strict().readonly());
 
 export function parseProviderSpendAccountInspectionForQuery(queryInput: unknown, resultInput: unknown): ProviderSpendAccountInspection {
   let query: ProviderSpendAccountQuery;
@@ -33,8 +38,20 @@ export function parseProviderSpendAccountInspectionForQuery(queryInput: unknown,
   catch { throw new ProviderSpendError('PROVIDER_SPEND_INVALID'); }
   const parsed = resultSchema.safeParse(resultInput);
   if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  if (parsed.data.schemaVersion !== (query.holds ? 3 : 2) || (parsed.data.holds !== undefined) !== (query.holds !== undefined)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  if (query.holds && parsed.data.holds) {
+    const page = parsed.data.holds;
+    let after = query.holds.afterInvocationId;
+    if (page.entries.length > query.holds.limit) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+    for (const entry of page.entries) {
+      if (after !== null && Buffer.compare(Buffer.from(after), Buffer.from(entry.invocationId)) >= 0) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+      after = entry.invocationId;
+    }
+    if (page.nextAfterInvocationId !== null && (page.entries.length !== query.holds.limit || page.nextAfterInvocationId !== after)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+    if (parsed.data.checkpoint === null && page.entries.length !== 0) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  }
   // A current query (stage 1) answers with the account's own id and revision, or the id a create would write (revision 1) when there is none.
-  if ('current' in query) query = { schemaVersion: 1, scopeId: query.scopeId, ...(parsed.data.checkpoint === null
+  if ('current' in query) query = { schemaVersion: query.schemaVersion, ...(query.holds ? { holds: query.holds } : {}), scopeId: query.scopeId, ...(parsed.data.checkpoint === null
     ? { budgetId: PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: 1 } : { budgetId: parsed.data.budgetId, budgetRevision: parsed.data.budgetRevision }) };
   if (parsed.data.scopeId !== query.scopeId || parsed.data.budgetId !== query.budgetId
     || parsed.data.budgetRevision !== query.budgetRevision) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
@@ -76,7 +93,7 @@ export class ProviderSpendAccountInspectionApplication {
       // Stage 1 current query: the checkpoint is scope-keyed, so a first read names the account; it is authorized and read again exactly.
       if ('current' in query) {
         const first = await reader.loadSnapshot({ schemaVersion: 1, scopeId: query.scopeId, budgetId: PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: 1 });
-        exact = { schemaVersion: 1, scopeId: query.scopeId, budgetId: first.checkpoint?.account.budget.budgetId ?? PROVIDER_SPEND_SCOPE_BUDGET_ID,
+        exact = { schemaVersion: query.schemaVersion, ...(query.holds ? { holds: query.holds } : {}), scopeId: query.scopeId, budgetId: first.checkpoint?.account.budget.budgetId ?? PROVIDER_SPEND_SCOPE_BUDGET_ID,
           budgetRevision: first.checkpoint?.account.budget.revision ?? 1 };
         authorizing = true; await authorize(exact); authorizing = false;
       } else exact = query;
@@ -94,7 +111,7 @@ export class ProviderSpendAccountInspectionApplication {
     // A budget that moved between the two reads is reported, never mixed (the result names one exact revision).
     const moved = snapshot.checkpoint && (snapshot.checkpoint.account.budget.budgetId !== exact.budgetId || snapshot.checkpoint.account.budget.revision !== exact.budgetRevision);
     if ('current' in query && moved) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-    return parseProviderSpendAccountInspectionForQuery(query, { schemaVersion: 2, scopeId: exact.scopeId,
+    return parseProviderSpendAccountInspectionForQuery(query, { schemaVersion: query.holds ? 3 : 2, scopeId: exact.scopeId,
       budgetId: exact.budgetId, budgetRevision: exact.budgetRevision, ...snapshot, spendingHistoryIntegrity });
   }
 }

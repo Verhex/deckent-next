@@ -103,11 +103,11 @@ export function askSlashWindow(slot: WindowSlot, labels: SlashWindowLabels | und
 const mark = (text: string, current: boolean, label: string) => current ? `${text} · ${label}` : text;
 
 /** `/reasoning`: model thinking on / off and the live preview shown / hidden; the row of each state in force is marked. */
-export function reasoningSpec(words: SlashWindowLabels, state: Readonly<{ thinking: boolean; preview: boolean }>): SlashPickSpec {
+export function reasoningSpec(words: SlashWindowLabels, state: Readonly<{ thinking: boolean; preview: boolean }>, offSupported = false): SlashPickSpec {
   const r = words.reasoning;
   return { title: r.title, hints: words.hints, bodyRows: 0, tree: { title: r.title, items: [
     { id: 'thinking-on', label: mark(r.thinkingOn, state.thinking, r.current), detail: r.thinkingOnDetail },
-    { id: 'thinking-off', label: mark(r.thinkingOff, !state.thinking, r.current), detail: r.thinkingOffDetail },
+    ...(offSupported ? [{ id: 'thinking-off', label: mark(r.thinkingOff, !state.thinking, r.current), detail: r.thinkingOffDetail }] : []),
     { id: 'preview-on', label: mark(r.previewOn, state.preview, r.current), detail: r.previewOnDetail },
     { id: 'preview-off', label: mark(r.previewOff, !state.preview, r.current), detail: r.previewOffDetail },
   ] } };

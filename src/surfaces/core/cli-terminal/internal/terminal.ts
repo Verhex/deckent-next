@@ -17,11 +17,14 @@ import { mcpPanelPort } from './mcp-panel.js';
 import { modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
+import { protocolPanelPort } from './protocol-panel.js';
 import { providerPanelPort } from './provider-panel.js';
+import { policyPanelPort } from './policy-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
-import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
+import { terminalAdminPorts, spendRecoveryView } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
+import { providerDisplayName } from './provider-label.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
 interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; trustDigest?: string; language?: string; scopeId?: string }
@@ -172,7 +175,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
       stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale) },
-    reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale) },
+    reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
       more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
       usage: t('terminal.scratch.usage', {}, locale) },
@@ -192,11 +195,15 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   // CACHE-SLICE1: the governed 5-minute cache migration of existing profiles, offered in both windows when the governed config writer is bound.
   const planProfileCache = context.planProfileCache;
   const cache = planProfileCache && context.configApplication && context.resolveConfigPrincipal ? { cache: cachePanelPort(root, scopeId, { ...context, planProfileCache }, options, locale) } : {};
+  const planProfileProtocol = context.planProfileProtocol;
+  const protocol = planProfileProtocol && context.configApplication && context.resolveConfigPrincipal
+    ? { protocol: protocolPanelPort(root, scopeId, { ...context, planProfileProtocol }, options, locale) } : {};
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
+    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
-    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache } } : {}),
+    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache, ...protocol } } : {}),
     ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale)), ...budget, ...cache } } : {}) } } };
 }
 
@@ -415,11 +422,14 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
-    target, model: chatTarget(chat, locale), systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
+    target, model: chat?.reference?.modelId ?? chatTarget(chat, locale),
+    ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
+    systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
     // NO_COLOR concerns colour only, so it does not stop the clear.
     clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
     completeTurn: turn, errorText: error => errorText(error, locale),
+    ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
     ...(context.findTerminalMentions ? { mentions: (query: string, signal: AbortSignal) => context.findTerminalMentions!(root, { scopeId, query }, options, signal) } : {}),

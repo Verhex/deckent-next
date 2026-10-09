@@ -10,8 +10,10 @@ import { pickerChoice, pickerFirstRow, movePicker } from './picker-core.js';
 import { truncateEnd, useRenderGlyphs, SpanText, sliceSpans, span, type Span } from '#surfaces/core/terminal-render/index.js';
 
 export const ARROW_PICKER_ROWS = 6;
+const FALLBACK_COLUMNS = 80;
 
 export function ArrowPicker(props: {
+  readonly maxColumns?: number;
   readonly rows: readonly string[];
   /** Optional already projected display spans; selection still binds the original row index. */
   readonly styledRows?: readonly (readonly Span[])[];
@@ -52,7 +54,7 @@ export function ArrowPicker(props: {
 
   const index = pickerChoice(selectedRef.current, props.rows.length);
   const first = pickerFirstRow(index, props.rows.length, ARROW_PICKER_ROWS);
-  const width = Math.max(1, (columns || 80) - 1);
+  const width = Math.max(1, Math.min(columns || FALLBACK_COLUMNS, props.maxColumns ?? Number.MAX_SAFE_INTEGER) - 1);
   void generation;
   return (
     <Box flexDirection="column">

@@ -29,8 +29,8 @@ const kindSchema = z.object({
   key: z.object({ required: z.boolean(), secretName: secretNameSchema.nullable(),
     derive: z.object({ from: z.literal('endpoint-host'), prefix: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}_$/u) }).strict().optional() }).strict()
     .refine(key => (key.secretName === null) === (key.derive !== undefined)).nullable(),
-  /** T4-B `models connect`: the invocation adapter, the chat path under the endpoint base and the packaged catalog seed (null: only models already
-   * declared in the provider catalog). Null: the kind stores a key but no model can be connected to it yet. */
+  /** `models connect`: adapter, chat path and seed (seed null: bounded endpoint model discovery or an already declared exact reference).
+   * Connect null: the kind stores a key but cannot bind a model. */
   connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
@@ -38,11 +38,16 @@ const kindSchema = z.object({
     /** CACHE-SLICE1 (owner 2026-10-09): the prompt-cache TTL a NEW profile of this kind starts with (Anthropic only; 5m is the only paid TTL
      * this slice admits, `none` keeps caching off). An existing profile keeps its own value, an absent one stays absent (no silent migration). */
     cacheDefault: z.enum(['none', '5m']).optional(),
-    /** Owner 2026-10-08: no paid call to a remote endpoint without a verified price. `true`: a remote (non-loopback) address needs the operator's
-     * declared price, which the SPEND-SETTLEMENT lane brings; until then such a connection is refused (`MODEL_CONNECT_PRICE_REQUIRED`). */
+    /** Owner W5: an unpriced remote model is refused with MODEL_CONNECT_PRICE_REQUIRED; loopback and verified published rows remain allowed.
+     * A user price-declaration path needs its own owner decision. */
     priceRequired: z.boolean().default(false),
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
     dialect: openAiChatDialectSchema.optional(),
+    /** Per-model wire selection; endpoints and effort choices are sourced registry data, never model-name branches. */
+    protocolRoutes: z.array(z.object({ modelId: z.string().min(1), path: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
+      dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
+      source: z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict() }).strict())
+      .min(1).refine(rows => new Set(rows.map(row => row.modelId)).size === rows.length).readonly().optional(),
     /** Verified first-party endpoint tags and token fields for metadata-priced chat; no provider/model guessing in code. */
     metadataPricing: z.object({ maxAgeMs: positiveLimit(), maxResponseBytes: positiveLimit(), timeoutMs: positiveLimit(),
       routes: z.array(z.object({ modelId: z.string().min(1), endpointTag: z.string().min(1),
@@ -51,17 +56,19 @@ const kindSchema = z.object({
         .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
+    .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
     .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),
 }).strict().readonly();
 function positiveLimit() { return z.number().int().positive().safe(); }
 const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
-  limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive }).strict(),
+  limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive,
+    modelListBytes: positive.default(asset.limits.modelListBytes), modelListCount: positive.default(asset.limits.modelListCount) }).strict(),
   /** Key names an earlier release stored that no row uses any more (T4-A's shared OpenAI-compatible slot): `/provider` warns and offers removal. */
   legacyKeys: z.array(z.object({ secretName: secretNameSchema, moveTo: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u) }).strict()).max(16).readonly().default([]),
   /** What a connected model's invocation profile starts with (data; the person can change the written profile on the governed config path). */
   profileDefaults: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, timeoutMs: positive, maxInFlight: positive,
-    maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u) }).strict(),
+    maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u), deliveryHeadroomBytes: positive }).strict(),
   kinds: z.array(kindSchema).min(1).readonly() }).strict().readonly();
 
 export type ProviderConnectKind = z.infer<typeof kindSchema>;

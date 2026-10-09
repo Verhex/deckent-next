@@ -1,4 +1,4 @@
-import { cells, plainText, span, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
+import { cells, plainText, span, modelProviderSpans, type ModelProviderLabel, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
 import type { SessionUsageView } from '#surfaces/core/terminal-kit/index.js';
 import type { WindowLine } from './window.js';
 
@@ -12,7 +12,7 @@ export type InfoChipState = 'ok' | 'warn' | 'fail' | 'info' | 'neutral';
 /** A status chip: `state` picks the colour and the shape, `text` is the word that carries the meaning. */
 export type InfoChip = Readonly<{ state: InfoChipState; text: string }>;
 /** One aligned key/value row (bold key). `muted` de-emphasises the value; `exact` keeps a command or path character for character. */
-export type InfoRow = Readonly<{ key: string; value: string; chip?: InfoChip; id?: string; muted?: boolean; exact?: boolean }>;
+export type InfoRow = Readonly<{ key: string; value: string; identity?: ModelProviderLabel; chip?: InfoChip; id?: string; muted?: boolean; exact?: boolean }>;
 /** One list item (bullet). */
 export type InfoItem = Readonly<{ text: string; chip?: InfoChip; id?: string; muted?: boolean }>;
 /** A small table: one header row of column names, then rows of cells. */
@@ -95,7 +95,7 @@ export function infoWindowLines(model: InfoWindowModel, selected: number | null 
     if (lines.length || index > 0) lines.push({ spans: [] });
     if (section.title) lines.push({ spans: [span(`${glyphs.section} ${section.title}`, { role: 'sectionHeader' }), ...tail(section.chip, undefined, glyphs)] });
     for (const row of section.rows ?? []) {
-      lines.push({ label: [span(row.key, { role: 'keyLabel' })], spans: [...(row.value ? [span(row.value, row.muted ? { role: 'muted' } : {})] : []), ...tail(row.chip, row.id, glyphs, row.value !== '')],
+      lines.push({ label: [span(row.key, { role: 'keyLabel' })], spans: [...(row.value ? row.identity ? modelProviderSpans(row.value, row.identity) : [span(row.value, row.muted ? { role: 'muted' } : {})] : []), ...tail(row.chip, row.id, glyphs, row.value !== '')],
         ...(row.exact ? { exact: true } : {}) });
     }
     for (const item of section.items ?? []) {
@@ -139,6 +139,7 @@ export type InfoViewPorts = Readonly<Partial<Record<InfoViewCommand, (input: Inf
 
 /** Words of `/context` as a window (`terminal.info.context.*`); templates use `{name}` placeholders. */
 export interface ContextInfoLabels {
+  readonly locale?: 'en' | 'tr';
   readonly title: string;
   readonly section: Readonly<{ window: string; split: string; summaries: string; suggestion: string }>;
   readonly key: Readonly<{ fill: string; used: string; auto: string; messages: string; count: string; last: string; largest: string }>;

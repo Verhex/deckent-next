@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
-import { AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, agentTurnResultDigest, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, agentTurnInterruptedNote, agentTurnResultDigest, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import type { AgentToolSpec, AgentTurnEvent } from '#domain/index.js';
 
 const roots: string[] = [];
@@ -14,6 +14,21 @@ async function file() { const root = await mkdtemp(join(tmpdir(), 'dn-agent-turn
 const claim = (turnId = 't1', requestDigest = 'a'.repeat(64), principalKey = 'host:1000') => ({ scopeId: 'scope', turnId, principalKey, requestDigest, claimedAtMs: 10 });
 const outcome = { finish: 'stop' as const, note: null, rounds: 1, toolCalls: 0, answer: 'hi', answerBytes: 2, appendedDigest: 'e'.repeat(64) };
 const code = (promise: Promise<unknown>) => promise.then(() => 'ok', (error: { code?: string }) => error.code);
+
+it('restart outcomes are stored in the service locale and old English restart receipts replay in Turkish without a model call', async () => {
+  const store = await openSqliteAgentTurnStore(await file(), options);
+  try {
+    await store.claim(claim()); await store.interruptRunning(20, 'tr');
+    expect(await store.claim(claim())).toMatchObject({ outcome: { note: agentTurnInterruptedNote('tr') } });
+    await store.claim(claim('old')); await store.interruptRunning(21, 'en');
+    const events: AgentTurnEvent[] = [];
+    const replay = await runDurableAgentTurn({ language: 'tr', claim: claim('old'), messages: [], tools: [], signal: new AbortController().signal,
+      emit: event => events.push(event) }, store, ports([]).value);
+    expect(replay).toMatchObject({ replayed: true, note: agentTurnInterruptedNote('tr') });
+    expect(events.at(-1)).toMatchObject({ kind: 'done', note: agentTurnInterruptedNote('tr') });
+    expect(await store.claim(claim('old'))).toMatchObject({ outcome: { note: AGENT_TURN_INTERRUPTED_NOTE } });
+  } finally { store.close(); }
+});
 
 it('binds a turn id to one principal and request: running is in progress, finished replays, anything else conflicts', async () => {
   const store = await openSqliteAgentTurnStore(await file(), options);

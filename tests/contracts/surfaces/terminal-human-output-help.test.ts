@@ -39,8 +39,8 @@ describe('/help grouped', () => {
   it('lists every registry command exactly once, each on a single line', () => {
     for (const locale of ['en', 'tr'] as const) {
       const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
-      expect(rows).toHaveLength(29);
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(29);
+      expect(rows).toHaveLength(30); // MCP-GRANT-WINDOW adds /policy
+      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(30);
     }
   });
 });

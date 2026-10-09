@@ -136,10 +136,10 @@ it('migrates an actual ledger48 reservation forward with a private v48 backup', 
   const f = await heldFixture(), db = new DatabaseSync(f.path), row = db.prepare('SELECT * FROM model_invocation_spend_reservations').get()!;
   const old = { ...JSON.parse(row.record as string), schemaVersion: 2 };
   db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=?').run(JSON.stringify(old), providerSpendReservationDigest(old));
-  db.exec('DROP TRIGGER provider_spend_management_no_update; DROP TRIGGER provider_spend_management_no_delete; DROP TABLE provider_spend_management; PRAGMA user_version=48'); db.close();
+  db.exec('DROP INDEX model_invocation_spend_unreconciled_holds; DROP TRIGGER provider_spend_management_no_update; DROP TRIGGER provider_spend_management_no_delete; DROP TABLE provider_spend_management; PRAGMA user_version=48'); db.close();
   const backups = join(f.path, '..', 'backups'); await mkdir(backups);
   const upgrade = await upgradeExistingProductLedger(f.path, options, backups, new Date('2026-10-08T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 48, to: 49 });
+  expect(upgrade).toMatchObject({ from: 48, to: 50 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true });
   try { expect(JSON.parse(backup.prepare('SELECT record FROM model_invocation_spend_reservations').get()!.record as string).schemaVersion).toBe(2); } finally { backup.close(); }
   const current = new DatabaseSync(f.path, { readOnly: true });

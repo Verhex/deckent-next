@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { inspectInstallationStartability } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
@@ -13,11 +14,11 @@ import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecis
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
-import { configuredPolicyTemplateUpgrade, listConfiguredStandingGrants, revokeConfiguredStandingGrant } from '#composition/core/approvals/index.js';
+import { configuredPolicyTemplateUpgrade, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
-import { connectConfiguredModel, planConfiguredProfileCache } from '#composition/core/model-connect/index.js';
+import { connectConfiguredModel, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
@@ -66,19 +67,20 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     runMcpCommand: runConfiguredMcpCommand,
     inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames, inspectRecoveryFiles: inspectConfiguredRecoveryFiles,
     inspectInstallationBinding: inspectConfiguredInstallationBinding,
-    inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
+    inspectInstallationStartability, inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
     setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),
     // T4 PROVIDER-CONNECT: the /provider kinds (adapter data) and the free check, run in this terminal process with the key the person typed;
     // the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it.
     providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
       endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
-      endpointChoices: kind.endpoint.choices, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
+      endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? null, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
       priceRequired: kind.connect?.priceRequired ?? false })),
     endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}),
     legacyKeys: PROVIDER_CONNECT_LEGACY_KEYS,
     // T4-B: the per-connection key name (the generic row derives it from the host) and a seeded kind's models (exact ids from its packaged seed).
     secretName: (id, endpoint) => { const kind = providerConnectKind(id); if (!kind) return null; const base = endpoint === null ? null : providerEndpoint(endpoint);
       return providerConnectSecretName(kind, base?.ok ? base.base : null); },
+    discoverModels: listConfiguredConnectionModels,
     seedModels: async id => { const kind = providerConnectKind(id), seed = kind?.connect?.seed; if (!kind || !seed) return [];
       return (await readProviderConnectSeed(seed)).providers.flatMap(provider => provider.models.map(model => ({ nativeId: model.nativeId,
         displayName: (model as { displayName?: string }).displayName ?? model.nativeId, priced: providerConnectModelPriced(kind, model.nativeId) }))); } },
@@ -111,6 +113,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation, applyModelCatalog: applyConfiguredModelCatalog, inspectModelCatalog: inspectConfiguredModelCatalog,
     // T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state.
     planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
+    inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
+    planProfileProtocol: planConfiguredProfileProtocol,
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),
     applyPoolCapacity: applyConfiguredPoolCapacity, inspectPoolCapacity: inspectConfiguredPoolCapacity, applyRunLifecycle: applyConfiguredRunLifecycle, applyPoolHold: applyConfiguredPoolHold, inspectPoolHold: inspectConfiguredPoolHold, // K5 typed pool hold (local, ledger-read by the service)
@@ -145,6 +149,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
     upgradePolicyTemplate: (root, scopeId, input, options) => configuredPolicyTemplateUpgrade(root, scopeId, options, input).catch(error => { throw queryFailure(error); }),
+    mcpCapabilities: { listMcpCapabilityScopes: listConfiguredMcpCapabilityScopes, inspectMcpCapabilities: inspectConfiguredMcpCapabilities, changeMcpCapabilities: changeConfiguredMcpCapabilities },
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),
     shutdownRuntimeService: (_root, command, options) => createConfiguredRuntimeClient(_root, options).shutdownService(command),
     inspectInventory: (_root, input) => runtime.inspectInventory(input), inspectRun: (_root, input) => runtime.inspectRun(input),

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseProviderCatalogDocument, type JsonObject, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION,
+  OPENAI_RESPONSES_HTTP_ADAPTER_VERSION,
   lookupOpenAiCompatibleTariff, parseOpenAiChatHttpDefinition } from '#adapters/core/provider-openai-chat/index.js';
 import { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, anthropicMessagesProtocol, anthropicModelCapability,
   anthropicPublishedTariff, parseAnthropicMessagesDefinition } from '#adapters/core/provider-anthropic-messages/index.js';
@@ -9,7 +10,7 @@ import { providerEndpoint, type ProviderConnectKind } from './registry.js';
 
 export class ProviderConnectError extends Error {
   constructor(readonly code: 'MODEL_CONNECT_SEED_UNAVAILABLE' | 'MODEL_CONNECT_TARIFF_UNKNOWN' | 'MODEL_CONNECT_TARIFF_UNVERIFIED' | 'MODEL_CONNECT_KEY_INSECURE'
-    | 'MODEL_CONNECT_DEFINITION_INVALID') {
+    | 'MODEL_CONNECT_DEFINITION_INVALID' | 'MODEL_CONNECT_PRICE_REQUIRED') {
     super(code); this.name = 'ProviderConnectError';
   }
 }
@@ -38,6 +39,10 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   maxOutputTokens: number; currency: string; existing?: JsonObject | null }>): ConnectionAdapter {
   const connect = kind.connect;
   if (!connect) throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID');
+  const route = connect.protocolRoutes?.find(row => row.modelId === input.nativeId);
+  // A reconnect is not the migration selection: existing definitions keep their wire choice.
+  const responses = route && (!input.existing || (input.existing['dialect'] as { protocol?: unknown } | undefined)?.protocol === 'responses');
+  if (responses) input = { ...input, endpoint: new URL(route.path, input.endpoint).href };
   const secure = new URL(input.endpoint).protocol === 'https:';
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) {
     if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');
@@ -51,26 +56,27 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     return Object.freeze({ adapter: { id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
       protocol: { family: anthropicMessagesProtocol.family, version: anthropicMessagesProtocol.version }, tariff: 'published' });
   }
-  const metadata = connect.metadataPricing, route = metadata?.routes.find(row => row.modelId === input.nativeId);
+  const metadata = connect.metadataPricing, pricedRoute = metadata?.routes.find(row => row.modelId === input.nativeId);
   if (metadata) {
-    if (!route || input.currency !== 'USD' || new URL(route.sourceUrl).origin !== new URL(input.endpoint).origin) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
+    if (!pricedRoute || input.currency !== 'USD' || new URL(pricedRoute.sourceUrl).origin !== new URL(input.endpoint).origin) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
     if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');
     const metadataEndpoint = new URL(`/api/v1/models/${input.nativeId.split('/').map(encodeURIComponent).join('/')}/endpoints`, input.endpoint).href;
     const metadataLimits = { maxAgeMs: metadata.maxAgeMs, maxResponseBytes: metadata.maxResponseBytes, timeoutMs: metadata.timeoutMs };
     const definition = { endpoint: input.endpoint, maxOutputTokens: input.maxOutputTokens,
-      dialect: { ...connect.dialect!, tokenLimitField: route.tokenLimitField }, authentication: { type: 'bearer', credentialRef: input.credentialRef },
-      tariff: { kind: 'openrouter-endpoint', version: 1, currency: 'USD', metadataEndpoint, endpointTag: route.endpointTag, metadataLimits } };
+      dialect: { ...connect.dialect!, tokenLimitField: pricedRoute.tokenLimitField }, authentication: { type: 'bearer', credentialRef: input.credentialRef },
+      tariff: { kind: 'openrouter-endpoint', version: 1, currency: 'USD', metadataEndpoint, endpointTag: pricedRoute.endpointTag, metadataLimits } };
     try { parseOpenAiChatHttpDefinition(definition); } catch { throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID'); }
     return Object.freeze({ adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
       protocol: { family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION }, tariff: 'published' });
   }
   const published = openAiChatLoopback(input.endpoint) ? null : lookupOpenAiCompatibleTariff(input.endpoint, input.nativeId);
-  if (!published && !openAiChatLoopback(input.endpoint)) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
-  const definition = { endpoint: input.endpoint, ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}), maxOutputTokens: input.maxOutputTokens, dialect: connect.dialect,
+  if (!published && !openAiChatLoopback(input.endpoint)) throw new ProviderConnectError(connect.priceRequired ? 'MODEL_CONNECT_PRICE_REQUIRED' : 'MODEL_CONNECT_TARIFF_UNVERIFIED');
+  const definition = { endpoint: input.endpoint, ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}), maxOutputTokens: input.maxOutputTokens,
+    dialect: responses ? input.existing?.['dialect'] ?? route.dialect : connect.dialect,
     authentication: secure && input.credentialRef !== null ? { type: 'bearer', credentialRef: input.credentialRef } : { type: 'none' },
     tariff: published ?? { kind: 'operator-static', version: 1, currency: input.currency, inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } };
   try { parseOpenAiChatHttpDefinition(definition); } catch { throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID'); }
-  return Object.freeze({ adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
+  return Object.freeze({ adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: responses ? OPENAI_RESPONSES_HTTP_ADAPTER_VERSION : OPENAI_CHAT_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
     protocol: { family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION }, tariff: published ? 'published' : 'unmetered' });
 }
 /** The spend authority's own loopback rule (provider-openai-chat `openAiCompatibleTariffRates`): only these hosts may keep a zero tariff. */
@@ -82,8 +88,8 @@ function openAiChatLoopback(endpoint: string): boolean {
  * Whether a model of a seeded kind can be connected with a price at the kind's default address (the `/provider` model list locks the others before
  * anything is written): Anthropic by its published tariff, the OpenAI chat adapter by an exact verified row, a loopback address always (zero tariff).
  */
-export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: string): boolean {
-  const connect = kind.connect, base = kind.endpoint.default === null ? null : providerEndpoint(kind.endpoint.default);
+export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: string, address: string | null = kind.endpoint.default): boolean {
+  const connect = kind.connect, base = address === null ? null : providerEndpoint(address);
   if (!connect || !base?.ok) return false;
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) return anthropicPublishedTariff(nativeId) !== null;
   if (connect.metadataPricing) return connect.metadataPricing.routes.some(route => route.modelId === nativeId);

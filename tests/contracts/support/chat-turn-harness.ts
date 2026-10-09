@@ -36,6 +36,10 @@ export type Script = { toolCall?: { name: string; arguments: string }; content?:
   /** TRUNCATED-TOOLCALL: the usage chunk's completion count (default 8); the fixture's `maxCompletionTokens` is 128. */
   completionTokens?: number };
 export async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
+  /** Seedless connection fixture: a free GET, separate from every model call. */
+  modelList?: () => readonly string[];
+  /** Config/catalog tests use an injected discovery transport and need no listener or runtime start. */
+  noServer?: boolean;
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
   thinkingSwitch?: boolean; dataInside?: boolean;
@@ -65,6 +69,10 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const body: Buffer[] = []; req.on('data', part => body.push(part));
     req.on('end', () => {
+      if (options.modelList && req.method === 'GET' && req.url === '/v1/models') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ object: 'list', data: options.modelList().map(id => ({ id })) })); return;
+      }
       if (req.url === '/tokenize') {
         state.tokenize.push(JSON.parse(Buffer.concat(body).toString('utf8')) as Record<string, unknown>);
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -102,8 +110,12 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
       next();
     });
   });
-  servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
+  let address: { port: number } = { port: 8000 };
+  if (!options.noServer) {
+    servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+    const listening = server.address(); if (!listening || typeof listening === 'string') throw new Error('FIXTURE_ADDRESS');
+    address = listening;
+  }
   const definition = { encodingVersion: 1 as const, provider: { id: 'local-openai', version: 1 }, model };
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,

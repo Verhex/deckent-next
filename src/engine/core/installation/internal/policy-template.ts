@@ -36,7 +36,7 @@ export async function inspectFirstRunPolicyTemplate(source: PolicyTemplateSource
   catch { return null; }
 }
 
-export type PolicyTemplateResource = 'policy' | 'bindings';
+export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger';
 export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplateResource; readonly path: string; readonly content: string; readonly digest: string }
 export interface PolicyTemplatePreview {
   readonly schemaVersion: 1; readonly status: 'preview';
@@ -66,6 +66,8 @@ export interface PreparePolicyTemplateInput {
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
   readonly paths: { readonly policy: string; readonly bindings: string };
   readonly toolNames: FirstRunToolNames;
+  /** Optional installer-owned first-session targets; retained in the same recovery journal. */
+  readonly firstSessionTargets?: readonly PolicyTemplatePublishTarget[];
 }
 export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId'
   | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId'>;
@@ -84,6 +86,7 @@ export function preparePolicyTemplateInstallation(input: PreparePolicyTemplateIn
   const targets: readonly PolicyTemplatePublishTarget[] = Object.freeze([
     Object.freeze({ resource: 'policy' as const, path: input.paths.policy, content: policyContent, digest: digestOf(policyContent) }),
     Object.freeze({ resource: 'bindings' as const, path: input.paths.bindings, content: bindingsContent, digest: digestOf(bindingsContent) }),
+    ...(input.firstSessionTargets ?? []),
   ]);
   const planDigest = digestOf(`deckent.policy-template-plan.v1\n${canonical({ id: template.id, version: template.version, scopeId, principal,
     targets: targets.map(target => ({ resource: target.resource, path: target.path, digest: target.digest })) })}`);
@@ -113,6 +116,8 @@ export class PolicyTemplateInstallationApplication {
       if (observed.record.transactionId !== preview.transactionId || observed.record.planDigest !== preview.planDigest) {
         throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
       }
+      if (observed.record.resources.length !== targets.length || targets.some(target => !observed.record!.resources.some(resource =>
+        resource.resource === target.resource && resource.path === target.path && resource.targetDigest === target.digest))) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
     } else {
       const preimages = new Map<PolicyTemplateResource, string | null>();
       for (const target of targets) {
@@ -126,7 +131,7 @@ export class PolicyTemplateInstallationApplication {
         profileDigest: preview.planDigest, phase: 'pending', createdAtMs: now, updatedAtMs: now, blockers: ['POLICY_TEMPLATE_NOT_APPLIED'],
         resources: targets.map(target => ({ resource: target.resource, path: target.path, preimageDigest: preimages.get(target.resource)!,
           targetDigest: target.digest, state: 'pending' as const })),
-        recovery: immutableJsonObjectSchema.parse({ schemaVersion: 1, scopeId: preview.scopeId, principal: preview.principal, template: preview.template }) };
+        recovery: immutableJsonObjectSchema.parse({ schemaVersion: 1, scopeId: preview.scopeId, principal: preview.principal, template: preview.template, ...(targets.length > 2 ? { firstSessionTargets: targets.filter(target => target.resource === 'config' || target.resource === 'ledger') } : {}) }) };
       observed = await this.ports.journal.write(observed, payload);
     }
     if (!observed.record) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');

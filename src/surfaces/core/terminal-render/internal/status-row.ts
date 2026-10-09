@@ -6,13 +6,13 @@ import { cells, truncateEnd, truncateStart } from './text-width.js';
  * Width-aware status row (behavior of legacy repl/status-row fitStatusRow, f18d53fb8): measured in display cells,
  * optional facts dropped lowest priority first, the scope tail-truncated with a leading ellipsis, never wrapped.
  */
-export type StatusSegment = Readonly<{ id: string; text: string; role: SpanRole | null; priority: number; droppable: boolean; shrink: boolean; bold?: boolean }>;
+export type StatusSegment = Readonly<{ id: string; text: string; role: SpanRole | null; priority: number; droppable: boolean; shrink: boolean; bold?: boolean; group?: string }>;
 export type StatusRowLayout = Readonly<{ segments: readonly StatusSegment[]; dropped: readonly string[] }>;
 
 const MIN_SHRINK_CELLS = 12;
 
 const rowCells = (segments: readonly StatusSegment[], separator: string): number =>
-  segments.reduce((sum, segment) => sum + cells(segment.text), 0) + cells(separator) * Math.max(0, segments.length - 1);
+  segments.reduce((sum, segment, index) => sum + cells(segment.text) + (index ? segment.id === 'provider' ? 1 : cells(separator) : 0), 0);
 
 export function fitStatusRow(input: readonly StatusSegment[], columns: number, separator: string, ellipsis: string): StatusRowLayout {
   const budget = Math.max(1, Math.floor(columns));
@@ -22,9 +22,11 @@ export function fitStatusRow(input: readonly StatusSegment[], columns: number, s
   const slack = () => { const item = shrinkable(); return item ? Math.max(0, cells(item.text) - MIN_SHRINK_CELLS) : 0; };
   // 1. Drop optional facts (lowest priority first) until shrinking the scope to its minimum is enough.
   for (const candidate of [...segments].filter(segment => segment.droppable).sort((a, b) => a.priority - b.priority)) {
+    if (!segments.includes(candidate)) continue;
     if (rowCells(segments, separator) - slack() <= budget) break;
-    segments = segments.filter(segment => segment !== candidate);
-    dropped.push(candidate.id);
+    const removed = segments.filter(segment => segment === candidate || candidate.group && segment.group === candidate.group);
+    segments = segments.filter(segment => !removed.includes(segment));
+    dropped.push(...removed.map(segment => segment.id));
   }
   // 2. Tail-truncate the scope into what is left (the end of an id or path is the informative part).
   const over = rowCells(segments, separator) - budget;
@@ -38,7 +40,7 @@ export function fitStatusRow(input: readonly StatusSegment[], columns: number, s
     const kept: StatusSegment[] = [];
     let used = 0;
     for (const segment of segments) {
-      const gap = kept.length ? cells(separator) : 0, width = cells(segment.text);
+      const gap = kept.length ? segment.id === 'provider' ? 1 : cells(separator) : 0, width = cells(segment.text);
       if (used + gap + width <= budget) { kept.push(segment); used += gap + width; continue; }
       const room = budget - used - gap;
       if (room > 0) kept.push({ ...segment, text: truncateEnd(segment.text, room, ellipsis) });
@@ -61,7 +63,7 @@ export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string; c
 export type PermissionModeStop = PermissionMode | 'ask-edits';
 const NEUTRAL_CANCEL_HINT = 'Esc cancels';
 export type WorklineStatusInput = Readonly<{
-  scope: string; model?: string | undefined; state: string; busy: boolean; spinner?: string | undefined; elapsedMs?: number | undefined;
+  scope: string; model?: string | undefined; provider?: string | undefined; state: string; busy: boolean; spinner?: string | undefined; elapsedMs?: number | undefined;
   queued?: number | undefined; notice?: string | undefined; labels: WorklineStatusLabels;
   /** The person's permission mode from the service (T-L4 slice 4c); shown only as its catalog text, never free text. */
   mode?: PermissionMode | undefined;
@@ -90,7 +92,8 @@ export function worklineStatusSegments(input: WorklineStatusInput): StatusSegmen
   const mode = PERMISSION_MODES.find(value => value === input.mode);
   return [
     segment('scope', input.scope, 'accent', 90, false, true),
-    ...(input.model ? [segment('model', input.model, 'code', 60)] : []),
+    ...(input.model ? [{ ...segment('model', input.model, 'model', 60), group: 'model-provider' },
+      ...(input.provider ? [{ ...segment('provider', `(${input.provider})`, 'provider', 60), group: 'model-provider' }] : [])] : []),
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
     ...(input.busy && input.cancellable ? [segment('cancel', input.labels.cancelHint ?? NEUTRAL_CANCEL_HINT, 'muted', 45)] : []),
     // Full access is a standing warning (T3 L4, owner 2026-10-07: mark, word and the warning tone together, bold); a derived source marker also

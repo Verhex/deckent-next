@@ -189,6 +189,8 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
     vi.spyOn(platform, 'loadConfig').mockResolvedValue({} as Awaited<ReturnType<typeof platform.loadConfig>>);
     const reference = { providerId: 'local', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
     vi.spyOn(adapters, 'readTerminalChatConfig').mockReturnValue({ schemaVersion: 1, reference, maxCompletionTokens: 128 });
+    // SPEND-HOLDS c83f46a9: the turn prices with the effective output cap, read from the same (here mocked) terminal chat config.
+    vi.spyOn(adapters, 'effectiveTerminalOutputCap').mockReturnValue(128);
     vi.spyOn(providerCatalog, 'inspectModelBinding').mockResolvedValue({ status: 'declared', catalogRevision: 'catalog',
       binding: { digest: 'a'.repeat(64) }, definition: { model: { protocols: [] } } } as unknown as Awaited<ReturnType<typeof providerCatalog.inspectModelBinding>>);
     vi.spyOn(adapters, 'openLocalIntegrityAuthority').mockResolvedValue(integrity);

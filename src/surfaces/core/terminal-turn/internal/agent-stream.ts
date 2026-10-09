@@ -13,7 +13,7 @@ export interface TerminalAgentTurnPorts {
   /** Existing governed inspection of this round's settled measurement; failure leaves cache usage unknown. */
   settledUsage?(projectRoot: string, command: ChatTurnCommand, round: number, options: ConfigLoadOptions): Promise<NonNullable<Extract<TurnDelta, { kind: 'usage' }>['cache']> | null>;
   /** Local preflight; returns service admission for the summarizing phase when available. */
-  preflight?(projectRoot: string, options: ConfigLoadOptions, reference?: ModelReference): Promise<AgentTurnAdmission | void>;
+  preflight?(projectRoot: string, options: ConfigLoadOptions, reference?: ModelReference, scopeId?: string): Promise<AgentTurnAdmission | void>;
 }
 export interface TerminalAgentTurnInput {
   readonly projectRoot: string;
@@ -36,7 +36,7 @@ type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown }
 /** Streams the service-owned turn/history and one final done; abort or early exit cancels the same command exactly once. */
 export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, ports: TerminalAgentTurnPorts): AsyncGenerator<TurnDelta> {
   input.signal?.throwIfAborted();
-  const admission = await ports.preflight?.(input.projectRoot, input.options, input.reference) ?? null;
+  const admission = await ports.preflight?.(input.projectRoot, input.options, input.reference, input.scopeId) ?? null;
   input.signal?.throwIfAborted();
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages],
     ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}),

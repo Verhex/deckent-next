@@ -2,9 +2,10 @@
 
 # Deckent
 
-**The Agent Control & Execution Plane**
+**Agent Control & Execution Plane**
 
-Every action by people, AI agents and tools is authorized, isolated, executed and proven inside your own infrastructure.
+Deckent combines a customer-installed runtime, a budget ceiling before every paid API call, sandboxed tools and MCP,
+governed approvals, and one typed application contract for human and AI entry points.
 
 *policy-driven agent runtime · governed execution · self-hosted agent control plane*
 
@@ -33,25 +34,26 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 
 ## What is Deckent
 
-AI agents can now write code, run commands and call tools on their own. The hard part is no longer *can the agent
-do it*, but *should it, where, on whose authority, and how do we know what happened*. Most products answer only half
-of that question: some run agents, others govern agents that run somewhere else.
+Deckent runs on your own machines and brings policy, approvals, execution and durable records together. Before a
+paid API call it reserves the maximum charge against the scope's budget; an unknown price or insufficient budget
+refuses the call. People use the terminal or `deckent` command; AI agents and integrations use MCP or the SDK.
+These entry points share one typed application contract.
 
-Deckent is both halves in one product, installed on your own machines. Think of an airport: the **control tower**
-decides who may take off and records every flight, and the **runway** is where the flight actually happens. Deckent
-is the tower and the runway together. It decides what a person or an agent may do, runs that work in an isolated
-place, and keeps a durable record you can check afterwards.
+MCP uses a separate actor with observation-only default grants; changing budgets, activating models or invoking them
+requires an explicit policy grant naming that MCP actor. Human approval decisions require interactive terminal input
+and output.
 
-You talk to Deckent through its terminal, its `deckent` command, its MCP server or its SDK. All of them use the same
-typed contract for identity, policy and approval checks. MCP uses a separate actor with observation-only default grants;
-changing budgets, activating models or invoking them requires an explicit policy grant naming that MCP actor.
-Human approval decisions require interactive terminal input and output. The open-source Core (Apache-2.0) works on its own; the proprietary Enterprise edition layers on top
-without changing Core.
+The open-source Core (Apache-2.0) works on its own. The planned proprietary Enterprise edition is designed
+to layer on through the registry without editing Core, as a separate distribution. Today the public extension entry lets a CLI
+distribution register effect adapters and secret-store adapters. Since alpha.20, that distribution can also start
+the service and MCP entry with its registrations; automatic service start and restart replay the distribution's
+entry. Core's bare executables do not discover those modules. Enterprise SSO, ERP integrations and fleet management
+remain planned capabilities.
 
 | | |
 |---|---|
 | 🗼 **Govern** | One identity, scope and policy model for people and AI agents. When something needs approval, the window shows exactly what: the full command, where it runs, on whose behalf, the risk, whether it can be undone, and a deadline. A persona or a model's advice never grants authority. |
-| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); workers run in Docker. Works with Anthropic, OpenAI, DeepSeek, Z.ai (GLM), OpenAI-compatible endpoints, OpenRouter (key only so far) and local vLLM models, and with Claude Code, Codex and Cursor workers. |
+| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); workers run in Docker. Works with Anthropic, OpenAI, DeepSeek, Z.ai (GLM), a local server or an OpenAI-compatible endpoint with published pricing, and OpenRouter model connections (paid calls require verified pricing and routing), and with Claude Code, Codex and Cursor workers. |
 | 📜 **Prove** | Every decision and effect lands in a durable ledger and audit trail. Approvals are sealed, patches are retained, and changes are integrated in an isolated candidate before anything is delivered. |
 
 ## How a request flows
@@ -110,18 +112,23 @@ deckent init policy --scope my-project --apply
 ```
 
 1. **Set up** once per project: `deckent init policy --scope <id> --preview` shows the first-run policy and
-   `deckent init policy --scope <id> --apply` installs it. It lets you connect and call models, keep keys and set
+   `deckent init policy --scope <id> --apply` installs it, writes the default terminal scope and chat limits,
+   and initializes cancellation settings and an empty migrated ledger. Choose a scope name such as `my-project`. It lets you connect and call models, keep keys and set
    budgets in that scope; every one of those actions is still checked and recorded. On Linux, WSL and macOS a fresh
    installation starts on the encrypted key store.
-2. **Open the terminal** with `deckent`.
-3. **Connect a provider** with `/provider`: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, any OpenAI-compatible
-   address or a local server such as vLLM. You type the key into a masked field; Deckent checks it with a free request
-   and stores it in the secret store under its name; a key the check rejects is never stored. Where a provider has no
-   free check, the key is kept unverified and the first turn shows any rejection. The value is never shown again and
-   no agent or worker ever receives it. Then choose **Connect a model** from that provider's catalog. A model
-   without a verified published price is listed but locked, with the reason (Zhipu GLM China stays locked because its
-   prices are in CNY). OpenRouter stores a key only for now. The same from the command line: `deckent secret set <NAME>`
-   and `deckent models connect --scope <id> --connection <kind> --command-id <id> --model <exact id>`.
+2. **Open the terminal** with `deckent` (or `deckent --scope my-project` for an explicit scope).
+3. **Connect a provider** with `/provider`: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, a local server
+   such as vLLM, or an OpenAI-compatible endpoint with published pricing. You type the key into a masked field;
+   Deckent checks it with a free request and stores it in the secret store under its name; a key the check
+   rejects is never stored. Where a provider has no free check, the key is kept unverified and the first turn
+   shows any rejection. The value is never shown again and no agent or worker ever receives it. Then choose
+   **Connect a model**. Providers with a packaged catalog offer those models; for a provider without one, choose
+   an address, then select an exact ID from its bounded `/v1/models` list. Deckent stores that ID unchanged.
+   Local loopback models are free-measured; a remote model without a verified published price is listed but
+   locked, with the reason and the next step (Zhipu GLM China stays locked because its prices are in CNY).
+   OpenRouter offers model connections; paid calls still require verified pricing and routing. The same from the
+   command line: `deckent secret set <NAME>` and `deckent models connect --scope <id> --connection <kind>
+   --command-id <id> --model <exact id>`.
 4. **Set a budget.** Every model turn reserves against one shared USD budget of the scope; without one, every turn is
    refused and the windows say so. The first row of `/provider`, **Create budget**, opens the budget window: 5, 10, 25,
    50 or 100 USD, or another whole-dollar amount from 1 to 1000 with the arrow keys, then a confirm step. Later the
@@ -177,7 +184,7 @@ may become an approval.
     <td width="50%"><img src=".github/assets/screenshots/en/07-mcp.png" alt="/mcp window"><br><sub><b>/mcp.</b> Add a server step by step; configured servers with their trust state.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/08-provider.png" alt="/provider window listing provider kinds"><br><sub><b>/provider.</b> Each provider's state; the OpenRouter row says it holds a key only for now.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/08-provider.png" alt="/provider window listing provider kinds"><br><sub><b>/provider.</b> Each provider's state. OpenRouter now offers model connections; this screenshot predates them.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/14-config.png" alt="/config window choosing the terminal theme"><br><sub><b>/config.</b> Section, key, then one of the allowed values; the current one is marked.</sub></td>
   </tr>
   <tr>
@@ -187,6 +194,17 @@ may become an approval.
 </table>
 
 ## Safety model
+
+External MCP clients start with observation-only permissions. Open `/policy` (**MCP permissions**), choose an existing scope and a capability group, then grant or revoke it after reviewing the exact rules. Applying requires an attested terminal approval and is audited; no policy JSON needs typing. Pool control, catalog registration and global model configuration are marked **all scopes**. Revoking a group preserves other grants, which may still allow a tool. “Dogfood worker” is a proposed work-only preset; its exact N1 MCP usage is unverified.
+
+CLI choices come from `deckent policy mcp list --json`:
+
+```sh
+deckent policy mcp grant --group work --scope <existing-scope> --preview
+deckent policy mcp grant --group work --scope <existing-scope> \
+  --apply --expect <preview-digest>
+# Revoke: the same two steps with `revoke` instead of `grant`.
+```
 
 Every tool call an agent makes is decided by two things together: your organization's policy and the permission mode
 you chose. You move between the modes you are allowed with <kbd>Shift</kbd>+<kbd>Tab</kbd>, or with `/mode`.
@@ -324,9 +342,12 @@ flowchart LR
 
 ## Get started
 
-Deckent runs on Linux or Windows WSL2 with Node.js ≥ 24.15.0 (Node 24 and 26 are supported); Docker is needed for
-the pinned bubblewrap build as well as coding workers. A C build toolchain is also required for the native
-sandbox helper. Until the npm package is published, build it once from source:
+Deckent runs on Linux or Windows through WSL2 with Node.js ≥ 24.15.0 (Node 24 and 26 are supported).
+Native Windows runtime transport is not supported. A fresh source build needs Docker to build and stage the locked
+bubblewrap (currently 0.13.0); it downloads and verifies the locked source and binary digests. A verified staged
+bundle can be reused offline. System bubblewrap, when selected, must be ≥ 0.12.0. Docker is also required for coding
+workers; the first terminal session itself does not need Docker or a paid call. A C build toolchain is also required
+for the native sandbox helper. Until npm publication, build once:
 
 ```sh
 git clone https://github.com/Verhex/deckent-next.git
@@ -342,13 +363,20 @@ Use a fresh `--out` directory for another build. Do not proceed with sandbox wor
 `bubblewrap=ABSENT`; inspect the sandbox posture with `deckent doctor`. See the
 [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart) for prerequisites and one test without a provider key.
 
+After linking, change to your own project folder, outside the Deckent source checkout.
+Long paths and spaces work: the local socket uses a short private directory per installation.
+`npm run build` fails clearly if it cannot stage the locked bubblewrap; start Docker and retry,
+or use `DECKENT_BWRAP_BUILD=<verified build-bwrap output> npm run build`.
+
 From then on, everything is `deckent`:
 
 ```sh
 deckent --version
-deckent                                   # open the interactive terminal
-deckent doctor                            # installation health
-deckent init policy --scope <id> --apply  # first-run policy for a project (see Your first session)
+deckent init policy --scope my-project --preview
+deckent init policy --scope my-project --apply
+deckent doctor                            # non-zero if setup cannot start
+deckent                                   # opens in the scope selected by init
+# deckent --scope my-project               # explicit scope, same terminal
 deckent init preview --profile <file>     # preview the installation for a project
 deckent mcp add context7 -- npx -y @upstash/context7-mcp   # add an MCP server
 deckent monitor                           # watch installations and work

@@ -32,7 +32,7 @@ export type { AgentChatMessage, ChatTurnMessage };
 
 /** Keeps the system instruction and the newest messages; `limit` counts every message including the system one. */
 export function boundChatHistory(system: ChatTurnMessage, history: readonly ChatTurnMessage[], limit: number): readonly ChatTurnMessage[] {
-  const recent = history.filter(message => message.role !== 'system');
+  const recent = history.filter(message => message.role !== 'system' && (message.role !== 'assistant' || message.content.trim()));
   return Object.freeze([system, ...recent.slice(-Math.max(1, limit - 1))]);
 }
 
@@ -42,7 +42,7 @@ export function boundChatHistory(system: ChatTurnMessage, history: readonly Chat
  * kept whole even when it alone exceeds `limit`.
  */
 export function boundAgentHistory(system: AgentChatMessage, history: readonly AgentChatMessage[], limit: number): readonly AgentChatMessage[] {
-  const recent = history.filter(message => message.role !== 'system');
+  const recent = history.filter(message => message.role !== 'system' && (message.role !== 'assistant' || message.content.trim() || message.toolCalls.length));
   let start = Math.max(0, recent.length - Math.max(1, limit - 1));
   while (start < recent.length && recent[start]!.role !== 'user') start += 1;
   if (start >= recent.length) {
@@ -55,7 +55,7 @@ export function boundAgentHistory(system: AgentChatMessage, history: readonly Ag
 
 /** The whole agent history behind the system instruction: its lifecycle is the runtime's measurement and compaction, not a count. */
 export function agentHistory(system: AgentChatMessage, history: readonly AgentChatMessage[]): readonly AgentChatMessage[] {
-  return Object.freeze([system, ...history.filter(message => message.role !== 'system')]);
+  return Object.freeze([system, ...history.filter(message => message.role !== 'system' && (message.role !== 'assistant' || message.content.trim() || message.toolCalls.length))]);
 }
 
 /** The plain (tool-less) form of an agent history, for the non-streaming path. */

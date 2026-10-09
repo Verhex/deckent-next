@@ -85,6 +85,23 @@ function modelLines(result: ModelConnectResult, label: string, locale: Locale): 
  */
 /** Model connections of this terminal waiting for an approval: the same choice continues under its command id (display state, never authority). */
 const pendingConnections = new Map<string, string>(), PENDING_CONNECTIONS_KEPT = 32;
+type DeclaredConnectionModel = Readonly<{ id: string; label: string; detail: string; family: readonly string[] }>;
+async function connectionModelRows(kind: ProviderConnectKindView, connect: NonNullable<Host['providerConnect']>, enabled: boolean,
+  declared: readonly DeclaredConnectionModel[], locale: Locale): Promise<ProviderPanelKind['models']> {
+  if (!enabled || !kind.connectFamily) return [];
+  if (kind.seeded && connect.seedModels) return (await connect.seedModels(kind.id).catch(() => [])).map(model => ({ id: `${SEED}${model.nativeId}`,
+    label: model.displayName, detail: model.nativeId, ...(model.priced === false ? { blocked: kind.id === 'zai-cn-api'
+      ? t('tui.provider.model.currencyUnsupported', {}, locale) : t('tui.provider.model.priceUnverified', {}, locale) } : {}) }));
+  return declared.filter(model => model.family.includes(kind.connectFamily!)).map(({ id, label, detail }) => ({ id, label, detail }));
+}
+function discoveryPort(root: string, scopeId: string, connect: NonNullable<Host['providerConnect']>, options: ConfigLoadOptions, locale: Locale):
+  Pick<ProviderPanelPort, 'listModels'> {
+  if (!connect.discoverModels) return {};
+  return { async listModels(kind, endpoint) {
+    return (await connect.discoverModels!(root, scopeId, kind, endpoint, options)).map(model => ({ id: `${SEED}${model.nativeId}`,
+      label: model.displayName, detail: model.nativeId, ...(model.priced ? {} : { blocked: t('tui.provider.model.priceRequired', {}, locale) }) }));
+  } };
+}
 export function providerPanelPort(root: string, scopeId: string, host: Host & { providerConnect: NonNullable<Host['providerConnect']> }, options: ConfigLoadOptions, locale: Locale,
   errorText: (error: unknown) => string): ProviderPanelPort {
   const connect = host.providerConnect;
@@ -122,7 +139,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         });
       };
       // T4-B: what each kind can connect — its seed's models (exact ids), or the declared catalog models speaking its protocol family.
-      let declared: readonly Readonly<{ id: string; label: string; detail: string; family: readonly string[] }>[] = [];
+      let declared: readonly DeclaredConnectionModel[] = [];
       if (host.inspectDeclaredModels && host.connectModel) {
         try {
           const inspection = await host.inspectDeclaredModels(root, options);
@@ -132,14 +149,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           }));
         } catch { declared = []; }
       }
-      const modelsOf = async (kind: ProviderConnectKindView) => {
-        if (!host.connectModel || !kind.connectFamily) return [];
-        // Stage 1: a seed model without a verified price is listed but locked (connecting it is refused before anything is written).
-        if (kind.seeded && connect.seedModels) return (await connect.seedModels(kind.id).catch(() => [])).map(model => ({ id: `${SEED}${model.nativeId}`, label: model.displayName, detail: model.nativeId,
-          ...(model.priced === false ? { blocked: kind.id === 'zai-cn-api' ? t('tui.provider.model.currencyUnsupported', {}, locale) : t('tui.provider.model.priceUnverified', {}, locale) } : {}) }));
-        return declared.filter(model => model.family.includes(kind.connectFamily!)).map(({ id, label, detail }) => ({ id, label, detail }));
-      };
-      const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id, await modelsOf(kind)] as const)));
+      const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id,
+        await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
       const kinds: ProviderPanelKind[] = connect.kinds.map(kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         const detail = !kind.available ? '' : keyName === null ? '-' : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale)
@@ -148,10 +159,9 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
         return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail, blocked: kind.available ? null : t('tui.provider.unavailable', {}, locale), keyName, keyStored: stored,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
-          models: models.get(kind.id) ?? [], ...(pending ? { pendingNote: pending } : {}),
+          models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),
           // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).
-          modelBlocked: kind.priceRequired ? t('tui.provider.model.priceRequired', {}, locale)
-            : kind.keyRequired && keyName !== null && names !== null && !stored ? t('tui.provider.model.needsKey', {}, locale) : null };
+          modelBlocked: kind.keyRequired && keyName !== null && names !== null && !stored ? t('tui.provider.model.needsKey', {}, locale) : null };
       });
       // (c) A key kept under a name no row uses any more (T4-A's shared OpenAI-compatible slot): warned, removable, never used.
       for (const legacy of connect.legacyKeys ?? []) {
@@ -172,6 +182,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       const checked = connect.endpoint(text);
       return checked.ok ? { ok: true, base: checked.base, check: `${checked.base}${kindOf(kind)?.probePath ?? ''}` } : { ok: false, reason: endpointWord(checked.reason, locale) };
     },
+    ...discoveryPort(root, scopeId, connect, options, locale),
     async connect(request: ProviderConnectRequest): Promise<ProviderConnectOutcome> {
       const kind = kindOf(request.kind), label = kindLabel(kind, request.kind, locale);
       const refused = (lines: readonly PanelLine[]): ProviderConnectOutcome => ({ stored: false, title: t('tui.provider.result.refused', { kind: label }, locale), lines });

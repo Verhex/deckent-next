@@ -62,7 +62,7 @@ it('reads journal time from the platform trusted clock (I40), not raw Date.now',
   const root = await project(), trusted = 1_000_000_000_000; // far from the real wall time, so a raw Date.now read is visible
   const clock = clockPerOperation(() => trusted);
   await expect(applyPolicyTemplateInstallation(root, 'installation')).resolves.toMatchObject({ status: 'installed' });
-  expect(clock.samples).toBe(4); // pending, two published updates, commit
+  expect(clock.samples).toBe(6); // pending, four published updates (policy, bindings; INSTALL-FLOW first-session config and ledger), commit
   expect((await platform.observeBootstrapState(root)).record).toMatchObject({ phase: 'committed', createdAtMs: trusted, updatedAtMs: trusted });
 });
 

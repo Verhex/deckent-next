@@ -153,7 +153,7 @@ describe('information windows on the real workline (SW-1)', () => {
     await settle(40);
     await type(view, '/context\r');
     await until(() => view.stdout.frame.includes('▸ Window [! filling up]'), 'context window');
-    expect(view.stdout.frame).toContain('80%'); expect(view.stdout.frame).toContain('4000 of 5000 tokens');
+    expect(view.stdout.frame).toContain('80%'); expect(view.stdout.frame).toContain('4,000 of 5,000 tokens'); // MODEL-SWITCH: locale-aware token units
     await type(view, ESC);
     await until(() => view.stdout.frame.includes(`${MARK} · Context: 80% full · 2 messages`), 'context summary');
     await type(view, '/usage b1 2\r');

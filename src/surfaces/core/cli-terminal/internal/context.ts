@@ -34,10 +34,11 @@ type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnT
  */
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
+  catalogProviderId?: string | null;
   secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
   /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
   connectFamily?: string | null; seeded?: boolean;
-  /** Owner 2026-10-08: a remote address of this kind needs a declared price first (SPEND-SETTLEMENT); its model action is locked until then. */
+  /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
   priceRequired?: boolean }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
 export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified' }>;
@@ -51,6 +52,9 @@ export interface ProviderConnectHost {
   readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
   secretName?(kind: string, endpoint: string | null): string | null;
   seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string; priced?: boolean }>[]>;
+  /** Seedless endpoint discovery after address selection; the same configured read used by models.connect. */
+  discoverModels?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions):
+    Promise<readonly Readonly<{ nativeId: string; displayName: string; priced: boolean }>[]>;
 }
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
@@ -61,13 +65,20 @@ export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schem
 /** The engine's `ProfileCachePlan` as this unit reads it (no engine model-activation import here). */
 export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown> }>[]; shared: readonly ModelReference[] }>;
+export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference;
+  detail: Readonly<{ modelId: string; from: string; to: string; protocol: string }> }>[];
+  writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
 export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
+  mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   providerConnect?: ProviderConnectHost;
   /** CACHE-SLICE1: the scope's existing profiles offered the 5-minute prompt cache, and the per-layer profile documents that switch it on (read only). */
   planProfileCache?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileCachePlan>;
+  inspectModelReadiness?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<unknown>;
+  prepareModelSwitch?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<void>;
+  planProfileProtocol?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileProtocolPlan>;
   listSecretNames?: TerminalSecretNamesHandler;
   setSecret?: TerminalSecretSetHandler;
   deleteSecret?: TerminalSecretDeleteHandler;

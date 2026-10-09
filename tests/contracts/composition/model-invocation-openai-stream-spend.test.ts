@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import type { ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -7,8 +7,9 @@ import { join } from 'node:path';
 import { describe, afterEach, expect, it } from 'vitest';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
-import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteProviderSpendIntegrityReader, readLocalOsIdentity } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
+import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSqliteModelInvocationReader, openSqliteProviderSpendIntegrityReader, readLocalOsIdentity } from '#adapters/index.js';
+import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, verifyProviderSpendIntegrity, modelInvocationRequestDigest,
+  modelInvocationProfileDigest, providerSpendEvidenceDigest } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 
@@ -32,14 +33,14 @@ const jsonReply: Reply = response => {
   response.end(JSON.stringify({ id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: MODEL,
     choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'partial answer' } }], usage }));
 };
-async function fixture(reply: Reply) {
+async function fixture(reply: Reply, listen = true) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-openai-stream-spend-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(data), mkdir(home)]);
   const { key, caPem } = await createLocalTls(root);
   const server = createServer({ key, cert: caPem }, (request, response) => { request.resume(); request.on('end', () => reply(response)); });
-  servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
+  if (listen) { servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); }); }
+  const address = server.address(); if (listen && (!address || typeof address === 'string')) throw new Error('FIXTURE');
   const reference = { providerId: 'operator', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
   const model = { id: 'chat', version: 1, nativeId: MODEL, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog', providers: [{ id: 'operator', version: 1, models: [model] }] };
@@ -47,7 +48,7 @@ async function fixture(reply: Reply) {
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
-      definition: { endpoint: `https://127.0.0.1:${address.port}/chat`, maxOutputTokens: 64, authentication: { type: 'none' }, tls: { caPem },
+      definition: { endpoint: `https://127.0.0.1:${address && typeof address !== 'string' ? address.port : 1234}/chat`, maxOutputTokens: 64, authentication: { type: 'none' }, tls: { caPem },
         tariff: { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: 200, cachedInputMinorUnitsPerMillionTokens: 50,
           outputMinorUnitsPerMillionTokens: 1000 } } },
     allocation: { id: 'allocation', maxCalls: 3, maxInFlight: 2 }, limits: { requestMaxBytes: 8192, responseMaxBytes: 8192, timeoutMs: 2000 } };
@@ -58,14 +59,15 @@ async function fixture(reply: Reply) {
   const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
   const activation = new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
     new ModelBindingApplication({ async read() { return catalog; } }), async () => openSqliteModelActivationStore(ledger, sqlite), () => 1);
-  await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0, catalogRevision: 'catalog', expectedBinding: binding });
+  const activated = await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0, catalogRevision: 'catalog', expectedBinding: binding });
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants: [{
     id: 'invoke', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: [{ issuer: principal.issuer, subject: principal.subject }],
     resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } }] }), { mode: 0o600 });
   const command = { schemaVersion: 1 as const, commandId: 'command', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: MODEL, messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 16 } };
   const streamed = { ...command, commandId: 'streamed', nativeRequest: { ...command.nativeRequest, stream: true, stream_options: { include_usage: true as const } } };
-  return { project, ledger, command, streamed, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
+  return { project, ledger, command, streamed, profile, definition, principal, activation: activated.receipt.record, data,
+    env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
 
 const chunk = (choice: Record<string, unknown> | null, extra: Record<string, unknown> = {}) => `data: ${JSON.stringify({ id: 'chatcmpl-1',
@@ -85,6 +87,31 @@ async function spendOf(f: Awaited<ReturnType<typeof fixture>>, invocationId: str
 }
 
 describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
+it('exhaustion totals require a fresh account-inspect grant, independently of invocation authority', async () => {
+  let requests = 0; const f = await fixture(response => { requests++; jsonReply(response); }, false);
+  const requestDigest = modelInvocationRequestDigest(f.command), profileDigest = modelInvocationProfileDigest(f.profile);
+  const evidence = { schemaVersion: 1, kind: 'synthetic-test-bound' }, digest = providerSpendEvidenceDigest(evidence);
+  const store = await openSqliteModelInvocationStore(f.ledger, sqlite, 'forbid');
+  const claim = await store.claim({ command: f.command, requestDigest, profileDigest, profile: f.profile, definition: f.definition, activation: f.activation,
+    actor: { id: f.principal.id, issuer: f.principal.issuer, subject: f.principal.subject, assurance: f.principal.assurance },
+    authorization: { revision: 'seed', ruleId: 'seed' }, invocationId: 'synthetic-held', claimedAtMs: 2,
+    spending: { budget: { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 },
+      quote: { schemaVersion: 1, scopeId: 'scope', requestDigest, profileDigest, currency: 'USD', maxChargeMinorUnits: 1000,
+        pricing: { id: 'fixture', version: 1, definition: evidence, digest }, meter: { id: 'fixture', version: 1, evidence, evidenceDigest: digest } } } });
+  await store.permitSend(claim.record.receipt.claim, 'synthetic-owner', 3); await store.recordUnknown(claim.record.receipt.claim, 'transport-error', 4); store.close();
+  const command = { ...f.command, commandId: 'exhausted' }, options = { env: f.env };
+  const denied = await invokeConfiguredModel(f.project, command, options).catch(error => error);
+  expect(denied).toMatchObject({ code: 'PROVIDER_SPEND_EXHAUSTED' }); expect(denied.params).not.toHaveProperty('held'); expect(denied.params).not.toHaveProperty('settled');
+  const path = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(path, 'utf8'));
+  policy.grants.push({ id: 'account-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: [{ issuer: f.principal.issuer, subject: f.principal.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } });
+  await writeFile(path, JSON.stringify(policy));
+  const allowed = await invokeConfiguredModel(f.project, command, options).catch(error => error);
+  expect(allowed).toMatchObject({ code: 'PROVIDER_SPEND_EXHAUSTED', params: { settled: '0', held: 1000, limit: 1000, currency: 'USD' } });
+  policy.grants.pop(); await writeFile(path, JSON.stringify(policy));
+  const revoked = await invokeConfiguredModel(f.project, command, options).catch(error => error);
+  expect(revoked.params).not.toHaveProperty('held'); expect(requests).toBe(0);
+  const { integrity } = await spendOf(f, 'synthetic-held'); expect(integrity.reservationCount).toBe(1); expect(integrity.reservedMinorUnits).toBe(1000);
+});
 it.each([
   ['cut after the usage-null finish chunk (EOF before the usage-only chunk and [DONE])', interimThenFinish, 'unknown'],
   ['completed with [DONE] but no final usage', interimThenFinish + 'data: [DONE]\n\n', 'rejected'],
@@ -99,6 +126,46 @@ it.each([
     disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null }, measurement: null });
   expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0,
     checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
+});
+
+it.each([400, 422, 429, 500, 503])('HTTP %s reaches atomic spend settlement through the real TLS producer', async status => {
+  const f = await fixture(response => { response.writeHead(status, { 'content-type': 'application/json' }); response.end('{"error":{"message":"invalid_request_error"}}'); });
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'http-status', httpStatus: status } });
+  const released = status < 500;
+  expect(inspection!.spending!.disposition.state).toBe(released ? 'released-no-charge' : 'held');
+  expect(integrity.reservedMinorUnits).toBe(released ? 0 : inspection!.spending!.descriptor.quote.maxChargeMinorUnits);
+  expect(integrity.settledMinorUnits).toBe(0);
+});
+
+it('a credential/policy refusal before POST releases its claim without contacting the TLS producer', async () => {
+  let requests = 0;
+  const f = await fixture(response => { requests++; jsonReply(response); });
+  const path = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
+  config.provider_invocation_profiles.profiles[0].adapter.definition.authentication = { type: 'bearer', credentialRef: 'MISSING_KEY' };
+  await writeFile(path, JSON.stringify(config)); clearConfigCache();
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'not-sent', httpStatus: null } });
+  expect(inspection!.spending!.disposition.state).toBe('released-no-charge');
+  expect(integrity.reservedMinorUnits).toBe(0); expect(requests).toBe(0);
+});
+
+it.each(['timeout', 'cancel'] as const)('%s after POST keeps the hold after closing the local request', async mode => {
+  const cancel = new AbortController(); let contacted = false;
+  const f = await fixture(response => { contacted = true; response.writeHead(200, { 'content-type': 'text/event-stream' }); response.flushHeaders();
+    response.write(content); if (mode === 'cancel') cancel.abort(); });
+  if (mode === 'timeout') {
+    const path = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
+    config.provider_invocation_profiles.profiles[0].limits.timeoutMs = 100;
+    await writeFile(path, JSON.stringify(config)); clearConfigCache();
+  }
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env }, cancel.signal);
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(contacted).toBe(true); expect(result.receipt.outcome?.state).toBe('unknown');
+  expect(inspection!.spending!.disposition.state).toBe('held');
+  expect(integrity.reservedMinorUnits).toBe(inspection!.spending!.descriptor.quote.maxChargeMinorUnits);
 });
 
 // Astra 2467: SSE comment padding pushes the observed wire past the 8192-byte retention cap (the evidence is then bounded, not complete,

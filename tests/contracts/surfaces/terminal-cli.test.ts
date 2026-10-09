@@ -71,7 +71,7 @@ describe('deckent terminal CLI', () => {
     expect(await main([], { ...tty('xterm-256color'), env: { ...f.env, TERM: 'xterm-256color', DECKENT_LANGUAGE: 'en' },
       stdout: Object.assign(bare.output, { isTTY: true }), stderr: bare.output })).toBe(2);
     expect(bare.text()).toContain('TERMINAL_SCOPE_REQUIRED');
-    expect(bare.text()).toContain('terminal.scopeId');
+    expect(bare.text()).toContain('deckent init policy --scope <id> --apply');
     expect(ensured).toBe(0);
   });
 
@@ -303,3 +303,13 @@ it('S05 line mode redacts a known value and a provider token split across deltas
   expect(err.text()).toContain('tool read_file a<U+E0041>b.ts: ok (1 ms)');
   expect(err.text()).toContain('Approval required: run_shell · echo <U+202E> \u2039secret:LINE_TEST\u203a');
 });
+
+it('dispatches deckent --scope to the same terminal command, including typed TTY and duplicate-scope refusals', async () => {
+    const f = await fixture(); const out = sink();
+    const context = { root: f.project, env: f.env, stdout: out.output, stderr: out.output,
+      stdin: Object.assign(Readable.from([]), { isTTY: false }), initialize() {}, async completeTerminalChat() { return ''; } };
+    expect(await main(['--scope', 's'], context), out.text()).toBe(2);
+    expect(out.text()).toContain('TERMINAL_TTY_REQUIRED');
+    expect(out.text()).not.toContain('Unknown command');
+    expect(await main(['--scope', 's', '--scope', 'other'], context)).toBe(2);
+  });

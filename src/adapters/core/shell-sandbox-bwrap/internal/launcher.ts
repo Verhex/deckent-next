@@ -271,3 +271,5 @@ export function shellSandboxCapabilities(stateDir: string | null): Promise<Shell
   }
   return value;
 }
+
+export { BUNDLED_MAX_BYTES as BUBBLEWRAP_BUNDLED_MAX_BYTES };

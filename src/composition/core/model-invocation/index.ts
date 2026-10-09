@@ -1,4 +1,4 @@
-export { invokeConfiguredModel, invokePeerConfiguredModel, measurePeerConfiguredModel } from './internal/invoke.js';
+export { invokeConfiguredModel, previewConfiguredModel, invokePeerConfiguredModel, measurePeerConfiguredModel } from './internal/invoke.js';
 export { inspectConfiguredModelInvocation, inspectConfiguredModelInvocationCommand, inspectPeerConfiguredModelInvocation } from './internal/inspect.js';
 export { purgePeerConfiguredModelInvocationContent } from './internal/purge.js';
 export { cancelPeerConfiguredModelInvocation } from './internal/cancel.js';

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { t, type Locale } from '#platform/index.js';
 import type { AgentToolCallStatus, AgentToolDiagnostic, AgentTurnFinish } from '#domain/index.js';
 
 export type AgentTurnStoreErrorCode = 'AGENT_TURN_IN_PROGRESS' | 'AGENT_TURN_CONFLICT' | 'AGENT_TURN_CORRUPT' | 'AGENT_TURN_INVALID' | 'AGENT_TURN_UNAVAILABLE';
@@ -53,7 +54,7 @@ export interface AgentTurnStore {
   recordToolCall(record: AgentTurnToolCallRecord): Promise<void>;
   finish(scopeId: string, turnId: string, outcome: AgentTurnOutcome, atMs: number): Promise<void>;
   /** Closes every intact running turn; a damaged row is reported and left as it is, never blocking the others. */
-  interruptRunning(atMs: number): Promise<{ readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }>;
+  interruptRunning(atMs: number, language?: Locale): Promise<{ readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }>;
 }
 
 /** Bounded outcome of a loop result: the final answer when it fits, the appended messages by digest only. */
@@ -64,4 +65,5 @@ export function agentTurnOutcome(result: { readonly finish: AgentTurnFinish; rea
     answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? result.answer : null, answerBytes, appendedDigest: result.appendedDigest });
 }
 export const agentTurnResultDigest = (text: string) => createHash('sha256').update(`agent-tool-result:1\0${text}`).digest('hex');
-export const AGENT_TURN_INTERRUPTED_NOTE = 'The turn was interrupted by a runtime service restart; the tool calls it settled are recorded. Send the request again as a new turn.';
+export const agentTurnInterruptedNote = (language?: Locale) => t('agent.turn.outcome.restart', {}, language);
+export const AGENT_TURN_INTERRUPTED_NOTE = agentTurnInterruptedNote('en');

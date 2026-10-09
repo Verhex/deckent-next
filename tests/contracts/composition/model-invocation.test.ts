@@ -13,7 +13,7 @@ import { ModelInvocationApplication, ModelInvocationCancellationApplication, Mod
   verifyModelInvocationReceipt } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
-import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
+import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata, replyPricedProviderPrivacy } from '../../fixtures/priced-provider.js';
 
 const roots: string[] = [], servers: Server[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
@@ -33,6 +33,7 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
   const tls = await createPricedProviderTls(root);
   let requests = 0, metadataGets = 0, response = options.response ?? 'ok'; const bodies: string[] = [], paths: string[] = [];
   const server = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
+    if (replyPricedProviderPrivacy(request, reply)) return;
     if (replyPricedProviderMetadata(request, reply)) { metadataGets++; return; }
     requests++; paths.push(request.url ?? ''); const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', () => { bodies.push(Buffer.concat(chunks).toString('utf8'));

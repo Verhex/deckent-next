@@ -175,7 +175,7 @@ describe('ledger buffer (Ink Static contract)', () => {
     view.stdin.write('first\r'); await until(() => saved.length === 1, 'first save');
     // The whole history without the system prompt is saved after the turn, and the measured context is reported.
     expect(saved[0]!.messages).toEqual([{ role: 'user', content: 'first' }, { role: 'assistant', content: 'reply 1', toolCalls: [] }]);
-    view.stdin.write('/context\r'); await until(() => view.stdout.text.includes('CTX 1500/6000 25% 2'), 'context line');
+    view.stdin.write('/context\r'); await until(() => view.stdout.text.includes('CTX 1,500/6,000 25% 2'), 'context line');
     view.stdin.write('/resume\r'); await until(() => view.stdout.text.includes('> SESSION 1 11111111'), 'picker');
     view.stdin.write('\u001b'); await until(() => !view.stdout.frame.includes('> SESSION 1 11111111'), 'picker dismissed');
     // The dismiss frame does not prove the composer's passive useInput subscription has taken over yet.

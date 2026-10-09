@@ -207,7 +207,8 @@ it('maps HTTP failures to a bodiless rejection, and a credential echo, timeout a
   await expect(run(silent, streamed(), { signal: controller.signal })).rejects.toMatchObject({ code: 'OPENAI_CHAT_CANCELLED' });
   const noKey = createAnthropicMessagesPricedNative({ async resolveCredential() { return undefined; } });
   const unresolved = await noKey.native.prepare(profile(silent), binding(), streamed());
-  await expect(noKey.native.send(unresolved)).rejects.toMatchObject({ code: 'OPENAI_CHAT_CREDENTIAL_UNAVAILABLE' });
+  // SPEND-HOLDS: a credential refusal before the POST is a certified, empty not-sent rejection (its reservation is released, never charged).
+  await expect(noKey.native.send(unresolved)).resolves.toMatchObject({ kind: 'rejected', evidence: { reason: 'not-sent', httpStatus: null, body: { complete: true, byteLength: 0 } } });
 });
 
 it('parses a non-streamed message (compaction path) with the same checks', async () => {

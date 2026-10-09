@@ -76,7 +76,7 @@ it('rejects absent, invalid, or non-RFC6750 bearer credentials before a request'
   for (const resolver of [undefined, async () => undefined, async () => '', async () => 'token with space', async () => 'token:colon']) {
     const port = createOpenAiChatNativePort(resolver ? { resolveCredential: resolver } : {});
     const prepared = await port.prepare(profile(endpoint, { type: 'bearer', credentialRef: 'PROVIDER_TOKEN' }), binding, request);
-    await expect(port.send(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_CREDENTIAL_UNAVAILABLE' } satisfies Partial<OpenAiChatHttpError>);
+    await expect(port.send(prepared)).resolves.toMatchObject({ kind: 'rejected', evidence: { reason: 'not-sent', httpStatus: null, body: { complete: true, byteLength: 0 } } });
   }
   expect(requests).toBe(0);
 });
@@ -144,7 +144,7 @@ it('bounds credential lookup by the whole deadline and ignores late resolution w
   const pending = new Promise<string>(resolve => { release = resolve; });
   const port = createOpenAiChatNativePort({ async resolveCredential() { return pending; } });
   const prepared = await port.prepare(profile(endpoint, { type: 'bearer', credentialRef: 'PROVIDER_TOKEN' }, 30), binding, request);
-  await expect(port.send(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_TIMEOUT' } satisfies Partial<OpenAiChatHttpError>);
+  await expect(port.send(prepared)).resolves.toMatchObject({ kind: 'rejected', evidence: { reason: 'not-sent', httpStatus: null, body: { complete: true, byteLength: 0 } } });
   release('late-secret'); await new Promise(resolve => setTimeout(resolve, 30)); expect(requests).toBe(0);
 });
 
@@ -156,6 +156,6 @@ it('cancels credential lookup without allowing its late result to send', async (
   const prepared = await port.prepare(profile(endpoint, { type: 'bearer', credentialRef: 'PROVIDER_TOKEN' }), binding, request);
   const controller = new AbortController(), sending = port.send(prepared, controller.signal);
   await new Promise(resolve => setImmediate(resolve)); controller.abort();
-  await expect(sending).rejects.toMatchObject({ code: 'OPENAI_CHAT_CANCELLED' } satisfies Partial<OpenAiChatHttpError>);
+  await expect(sending).resolves.toMatchObject({ kind: 'rejected', evidence: { reason: 'not-sent', httpStatus: null, body: { complete: true, byteLength: 0 } } });
   expect(observedSignal?.aborted).toBe(true); release('late-secret'); await new Promise(resolve => setTimeout(resolve, 30)); expect(requests).toBe(0);
 });

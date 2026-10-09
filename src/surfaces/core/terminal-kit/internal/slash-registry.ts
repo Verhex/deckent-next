@@ -40,6 +40,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'scratch', group: 'session', descriptionKey: 'terminal.slash.scratch' },
   // MCP-CLIENT: the project's MCP servers (`/mcp approve|reconnect|remove <name>` typed); runs at once from the palette.
   { name: 'mcp', group: 'settings', descriptionKey: 'terminal.slash.mcp' },
+  { name: 'policy', group: 'settings', descriptionKey: 'terminal.slash.policy' },
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
   { name: 'config', group: 'settings', descriptionKey: 'config.surface.slashDescription' },
   // T4 PROVIDER-CONNECT: connect a provider (masked key, free check, secret store) or disconnect it; a window only.
@@ -65,16 +66,27 @@ export function isInspectSlashCommand(command: string): command is InspectSlashC
  * `reasoningTokens` sums only the reports that carried a reasoning count; `reasoningUnmeasured` counts the reports that did not, so an
  * unreported value stays unknown instead of reading as zero (P2-3a). */
 export interface SessionUsageView { readonly reports: number; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number;
-  readonly reasoningUnmeasured: number; readonly cache?: SessionCacheUsage }
+  readonly reasoningUnmeasured: number; readonly cache?: SessionCacheUsage;
+  readonly models?: readonly Readonly<{ model: string; provider: string; reports: number; promptTokens: number; completionTokens: number }>[] }
 /** CACHE-SLICE1: raw cache classes summed over the measured reports, and the same-request net benefit (USD x 1e10) over the reports that carried
  * one (`benefitReports`); an unknown benefit is never counted as zero. */
 export interface SessionCacheUsage { readonly reports: number; readonly readTokens: number; readonly writeTokens: number; readonly promptTokens: number;
   readonly write5mTokens: number; readonly write1hTokens: number; readonly netBenefitUsdE10: number; readonly benefitReports: number }
 type ReportCache = Readonly<{ readTokens: number; writeTokens: number; promptTokens: number; write5mTokens?: number; write1hTokens?: number; netBenefitUsdE10?: number | null }>;
 export const EMPTY_SESSION_USAGE: SessionUsageView = Object.freeze({ reports: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0, reasoningUnmeasured: 0 });
-export function addSessionUsage(total: SessionUsageView, report: Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null; cache?: ReportCache }>): SessionUsageView {
+export function addSessionUsage(total: SessionUsageView, report: Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null; cache?: ReportCache;
+  identity?: Readonly<{ model: string; provider: string }> | undefined }>): SessionUsageView {
   const cache = report.cache, benefit = typeof cache?.netBenefitUsdE10 === 'number' ? cache.netBenefitUsdE10 : null;
+  const models = [...(total.models ?? [])], identity = report.identity;
+  if (identity) {
+    const at = models.findIndex(row => row.model === identity.model && row.provider === identity.provider);
+    const previous = models[at];
+    const row = Object.freeze({ ...identity, reports: (previous?.reports ?? 0) + 1,
+      promptTokens: (previous?.promptTokens ?? 0) + report.promptTokens, completionTokens: (previous?.completionTokens ?? 0) + report.completionTokens });
+    if (at < 0) models.push(row); else models[at] = row;
+  }
   return Object.freeze({ reports: total.reports + 1, promptTokens: total.promptTokens + report.promptTokens, completionTokens: total.completionTokens + report.completionTokens,
+    ...(models.length ? { models: Object.freeze(models) } : {}),
     reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0), reasoningUnmeasured: total.reasoningUnmeasured + (report.reasoningTokens === null ? 1 : 0),
     cache: { reports: (total.cache?.reports ?? 0) + (cache ? 1 : 0), readTokens: (total.cache?.readTokens ?? 0) + (cache?.readTokens ?? 0),
       writeTokens: (total.cache?.writeTokens ?? 0) + (cache?.writeTokens ?? 0), promptTokens: (total.cache?.promptTokens ?? 0) + (cache?.promptTokens ?? 0),

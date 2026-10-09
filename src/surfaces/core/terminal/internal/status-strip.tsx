@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Text, useAnimation, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { useRenderGlyphs, useHumanTextSecrets, projectHumanPickerText } from '#surfaces/core/terminal-render/index.js';
 import { spanStyle } from '#surfaces/core/terminal-render/index.js';
 import { fitStatusRow, worklineStatusSegments, type StatusSegment, type WorklineStatusLabels } from '#surfaces/core/terminal-render/index.js';
 import type { PermissionMode } from '#domain/index.js';
@@ -11,6 +11,7 @@ export interface StatusStripProps {
   /** Scope (or the pre-joined `scope · model` target); shrinks from the start before anything wraps. */
   readonly target: string;
   readonly model?: string | undefined;
+  readonly provider?: string | undefined;
   readonly state: string;
   readonly busy: boolean;
   readonly queued?: number | undefined;
@@ -29,13 +30,17 @@ export interface StatusStripProps {
 }
 
 /** One inline text node measured against live terminal width; no wrapping or stale lines on resize (legacy f18d53fb8, row 7143). */
-export function StatusStrip({ target, model, state, busy, queued, notice, labels, mode, stop, selfSource, cancellable, reasoning }: StatusStripProps) {
+export function StatusStrip({ target, model, provider, state, busy, queued, notice, labels, mode, stop, selfSource, cancellable, reasoning }: StatusStripProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
+  const known = useHumanTextSecrets(), identity = model ? provider ? `${model} (${provider})` : model : '';
+  // Mask the complete identity before splitting or dropping it; a known secret can span both names.
+  const projected = projectHumanPickerText(identity, known).label;
+  const unchanged = projected === identity;
   const { columns } = useWindowSize();
   const { frame } = useAnimation({ interval: 120, isActive: busy });
   const [since, setSince] = useState<number | null>(null);
   useEffect(() => { setSince(busy ? Date.now() : null); }, [busy]);
-  const segments = worklineStatusSegments({ scope: target, model, state, busy, spinner: glyphs.spinner[frame % glyphs.spinner.length],
+  const segments = worklineStatusSegments({ scope: target, model: unchanged ? model : projected, provider: unchanged ? provider : undefined, state, busy, spinner: glyphs.spinner[frame % glyphs.spinner.length],
     elapsedMs: since === null ? undefined : Date.now() - since, queued, notice, labels, mode, selfSource, cancellable, stop, modeMark: stop ? glyphs.mode[stop] : undefined });
   const separator = ` ${glyphs.separator} `;
   const reasoningSegment: StatusSegment | null = reasoning ? Object.freeze({ id: 'reasoning', text: reasoning, role: 'muted' as const, priority: 48, droppable: true, shrink: false }) : null;
@@ -45,7 +50,7 @@ export function StatusStrip({ target, model, state, busy, queued, notice, labels
   return (
     <Text wrap="truncate-end">
       {layout.segments.map((segment, index) => (
-        <Text key={segment.id}>{index > 0 ? separator : ''}<Text {...(segment.role ? spanStyle({ text: '', role: segment.role, ...(segment.bold ? { bold: true } : {}) }, palette) : {})}>{segment.text}</Text></Text>
+        <Text key={segment.id}>{index > 0 ? segment.id === 'provider' ? ' ' : separator : ''}<Text {...(segment.role ? spanStyle({ text: '', role: segment.role, ...(segment.bold ? { bold: true } : {}) }, palette) : {})}>{segment.text}</Text></Text>
       ))}
     </Text>
   );

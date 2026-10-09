@@ -8,8 +8,8 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
+import { ErrorRegistry, resolveLocale, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
@@ -63,13 +63,13 @@ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadCompos
 }
 
 /** Interrupt abandoned turns only under ledger custody; a second start cannot close a live service's turns. */
-async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadComposedConfig>>, observer: ConfiguredRuntimeServiceObserver, custodyId: string) {
+async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadComposedConfig>>, observer: ConfiguredRuntimeServiceObserver, custodyId: string, options: ConfigLoadOptions) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
   const store = await openSqliteAgentTurnStore(path, config.storage.sqlite, 'forbid');
   try {
-    const result = await store.interruptRunning(Date.now());
+    const result = await store.interruptRunning(Date.now(), resolveLocale(undefined, options.env ?? process.env, config.language));
     if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
   } finally { store.close(); }
   // FIX-2143-SLOTS/INFLIGHT-FIX (Astra 2145 R1): settle this custody's abandoned calls and release settled slots; leave other open calls intact.
@@ -99,7 +99,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   const missingCancellation = [...(config.cancellation ? [] : ['cancellation']), ...(config.cancellationRuntime ? [] : ['cancellationRuntime'])];
   if (missingCancellation.length) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: missingCancellation.join(', ') } });
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
-  const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
+  const endpoint = await prepareRuntimeSocket(config.productLayout);
   // LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start.
   const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
   try { return await startUnderCustody(projectRoot, observer, options, config, guard, ports); }
@@ -112,7 +112,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   await upgradeLedgerAtStart(config, observer);
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
   const scopes = await registerConfiguredScopesAtStart(config);
-  await interruptAgentTurnsAtStart(config, observer, guard.custodyId);
+  await interruptAgentTurnsAtStart(config, observer, guard.custodyId, options);
   const custody = await sweepConfiguredAttemptCustody(projectRoot, [...scopes?.pins.keys() ?? []], options); if (custody.length) await observer.onAttemptCustodySwept?.(custody);
   // SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held). The one
   // scratch custody of this service: start sweep, periodic sweep and turns claim and hold areas through it (Astra 2149).

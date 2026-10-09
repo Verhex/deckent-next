@@ -11,7 +11,7 @@ function metadata(options: { readonly tag?: string; readonly modelId?: string; r
     input_cache_write: options.cacheWrite ?? '0', internal_reasoning: options.reasoning ?? '0', request: options.request ?? '0', discount: 0,
     ...(options.extraPricing ?? {}) } as Record<string, unknown>;
   for (const key of options.omitPricing ?? []) delete pricing[key];
-  const endpoint = { model_id: options.endpointModelId ?? 'vendor/model', tag: options.tag ?? 'provider/region', provider_name: 'Provider',
+  const endpoint = { model_id: options.endpointModelId ?? 'vendor/model', tag: options.tag ?? 'provider/region', provider_name: 'Provider', data_policy: { training: false, retainsPrompts: false },
     context_length: 10, max_prompt_tokens: options.maxPrompt === undefined ? 3 : options.maxPrompt,
     max_completion_tokens: options.maxCompletion === undefined ? 4 : options.maxCompletion, status: options.status ?? 0,
     supported_parameters: options.supported ?? ['max_tokens'], pricing, ...(options.extraEndpoint ?? {}) };
@@ -27,7 +27,7 @@ it('selects one exact provider/region endpoint and quotes independently rounded 
   const parsed = tariff({ request: '0.005' });
   const result = quoteOpenRouterText(parsed, quoteRequest(), 150);
   expect(result).toEqual({ schemaVersion: 2, currency: 'USD', maxChargeMinorUnits: 8, metadataDigest: parsed.metadataDigest, tariffDigest: parsed.tariffDigest,
-    maxPromptTokens: 3, maxCompletionTokens: 2, requestControls: expect.objectContaining({ modalities: ['text'] }), provider: { only: ['provider/region'], allow_fallbacks: false, require_parameters: true,
+    maxPromptTokens: 3, maxCompletionTokens: 2, requestControls: expect.objectContaining({ modalities: ['text'] }), provider: { only: ['provider/region'], allow_fallbacks: false, require_parameters: true, data_collection: 'deny', zdr: true,
       max_price: { prompt: '10000', completion: '20000', request: '0.005' } } });
   expect(parsed.pricedDimensions).toEqual(['completion', 'input_cache_read', 'input_cache_write', 'internal_reasoning', 'prompt', 'request']);
 });

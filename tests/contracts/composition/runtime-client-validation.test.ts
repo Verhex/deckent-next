@@ -3,12 +3,12 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import type { EffectCommand } from '#domain/index.js';
 const transport = vi.hoisted(() => vi.fn());
 vi.mock('#adapters/index.js', async importOriginal => ({
-  ...await importOriginal<typeof import('#adapters/index.js')>(), requestLocalRuntime: transport,
+  // INSTALL-FLOW: the client resolves its private socket through the adapter; the transport mock never dials it.
+  ...await importOriginal<typeof import('#adapters/index.js')>(), requestLocalRuntime: transport, prepareRuntimeSocket: async () => '/unused-test-socket',
 }));
 vi.mock('#platform/index.js', async importOriginal => {
   const actual = await importOriginal<typeof import('#platform/index.js')>();
-  return { ...actual, loadConfig: async () => ({ service: actual.getConfigFieldDefault('service') }),
-    prepareProductSocket: async () => '/unused-test-socket' };
+  return { ...actual, loadConfig: async () => ({ service: actual.getConfigFieldDefault('service') }) };
 });
 afterEach(() => transport.mockReset());
 const client = () => createConfiguredRuntimeClient('/unused-test-project');

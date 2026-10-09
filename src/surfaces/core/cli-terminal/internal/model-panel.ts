@@ -1,15 +1,16 @@
-import { loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { loadConfig, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
+import { providerDisplayName } from './provider-label.js';
 
 // The config surface reaches the terminal renderer; load it only when a default-model write happens (startup graph stays light).
 const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/core/config/index.js').terminalConfigWrite>) =>
   (await import('#surfaces/core/config/index.js')).terminalConfigWrite(...args);
 
 type Host = Pick<TerminalLaunchContext, 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
-  | 'listSecretNames' | 'inspectProviderSpendAccount'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
+  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
 /** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
 function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
   switch (source) {
@@ -39,6 +40,16 @@ export async function scopeBudgeted(config: Record<string, unknown>, scopeId: st
   return read.inspect ? (await read.inspect(read.root, { schemaVersion: 1, scopeId, current: true }, read.options).catch(() => null))?.checkpoint != null : false;
 }
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
+function readinessReason(error: unknown, locale: Locale): string {
+  const code = errorCode(error);
+  if (code === 'MODEL_INVOCATION_REASONING_UNSUPPORTED') return t('tui.model.reason.reasoningOff', {}, locale);
+  if (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN' || code === 'PROVIDER_SPEND_UNAVAILABLE')
+    return t('tui.model.reason.budget', { code }, locale);
+  if (code === 'PROVIDER_SPEND_TARIFF_UNVERIFIED') return t('tui.model.reason.price', {}, locale);
+  if (code === 'MODEL_INVOCATION_UNAVAILABLE' || code === 'OPENAI_CHAT_DEFINITION_INVALID' || code === 'OPENAI_CHAT_REQUEST_INVALID'
+    || code === 'OPENAI_CHAT_MODEL_MISMATCH' || code === 'MODEL_INVOCATION_NATIVE_REQUEST_INVALID') return t('tui.model.reason.protocol', { code }, locale);
+  return t('tui.model.reason.notRunnable', { code }, locale);
+}
 
 /**
  * The terminal `/model` window's source (T4 MODEL-SWITCH). It lists the models the provider catalog declares (exact references only) with what
@@ -50,6 +61,18 @@ const errorCode = (error: unknown) => String((error as { code?: unknown })?.code
 export function modelPanelSource(root: string, scopeId: string, host: Host, options: ConfigLoadOptions, locale: Locale): ModelPanelSource {
   const defaultBlocked = () => host.configApplication && host.resolveConfigPrincipal ? null : t('tui.model.defaultReadOnly', {}, locale);
   return {
+    ...(host.prepareModelSwitch ? { async prepare(choice: ModelPanelChoice, reasoning?: 'off') {
+      try { await host.prepareModelSwitch!(root, scopeId, choice.reference, options, reasoning); }
+      catch (error) { throw ErrorRegistry.createError('TERMINAL_MODEL_SWITCH_REFUSED', { params: { reason: readinessReason(error, locale) } }); }
+    } } : {}),
+    async reasoningOffSupported(reference) {
+      const declared = await host.inspectDeclaredModels?.(root, options);
+      const plan = reference ? null : await host.describeTerminalChatPlan?.(root, options);
+      const exact = reference ?? plan?.reference;
+      return declared?.status === 'declared' && !!exact && declared.catalog.providers.some(provider => provider.id === exact.providerId && provider.version === exact.providerVersion
+        && provider.models.some(model => model.id === exact.modelId && model.version === exact.modelVersion && model.protocols.some(protocol =>
+          protocol.capabilities.some(capability => capability.id === 'chat-template-enable-thinking' && capability.version === 1 && capability.state === 'supported'))));
+    },
     async inspect(): Promise<ModelPanelView> {
       const title = t('tui.model.title', { scope: scopeId }, locale), notes: string[] = [];
       const declared = host.inspectDeclaredModels ? await host.inspectDeclaredModels(root, options) : null;
@@ -87,15 +110,22 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         else if (host.inspectModelActivation) {
           try {
             const activation = (await host.inspectModelActivation(root, { schemaVersion: 1, scopeId, reference }, options)).activation;
-            if (activation?.state !== 'active') {
-              const binding = host.inspectModelBinding ? await host.inspectModelBinding(root, reference, options).catch(() => null) : null;
+            const binding = host.inspectModelBinding ? await host.inspectModelBinding(root, reference, options).catch(() => null) : null;
+            if (activation?.state !== 'active' || (!binding && !host.inspectModelReadiness)
+              || (binding && (binding.status !== 'declared' || activation.binding.digest !== binding.binding.digest
+                || (activation.catalogRevision !== binding.catalogRevision && !host.prepareModelSwitch)))) {
               blocked = t('tui.model.reason.inactive', {}, locale);
               command = t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
                 revision: activation?.revision ?? 0, digest: binding?.binding?.digest ?? '<digest>', catalog: binding?.catalogRevision ?? '<revision>' }, locale);
             }
           } catch (error) { blocked = t('tui.model.reason.activationUnread', { code: errorCode(error) }, locale); }
         }
+        if (!blocked && host.inspectModelReadiness) {
+          try { await host.inspectModelReadiness(root, scopeId, reference, options); }
+          catch (error) { blocked = readinessReason(error, locale); }
+        }
         return { reference, label: display.get(exact) ?? model.id, detail: blocked ? t('tui.model.state.blocked', {}, locale) : t('tui.model.state.ready', {}, locale),
+          providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
       })));

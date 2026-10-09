@@ -7,6 +7,7 @@ import { queryFailureText } from './failure.js';
 import { count } from './human.js';
 import type { TerminalAdminCall } from './context.js';
 import USAGE_DISPLAY from './usage-display.json' with { type: 'json' };
+import { spendRecoveryView } from './spend-recovery.js';
 
 /** `netBenefitUsdE10` is USD x 1e10 (tokens x rate units of 0.0001 USD per million tokens). */
 const USD_E10 = 1e10;
@@ -135,7 +136,9 @@ export async function usageView(call: TerminalAdminCall, usage: SessionUsageView
     : { title: t('terminal.info.usage.section.conversation', {}, locale), rows: [{ key: t('terminal.info.usage.key.reports', {}, locale), value: count(usage.reports, locale) },
       { key: t('terminal.info.usage.key.prompt', {}, locale), value: t('terminal.info.usage.tokens', { tokens: count(usage.promptTokens, locale) }, locale) },
       { key: t('terminal.info.usage.key.completion', {}, locale), value: t('terminal.info.usage.tokens', { tokens: count(usage.completionTokens, locale) }, locale) },
-      { key: t('terminal.info.usage.key.reasoning', {}, locale), value: reasoningText(usage, locale), ...(usage.reasoningUnmeasured ? { chip: { state: 'neutral' as const, text: t('terminal.info.chip.unknown', {}, locale) } } : {}) }, ...cacheRows(usage, locale)],
+      { key: t('terminal.info.usage.key.reasoning', {}, locale), value: reasoningText(usage, locale), ...(usage.reasoningUnmeasured ? { chip: { state: 'neutral' as const, text: t('terminal.info.chip.unknown', {}, locale) } } : {}) },
+      ...(usage.models ?? []).map(row => ({ key: t('terminal.info.usage.key.model', {}, locale), identity: { model: row.model, provider: row.provider },
+        value: t('terminal.info.usage.model', { model: row.model, provider: row.provider, prompt: count(row.promptTokens, locale), completion: count(row.completionTokens, locale), reports: row.reports }, locale) })), ...cacheRows(usage, locale)],
     notes: [t('terminal.admin.usage.notBilling', {}, locale)] };
   const budgetsTitle = t('terminal.info.usage.section.budgets', {}, locale);
   let budgets: readonly Budget[] = [], budgetSection: InfoSection;
@@ -152,7 +155,10 @@ export async function usageView(call: TerminalAdminCall, usage: SessionUsageView
     : t('terminal.info.usage.summary', { prompt: count(usage.promptTokens, locale), completion: count(usage.completionTokens, locale), reports: count(usage.reports, locale) }, locale);
   const base = { title: t('terminal.info.usage.title', {}, locale), summary };
   const live = await accountSection(call, null);
-  const view = (account: InfoSection | null): InfoView => ({ model: { ...base, sections: [live, conversation, budgetSection, ...(account ? [account] : [])] }, pick: async choice => {
+  const recovery = call.context.manageProviderSpend ? await spendRecoveryView(call).catch(() => null) : null;
+  const actions = recovery?.model.sections.flatMap(section => section.choices?.length ? [{ choices: section.choices }] : []) ?? [];
+  const view = (account: InfoSection | null): InfoView => ({ model: { ...base, sections: [live, conversation, budgetSection, ...(account ? [account] : []), ...actions] }, pick: async choice => {
+    if ((choice === 'reconcile' || choice === 'budget') && recovery?.pick) return recovery.pick(choice);
     const budget = budgets[Number(choice.slice('budget-'.length))];
     return budget && choice.startsWith('budget-') ? view(await accountSection(call, budget)) : null;
   } });

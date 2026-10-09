@@ -31,7 +31,7 @@ async function fixture() {
 
 const decisionTables = (db: DatabaseSync) => db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'decision_%' ORDER BY name").all().map(row => row.name);
 it('backs up v44 before explicitly migrating all Run snapshots and historical receipts to v4, then adds v46 decision custody', async () => {
-  const f = await fixture(); expect(RUN_PARKING_LEDGER_VERSION).toBe(45); expect(DECISION_PORT_LEDGER_VERSION).toBe(46); expect(CURRENT_LEDGER_VERSION).toBe(49);
+  const f = await fixture(); expect(RUN_PARKING_LEDGER_VERSION).toBe(45); expect(DECISION_PORT_LEDGER_VERSION).toBe(46); expect(CURRENT_LEDGER_VERSION).toBe(50);
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-02T00:00:00Z'));
   expect(upgrade?.from).toBe(44); expect(upgrade?.to).toBe(CURRENT_LEDGER_VERSION);

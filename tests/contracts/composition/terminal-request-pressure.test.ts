@@ -1,10 +1,11 @@
+import { prepareRuntimeSocket } from '#adapters/core/local-runtime-socket/index.js';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
-import { clearConfigCache, DeckentError, ErrorRegistry, loadConfig, prepareProductSocket } from '#platform/index.js';
+import { clearConfigCache, DeckentError, ErrorRegistry, loadConfig } from '#platform/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
 const roots: string[] = [], mounted: ReturnType<typeof mountWorkline>[] = [];
@@ -18,15 +19,15 @@ async function fixture() {
   await mkdir(join(project, '.deckent'));
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(project, 'data') }, service: { inputMaxBytes: 4096 } }));
   const config = await loadConfig(project, options);
-  await prepareProductSocket(config.productLayout, 'runtimeSocket');
+  const endpoint = await prepareRuntimeSocket(config.productLayout); roots.push(join(endpoint, '..'));
   // No service listens: the size refusal must precede a connection attempt.
   return { project, options, client: createConfiguredRuntimeClient(project, options) };
 }
 
 it.for(['en', 'tr'] as const)('renders the actual client JSON-byte refusal in %s for Unicode and permits /clear recovery', async (language, context) => {
-  if (process.platform === 'win32') {
-    await expect(fixture()).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
-    context.skip('MANAGED_FILE_UNSUPPORTED: configured client requires POSIX managed socket parents; refusal verified');
+  if (process.platform !== 'linux') {
+    await expect(fixture()).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_UNSUPPORTED' });
+    context.skip('LOCAL_RUNTIME_UNSUPPORTED: configured client requires Linux authenticated sockets; refusal verified');
   }
   const f = await fixture(), seen: string[] = [];
   const view = mountWorkline({ errorText: error => {
@@ -53,9 +54,9 @@ it.for(['en', 'tr'] as const)('renders the actual client JSON-byte refusal in %s
 });
 
 it('includes the envelope and JSON escaping in the byte refusal even when content alone fits', async context => {
-  if (process.platform === 'win32') {
-    await expect(fixture()).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
-    context.skip('MANAGED_FILE_UNSUPPORTED: configured client requires POSIX managed socket parents; refusal verified');
+  if (process.platform !== 'linux') {
+    await expect(fixture()).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_UNSUPPORTED' });
+    context.skip('LOCAL_RUNTIME_UNSUPPORTED: configured client requires Linux authenticated sockets; refusal verified');
   }
   const f = await fixture();
   const content = '\u0000'.repeat(650);

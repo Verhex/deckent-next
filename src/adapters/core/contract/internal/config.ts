@@ -6,6 +6,7 @@ import { registerProviderSpendingConfig } from './spending.js';
 import { registerProviderSpendAuditConfig } from './spend-audit.js';
 import { registerInferenceServingConfig } from './inference-serving.js';
 import { registerTerminalConfig } from './terminal.js';
+export { effectiveTerminalOutputCap } from './terminal-output.js';
 import { registerOperationsConfig } from './operations.js';
 import { registerSecretStoreConfig } from './secrets.js';
 let registered = false;

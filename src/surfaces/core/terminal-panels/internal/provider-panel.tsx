@@ -14,7 +14,7 @@ export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanel
     ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
       : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : labels.actions.connect },
       // T4-B: connect one of the kind's models (governed models.connect), offered where the host binds it and the kind lists models.
-      ...(models && kind.models.length ? [{ id: 'model', label: labels.actions.model, ...(kind.modelBlocked ? { blocked: { reason: kind.modelBlocked } } : {}) }] : []),
+      ...(models && (kind.models.length || kind.discoversModels) ? [{ id: 'model', label: labels.actions.model, ...(kind.modelBlocked ? { blocked: { reason: kind.modelBlocked } } : {}) }] : []),
       ...(kind.keyStored ? [{ id: 'disconnect', label: labels.actions.disconnect }] : [])] }) })) };
 }
 /** T4-B: the kind's models as a list (labels first; the exact id is the dimmed detail). */
@@ -62,6 +62,12 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   exits.current = { onError, onClose };
   useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); reload().catch(error => onError(error)); };
+  const chooseModels = (target: ProviderPanelKind, endpoint: string | null) => {
+    if (!target.discoversModels || !port.listModels) { setStep({ kind: 'model', target, endpoint }); return; }
+    setStep({ kind: 'busy' });
+    port.listModels(target.id, endpoint).then(models => setStep({ kind: 'model', target: { ...target, models }, endpoint }),
+      error => { onError(error); back(); });
+  };
   const title = (text: string) => [span(text, { bold: true })];
   if (!view || step.kind === 'busy') return <Window title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} hints={words.hints} position={labels.position} />;
   if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
@@ -98,7 +104,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       footer={focused => <ListPicker tree={providerEndpointTree(target, words)} labels={labels.picker} active={focused} maxRows={room.rows} onResult={result => {
         if (result.kind !== 'selected') { back(); return; }
         const choice = target.endpointChoices.find(item => item.id === result.id);
-        setStep(choice ? (step.forModel ? { kind: 'model', target, endpoint: choice.url } : { kind: 'key', target, endpoint: choice.url })
+        if (choice && step.forModel) { chooseModels(target, choice.url); return; }
+        setStep(choice ? { kind: 'key', target, endpoint: choice.url }
           : { kind: 'address', target, text: '', problem: null, ...(step.forModel ? { forModel: true } : {}) });
       }} />} />;
   }
@@ -115,8 +122,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     lines={[{ label: words.previewAddress, text: step.base }, ...(step.forModel ? [] : [{ label: words.previewCheck, text: `GET ${step.check}`, tone: 'muted' as const }]),
       // T4-B (Jev da5312fb): the key name this address gets is shown before anything is saved.
       ...((name => name ? [{ label: words.keyName, text: name }] : [])(port.keyName?.(step.target.id, step.base) ?? null))]}
-    onAnswer={answer => setStep(answer ? (step.forModel ? { kind: 'model', target: step.target, endpoint: step.base } : { kind: 'key', target: step.target, endpoint: step.base })
-      : { kind: 'address', target: step.target, text: step.text, problem: null, ...(step.forModel ? { forModel: true } : {}) })} />;
+    onAnswer={answer => {
+      if (answer && step.forModel) { chooseModels(step.target, step.base); return; }
+      setStep(answer ? { kind: 'key', target: step.target, endpoint: step.base }
+        : { kind: 'address', target: step.target, text: step.text, problem: null, ...(step.forModel ? { forModel: true } : {}) });
+    }} />;
   if (step.kind === 'key') {
     const { target, endpoint } = step;
     const keyName = port.keyName?.(target.id, endpoint) ?? null;
@@ -138,7 +148,10 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!target || !action) { setState(at); back(); return; }
     setState({ ...PICKER_INITIAL, pos: at.trail[0]?.pos ?? 0 });
     if (action === 'disconnect') { setStep({ kind: 'confirm', target }); return; }
-    if (action === 'model') { setStep(target.endpointEditable ? { kind: 'endpoint', target, forModel: true } : { kind: 'model', target, endpoint: null }); return; }
+    if (action === 'model') {
+      if (target.endpointEditable) setStep({ kind: 'endpoint', target, forModel: true }); else chooseModels(target, null);
+      return;
+    }
     setStep(target.endpointEditable ? { kind: 'endpoint', target } : { kind: 'key', target, endpoint: null });
   };
   const body = [...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),

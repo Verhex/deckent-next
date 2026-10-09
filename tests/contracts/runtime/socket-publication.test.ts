@@ -36,7 +36,7 @@ describe.skipIf(process.platform !== 'linux')('private runtime socket publicatio
     await mkdir(parent, { mode: 0o700 }); const endpoint = join(parent, 'x');
     expect(Buffer.byteLength(endpoint)).toBeLessThan(108);
     await expect(startLocalRuntimeSocketServer(options(endpoint), async () => { throw new Error('never dispatch'); }))
-      .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_OPTIONS' });
+      .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', path: endpoint });
     expect(await readdir(parent)).toEqual([]);
   });
 

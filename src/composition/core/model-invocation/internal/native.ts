@@ -1,14 +1,16 @@
 import { isDeepStrictEqual } from 'node:util';
-import { createOpenRouterOpenAiPricedNative } from '#adapters/index.js';
+import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError } from '#adapters/index.js';
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
-import { ProviderSpendError, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
+import { ProviderSpendError, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
 import { invocationEffectAuthority } from './authority.js';
 /** One tariff per (endpoint, model, tag, CA) for the process lifetime of the freshness window: calls inside it make no metadata request. The fetcher is resolved per miss. */
-const tariffCache = createOpenRouterTariffCache((options, now, signal) => fetchOpenRouterTariff(options, now, signal));
+const tariffCache = createOpenRouterTariffCache((options, now, signal) => fetchOpenRouterTariff(options, now, signal).catch(error => {
+  throw error instanceof OpenRouterPricingError && error.code === 'PRIVACY_UNAVAILABLE' ? new ProviderSpendError('PROVIDER_SPEND_DATA_POLICY_REFUSED') : error;
+}));
 type InvocationNativeContext = Awaited<ReturnType<typeof loadInvocationContext>>;
 /** VLLM-CACHE-SALT: the installation's own salt secret (created on first use in an older installation), never the integrity key. */
 const installationCacheSalt = (context: InvocationNativeContext, scopeId: string) => localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, true);
@@ -17,12 +19,10 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
   const now = () => clock.sample().wallMs;
   // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
   const budgetFor = async (scopeId: string) => {
-    const configured = providerSpendingConfiguredBudget(await context.freshConfig(), scopeId);
-    const reader = await openSqliteProviderSpendAccountReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
+    const configured = providerSpendingConfiguredBudget(await context.freshConfig(), scopeId), reader = await openSqliteProviderSpendAccountReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
     try {
       const snapshot = await reader.loadSnapshot({ schemaVersion: 1, scopeId, budgetId: configured?.budgetId ?? PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: configured?.revision ?? 1 });
-      const current = snapshot.checkpoint?.account.budget;
-      const only = current && configured ? null : current ?? configured;
+      const current = snapshot.checkpoint?.account.budget, only = current && configured ? null : current ?? configured;
       if (!current || !configured) { if (!only) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); return only; }
       if (current.budgetId !== configured.budgetId || current.currency !== configured.currency || current.revision < configured.revision)
         throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
@@ -76,6 +76,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     },
   });
   const spending: ModelInvocationSpendingAuthority = Object.freeze({
+    checkCapacity: (spending: Awaited<ReturnType<ModelInvocationSpendingAuthority['authorize']>>) => checkModelInvocationCapacity(async () => openSqliteProviderSpendAccountReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }), spending),
     async authorize(input: ModelInvocationSpendingInput) {
       if(input.profile.adapter.id===decisionHttpAdapter.id&&input.profile.adapter.version===decisionHttpAdapter.version){
         const budget=await budgetFor(input.command.scopeId); return Object.freeze({budget,quote:quoteDecisionHttpOperatorTariff(input)});

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
 import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { CONTEXT_SUGGEST_SHARE, contextBreakdown, contextViewLines, contextCompactionThreshold, fillTemplate, projectHumanPickerText, type ContextCompaction, type ContextMeasure,
-  type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
+  formatContextTokens, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
 import type { ContextInfoLabels, InfoSection, InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
 import type { LocalExecution, ResumePickerItem } from '#surfaces/core/terminal-work/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
@@ -13,6 +13,7 @@ import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-his
 export { bindSessionScope } from '#surfaces/core/terminal-kit/index.js';
 export type { ConversationSessionSummary, ConversationSessionPort, TerminalSessionStoreView, SessionRefusal } from '#surfaces/core/terminal-kit/index.js';
 export interface ConversationSessionLabels {
+  readonly locale?: 'en' | 'tr';
   /** `{index}. {session} · {when} · {count} messages · {preview}` */
   readonly entry: string;
   readonly hiddenCount?: string;
@@ -57,7 +58,7 @@ export function contextInfoModel(input: Readonly<{ measured: ContextMeasure | nu
   const sections: InfoSection[] = [
     { title: labels.section.window, chip, rows: [
       ...(percent === null ? [{ key: labels.key.fill, value: labels.notMeasured }] : [{ key: labels.key.fill, value: `${bar} ${percent}%` },
-        { key: labels.key.used, value: fillTemplate(labels.used, { approx: measured!.quality === 'upper-bound' ? '~' : '', prompt: measured!.promptTokens, window: measured!.windowTokens ?? '?' }) }]),
+        { key: labels.key.used, value: fillTemplate(labels.used, { approx: measured!.quality === 'upper-bound' ? '~' : '', prompt: formatContextTokens(measured!.promptTokens, labels.locale), window: measured!.windowTokens === null ? '?' : formatContextTokens(measured!.windowTokens, labels.locale) }) }]),
       ...(threshold ? [{ key: labels.key.auto, value: fillTemplate(labels.auto, threshold) }] : []),
       { key: labels.key.messages, value: String(count) }] },
     ...(parts.total > 0 ? [{ title: labels.section.split, table: { columns: [labels.column.part, labels.column.share], rows: [[labels.part.system, share(parts.system)],
@@ -106,7 +107,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     if (command === 'context') {
       const measured = context.current;
       const head = !measured ? fillTemplate(labels.contextNone, { count })
-        : fillTemplate(labels.context, { approx: measured.quality === 'upper-bound' ? '~' : '', prompt: measured.promptTokens, window: measured.windowTokens ?? '?',
+        : fillTemplate(labels.context, { approx: measured.quality === 'upper-bound' ? '~' : '', prompt: formatContextTokens(measured.promptTokens, labels.locale), window: measured.windowTokens === null ? '?' : formatContextTokens(measured.windowTokens, labels.locale),
           percent: measured.windowTokens ? Math.ceil(measured.promptTokens * 100 / measured.windowTokens) : '?', count });
       const view = contextViewLines({ measured, history: history.current, compaction: compaction.current, now: Date.now(), when }, labels.view);
       return done([notice('info', head), ...view.map(line => notice('info', line))]);

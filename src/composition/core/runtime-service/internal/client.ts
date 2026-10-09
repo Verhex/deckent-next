@@ -9,8 +9,8 @@ import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, runtimeAppr
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { DeckentError, ErrorRegistry, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { LocalRuntimeSocketError, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
+import { DeckentError, ErrorRegistry, ManagedFileError,  type ConfigLoadOptions } from '#platform/index.js';
+import { LocalRuntimeSocketError, prepareRuntimeSocket, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import type { ModelInvocationCancellationCommand, ModelInvocationPurgeCommand, ModelInvocationCommand, ModelInvocationQuery, ProviderSpendAccountQuery, ProviderSpendAuditCommand,
@@ -88,7 +88,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     try {
       const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
       // The endpoint's never-created state directory is the same fact as a missing endpoint: no live service.
-      const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket', false).catch(error => {
+      const endpoint = await prepareRuntimeSocket(config.productLayout, false).catch(error => {
         if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNAVAILABLE', { cause: error });
         throw error;
       });

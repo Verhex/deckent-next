@@ -2,7 +2,7 @@ import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/ter
 import { appendFileSync } from 'node:fs';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
@@ -15,7 +15,7 @@ import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { createWorklineLedgerPorts, workSurfaceLabels } from '#surfaces/core/cli/index.js';
 import { SessionStanding, RUNTIME_SERVICE_SCHEMA_VERSION, runtimeServiceRequestSchema, type RuntimeServiceRequest } from '#engine/index.js';
-import { clearConfigCache, t, type Locale } from '#platform/index.js';
+import { clearConfigCache, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import type { AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';
 import { agentTurnStreamEventSchema, type AgentTurnStreamEvent } from '#domain/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -55,6 +55,9 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   ];
   if (settings.fullAccess) grants.push({ id: 'full-access', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: me, resource: { kind: 'permission-mode', ids: ['full-access'] } });
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants }), { mode: 0o600 });
+  // INSTALL-FLOW: a client reaches a service only through its private per-installation socket directory; the in-process transport below stands in for the socket.
+  const socket = await adapters.prepareRuntimeSocket(resolveProductLayout({ projectRoot: project, root: data }));
+  cleanups.push(async () => { await rm(dirname(socket), { recursive: true, force: true }); });
   // Only the model and build-origin observation are fixtures. The loop, edit planning/effect, approval service, B1, audit and UI are real.
   vi.spyOn(adapters, 'isSelfSourceProject').mockResolvedValue(true);
   vi.spyOn(catalog, 'inspectModelBinding').mockResolvedValue({ status: 'declared', catalogRevision: 'fixture', binding: { digest: 'a'.repeat(64) }, definition: {

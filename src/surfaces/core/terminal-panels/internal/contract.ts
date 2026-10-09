@@ -1,14 +1,15 @@
 import type { PermissionModeView } from '#domain/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
+import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 
 /**
  * T3 L4 PANELS: the ports and words of the interactive `/mode`, `/config` and `/mcp` windows (T4: `/model` and `/provider`). This unit only presents and collects a choice;
  * every read, write, policy decision and trust record stays behind the port the trusted composition binds (the same paths as the text
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
-export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider';
-export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string }>;
+export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
+export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string; identity?: ModelProviderLabel }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
 export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
 
@@ -121,7 +122,7 @@ export type ModelPanelReference = Readonly<{ providerId: string; providerVersion
  * One model of `/model` (T4 MODEL-SWITCH): its words, the provider group it is listed under, and why it cannot be chosen now (not connected in
  * this scope, its key missing, not activated, not readable) — such a row is listed with its reason and is never pickable.
  */
-export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label: string; detail: string; group: string; blocked: string | null;
+export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label: string; providerLabel?: string; detail: string; group: string; blocked: string | null;
   /** Shown dimmed under the list for the focused row only (owner 2026-10-08: human labels first, exact ids and digests never in front): the exact
    * reference, and for a locked row the governed command that would fix it. */
   exact: string; command: string | null;
@@ -135,13 +136,20 @@ export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPa
 export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
+  /** Rechecks runnability and refreshes an eligible stale activation through its governed owner before any session pin. */
+  prepare?(choice: ModelPanelChoice, reasoning?: 'off'): Promise<void>;
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */
   readonly budget?: BudgetPanelPort;
   /** CACHE-SLICE1: the governed one-step "turn the 5-minute prompt cache on" for existing profiles (absent: not offered). */
   readonly cache?: CachePanelPort;
+  /** OpenAI wire protocol migration, with a mandatory preview and existing governed writer. */
+  readonly protocol?: CachePanelPort;
   /** CACHE-SLICE1: the conversation's measured context when it is at or above the registry threshold (null: below it or not measured yet); a
    * model switch then asks "new context / continue" before it pins. */
   largeContext?(): number | null;
+  /** Current session preference, rechecked before pinning. */
+  reasoning?(): 'off' | undefined;
+  reasoningOffSupported?(reference: ModelPanelReference | null): Promise<boolean>;
   makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
   /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
    * drops the project's model so the user default applies; `align` makes the project's model this one. */
@@ -189,6 +197,8 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
    * `modelBlocked`: why "connect a model" cannot be offered now (e.g. no key stored yet), null when it can; a model's own `blocked` (stage 1:
    * no verified price) locks that row only. */
   models: readonly Readonly<{ id: string; label: string; detail: string; blocked?: string }>[]; modelBlocked: string | null;
+  /** Seedless kinds offer the model action before a list exists; the selected address supplies that list. */
+  discoversModels?: boolean;
   /** K6: shown on the row (muted) when the kind stores a key but no model can be connected to it yet. */
   pendingNote?: string;
   /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
@@ -214,6 +224,7 @@ export interface ProviderPanelPort {
   keyName?(kind: string, endpoint: string | null): string | null;
   /** T4-B: connects the chosen model through the governed `models.connect` operation (absent: the action is not offered). */
   connectModel?(request: ProviderModelRequest): Promise<ProviderModelOutcome>;
+  listModels?(kind: string, endpoint: string | null): Promise<ProviderPanelKind['models']>;
   /** The transparency rows the key step shows: how the key is kept and who else can read it. */
   readonly transparency: readonly PanelLine[];
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */
@@ -261,6 +272,7 @@ export interface BudgetPanelLabels {
   readonly belowSettled?: string;
 }
 export interface PanelLabels {
+  readonly policy?: PolicyPanelLabels;
   readonly picker: PickerLabels;
   readonly position: string;
   readonly loading: string;
@@ -271,11 +283,28 @@ export interface PanelLabels {
   readonly provider: ProviderPanelLabels;
   readonly budget: BudgetPanelLabels;
   readonly cache: CachePanelLabels;
+  readonly protocol?: CachePanelLabels;
 }
 export interface PanelPorts {
+  readonly policy?: PolicyPanelPort;
   readonly mode?: ModePanelPort;
   readonly config?: ConfigPanelPort;
   readonly mcp?: McpPanelPort;
   readonly model?: ModelPanelPort;
   readonly provider?: ProviderPanelPort;
+}
+/** Localized presentation of the shared typed MCP capability contract. No typed values or rule editor. */
+export interface PolicyPanelPort {
+  scopes(): Promise<readonly string[]>;
+  inspect(scopeId: string): Promise<Readonly<{ groups: readonly Readonly<{ id: string; label: string; detail: string; note: string }>[] }>>;
+  preview(scopeId: string, groupId: string, action: 'grant' | 'revoke'): Promise<PolicyPanelPreview>;
+  apply(preview: PolicyPanelPreview): Promise<readonly PanelNotice[]>;
+}
+export interface PolicyPanelPreview {
+  readonly scopeId: string; readonly groupId: string; readonly action: 'grant' | 'revoke'; readonly digest: string;
+  readonly lines: readonly PanelLine[]; readonly applicable: boolean;
+}
+export interface PolicyPanelLabels {
+  readonly title: string; readonly scope: string; readonly groups: string; readonly preview: string;
+  readonly grant: string; readonly revoke: string; readonly confirm: string; readonly back: string; readonly hints: string; readonly empty: string;
 }

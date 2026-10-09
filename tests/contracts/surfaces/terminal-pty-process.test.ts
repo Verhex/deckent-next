@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { terminalScreen } from '../../fixtures/terminal-screen.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
+import { openSqliteModelActivationStore, prepareRuntimeSocket, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -264,18 +264,19 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   });
 
   // Owner report 2026-09-27 at the real boundary: compiled CLI, real runtime service (protocol v15), real pseudo-terminal keys.
-  it.skipIf(process.platform !== 'linux')('surfaces MANAGED_FILE_UNSAFE for a non-private runtime socket without repairing it (requires Linux local runtime transport)', async () => {
+  it.skipIf(process.platform !== 'linux')('surfaces LOCAL_RUNTIME_ENDPOINT_UNSAFE for a non-private runtime socket without repairing it (requires Linux local runtime transport)', async () => {
     const f = await governedChat();
-    const endpoint = join(f.projectRoot, '../data/state/runtime.sock');
+    // INSTALL-FLOW: the socket lives in the private per-installation directory (runtimeSocketLocation); the 0600 check refuses with its own code.
+    const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: f.projectRoot, root: join(f.projectRoot, '../data') })); roots.push(join(endpoint, '..'));
     const listener = createSocketServer(socket => socket.destroy());
     await new Promise<void>((resolve, reject) => { listener.once('error', reject); listener.listen(endpoint, resolve); });
     try {
       await chmod(endpoint, 0o755);
       const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'],
-        [['(code: MANAGED_FILE_UNSAFE)', '/exit\r']]);
+        [['(code: LOCAL_RUNTIME_ENDPOINT_UNSAFE)', '/exit\r']]);
       expect(result.timeout, result.output).toBeUndefined();
       expect(result.status, result.output).toBe(0);
-      expect(result.output).toContain('(code: MANAGED_FILE_UNSAFE)');
+      expect(result.output).toContain('(code: LOCAL_RUNTIME_ENDPOINT_UNSAFE)');
       expect(result.output).not.toContain('started in the background');
       expect((await lstat(endpoint)).mode & 0o777).toBe(0o755);
     } finally { await new Promise<void>(resolve => listener.close(() => resolve())); }

@@ -130,6 +130,7 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
       || input.command.scopeId !== value.profile.scopeId || modelInvocationRequestDigest(input.command) !== input.requestDigest
       || modelInvocationProfileDigest(input.profile) !== input.profileDigest) throw new OpenRouterChatError('TARIFF_CONFLICT');
     const evidence = { schemaVersion: 1, sourceEndpoint: value.observation.sourceEndpoint,
+      privacySourceEndpoint: value.observation.privacySourceEndpoint ?? null, privacyBodyDigest: value.observation.privacyBodyDigest ?? null,
       observedAtMs: value.observation.observedAtMs, sourceBodyDigest: value.observation.sourceBodyDigest,
       tariffDigest: value.reservation.tariffDigest, bodyDigest: createHash('sha256').update(value.wire.body).digest('hex'),
       pricedDimensions: value.observation.tariff.pricedDimensions, unpricedDimensions: value.observation.tariff.unpricedDimensions,

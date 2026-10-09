@@ -31,13 +31,15 @@ const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const,
   digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
 const principal = { id: 'actor', issuer: 'os', subject: '1', assurance: 'os-user' as const, scopeIds: ['scope'] };
 const prices = (prompt = '0.000001') => ({ prompt, completion: '0.000002', request: '0', input_cache_read: '0', input_cache_write: '0', internal_reasoning: '0' });
-const metadata = (pricing: Record<string, unknown>) => ({ data: { id: 'vendor/model', endpoints: [{ model_id: 'vendor/model', tag: 'provider/region',
+const metadata = (pricing: Record<string, unknown>) => ({ data: { id: 'vendor/model', endpoints: [{ model_id: 'vendor/model', tag: 'provider/region', data_policy: { training: false, retainsPrompts: false },
   provider_name: 'Synthetic Provider', context_length: 4096, max_prompt_tokens: 1000, max_completion_tokens: 32, status: 0,
   supported_parameters: ['max_completion_tokens'], pricing }] } });
 
 async function fixture(pricing: Record<string, unknown> = prices()) {
   let metadataDocument = metadata(pricing), posts = 0, metadataGets = 0, serviceOpen = true;
   const fixtureServer = server = createServer({ key: privateKey, cert: certificate }, (request, response) => {
+    if (request.url === '/api/v1/endpoints/zdr') { response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ data: [{ model_id: 'vendor/model', tag: 'provider/region' }] })); return; }
     if (request.url === '/api/v1/models/vendor/model/endpoints') {
       metadataGets++; response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(metadataDocument)); return;
     }
@@ -118,7 +120,7 @@ it('reserves from the actual native-produced quote, holds missing usage, and rep
       persisted = parseProviderSpendReservation(JSON.parse(String(
         db.prepare('SELECT record FROM model_invocation_spend_reservations').get()!.record)));
       expect(persisted).toMatchObject({ descriptor: { quote: {
-        pricing: { id: 'openrouter-endpoint-tariff', definition: { modelId: 'vendor/model', endpointTag: 'provider/region', pricing: prices() } },
+        pricing: { id: 'openrouter-endpoint-tariff', definition: { modelId: 'vendor/model', endpointTag: 'provider/region', endpoints: [expect.objectContaining({ pricing: prices() })] } },
         meter: { id: 'openrouter-text-reservation', evidence: { schemaVersion: 1, sourceBodyDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
           calculation: { currency: 'USD', rounding: 'ceil-per-dimension', minorUnitsPerCurrencyUnit: 100 },
           pricedDimensions: ['completion', 'input_cache_read', 'input_cache_write', 'internal_reasoning', 'prompt', 'request'],
@@ -142,7 +144,7 @@ it('reserves from the actual native-produced quote, holds missing usage, and rep
     try {
       const inspection = await reopened.loadInspection('scope', first.receipt.claim.invocationId);
       expect(inspection?.spending).toEqual(persisted);
-      expect(inspection?.spending?.descriptor.quote.pricing.definition.pricing).toEqual(prices());
+      expect(inspection?.spending?.descriptor.quote.pricing.definition.endpoints[0].pricing).toEqual(prices());
       expect(inspection?.spending?.descriptor.quote.meter.evidence.reservation).toEqual(
         persisted.descriptor.quote.meter.evidence.reservation);
     } finally { reopened.close(); }
@@ -159,7 +161,7 @@ it('rejects tampered nested tariff data even when its outer quote and row checks
       const row = db.prepare('SELECT record FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?')
         .get('scope', result.receipt.claim.invocationId)!;
       const record = JSON.parse(String(row.record));
-      record.descriptor.quote.pricing.definition.pricing.prompt = '0.999999';
+      record.descriptor.quote.pricing.definition.endpoints[0].pricing.prompt = '0.999999';
       record.descriptor.quoteDigest = createHash('sha256').update(
         `deckent.provider-spend-quote.v1\n${JSON.stringify(record.descriptor.quote)}`).digest('hex');
       const serialized = JSON.stringify(record);
@@ -198,6 +200,16 @@ it('rejects an observation change between the two quote checks before durable ef
       return { budget: { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 }, quote };
     });
     await expect(app.invoke(f.command('changed'))).rejects.toThrow(); expect(calls).toBe(1);
+    expect(f.posts).toBe(0); expect(f.counts()).toEqual({ invocations: 0, reservations: 0 });
+  } finally { await f.close(); }
+});
+
+it('refuses a training-only policy before invocation admission, reservation or POST', async () => {
+  const f = await fixture();
+  try {
+    const document = metadata(prices()); document.data.endpoints[0]!.data_policy.training = true;
+    f.setMetadata(document);
+    await expect(f.fetchObservation()).rejects.toMatchObject({ code: 'PRIVACY_UNAVAILABLE' });
     expect(f.posts).toBe(0); expect(f.counts()).toEqual({ invocations: 0, reservations: 0 });
   } finally { await f.close(); }
 });

@@ -1,5 +1,5 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
+import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailureState, modelInvocationProfileDigest } from '#engine/index.js';
 export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
@@ -10,7 +10,7 @@ import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agent
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, sealedRootEntryRefused, agentDataRootRel, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, effectiveTerminalOutputCap, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
   isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
@@ -19,14 +19,14 @@ import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
-import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
+import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions, withAgentAudit } from './mode.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound,
+import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, mapOpenAiErrorResponse, openAiProviderRefusal,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 
 /** Service-owned state of running turns: cancellation by the starting principal, service stop, the scratch custody (areas they hold are never
@@ -79,13 +79,14 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const fullAccess = command.fullAccess === true;
   if (fullAccess) await admitFullAccess(context, command, clock);
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
-  const chat = readTerminalChatConfig(config);
-  if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
+  const configuredChat = readTerminalChatConfig(config);
+  if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   // v23 (T4 MODEL-SWITCH, S19): the session's pinned model, else the configured one. A pinned model that is not declared, has no profile or is
   // not active is refused typed by the same checks below; the configured model is never used in its place (no silent fallback).
   // T4-B D1: without a pin the one precedence decides (project model > the user's default > the user's configured model).
-  const reference = command.reference ?? (await configuredTerminalModel(projectRoot, options))?.reference ?? chat.reference;
+  const reference = command.reference ?? (await configuredTerminalModel(projectRoot, options))?.reference ?? configuredChat.reference;
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
+  const chat = { ...configuredChat, maxCompletionTokens: effectiveTerminalOutputCap(config, command.scopeId, reference) };
   const binding = await inspectModelBinding(projectRoot, reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)
@@ -165,7 +166,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
       schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
       scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-      nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
+      nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt), profile ? { scopeId: command.scopeId, reference, profileDigest: modelInvocationProfileDigest(profile) } : undefined), max_completion_tokens: chat.maxCompletionTokens,
         ...roundStream, ...roundThinking,
         ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
           parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
@@ -219,7 +220,21 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         }
         const outcome = result.receipt.outcome;
         if (!outcome) return { status: 'failed', state: 'pending' };
-        if (outcome.state !== 'responded') return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
+        if (outcome.state !== 'responded') {
+          const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
+          if (evidence?.adapter.id === 'openai-chat-http' && evidence.httpStatus === 400) {
+            // Retained vendor content is read through the existing inspect-content policy. Denied/purged content stays unknown.
+            const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
+              invocationId: result.receipt.claim.invocationId, reference, includeResponseContent: true }, peer, options).catch(() => null);
+            const body = inspected?.responseContent?.kind === 'response-body' ? inspected.responseContent.data : null;
+            const diagnostic = mapOpenAiErrorResponse(400, body);
+            return { status: 'failed', state: diagnostic?.message ? t('tui.openai.badRequest', { message: diagnostic.message }, language)
+              : t('tui.openai.badRequestUnknown', {}, language) };
+          }
+          return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
+        }
+        const refusal = openAiProviderRefusal(result.response);
+        if (refusal) return { status: 'failed', state: t('tui.openai.refusal', { message: refusal.message }, language) };
         const message = openAiChatMessageFromInvocation(result);
         if (!message) return { status: 'failed', state: 'unreadable' };
         // What was shown is always a prefix of the governed result; anything else ends the turn, never merged.
@@ -228,6 +243,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (message.content.length > shownText.length) onDelta({ kind: 'text', text: message.content.slice(shownText.length) });
         const usage = openAiChatUsageFromInvocation(result);
         return { status: 'responded', content: message.content, reasoning: message.reasoning, toolCalls: message.toolCalls,
+          ...(message.continuation ? { continuation: message.continuation } : {}), ...(message.providerStop ? { providerStop: message.providerStop } : {}),
           finish: typeof message.finish === 'string' ? message.finish : 'unknown',
           usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
       },

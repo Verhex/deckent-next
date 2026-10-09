@@ -1,4 +1,4 @@
-export { readIdentityProfileConfig, registerProviderConfig, providerSpendingSchema, providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendAuditConfigSchema, readTerminalChatConfig, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES, type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig,
+export { readIdentityProfileConfig, registerProviderConfig, providerSpendingSchema, providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendAuditConfigSchema, readTerminalChatConfig, effectiveTerminalOutputCap, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES, type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig,
   openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS, isRegisteredSecretStore,
   openRegisteredSecretStore, registeredSecretStores } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
@@ -87,3 +87,7 @@ export * from '#adapters/core/provider-connect/index.js';
 export * from '#adapters/core/project-instructions/index.js';
 export * from '#adapters/core/backup-store/index.js';
 export { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+
+export { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+export { inspectInstallationStartabilityFiles, type InstallationStartability } from '#adapters/core/installation-files/index.js';
+export { firstSessionTargets, firstSessionPublication } from '#adapters/core/installation-files/index.js';

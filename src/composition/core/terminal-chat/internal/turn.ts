@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, type TerminalModelSource } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap, type TerminalModelSource } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -45,10 +45,12 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
  */
 /** Builds the governed command of one turn from fresh config and catalog binding (shared by both turn forms). */
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean) {
-  const chat = readTerminalChatConfig(await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>);
-  if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  const reference = (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? chat.reference;
+  const config = await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>;
+  const configuredChat = readTerminalChatConfig(config);
+  if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
+  const reference = (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? configuredChat.reference;
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
+  const chat = { ...configuredChat, maxCompletionTokens: effectiveTerminalOutputCap(config, input.scopeId, reference) };
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const nativeRequest = {
@@ -92,7 +94,7 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
  * The same configuration check the plain turn makes, before an agent turn contacts the service; returns the service's admission from
  * that configuration, so the stream can name the summarizing phase (TL-A).
  */
-export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}, reference?: ModelReference): Promise<AgentTurnAdmission> {
+export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}, reference?: ModelReference, scopeId?: string): Promise<AgentTurnAdmission> {
   const plan = await describeTerminalChat(projectRoot, options);
   if (plan.status === 'not-configured') throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   // T4 MODEL-SWITCH (S19): a session pin is checked as itself; the configured model's state neither blocks nor stands in for it.
@@ -100,5 +102,6 @@ export async function assertTerminalChatReady(projectRoot: string, options: Conf
   if (!declared) throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const config = await loadComposedConfig(projectRoot, options) as { service: { inputMaxBytes: number } };
   const chat = readTerminalChatConfig(config as unknown as Record<string, unknown>);
-  return agentTurnAdmission(plan.maxCompletionTokens!, config.service.inputMaxBytes, chat?.compactionThresholdTokens);
+  const configuredScope = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? '';
+  return agentTurnAdmission(effectiveTerminalOutputCap(config as unknown as Record<string, unknown>, scopeId ?? configuredScope, reference ?? plan.reference!), config.service.inputMaxBytes, chat?.compactionThresholdTokens);
 }
