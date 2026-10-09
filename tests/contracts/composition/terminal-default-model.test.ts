@@ -1,3 +1,4 @@
+import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -5,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { resolveTerminalModel } from '#adapters/index.js';
 import { configuredTerminalModel, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
-import { configuredApproval } from '#composition/core/approvals/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { modelPanelSource } from '#surfaces/core/cli-terminal/index.js';
@@ -91,7 +91,7 @@ describe('terminal.defaultModel through the governed writer', () => {
     expect(pending).toMatchObject({ status: 'approval-pending', layer: 'global', keyPath: 'terminal.defaultModel' });
     if (pending.status !== 'approval-pending') throw new Error('expected pending');
     await expect(readFile(await findGlobalFile(f.globalHome), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-    await configuredApproval(f.root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId: pending.approval.approvalId, commandId: 'decide-1', expectedRevision: 0,
+    await terminalApproval(f.root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId: pending.approval.approvalId, commandId: 'decide-1', expectedRevision: 0,
       decision: 'allow', reason: 'Allowed in the terminal', channel: 'local-terminal-card' }, f.options);
     const applied = await f.app.submit('set', { ...input, expect: pending.expect });
     expect(applied).toMatchObject({ status: 'applied', approvalId: pending.approval.approvalId });
@@ -154,7 +154,7 @@ describe('a project model that shadows the user default (owner 2026-10-08, Jev 7
     await f.source.makeDefault!(f.choice);
     const pending = await f.source.resolveShadow!(f.choice, 'align');
     expect(pending.status).toBe('approval-pending'); expect(pending.approvalId).toEqual(expect.any(String));
-    await configuredApproval(f.root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId: pending.approvalId!, commandId: 'decide-align', expectedRevision: 0,
+    await terminalApproval(f.root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId: pending.approvalId!, commandId: 'decide-align', expectedRevision: 0,
       decision: 'allow', reason: 'Allowed in the terminal', channel: 'local-terminal-card' }, f.options);
     const applied = await f.source.resolveShadow!(f.choice, 'align');
     expect(applied.status).toBe('applied'); expect(applied.lines[0]).toBe("The project's model is now mine.");

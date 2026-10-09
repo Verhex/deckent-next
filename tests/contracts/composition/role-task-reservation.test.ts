@@ -1,3 +1,4 @@
+import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -46,7 +47,7 @@ describe.skipIf(process.platform === 'win32')('a role-derived task rule is appli
     const pending = await configuredApproval(project, 'list', { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 }, options) as
       { request: { approvalId: string; taskId: string } }[];
     expect(pending).toHaveLength(1); expect(pending[0]!.request.taskId).toBe('held');
-    await configuredApproval(project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId: pending[0]!.request.approvalId,
+    await terminalApproval(project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId: pending[0]!.request.approvalId,
       commandId: 'allow-held', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' }, options);
     const next = await reserveConfiguredRunTasks(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve-2', expectedRevision: 1 }, options);
     expect(next.reservation.identities.map(value => value.taskId)).toEqual(['held']);

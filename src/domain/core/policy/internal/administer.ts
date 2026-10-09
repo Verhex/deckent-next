@@ -1,3 +1,4 @@
+import { isMcpPrincipal } from '#domain/core/principal/index.js';
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policySchema, principalGrants, resolvePolicyBindings, type Policy,
@@ -147,7 +148,7 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
   if (total > DELEGATION_CELL_LIMIT) throw new PolicyChangeError('POLICY_CHANGE_TOO_LARGE');
   const own = (value: { readonly principals: 'all' | readonly { readonly issuer: string; readonly subject: string }[] }) => value.principals === 'all'
     || value.principals.some(item => item.issuer === actor.issuer && item.subject === actor.subject);
-  const grants = principalGrants(policy, actor).filter(own);
+  const grants = principalGrants(policy, actor).filter(value => own(value) && !(value.effect === 'allow' && value.principals === 'all' && isMcpPrincipal(actor)));
   const denies = [...grants.filter(value => value.effect === 'deny'), ...policy.restrictions.filter(own)];
   const asks = grants.filter(value => value.effect === 'require-approval'), allows = grants.filter(value => value.effect === 'allow');
   for (const value of touched) {

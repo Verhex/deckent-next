@@ -1,5 +1,19 @@
 # Architecture
 
+
+**W3-AUTHORITY (owner 2026-10-09; candidate, no live acceptance):** `deckent-mcp` uses the same verified OS UID with a distinct actor
+(`issuer = <host>/mcp`, actor id suffixed `/mcp`). All handlers, including direct model-connect/activation writes, enter that code-only context;
+service-bound calls carry `channel: mcp` on local protocol v26, lifecycle window `[26,25]`, current-only mutations. This metadata delegates no
+other OS identity; same-account direct socket access remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
+MCP authority; an explicit rule or role binding must name the MCP actor. Denies/restrictions still apply. Template v9 and add-only upgrades add
+named observation rules only. Budget creation/revision/unfreeze/reconciliation, activation and invocation require an explicit MCP-specific grant;
+these paths have no new approval broker, and `require-approval` keeps its typed unsupported refusal. MCP still exposes no decision tool.
+Human approval decisions (allow and deny, CLI/SDK/terminal) require service-attested interactive stdin/stdout on the peer's controlling terminal,
+rechecked with process birth/UID/connection evidence. Noninteractive decisions return `APPROVAL_INTERACTIVE_REQUIRED` before settlement;
+no automation exception is added. Hard-floor allow additionally retains its turn-bound capability. A same-UID process can manufacture a PTY:
+TTY attestation is an interaction requirement, not proof of human presence or account isolation. Ledger/approval formats and package version stay
+unchanged. Contract/design evidence: `proof/W3-AUTHORITY-2026-10-09/`, [decision log](.deckent/docs/architecture/decisions.md).
+
 **Owner amendment 2026-10-02 — MCP-NO-DECIDE:** MCP exposes no approval decision tool: neither `allow` nor `deny`; `list_approvals` and `inspect_approval` remain observation. CLI `approval decide`, SDK and terminal decisions retain their existing authority checks. This supersedes B1's MCP-deny exception; protocol and ledger contracts stay unchanged. Implementation `57c49ac6` (batch 25; on main and live since `aa58f559`); evidence `proof/LIVE-SWITCH-BATCH25-2026-10-02/`.
 
 Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).

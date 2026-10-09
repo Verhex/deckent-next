@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { verifiedPrincipalSchema, verifiedSessionSchema, type VerifiedSession } from '#domain/index.js';
 import { SessionAuthenticationError, type SessionAuthority, type SessionVerifier } from '#engine/index.js';
 import type { TrustedClock, ClockSample } from '#platform/index.js';
+import { attestLocalInteractiveTerminal } from './interactive.js';
 import { readLocalOsIdentity } from './local.js';
 
 interface ProcessEvidence { readonly start: string; readonly tty: string; readonly session: string }
@@ -19,6 +20,8 @@ async function processEvidence(pid: number, uid: number): Promise<ProcessEvidenc
  */
 export class LocalOsSessionAuthority implements SessionAuthority, SessionVerifier {
   private revoked = false;
+  private interactive = false;
+  requireInteractiveTerminal() { this.interactive = true; }
   private last: ClockSample;
   private constructor(private readonly principal: ReturnType<typeof verifiedPrincipalSchema.parse>,
     private readonly session: VerifiedSession, private readonly clock: TrustedClock, private readonly issued: ClockSample,
@@ -48,6 +51,7 @@ export class LocalOsSessionAuthority implements SessionAuthority, SessionVerifie
     if (JSON.stringify(input) !== JSON.stringify(this.session)) return false;
     if (this.revoked || this.connection?.aborted) { this.revoked = true; return false; }
     try {
+      if (this.interactive && !await attestLocalInteractiveTerminal(this.pid, Number(this.principal.subject))) { this.revoked = true; return false; }
       if (this.isConnectionActive && !this.isConnectionActive()) { this.revoked = true; return false; }
       const evidence = await processEvidence(this.pid, Number(this.principal.subject));
       const now = this.clock.sample();

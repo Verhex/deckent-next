@@ -1,3 +1,4 @@
+import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { chmod, link, mkdir, mkdtemp, readdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
@@ -25,7 +26,7 @@ async function code(work: Promise<unknown>): Promise<string> {
   try { await work; return 'resolved'; }
   catch (error) { expect(error).toBeInstanceOf(LocalRuntimeSocketError); return (error as LocalRuntimeSocketError).code; }
 }
-const handler = async (request: { requestId: string }) => ({ schemaVersion: 25 as const, requestId: request.requestId, ok: true as const, result: null });
+const handler = async (request: { requestId: string }) => ({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true as const, result: null });
 /** Descriptors of this process open on `path`, with their open flags from /proc. */
 async function descriptors(path: string) {
   const found: { fd: string; flags: number }[] = [];

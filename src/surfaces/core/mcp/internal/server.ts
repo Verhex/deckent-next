@@ -85,7 +85,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
     description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,
     invoke: input => inspectDecision.call(applications, decisionQuerySchema.parse(input)) });
-  if (renewApproval) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'renew_approval',
+  if (renewApproval) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: false, name: 'renew_approval',
     description: t('mcp.tool.renewApproval', {}, locale), schema: approvalRenewalSchema, boundedDelivery: true,
     invoke: (input, delivery) => renewApproval.call(applications, approvalRenewalSchema.parse(input), delivery) });
   const listApprovals = applications.listApprovals;
@@ -111,14 +111,14 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const updateToolchains = applications.updateToolchains;
   const updateToolchainsSchema = z.object({ apply: z.boolean().optional() }).strict();
   // No commandId; a repeat apply plans/builds again and the receipt write uses O_EXCL (composition/core/toolchains/internal/update.ts:32), so a same-input replay is not a persisted no-op.
-  if (updateToolchains) definitions.push({ readOnly: false, destructive: false, idempotent: false, openWorld: true, name: 'update_toolchains',
+  if (updateToolchains) definitions.push({ readOnly: false, destructive: true, idempotent: false, openWorld: true, name: 'update_toolchains',
     description: t('mcp.tool.updateToolchains', {}, locale), schema: updateToolchainsSchema,
     invoke: (input: unknown) => updateToolchains.call(applications, updateToolchainsSchema.parse(input)) });
   const createRun = applications.createRun;
   if (createRun) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'create_run', description: t('mcp.tool.createRun', {}, locale),
     schema: runAdmissionSchema, invoke: (input: unknown) => createRun.call(applications, runAdmissionSchema.parse(input)) });
   const reserveRunTasks = applications.reserveRunTasks;
-  if (reserveRunTasks) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'reserve_run_tasks', description: t('mcp.tool.reserveRunTasks', {}, locale),
+  if (reserveRunTasks) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'reserve_run_tasks', description: t('mcp.tool.reserveRunTasks', {}, locale),
     schema: runReservationCommandSchema, invoke: (input: unknown) => reserveRunTasks.call(applications, runReservationCommandSchema.parse(input)) });
   const requestCancellation = applications.requestRunCancellation;
   // Destructive but idempotent: adapters/core/attempt-store/internal/runs.ts:123 returns the commandId-keyed receipt on replay before any new mutation.
@@ -129,14 +129,14 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (deliverCancellation) definitions.push({ readOnly: false, destructive: true, idempotent: false, name: 'deliver_run_cancellation', description: t('mcp.tool.deliverRunCancellation', {}, locale),
     schema: runCommandSchema, invoke: (input: unknown) => deliverCancellation.call(applications, runCommandSchema.parse(input)) });
   const reconcile = applications.reconcileAttempt;
-  if (reconcile) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'reconcile_attempt', description: t('mcp.tool.reconcileAttempt', {}, locale),
+  if (reconcile) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'reconcile_attempt', description: t('mcp.tool.reconcileAttempt', {}, locale),
     schema: attemptIdentitySchema, invoke: (input: unknown) => reconcile.call(applications, attemptIdentitySchema.parse(input)) });
   const executeTask = applications.executeTask;
   // Destructive but idempotent: composition/core/execution/internal/task.ts:24-27 returns the existing bound dispatch for the identity instead of relaunching a second container/process.
   if (executeTask) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: true, name: 'execute_task', description: t('mcp.tool.executeTask', {}, locale),
     schema: attemptIdentitySchema, invoke: (input: unknown) => executeTask.call(applications, attemptIdentitySchema.parse(input)) });
   const evaluateTask = applications.evaluateTask;
-  if (evaluateTask) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'evaluate_task', description: t('mcp.tool.evaluateTask', {}, locale),
+  if (evaluateTask) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'evaluate_task', description: t('mcp.tool.evaluateTask', {}, locale),
     schema: taskEvaluationCommandSchema, invoke: (input: unknown) => evaluateTask.call(applications, taskEvaluationCommandSchema.parse(input)) });
   const describeService = applications.describeService;
   if (describeService) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'runtime_service_descriptor',
@@ -192,7 +192,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     description: t('mcp.tool.inspectProviderSpending', {}, locale), schema: providerSpendExactAccountQuerySchema, boundedDelivery: true,
     invoke: (input, delivery) => inspectProviderSpendAccount.call(applications, providerSpendExactAccountQuerySchema.parse(input), delivery) });
   const manageProviderSpend = applications.manageProviderSpend;
-  if (manageProviderSpend) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'manage_provider_spending',
+  if (manageProviderSpend) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: false, name: 'manage_provider_spending',
     description: t('mcp.tool.manageProviderSpending', {}, locale), schema: providerSpendManagementCommandSchema, boundedDelivery: true,
     invoke: (input, delivery) => manageProviderSpend.call(applications, parseProviderSpendManagementCommand(input), delivery) });
   const auditProviderSpendAccount = applications.auditProviderSpendAccount;

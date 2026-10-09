@@ -1,3 +1,4 @@
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 import { once } from 'node:events';
 import { Socket } from 'node:net';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
-import { createConfiguredRuntimeClient, executeConfiguredOperation } from '../../../src/index.js';
+import { executeConfiguredOperation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { encodeServiceFrame } from '../../../src/adapters/core/local-runtime-socket/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -66,10 +67,10 @@ async function fixture(options: { readonly responseMaxBytes?: number } = {}) {
     } finally { db.close(); }
   };
   const service = await startTestRuntimeService(project, env);
-  const client = createConfiguredRuntimeClient(project, { env });
+  const client = createTerminalRuntimeClient(project, { env });
   return { server, project, env, policy, command, rows, pin, service, client, ledger: opened.path, layout: opened.layout };
 }
-const decide = (client: ReturnType<typeof createConfiguredRuntimeClient>, approvalId: string, commandId: string, decision: 'allow' | 'deny') =>
+const decide = (client: ReturnType<typeof createTerminalRuntimeClient>, approvalId: string, commandId: string, decision: 'allow' | 'deny') =>
   client.decideApproval({ schemaVersion: 1, scopeId: 's', approvalId, commandId, expectedRevision: 0, decision, reason: 'Reviewed' }) as Promise<{ status: string }>;
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] executes a catalog operation through the runtime service: pending without an effect, decided on the live connection, the same command settles once (C12 G4)', async () => {

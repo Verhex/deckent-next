@@ -1,3 +1,4 @@
+import { withLocalPrincipalChannel } from '#adapters/index.js';
 import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { executeRuntimeApproval } from './approvals.js';
@@ -165,7 +166,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
     ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError, onScopeSkipped: (note: DeckentError) => observer.onRunProgressionError?.(null, note) } : {}),
   }, (work, onSlotWait) => lifecycle.admitExecution(() => idle.track(work), onSlotWait), options);
-  const server = await guard.start((request, peer, stream, turn) => idle.track(async () => {
+  const server = await guard.start((request, peer, stream, turn) => withLocalPrincipalChannel(request.channel, () => idle.track(async () => {
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admitBounded(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
@@ -201,7 +202,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false,
         error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };
     }
-  }));
+  }), peer));
   // Started once the listener is up: a start that fails before leaves no sweep running after its custody is released.
   startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
     onSweep: result => { void observer.onScratchSwept?.(result); } });
