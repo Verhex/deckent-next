@@ -718,7 +718,9 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   // policy → classification → approval → C11 path: the card says so, no fallback note anywhere, the deny floor and HOME are hidden,
   // the project write lands, and the scratch area (TMPDIR) is writable.
   it.skipIf(!sandboxReady)('S9 require-sandbox runs a modifying command in the bubblewrap realm after approval, hiding secrets and HOME', async () => {
-    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'require-sandbox' }); await f.start();
+    // SBX-05 x company policy (lead 2026-10-09): `> made.txt` makes the call destructive, so after approval its writes are decided like edits:
+    // the fixture carries the project write grant (every real installation has it) and the write lands as its own workspace-file effect.
+    const f = await runtime({ toolGrant: false, extraGrants: [...shellGrants('allow'), editGrants('allow')[1]!], shellRealm: 'require-sandbox' }); await f.start();
     await writeFile(join(f.project, '.env'), 'SECRET-ENV\n');
     // The command's HOME is the service process's own (host-shell allowlist), not the fixture's: a regular file that exists there must not exist inside.
     const serviceHome = process.env['HOME'] ?? homedir();
@@ -742,7 +744,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(await readFile(join(serviceHome, homeFile))).toBeDefined();
     expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('made\n');
     expect((await readdir(join(f.data, 'state', 'scratch'), { recursive: true })).some(entry => String(entry).endsWith('s.txt'))).toBe(true);
-    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }]);
+    expect(f.rows('SELECT target_kind, state FROM effect_intents ORDER BY target_kind')).toEqual([{ target_kind: 'host-shell', state: 'settled' },
+      { target_kind: 'workspace-file', state: 'settled' }]);
   }, 30_000);
 
   // T-L4 slice 3c (Jev 82858581): run_shell as a C11 effect of host.shell.run. Only a read-only command of bounded reach runs silently.
