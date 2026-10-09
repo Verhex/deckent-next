@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.20`** (2026-10-09 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.21`** (2026-10-09 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
@@ -276,6 +276,11 @@ flowchart LR
   ücretli çağrılar, sağlayıcının kullanım verisi ile doğrulanmış yayımlanmış tarifenin çarpımından, bütçe penceresinde
   ya da `deckent models create-budget` ile belirlediğiniz bütçe altında kesinleşir (fiyatı bilinmeyen uzak model
   reddedilir ve nedeniyle kilitlenir); harcama ve ayırma denetimi.
+- **Önbellekle maliyeti izleyin**: yeni Anthropic profilleri 5 dakikalık istem önbelleğini kullanır, mevcut profiller
+  yalnızca sizin seçiminizle değişir; `/usage` canlı hesabı USD olarak, önbellek okuma ve yazmalarını ve tahmini net
+  kazancı gösterir.
+- **Terminalde OpenRouter modelleri kullanın**: `/provider` ile kendi anahtarınızı bağlayın; araç ve akış çalışır,
+  OpenRouter'ın bildirdiği her çağrı ücreti bütçenize kesinleşir.
 - **Yedekleyin ve geri yükleyin**: `deckent backup create|verify|restore` şifreli, doğrulanabilir kurtarma kümeleri yazar;
   isterseniz zamanlayarak ve saklama süresiyle; geri yükleme yalnızca servis durmuşken çalışır.
 - **İşletin**: tüm kurulumlar için salt okunur `deckent monitor`, sağlık için `deckent doctor`, ayarlar için
@@ -288,7 +293,7 @@ web paneli. Docker işçisi host çekirdeğini paylaşır; sanal makine değildi
 
 ```mermaid
 flowchart LR
-  L["Yayımlandı · alpha.20<br/>terminal pencereleri · onay penceresi · slash komut pencereleri<br/>/config · /mode · /mcp · /provider · /model<br/>kolay MCP (HTTP, içe aktarma, güven) · şifreli anahtar deposu<br/>harcama kesinleştirme ve bütçeler"] --> P["Sürüyor<br/>terminalde OpenRouter modelleri<br/>maliyet korumaları · sağlayıcı başına harcama sınırı<br/>ilk kullanım düzeltmeleri (önbellek, kullanım satırı)"]
+  L["Yayımlandı · alpha.21<br/>terminal pencereleri · onay penceresi · slash komut pencereleri<br/>/config · /mode · /mcp · /provider · /model<br/>kolay MCP (HTTP, içe aktarma, güven) · şifreli anahtar deposu<br/>harcama kesinleştirme ve bütçeler · OpenRouter modelleri · istem önbelleği"] --> P["Sürüyor<br/>maliyet korumaları · sağlayıcı başına harcama sınırı<br/>önbellek kırılma noktaları ve sıkıştırma tetikleyicileri"]
   P --> N["Sırada<br/>abonelikler · işçi kimlik bilgisi kipleri<br/>sistem istemi ve ayarlar<br/>proje talimat dosyası"]
   N --> F["Planlı<br/>Firecracker mikro VM sandbox'ı<br/>HTTP API · web paneli · masaüstü"]
 ```

@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (owner 2026-10-07, no
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.20`** (released 2026-10-09). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.21`** (released 2026-10-09). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -279,6 +279,10 @@ flowchart LR
   settle from the provider's usage times a verified published tariff under a budget you set in the budget window or
   with `deckent models create-budget` (an unpriced remote model is refused and locked with the reason); spending and
   allocation audit.
+- **Cache prompts and watch the cost**: new Anthropic profiles use the 5-minute prompt cache and existing ones change only
+  by your choice; `/usage` shows the live account in USD, cache reads and writes, and the estimated net benefit.
+- **Use OpenRouter models in the terminal**: connect your key in `/provider`; tools and streaming work, and the cost
+  OpenRouter reports settles each call under your budget.
 - **Back up and restore**: `deckent backup create|verify|restore` writes encrypted, verifiable recovery sets, on a schedule
   if you choose, with retention; a restore runs only while the service is stopped.
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
@@ -291,7 +295,7 @@ a remote HTTP API, Desktop and Dashboard. A Docker worker shares the host kernel
 
 ```mermaid
 flowchart LR
-  L["Released · alpha.20<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets"] --> P["In progress<br/>OpenRouter models in the terminal<br/>cost guards · per-provider spend limits<br/>first-use fixes (cache, usage line)"]
+  L["Released · alpha.21<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets · OpenRouter models · prompt cache"] --> P["In progress<br/>cost guards · per-provider spend limits<br/>cache breakpoints and compaction triggers"]
   P --> N["Next<br/>subscriptions · worker credential modes<br/>system prompt and settings<br/>project instruction file"]
   N --> F["Planned<br/>Firecracker microVM sandbox<br/>HTTP API · Dashboard · Desktop"]
 ```
