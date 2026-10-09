@@ -4,6 +4,7 @@ import { createImmutableJsonObjectSchema, type JsonObject } from '#domain/index.
 import { maxRate } from './decimal.js';
 import { chargeDimensions, endpointRates, type TariffRates } from './rates.js';
 import { OpenRouterPricingError } from './error.js';
+import PRIVACY_LIMITS from './privacy-limits.json' with { type: 'json' };
 
 export const OPENROUTER_TARIFF_VERSION = 2 as const;
 const boundedMetadata = createImmutableJsonObjectSchema({ maxDepth: 16, maxNodes: 65_536, maxCodeUnits: 1_048_576 });
@@ -14,6 +15,7 @@ const endpointSchema = z.object({ model_id: identity, tag: identity, provider_na
   context_length: integer.positive(), max_prompt_tokens: integer.positive().nullable(),
   max_completion_tokens: integer.positive().nullable(), status: z.number().int(),
   supported_parameters: z.array(identity),
+  data_policy: z.object({ training: z.boolean().optional(), retainsPrompts: z.boolean().optional() }).passthrough().nullish(),
   // Already descriptor-copied as bounded JSON. Do not rebuild this with z.record: it can discard
   // prototype-named keys before the pricing allowlist sees them.
   pricing: z.custom<JsonObject>(value => value !== null && typeof value === 'object' && !Array.isArray(value)) }).passthrough();
@@ -28,13 +30,14 @@ export interface OpenRouterTariff {
   readonly contextLength: number; readonly maxPromptTokens: number; readonly maxCompletionTokens: number;
   readonly supportedParameters: readonly string[]; readonly pricedDimensions: readonly string[]; readonly unpricedDimensions: readonly string[];
   readonly includedDimensions: readonly string[];
+  readonly routeTags: readonly string[];
 }
 const ratesByTariff = new WeakMap<OpenRouterTariff, TariffRates>();
 
 /** Validates a captured native document, not its network provenance. The caller owns trusted acquisition.
  * Full native metadata is retained and digested; unknown pricing is never silently stripped by a schema.
  */
-export function parseOpenRouterTariff(metadata: unknown, selection: OpenRouterTariffSelection): OpenRouterTariff {
+export function parseOpenRouterTariff(metadata: unknown, selection: OpenRouterTariffSelection, zdrMetadata?: unknown): OpenRouterTariff {
   const copied = boundedMetadata.safeParse(metadata), selected = boundedMetadata.safeParse(selection);
   const parsed = copied.success && metadataSchema.safeParse(copied.data);
   const identityResult = selected.success && selectionSchema.safeParse(selected.data);
@@ -44,10 +47,19 @@ export function parseOpenRouterTariff(metadata: unknown, selection: OpenRouterTa
   const endpoints = parsed.data.data.endpoints;
   // Bare slugs reach every variant/region. Include even currently unavailable variants in the
   // envelope: a status change during metadata freshness must never introduce a higher price.
-  const matches = endpoints.filter(endpoint => endpoint.tag === identity.endpointTag
+  const selectedEndpoints = endpoints.filter(endpoint => endpoint.tag === identity.endpointTag
     || !identity.endpointTag.includes('/') && endpoint.tag.startsWith(`${identity.endpointTag}/`));
-  if (matches.length === 0) throw new OpenRouterPricingError('ENDPOINT_AMBIGUOUS');
-  if (matches.some(endpoint => endpoint.model_id !== identity.modelId) || !matches.some(endpoint => endpoint.status === 0)) {
+  if (selectedEndpoints.length === 0) throw new OpenRouterPricingError('ENDPOINT_AMBIGUOUS');
+  if (endpoints.some(endpoint => endpoint.model_id !== identity.modelId)) throw new OpenRouterPricingError('ENDPOINT_UNAVAILABLE');
+  const zdr = zdrMetadata === undefined ? [] : parseZdrEndpoints(zdrMetadata, identity.modelId);
+  // Provider defaults/names never attest endpoint policy. Missing fields require an exact
+  // model/tag observation in the official ZDR inventory. Explicit contrary metadata wins.
+  const compliant = endpoints.filter(endpoint => endpoint.data_policy?.training !== true && endpoint.data_policy?.retainsPrompts !== true
+    && (endpoint.data_policy?.training === false && endpoint.data_policy.retainsPrompts === false || zdr.includes(endpoint.tag)));
+  const preferred = compliant.filter(endpoint => selectedEndpoints.includes(endpoint));
+  const matches = preferred.some(endpoint => endpoint.status === 0) ? preferred : compliant;
+  if (matches.length === 0) throw new OpenRouterPricingError('PRIVACY_UNAVAILABLE');
+  if (!matches.some(endpoint => endpoint.status === 0)) {
     throw new OpenRouterPricingError('ENDPOINT_UNAVAILABLE');
   }
   const parsedRates = matches.map(endpoint => endpointRates(endpoint.pricing));
@@ -58,20 +70,30 @@ export function parseOpenRouterTariff(metadata: unknown, selection: OpenRouterTa
   const outputBound = (endpoint: typeof matches[number]) => Math.min(endpoint.max_completion_tokens ?? endpoint.context_length, endpoint.context_length);
   const supportedParameters = Object.freeze([...new Set(matches.flatMap(endpoint => endpoint.supported_parameters))].sort());
   const tariffIdentity = { schemaVersion: OPENROUTER_TARIFF_VERSION, selection: identity,
+    dataPolicy: { data_collection: 'deny', zdr: true, inventoryTags: zdr },
     modelId: identity.modelId, endpointTag: identity.endpointTag, inclusionRule: 'closed-text-published-skus-v2',
     endpoints: matches.map(endpoint => ({ tag: endpoint.tag, providerName: endpoint.provider_name,
       contextLength: endpoint.context_length, maxPromptTokens: endpoint.max_prompt_tokens, maxCompletionTokens: endpoint.max_completion_tokens,
-      supportedParameters: [...endpoint.supported_parameters].sort(), pricing: endpoint.pricing })),
+      supportedParameters: [...endpoint.supported_parameters].sort(), dataPolicy: endpoint.data_policy ?? null, pricing: endpoint.pricing })),
     includedDimensions: dimensions('included'), unpricedDimensions: dimensions('unpriced') };
   const definition = boundedMetadata.parse(tariffIdentity);
   const tariffDigest = createHash('sha256').update(JSON.stringify(definition)).digest('hex');
   const tariff: OpenRouterTariff = Object.freeze({ schemaVersion: OPENROUTER_TARIFF_VERSION, selection: Object.freeze(identity),
     metadata: copied.data, definition, metadataDigest: createHash('sha256').update(JSON.stringify(copied.data)).digest('hex'), tariffDigest,
     providerName: matches[0]!.provider_name, contextLength: Math.max(...matches.map(endpoint => endpoint.context_length)),
+    routeTags: Object.freeze([...new Set(matches.map(endpoint => endpoint.tag))].sort()),
     maxPromptTokens: Math.max(...matches.map(promptBound)), maxCompletionTokens: Math.max(...matches.map(outputBound)),
     supportedParameters, pricedDimensions: dimensions('priced'), unpricedDimensions: dimensions('unpriced'), includedDimensions: dimensions('included') });
   ratesByTariff.set(tariff, rates);
   return tariff;
+}
+
+/** The documented ZDR inventory carries endpoint records keyed by model_id and exact tag. */
+export function parseZdrEndpoints(input: unknown, modelId: string): string[] {
+  const copied = createImmutableJsonObjectSchema(PRIVACY_LIMITS).safeParse(input);
+  const parsed = copied.success && z.object({ data: z.array(z.object({ model_id: identity, tag: identity })) }).safeParse(copied.data);
+  if (!parsed || !parsed.success) throw new OpenRouterPricingError('INVALID_METADATA');
+  return [...new Set(parsed.data.data.filter(endpoint => endpoint.model_id === modelId).map(endpoint => endpoint.tag))].sort();
 }
 
 export function requireTariffRates(tariff: OpenRouterTariff, nowMs: number): TariffRates {

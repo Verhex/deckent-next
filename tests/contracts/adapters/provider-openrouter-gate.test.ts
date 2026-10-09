@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { parseOpenRouterTariff, quoteOpenRouterText } from '#adapters/core/provider-openrouter-pricing/index.js';
+import { parseOpenRouterTariff as parseTariff, quoteOpenRouterText } from '#adapters/core/provider-openrouter-pricing/index.js';
 
 interface Endpoint {
   model_id: string; tag: string; status: number; provider_name: string; context_length: number;
@@ -8,6 +8,11 @@ interface Endpoint {
   pricing: Record<string, unknown>;
 }
 interface Metadata { data: { id: string; endpoints: Endpoint[] } }
+// Synthetic ZDR membership isolates pricing tests; retained documents are unchanged vendor snapshots.
+const parseOpenRouterTariff = (document: Metadata, selected: Parameters<typeof parseTariff>[1]) => parseTariff(document, selected,
+  { data: document.data.endpoints.filter(e => e.tag === selected.endpointTag || !selected.endpointTag.includes('/') && e.tag.startsWith(`${selected.endpointTag}/`))
+    .map(e => ({ model_id: e.model_id, tag: e.tag })) });
+
 const retained = (file: string) => JSON.parse(readFileSync(new URL(`../../fixtures/openrouter-endpoints/${file}`, import.meta.url), 'utf8')) as Metadata;
 const fixtures = [
   { file: 'sonnet-endpoints.json', tag: 'anthropic', output: 128000, cents: 728 },
@@ -50,7 +55,7 @@ it.each(fixtures)('admits retained $file / $tag and reserves the independently p
   const document = retained(row.file), tariff = parseOpenRouterTariff(document, selection(document.data.id, row.tag));
   const quote = quoteOpenRouterText(tariff, request(document.data.id, row.output), 150);
   expect(quote.maxChargeMinorUnits).toBe(row.cents);
-  expect(quote.provider).toMatchObject({ only: [row.tag], allow_fallbacks: false, require_parameters: true });
+  expect(quote.provider).toMatchObject({ only: document.data.endpoints.filter(e => e.tag === row.tag || e.tag.startsWith(`${row.tag}/`)).map(e => e.tag).sort(), allow_fallbacks: false, require_parameters: true });
   expect(tariff.unpricedDimensions).toEqual([]);
 });
 

@@ -17,8 +17,15 @@ afterEach(async () => {
   for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 afterAll(async () => rm(directory, { recursive: true, force: true }));
+function withPrivacyInventory(handler: Parameters<typeof createServer>[1]): Parameters<typeof createServer>[1] {
+  return (req, res) => {
+    if (req.url === '/api/v1/endpoints/zdr') { res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: [{ model_id: 'vendor/model', tag: 'provider/region' }] })); return; }
+    handler(req, res);
+  };
+}
 async function fixture(handler: Parameters<typeof createServer>[1]) {
-  const server = createServer({ key: privateKey, cert: certificate }, handler); servers.push(server);
+  const server = createServer({ key: privateKey, cert: certificate }, withPrivacyInventory(handler)); servers.push(server);
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   return `https://127.0.0.1:${address.port}/api/v1/models/vendor/model/endpoints`;
@@ -48,9 +55,9 @@ it('fetches the exact TLS metadata path without auth or proxy and quotes only fu
     expect(quoteOpenRouterText(observation.tariff, { model: 'vendor/model', messages: [{ role: 'user', content: 'x' }],
       max_completion_tokens: 10 }, 10)).toMatchObject({ currency: 'USD', provider: { only: ['provider/region'], allow_fallbacks: false } });
     const incompleteBody = JSON.stringify(metadata({ prompt: '0.1', completion: '0.2', request: null }));
-    servers[0]!.removeAllListeners('request'); servers[0]!.on('request', (_req, res) => {
+    servers[0]!.removeAllListeners('request'); servers[0]!.on('request', withPrivacyInventory((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(incompleteBody);
-    });
+    }));
     const incomplete = await fetchOpenRouterTariff(options(endpoint), () => 20);
     expect(() => quoteOpenRouterText(incomplete.tariff, { model: 'vendor/model', messages: [{ role: 'user', content: 'x' }],
       max_completion_tokens: 10 }, 20)).toThrow('INCOMPLETE_PRICING');
@@ -76,9 +83,9 @@ it('rejects malformed JSON, invalid UTF-8, strict metadata failures, and oversiz
   for (let index = 0; index < bodies.length; index++) {
     await expect(fetchOpenRouterTariff(options(endpoint), () => 1)).rejects.toMatchObject({ code: 'INVALID_METADATA' } satisfies Partial<OpenRouterPricingError>);
   }
-  servers[0]!.removeAllListeners('request'); servers[0]!.on('request', (_req, res) => {
+  servers[0]!.removeAllListeners('request'); servers[0]!.on('request', withPrivacyInventory((_req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(metadata()));
-  });
+  }));
   await expect(fetchOpenRouterTariff(options(endpoint, { maxResponseBytes: 8 }), () => 1))
     .rejects.toMatchObject({ code: 'METADATA_TOO_LARGE' } satisfies Partial<OpenRouterPricingError>);
 });
