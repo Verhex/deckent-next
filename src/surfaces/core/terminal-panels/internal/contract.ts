@@ -134,16 +134,35 @@ export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */
   readonly budget?: BudgetPanelPort;
+  /** CACHE-SLICE1: the governed one-step "turn the 5-minute prompt cache on" for existing profiles (absent: not offered). */
+  readonly cache?: CachePanelPort;
+  /** CACHE-SLICE1: the conversation's measured context when it is at or above the registry threshold (null: below it or not measured yet); a
+   * model switch then asks "new context / continue" before it pins. */
+  largeContext?(): number | null;
   makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
   /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
    * drops the project's model so the user default applies; `align` makes the project's model this one. */
   resolveShadow?(choice: ModelPanelChoice, action: 'remove' | 'align'): Promise<ConfigPanelOutcome>;
 }
-/** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). */
+/** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). `fresh`: the
+ * person chose a new context for the switch (the conversation keeps only their own instructions). */
 export interface ModelPanelPort extends ModelPanelSource {
   pinned(): ModelPanelReference | null;
-  pin(choice: ModelPanelChoice): void;
+  pin(choice: ModelPanelChoice, fresh?: boolean): void;
 }
+/** CACHE-SLICE1: what the cache migration would change, in words (the host builds them from each profile's own tariff), or nothing to offer. */
+export type CachePanelView = Readonly<{ detail: string; lines: readonly PanelLine[] }>;
+export interface CachePanelPort {
+  inspect(): Promise<CachePanelView | null>;
+  /** The governed `/config` writes (policy, approval, audit), read fresh at the answer; the outcome's lines are the one summary. */
+  apply(): Promise<ConfigPanelOutcome>;
+}
+export interface CachePanelLabels {
+  /** The list row; the window title; its two answers; its key hint. */
+  readonly entry: string; readonly title: string; readonly confirm: string; readonly cancel: string; readonly hints: string;
+}
+/** CACHE-SLICE1: the model-switch question over a large context (`{tokens}` measured, `{model}` the chosen one). */
+export interface ModelSwitchLabels { readonly title: string; readonly fresh: string; readonly keep: string; readonly freshDone: string; readonly keepDone: string }
 export interface ModelPanelLabels {
   readonly hints: string;
   /** Scope step: this session only; this session and the user default. */
@@ -154,6 +173,7 @@ export interface ModelPanelLabels {
   readonly pinned: string;
   /** T4-B shadow window: `{model}` the project's model; its two governed choices and "keep as it is". */
   readonly shadowTitle: string; readonly shadowRemove: string; readonly shadowAlign: string; readonly shadowKeep: string;
+  readonly switch: ModelSwitchLabels;
 }
 
 /** One `/provider` kind (T4 PROVIDER-CONNECT): its state in words, the key's store name (never a value) and what the connect flow asks. */
@@ -195,6 +215,8 @@ export interface ProviderPanelPort {
   readonly transparency: readonly PanelLine[];
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */
   readonly budget?: BudgetPanelPort;
+  /** CACHE-SLICE1: the same cache migration as `/model` (absent: not offered). */
+  readonly cache?: CachePanelPort;
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
@@ -245,6 +267,7 @@ export interface PanelLabels {
   readonly model: ModelPanelLabels;
   readonly provider: ProviderPanelLabels;
   readonly budget: BudgetPanelLabels;
+  readonly cache: CachePanelLabels;
 }
 export interface PanelPorts {
   readonly mode?: ModePanelPort;

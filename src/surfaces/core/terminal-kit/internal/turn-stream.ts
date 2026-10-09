@@ -32,7 +32,9 @@ export type ToolTrackedChanges = { readonly deleted: number; readonly overwritte
 export type TurnDelta =
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'reasoning'; readonly text: string }
-  | { readonly kind: 'usage'; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number | null; readonly cache?: { readonly readTokens: number; readonly writeTokens: number; readonly promptTokens: number } }
+  | { readonly kind: 'usage'; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number | null; readonly cache?: { readonly readTokens: number; readonly writeTokens: number; readonly promptTokens: number;
+    /** CACHE-SLICE1: the TTL split of the writes and the same-request net cache benefit (USD x 1e10, an estimate; null: unknown). */
+    readonly write5mTokens?: number; readonly write1hTokens?: number; readonly netBenefitUsdE10?: number | null } }
   /** An agent tool call: `started` with the engine's target, then `finished` with its typed status and duration (T-L3). `cleanup`
    * (Astra 2124) only ever arrives on a finished host shell call; every other call leaves it undefined. The tool line's pattern-first
    * target and result summary (TL-B D2) are derived by the renderer from the `message` deltas, not carried here. */

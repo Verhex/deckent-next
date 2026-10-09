@@ -28,4 +28,4 @@ export { parseProviderSpendMeasurement, parseProviderSpendTariffMeasurement, mea
 export type { ProviderSpendMeasurement, ProviderSpendTariffMeasurement } from './internal/measured.js';
 export { ProviderSpendManagementApplication, parseProviderSpendManagementReceipt, parseProviderSpendManagementResultForCommand, reconcileProviderSpend, reviseProviderSpendBudget, createGovernedProviderSpendAccount } from './internal/management.js';
 export type { ProviderSpendManagementAuthorization, ProviderSpendManagementReceipt, ProviderSpendManagementResult, ProviderSpendManagementStore } from './internal/management.js';
-export { settledProviderCacheUsage } from './internal/cache-usage.js';
+export { settledProviderCacheUsage, type SettledProviderCacheUsage } from './internal/cache-usage.js';

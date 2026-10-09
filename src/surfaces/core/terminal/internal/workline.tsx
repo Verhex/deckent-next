@@ -12,6 +12,8 @@ import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphs
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
+import { freshContextHistory } from './workline-history.js';
+import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowNoteContext, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
@@ -162,6 +164,7 @@ export function WorklineApp(props: WorklineProps) {
   const sessionId = useCallback(() => panel.controller.snapshot().context.sessionId, [panel]);
   const usage = () => usages.current.get(sessionId()) ?? EMPTY_SESSION_USAGE;
   const session = useConversationSession(props.sessions, labels.sessions, sessionId, props.knownSecrets);
+  const sessionNow = useRef(session); sessionNow.current = session;
   const presentation = panel.presentation(state);
   const resumePicker = presentation?.kind === 'resume' && state.picker ? presentation.rows : null;
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
@@ -231,8 +234,13 @@ export function WorklineApp(props: WorklineProps) {
   // conversation's own pin, or none (the configured model) — never another conversation's.
   const [, setModelGeneration] = useState(0);
   const pinnedModels = useRef(new Map<string, ModelPanelReference>());
+  // CACHE-SLICE1: a switch over a large context asks first (registry threshold); "new context" keeps the person's own instructions, never silently.
   const sessionModel = useMemo(() => ({ pinned: () => pinnedModels.current.get(sessionId()) ?? null,
-    pin: (choice: ModelPanelChoice) => { pinnedModels.current.set(sessionId(), choice.reference); setModelGeneration(value => value + 1); } }), [sessionId]);
+    largeContext: () => { const tokens = sessionNow.current.measuredPrompt(); return tokens !== null && tokens >= MODEL_SWITCH.askFreshContextAtTokens ? tokens : null; },
+    pin: (choice: ModelPanelChoice, fresh?: boolean) => {
+      if (fresh) { history.current = freshContextHistory(history.current); sessionNow.current.forgetContext(); }
+      pinnedModels.current.set(sessionId(), choice.reference); setModelGeneration(value => value + 1);
+    } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).

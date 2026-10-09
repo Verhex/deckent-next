@@ -140,5 +140,8 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     const model = contextInfoModel({ measured: context.current, history, compaction: compaction.current }, info, labels?.view, ascii);
     return { ...model, sections: model.sections.map((section, index) => index === 0 ? { ...section, notes: [...(section.notes ?? []), ...sources] } : section) };
   }, [labels]);
-  return { noteContext, save, run, id, contextView };
+  /** CACHE-SLICE1: the latest measured prompt of this conversation (null: none yet), and forgetting it when a new context replaces the history. */
+  const measuredPrompt = useCallback(() => context.current?.promptTokens ?? null, []);
+  const forgetContext = useCallback(() => { context.current = null; compaction.current = null; }, []);
+  return { noteContext, save, run, id, contextView, measuredPrompt, forgetContext };
 }

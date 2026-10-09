@@ -480,3 +480,101 @@ describe('stage 1 budget window (/model and /provider)', () => {
     expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 50 USD' }]);
   });
 });
+
+describe('CACHE-SLICE1: the governed cache migration row and the model-switch question', () => {
+  const COST = { detail: '1 model(s) without a cache choice', lines: [{ label: '', text: 'WHAT-CHANGES' },
+    { label: 'claude-sonnet-5-5', text: 'a cache write costs 1.25× the input price, a cache read 0.05×; it pays back after 1 reuse(s) within 5 minutes' }] };
+  const cachePort = (status: 'applied' | 'approval-pending' = 'applied') => {
+    const applied: number[] = [];
+    const port = { inspect: async () => COST, apply: async (): Promise<ConfigPanelOutcome> => { applied.push(1);
+      return status === 'applied' ? { status, lines: ['Prompt cache (5 min) turned on for 1 model(s).'], approvalId: null } : { status, lines: ['WAITS'], approvalId: 'approval-cache' }; } };
+    return { port, applied };
+  };
+  it('/model lists the row; the window shows the cost note first; nothing is written before Yes; Yes writes once through the port', async () => {
+    const cache = cachePort(), { port, pins } = modelPort(MODELS);
+    const { element, calls } = panel('model', { model: { ...port, cache: cache.port } });
+    const screen = mount(element, 140, 40); await settle(80);
+    expect(screen.frame()).toContain('Turn on prompt cache (5 min)'); expect(screen.frame()).toContain('1 model(s) without a cache choice');
+    await screen.press(ENTER);
+    expect(screen.frame()).toContain('Turn on prompt cache (5 min)?'); expect(screen.frame()).toContain('1.25× the input price');
+    expect(screen.frame()).toContain('Yes, turn it on (5 min)'); expect(cache.applied).toEqual([]);
+    await screen.press(ENTER, 80);
+    expect(cache.applied).toEqual([1]); expect(calls.notices).toEqual([{ level: 'info', text: 'Prompt cache (5 min) turned on for 1 model(s).' }]);
+    expect(calls.closed).toBe(1); expect(pins).toEqual([]);
+  });
+
+  it('"No" and Esc write nothing; a held write opens its approval card (Turkish row on /provider)', async () => {
+    const cancel = cachePort(), { port } = modelPort(MODELS);
+    const first = panel('model', { model: { ...port, cache: cancel.port } });
+    const screen = mount(first.element, 140, 40); await settle(80);
+    await screen.press(ENTER); await screen.press(`${DOWN}${ENTER}`, 80);
+    expect(cancel.applied).toEqual([]); expect(first.calls.closed).toBe(1);
+    const held = cachePort('approval-pending');
+    const provider: ProviderPanelPort = { inspect: async () => ({ title: 'Sağlayıcılar', kinds: [], notes: [] }), endpoint: () => ({ ok: false, reason: '-' }),
+      connect: async () => { throw new Error('unreached'); }, disconnect: async () => [], transparency: [], cache: held.port } as never;
+    const second = panel('provider', { provider }, 'tr');
+    const tr = mount(second.element, 140, 40); await settle(80);
+    expect(tr.frame()).toContain('Önbelleği aç (5 dk)');
+    await tr.press(ENTER); expect(tr.frame()).toContain('Evet, aç (5 dk)');
+    await tr.press(ENTER, 80);
+    expect(held.applied).toEqual([1]); expect(second.calls.approvals).toEqual(['approval-cache']);
+  });
+
+  const switchPort = (tokens: number | null) => {
+    const pins: { model: string; fresh: boolean | undefined }[] = [];
+    const port: ModelPanelPort = { inspect: async () => MODELS, pinned: () => null, largeContext: () => tokens,
+      pin: (choice, fresh) => { pins.push({ model: choice.reference.modelId, fresh }); } };
+    return { port, pins };
+  };
+  it('a switch over a large context asks "new context / continue" before it pins; Esc pins nothing; the current model or a small context never asks', async () => {
+    for (const [answer, fresh] of [[ENTER, true], [`${DOWN}${ENTER}`, false]] as const) {
+      const { port, pins } = switchPort(60_000), { element, calls } = panel('model', { model: port });
+      const screen = mount(element, 140, 40); await settle(80);
+      // Rows: chat (configured), coder (locked), fast. Pick fast for this session.
+      await screen.press(`${DOWN}${DOWN}${ENTER}${ENTER}`);
+      expect(screen.frame()).toContain('fast: this conversation is 60000 tokens'); expect(pins).toEqual([]);
+      await screen.press(answer, 60);
+      expect(pins).toEqual([{ model: 'fast', fresh }]);
+      expect(calls.notices.map(item => item.text).join('\n')).toContain(fresh ? 'New context for fast' : 'fast continues with the whole history');
+    }
+    const esc = switchPort(60_000), escaped = panel('model', { model: esc.port });
+    const screen = mount(escaped.element, 140, 40); await settle(80);
+    await screen.press(`${DOWN}${DOWN}${ENTER}${ENTER}`); await screen.press(ESC, 60);
+    expect(esc.pins).toEqual([]);
+    const small = switchPort(null), quiet = panel('model', { model: small.port });
+    const other = mount(quiet.element, 140, 40); await settle(80);
+    await other.press(`${DOWN}${DOWN}${ENTER}${ENTER}`, 60);
+    expect(small.pins).toEqual([{ model: 'fast', fresh: false }]); expect(other.all()).not.toContain('cold cache');
+    const same = switchPort(60_000), current = panel('model', { model: same.port });
+    const again = mount(current.element, 140, 40); await settle(80);
+    await again.press(`${ENTER}${ENTER}`, 60);
+    expect(same.pins).toEqual([{ model: 'chat', fresh: false }]);
+  });
+
+  it('in the workline, "new context" keeps the person\'s own messages and leaves answers behind; the next turn carries the new pin', async () => {
+    const turns: { messages: { role: string; content: string }[]; reference: unknown }[] = [];
+    const streamTurn = async function* (messages: unknown, _signal: AbortSignal, turn?: { reference?: unknown }) {
+      turns.push({ messages: structuredClone(messages) as never, reference: turn?.reference ?? null });
+      yield { kind: 'context' as const, promptTokens: 60_000, windowTokens: 200_000, quality: 'provider-count' as const };
+      yield { kind: 'text' as const, text: `ANSWER-${turns.length}` }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const view = mountWorkline({ labels: WORKLINE_TEST_LABELS, streamTurn, panels: { ports: { model: { inspect: async () => MODELS } }, labels: terminalPanelLabels('en') } });
+    mounted.push(view.instance);
+    await settleWorkline(40);
+    view.stdin.write(`keep answers short${ENTER}`);
+    await until(() => turns.length === 1 && view.stdout.text.includes('ANSWER-1'), 'first turn');
+    view.stdin.write(`/model${ENTER}`);
+    await until(() => view.stdout.frame.includes('Models · scope'), 'model window');
+    await settleWorkline(60);
+    for (const key of [DOWN, DOWN, ENTER, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
+    await until(() => view.stdout.frame.includes('this conversation is 60000 tokens'), 'switch question');
+    view.stdin.write(ENTER);
+    await until(() => view.stdout.text.includes('New context for fast'), 'fresh context notice');
+    view.stdin.write(`next${ENTER}`);
+    await until(() => turns.length === 2, 'second turn');
+    expect(turns[1]!.reference).toEqual(ref('fast'));
+    expect(turns[1]!.messages.map(message => message.role)).toEqual(['system', 'user', 'user']);
+    expect(turns[1]!.messages.slice(1).map(message => message.content)).toEqual(['keep answers short', 'next']);
+    expect(JSON.stringify(turns[1]!.messages)).not.toContain('ANSWER-1');
+  });
+});

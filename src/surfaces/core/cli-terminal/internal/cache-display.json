@@ -1,0 +1,4 @@
+{
+  "note": "CACHE-SLICE1: display precision of the cache window's price ratios (each model's own cache write and read price against its input price).",
+  "ratioFractionDigits": 3
+}

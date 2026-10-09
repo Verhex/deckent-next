@@ -626,6 +626,14 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   exact verified row of `lookupOpenAiCompatibleTariff(endpoint, nativeId)` (`published`); a remote model without one is refused before any
   catalog/config write (`MODEL_CONNECT_TARIFF_UNVERIFIED`; the adapter step runs first), only loopback keeps the zero tariff (`unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver → chat activation →
   one `model-connect` audit subject. A config approval stops the run (`approval-pending`); the same command id continues. No key value is taken.
+- **Prompt cache, first slice (CACHE-SLICE1, owner 2026-10-09):** the provider-connect row's `cacheDefault` (Anthropic only, `none|5m`; shipped
+  `anthropic-api` = `5m`) is written into a NEW profile's definition (`cache: '5m'` → the adapter's existing top-level automatic `cache_control`).
+  An existing profile keeps its own value on every re-run (absent stays absent, `none` stays `none`; the adapter port receives the written
+  definition). Existing profiles without a cache field are offered a governed one-step migration in `/model` and `/provider` (engine
+  `planProfileCache` + adapter `providerProfileCacheOffer`: `cache: '5m'`, version + 1, one `/config` writer call per authored layer with policy,
+  approval and audit; a profile authored in both layers is named, not changed, because a project profile must equal a user-layer one). Each call
+  reads its own profile (model switch, pin and worker paths carry no override); the reservation prices every input token at the dearest enabled
+  class (miss + write) plus the full output. No paid keep-alive or prewarm; TTL 5m only; breakpoints/1h/allocator are slice 2.
 - **Provider rows (Jev da5312fb):** OpenAI, DeepSeek, Z.ai GLM (global) and Zhipu GLM (China) each keep their own secret name; the generic
   OpenAI-compatible row derives `DECKENT_OAICOMPAT_<HOST[_PORT]>` from the chosen address and shows it before saving. Z.ai documents no free
   read: its rows have no probe (the key is kept unverified). Owner 2026-10-08: no paid call to a remote endpoint without a verified price — the

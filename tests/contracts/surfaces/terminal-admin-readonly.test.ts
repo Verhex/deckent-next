@@ -166,7 +166,8 @@ describe('terminal read-only management (S09)', () => {
 
   it('adds usage reports without losing earlier totals', () => {
     const total = addSessionUsage(addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 1, completionTokens: 2, reasoningTokens: 3 }), { promptTokens: 4, completionTokens: 5, reasoningTokens: null });
-    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3, reasoningUnmeasured: 1, cache: { reports: 0, readTokens: 0, writeTokens: 0, promptTokens: 0 } });
+    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3, reasoningUnmeasured: 1, cache: { reports: 0, readTokens: 0, writeTokens: 0, promptTokens: 0,
+      write5mTokens: 0, write1hTokens: 0, netBenefitUsdE10: 0, benefitReports: 0 } });
   });
 
   // BATCH-FIX 2026-10-07 USAGE-UNKNOWN (P2-3a): an unreported reasoning count is never summed as 0; a partial sum says what it misses.

@@ -43,3 +43,19 @@ export function resumedHistoryEntries(messages: readonly AgentChatMessage[], lab
   flush();
   return rows;
 }
+
+/**
+ * CACHE-SLICE1: the conversation a "new context" model switch keeps — the system message and the person's own messages as they typed them (attached
+ * file bodies dropped, they can be mentioned again) plus any runtime summary that already carries earlier instructions; assistant answers and tool
+ * traffic are left behind. Never sent by itself: the next turn carries it to the newly pinned model.
+ */
+export function freshContextHistory(history: readonly AgentChatMessage[]): readonly AgentChatMessage[] {
+  const [system, ...rest] = history;
+  const kept = rest.flatMap(message => {
+    if (message.role !== 'user') return [];
+    if ([SUMMARY_MARK, EXCERPT_MARK, RENDER_MARK].some(mark => message.content.startsWith(mark))) return [message];
+    const attached = message.content.indexOf(ATTACHED), text = (attached >= 0 ? message.content.slice(0, attached) : message.content).trim();
+    return text ? [{ ...message, content: text }] : [];
+  });
+  return system ? [system, ...kept] : kept;
+}

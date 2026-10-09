@@ -118,3 +118,21 @@ it.each(['tr', 'en'] as const)('renders session cache reads, writes and hit rati
   await until(() => view.stdout.frame.includes(locale === 'tr' ? 'Önbellek isabet oranı' : 'Cache hit ratio'), 'settled cache projection visible in Ink');
   expect(view.stdout.frame).toContain('60.0'); expect(view.stdout.frame).not.toContain('\u001b[');
 });
+
+it.each(['tr', 'en'] as const)('CACHE-SLICE1 /usage: raw read, 5m and 1h writes and the same-request net benefit as an estimate, negative shown as is (%s)', async locale => {
+  const root = await project();
+  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: { HOME: join(root, 'h') } }, locale, context: {}, status: async () => '', doctor: async () => undefined });
+  const view = async (usage: ReturnType<typeof addSessionUsage>) => infoModelText((await admin.info.ports.usage!({ usage })).model).join('\n');
+  const measured = addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 126_000, completionTokens: 500, reasoningTokens: null,
+    cache: { readTokens: 100_000, writeTokens: 25_000, promptTokens: 126_000, write5mTokens: 20_000, write1hTokens: 5_000, netBenefitUsdE10: 1_700_000_000 } });
+  const text = await view(measured);
+  expect(text).toContain(locale === 'tr' ? 'Önbelleğe yazılan (5 dk)' : 'Cache write (5 min)'); expect(text).toContain(locale === 'tr' ? '20.000' : '20,000');
+  expect(text).toContain(locale === 'tr' ? 'Önbelleğe yazılan (1 saat)' : 'Cache write (1 hour)'); expect(text).toContain(locale === 'tr' ? '5.000' : '5,000');
+  expect(text).toContain(locale === 'tr' ? '0,1700 USD' : '0.1700 USD'); expect(text).toContain(locale === 'tr' ? 'tahmin' : 'estimate');
+  const negative = await view(addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 10, completionTokens: 1, reasoningTokens: null,
+    cache: { readTokens: 0, writeTokens: 1_000_000, promptTokens: 1_000_010, write5mTokens: 1_000_000, write1hTokens: 0, netBenefitUsdE10: -5_000_000_000 } }));
+  expect(negative).toContain(locale === 'tr' ? '-0,5000 USD' : '-0.5000 USD');
+  // A report without a measured benefit keeps the figure partial, never a zero for the whole session.
+  const partial = await view(addSessionUsage(measured, { promptTokens: 1, completionTokens: 1, reasoningTokens: null }));
+  expect(partial).toMatch(locale === 'tr' ? /ölçülen raporlarda 0,1700 USD, tahmin \(1\/2\)/u : /0\.1700 USD, estimate, in measured reports \(1\/2\)/u);
+});

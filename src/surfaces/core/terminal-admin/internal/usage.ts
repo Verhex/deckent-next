@@ -6,6 +6,10 @@ import type { SessionUsageView } from '#surfaces/core/terminal-kit/index.js';
 import { queryFailureText } from './failure.js';
 import { count } from './human.js';
 import type { TerminalAdminCall } from './context.js';
+import USAGE_DISPLAY from './usage-display.json' with { type: 'json' };
+
+/** `netBenefitUsdE10` is USD x 1e10 (tokens x rate units of 0.0001 USD per million tokens). */
+const USD_E10 = 1e10;
 
 /** An unreported reasoning count stays unknown: never a zero, and a partial sum says how many reports it misses. */
 function reasoningText(usage: SessionUsageView, locale: TerminalAdminCall['locale']): string {
@@ -25,7 +29,22 @@ function cacheRows(usage: SessionUsageView, locale: TerminalAdminCall['locale'])
     : t('terminal.info.usage.cacheHit', { percent, read: count(cache!.readTokens, locale), prompt: count(cache!.promptTokens, locale) }, locale);
   return [{ key: t('terminal.info.usage.key.cacheRead', {}, locale), value: amount(cache?.readTokens ?? 0) },
     { key: t('terminal.info.usage.key.cacheWrite', {}, locale), value: amount(cache?.writeTokens ?? 0) },
-    { key: t('terminal.info.usage.key.cacheHit', {}, locale), value: hit }];
+    // CACHE-SLICE1: the raw TTL classes of the writes (a write the provider reported without its TTL split is only in the total above).
+    { key: t('terminal.info.usage.key.cacheWrite5m', {}, locale), value: amount(cache?.write5mTokens ?? 0) },
+    { key: t('terminal.info.usage.key.cacheWrite1h', {}, locale), value: amount(cache?.write1hTokens ?? 0) },
+    { key: t('terminal.info.usage.key.cacheHit', {}, locale), value: hit },
+    { key: t('terminal.info.usage.key.cacheBenefit', {}, locale), value: benefitText(cache, usage.reports, locale) }];
+}
+/** CACHE-SLICE1: the same-request net cache benefit in USD (read savings minus the write premium, at each request's own rates); an estimate, never a
+ * bill, and a negative value is shown as it is. Reports without a measured benefit keep the figure partial. */
+function benefitText(cache: SessionUsageView['cache'], total: number, locale: TerminalAdminCall['locale']): string {
+  const reports = cache?.benefitReports ?? 0;
+  if (!cache || reports === 0) return t('terminal.info.usage.cacheNone', {}, locale);
+  const digits = USAGE_DISPLAY.cacheBenefitFractionDigits;
+  const usd = (cache.netBenefitUsdE10 / USD_E10).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const text = t('terminal.info.usage.money', { amount: usd, currency: 'USD' }, locale);
+  return reports < total ? t('terminal.info.usage.cacheBenefitPartial', { amount: text, measured: reports, reports: total }, locale)
+    : t('terminal.info.usage.cacheBenefit', { amount: text }, locale);
 }
 
 /**
