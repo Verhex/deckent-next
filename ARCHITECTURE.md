@@ -831,6 +831,7 @@ The Markdown gate admits the five product/roadmap documents `README.md`, `ARCHIT
 `COMPLETED-PLAN.md`, `CHANGELOG.md`, plus owner-admitted repository standards (2026-10-03): `README.tr.md`,
 `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
 `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`;
+public reader guides `docs/glossary{,.tr}.md` and `docs/architecture-overview{,.tr}.md` (owner-approved pre-beta DOC-03/DOC-04 fixes, 2026-10-09);
 ≤70-line permanent product-development contracts `CLAUDE.md`, `AGENTS.md`;
 ≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
 and the explicit refactor host-kit globs in `arch.json`: the remaining 20 `.agents/skills/<skill>`
