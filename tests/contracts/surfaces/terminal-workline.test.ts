@@ -379,8 +379,8 @@ describe('workline view rendered by Ink', () => {
       }, async inspectRun() { return null; } } });
     await view.type('/watch-workers\r'); await until(() => calls >= 5, 'several polls');
     expect(reported).toBe(1); expect(overlap).toBe(0);
-    // The window owns the keyboard: Esc closes it and stops the polling.
-    view.stdin.write(ESC); await until(() => view.stdout.text.includes('Workers window closed'), 'stopped');
+    // A watch frame leaves focus in the composer; its slash command stops the polling.
+    view.stdin.write('/watch-stop\r'); await until(() => view.stdout.text.includes('Workers window closed'), 'stopped');
     const after = calls; await settle(120);
     expect(calls - after).toBeLessThanOrEqual(1);
   });

@@ -1,0 +1,4 @@
+{
+  "note": "CACHE-SLICE1 /usage: fraction digits of the same-request net cache benefit in USD (an estimate; sub-cent amounts stay visible).",
+  "cacheBenefitFractionDigits": 4
+}

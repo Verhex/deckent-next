@@ -4,7 +4,7 @@ export { OPENAI_CHAT_WIRE_LIMITS, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_
   parseOpenAiChatTextRequest, OPENAI_CHAT_MAX_TOOL_CALLS, OPENAI_CHAT_TOOL_NAME, openAiChatFinishReasonSchema, openAiChatUsageSchema,
   openAiChatWireObjectSchema } from './internal/contract.js';
 export { checkedToolCalls, couldBeDeclaredTool } from './internal/tool-calls.js';
-export type { OpenAiChatDialect, OpenAiChatHttpAuthentication, OpenAiChatHttpDefinition, OpenAiChatHttpErrorCode, OpenAiChatHttpLimits, OpenAiChatHttpResponse, OpenAiChatOperatorTariff,
+export type { OpenRouterEndpointTariff, OpenAiChatDialect, OpenAiChatHttpAuthentication, OpenAiChatHttpDefinition, OpenAiChatHttpErrorCode, OpenAiChatHttpLimits, OpenAiChatHttpResponse, OpenAiChatOperatorTariff,
   OpenAiChatTextMessage, OpenAiChatTextRequest, OpenAiChatToolDefinition } from './internal/contract.js';
 export { createOpenAiChatNativePort, openAiChatProtocol, prepareOpenAiChatHttpRequest } from './internal/transport.js';
 export type { OpenAiChatNativePortOptions, PreparedOpenAiChatRequest } from './internal/transport.js';

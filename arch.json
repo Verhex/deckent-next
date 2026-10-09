@@ -270,7 +270,8 @@
         "src/composition/core/model-connect",
         "src/surfaces/core/terminal-turn",
         "src/composition/core/project-instructions",
-        "src/composition/core/backup"
+        "src/composition/core/backup",
+        "src/engine/core/provider-spend"
       ],
       "plan": "SURFACES"
     },
@@ -1545,7 +1546,7 @@
     },
     "src/adapters/core/provider-openrouter-pricing": {
       "dependencies": [
-        "src/domain/core/agent-tool",
+        "src/adapters/core/provider-openai-chat",
         "src/domain/core/primitives"
       ],
       "plan": "PROVIDERS"
@@ -1570,6 +1571,7 @@
     },
     "src/adapters/core/provider-openrouter-chat": {
       "dependencies": [
+        "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-http-json",
         "src/adapters/core/provider-openrouter-pricing",
         "src/domain/core/model-invocation",
@@ -1982,7 +1984,8 @@
         "src/domain/core/agent-turn",
         "src/platform/core/host",
         "src/domain/core/model-invocation",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -2655,7 +2658,7 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 25000,
+      "adapters": 26000,
       "surfaces": 45000,
       "composition": 6500
     },

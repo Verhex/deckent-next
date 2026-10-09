@@ -37,12 +37,17 @@ export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; versi
  * (`omit`: the provider has no such option and reports usage on its last chunk, e.g. Z.ai) and which `tool_choice` values it accepts.
  */
 export type OpenAiChatDialect = Readonly<{ tokenLimitField: 'max_tokens' | 'max_completion_tokens'; streamUsage: 'include' | 'omit';
-  toolChoice: readonly ('auto' | 'none' | 'required')[] }>;
+  toolChoice: readonly ('auto' | 'none' | 'required')[]; finalUsageChoice?: 'repeat-finish' | undefined }>;
+export const openRouterEndpointTariffSchema = z.object({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
+  metadataEndpoint: z.string().url(), endpointTag: z.string().min(1).max(1024),
+  metadataLimits: z.object({ maxAgeMs: z.number().int().positive().safe(), maxResponseBytes: z.number().int().positive().safe(),
+    timeoutMs: z.number().int().positive().safe() }).strict() }).strict();
+export type OpenRouterEndpointTariff = z.infer<typeof openRouterEndpointTariffSchema>;
 /** The OpenAI wire itself: what a v4 profile (no dialect) is sent. */
 export const OPENAI_CHAT_DEFAULT_DIALECT: OpenAiChatDialect = Object.freeze({ tokenLimitField: 'max_completion_tokens', streamUsage: 'include',
   toolChoice: Object.freeze(['auto', 'none', 'required'] as const) });
 export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTokens: number; dialect?: OpenAiChatDialect;
-  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff | OpenAiCompatiblePublishedTariff;
+  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff | OpenAiCompatiblePublishedTariff | OpenRouterEndpointTariff;
   /** vLLM-style `POST /tokenize` of the same origin (T-L5); used only when the binding declares `token-count`. */
   tokenizeEndpoint?: string }>;
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
@@ -95,11 +100,11 @@ const tariffSchema = z.union([z.object({ kind: z.literal('operator-static'), ver
   inputMinorUnitsPerMillionTokens: z.literal(0), outputMinorUnitsPerMillionTokens: z.literal(0) }).strict(),
   z.object({ kind: z.literal('operator-static'), version: z.literal(2), currency: z.literal('USD'),
     inputMinorUnitsPerMillionTokens: operatorRate, outputMinorUnitsPerMillionTokens: operatorRate,
-    cachedInputMinorUnitsPerMillionTokens: operatorRate }).strict(), openAiCompatiblePublishedTariffSchema]);
+    cachedInputMinorUnitsPerMillionTokens: operatorRate }).strict(), openAiCompatiblePublishedTariffSchema, openRouterEndpointTariffSchema]);
 export const openAiChatDialectSchema = z.object({ tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), streamUsage: z.enum(['include', 'omit']),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   toolChoice: z.array(z.union([z.literal('auto'), z.literal('none'), z.literal('required')])).min(1).max(3)
-    .refine(values => new Set(values).size === values.length) }).strict();
+    .refine(values => new Set(values).size === values.length), finalUsageChoice: z.literal('repeat-finish').optional() }).strict();
 const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: positive, dialect: openAiChatDialectSchema.optional(),
   authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
     z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict()]),
@@ -145,6 +150,11 @@ export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDef
   const tokenize = parsed.data.tokenizeEndpoint;
   if (tokenize !== undefined && (!isCanonicalEndpoint(tokenize, parsed.data.authentication.type, parsed.data.tls !== undefined)
     || new URL(tokenize).origin !== new URL(parsed.data.endpoint).origin)) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
+  if (parsed.data.tariff.kind === 'openrouter-endpoint') {
+    const source = new URL(parsed.data.tariff.metadataEndpoint), endpoint = new URL(parsed.data.endpoint);
+    if (source.protocol !== 'https:' || source.origin !== endpoint.origin || source.username || source.password || source.search || source.hash
+      || source.href !== parsed.data.tariff.metadataEndpoint || !parsed.data.dialect) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
+  }
   const authentication = Object.freeze({ ...parsed.data.authentication });
   const dialect = parsed.data.dialect;
   return Object.freeze({ endpoint: parsed.data.endpoint, maxOutputTokens: parsed.data.maxOutputTokens, authentication,

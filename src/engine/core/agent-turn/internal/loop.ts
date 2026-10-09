@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AGENT_COMPACTION_HIGH_WATER, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
 import { createAgentContextCarry } from './carry.js';
-import { agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
+import { agentSpendFailureNote, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { LOCALES, t, type Locale } from '#platform/index.js';
@@ -126,7 +126,7 @@ export interface AgentTurnInput {
      * `length`, is truncated: none of its tool calls runs (a provider may report such a round as `tool_calls`, vLLM v0.30.0 does). Absent: only
      * `length` marks a round.
      */
-    readonly completionLimitTokens?: number };
+    readonly completionLimitTokens?: number; readonly compactionThresholdTokens?: number };
   /** MODES-3: a quarantined tool result does not wait. The model still receives only the withheld sentence. */
   readonly fullAccess?: boolean;
   /** APPROVER-NOTE: the most code points of an approver's note the model receives (`approvals.approverNoteMaxChars`). Absent: no note is sent. */
@@ -267,7 +267,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     // Compaction (T-L5b) past the high-water mark of the measured window, or of the request byte bound (exact bytes of the history
     // the client will send next; needs no measurement): older messages become one labelled summary.
     const current = measured as Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
-    const tokenPressure = current !== null && current.windowTokens !== null && current.promptTokens + reserve > current.windowTokens * AGENT_COMPACTION_HIGH_WATER;
+    const tokenPressure = current !== null && ((current.windowTokens !== null && current.promptTokens + reserve > current.windowTokens * AGENT_COMPACTION_HIGH_WATER)
+      || (input.admission?.compactionThresholdTokens !== undefined && current.promptTokens >= input.admission.compactionThresholdTokens));
     const byteBound = input.admission?.requestMaxBytes;
     const historyBytes = byteBound === undefined ? 0 : agentHistoryBytes(messages);
     // Past the high-water mark, or when this round's longest answer plus the next user message would not fit the next request.
@@ -318,6 +319,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         if (streamed) push({ role: 'assistant', content: `${streamed}\n${AGENT_TURN_CANCELLED_MID_ANSWER}`, toolCalls: [] });
         return finish('cancelled', `Cancelled. ${summary()}.`);
       }
+      const spendNote = agentSpendFailureNote(outcome.state, input.language);
+      if (spendNote) return finish('error', spendNote);
       return finish('error', `The model round ended without an answer (${outcome.state}); it is recorded and not retried. ${summary()}.`);
     }
     if (outcome.usage) emit({ kind: 'usage', round: rounds, ...outcome.usage });

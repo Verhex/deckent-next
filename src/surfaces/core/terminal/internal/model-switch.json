@@ -1,0 +1,4 @@
+{
+  "note": "CACHE-SLICE1 (owner 2026-10-09): a model switch whose conversation's measured prompt is at least this many tokens asks 'new context / continue' first. A switch starts a cold prompt cache on the new model (the whole history is written again, and a new context keeps only the person's own instructions). Data, not code.",
+  "askFreshContextAtTokens": 50000
+}

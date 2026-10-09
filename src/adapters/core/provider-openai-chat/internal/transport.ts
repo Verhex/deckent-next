@@ -16,9 +16,12 @@ export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDef
   request: OpenAiChatTextRequest; body: string }>;
 export interface OpenAiChatNativePortOptions {
   /** A streamed send's final usage only (seen with or after its finish reason) with the stream's authoritative service tier; an interim usage never reaches it. */
-  readonly onFinalUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject, serviceTier?: unknown) => void;
+  readonly onFinalUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject, serviceTier?: unknown, frame?: string) => void;
   /** A contradiction after that final usage (e.g. a later conflicting service tier) withdraws it: it no longer settles money (Astra 2467). */
   readonly onFinalUsageWithdrawn?: (prepared: PreparedOpenAiChatRequest) => void;
+  /** Pure pricing adapter ports: routing is appended before size checking; raw validated response bytes preserve monetary decimals. */
+  readonly providerRouting?: (definition: OpenAiChatHttpDefinition, request: OpenAiChatTextRequest) => JsonObject;
+  readonly onResponse?: (prepared: PreparedOpenAiChatRequest, body: Buffer, response: OpenAiChatHttpResponse) => void;
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
   /** The scope's secret prefix-cache salt (composition: HMAC under the installation's salt secret). Required by a binding that declares
    * prefix-cache-salt: without it, or when it fails, nothing is sent (fail closed, never a derivable salt). */
@@ -77,7 +80,8 @@ async function secretCacheSalt(options: OpenAiChatNativePortOptions, scopeId: st
 }
 
 /** Pure preparation: it has no network, credential, or profile-resolution effect. */
-export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInput: unknown, nativeRequestInput: unknown, cacheSalt?: string): PreparedOpenAiChatRequest {
+export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInput: unknown, nativeRequestInput: unknown, cacheSalt?: string,
+  provider?: JsonObject): PreparedOpenAiChatRequest {
   const definition = parseOpenAiChatHttpDefinition(definitionInput), limits = parseOpenAiChatHttpLimits(limitsInput);
   const nativeRequest = parseOpenAiChatTextRequest(nativeRequestInput, definition);
   const streamed = nativeRequest.stream === true, dialect = definition.dialect ?? OPENAI_CHAT_DEFAULT_DIALECT;
@@ -88,7 +92,8 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
     ...(streamed && dialect.streamUsage === 'include' ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
     ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}),
     ...(nativeRequest.chat_template_kwargs ? { chat_template_kwargs: nativeRequest.chat_template_kwargs } : {}),
-    ...(cacheSalt ? { cache_salt: cacheSalt } : {}) });
+    ...(cacheSalt ? { cache_salt: cacheSalt } : {}), ...(provider ? { provider } : {}) });
+  if ((definition.tariff.kind === 'openrouter-endpoint') !== (provider !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
   return Object.freeze({ definition, limits, request: nativeRequest, body });
 }
@@ -97,7 +102,7 @@ function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { res
   let raw: unknown;
   try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)); } catch { return { reason: 'invalid-response' }; }
   const copied = openAiChatWireObjectSchema.safeParse(raw), parsed = copied.success && responseSchema.safeParse(copied.data);
-  if (!parsed || !parsed.success) return { reason: 'invalid-response' };
+  if (!parsed || !parsed.success || (copied.data['error'] !== undefined && copied.data['error'] !== null)) return { reason: 'invalid-response' };
   if (parsed.data.model !== prepared.request.model) return { reason: 'model-mismatch' };
   // JSON serialization can expand numeric wire spellings. Bound the representation actually persisted/delivered too.
   if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > prepared.limits.responseMaxBytes) {
@@ -128,9 +133,10 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
       adapter: adapterOf(prepared.definition) },
     // A streamed request is parsed incrementally whether or not a caller observes its deltas.
     prepared.request.stream === true
-      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, (usage, serviceTier) => options.onFinalUsage?.(prepared, usage, serviceTier),
-        () => options.onFinalUsageWithdrawn?.(prepared)), ...(onDelta ? { onDelta } : {}) }
-      : { ...transport, parseResponse: body => parseResponse(body, prepared) }, signal);
+      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, (usage, serviceTier, frame) => options.onFinalUsage?.(prepared, usage, serviceTier, frame),
+        () => options.onFinalUsageWithdrawn?.(prepared), prepared.definition.dialect), ...(onDelta ? { onDelta } : {}) }
+      : { ...transport, parseResponse: body => { const result = parseResponse(body, prepared);
+        if ('response' in result) options.onResponse?.(prepared, body, result.response); return result; } }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;
     const code = error.code.replace('NATIVE_JSON_HTTP_', 'OPENAI_CHAT_') as OpenAiChatHttpErrorCode;
@@ -176,7 +182,8 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
       if ((request.tools && !declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY))
         || (request.chat_template_kwargs && !declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request,
-        declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? await secretCacheSalt(options, parsedProfile.data.scopeId) : undefined);
+        declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? await secretCacheSalt(options, parsedProfile.data.scopeId) : undefined,
+        options.providerRouting?.(adapterDefinition, request));
       preparedTokens.add(prepared);
       // A counter is used only for a model whose binding declares it (catalog data) and a profile that names its endpoint.
       if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(prepared);

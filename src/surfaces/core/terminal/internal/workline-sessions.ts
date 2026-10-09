@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
 import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
-import { CONTEXT_AUTO_SUMMARY_SHARE, CONTEXT_SUGGEST_SHARE, contextBreakdown, contextViewLines, fillTemplate, projectHumanPickerText, type ContextCompaction, type ContextMeasure,
+import { CONTEXT_SUGGEST_SHARE, contextBreakdown, contextViewLines, contextCompactionThreshold, fillTemplate, projectHumanPickerText, type ContextCompaction, type ContextMeasure,
   type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
 import type { ContextInfoLabels, InfoSection, InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
 import type { LocalExecution, ResumePickerItem } from '#surfaces/core/terminal-work/index.js';
@@ -52,14 +52,13 @@ export function contextInfoModel(input: Readonly<{ measured: ContextMeasure | nu
     : { state: 'ok' as const, text: labels.chip.room };
   const filled = percent === null ? 0 : Math.min(BAR_CELLS, Math.round(percent * BAR_CELLS / 100));
   const bar = `${(ascii ? '#' : '█').repeat(filled)}${(ascii ? '.' : '░').repeat(BAR_CELLS - filled)}`;
-  const limit = measured?.windowTokens ? Math.floor(measured.windowTokens * CONTEXT_AUTO_SUMMARY_SHARE) : null;
+  const threshold = contextCompactionThreshold(measured);
   const share = (part: number) => `${parts.total ? Math.round(part * 100 / parts.total) : 0}%`;
   const sections: InfoSection[] = [
     { title: labels.section.window, chip, rows: [
       ...(percent === null ? [{ key: labels.key.fill, value: labels.notMeasured }] : [{ key: labels.key.fill, value: `${bar} ${percent}%` },
         { key: labels.key.used, value: fillTemplate(labels.used, { approx: measured!.quality === 'upper-bound' ? '~' : '', prompt: measured!.promptTokens, window: measured!.windowTokens ?? '?' }) }]),
-      ...(limit !== null ? [{ key: labels.key.auto, value: fillTemplate(labels.auto, { tokens: limit, percent: Math.round(CONTEXT_AUTO_SUMMARY_SHARE * 100),
-        remaining: Math.max(0, limit - measured!.promptTokens) }) }] : []),
+      ...(threshold ? [{ key: labels.key.auto, value: fillTemplate(labels.auto, threshold) }] : []),
       { key: labels.key.messages, value: String(count) }] },
     ...(parts.total > 0 ? [{ title: labels.section.split, table: { columns: [labels.column.part, labels.column.share], rows: [[labels.part.system, share(parts.system)],
       [labels.part.user, share(parts.user)], [labels.part.assistant, share(parts.assistant)], [labels.part.tools, share(parts.tools)], [labels.part.attachments, share(parts.attachments)]] },
@@ -82,7 +81,7 @@ export function contextInfoModel(input: Readonly<{ measured: ContextMeasure | nu
 export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined, id: () => string, known?: KnownSecretSnapshot) {
   const saveFailed = useRef(false), listed = useRef<readonly ConversationSessionSummary[]>([]), context = useRef<ContextView | null>(null), compaction = useRef<ContextCompaction | null>(null);
   const noteContext = useCallback((delta: TurnDelta) => {
-    if (delta.kind === 'context') context.current = { promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality };
+    if (delta.kind === 'context') context.current = { promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality, ...(delta.compactionThresholdTokens === undefined ? {} : { compactionThresholdTokens: delta.compactionThresholdTokens }) };
     if (delta.kind === 'compacted') compaction.current = { count: (compaction.current?.count ?? 0) + 1, replacedMessages: delta.replacedMessages, atMs: Date.now() };
   }, []);
   const save = useCallback(async (history: readonly AgentChatMessage[]): Promise<WorkLedgerEntry[]> => {
@@ -141,5 +140,8 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     const model = contextInfoModel({ measured: context.current, history, compaction: compaction.current }, info, labels?.view, ascii);
     return { ...model, sections: model.sections.map((section, index) => index === 0 ? { ...section, notes: [...(section.notes ?? []), ...sources] } : section) };
   }, [labels]);
-  return { noteContext, save, run, id, contextView };
+  /** CACHE-SLICE1: the latest measured prompt of this conversation (null: none yet), and forgetting it when a new context replaces the history. */
+  const measuredPrompt = useCallback(() => context.current?.promptTokens ?? null, []);
+  const forgetContext = useCallback(() => { context.current = null; compaction.current = null; }, []);
+  return { noteContext, save, run, id, contextView, measuredPrompt, forgetContext };
 }

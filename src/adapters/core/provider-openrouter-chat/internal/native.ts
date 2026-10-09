@@ -68,6 +68,7 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
       const request = parseOpenRouterTextRequest(requestInput), observation = requireOpenRouterMetadataObservation(currentObservation());
       if (observation.sourceEndpoint !== definition.metadataEndpoint || observation.tariff.selection.endpointTag !== definition.endpointTag
         || binding.model.nativeId !== request.model || request.model !== observation.tariff.selection.modelId) throw new OpenRouterChatError('TARIFF_CONFLICT');
+      if (request.tools || request.stream === true) throw new OpenRouterChatError('INVALID_REQUEST');
       const requestedOutput = request.max_tokens ?? request.max_completion_tokens!;
       if (requestedOutput > definition.maxOutputTokens) throw new OpenRouterChatError('INVALID_REQUEST');
       const reservation = quoteOpenRouterText(observation.tariff, request, now());

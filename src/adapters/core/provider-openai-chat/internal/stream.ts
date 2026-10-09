@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { JsonObject, ModelInvocationDelta, ModelInvocationRejectionReason } from '#domain/index.js';
 import type { NativeJsonHttpParsed, NativeJsonHttpStream } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_MAX_TOOL_CALLS, openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema,
-  type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from './contract.js';
+  type OpenAiChatDialect, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from './contract.js';
 import { checkedToolCalls, couldBeDeclaredTool } from './tool-calls.js';
 
 /**
@@ -40,8 +40,8 @@ const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.co
  * stream) calls `onFinalUsageWithdrawn` once: the reported usage and tier are no longer a measurement, so the reservation stays held
  * even when the transport records the refusal as a bounded, incomplete response (Astra 2467). A clean cut or a size limit withdraws nothing.
  */
-export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onFinalUsage?: (usage: JsonObject, serviceTier?: unknown) => void,
-  onFinalUsageWithdrawn?: () => void): NativeJsonHttpStream {
+export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onFinalUsage?: (usage: JsonObject, serviceTier?: unknown, frame?: string) => void,
+  onFinalUsageWithdrawn?: () => void, dialect?: OpenAiChatDialect): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, chunks = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [];
@@ -52,6 +52,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
   let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null, usageReported = false;
   // Chunk positions of the usage and the finish reason: the usage is final only when it arrives with or after the finish chunk.
   let usageChunk = 0, finishChunk = 0;
+  let usageFrame: string | undefined;
   const finalUsage = () => usage !== null && finish !== null && usageChunk >= finishChunk;
   // Tool-call deltas assembled by index: the id is fixed once, name and arguments arrive in pieces (T-L2).
   const calls = new Map<number, { id: string | null; name: string; arguments: string }>();
@@ -63,7 +64,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
 
   function event(text: string, out: ModelInvocationDelta[]): boolean {
     const limit = parse(text, out);
-    if (!usageReported && !invalid && finalUsage()) { usageReported = true; onFinalUsage?.(usage!, serviceTier); }
+    if (!usageReported && !invalid && finalUsage()) { usageReported = true; onFinalUsage?.(usage!, serviceTier, usageFrame); }
     return limit;
   }
 
@@ -75,6 +76,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     const copied = openAiChatWireObjectSchema.safeParse(raw), parsed = copied.success ? chunkSchema.safeParse(copied.data) : undefined;
     if (!copied.success || !parsed?.success) { fail('invalid-response'); return false; }
     const chunk = parsed.data; chunks += 1;
+    if (chunk['error'] !== undefined && chunk['error'] !== null) { fail('invalid-response'); return false; }
     if (chunk.model !== request.model) { fail('model-mismatch'); return false; }
     if (!head) head = { id: chunk.id, created: chunk.created, model: chunk.model };
     else if (chunk.id !== head.id) { fail('invalid-response'); return false; }
@@ -86,11 +88,15 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (chunk.usage !== undefined && chunk.usage !== null) {
       const checked = openAiChatUsageSchema.safeParse(chunk.usage);
       if (usage || !checked.success || checked.data.completion_tokens > request.max_completion_tokens) { fail('invalid-response'); return false; }
-      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject; usageChunk = chunks;
+      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject; usageChunk = chunks; usageFrame = text;
     }
     const choice = chunk.choices[0];
     if (!choice) return false;
     const delta = choice.delta;
+    // OpenRouter's accounting frame repeats the terminal reason. It carries its own usage and no output of any kind.
+    if (finish !== null && dialect?.finalUsageChoice === 'repeat-finish' && chunk.usage != null && choice.finish_reason === finish
+      && Object.entries(delta).every(([key, value]) => (key === 'role' && value === 'assistant')
+        || (['content', 'reasoning', 'reasoning_content', 'refusal'].includes(key) && (value === '' || value === null)))) return false;
     // vLLM sends these keys as null when there is none. function_call is never accepted; tool_calls only when tools were declared.
     if (finish !== null || (delta['function_call'] ?? null) !== null) { fail('invalid-response'); return false; }
     const toolDeltas = delta['tool_calls'] ?? null;

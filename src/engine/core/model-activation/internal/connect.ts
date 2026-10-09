@@ -19,8 +19,9 @@ export interface ModelConnectPorts {
   endpoint(text: string): string | null;
   secretName(kind: string, base: string): string | null;
   seed(name: string): Promise<ProviderCatalogDocument>;
-  /** The adapter part of the profile, validated by the adapter's own parser. */
-  adapter(kind: string, input: Readonly<{ endpoint: string; credentialRef: string | null; nativeId: string; maxOutputTokens: number; currency: string }>):
+  /** The adapter part of the profile, validated by the adapter's own parser. `existing`: the adapter definition already written for this model on
+   * the layer being written (null: a new profile), so the adapter keeps the person's own choices in it (CACHE-SLICE1: the cache TTL). */
+  adapter(kind: string, input: Readonly<{ endpoint: string; credentialRef: string | null; nativeId: string; maxOutputTokens: number; currency: string; existing?: JsonObject | null }>):
     Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>; protocol: Readonly<{ family: string; version: string }>; tariff: 'published' | 'unmetered' }>;
   principal(): Promise<VerifiedPrincipal>;
   /** The two authored layer documents and the merged configuration, read fresh. */
@@ -106,7 +107,8 @@ export class ModelConnectApplication {
       return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath, layer }) : null;
     };
     // The profile's adapter part first (stage 1): an unpriced remote model or a malformed definition is refused before any catalog or config write.
-    const adapter = ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency });
+    const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency };
+    const adapter = ports.adapter(kind.id, { ...adapterInput, existing: null });
     tariff = adapter.tariff;
     // 1. Ledger catalog facts (installation-wide, no restart).
     if (target.seed && target.declare) {
@@ -141,19 +143,25 @@ export class ModelConnectApplication {
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 3. The scope's invocation profile: endpoint preset, the key NAME, tariff, limits, binding digest.
     const profileId = [command.connection, target.reference.providerId, target.reference.modelId, String(target.reference.modelVersion)].join('.');
-    const build = (version: number, responseMaxBytes: number) => ({ schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
-      bindingDigest: binding.binding.digest, protocol: adapter.protocol, adapter: adapter.adapter, allocation: { id: profileId, maxCalls: null, maxInFlight: ports.defaults.maxInFlight },
+    const build = (version: number, responseMaxBytes: number, shaped: typeof adapter = adapter) => ({ schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
+      bindingDigest: binding.binding.digest, protocol: shaped.protocol, adapter: shaped.adapter, allocation: { id: profileId, maxCalls: null, maxInFlight: ports.defaults.maxInFlight },
       limits: { requestMaxBytes: ports.defaults.requestMaxBytes, responseMaxBytes, timeoutMs: ports.defaults.timeoutMs },
       ...(target.contextWindow ? { contextWindowTokens: target.contextWindow } : {}) });
     const responseMaxBytes = this.deliverable(bytes => ports.delivers(build(1, bytes), binding));
     const authored = { global: layers.global['provider_invocation_profiles'] !== undefined, project: layers.project['provider_invocation_profiles'] !== undefined };
     const targets: ModelConnectLayer[] = authored.global && authored.project ? ['global', 'project'] : authored.global ? ['global'] : ['project'];
+    const mine = (item: Record<string, unknown>) => item['scopeId'] === scopeId && (item['id'] === profileId || isDeepStrictEqual(item['reference'], target.reference));
+    const layerProfiles = (layer: ModelConnectLayer) => ((layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles) ?? [];
     for (const layer of targets) {
-      const profiles = ((layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles) ?? [];
-      const mine = (item: Record<string, unknown>) => item['scopeId'] === scopeId && (item['id'] === profileId || isDeepStrictEqual(item['reference'], target.reference));
+      const profiles = layerProfiles(layer);
       const existing = profiles.find(mine), version = typeof existing?.['version'] === 'number' ? existing['version'] : 1;
-      if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes))) continue;
-      const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles: [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes)] },
+      // An existing profile keeps what the person chose in its definition (CACHE-SLICE1: no silent cache migration on a re-run). A layer without
+      // its own copy takes the other authored layer's (the user layer first), so a project copy stays equal to the user-layer profile.
+      const known = existing ?? targets.map(item => layerProfiles(item).find(mine)).find(Boolean);
+      const previous = (known?.['adapter'] as { definition?: unknown } | undefined)?.definition;
+      const shaped = known ? ports.adapter(kind.id, { ...adapterInput, existing: previous && typeof previous === 'object' ? previous as JsonObject : {} }) : adapter;
+      if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped))) continue;
+      const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles: [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped)] },
         layer, step(command.commandId, 'profile', layer));
       if (stopped) return stopped;
       steps.profile = 'written';

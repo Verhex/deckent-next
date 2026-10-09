@@ -89,11 +89,11 @@ describe('information windows on the real workline (SW-1)', () => {
       return { schemaVersion: 2, scopeId: 's', budgetId: 'team-budget', budgetRevision: 3, checkpoint: null, audit: null, spendingHistoryIntegrity: 'not-recorded' }; }) as never };
     const view = await open({ info: admin(root, context).info });
     await type(view, '/usage\r');
-    await until(() => view.stdout.frame.includes('› team-budget · limit 50,000 minor units (USD)'), 'budget choice');
+    await until(() => view.stdout.frame.includes('› team-budget · limit 500.00 USD'), 'budget choice');
     expect(view.stdout.frame).toContain('No token usage reported yet');
     await type(view, '\r');
     await until(() => view.stdout.frame.includes('▸ Spend account · team-budget [! no snapshot]'), 'account section');
-    expect(calls).toEqual([{ schemaVersion: 1, scopeId: 's', budgetId: 'team-budget', budgetRevision: 3 }]);
+    expect(calls).toEqual([{ schemaVersion: 1, scopeId: 's', current: true }, { schemaVersion: 1, scopeId: 's', budgetId: 'team-budget', budgetRevision: 3 }]);
     await type(view, ESC);
     await until(() => view.stdout.frame.includes(`${MARK} · Usage: nothing reported yet in this conversation`), 'usage summary');
     expect(count(view.stdout.frame, MARK)).toBe(1);

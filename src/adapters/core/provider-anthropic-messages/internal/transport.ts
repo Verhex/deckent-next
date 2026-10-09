@@ -18,7 +18,7 @@ export interface AnthropicMessagesNativeOptions {
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
 }
 export type PreparedAnthropicRequest = Readonly<{ definition: AnthropicMessagesDefinition; limits: OpenAiChatHttpLimits; request: OpenAiChatTextRequest;
-  body: string; wire: Record<string, unknown>; scopeId: string; prefixDigest: string }>;
+  body: string; wire: Record<string, unknown>; scopeId: string; prefixDigest: string; countedTokens?: number | null }>;
 const VERSION_HEADERS = Object.freeze({ 'anthropic-version': ANTHROPIC_MESSAGES_PROTOCOL_VERSION });
 const adapter = Object.freeze({ id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION });
 const countSchema = z.object({ input_tokens: z.number().int().nonnegative().safe() }).passthrough();
@@ -86,7 +86,7 @@ export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNa
       const wrapper = BigInt(Buffer.byteLength(JSON.stringify({ schemaVersion: 1, native: null, usage: null }), 'utf8'));
       return wrapper - 8n + cap + (cap > 4n ? cap : 4n);
     },
-    async prepare(profile: unknown, definition: unknown, nativeRequest: unknown): Promise<unknown> {
+    async prepare(profile: unknown, definition: unknown, nativeRequest: unknown, signal?: AbortSignal): Promise<unknown> {
       const envelope = openAiChatWireObjectSchema.safeParse(profile);
       if (!envelope.success) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
       const parsedProfile = modelInvocationProfileSchema.safeParse(envelope.data);
@@ -113,8 +113,10 @@ export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNa
       const prepared: PreparedAnthropicRequest = Object.freeze({ definition: adapterDefinition, limits, request, body, wire, scopeId: parsedProfile.data.scopeId,
         prefixDigest: anthropicPrefixDigest(wire['system'], wire['tools'], wire['messages']) });
       const token = Object.freeze({});
-      tokens.set(token, prepared);
-      if (adapterDefinition.tokenCountEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(token);
+      const canCount = adapterDefinition.tokenCountEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY);
+      const count = canCount ? await countPrepared(prepared, options, signal) : null;
+      tokens.set(token, Object.freeze({ ...prepared, countedTokens: count?.promptTokens ?? null }));
+      if (canCount) countable.add(token);
       return token;
     },
     async send(token: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult> {
@@ -134,7 +136,8 @@ export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNa
     },
     async measure(token: unknown, signal?: AbortSignal) {
       const prepared = read(token); tokens.delete(token as object);
-      return countable.has(token as object) ? countPrepared(prepared, options, signal) : null;
+      if (signal?.aborted || !countable.has(token as object) || prepared.countedTokens == null) return null;
+      return Object.freeze({ promptTokens: prepared.countedTokens, windowTokens: null });
     },
   });
   return Object.freeze({ native, quote: (input: ModelInvocationSpendingInput) => {

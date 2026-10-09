@@ -1,4 +1,5 @@
 import { anthropicUsageSchema } from './assemble.js';
+import reservationDefaults from './reservation-defaults.json' with { type: 'json' };
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
@@ -29,17 +30,19 @@ export function anthropicReportedPromptTokens(usage: Readonly<{ input_tokens: nu
   return usage.input_tokens === null ? null : usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
 }
 /**
- * Verified worst case of one call in minor units (cents): every prompt byte counts as a token (a token is never shorter than a
- * byte) plus the tool-use overhead, at the dearest input class in effect (a cache write when caching is on), plus every allowed
- * output token (thinking is billed as output and counts inside `max_tokens`). Ceil once, at the end. A tiered tariff is priced at the
- * tier of that same prompt bound: the real prompt can only be smaller, so the reservation never falls into a cheaper tier than the call.
+ * Conservative reservation of one call in minor units: provider input estimate plus the registry safety percentage and tool overhead,
+ * else the request byte bound. Output (including thinking) reserves every requested token; cache reserves the dearest enabled class.
+ * Ceil once, and select the prompt tier with this complete input bound. Counts are estimates without a published error ceiling:
+ * the percentage is safety policy, and the spend authority retains its settlement-overrun hold/freeze.
  */
-export function anthropicMaxChargeMinorUnits(tariff: AnthropicPublishedTariff, cache: 'none' | '5m' | '1h', bodyBytes: number, maxTokens: number): number {
-  const rates = anthropicTariffRates(tariff, bodyBytes + ANTHROPIC_PROMPT_OVERHEAD_TOKENS).rates;
+export function anthropicMaxChargeMinorUnits(tariff: AnthropicPublishedTariff, cache: 'none' | '5m' | '1h', bodyBytes: number, maxTokens: number, countedTokens?: number | null): number {
+  const inputTokens = countedTokens == null ? bodyBytes + ANTHROPIC_PROMPT_OVERHEAD_TOKENS
+    : countedTokens + Math.ceil(countedTokens * reservationDefaults.countSafetyPercent / 100) + ANTHROPIC_PROMPT_OVERHEAD_TOKENS;
+  const rates = anthropicTariffRates(tariff, inputTokens).rates;
   let input = units(rates.input);
   if (cache === '5m' && units(rates.cacheWrite5m) > input) input = units(rates.cacheWrite5m);
   if (cache === '1h' && units(rates.cacheWrite1h) > input) input = units(rates.cacheWrite1h);
-  const numerator = BigInt(bodyBytes + ANTHROPIC_PROMPT_OVERHEAD_TOKENS) * input + BigInt(maxTokens) * units(rates.output);
+  const numerator = BigInt(inputTokens) * input + BigInt(maxTokens) * units(rates.output);
   // tokens x (rate/1e4 USD per 1e6 tokens) = USD x 1e10; minor units = USD x 100.
   const minor = (numerator + 99_999_999n) / 100_000_000n;
   if (minor > BigInt(Number.MAX_SAFE_INTEGER)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
@@ -47,9 +50,9 @@ export function anthropicMaxChargeMinorUnits(tariff: AnthropicPublishedTariff, c
 }
 
 export type AnthropicPreparedView = Readonly<{ body: string; request: { max_completion_tokens: number; model: string }; scopeId: string;
-  definition: unknown; limits: unknown }>;
+  definition: unknown; limits: unknown; countedTokens?: number | null }>;
 
-/** Pure, repeatable quote for the exact prepared request: published tariff from the profile, real reservation bound. */
+/** Pure, repeatable quote for the exact prepared request: published tariff and the pinned conservative input estimate. */
 export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInput, prepared: AnthropicPreparedView): ProviderSpendQuote {
   const profile = modelInvocationProfileSchema.parse(input.profile);
   if (profile.adapter.id !== ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID || profile.adapter.version !== ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
@@ -64,13 +67,15 @@ export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInpu
     || modelInvocationProfileDigest(profile) !== input.profileDigest) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const tariff = definition.tariff, tariffDigest = providerSpendEvidenceDigest(tariff), cache = definition.cache ?? 'none';
   const bodyBytes = Buffer.byteLength(prepared.body, 'utf8');
-  const maxChargeMinorUnits = anthropicMaxChargeMinorUnits(tariff, cache, bodyBytes, request.max_completion_tokens);
-  const inputBoundTokens = bodyBytes + ANTHROPIC_PROMPT_OVERHEAD_TOKENS;
+  const maxChargeMinorUnits = anthropicMaxChargeMinorUnits(tariff, cache, bodyBytes, request.max_completion_tokens, prepared.countedTokens);
+  const inputBoundTokens = prepared.countedTokens == null ? bodyBytes + ANTHROPIC_PROMPT_OVERHEAD_TOKENS
+    : prepared.countedTokens + Math.ceil(prepared.countedTokens * reservationDefaults.countSafetyPercent / 100) + ANTHROPIC_PROMPT_OVERHEAD_TOKENS;
   // A tiered tariff records which prompt-length tier the bound selected (null = base rates); a flat quote keeps its v1 evidence bytes.
   const promptTier = tariff.version === 1 ? {} : { promptTier: { basis: tariff.promptTokenBasis, aboveTokens: anthropicTariffRates(tariff, inputBoundTokens).aboveTokens } };
   const evidence = { schemaVersion: 1, tariffDigest, bodyDigest: createHash('sha256').update(prepared.body).digest('hex'),
     calculation: { schemaVersion: 1, currency: tariff.currency, minorUnitsPerCurrencyUnit: 100, rounding: 'ceil-total', cache,
-      inputBound: 'body-bytes-as-tokens-plus-overhead', inputBoundTokens, ...promptTier,
+      inputBound: prepared.countedTokens == null ? 'body-bytes-as-tokens-plus-overhead' : 'provider-count-plus-safety', inputBoundTokens,
+      ...(prepared.countedTokens == null ? {} : { countedTokens: prepared.countedTokens, countSafetyPercent: reservationDefaults.countSafetyPercent }), ...promptTier,
       outputBound: 'requested-max-tokens', outputBoundTokens: request.max_completion_tokens, requestCount: 1 } };
   return parseProviderSpendQuote({ schemaVersion: 1, scopeId: input.command.scopeId, requestDigest: input.requestDigest, profileDigest: input.profileDigest,
     pricing: { id: ANTHROPIC_MESSAGES_PRICING_ID, version: tariff.version, digest: tariffDigest, definition: tariff },

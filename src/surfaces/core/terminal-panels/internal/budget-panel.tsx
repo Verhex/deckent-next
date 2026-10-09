@@ -52,7 +52,9 @@ export function BudgetWindow({ port, view, labels, push, onDone }: { readonly po
       error => { push([{ level: 'error', text: String((error as { message?: unknown })?.message ?? error) }]); onDone(); });
   };
   const tree = step.kind === 'amount' ? budgetAmountTree(view, words) : budgetConfirmTree(view, step.usd, words);
-  return <Window title={title} body={view.current ? [{ spans: [span(fillTemplate(words.changeDetail, { current: view.current }), { role: 'muted' })] }] : []} hints={words.hints}
+  const warning = step.kind === 'confirm' && view.settledUsd !== undefined && step.usd <= view.settledUsd && words.belowSettled
+    ? [{ spans: [span(`! ${fillTemplate(words.belowSettled, { usd: step.usd, settled: view.settledUsd })}`, { role: 'warning' })] }] : [];
+  return <Window title={title} body={[...(view.current ? [{ spans: [span(fillTemplate(words.changeDetail, { current: view.current }), { role: 'muted' })] }] : []), ...warning]} hints={words.hints}
     position={labels.position} footerRows={room.footerRows} onInput={() => true}
     footer={focused => <ListPicker key={step.kind} tree={tree} labels={labels.picker} active={focused} maxRows={room.rows} onResult={answer} />} />;
 }

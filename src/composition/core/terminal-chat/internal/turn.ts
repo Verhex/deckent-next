@@ -99,5 +99,6 @@ export async function assertTerminalChatReady(projectRoot: string, options: Conf
   const declared = reference ? (await inspectModelBinding(projectRoot, reference, options)).status === 'declared' : plan.status !== 'model-not-declared';
   if (!declared) throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const config = await loadComposedConfig(projectRoot, options) as { service: { inputMaxBytes: number } };
-  return agentTurnAdmission(plan.maxCompletionTokens!, config.service.inputMaxBytes);
+  const chat = readTerminalChatConfig(config as unknown as Record<string, unknown>);
+  return agentTurnAdmission(plan.maxCompletionTokens!, config.service.inputMaxBytes, chat?.compactionThresholdTokens);
 }

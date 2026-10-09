@@ -1,0 +1,5 @@
+{
+  "maxCompletionTokens": 16384,
+  "historyMessages": 40,
+  "compactionThresholdTokens": 100000
+}

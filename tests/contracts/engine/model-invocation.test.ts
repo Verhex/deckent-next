@@ -358,6 +358,27 @@ describe('model invocation application after permission', () => {
     expect(f.calls).toMatchObject({ claims: 1, sends: 1 }); expect(f.stored?.receipt.outcome).toBeNull();
   });
 
+  it('resolves a command to its actual invocation under the same read authority, without exposing response content', async () => {
+    const f = fixture(); const invoked = await f.app.invoke(command); let reads = 0, authorized = 0;
+    const inspect = new ModelInvocationInspectionApplication({ async verify() { return principal; } },
+      { async authorize(action) { expect(action).toBe('inspect'); authorized++; return authorization; } }, async () => {
+        reads++; return { ...inspectionReader(f), loadReceipt: async (_scope: string, id: string) => id === 'command' ? f.stored : null };
+      });
+    const query = { schemaVersion: 1 as const, scopeId: 'scope', commandId: 'command', reference };
+    const result = await inspect.inspectCommand(query);
+    expect(result?.invocationId).toBe('invocation-1'); expect(result?.invocation).toEqual(invoked.receipt);
+    expect(result).not.toHaveProperty('responseContent'); expect(authorized).toBe(2); expect(reads).toBe(2);
+    expect(await inspect.inspectCommand({ ...query, commandId: 'absent' })).toBeNull();
+    await expect(inspect.inspectCommand({ ...query, reference: { ...reference, modelId: 'foreign' } })).rejects.toThrow('MODEL_INVOCATION_CORRUPT');
+    let deniedReads = 0;
+    const denied = new ModelInvocationInspectionApplication({ async verify() { return principal; } },
+      { async authorize() { throw new Error('POLICY_DENIED'); } }, async () => { deniedReads++; return inspectionReader(f); });
+    await expect(denied.inspectCommand(query)).rejects.toThrow('POLICY_DENIED'); expect(deniedReads).toBe(0);
+    let getters = 0;
+    const unsafe = Object.defineProperty({}, 'scopeId', { get() { getters++; return 'scope'; } });
+    await expect(inspect.inspectCommand(unsafe as never)).rejects.toThrow('MODEL_INVOCATION_INVALID'); expect(getters).toBe(0);
+  });
+
   it('uses a distinct stable invocation policy target and inspects only exact stored identity after fresh policy', async () => {
     expect(modelInvocationTargetId(reference)).toMatch(/^[a-f0-9]{64}$/);
     const f = fixture(); const invoked = await f.app.invoke(command); let authorized = 0;

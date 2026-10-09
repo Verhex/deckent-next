@@ -32,7 +32,9 @@ export type ToolTrackedChanges = { readonly deleted: number; readonly overwritte
 export type TurnDelta =
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'reasoning'; readonly text: string }
-  | { readonly kind: 'usage'; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number | null }
+  | { readonly kind: 'usage'; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number | null; readonly cache?: { readonly readTokens: number; readonly writeTokens: number; readonly promptTokens: number;
+    /** CACHE-SLICE1: the TTL split of the writes and the same-request net cache benefit (USD x 1e10, an estimate; null: unknown). */
+    readonly write5mTokens?: number; readonly write1hTokens?: number; readonly netBenefitUsdE10?: number | null } }
   /** An agent tool call: `started` with the engine's target, then `finished` with its typed status and duration (T-L3). `cleanup`
    * (Astra 2124) only ever arrives on a finished host shell call; every other call leaves it undefined. The tool line's pattern-first
    * target and result summary (TL-B D2) are derived by the renderer from the `message` deltas, not carried here. */
@@ -43,7 +45,7 @@ export type TurnDelta =
   /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. `compacting` (TL-A, derived on the
    * client from this measurement and the engine's own rule, not a wire field): the service summarizes older messages before the round. */
   | { readonly kind: 'context'; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality;
-    readonly compacting?: boolean }
+    readonly compacting?: boolean; readonly compactionThresholdTokens?: number }
   /** The history was compacted (T-L5b): `messages` replaces every non-system message of the caller's history. */
   | { readonly kind: 'compacted'; readonly messages: readonly AgentChatMessage[]; readonly replacedMessages: number }
   /** A tool call waits for the owner's decision (T-L4): the surface shows a decision card; the approval binds the exact call. */

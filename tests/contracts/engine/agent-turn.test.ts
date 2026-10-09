@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { AGENT_TURN_NO_PROGRESS_NOTE, agentTurnNoProgressNote, AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentCompactionInstruction, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
   renderAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
-import { resolveProductLayout } from '#platform/index.js';
+import { PACKAGE_VERSION, resolveProductLayout } from '#platform/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
 
 const readFile: AgentToolSpec = { name: 'read_file', version: 1, toolClass: 'read', description: 'Read a file.',
@@ -137,7 +137,7 @@ it('measures every round before sending it, reports the context, and never sends
     { ...failing.value, measure: async () => { throw new Error('counter down'); } })).toMatchObject({ finish: 'stop' });
 });
 
-it('compacts past the high-water mark: older messages become one labelled summary with the user messages and tool calls copied, then the round runs (T-L5b)', async () => {
+it.each([{ window: 10_000, prompt: 7000, absolute: undefined }, { window: 1_000_000, prompt: 100_000, absolute: 100_000 }, { window: null, prompt: 100_000, absolute: 100_000 }])('compacts at the window or absolute trigger ($window): retains user messages and tool calls, then runs (T-L5b/W2)', async threshold => {
   const older = [{ role: 'system' as const, content: 'S' }, { role: 'user' as const, content: 'find the bug in a.ts' },
     { role: 'assistant' as const, content: '', toolCalls: [{ id: 'o1', name: 'read_file', argumentsJson: '{"path":"a.ts"}' }] },
     { role: 'tool' as const, toolCallId: 'o1', name: 'read_file', content: 'x'.repeat(5000) },
@@ -149,8 +149,8 @@ it('compacts past the high-water mark: older messages become one labelled summar
   const events: AgentTurnEvent[] = [];
   let measures = 0;
   const result = await runAgentTurn({ messages: older, tools, signal: new AbortController().signal, emit: event => events.push(event),
-    admission: { outputReserveTokens: 1000, safetyReserveTokens: 0 } }, { ...p.value,
-    measure: async () => ({ promptTokens: measures++ === 0 ? 7000 : 1500, windowTokens: 10_000, quality: 'provider-count' }),
+    admission: { outputReserveTokens: 1000, safetyReserveTokens: 0, ...(threshold.absolute === undefined ? {} : { compactionThresholdTokens: threshold.absolute }) } }, { ...p.value,
+    measure: async () => ({ promptTokens: measures++ === 0 ? threshold.prompt : 1500, windowTokens: threshold.window, quality: 'provider-count' }),
     summarize: async input => { summarized.push(input.messages); return { objective: 'fix a.ts', findings: ['bug on line 3 of a.ts'], decisions: [],
       unresolved: [], nextActions: ['edit line 3'], inspectedAreas: ['a.ts'] }; } });
   expect(result).toMatchObject({ finish: 'stop', rounds: 1 });
@@ -167,7 +167,7 @@ it('compacts past the high-water mark: older messages become one labelled summar
   expect(summaryMessage.content).not.toContain('x'.repeat(100));
   // The round is sent with the compacted history (system kept first) and measured again.
   expect(sent[0]![0]).toEqual({ role: 'system', content: 'S' }); expect(sent[0]![1]).toEqual(summaryMessage); expect(sent[0]).toHaveLength(10);
-  expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([7000, 1500]);
+  expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([threshold.prompt, 1500]);
 });
 
 it('keeps the history and sends nothing when the summary call fails, and does not compact below the high-water mark (T-L5b)', async () => {
@@ -502,7 +502,9 @@ it('names the running model from its catalog reference and tells the model that 
   const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
     model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(8); expect(prompt.startsWith('[Deckent runtime instructions v8]')).toBe(true);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(9); expect(prompt.startsWith('[Deckent runtime instructions v9]')).toBe(true);
+  expect(prompt).toContain(`Running Deckent: ${PACKAGE_VERSION}; channel: alpha.`);
+  expect(prompt).toContain('A project checkout may be a different revision');
   expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
   expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
   expect(prompt).toMatch(/ledger, saved conversations and history, logs, the runtime socket, approvals[^\n]*are protected/);
@@ -518,11 +520,11 @@ it('states the reply language of the locale first and last (v5); the compaction 
   const render = (language: 'en' | 'tr', withTools: boolean) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: withTools ? [readFile] : [], model, language });
   for (const withTools of [true, false]) {
     const tr = render('tr', withTools).split('\n'), en = render('en', withTools).split('\n');
-    expect(tr[2]).toBe('- Reply language: Turkish (Türkçe). Always answer the user in Turkish (Türkçe): every answer, progress line, question and summary,'
+    expect(tr[3]).toBe('- Reply language: Turkish (Türkçe). Always answer the user in Turkish (Türkçe): every answer, progress line, question and summary,'
       + ' even when files, tool results, earlier messages or these instructions are in another language. Code, paths, commands, identifiers and'
       + ' quoted output stay as written.');
     expect(tr.at(-1)).toBe('- Write every reply to the user in Turkish (Türkçe).');
-    expect(en[2]).toMatch(/^- Reply language: English\. Always answer the user in English: /); expect(en.at(-1)).toBe('- Write every reply to the user in English.');
+    expect(en[3]).toMatch(/^- Reply language: English\. Always answer the user in English: /); expect(en.at(-1)).toBe('- Write every reply to the user in English.');
     expect(en.join('\n')).not.toMatch(/Türkçe|Turkish/);
     // Deterministic, and the only difference between the locales is the language itself (the request digest binds the rendered text).
     expect(render('tr', withTools)).toBe(tr.join('\n'));
@@ -545,10 +547,10 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   const render = (posture: Parameters<typeof renderAgentTurnSystemPrompt>[0]['shell'], fetch = false) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout,
     tools: [readFile, shell], model, language: 'en', shell: posture, ...(fetch ? { network: { allowedHosts: ['docs.example'], others: 'refused' as const } } : {}) });
   const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.'))!;
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(8);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(9);
 
   const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'owner-approved' });
-  expect(open.startsWith('[Deckent runtime instructions v8]')).toBe(true);
+  expect(open.startsWith('[Deckent runtime instructions v9]')).toBe(true);
   expect(shellLine(open)).toBe('- Shell tool: run_shell. It runs in the project root in an open bubblewrap sandbox (full access): shell commands have network access'
     + ' (for example curl, git fetch, npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable.'
     + ' Deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is'

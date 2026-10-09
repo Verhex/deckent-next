@@ -144,7 +144,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         const detail = !kind.available ? '' : keyName === null ? '-' : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale)
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : t('tui.provider.state.notConnected', {}, locale);
-        // K6 (Jev 7e0348c4): a kind that stores a key but connects no model yet (OpenRouter) says so on its row; no model action is offered.
+        // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
         return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail, blocked: kind.available ? null : t('tui.provider.unavailable', {}, locale), keyName, keyStored: stored,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),

@@ -8,5 +8,5 @@ export { panelWindowLines, usePickerRoom, LinesWindow, QuestionWindow } from './
 export { modelPanelTree } from './internal/model-panel.js';
 export { providerPanelTree, providerEndpointTree, providerModelTree } from './internal/provider-panel.js';
 export { ConfigNumberWindow } from './internal/config-stepper.js';
-
+export { cacheConfirmTree, cacheEntry, CacheWindow } from './internal/cache-panel.js';
 export { ConfigRecordWindow } from './internal/config-records.js';

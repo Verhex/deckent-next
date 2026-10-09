@@ -152,6 +152,21 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect(await readFile(f.path, 'utf8')).toBe(before);
   }, 60_000);
 
+  it('OpenRouter connects both approved seed models through governed config, catalog and activation with v5 metadata pricing', async () => {
+    const f = await harness();
+    for (const nativeId of ['anthropic/claude-sonnet-5.5', 'openai/gpt-6.1-sol']) {
+      const result = await connectConfiguredModel(f.project, { schemaVersion: 1, commandId: `or-${nativeId.replaceAll('/', '-')}`, scopeId: 'scope',
+        connection: 'openrouter', endpoint: null, model: { nativeId } }, f.options, { listSecretNames: async () => ({ names: ['DECKENT_OPENROUTER_KEY'] }) });
+      expect(result).toMatchObject({ status: 'connected', tariff: 'published', keyStored: true, credentialRef: 'DECKENT_OPENROUTER_KEY',
+        reference: { providerId: 'openrouter-api', modelId: nativeId } });
+    }
+    const profiles = (await f.config()).provider_invocation_profiles.profiles.filter(p => JSON.stringify(p.reference).includes('openrouter-api'));
+    expect(profiles).toHaveLength(2);
+    for (const profile of profiles) expect(profile.adapter).toMatchObject({ id: 'openai-chat-http', version: 5, definition: {
+      endpoint: 'https://openrouter.ai/api/v1/chat/completions', dialect: { tokenLimitField: 'max_tokens', streamUsage: 'omit', finalUsageChoice: 'repeat-finish' },
+      tariff: { kind: 'openrouter-endpoint', currency: 'USD' } } });
+  }, 60_000);
+
   it('a require-approval config rule stops the run with the pending card; after allow the same command finishes', async () => {
     const f = await harness([{ id: 'ask-profiles', effect: 'require-approval', actions: ['write'], scopes: 'all', principals: me,
       resource: { kind: 'config', ids: ['project:provider_invocation_profiles'] } }]);

@@ -147,5 +147,6 @@
   "tui.provider.kind.deepseekApi",
   "tui.provider.kind.zaiApi",
   "tui.provider.model.field.model",
-  "tui.panel.budget.preset"
+  "tui.panel.budget.preset",
+  "terminal.info.usage.money"
 ]

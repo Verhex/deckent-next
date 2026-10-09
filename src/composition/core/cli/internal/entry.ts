@@ -5,6 +5,7 @@ import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composi
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced,
   providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
+import { settledProviderCacheUsage } from '#engine/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
@@ -16,7 +17,7 @@ import { configuredPolicyTemplateUpgrade, listConfiguredStandingGrants, revokeCo
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
-import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
+import { connectConfiguredModel, planConfiguredProfileCache } from '#composition/core/model-connect/index.js';
 import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
@@ -24,13 +25,13 @@ import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConf
 import { main as runCli, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation,
   applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { inspectConfiguredShellRealm, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
-import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
+import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
 export async function main(argv: readonly string[] = process.argv.slice(2), serviceEntry?: string) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
@@ -91,7 +92,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
-      { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady }),
+      { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady,
+        settledUsage: async (root, command, round, options) => {
+          const reference = command.reference ?? (await describeTerminalChat(root, options)).reference;
+          return settledProviderCacheUsage((reference ? await inspectConfiguredModelInvocationCommand(root, { schemaVersion: 1, scopeId: command.scopeId,
+            commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round), reference }, options) : null)?.spending ?? null);
+        } }),
     findTerminalMentions: (projectRoot, input, options, signal) => findTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
     attachTerminalMentions: (projectRoot, input, options, signal) => attachTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
@@ -104,6 +110,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     cancelModelInvocation: cancelRuntimeModelInvocation, inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount, auditProviderSpendAccount: auditRuntimeProviderSpendAccount, manageProviderSpend: manageRuntimeProviderSpend,
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation, applyModelCatalog: applyConfiguredModelCatalog, inspectModelCatalog: inspectConfiguredModelCatalog,
     // T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state.
+    planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),
     applyPoolCapacity: applyConfiguredPoolCapacity, inspectPoolCapacity: inspectConfiguredPoolCapacity, applyRunLifecycle: applyConfiguredRunLifecycle, applyPoolHold: applyConfiguredPoolHold, inspectPoolHold: inspectConfiguredPoolHold, // K5 typed pool hold (local, ledger-read by the service)

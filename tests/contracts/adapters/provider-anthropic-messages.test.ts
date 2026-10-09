@@ -262,6 +262,44 @@ it('counts tokens through the same-origin counter for a declared model, without 
   await expect(priced.native.measure!(undeclared)).resolves.toBeNull();
 });
 
+it.each(['counted', 'http-error', 'malformed', 'aborted'] as const)('pins a %s input reservation with a safe fallback and sends the requested output bound', async mode => {
+  let counters = 0, generated = '';
+  const endpoint = await fixture((req, res, body) => {
+    if (req.url?.endsWith('/count_tokens')) {
+      counters++;
+      if (mode === 'aborted') return;
+      res.writeHead(mode === 'http-error' ? 503 : 200, { 'content-type': 'application/json' });
+      res.end(mode === 'malformed' ? '{invalid' : JSON.stringify({ input_tokens: 5000 })); return;
+    }
+    generated = body; res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(textStream());
+  });
+  const priced = createAnthropicMessagesPricedNative({ resolveCredential: credential });
+  const stored = profile(endpoint, { maxOutputTokens: 128000, tokenCountEndpoint: endpoint.replace('/v1/messages', '/v1/messages/count_tokens') });
+  const request = streamed({ max_completion_tokens: 16384, messages: [{ role: 'user', content: 'x'.repeat(20000) }] });
+  const controller = new AbortController(), timer = mode === 'aborted' ? setTimeout(() => controller.abort(), 50) : null;
+  const token = await priced.native.prepare(stored, binding(), request, controller.signal);
+  if (timer) clearTimeout(timer);
+  const command = { schemaVersion: 1 as const, commandId: 'counted-command', scopeId: 'scope', reference, catalogRevision: 'catalog',
+    expectedBinding: { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: 'a'.repeat(64) }, nativeRequest: request };
+  const input = { command, requestDigest: modelInvocationRequestDigest(command), profile: stored, profileDigest: modelInvocationProfileDigest(stored), definition: binding(), prepared: token };
+  const quote = priced.quote(input as never);
+  expect(priced.quote(input as never)).toEqual(quote); expect(counters).toBe(1);
+  const calculation = (quote.meter.evidence as { calculation: { inputBound: string; inputBoundTokens: number; outputBoundTokens: number } }).calculation;
+  expect(calculation.outputBoundTokens).toBe(16384);
+  if (mode === 'counted') {
+    expect(calculation).toMatchObject({ inputBound: 'provider-count-plus-safety', inputBoundTokens: 8298 });
+    expect(calculation.inputBoundTokens).toBeGreaterThan(5000);
+    expect(quote.maxChargeMinorUnits).toBeLessThan(anthropicMaxChargeMinorUnits(anthropicPublishedTariff(MODEL)!, 'none', 20000, 16384));
+  } else {
+    expect(calculation.inputBound).toBe('body-bytes-as-tokens-plus-overhead'); expect(calculation.inputBoundTokens).toBeGreaterThan(20000);
+  }
+  if (mode !== 'aborted') {
+    await priced.native.send(token);
+    expect(JSON.parse(generated)).toMatchObject({ max_tokens: 16384 });
+    expect(JSON.stringify(quote)).not.toContain(SECRET);
+  }
+});
+
 it('quotes the exact worst case from the profile tariff and refuses a quote for a request that is not the prepared one', async () => {
   // 1000 body bytes + 2048 overhead at $2/MTok plus 64 output tokens at $10/MTok, ceil to cents once: 0.006096 + 0.00064 USD -> 1 cent.
   expect(anthropicMaxChargeMinorUnits(anthropicPublishedTariff(MODEL)!, 'none', 1000, 64)).toBe(1);
