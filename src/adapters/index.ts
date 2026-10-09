@@ -9,7 +9,7 @@ export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from
 export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
   resolveDockerReadOnlyMounts, dockerProfileObservesWorker } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
-export { LocalOsPrincipalVerifier, readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
+export { LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
 export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
 export type { GitWorkspaceOptions, GitWorkspaceLease } from '#adapters/core/git-workspace/index.js';
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from '#adapters/core/git-workspace/index.js';

@@ -318,6 +318,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/adapters/core/local-principal",
         "src/composition/core/scoped-request",
         "src/composition/core/runs",
         "src/adapters/core/mcp-transport",
@@ -1888,6 +1889,7 @@
     },
     "src/composition/core/approvals": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/engine/core/installation",
         "src/platform/core/clock",
         "src/platform/core/config",
