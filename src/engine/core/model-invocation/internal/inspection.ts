@@ -1,6 +1,6 @@
 import { verifyInvocationSpendReservation, type ProviderSpendReservation } from '#engine/core/provider-spend/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { parseModelInvocationControlRecord, parseModelInvocationQuery, type ModelInvocationControlRecord, type ModelInvocationPurgeReceipt, type ModelInvocationQuery,
+import { parseModelInvocationControlRecord, parseModelInvocationQuery, ModelInvocationError, modelInvocationCommandQueryInputSchema, type ModelInvocationCommandQuery, type ModelInvocationControlRecord, type ModelInvocationPurgeReceipt, type ModelInvocationQuery,
   type ModelInvocationReceipt, type ModelInvocationResponseContent } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelInvocationAuthorizer } from './application.js';
@@ -10,6 +10,7 @@ import { checkInvocationResultDelivery, validateInvocationDelivery, type ModelIn
 
 export interface ModelInvocationInspectionRecord { readonly record: ModelInvocationRecord; readonly control: ModelInvocationControlRecord; readonly spending: ProviderSpendReservation | null }
 export interface ModelInvocationInspectionReader {
+  loadReceipt?(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   loadInspection(scopeId: string, invocationId: string): Promise<ModelInvocationInspectionRecord | null>;
   close(): void;
 }
@@ -22,6 +23,25 @@ export type ModelInvocationInspection = Readonly<{ schemaVersion: 7; scopeId: st
 export class ModelInvocationInspectionApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorization: ModelInvocationAuthorizer,
     private readonly openReader: () => Promise<ModelInvocationInspectionReader>) {}
+  /** Same read authority, resolved by command identity first; immutable scope/reference are verified before returning any lookup. */
+  async inspectCommand(input: ModelInvocationCommandQuery, credential?: unknown): Promise<ModelInvocationInspection | null> {
+    const parsed = modelInvocationCommandQueryInputSchema.safeParse(input);
+    if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+    const query = parsed.data, principal = await authenticate(this.verifier, credential, query.scopeId);
+    await this.authorization.authorize('inspect', { scopeId: query.scopeId, reference: query.reference }, principal);
+    const reader = await this.openReader();
+    let invocationId: string;
+    try {
+      if (!reader.loadReceipt) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+      const stored = await reader.loadReceipt(query.scopeId, query.commandId);
+      if (!stored) return null;
+      const { receipt } = verifyModelInvocationRecord(stored);
+      if (receipt.claim.scopeId !== query.scopeId || receipt.request.commandId !== query.commandId
+        || !isDeepStrictEqual(receipt.request.reference, query.reference)) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      invocationId = receipt.claim.invocationId;
+    } finally { reader.close(); }
+    return this.inspect({ schemaVersion: 2, scopeId: query.scopeId, invocationId, reference: query.reference }, credential);
+  }
   async inspect(input: unknown, credential?: unknown, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection> {
     validateInvocationDelivery(delivery);
     const query = parseModelInvocationQuery(input), principal = await authenticate(this.verifier, credential, query.scopeId);

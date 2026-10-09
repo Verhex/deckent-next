@@ -86,23 +86,23 @@ describe('live windows in the workline', () => {
     taskId: `task-${index}`, process: 'running', provider: 'docker', authority: 'next-ledger' })) }] }) as never;
   const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
 
-  it('/watch-workers updates the worker list in place, takes the keyboard from the composer, and Esc closes it, stops the watch and leaves one line', async () => {
+  it('/watch-workers updates in place without taking focus; /watch-stop closes it and stops the feed', async () => {
     let count = 1, calls = 0;
     const sent: string[] = [];
     const view = mountWorkline({ pollMs: 20, completeTurn: async messages => { sent.push(messages.at(-1)!.content); return 'ok'; },
       ledger: { scopeId: 'scope-a', async listWorkers() { calls++; return report(count); }, async inspectRun() { return null; } } }); mounted.push(view.instance);
     await settle(20); view.stdin.write('/watch-workers\r');
     await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1 · docker'), 'window with the first worker');
-    expect(view.stdout.frame).toContain(EN.live!.hints);
-    // The window owns the keyboard: typed text and Enter do not reach the composer.
-    view.stdin.write('hello\r'); await settle(60); expect(sent).toEqual([]);
+    expect(view.stdout.frame).toContain(EN.live!.watchHints);
+    // The observation frame leaves input ownership with the composer.
+    view.stdin.write('hello\r'); await until(() => sent.length === 1, 'composer while observing');
     count = 2; await until(() => view.stdout.frame.includes('worker 2 · docker'), 'the second worker appears in the open window');
     // In place: one row each, no card appended to the scrollback.
     expect(occurrences(view.stdout.frame, 'worker 1 · docker')).toBe(1); expect(occurrences(view.stdout.frame, 'worker 2 · docker')).toBe(1);
-    view.stdin.write(ESC);
-    await until(() => view.stdout.frame.includes(EN.live!.closedWorkers.replace('{count}', '2')) && !view.stdout.frame.includes('LIVE-PANEL'), 'Esc closes the window and leaves the summary');
+    view.stdin.write('/watch-stop\r');
+    await until(() => view.stdout.frame.includes(EN.live!.closedWorkers.replace('{count}', '2')) && !view.stdout.frame.includes('LIVE-PANEL'), 'watch-stop closes the frame and leaves the summary');
     const after = calls; await settle(120); expect(calls - after).toBeLessThanOrEqual(1);
-    view.stdin.write('hello\r'); await until(() => sent.length === 1, 'the composer listens again');
+    view.stdin.write('hello\r'); await until(() => sent.length === 2, 'the composer listens again');
   });
 
   it('/tasks shows workers and runs together; the finished output stays in the scrollback', async () => {
@@ -112,7 +112,30 @@ describe('live windows in the workline', () => {
     await until(() => view.stdout.frame.includes(EN.live!.tasksTitle) && view.stdout.frame.includes('worker 1') && view.stdout.frame.includes('rev 3'), 'both lists in one window');
     expect(view.stdout.frame).toContain(EN.live!.runsTitle); expect(view.stdout.frame).toContain('1 workers · 1 runs');
     view.stdin.write(ESC);
-    await until(() => !view.stdout.frame.includes(EN.live!.hints) && view.stdout.frame.includes('1 workers and 1 runs at the last read'), 'closed with the summary');
+    await until(() => !view.stdout.frame.includes(EN.live!.tasksHints!) && view.stdout.frame.includes('1 workers and 1 runs at the last read'), 'closed with the summary');
+  });
+
+  it('/tasks Enter opens the selected transcript and x uses the refreshed run cancellation approval; opening a card never cancels', async () => {
+    const attempt = { scopeId: 'scope-a', runId: 'run-a', taskId: 'task-0', attemptId: 'attempt-a' };
+    const cancelled: unknown[][] = [], transcripts: unknown[] = [];
+    let revision = 3;
+    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a', listWorkers: async () => ({ schemaVersion: 1, scopeId: 'scope-a', sources: [{
+      workers: [{ taskId: 'task-0', process: 'running', provider: 'docker', authority: 'next-ledger', identity: attempt }] }] }) as never,
+      listRunIds: async () => ['run-a'], inspectRun: async () => ({ runId: 'run-a', scopeId: 'scope-a', revision, cancellationRequested: false,
+        tasks: [{ id: 'task-0', phase: 'active' }], state: { kind: 'running' } }) as never,
+      inspectTranscript: async target => { transcripts.push(target); return 'SELECTED-TRANSCRIPT'; },
+      cancelRun: async (...args) => { cancelled.push(args); return 'CANCELLED-SELECTED-RUN'; },
+    } }); mounted.push(view.instance);
+    await settle(20); view.stdin.write('/tasks\r'); await until(() => view.stdout.frame.includes('worker 1'), 'task rows');
+    view.stdin.write('\r'); await until(() => view.stdout.frame.includes('SELECTED-TRANSCRIPT'), 'selected transcript');
+    expect(transcripts).toEqual([attempt]); expect(cancelled).toEqual([]);
+    view.stdin.write(ESC); await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks returns');
+    revision = 9; view.stdin.write('x'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'existing cancel approval');
+    expect(view.stdout.frame).toContain('9'); expect(cancelled).toEqual([]);
+    view.stdin.write('n'); await until(() => view.stdout.text.includes('C-KEPT'), 'deny keeps run'); expect(cancelled).toEqual([]);
+    await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks after denial');
+    view.stdin.write('x'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'cancel approval again'); view.stdin.write('y');
+    await until(() => cancelled.length === 1, 'approved cancellation'); expect(cancelled).toEqual([['run-a', 9]]);
   });
 
   it('/watch-runs follows runs only', async () => {
@@ -122,7 +145,7 @@ describe('live windows in the workline', () => {
     await settle(20); view.stdin.write('/watch-runs\r');
     await until(() => view.stdout.frame.includes(EN.live!.runsTitle) && view.stdout.frame.includes('rev 7') && view.stdout.frame.includes('cancel'), 'run row with the requested cancellation');
     expect(workerReads).toBe(0);
-    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('1 runs at the last read'), 'closed');
+    view.stdin.write('/watch-stop\r'); await until(() => view.stdout.frame.includes('1 runs at the last read'), 'closed');
   });
 
   it('refuses /tasks and /watch-workers without a ledger and opens no window', async () => {

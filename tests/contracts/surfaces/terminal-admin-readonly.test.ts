@@ -150,8 +150,8 @@ describe('terminal read-only management (S09)', () => {
     await type(view, '/usage \r');
     await until(() => view.stdout.text.includes('Reasoning: not measured'), 'measured usage');
     await type(view, '/usage b1 2\r');
-    await until(() => spend.mock.calls.length === 1, 'spend query');
-    expect(spend.mock.calls[0]![1]).toEqual({ schemaVersion: 1, scopeId: 's', budgetId: 'b1', budgetRevision: 2 });
+    await until(() => spend.mock.calls.length === 3, 'spend query');
+    expect(spend.mock.calls[2]![1]).toEqual({ schemaVersion: 1, scopeId: 's', budgetId: 'b1', budgetRevision: 2 });
     await until(() => view.stdout.text.includes('b1'), 'spend rendered');
     const mark = view.stdout.text.length;
     await type(view, '/usage broken 1\r');
@@ -159,13 +159,15 @@ describe('terminal read-only management (S09)', () => {
     expect(view.stdout.text.slice(mark)).toContain('not read');
     await type(view, '/usage b1 zero\r/usage b1\r');
     await settle(100);
-    expect(spend).toHaveBeenCalledTimes(2);
+    expect(spend).toHaveBeenCalledTimes(4);
+    expect(spend.mock.calls.slice(0, 2).map(call => call[1])).toEqual([{ schemaVersion: 1, scopeId: 's', current: true }, { schemaVersion: 1, scopeId: 's', current: true }]);
     expect(view.stdout.text.split('Usage: /usage').length - 1).toBeGreaterThanOrEqual(2);
   });
 
   it('adds usage reports without losing earlier totals', () => {
     const total = addSessionUsage(addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 1, completionTokens: 2, reasoningTokens: 3 }), { promptTokens: 4, completionTokens: 5, reasoningTokens: null });
-    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3, reasoningUnmeasured: 1 });
+    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3, reasoningUnmeasured: 1, cache: { reports: 0, readTokens: 0, writeTokens: 0, promptTokens: 0,
+      write5mTokens: 0, write1hTokens: 0, netBenefitUsdE10: 0, benefitReports: 0 } });
   });
 
   // BATCH-FIX 2026-10-07 USAGE-UNKNOWN (P2-3a): an unreported reasoning count is never summed as 0; a partial sum says what it misses.

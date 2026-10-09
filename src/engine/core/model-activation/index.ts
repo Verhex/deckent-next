@@ -13,3 +13,4 @@ export { admitWorkerModels, WorkerModelAdmissionError } from './internal/worker-
 export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail, WorkerAdmissionWarning, WorkerAdmissionOptions } from './internal/worker-admission.js';
 export { ModelConnectApplication, ModelConnectError, declareConnectedModel } from './internal/connect.js';
 export type { ModelConnectBinding, ModelConnectDefaults, ModelConnectKind, ModelConnectLayer, ModelConnectPorts } from './internal/connect.js';
+export { planProfileCache, type ProfileCacheOffer, type ProfileCachePlan } from './internal/profile-cache.js';

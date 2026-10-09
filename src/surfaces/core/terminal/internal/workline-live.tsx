@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { systemSummaryEntry, LiveWatchWindow, MonitorWindow, liveWindowClosedText, type LiveWindowKind, type MonitorWindowLoader, type MonitorWindowRender, type WatchState,
-  type WorkSurfaceLabels } from '#surfaces/core/terminal-work/index.js';
+  type WorkSurfaceLabels, type TaskWindowAction } from '#surfaces/core/terminal-work/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Window } from '#surfaces/core/terminal-window/index.js';
 import { type WorkLedgerEntry, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
@@ -10,12 +10,13 @@ import { type WorkLedgerEntry, type WorkLedgerRunEntry, type WorkLedgerWorkerEnt
  * it shows (updated in place, no cards in the scrollback) and the watch it started: closing the window stops that watch and leaves one
  * summary line in the scrollback. Only one live window is open at a time; approval windows still stack above it (window stack priority).
  */
-export function useLiveWindows({ work, workers, watch, watchRef, setWatch, push, errorText, monitorWindow, positionLabel, status, statusLines }: {
+export function useLiveWindows({ work, workers, watch, watchRef, setWatch, push, errorText, monitorWindow, positionLabel, status, statusLines, onTaskAction }: {
   readonly work: WorkSurfaceLabels | undefined; readonly workers: readonly WorkLedgerWorkerEntry[]; readonly watch: WatchState;
   readonly watchRef: MutableRefObject<WatchState>; readonly setWatch: (watch: WatchState) => void;
   readonly push: (entries: readonly WorkLedgerEntry[]) => void; readonly errorText: (error: unknown) => string;
   readonly status?: string; readonly statusLines?: readonly string[];
   readonly monitorWindow?: MonitorWindowLoader | undefined; readonly positionLabel: string;
+  readonly onTaskAction?: (action: TaskWindowAction) => void;
 }) {
   const [kind, setKind] = useState<LiveWindowKind | null>(null);
   const [runs, setRuns] = useState<readonly WorkLedgerRunEntry[]>([]);
@@ -43,7 +44,7 @@ export function useLiveWindows({ work, workers, watch, watchRef, setWatch, push,
   const live = work?.live;
   const element = !live || !work || kind === null ? null : kind === 'monitor'
     ? (failure ? <Window title={[span(live.monitorTitle)]} body={[{ spans: [span(failure, { role: 'error' })] }]} hints={live.monitorHints} position={positionLabel} onClose={close} /> : monitor ? <MonitorWindow render={monitor} labels={live} onClose={close} /> : null)
-    : <LiveWatchWindow kind={kind} data={{ workers, runs }} labels={{ live, panel: work.panel, workerLine: work.workerLine, jobs: work.jobs }} position={positionLabel} statusText={status} statusLines={statusLines} onClose={close} />;
+    : <LiveWatchWindow kind={kind} data={{ workers, runs }} labels={{ live, panel: work.panel, workerLine: work.workerLine, jobs: work.jobs }} position={positionLabel} statusText={status} statusLines={statusLines} onClose={close} onAction={onTaskAction} />;
   const isOpen = useCallback(() => latest.current.kind !== null, []);
   return { show, openMonitor, close, isOpen, setRuns, element, canOpenMonitor: Boolean(monitorWindow && live) };
 }

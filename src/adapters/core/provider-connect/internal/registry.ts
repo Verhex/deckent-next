@@ -33,13 +33,27 @@ const kindSchema = z.object({
    * declared in the provider catalog). Null: the kind stores a key but no model can be connected to it yet. */
   connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
+    /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
+    tokenCountPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).optional(),
+    /** CACHE-SLICE1 (owner 2026-10-09): the prompt-cache TTL a NEW profile of this kind starts with (Anthropic only; 5m is the only paid TTL
+     * this slice admits, `none` keeps caching off). An existing profile keeps its own value, an absent one stays absent (no silent migration). */
+    cacheDefault: z.enum(['none', '5m']).optional(),
     /** Owner 2026-10-08: no paid call to a remote endpoint without a verified price. `true`: a remote (non-loopback) address needs the operator's
      * declared price, which the SPEND-SETTLEMENT lane brings; until then such a connection is refused (`MODEL_CONNECT_PRICE_REQUIRED`). */
     priceRequired: z.boolean().default(false),
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
-    dialect: openAiChatDialectSchema.optional() }).strict()
-    .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined)).nullable().default(null),
+    dialect: openAiChatDialectSchema.optional(),
+    /** Verified first-party endpoint tags and token fields for metadata-priced chat; no provider/model guessing in code. */
+    metadataPricing: z.object({ maxAgeMs: positiveLimit(), maxResponseBytes: positiveLimit(), timeoutMs: positiveLimit(),
+      routes: z.array(z.object({ modelId: z.string().min(1), endpointTag: z.string().min(1),
+        tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), sourceUrl: z.string().url().startsWith('https:'),
+        observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict()).min(1)
+        .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
+    .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
+    .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
+    .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),
 }).strict().readonly();
+function positiveLimit() { return z.number().int().positive().safe(); }
 const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
   limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive }).strict(),
@@ -102,4 +116,3 @@ export function providerEndpoint(text: string): Readonly<{ ok: true; base: strin
   // An OpenAI-compatible base is often given with its `/v1`; the probe path already carries it.
   return { ok: true, base: `${parsed.origin}${path.endsWith('/v1') ? path.slice(0, -3) : path}` };
 }
-

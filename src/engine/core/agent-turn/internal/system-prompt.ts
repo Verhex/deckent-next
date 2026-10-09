@@ -1,6 +1,6 @@
 import { isAbsolute, relative, sep } from 'node:path';
 import type { AgentToolSpec, AgentTurnMessage, ShellRealm } from '#domain/index.js';
-import type { ProductLayout } from '#platform/index.js';
+import { PACKAGE_VERSION, type ProductLayout } from '#platform/index.js';
 import { AGENT_CONTEXT_CARRY_VERSION, AGENT_CONTEXT_RENDER_VERSION } from './carry.js';
 
 /**
@@ -11,7 +11,7 @@ import { AGENT_CONTEXT_CARRY_VERSION, AGENT_CONTEXT_RENDER_VERSION } from './car
  * descriptions: English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the
  * rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 8;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 9;
 /**
  * v6 PROMPT-POSTURE (live 2026-09-30: a full-access model refused `curl` "by policy" because v5 said "Network access: none" whenever fetch_url
  * was absent): where this turn's shell commands run, as composition resolved it from the realm the turn's shell calls take (the same
@@ -94,6 +94,8 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
     ['Shell tool', named('shell'), shellNote(shell)]] as const;
   const lines = [
     `[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`,
+    `Running Deckent: ${PACKAGE_VERSION}; channel: ${PACKAGE_VERSION.includes('-') ? PACKAGE_VERSION.split('-')[1]!.split('.')[0] : 'stable'}.`
+      + ' This identifies the running service. A project checkout may be a different revision; verify its version before drawing conclusions about live behavior.',
     'These instructions come from the Deckent runtime service, not from the user. You are the coding assistant of the Deckent operator'
       + ' terminal and work on the user\'s project.',
     `- Reply language: ${AGENT_TURN_REPLY_LANGUAGES[language]}. ${agentTurnReplyLanguageRule(language)}`,

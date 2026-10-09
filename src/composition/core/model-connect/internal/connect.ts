@@ -1,7 +1,8 @@
 import type { ModelConnectResult } from '#domain/index.js';
-import { AuditApplication, ModelConnectApplication, ModelConnectError, assessModelInvocationProfileDeliveries, configServiceState, type DescribeService } from '#engine/index.js';
+import { AuditApplication, ModelConnectApplication, ModelConnectError, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService,
+  type ProfileCachePlan } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName,
-  providerEndpoint, readProviderConnectSeed, type ProviderConnectRegistry } from '#adapters/index.js';
+  providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -71,4 +72,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     if (error instanceof ModelConnectError || error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
     throw error instanceof DeckentError ? error : queryFailure(error);
   }
+}
+
+/** CACHE-SLICE1: the scope's existing profiles the adapter offers the 5-minute prompt cache for, and the per-layer writes (read fresh; nothing written
+ * here — the caller sends each write through the governed `/config` writer, so policy, approval and audit stay that writer's). */
+export async function planConfiguredProfileCache(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileCachePlan> {
+  const snapshot = await snapshotConfiguredConfig(projectRoot, options);
+  return planProfileCache({ global: snapshot.global as Record<string, unknown>, project: snapshot.project as Record<string, unknown> }, scopeId, providerProfileCacheOffer);
 }

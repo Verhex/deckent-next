@@ -1,24 +1,21 @@
-import { z } from 'zod';
-import { immutableJsonObjectSchema, wellFormedModelJson } from '#domain/index.js';
+import { parseOpenAiChatTextRequest, openAiChatWireObjectSchema, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { sumCeilUsdCents, decimalText, multiplyRate } from './decimal.js';
 import { OpenRouterPricingError } from './error.js';
 import { requireTariffRates, type OpenRouterTariff } from './tariff.js';
 
-const requestSchema = immutableJsonObjectSchema.pipe(z.object({ model: z.string().min(1),
-  messages: z.array(z.object({ role: z.enum(['system', 'developer', 'user', 'assistant']),
-    content: z.string().min(1) }).strict()).min(1), max_tokens: z.number().int().positive().safe().optional(),
-  max_completion_tokens: z.number().int().positive().safe().optional(),
-  stream: z.literal(false).optional(), n: z.literal(1).optional() }).strict()
-  .refine(value => (value.max_tokens === undefined) !== (value.max_completion_tokens === undefined)));
-export function parseOpenRouterTextRequest(input: unknown) {
-  const parsed = requestSchema.safeParse(input);
-  if (!parsed.success) throw new OpenRouterPricingError('INVALID_REQUEST');
-  // Same boundary as parseOpenAiChatTextRequest (SURROGATE-CUT): a lone UTF-16 surrogate is serialized as `\udXXX` and a
-  // provider tokenizer rejects the request. Every message string is made well-formed (U+FFFD) here,
-  // before the HTTP body and the tariff bodyDigest. The admitted command is not rewritten. The replacement is pure and
-  // idempotent, so a replay sends the same bytes; well-formed text is returned unchanged, so those bodies stay byte-identical.
-  const data = wellFormedModelJson(parsed.data);
-  return Object.freeze({ ...data, messages: Object.freeze(data.messages.map(message => Object.freeze({ ...message }))) });
+/** Same tool/message/stream contract as the shared transport; legacy max_tokens spelling remains supported. */
+export function parseOpenRouterTextRequest(input: unknown): Omit<OpenAiChatTextRequest, 'max_completion_tokens'> & { readonly max_tokens?: number; readonly max_completion_tokens?: number } {
+  const copied = openAiChatWireObjectSchema.safeParse(input);
+  if (!copied.success) throw new OpenRouterPricingError('INVALID_REQUEST');
+  const value = copied.data as Record<string, unknown>;
+  if ((value['max_tokens'] === undefined) === (value['max_completion_tokens'] === undefined)) throw new OpenRouterPricingError('INVALID_REQUEST');
+  const { max_tokens: maxTokens, ...rest } = value;
+  try {
+    const parsed = parseOpenAiChatTextRequest({ ...rest, max_completion_tokens: maxTokens ?? value['max_completion_tokens'] },
+      { maxOutputTokens: Number.MAX_SAFE_INTEGER });
+    const { max_completion_tokens: completion, ...request } = parsed;
+    return Object.freeze({ ...request, ...(maxTokens === undefined ? { max_completion_tokens: completion } : { max_tokens: completion }) });
+  } catch { throw new OpenRouterPricingError('INVALID_REQUEST'); }
 }
 export interface OpenRouterTextReservation {
   readonly schemaVersion: 1; readonly currency: 'USD'; readonly maxChargeMinorUnits: number;
@@ -32,18 +29,20 @@ export interface OpenRouterTextReservation {
  * base prices, so replacement pricing cannot under-reserve. Conditional tariffs are explicitly unsupported.
  */
 export function quoteOpenRouterText(tariff: OpenRouterTariff, input: unknown, nowMs: number): OpenRouterTextReservation {
-  const rates = requireTariffRates(tariff, nowMs), request = requestSchema.safeParse(input);
+  const rates = requireTariffRates(tariff, nowMs), request = parseOpenRouterTextRequest(input);
   // A routing price filter is not evidence for an absent tariff rate, including per-request charges.
   // Missing dimensions require a proven native inclusion/reachability rule before enabling this path.
   if (tariff.unpricedDimensions.length !== 0) throw new OpenRouterPricingError('INCOMPLETE_PRICING');
-  if (!request.success || request.data.model !== tariff.selection.modelId) {
+  if (request.model !== tariff.selection.modelId) {
     throw new OpenRouterPricingError('INVALID_REQUEST');
   }
-  const maxCompletionTokens = request.data.max_tokens ?? request.data.max_completion_tokens!;
-  const parameter = request.data.max_tokens === undefined ? 'max_completion_tokens' : 'max_tokens';
+  const maxCompletionTokens = request.max_tokens ?? request.max_completion_tokens!;
+  const parameter = request.max_tokens === undefined ? 'max_completion_tokens' : 'max_tokens';
   if (maxCompletionTokens > tariff.maxCompletionTokens || !tariff.supportedParameters.includes(parameter)) {
     throw new OpenRouterPricingError('INVALID_REQUEST');
   }
+  if (request.tools && !tariff.supportedParameters.includes('tools')
+    || request.tool_choice && !tariff.supportedParameters.includes('tool_choice')) throw new OpenRouterPricingError('INVALID_REQUEST');
   const dimensions = [multiplyRate(rates.prompt, tariff.maxPromptTokens),
     multiplyRate(rates.input_cache_read, tariff.maxPromptTokens), multiplyRate(rates.input_cache_write, tariff.maxPromptTokens),
     multiplyRate(rates.completion, maxCompletionTokens), multiplyRate(rates.internal_reasoning, maxCompletionTokens), rates.request];

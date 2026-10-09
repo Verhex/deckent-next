@@ -34,6 +34,10 @@ export const modelInvocationCommandSchema = z.object({ schemaVersion: z.literal(
   expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).strict().readonly();
 export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(2), scopeId: identitySchema,
   invocationId: identitySchema, reference: modelReferenceSchema, includeResponseContent: z.boolean().optional() }).strict().readonly();
+/** Internal/local read lookup by immutable command identity; it does not replay or invoke a model. */
+export const modelInvocationCommandQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  commandId: identitySchema, reference: modelReferenceSchema }).strict().readonly();
+export type ModelInvocationCommandQuery = Readonly<z.infer<typeof modelInvocationCommandQuerySchema>>;
 export const modelInvocationPurgeCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
   scopeId: identitySchema, invocationId: identitySchema, reference: modelReferenceSchema,
   expectedContentDigest: digest }).strict().readonly();
@@ -42,6 +46,7 @@ export const modelInvocationPurgeReceiptSchema = z.object({ schemaVersion: z.lit
   authorization: modelActivationAuthorizationSchema, purgedAtMs: counterSchema }).strict().readonly();
 /** Descriptor-safe wire ingress. Raw object schemas remain available for closed-world JSON-schema generation. */
 export const modelInvocationCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandSchema);
+export const modelInvocationCommandQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandQuerySchema);
 export const modelInvocationQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationQuerySchema);
 export const modelInvocationPurgeCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationPurgeCommandSchema);
 export const modelInvocationProfileSchema = z.object({ schemaVersion: z.literal(1), id: identitySchema,

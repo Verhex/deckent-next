@@ -1,7 +1,7 @@
 import type { RunView } from '#engine/index.js';
 import type { JobWindowLabels } from './job-windows.js';
 import { runViewToLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useWindowSize } from 'ink';
 import { shortId } from '#platform/index.js';
 import { LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type LedgerCardLabels, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
@@ -18,6 +18,8 @@ export interface WorkerPanelLabels {
   readonly more: string;
 }
 export interface LiveWindowLabels {
+  readonly tasksHints?: string;
+  readonly watchHints?: string;
   readonly monitorTitle: string; readonly runsTitle: string; readonly tasksTitle: string;
   readonly hints: string; readonly monitorHints: string;
   /** `{count}` / `{workers}` `{runs}` */
@@ -42,6 +44,7 @@ export interface LiveWindowData {
   readonly workers: readonly WorkLedgerWorkerEntry[];
   readonly runs: readonly WorkLedgerRunEntry[];
 }
+export type TaskWindowAction = Readonly<{ action: 'transcript' | 'cancel'; target: WorkLedgerWorkerEntry | WorkLedgerRunEntry }>;
 export interface LiveWindowRenderLabels {
   readonly live: LiveWindowLabels; readonly panel: WorkerPanelLabels; readonly workerLine: WorkerLineLabels; readonly jobs?: JobWindowLabels | undefined;
 }
@@ -105,14 +108,38 @@ export function liveWindowClosedText(kind: Exclude<LiveWindowKind, 'monitor'>, d
 const FRAME_ROWS = 4, FRAME_COLUMNS = 4, MONITOR_MIN_ROWS = 6, FALLBACK_COLUMNS = 80, FALLBACK_ROWS = 24;
 
 /**
- * A watch window (`/watch-workers`, `/watch-runs`, `/tasks`): the observation updates in place instead of appending cards. Modal like every
- * window: it owns the keyboard, scrolls by keyboard, and Esc closes it (the host then stops the watch).
+ * Watch frames update in place and leave focus with the composer; `/watch-stop` closes them.
+ * `/tasks` owns focus for selection and existing transcript/cancel actions; Esc closes that list.
  */
-export function LiveWatchWindow({ kind, data, labels, position, statusText, statusLines, onClose }: {
+export function LiveWatchWindow({ kind, data, labels, position, statusText, statusLines, onClose, onAction }: {
   readonly kind: Exclude<LiveWindowKind, 'monitor'>; readonly data: LiveWindowData; readonly labels: LiveWindowRenderLabels; readonly position: string; readonly statusText?: string | undefined; readonly statusLines?: readonly string[] | undefined; readonly onClose: () => void;
+  readonly onAction?: ((action: TaskWindowAction) => void) | undefined;
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const targets = [...data.workers, ...data.runs];
+  const keyOf = (target: TaskWindowAction['target']) => target.kind === 'run' ? `run:${target.scopeId}:${target.runId}`
+    : `worker:${target.scopeId}:${target.taskId}:${JSON.stringify(target.attempt ?? target.provider)}`;
+  const selected = Math.max(0, targets.findIndex(target => keyOf(target) === selectedId));
   const status: readonly Span[] = [span([liveWindowStatus(kind, data, labels), statusText].filter(Boolean).join(' · '))];
-  return <Window title={[span(liveWindowTitle(kind, labels))]} status={status} body={[...(statusLines ?? []).map(text => ({ spans: [span(text, { role: 'muted' })] })), ...liveWindowLines(kind, data, labels)]} hints={labels.live.hints} position={position} onClose={onClose} />;
+  const notes = (statusLines ?? []).map(text => ({ spans: [span(text, { role: 'muted' })] }));
+  const taskRows = targets.map((target, index) => ({ spans: [span(`${index === selected ? '>' : ' '} `),
+    ...(target.kind === 'worker' ? workerLines([target], labels, 1)[0]!.spans : runLines([target], labels, 1)[0]!.spans)] }));
+  const taskBody = [{ spans: [span(labels.panel.title, { bold: true })] }, ...taskRows.slice(0, data.workers.length),
+    { spans: [] }, { spans: [span(labels.live.runsTitle, { bold: true })] }, ...taskRows.slice(data.workers.length)];
+  return <Window interactive={kind === 'tasks'} title={[span(liveWindowTitle(kind, labels))]} status={status}
+    body={[...notes, ...(kind === 'tasks' && targets.length ? taskBody : liveWindowLines(kind, data, labels))]}
+    hints={kind === 'tasks' ? labels.live.tasksHints ?? labels.live.hints : labels.live.watchHints ?? labels.live.hints} position={position} onClose={onClose}
+    {...(kind === 'tasks' ? { reveal: notes.length + selected + (selected >= data.workers.length ? 3 : 1), onInput: (input, key) => {
+      if (key.ctrl || key.meta || key.shift) return false;
+      if ((key.upArrow || key.downArrow) && targets.length) {
+        const next = (selected + (key.upArrow ? -1 : 1) + targets.length) % targets.length;
+        setSelectedId(keyOf(targets[next]!)); return true;
+      }
+      if ((key.return || input === 'x') && targets[selected]) {
+        onAction?.({ action: key.return ? 'transcript' : 'cancel', target: targets[selected]! }); return true;
+      }
+      return false;
+    } } : {})} />;
 }
 
 /**

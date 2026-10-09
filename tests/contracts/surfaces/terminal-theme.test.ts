@@ -54,6 +54,7 @@ describe('terminal themes (T2 T-READABLE)', () => {
     expect(palette.userLabel).toEqual({ bold: true });
     expect(palette.assistantLabel).toEqual({ color: 'blueBright', bold: true });
     expect(palette.windowBorder.color).toBe('gray');
+    expect(palette.selection.inverse).toBe(true);
     expect(palette.diffAdded.color).toBe('green');
     expect(palette.diffRemoved.color).toBe('red');
     expect(palette.modeIndicator.color).toBe('yellow');

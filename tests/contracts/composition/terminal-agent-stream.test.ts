@@ -221,3 +221,17 @@ describe('T4 MODEL-SWITCH: the session pin rides on the turn command (v23)', () 
     expect(asked).toEqual([reference, null]);
   });
 });
+
+it.each(['settled', 'missing', 'mismatch'] as const)('projects cache usage only from a matching settled round (%s), with the wire unchanged', async scenario => {
+  const p = ports(async (command, onEvent) => { onEvent({ kind: 'usage', round: 2, promptTokens: 100, completionTokens: 5 }); return result({ turnId: command.turnId, answer: null }); });
+  const calls: unknown[] = [];
+  p.value.settledUsage = async (_root, command, round) => { calls.push({ command, round });
+    if (scenario === 'missing') throw new Error('POLICY_DENIED');
+    return { readTokens: 60, writeTokens: 10, promptTokens: scenario === 'mismatch' ? 101 : 100 };
+  };
+  const deltas = await collect(streamTerminalAgentTurn(input, p.value));
+  expect(calls).toEqual([{ command: p.commands[0], round: 2 }]);
+  const usage = deltas.find(delta => delta.kind === 'usage');
+  expect(usage).toEqual({ kind: 'usage', promptTokens: 100, completionTokens: 5, reasoningTokens: null,
+    ...(scenario === 'settled' ? { cache: { readTokens: 60, writeTokens: 10, promptTokens: 100 } } : {}) });
+});

@@ -33,7 +33,9 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
     model: { hints: t('tui.panel.model.hints', {}, locale), session: t('tui.panel.model.session', {}, locale), sessionAndDefault: t('tui.panel.model.sessionAndDefault', {}, locale),
       pinnedMark: t('tui.panel.model.pinnedMark', {}, locale), configuredMark: t('tui.panel.model.configuredMark', {}, locale), pinned: t('tui.panel.model.pinned', {}, locale),
       shadowTitle: t('tui.panel.model.shadowTitle', {}, locale), shadowRemove: t('tui.panel.model.shadowRemove', {}, locale),
-      shadowAlign: t('tui.panel.model.shadowAlign', {}, locale), shadowKeep: t('tui.panel.model.shadowKeep', {}, locale) },
+      shadowAlign: t('tui.panel.model.shadowAlign', {}, locale), shadowKeep: t('tui.panel.model.shadowKeep', {}, locale),
+      switch: { title: t('tui.panel.model.switch.title', {}, locale), fresh: t('tui.panel.model.switch.fresh', {}, locale), keep: t('tui.panel.model.switch.keep', {}, locale),
+        freshDone: t('tui.panel.model.switch.freshDone', {}, locale), keepDone: t('tui.panel.model.switch.keepDone', {}, locale) } },
     provider: { title: t('tui.panel.provider.title', {}, locale), hints: t('tui.panel.provider.hints', {}, locale),
       actions: { connect: t('tui.panel.provider.action.connect', {}, locale), replace: t('tui.panel.provider.action.replace', {}, locale),
         disconnect: t('tui.panel.provider.action.disconnect', {}, locale), model: t('tui.panel.provider.action.model', {}, locale) },
@@ -49,6 +51,8 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
     budget: { create: t('tui.panel.budget.create', {}, locale), change: t('tui.panel.budget.change', {}, locale), changeDetail: t('tui.panel.budget.changeDetail', {}, locale),
       preset: t('tui.panel.budget.preset', {}, locale), other: t('tui.panel.budget.other', {}, locale), stepperTitle: t('tui.panel.budget.stepperTitle', {}, locale),
       hints: t('tui.panel.budget.hints', {}, locale), confirmTitle: t('tui.panel.budget.confirmTitle', {}, locale), confirm: t('tui.panel.budget.confirm', {}, locale),
-      confirmUnfreeze: t('tui.panel.budget.confirmUnfreeze', {}, locale), cancel: t('tui.panel.budget.cancel', {}, locale) },
+      confirmUnfreeze: t('tui.panel.budget.confirmUnfreeze', {}, locale), cancel: t('tui.panel.budget.cancel', {}, locale), belowSettled: t('tui.panel.budget.belowSettled', {}, locale) },
+    cache: { entry: t('tui.panel.cache.entry', {}, locale), title: t('tui.panel.cache.title', {}, locale), confirm: t('tui.panel.cache.confirm', {}, locale),
+      cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },
   };
 }

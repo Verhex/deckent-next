@@ -4,14 +4,18 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { ProviderSpendError, ModelInvocationStoreError, type ModelInvocationStore, type ModelInvocationInspectionReader } from '#engine/index.js';
 import { MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
-import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationRecord } from './read.js';
+import { decodeInvocationRecord, invocationIdentity, invocationRow, invocationCommandRow, loadInvocationRecord } from './read.js';
 import { decodeInvocationControl } from './control.js';
 
 const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
-export type ModelInvocationReader = Pick<ModelInvocationStore, 'loadInvocation' | 'close'> & ModelInvocationInspectionReader;
+export type ModelInvocationReader = Pick<ModelInvocationStore, 'loadInvocation' | 'loadReceipt' | 'close'> & ModelInvocationInspectionReader;
 class SqliteModelInvocationReader implements ModelInvocationReader {
   constructor(private readonly db: DatabaseSync) {}
   async loadInvocation(scopeId: string, invocationId: string) { return loadInvocationRecord(this.db, scopeId, invocationId); }
+  async loadReceipt(scopeInput: string, commandInput: string) {
+    const scopeId = invocationIdentity(scopeInput), commandId = invocationIdentity(commandInput);
+    return decodeInvocationRecord(invocationCommandRow(this.db, scopeId, commandId), scopeId, commandId, 'command_id');
+  }
   async loadInspection(scopeInput: string, invocationInput: string) {
     const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
     // A read transaction binds control/outcome and financial rows to one snapshot without a writer lock.

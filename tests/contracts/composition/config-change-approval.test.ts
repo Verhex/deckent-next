@@ -1,4 +1,7 @@
 import { configPanelPort } from '#surfaces/core/config/index.js';
+import { cachePanelPort } from '#surfaces/core/cli-terminal/index.js';
+import { planConfiguredProfileCache } from '#composition/core/model-connect/index.js';
+import { anthropicPublishedTariff } from '#adapters/core/provider-anthropic-messages/index.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -235,5 +238,39 @@ describe('CS-1 selection through the real governed panel port', () => {
     const applied = await port.write(request); expect(applied).toMatchObject({ status: 'applied', approvalId: pending.approvalId });
     expect(JSON.parse((await bytesOf(f.path))!).max_workers).toBe(2); expect(f.auditCount()).toBe(audits + 1);
     expect(f.audits().at(-1)!.event.subject).toMatchObject({ kind: 'config-change', approvalId: pending.approvalId, keyPath: 'max_workers' });
+  });
+});
+
+describe('CACHE-SLICE1: the cache migration through the real governed config writer', () => {
+  const profile = (id: string, cache?: 'none') => ({ schemaVersion: 1, id, version: 2, scopeId: 'installation',
+    reference: { providerId: 'anthropic-api', providerVersion: 1, modelId: id, modelVersion: 1 }, bindingDigest: 'a'.repeat(64),
+    protocol: { family: 'anthropic-messages', version: '2023-06-01' }, adapter: { id: 'anthropic-messages-http', version: 2, definition: {
+      endpoint: 'https://api.anthropic.com/v1/messages', maxOutputTokens: 4096, authentication: { type: 'header', name: 'x-api-key', credentialRef: 'DECKENT_ANTHROPIC_KEY' },
+      tariff: anthropicPublishedTariff('claude-sonnet-5-5'), ...(cache ? { cache } : {}) } },
+    allocation: { id, maxCalls: null, maxInFlight: 4 }, limits: { requestMaxBytes: 8_388_608, responseMaxBytes: 262_144, timeoutMs: 600_000 } });
+  it('offers only the profile without a cache choice; Yes waits for the policy approval and writes nothing; after allow it writes 5m once, audited; none stays none', async () => {
+    const f = await setup(() => []);
+    await f.app.set({ ...f.command, commandId: 'seed-scope', keyPath: 'terminal.scopeId', value: 'installation' });
+    await f.app.set({ ...f.command, commandId: 'seed-profiles', keyPath: 'provider_invocation_profiles', value: { schemaVersion: 1, profiles: [profile('sonnet'), profile('kept', 'none')] } });
+    // From here the policy holds every profile write for a decision.
+    await f.writePolicy(principals => [{ id: 'company-profiles-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'], principals,
+      resource: { kind: 'config', ids: ['project:provider_invocation_profiles'] } }]);
+    const port = cachePanelPort(f.root, 'installation', { planProfileCache: planConfiguredProfileCache, configApplication: createConfiguredConfigApplication,
+      resolveConfigPrincipal: resolveConfiguredConfigPrincipal }, f.options, 'en');
+    const view = await port.inspect();
+    expect(view?.detail).toBe('1 model(s) without a cache choice');
+    expect(view?.lines.map(line => `${line.label} ${line.text}`).join('\n')).toContain('claude-sonnet-5-5 a cache write costs 1.25× the input price, a cache read 0.05×; it pays back after 1 reuse(s)');
+    const before = await bytesOf(f.path), audits = f.auditCount();
+    const pending = await port.apply();
+    expect(pending.status).toBe('approval-pending'); expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
+    await f.decide(pending.approvalId!, 'allow', 'allow-cache');
+    const applied = await port.apply();
+    expect(applied.status).toBe('applied'); expect(applied.lines[0]).toBe('Prompt cache (5 min) turned on for 1 model(s).');
+    const profiles = (JSON.parse((await bytesOf(f.path))!) as { provider_invocation_profiles: { profiles: { id: string; version: number; adapter: { definition: Record<string, unknown> } }[] } })
+      .provider_invocation_profiles.profiles;
+    expect(profiles.map(item => [item.id, item.version, item.adapter.definition['cache']])).toEqual([['sonnet', 3, '5m'], ['kept', 2, 'none']]);
+    expect(f.auditCount()).toBe(audits + 1);
+    expect(f.audits().at(-1)!.event.subject).toMatchObject({ kind: 'config-change', approvalId: pending.approvalId, keyPath: 'provider_invocation_profiles' });
+    expect(await port.inspect()).toBeNull();
   });
 });
