@@ -1,0 +1,26 @@
+[
+  {
+    "file": "sonnet-endpoints.json",
+    "source": "https://openrouter.ai/api/v1/models/anthropic/claude-sonnet-5.5/endpoints",
+    "observedOn": "2026-10-08",
+    "sha256": "83315570d130070c4a40ec3ae6380c0b7851f1a852c89a501055de20eabfe808"
+  },
+  {
+    "file": "sol-endpoints.json",
+    "source": "https://openrouter.ai/api/v1/models/openai/gpt-6.1-sol/endpoints",
+    "observedOn": "2026-10-08",
+    "sha256": "a708f85146bdd65534ab91212b1430fb7e729fb836c6c034f8482f034198afe6"
+  },
+  {
+    "file": "z-ai--glm-5.3-endpoints.json",
+    "source": "https://openrouter.ai/api/v1/models/z-ai/glm-5.3/endpoints",
+    "observedOn": "2026-10-08",
+    "sha256": "50d2c2248618c21cac4d0b35c243f748dc540f40c070da8bd24404ac064ed463"
+  },
+  {
+    "file": "deepseek--deepseek-v4.1-flash-endpoints.json",
+    "source": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints",
+    "observedOn": "2026-10-08",
+    "sha256": "764691c6a6f77f997ae75c4060a2b97fa09ae898c6fc9fe5f6c955cc72414e95"
+  }
+]

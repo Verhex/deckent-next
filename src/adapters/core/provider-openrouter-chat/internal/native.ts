@@ -72,7 +72,7 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
       const requestedOutput = request.max_tokens ?? request.max_completion_tokens!;
       if (requestedOutput > definition.maxOutputTokens) throw new OpenRouterChatError('INVALID_REQUEST');
       const reservation = quoteOpenRouterText(observation.tariff, request, now());
-      const body = JSON.stringify({ ...request, stream: false, provider: { ...reservation.provider, order: reservation.provider.only } });
+      const body = JSON.stringify({ ...request, stream: false, ...reservation.requestControls, provider: { ...reservation.provider, order: reservation.provider.only } });
       const limits = parseNativeJsonHttpLimits(profile.limits);
       if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenRouterChatError('REQUEST_TOO_LARGE');
       const wire = Object.freeze({ definition: definition.transport, limits, body,
@@ -134,13 +134,13 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
       tariffDigest: value.reservation.tariffDigest, bodyDigest: createHash('sha256').update(value.wire.body).digest('hex'),
       pricedDimensions: value.observation.tariff.pricedDimensions, unpricedDimensions: value.observation.tariff.unpricedDimensions,
       calculation: { schemaVersion: 1, currency: 'USD', minorUnitsPerCurrencyUnit: 100, rounding: 'ceil-per-dimension',
-        inputRates: ['prompt', 'input_cache_read', 'input_cache_write'], outputRates: ['completion', 'internal_reasoning'],
+        inputRates: ['max(prompt,input_cache_read)', 'max(input_cache_write,input_cache_write_1h)'], outputRates: ['completion', 'internal_reasoning'],
         inputBound: 'published-endpoint-prompt-or-context', outputBound: 'requested-output-tokens', requestCount: 1 },
       reservation: value.reservation };
     const evidenceDigest = providerSpendEvidenceDigest(evidence);
     const quote = parseProviderSpendQuote({ schemaVersion: 1, scopeId: input.command.scopeId, requestDigest: input.requestDigest, profileDigest: input.profileDigest,
-      pricing: { id: 'openrouter-endpoint-tariff', version: 1, digest: value.reservation.tariffDigest, definition: value.observation.tariff.definition },
-      meter: { id: 'openrouter-text-reservation', version: 1, evidenceDigest, evidence },
+      pricing: { id: 'openrouter-endpoint-tariff', version: value.observation.tariff.schemaVersion, digest: value.reservation.tariffDigest, definition: value.observation.tariff.definition },
+      meter: { id: 'openrouter-text-reservation', version: value.reservation.schemaVersion, evidenceDigest, evidence },
       currency: value.reservation.currency, maxChargeMinorUnits: value.reservation.maxChargeMinorUnits });
     quotes.set(input.prepared as object, quote);
     return quote;

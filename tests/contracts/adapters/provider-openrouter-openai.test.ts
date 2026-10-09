@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ import { classifyProviderRejection, createProviderSpendAccount, modelInvocationP
   providerSpendQuoteDigest, reserveProviderSpend, settleProviderSpend } from '#engine/index.js';
 
 let directory = '', caPem = '', key = '';
-const servers: Server[] = [], model = 'vendor/model', tag = 'provider/region', metadataPath = `/api/v1/models/${model}/endpoints`;
+const servers: Server[] = [], model = 'vendor/model', tag = 'provider/region';
 beforeAll(async () => { directory = await mkdtemp(join(tmpdir(), 'deckent-openrouter-v5-')); ({ caPem, key } = await createLocalTls(directory)); });
 afterEach(async () => { for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); } });
 afterAll(async () => { await rm(directory, { recursive: true, force: true }); });
@@ -23,20 +24,23 @@ const chunk = (choice: object | null, extra: object = {}) => `data: ${json({ id:
 const finish = chunk({ delta: {}, finish_reason: 'stop' });
 const final = chunk({ delta: { role: 'assistant', content: '' }, finish_reason: 'stop' }, { usage });
 const content = chunk({ delta: { content: 'ok' }, finish_reason: null });
-async function fixture(answer: string, streamed: boolean, status = 200, requestMaxBytes = 4096, responseMaxBytes = 4096) {
-  let sent = '';
-  const metadata = { data: { id: model, endpoints: [{ model_id: model, tag, provider_name: 'Vendor', context_length: 100,
+async function fixture(answer: string, streamed: boolean, status = 200, requestMaxBytes = 4096, responseMaxBytes = 4096,
+  retained?: { document: { data: { id: string } }; tag: string }) {
+  let sent = '', metadataGets = 0, posts = 0;
+  const model = retained?.document.data.id ?? 'vendor/model', tag = retained?.tag ?? 'provider/region', metadataPath = `/api/v1/models/${model}/endpoints`;
+  const metadata = retained?.document ?? { data: { id: model, endpoints: [{ model_id: model, tag, provider_name: 'Vendor', context_length: 100,
     max_prompt_tokens: 100, max_completion_tokens: 10, status: 0, supported_parameters: ['max_tokens', 'tools', 'tool_choice'],
     pricing: { prompt: '0.01', completion: '0.02', request: '0', input_cache_read: '0', input_cache_write: '0', internal_reasoning: '0' } }] } };
   const server = createServer({ ca: caPem, cert: caPem, key }, (req, res) => {
-    if (req.url === metadataPath) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(metadata)); return; }
+    if (req.url === metadataPath) { metadataGets++; res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(metadata)); return; }
+    posts++;
     req.setEncoding('utf8'); req.on('data', text => { sent += text; }); req.on('end', () => {
       res.writeHead(status, { 'content-type': streamed && status === 200 ? 'text/event-stream' : 'application/json' }); res.end(answer);
     });
   }); servers.push(server); await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
   const addr = server.address(); if (!addr || typeof addr === 'string') throw new Error('fixture'); const origin = `https://127.0.0.1:${addr.port}`;
   const observed = await fetchOpenRouterTariff({ endpoint: `${origin}${metadataPath}`, modelId: model, endpointTag: tag, maxAgeMs: 1000,
-    maxResponseBytes: 4096, timeoutMs: 1000, caPem }, () => 10);
+    maxResponseBytes: retained ? 131072 : 4096, timeoutMs: 1000, caPem }, () => 10);
   const reference = { providerId: 'vendor', providerVersion: 1, modelId: 'model', modelVersion: 1 };
   const profile = { schemaVersion: 1, id: 'p', version: 1, scopeId: 'scope', reference, bindingDigest: 'a'.repeat(64),
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 5,
@@ -56,11 +60,31 @@ async function fixture(answer: string, streamed: boolean, status = 200, requestM
   const prepared = requestMaxBytes < 1000 ? null : await prepare();
   const quote = prepared && priced.quote({ profile, definition, command, requestDigest: modelInvocationRequestDigest(command),
     profileDigest: modelInvocationProfileDigest(profile as never), prepared } as never);
-  const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 };
+  const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: Math.max(1000, quote?.maxChargeMinorUnits ?? 0) };
   const reserved = quote && reserveProviderSpend(createProviderSpendAccount(budget), budget, { schemaVersion: 1, scopeId: 'scope', invocationId: 'call',
     budgetId: 'budget', budgetRevision: 1, currency: 'USD', quote, quoteDigest: providerSpendQuoteDigest(quote) });
-  return { priced, prepared, quote, reserved, prepare, seen: () => JSON.parse(sent || '{}') as Record<string, unknown> };
+  return { priced, prepared, quote, reserved, prepare, counts: () => [metadataGets, posts], seen: () => JSON.parse(sent || '{}') as Record<string, unknown> };
 }
+
+it.each([
+  ['sonnet-endpoints.json', 'anthropic'], ['sol-endpoints.json', 'openai'],
+  ['z-ai--glm-5.3-endpoints.json', 'z-ai'], ['deepseek--deepseek-v4.1-flash-endpoints.json', 'deepseek'],
+])('passes retained %s through local TLS metadata → v5 reservation → routed POST → final cost settlement', async (file, tag) => {
+  const document = JSON.parse(readFileSync(new URL(`../../fixtures/openrouter-endpoints/${file}`, import.meta.url), 'utf8')) as { data: { id: string } };
+  const answer = json({ id: 'generation', object: 'chat.completion', created: 1, model: document.data.id,
+    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'fixture' } }], usage });
+  const f = await fixture(answer, false, 200, 4096, 4096, { document, tag });
+  expect(f.counts()).toEqual([1, 0]); // Acquisition only; reserve/prepare add no network access.
+  const response = await f.priced.native.send(f.prepared);
+  if ('kind' in response) throw new Error(JSON.stringify(response));
+  expect(f.counts()).toEqual([1, 1]);
+  expect(f.seen()).toMatchObject({ model: document.data.id, tools, modalities: ['text'],
+    plugins: expect.arrayContaining([{ id: 'web', enabled: false }]), provider: { only: [tag], allow_fallbacks: false, require_parameters: true } });
+  const measurement = f.priced.native.observeSpending!(f.prepared, response)!;
+  expect(measurement).toMatchObject({ basis: 'provider-reported', exactMinorUnits: exactCents, source: { numericSource: cost } });
+  expect(settleProviderSpend(f.reserved!.account, f.reserved!.reservation, { kind: 'provider-reported', measurement: measurement as never,
+    evidenceDigest: 'b'.repeat(64) }).account).toMatchObject({ settledExactMinorUnits: exactCents, reservedMinorUnits: 0, frozen: false });
+});
 
 it.each([false, true])('reserves tools and stream=%s, settles raw usage.cost as provider-reported, sends pinned routing and max_tokens', async streamed => {
   const answer = streamed ? content + finish + final + 'data: [DONE]\n\n' : json({ id: 'generation', object: 'chat.completion', created: 1, model,
@@ -73,7 +97,10 @@ it.each([false, true])('reserves tools and stream=%s, settles raw usage.cost as 
   expect(measurement).toMatchObject({ basis: 'provider-reported', exactMinorUnits: exactCents, source: { numericSource: cost } });
   expect(settleProviderSpend(f.reserved!.account, f.reserved!.reservation, { kind: 'provider-reported', measurement: measurement as never,
     evidenceDigest: 'b'.repeat(64) }).account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: exactCents, frozen: false });
-  expect(f.seen()).toMatchObject({ max_tokens: 10, tools, provider: { only: [tag], allow_fallbacks: false, require_parameters: true } });
+  expect(f.seen()).toMatchObject({ max_tokens: 10, tools, modalities: ['text'], plugins: expect.arrayContaining([
+    { id: 'web', enabled: false }, { id: 'file-parser', enabled: false }, { id: 'fusion', enabled: false },
+  ]), provider: { only: [tag], allow_fallbacks: false, require_parameters: true } });
+  expect((f.seen()['plugins'] as { enabled: boolean }[]).every(plugin => plugin.enabled === false)).toBe(true);
   expect(f.seen()).not.toHaveProperty('max_completion_tokens'); expect(f.seen()).not.toHaveProperty('stream_options');
   if (streamed) expect(deltas).toEqual([{ kind: 'text', text: 'ok' }]);
 });

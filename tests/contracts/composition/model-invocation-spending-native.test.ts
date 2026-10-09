@@ -36,7 +36,7 @@ async function fixture(withBudget = true, allow = true, completePricing = true, 
       metadataGets++; response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ data: { id: 'vendor/model', endpoints: [{
         model_id: 'vendor/model', tag: 'provider/region', provider_name: 'Fixture', context_length: 4096, max_prompt_tokens: 1000,
         max_completion_tokens: 32, status: 0, supported_parameters: v5 ? ['max_tokens', 'tools', 'tool_choice'] : ['max_completion_tokens'],
-        pricing: { prompt: '0.000001', completion: '0.000002', ...(completePricing ? { request: '0' } : {}),
+        pricing: { prompt: '0.000001', completion: '0.000002', request: completePricing ? '0' : null,
           input_cache_read: '0', input_cache_write: '0', internal_reasoning: '0' },
       }] } })); return;
     }
@@ -104,8 +104,8 @@ it('acquires one native tariff, persists one reservation, and replays without re
   finally { invocationReader.close(); }
   expect(persisted?.spending).toMatchObject({ schemaVersion: 3, descriptor: { scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
     budgetId: 'budget', budgetRevision: 1, currency: 'USD', quote: { maxChargeMinorUnits: 2,
-      pricing: { id: 'openrouter-endpoint-tariff', version: 1, definition: expect.objectContaining({ modelId: 'vendor/model', endpointTag: 'provider/region' }) },
-      meter: { id: 'openrouter-text-reservation', version: 1, evidence: expect.objectContaining({ tariffDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }) } } },
+      pricing: { id: 'openrouter-endpoint-tariff', version: 2, definition: expect.objectContaining({ modelId: 'vendor/model', endpointTag: 'provider/region' }) },
+      meter: { id: 'openrouter-text-reservation', version: 2, evidence: expect.objectContaining({ tariffDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }) } } },
     disposition: { state: 'held', reason: 'missing-usage', observedMinorUnits: null, evidenceDigest: expect.stringMatching(/^[a-f0-9]{64}$/) } });
   const spendReader = await openSqliteProviderSpendIntegrityReader(f.ledger, { busyTimeoutMs: 1000 });
   let beforeReplay;
