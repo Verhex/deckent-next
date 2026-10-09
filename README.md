@@ -22,7 +22,7 @@ Every action by people, AI agents and tools is authorized, isolated, executed an
 <!-- Node and pre-release badges read public main package.json, not this local branch.
 Keep package.json version and CHANGELOG.md release line together at each release.
 npm badges: enable only after the first npm publish. The unscoped name `deckent` is not usable (conflicts with an existing
-package); the planned name is the scoped `@verhex/deckent` (owner 2026-10-07, not final). Verify package identity first.
+package); the planned name is the scoped `@verhex/deckent` (proposed name; not finalized). Verify package identity first.
 [![npm version](https://img.shields.io/npm/v/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 [![npm downloads](https://img.shields.io/npm/dm/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 -->
@@ -95,6 +95,18 @@ flowchart LR
   B --> M["5 · Choose a model<br/><sub>/model · session or default</sub>"]
   M --> W["6 · Work<br/><sub>approvals · modes</sub>"]
   W --> U["7 · Check usage<br/><sub>/usage · spend account</sub>"]
+```
+
+A **scope** is the stable identifier used to bind policy, work records and spending to this project.
+`--scope my-project` selects that identifier, not a directory or a sandbox. For a new project, choose
+it when previewing the initial policy; for an existing installation, use its configured scope ID.
+Reuse the same ID for subsequent commands. The terminal defaults to `terminal.scopeId`; open it with
+`deckent --scope my-project` to select this scope explicitly. See the [glossary](docs/glossary.md)
+for scope and realm definitions.
+
+```sh
+deckent init policy --scope my-project --preview
+deckent init policy --scope my-project --apply
 ```
 
 1. **Set up** once per project: `deckent init policy --scope <id> --preview` shows the first-run policy and
@@ -311,12 +323,22 @@ flowchart LR
 ## Get started
 
 Deckent runs on Linux or Windows WSL2 with Node.js ≥ 24.15.0 (Node 24 and 26 are supported); Docker is needed for
-coding workers. Until the npm package is published, build it once from source:
+the pinned bubblewrap build as well as coding workers. A C build toolchain is also required for the native
+sandbox helper. Until the npm package is published, build it once from source:
 
 ```sh
-git clone https://github.com/Verhex/deckent-next.git && cd deckent-next
-npm ci && npm run build && npm link
+git clone https://github.com/Verhex/deckent-next.git
+cd deckent-next
+npm ci
+node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/first-build
+node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/first-build
+npm run build
+npm link
 ```
+
+Use a fresh `--out` directory for another build. Do not proceed with sandbox work if the build reports
+`bubblewrap=ABSENT`; inspect the sandbox posture with `deckent doctor`. See the
+[contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart) for prerequisites and one test without a provider key.
 
 From then on, everything is `deckent`:
 
@@ -333,7 +355,9 @@ deckent --help                            # every command; deckent <command> --h
 
 ## Learn more
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): contracts, layers and invariants
+- [Architecture overview](docs/architecture-overview.md): layers, security, extension points and current limits
+- [Glossary](docs/glossary.md): scope, realm, work lifecycle, approvals and spending
+- [ARCHITECTURE.md](ARCHITECTURE.md): detailed engineering contracts and implementation notes (English/Turkish)
 - [Operator reference](.deckent/docs/architecture/operator-reference.md): worker toolchains, worker images, coding
   profiles, patch custody and installation custody rules
 - [CHANGELOG.md](CHANGELOG.md): what each release brought
