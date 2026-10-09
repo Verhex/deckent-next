@@ -162,6 +162,14 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     tool: toolRef, call: callRef,
     summary: auditSummarySchema }).strict(),
   /**
+   * SBX-05 x company policy (lead 2026-10-09): one write-set entry of an owner-approved destructive shell call that the decision still asks
+   * for (a write-floor file, or an ordinary edit in a mode that lowers none), applied as card-approved — recorded with the call's approval
+   * before its effect (no record, nothing applied). Policy denies and the configuration file are never admitted this way, nor a floor-named
+   * directory.
+   */
+  z.object({ kind: z.literal('sandbox-write-approved'), approvalId: identitySchema, cell: z.enum(['edit', 'edit-floor', 'edit-self-source']),
+    tool: toolRef, call: callRef, summary: auditSummarySchema }).strict(),
+  /**
    * A typed execution pool hold change (K5, owner 2026-09-30 option A): `hold` stops new task reservations of the installation-wide pool,
    * `resume` restarts them; running work is never touched. Every decision on the `pool`/`hold|resume` cell is recorded — a refusal too
    * (`state` null, nothing written); an allowed change commits in the same ledger transaction as the hold row (no record, no change).

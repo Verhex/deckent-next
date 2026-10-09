@@ -102,7 +102,10 @@ export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPerm
   writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean; readonly open: boolean } {
   // OPEN-SANDBOX (owner MODES-3 checkpoint 4): a call the launched full-access mode or the owner's card stands behind, in a full-access
   // turn, runs in the open view (network, HOME); an unattended call of that turn (the grant no longer holds) stays closed and read-only.
-  if (authority === 'owner-approved') return { writeFloorReadOnly: fullAccessTurn, projectReadOnly: false, writeSet: false, open: fullAccessTurn };
+  // SBX-05 x company policy (lead 2026-10-09): an owner-approved call given a write set (a destructive call outside full access) keeps its writes
+  // aside with the floor writable inside it; each entry is decided after the call (policy denies still apply).
+  if (authority === 'owner-approved') return writeSets && !fullAccessTurn ? { writeFloorReadOnly: false, projectReadOnly: false, writeSet: true, open: false }
+    : { writeFloorReadOnly: fullAccessTurn, projectReadOnly: false, writeSet: false, open: fullAccessTurn };
   if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false, open: true };
   // Everything else is the one unattended derivation (shared with long-lived MCP servers); SHELL-OVERLAY's write set is its
   // variant for a full-auto relaxation in a realm that keeps writes aside (a full-access turn's unattended call stays read-only).
@@ -115,7 +118,8 @@ export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPerm
  */
 export function describeShellWritePosture(view: ShellSandboxWriteView): string {
   if (view.projectReadOnly) return 'the project is read-only, .git included';
-  if (view.writeSet) return 'the project\'s writes are kept aside and applied after the call like edits (write floor changes are not applied), .git read-only';
+  if (view.writeSet) return view.writeFloorReadOnly ? 'the project\'s writes are kept aside and applied after the call like edits (write floor changes are not applied), .git read-only'
+    : 'the project\'s writes are kept aside and applied after the call as this approval allows; policy denies still apply, the configuration file and floor-named directories are not applied, .git read-only';
   const git = `.git ${view.repositoryWritable ? 'writable' : 'read-only'}`;
   // Named, not just implied: an owner-approved call also writes what the write floor would otherwise protect (SHELL-AUTONOMY, "the
   // floor means the owner approves, not never") — the one case that unlocks it is the one the card should say so about out loud.

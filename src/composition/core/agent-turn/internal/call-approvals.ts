@@ -31,7 +31,7 @@ export function createAgentCallApprovals(input: { readonly context: Awaited<Retu
     allowed(execution: Execution, approval: NonNullable<AgentToolCallAdmission['approval']>) { allowed.set(position(execution), approval); },
     /** The effect gate of one edit or shell call. The approval ledger and the integrity key (never created here) are opened only when the
      * gate needs the record; `close` releases them after the effect. */
-    gate(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution): { readonly gate: EffectApprovalGate; close(): Promise<void> } {
+    gate(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution): { readonly gate: EffectApprovalGate; readonly approvalId: string | null; close(): Promise<void> } {
       type Records = { store: ReturnType<typeof openSqliteApprovalStore>['store']; integrity: Awaited<ReturnType<typeof openLocalIntegrityAuthority>>; close: () => void };
       let opened: Promise<Records> | null = null;
       const approval = allowed.get(position(execution)) ?? null;
@@ -43,7 +43,7 @@ export function createAgentCallApprovals(input: { readonly context: Awaited<Retu
       })());
       const gate = agentToolCallApprovalGate(records, clock, { scopeId,
         subject: subject(execution, tool, describe(tool, args), agentToolArgumentsDigest(tool.name, args)), approval }, consumed);
-      return { gate, async close() { if (opened) (await opened.catch(() => null))?.close(); } };
+      return { gate, approvalId: approval?.approvalId ?? null, async close() { if (opened) (await opened.catch(() => null))?.close(); } };
     },
   };
 }

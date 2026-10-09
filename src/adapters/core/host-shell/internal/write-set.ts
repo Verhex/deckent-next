@@ -326,6 +326,11 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
       if (cell === 'denied') { report.notApplied.push({ rel: shown(change), reason: 'denied' }); continue; }
       const decision = await input.decider.decide(change.rel, cell);
       if (!decision.ok) { report.notApplied.push({ rel: shown(change), reason: decision.reason }); continue; }
+      // Astra 2182 x SBX-05 (lead 2026-10-09): a floor file an approval admits is written only into existing directories, so a shell call never
+      // makes a floor-named directory for it (an unattended floor entry is never admitted, so this only bounds approved ones).
+      if (change.kind === 'write' && cell !== 'edit' && change.rel.split('/').slice(0, -1).some((_, i, parts) => scan.newDirectories.has(parts.slice(0, i + 1).join('/')))) {
+        report.notApplied.push({ rel: change.rel, reason: cell === 'edit-authority' ? 'configuration-file' : 'write-floor' }); continue;
+      }
       // The entry's own reason comes first (a refused entry never decides its directories); then each new directory it needs.
       const parents = change.kind === 'write' ? await newParents(change.rel) : [];
       if (parents === null) { report.notApplied.push({ rel: change.rel, reason: 'parent-refused' }); continue; }

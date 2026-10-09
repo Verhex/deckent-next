@@ -442,7 +442,7 @@
   "terminal.approval.window.posture.project.writable": "proje yazılabilir; Deckent yetki dosyaları salt okunur",
   "terminal.approval.window.posture.project.writable-except-floor": "proje yazılabilir (korunan dosyalar salt okunur)",
   "terminal.approval.window.posture.project.read-only": "proje salt okunur",
-  "terminal.approval.window.posture.project.write-set": "projeye yazılanlar kenarda tutulur, düzenleme gibi uygulanır",
+  "terminal.approval.window.posture.project.write-set": "projeye yazılanlar kenarda tutulur ve çağrıdan sonra uygulanır; policy yasakları yine geçerlidir",
   "terminal.approval.window.posture.git.writable": "yazılabilir",
   "terminal.approval.window.posture.git.read-only": "salt okunur",
   "terminal.approval.window.posture.network.reachable": "açık",

@@ -61,7 +61,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   const cardView = (tool: string, args: Record<string, unknown>) => {
     const planned = plans.get(key(tool, args));
     if (!planned?.ok) return null;
-    const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
+    const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true, planned.tier === 'destructive' && planned.realm.writeSets === true);
     const realm = callRealm(planned.realm, write.open);
     return realm.ok ? { planned, view: sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write), realm } : null;
   };

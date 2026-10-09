@@ -25,9 +25,10 @@ const runtime = (mode: 'full-auto' | 'auto-edit' = 'full-auto', grants = GRANTS,
 
 it.skipIf(!ready).each([['ordinary', 'new-dir', GRANTS, true], ['protected', 'package.json', GRANTS, false], ['policy-denied', 'new-dir', [...GRANTS.slice(0,2),rule('write-op','operation',['workspace.file.write'],'deny')], false]] as const)('Astra: overlay parent creation - %s', async (_label, name, grants, expected) => {
  const f=await runtime('full-auto', [...grants]);
- const result=await f.call('run_shell',{command:`d=${name}; mkdir -p src/$d; echo bad > src/$d/payload.txt`});
+ const result=await f.call('run_shell',{command:`d=${name}; mkdir -p src/$d; echo bad > src/$d/payload.txt`},'allow');
+ expect(result.card).toBe(true);
+ expect(result.events.find(event=>event.kind==='approval.requested')).toMatchObject({risk:'shell-destructive',undo:'irreversible'});
  const exists=existsSync(join(f.project,'src',name));
  console.log('ASTRA_PROTECTED_PARENT',JSON.stringify({result,exists,effects:f.rows("SELECT target_kind,target_id,state FROM effect_intents")}));
- expect(result).toMatchObject({card:false});
  expect(exists).toBe(expected);
 },120000);

@@ -442,7 +442,7 @@
   "terminal.approval.window.posture.project.writable": "the project is writable; Deckent authority stays read-only",
   "terminal.approval.window.posture.project.writable-except-floor": "the project is writable except its protected files",
   "terminal.approval.window.posture.project.read-only": "the project is read-only",
-  "terminal.approval.window.posture.project.write-set": "the project's writes are kept aside and applied like edits",
+  "terminal.approval.window.posture.project.write-set": "the project's writes are kept aside and applied after the call; policy denies still apply",
   "terminal.approval.window.posture.git.writable": "writable",
   "terminal.approval.window.posture.git.read-only": "read-only",
   "terminal.approval.window.posture.network.reachable": "on",

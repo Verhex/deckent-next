@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
-import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
+import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, approvedWriteEntryAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding, type SessionStanding, type ShellPermissionTier,
   trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
 import { getConfigKnownSecrets, type TrustedClock } from '#platform/index.js';
@@ -123,6 +123,28 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       } };
     },
   });
+  /** SBX-05 x company policy (lead 2026-10-09): an owner-approved destructive call's write set. Denies and the configuration file are refused, a
+   * floor-named directory is never made; an entry the decision still asks for is applied as card-approved, recorded with `approvalId` first. */
+  const approvedWriteSet = (tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, approvalId: string): SandboxWriteDecider => ({
+    async decide(rel: string, cell: SandboxWriteCell) {
+      if (cell === 'edit-authority') return { ok: false, reason: 'configuration-file' };
+      if (cell !== 'edit' && rel.endsWith('/')) return { ok: false, reason: 'write-floor' };
+      const first = await writeSet(tool, args, execution, callId).decide(rel, cell);
+      if (first.ok || (first.reason !== 'approval-required' && first.reason !== 'write-floor')) return first;
+      const again = () => decide(tool, cell, undefined, { path: rel }, undefined, WORKSPACE_FILE_WRITE_OPERATION.operation), fresh = await again();
+      if (!fresh || fresh.decision === 'deny') return { ok: false, reason: 'denied-by-policy' };
+      const event = approvedWriteEntryAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: rel },
+        eventId: permissionModeEventId(scopeId, turnId, execution, sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`), 'sandbox-write-approved'),
+        call: { turnId, round: execution.round, index: execution.index, callId } }, fresh.revision, approvalId, cell);
+      try { await withAudit(audit => audit.record(event)); } catch { return { ok: false, reason: 'audit-unavailable' }; }
+      return { ok: true, gate: { async admit(descriptor, _decision, _command, _principal, effect) {
+        if (effect.record && (effect.record.state === 'settled' || effect.record.state === 'refused')) return;
+        if (descriptor.approval === 'required') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+        const now = await again();
+        if (!now || now.decision === 'deny' || now.revision !== fresh.revision) throw new PolicyAuthorizationError('POLICY_DENIED');
+      } } };
+    },
+  });
   return {
     async authorize(tool: AgentToolSpec, args: Record<string, unknown> | undefined): Promise<'allow' | 'deny' | 'require-approval'> {
       if (!args) return (await decide(tool, 'read'))?.decision === 'deny' ? 'deny' : 'require-approval';
@@ -180,9 +202,14 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       run: (gate: EffectApprovalGate, authority: ShellCallAuthority, writes?: SandboxWriteDecider,
         track?: (change: { readonly deleted: TrackedFilesAuditList; readonly overwritten: TrackedFilesAuditList }) => Promise<boolean>) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
       const key = keyOf(tool, args), kept = stored.get(key);
-      const { gate: inner, close } = approvals.gate(tool, args, execution);
+      const { gate: inner, close, approvalId } = approvals.gate(tool, args, execution);
       try {
-        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner, 'owner-approved');
+        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') {
+          // SBX-05 x company policy (lead 2026-10-09): the card lifts only the destructive-risk gate; outside full access the call's writes are kept
+          // aside and decided (`approvedWriteSet`) wherever the realm can keep them aside.
+          const approved = approvalId !== null && input.fullAccess !== true && kept !== undefined && 'cell' in kept && kept.cell === 'shell-destructive';
+          return await run(inner, 'owner-approved', approved ? approvedWriteSet(tool, args, execution, callId, approvalId) : undefined);
+        }
         const fresh = await decide(tool, kept.cell, undefined, args, kept.shell);
         if (!fresh || fresh.decision === 'deny') return { status: 'error', text: `[deckent] ${tool.name}: error=denied-by-policy (the policy changed; nothing ran)` };
         if (fresh.decision !== 'allow') return { status: 'error', text: `[deckent] ${tool.name}: error=approval-required (the policy changed; nothing ran)` };

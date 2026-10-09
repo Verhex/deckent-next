@@ -14,7 +14,7 @@ export { ModelActivationPolicyAuthorization, ModelCatalogPolicyAuthorization } f
 export { ModelInvocationPolicyAuthorization } from './internal/model-invocation.js';
 export { ProviderSpendAccountPolicyAuthorization } from './internal/provider-spend.js';
 export { AgentToolPolicyAuthorization, agentToolPolicyResource } from './internal/agent-tool.js';
-export { admitFullAccessTurn, agentCallPermissionMode, agentCallAuditEvent, decideAgentToolCall, isAuditedDecision, standingWouldLower, trackedFilesAuditEvent, type TrackedFilesAuditList } from './internal/permission-mode.js';
+export { admitFullAccessTurn, agentCallPermissionMode, agentCallAuditEvent, approvedWriteEntryAuditEvent, decideAgentToolCall, isAuditedDecision, standingWouldLower, trackedFilesAuditEvent, type TrackedFilesAuditList } from './internal/permission-mode.js';
 export type { AgentCallAuditInput, AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, FullAccessDecision, PermissionModeRelaxation, StandingApproval } from './internal/permission-mode.js';
 export { PermissionModeApplication, PermissionModeError, inspectPermissionMode } from './internal/permission-mode-admin.js';
 export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from './internal/permission-mode-admin.js';

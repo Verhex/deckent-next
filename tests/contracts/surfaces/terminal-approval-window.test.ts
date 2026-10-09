@@ -378,7 +378,7 @@ describe('approval window: reversibility by call kind and structured posture (T2
     const open = shell({ realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'writable', network: 'reachable', passedOver: [] });
     expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir; Deckent yetki dosyaları salt okunur, .git yazılabilir, ağ açık');
     const overlay = shell({ realm: 'enterprise-vm', containment: 'sandbox', project: 'write-set', git: 'read-only', network: 'closed', passedOver: [] });
-    expect(rows(overlay, 'en')).toContain('In the enterprise-vm sandbox: the project\'s writes are kept aside and applied like edits, .git read-only, network off');
+    expect(rows(overlay, 'en')).toContain('In the enterprise-vm sandbox: the project\'s writes are kept aside and applied after the call; policy denies still apply, .git read-only, network off');
     // The engine sentence is never worded into the posture rows; it stays in the producer's preview below the Preview heading.
     for (const approval of [host, degraded, open, overlay]) for (const locale of ['en', 'tr'] as const) {
       const lines = rows(approval, locale).split('\n'), heading = workSurfaceLabels(locale).approvalWindow.field.preview;
