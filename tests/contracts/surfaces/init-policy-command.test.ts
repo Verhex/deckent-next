@@ -26,13 +26,13 @@ it('upgrade uses the saved session language and names current rules without a st
         stdout: { write: (text: string) => { output.push(text); return true; } } });
       const argv = ['init', 'policy', '--scope', 'installation', '--upgrade', status === 'preview' ? '--preview' : '--apply'];
       expect(await main(argv, ctx)).toBe(0);
-      expect(output.join('')).toContain('güncel şablon kurallar'); expect(output.join('')).not.toContain('v5');
+      expect(output.join('')).toContain('güncel ilk kurulum kural'); expect(output.join('')).not.toContain('v5');
       output.length = 0;
       expect(await main([...argv, '--lang', 'en'], ctx)).toBe(0);
-      expect(output.join('')).toContain('current template rules'); expect(output.join('')).not.toContain('v5');
+      expect(output.join('')).toContain('current first-run rules'); expect(output.join('')).not.toContain('v5');
       output.length = 0;
       expect(await main(argv, { ...ctx, env: { ...ctx.env, DECKENT_LANGUAGE: 'en' } })).toBe(0);
-      expect(output.join('')).toContain('current template rules');
+      expect(output.join('')).toContain('current first-run rules');
     }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

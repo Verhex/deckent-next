@@ -59,12 +59,12 @@ describe('K1 real binary journeys', () => {
     const f = await fixture('project-override');
     // The fixture's installation directory (~/.deckent) is not owner-only, as a hand-made or pre-0da9f0d6 directory can be: pinned here so the
     // leftover report below does not depend on the umask.
-    await chmod(dirname(resolveGlobalConfigPaths(f.env).platformPath), 0o755);
+    await chmod(dirname(resolveGlobalConfigPaths(f.env).platformPath), 0o755); await chmod(join(f.project, '.deckent'), 0o755);
     const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null, modelInvocationDelivery: [] });
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable).
-    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'status']);
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'status']);
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
@@ -76,9 +76,14 @@ describe('K1 real binary journeys', () => {
     // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
     // SECRET-STORE-SWITCH (Astra 2456 N2): the other Core stores that cannot be listed now (here: the installation directory is not private,
     // so the file stores refuse it as unsafe) are `unverified`, never counted as empty; names are never read or shown.
+    // SECRET env guard (0805e626): with the environment store selected, doctor names any environment-held secret also kept in a file store (none here).
     expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null,
+      envGuard: { 'core.secret-store.file@1': { names: [], code: null }, 'core.secret-store.encrypted-file@1': { names: [], code: null } },
       leftover: { backends: [], entries: 0, unverified: ['core.secret-store.file@1', 'core.secret-store.encrypted-file@1'] } });
     expect(result.shellRealm).toMatchObject({ schemaVersion: 1 });
+    // S1 D2/D4 (backup): no stale restore stage; the project's .deckent directory is named with its mode (here open, so doctor would say chmod 700).
+    expect(result.recoveryFiles).toMatchObject({ leftovers: [], installationDirectory: { path: expect.stringMatching(/[\\/]project[\\/]\.deckent$/u) } });
+    if (process.platform !== 'win32') expect(result.recoveryFiles.installationDirectory.mode).toBe('0755');
     expect(result.poolReadiness).toEqual({ status: 'unconfigured', drift: null });
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
     expect(result.company).toEqual({ companyId: 'default' });
