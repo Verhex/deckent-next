@@ -97,10 +97,12 @@ async function fixture(locale: 'en' | 'tr' = 'tr') {
       for (const event of events) if (event.kind === 'text' || event.kind === 'done' || event.kind === 'context') yield event;
     } });
   close.push(() => view.instance.unmount()); await settle(60);
-  const press = async (...keys: string[]) => { for (const key of keys) { view.stdin.write(key); await settle(30); } };
+  // A step's frame is written at commit, its key listener attaches in a passive effect: yield one check phase so a key never precedes it.
+  const press = async (...keys: string[]) => { for (const key of keys) { await new Promise(resolve => setImmediate(resolve)); view.stdin.write(key); await settle(30); } };
   const choose = async (providerIndex: number, confirm = true) => {
     expect((await source.inspect()).choices[providerIndex]!.blocked).toBeNull();
-    await press('/model', ENTER); await until(() => view.stdout.frame.includes('claude'), 'providers');
+    // The status line also names 'claude' after a switch: wait for the loaded group rows, or the filter keys land in the loading window.
+    await press('/model', ENTER); await until(() => refs.every(ref => view.stdout.frame.includes(`${ref.providerId} ›`)) && !view.stdout.frame.includes(t('tui.panel.loading', {}, locale)), 'providers');
     const provider = refs[providerIndex]!.providerId;
     await press(provider); await until(() => view.stdout.frame.includes(terminalPanelLabels(locale).picker.filter.replace('{query}', provider)), 'filtered provider');
     await press(ENTER); await until(() => view.stdout.frame.includes(`› ${provider}`), 'provider models');

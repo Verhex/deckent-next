@@ -68,7 +68,7 @@ const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.st
   legacyKeys: z.array(z.object({ secretName: secretNameSchema, moveTo: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u) }).strict()).max(16).readonly().default([]),
   /** What a connected model's invocation profile starts with (data; the person can change the written profile on the governed config path). */
   profileDefaults: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, timeoutMs: positive, maxInFlight: positive,
-    maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u) }).strict(),
+    maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u), deliveryHeadroomBytes: positive }).strict(),
   kinds: z.array(kindSchema).min(1).readonly() }).strict().readonly();
 
 export type ProviderConnectKind = z.infer<typeof kindSchema>;

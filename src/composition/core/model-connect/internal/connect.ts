@@ -61,8 +61,8 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         await admitConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
           expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options);
       },
-      delivers: (profile, binding) => assessModelInvocationProfileDeliveries([{ profile: profile as never, definition: binding.definition, catalogRevision: binding.catalogRevision }],
-        configuredModelInvocationDeliverySurfaces(effective as never)).length === 0,
+      delivers: (profile, binding, spare) => assessModelInvocationProfileDeliveries([{ profile: profile as never, definition: binding.definition, catalogRevision: binding.catalogRevision }],
+        configuredModelInvocationDeliverySurfaces(effective as never).map(([surface, frame]) => [surface, { maxResultBytes: frame.maxResultBytes - spare }] as const)).length === 0,
       async audit(event) {
         const context = await scope(), store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
         try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)).record(event); } finally { store.close(); }

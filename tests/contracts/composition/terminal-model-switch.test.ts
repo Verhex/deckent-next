@@ -90,18 +90,22 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
       streamTurn: (messages, signal, input) => streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', messages, options, signal,
         ...input }, { chatTurn: async (_root, command, onEvent) => f.client().chatTurn(command, onEvent), cancelChatTurn: async (_root, command) => f.client().cancelChatTurn(command) }) });
     mounted.push(view); await settle(60);
-    const press = async (...keys: string[]) => { for (const key of keys) { view.stdin.write(key); await settle(35); } };
+    // A step's frame is written at commit, its key listener attaches in a passive effect: yield one check phase so a key never precedes it.
+    const press = async (...keys: string[]) => { for (const key of keys) { await new Promise(resolve => setImmediate(resolve)); view.stdin.write(key); await settle(35); } };
     // The /model provider groups follow the canonical catalog order (provider id): anthropic-api, then local-openai.
     const CLAUDE = 'anthropic-api', LOCAL = 'local-openai';
     // Each picker step renders asynchronously (group list, model list, readiness, confirmation), so every key waits for the step it acts on.
-    const switchTo = async (provider: typeof CLAUDE | typeof LOCAL) => {
-      const frame = () => view.stdout.frame, loading = t('tui.panel.loading', {}, 'tr');
+    const frame = () => view.stdout.frame, loading = t('tui.panel.loading', {}, 'tr');
+    const openGroup = async (provider: typeof CLAUDE | typeof LOCAL) => {
       // The status line and transcript also name providers, so wait for the loaded group rows themselves.
       await press('/model', ENTER); await until(() => frame().includes(`${CLAUDE} ›`) && frame().includes(`${LOCAL} ›`) && !frame().includes(loading), 'provider groups');
       if (provider === LOCAL) { await press(DOWN); await until(() => new RegExp(`> +${LOCAL} ›`).test(frame()), 'provider cursor'); }
       await press(ENTER); await until(() => frame().includes(`› ${provider}`) && !frame().includes(loading), 'provider models');
-      await press(ENTER);
-      expect(requests.length).toBeLessThanOrEqual(3);
+    };
+    const switchTo = async (provider: typeof CLAUDE | typeof LOCAL) => {
+      const sent = requests.length;
+      await openGroup(provider); await press(ENTER);
+      expect(requests.length).toBe(sent); // preparing a switch sends no model request
       // Choosing the model first prepares the switch (readiness); the confirmation step appears only after it.
       await until(() => frame().includes(t('tui.panel.model.session', {}, 'tr')), 'confirmation step');
       await press(ENTER); // the only confirmation after choosing the model
@@ -128,21 +132,26 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     const changed = await app.submit('set', { keyPath: 'provider_catalog', value: { ...current.provider_catalog, revision: 'catalog-after-cache' }, layer: 'project', scopeId: 'scope', principal,
       commandId: 'catalog-after-cache' });
     expect(changed.status).toBe('applied');
+    // CONVO-PARSERS: a direct turn on the stale activation is repaired inside invoke before any send — the governed activation admission (activate
+    // grant, delivery fit) re-pins the SAME binding at the new catalog revision; nothing is sent under the stale one. P1 DELIVERY-FIT: the
+    // connect-seeded profile keeps headroom, so the cache migration plus the fixture CA still deliver and the repair is admitted.
     const stale = await f.client().chatTurn({ schemaVersion: 1, turnId: 'stale-proof', scopeId: 'scope', reference, messages: [{ role: 'user', content: 'stale' }] }, () => undefined);
-    expect(stale.note).toContain('MODEL_INVOCATION_ACTIVATION_CONFLICT'); expect(requests).toHaveLength(2);
+    expect(stale.finish).toBe('stop'); expect(requests).toHaveLength(3); expect(requests[2]!.model).toBe('claude-sonnet-5-5');
+    const repaired = (await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference }, options)).activation!;
+    expect(repaired.revision).toBe(activationBefore!.revision + 1);
+    expect(repaired.catalogRevision).toBe('catalog-after-cache'); expect(repaired.binding).toEqual(activationBefore!.binding);
+    // The /model switch back finds the repaired activation current: it pins without another activation.
     await switchTo(CLAUDE); await press('after migration', ENTER);
-    await until(() => requests.length === 3, 'current activation next turn');
-    const activationAfter = (await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference }, options)).activation!;
-    expect(activationAfter.revision).toBe(activationBefore!.revision + 1);
-    expect(activationAfter.catalogRevision).toBe('catalog-after-cache'); expect(activationAfter.binding).toEqual(activationBefore!.binding);
-    expect(requests[2]!.model).toBe('claude-sonnet-5-5'); expect(requests[2]!.cache_control).toEqual({ type: 'ephemeral' });
+    await until(() => requests.length === 4, 'current activation next turn');
+    expect((await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference }, options)).activation).toEqual(repaired);
+    expect(requests[3]!.model).toBe('claude-sonnet-5-5'); expect(requests[3]!.cache_control).toEqual({ type: 'ephemeral' });
     // A known unsupported adapter is refused before pin; the previous Claude pin keeps serving the next turn.
     const unsupported = JSON.parse(await readFile(path, 'utf8')).provider_invocation_profiles;
     unsupported.profiles.find((p: { reference: ModelReference }) => p.reference.providerId === local.providerId).adapter = { id: 'fixture-unsupported', version: 1, definition: {} };
-    expect((await app.submit('set', { keyPath: 'provider_invocation_profiles', value: unsupported, layer: 'project', scopeId: 'scope', principal })).status).toBe('applied');
-    await press('/model', ENTER); await until(() => view.stdout.frame.includes('local-openai'), 'unsupported list'); await press(ENTER);
-    await until(() => view.stdout.frame.includes('desteklenen protokol'), 'refusal and next step'); await press(ENTER, ESC, ESC);
-    await press('still Claude', ENTER); await until(() => requests.length === 4, 'refused switch preserves pin');
+    expect((await app.submit('set', { keyPath: 'provider_invocation_profiles', value: unsupported, layer: 'project', scopeId: 'scope', principal,
+      commandId: 'unsupported-adapter' })).status).toBe('applied');
+    await openGroup(LOCAL); await until(() => frame().includes('desteklenen protokol'), 'refusal and next step'); await press(ENTER, ESC, ESC);
+    await press('still Claude', ENTER); await until(() => requests.length === 5, 'refused switch preserves pin');
     expect(f.state.requests).toHaveLength(1);
   }, 60_000);
 });
