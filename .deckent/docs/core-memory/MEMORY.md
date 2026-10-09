@@ -24,4 +24,4 @@ Ortak ürün hedefi ve karar ölçütü: **[Product north star](project_product_
 
 ## Eski numara eşlemesi (2026-09-23 birleştirme)
 
-Eski 1 (ölçek/MVP) → north star. Eski 3-kapanış, 9, 15, xverify-claim, closure-OS → 1. Eski 2, 3-onay, 4-SSOT, fallback-devir, dev-operating-contract → 2 (contract'ın kalanı `CLAUDE.md`/`AGENTS.md` "Current development phase"). Eski 4-Türkçe, 7, 12 → 3. Eski 11, living-documents → 4. Eski 6, 8, bottleneck → 5. Eski 10, tier-routing, Cursor-ortamı, owner-model-policy → 6. Eski 5, verification-cadence → 7. Eski 14 → 8. Eski 13 → 9.
+Eski 1 (ölçek/MVP) → north star. Eski 3-kapanış, 9, 15, xverify-claim, closure-OS → 1. Eski 2, 3-onay, 4-SSOT, fallback-devir, dev-operating-contract → 2 (contract'ın kalanı `.agents/skills/deckent-next-refactor/internal-contract.md` "Current development phase"; DOC-01 2026-10-09, lead transfer copy in external ROOT-DOCS proof). Eski 4-Türkçe, 7, 12 → 3. Eski 11, living-documents → 4. Eski 6, 8, bottleneck → 5. Eski 10, tier-routing, Cursor-ortamı, owner-model-policy → 6. Eski 5, verification-cadence → 7. Eski 14 → 8. Eski 13 → 9.
