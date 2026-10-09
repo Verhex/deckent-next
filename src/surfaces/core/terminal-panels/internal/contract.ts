@@ -139,6 +139,8 @@ export interface ModelPanelSource {
   readonly budget?: BudgetPanelPort;
   /** CACHE-SLICE1: the governed one-step "turn the 5-minute prompt cache on" for existing profiles (absent: not offered). */
   readonly cache?: CachePanelPort;
+  /** OpenAI wire protocol migration, with a mandatory preview and existing governed writer. */
+  readonly protocol?: CachePanelPort;
   /** CACHE-SLICE1: the conversation's measured context when it is at or above the registry threshold (null: below it or not measured yet); a
    * model switch then asks "new context / continue" before it pins. */
   largeContext?(): number | null;
@@ -271,6 +273,7 @@ export interface PanelLabels {
   readonly provider: ProviderPanelLabels;
   readonly budget: BudgetPanelLabels;
   readonly cache: CachePanelLabels;
+  readonly protocol?: CachePanelLabels;
 }
 export interface PanelPorts {
   readonly mode?: ModePanelPort;

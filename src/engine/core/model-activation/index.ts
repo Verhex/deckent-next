@@ -14,3 +14,4 @@ export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail, WorkerAdmiss
 export { ModelConnectApplication, ModelConnectError, declareConnectedModel } from './internal/connect.js';
 export type { ModelConnectBinding, ModelConnectDefaults, ModelConnectKind, ModelConnectLayer, ModelConnectPorts } from './internal/connect.js';
 export { planProfileCache, type ProfileCacheOffer, type ProfileCachePlan } from './internal/profile-cache.js';
+export { planProfileChanges, type ProfileChange, type ProfileChangePlan } from './internal/profile-changes.js';

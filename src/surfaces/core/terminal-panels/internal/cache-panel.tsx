@@ -19,9 +19,10 @@ export function cacheConfirmTree(words: CachePanelLabels): PickerTree {
  * what it costs (each model's own write and read price against its input price, and after how many reuses within 5 minutes it pays back); nothing
  * is written before the answer, and the write is the governed `/config` writer's (a policy approval opens after the window closes).
  */
-export function CacheWindow({ port, view, labels, push, openApproval, onError, onDone }: { readonly port: CachePanelPort; readonly view: CachePanelView; readonly labels: PanelLabels;
+export function CacheWindow({ port, view, labels, words = labels.cache, push, openApproval, onError, onDone }: { readonly port: CachePanelPort; readonly view: CachePanelView; readonly labels: PanelLabels;
+  readonly words?: CachePanelLabels;
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval?: (approvalId: string) => void; readonly onError: (error: unknown) => void; readonly onDone: () => void }) {
-  const words = labels.cache, room = usePickerRoom(view.lines.length);
+  const room = usePickerRoom(view.lines.length);
   const [busy, setBusy] = useState(false);
   const title = [span(words.title, { bold: true })];
   if (busy) return <Window title={title} body={[{ spans: [span(labels.loading)] }]} hints={words.hints} position={labels.position} />;

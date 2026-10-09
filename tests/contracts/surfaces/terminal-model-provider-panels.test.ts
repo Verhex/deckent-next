@@ -482,6 +482,19 @@ describe('stage 1 budget window (/model and /provider)', () => {
 });
 
 describe('CACHE-SLICE1: the governed cache migration row and the model-switch question', () => {
+  it('Responses migration in /model shows a Turkish preview, writes once on confirmation and opens an existing approval; cancel writes nothing', async () => {
+    for (const confirm of [true, false]) {
+      const { port, pins } = modelPort(MODELS), applied: number[] = [];
+      const protocol = { inspect: async () => ({ detail: '1 model Responses kullanabilir', lines: [{ label: 'GPT-6.1 Sol', text: 'Chat Completions → Responses; API anahtarı korunur.' }] }),
+        apply: async (): Promise<ConfigPanelOutcome> => { applied.push(1); return { status: 'approval-pending', lines: ['Onay bekleniyor.'], approvalId: 'protocol-approval' }; } };
+      const { element, calls } = panel('model', { model: { ...port, protocol } }, 'tr');
+      const screen = mount(element, 140, 40); await settle(80);
+      expect(screen.frame()).toContain('Güncel protokole geç');
+      await screen.press(ENTER); expect(screen.frame()).toContain('API anahtarı korunur'); expect(applied).toEqual([]);
+      await screen.press(confirm ? ENTER : ESC, 80);
+      expect(applied).toEqual(confirm ? [1] : []); expect(calls.approvals).toEqual(confirm ? ['protocol-approval'] : []); expect(pins).toEqual([]);
+    }
+  });
   const COST = { detail: '1 model(s) without a cache choice', lines: [{ label: '', text: 'WHAT-CHANGES' },
     { label: 'claude-sonnet-5-5', text: 'a cache write costs 1.25× the input price, a cache read 0.05×; it pays back after 1 reuse(s) within 5 minutes' }] };
   const cachePort = (status: 'applied' | 'approval-pending' = 'applied') => {

@@ -1,1 +1,1 @@
-export { connectConfiguredModel, planConfiguredProfileCache, type ModelConnectHost } from './internal/connect.js';
+export { connectConfiguredModel, planConfiguredProfileCache, planConfiguredProfileProtocol, type ModelConnectHost } from './internal/connect.js';

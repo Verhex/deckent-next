@@ -7,7 +7,7 @@ import { BudgetWindow, budgetEntry } from './budget-panel.js';
 import { CacheWindow, cacheEntry } from './cache-panel.js';
 import type { BudgetPanelView, CachePanelView, ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
 
-const SESSION = 'session', DEFAULT = 'default', BUDGET = ':budget', CACHE = ':cache', FRESH = 'fresh', KEEP = 'keep';
+const SESSION = 'session', DEFAULT = 'default', BUDGET = ':budget', CACHE = ':cache', PROTOCOL = ':protocol', FRESH = 'fresh', KEEP = 'keep';
 const keyOf = (reference: ModelPanelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 const same = (left: ModelPanelReference | null, right: ModelPanelReference) => left !== null && keyOf(left) === keyOf(right);
 
@@ -42,6 +42,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const [budget, setBudget] = useState<BudgetPanelView | null>(null), [budgetOpen, setBudgetOpen] = useState(false);
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice) and the model-switch question over a large context.
   const [cache, setCache] = useState<CachePanelView | null>(null), [cacheOpen, setCacheOpen] = useState(false);
+  const [protocol, setProtocol] = useState<CachePanelView | null>(null), [protocolOpen, setProtocolOpen] = useState(false);
   const [switching, setSwitching] = useState<Readonly<{ choice: ModelPanelChoice; result: PickerResult; tokens: number }> | null>(null);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
@@ -52,17 +53,22 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     port.budget?.inspect().then(value => { if (live) setBudget(value); }, () => undefined);
     port.cache?.inspect().then(value => { if (live) setCache(value); }, () => undefined);
+    port.protocol?.inspect().then(value => { if (live) setProtocol(value); }, () => undefined);
     return () => { live = false; };
   }, [port]);
   if (!view) return <Window title={[span(labels.loading)]} hints={words.hints} position={labels.position} onClose={onClose} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
   if (cacheOpen && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
+  if (protocolOpen && protocol && port.protocol && labels.protocol) return <CacheWindow port={port.protocol} view={protocol} words={labels.protocol} labels={labels}
+    push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   const entry = budgetEntry(budget, labels.budget), cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault));
   const tree: PickerTree = { ...listed, items: [...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail, unscoped: true }] : []),
+    ...(protocol && labels.protocol ? [{ id: PROTOCOL, label: labels.protocol.entry, detail: protocol.detail, unscoped: true }] : []),
     ...(cacheRow ? [{ id: CACHE, label: cacheRow.label, detail: cacheRow.detail, unscoped: true }] : []), ...listed.items] };
   const chosen = (result: PickerResult, fresh?: boolean) => {
     if (result.kind === 'selected' && result.id === BUDGET) { setBudgetOpen(true); return; }
     if (result.kind === 'selected' && result.id === CACHE) { setCacheOpen(true); return; }
+    if (result.kind === 'selected' && result.id === PROTOCOL) { setProtocolOpen(true); return; }
     const choice = result.kind === 'selected' ? view.choices.find(item => keyOf(item.reference) === result.id && item.blocked === null) : undefined;
     if (!choice) { onClose(); return; }
     // A switch to another model over a large context never resets or carries it silently: the person answers "new context / continue" first.

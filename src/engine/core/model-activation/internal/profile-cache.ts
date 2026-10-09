@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from 'node:util';
+import { planProfileChanges } from './profile-changes.js';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelConnectLayer } from './connect.js';
 
@@ -17,26 +17,11 @@ export type ProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference:
  */
 export function planProfileCache(layers: Readonly<Record<ModelConnectLayer, Record<string, unknown>>>, scopeId: string,
   offer: (profile: unknown) => ProfileCacheOffer | null): ProfileCachePlan {
-  const models: { reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }[] = [];
-  const writes: { layer: ModelConnectLayer; value: Record<string, unknown> }[] = [], shared: ModelReference[] = [];
-  const profilesOf = (layer: ModelConnectLayer) => (layers[layer]['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles;
-  const mine = (profile: unknown) => { const item = profile as { scopeId?: unknown; reference?: ModelReference } | null; return item?.scopeId === scopeId && item.reference ? item.reference : null; };
-  const inProject = Array.isArray(profilesOf('global')) ? (profilesOf('project') ?? []).flatMap(profile => { const reference = mine(profile); return reference ? [reference] : []; }) : [];
-  const blocked = (reference: ModelReference) => inProject.some(item => isDeepStrictEqual(item, reference));
-  for (const layer of ['global', 'project'] as const) {
-    const document = layers[layer]['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined;
-    if (!Array.isArray(document?.profiles)) continue;
-    let changed = false;
-    const profiles = document.profiles.map(profile => {
-      const reference = mine(profile), offered = reference ? offer(profile) : null;
-      if (!reference || !offered) return profile;
-      if (blocked(reference)) { if (!shared.some(item => isDeepStrictEqual(item, reference))) shared.push(reference); return profile; }
-      changed = true;
-      if (!models.some(model => isDeepStrictEqual(model.reference, reference))) models.push({ reference, ttl: offered.ttl, modelId: offered.modelId,
-        writeRatio: offered.writeRatio, readRatio: offered.readRatio });
-      return offered.next;
-    });
-    if (changed) writes.push({ layer, value: { ...document, profiles } });
-  }
-  return { models, writes, shared };
+  const plan = planProfileChanges(layers, scopeId, profile => {
+    const value = offer(profile);
+    if (!value) return null;
+    const { next, ...detail } = value;
+    return { next, detail };
+  });
+  return { ...plan, models: plan.models.map(({ reference, detail }) => ({ reference, ...detail })) };
 }

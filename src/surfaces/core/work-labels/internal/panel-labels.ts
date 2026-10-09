@@ -54,5 +54,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       confirmUnfreeze: t('tui.panel.budget.confirmUnfreeze', {}, locale), cancel: t('tui.panel.budget.cancel', {}, locale), belowSettled: t('tui.panel.budget.belowSettled', {}, locale) },
     cache: { entry: t('tui.panel.cache.entry', {}, locale), title: t('tui.panel.cache.title', {}, locale), confirm: t('tui.panel.cache.confirm', {}, locale),
       cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },
+    protocol: { entry: t('tui.panel.protocol.entry', {}, locale), title: t('tui.panel.protocol.title', {}, locale), confirm: t('tui.panel.protocol.confirm', {}, locale),
+      cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },
   };
 }
