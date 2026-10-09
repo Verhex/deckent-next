@@ -688,7 +688,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   profile on every layer that authors profiles (user first: a project snapshot stays a subset) with endpoint preset, the connection's secret NAME
   as `credentialRef` (https only; plain-http local servers get none), published tariff (Anthropic) or, for the OpenAI chat adapter (stage 1), the
   exact verified row of `lookupOpenAiCompatibleTariff(endpoint, nativeId)` (`published`); a remote model without one is refused before any
-  catalog/config write (`MODEL_CONNECT_TARIFF_UNVERIFIED`; the adapter step runs first), only loopback keeps the zero tariff (`unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver → chat activation →
+  catalog/config write (`MODEL_CONNECT_TARIFF_UNVERIFIED`; the adapter step runs first), only loopback keeps the zero tariff (`unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver with the registry's `deliveryHeadroomBytes` to spare, sized on the profile as written (P1 DELIVERY-FIT 2026-10-09: an exact fit broke on later governed growth such as the cache window) → chat activation →
   one `model-connect` audit subject. A config approval stops the run (`approval-pending`); the same command id continues. No key value is taken.
 - **Seedless provider discovery (PROVIDERS-CLAIMS, owner 2026-10-09):** when the provider-connect kind has no seed, `/provider` offers model
   connection before a list exists. Address selection precedes a read-only `GET /v1/models` through the existing probe transport/endpoint rules
