@@ -10,6 +10,8 @@ export interface TerminalAgentTurnPorts {
   chatTurn(projectRoot: string, command: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, options: ConfigLoadOptions,
     signal?: AbortSignal): Promise<ChatTurnResult>;
   cancelChatTurn(projectRoot: string, command: ChatTurnCancellation, options: ConfigLoadOptions): Promise<unknown>;
+  /** Existing governed inspection of this round's settled measurement; failure leaves cache usage unknown. */
+  settledUsage?(projectRoot: string, command: ChatTurnCommand, round: number, options: ConfigLoadOptions): Promise<NonNullable<Extract<TurnDelta, { kind: 'usage' }>['cache']> | null>;
   /** Local preflight; returns service admission for the summarizing phase when available. */
   preflight?(projectRoot: string, options: ConfigLoadOptions, reference?: ModelReference): Promise<AgentTurnAdmission | void>;
 }
@@ -44,7 +46,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     .catch(() => undefined);
   const local = new AbortController(), signal = input.signal ? AbortSignal.any([input.signal, local.signal]) : local.signal;
   // Preserve engine targets; the renderer derives display targets from message events.
-  const queue: TurnDelta[] = [], targets = new Map<string, string | null>(), names = new Map<string, string>();
+  const queue: Array<{ delta: TurnDelta; usageRound: number | null }> = [], targets = new Map<string, string | null>(), names = new Map<string, string>();
   let outcome: Outcome | null = null, wake: (() => void) | null = null, roundText = '';
   // Follow measured history and mark at most one compaction per round using the service admission.
   const history: AgentTurnMessage[] = [...input.messages];
@@ -61,7 +63,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     }
     if (event.kind === 'context') round = event.round;
     const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission) && compactionGuard.plan(history) !== null;
-    queue.push(toDelta(event, targets, compacting, names)); notify();
+    queue.push({ delta: toDelta(event, targets, compacting, names, admission?.compactionThresholdTokens), usageRound: event.kind === 'usage' ? event.round : null }); notify();
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.
   const onAbort = () => { void cancel(); };
@@ -73,7 +75,12 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     void ports.chatTurn(input.projectRoot, command, onEvent, input.options, signal)
       .then(result => { outcome = { result }; }, (error: unknown) => { outcome = { error }; }).finally(notify);
     for (;;) {
-      while (queue.length > 0) yield queue.shift()!;
+      while (queue.length > 0) {
+        const { delta, usageRound } = queue.shift()!;
+        const cache = usageRound !== null && ports.settledUsage && !signal.aborted
+          ? await ports.settledUsage(input.projectRoot, command, usageRound, input.options).catch(() => null) : null;
+        yield delta.kind === 'usage' && cache?.promptTokens === delta.promptTokens ? { ...delta, cache } : delta;
+      }
       if (outcome) break;
       await new Promise<void>(resolve => { wake = resolve; if (queue.length > 0 || outcome) notify(); });
     }
@@ -96,13 +103,13 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   }
 }
 
-function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>, compacting: boolean, names: ReadonlyMap<string, string> = new Map()): TurnDelta {
+function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>, compacting: boolean, names: ReadonlyMap<string, string> = new Map(), compactionThresholdTokens?: number): TurnDelta {
   switch (event.kind) {
     case 'text': case 'reasoning': return { kind: event.kind, text: event.text };
     case 'usage': return { kind: 'usage', promptTokens: event.promptTokens, completionTokens: event.completionTokens, reasoningTokens: null };
     case 'message': return { kind: 'message', message: event.message };
     case 'context': return { kind: 'context', promptTokens: event.promptTokens, windowTokens: event.windowTokens, quality: event.quality,
-      ...(compacting ? { compacting } : {}) };
+      ...(compacting ? { compacting } : {}), ...(compactionThresholdTokens === undefined ? {} : { compactionThresholdTokens }) };
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };
     case 'approval.requested': return { kind: 'approval', phase: 'requested', callId: event.callId, approvalId: event.approvalId, revision: event.revision, summary: event.summary, preview: event.preview,
       expiresAt: event.expiresAt, ...(event.standing ? { standing: event.standing } : {}), ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}),

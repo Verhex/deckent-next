@@ -16,7 +16,7 @@
     "workerCard": { "primitive": "novaGo", "ansi16": "32", "class": "supplemental", "contrast": "border" },
     "windowBorder": { "primitive": "seaTextMuted", "ansi16": "90", "class": "decorative", "contrast": "border" },
     "windowTitle": { "primitive": "novaGlow", "ansi16": "36", "attrs": ["1"], "class": "primary" },
-    "selection": { "primitive": "novaGlowBright", "ansi16": "96", "attrs": ["1"], "class": "primary" },
+    "selection": { "primitive": "novaGlowBright", "ansi16": "96", "attrs": ["1", "7"], "class": "primary" },
     "diffAdded": { "primitive": "novaGo", "ansi16": "32", "class": "supplemental" },
     "diffRemoved": { "primitive": "novaAbort", "ansi16": "31", "class": "supplemental" },
     "modeIndicator": { "primitive": "novaAmber", "ansi16": "33", "class": "supplemental" },

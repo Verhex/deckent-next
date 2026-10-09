@@ -104,9 +104,14 @@ the footer). A failed call keeps the history unchanged and closes the turn with 
 conversation. Re-asking the model was not chosen: a second governed call would need another command id scheme and can fail again; the
 mechanical excerpt is deterministic, free and labelled. Open: the `compacted` event does not carry the summary kind (a protocol field
 would be a checkpoint), and a newest exchange larger than the window cannot be compacted (admission then refuses).
-**History lifecycle and bounded turn memory (Astra 2091 fix, Jev 4a702440).** The interactive workline's agent path sends the whole
-conversation (no message-count cut; `terminal.chat.historyMessages` now bounds only the plain line mode); the runtime owns its
-lifecycle. Compaction is also triggered when the exact serialized history exceeds 75% of the service input bound
+**History lifecycle and bounded turn memory (Astra 2091 fix, Jev 4a702440; W2 owner amendment 2026-10-08, batch A candidate).**
+The streamed agent path (rich workline) sends and saves the whole conversation; the runtime measures and compacts it, so no count cut drops the
+first instruction (Astra 2091 R1). `terminal.chat.historyMessages` windows only the plain (non-streaming) path through `boundAgentHistory`
+(complete tool-call exchanges stay together). The W2 lane also capped the streamed path; batch A kept the accepted contract instead
+(Jev 280abf6b 0.86, below 0.90: owner decision open) and bounds growth with the absolute token trigger below.
+The runtime owns token/byte admission and compaction. Registry `terminal-chat-defaults.json` supplies 40 messages, 16384 output tokens and
+`compactionThresholdTokens=100000` as a proposed absolute input trigger alongside the 75 percent window and byte thresholds. The same admission
+reaches the producer and terminal phase projection. Explicit configured limits win. Summary quality and live savings remain unmeasured. Compaction is also triggered when the exact serialized history exceeds 75% of the service input bound
 (`service.inputMaxBytes`, passed by the composition as `admission.requestMaxBytes`), so a conversation keeps fitting the client's next
 request even when the window is unknown. The loop keeps no copy of appended messages: the result carries the final answer, a count and
 the incremental digest (same value as the digest of the whole array); a replay appends nothing (count 0, recorded digest). Read dedupe
@@ -154,7 +159,7 @@ verified records: open calls of ended service owners settle `unknown` (above); t
 `onModelAllocationSlotsReleased({ allocations, released, settled, inconsistent })`, called when anything was released, settled or
 reported. No ledger schema or version change. Cost: O(retained rows) of the allocation, only when a slot is held or a row is open.
 
-**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 6),
+**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 9; W2 adds the running binary version/channel),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
 Deckent data root (workspace-relative when inside the project, else marked unreadable; v4 names Deckent's own state protected),
 the configuration path, protected places, the declared tools by class (read / edit / shell), that policy and the permission mode
@@ -246,3 +251,7 @@ context, never authority; they follow the composer history switch `terminal.pers
 pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s).
 
 **MODEL-INGRESS P2 (2026-10-06, `wave/2`, `363fd061`, `9dd85f7b`).** Modele giden ham alanlar (kullanıcı/araç mesajları, onay kartı önizlemesi, MCP araç açıklaması pini) P1 yardımcısı `projectModelIngressField` ile işlenir; gizli/bidi/tag Unicode model görmeden `[hidden-unicode: N cp, aralık, özet]` notuna çevrilir. Tag/şifreli payload çözülürse karar `quarantine`: model yalnız "result withheld" cümlesini görür, çözülmüş metin modele ve loga girmez (decode model dışında). ZWNJ/LRM/RLM işaretlenir, silinmez; ZWJ/VS15/16 korunur; düz metin `unchanged` kalır ve kayıt yazılmaz. Karantinada tam erişim değilse araç sonucu onay ister; full-access'te onay sorulmaz, alan withheld edilir (`AgentTurnInput.fullAccess`). Sıra: mesaj → projeksiyon → carry/compaction guard projekte mesajlardan kurulur (gizli payload carry'ye girmez). Audit subject `model-ingress` yalnız özet taşır, disposition kapalı `note|quarantine`; `AgentTurnPorts.recordIngress` hatası alanı withheld eder. Aynı not onay kartında ve terminalde (`terminal.safety.hiddenCount`) EN/TR görünür. Açık: P3 (araç/MCP şema açıklaması ve argüman JSON tam kapsam), eşleşmemiş ZWJ/VS sınırı. Proof `proof/W2-INGRESS-P2-2026-10-06/`.
+
+**W2 FIRST-TEST-FIXES candidate (2026-10-08, base `8cc60c2d`; no live acceptance).** System prompt v9 states the shipped `PACKAGE_VERSION` and release channel without timestamps; it warns that the project checkout may differ from the running service. Paid-call evidence corrected: request output bound was 16384 (`terminal.chat.maxCompletionTokens` → `max_completion_tokens` → Anthropic `max_tokens`), while profile 128000 is a ceiling. Anthropic prepare optionally receives cancellation and counts the exact prompt through its admitted same-origin endpoint; the resulting estimate is pinned to that prepared token. Pure repeated quotes reserve count + 25 percent + 2048 tokens, output cap and the dearest applicable input class/tier; failures retain the byte bound. The provider does not guarantee an estimate error ceiling: a formal never-under-reserve claim is unproven; existing overrun hold/freeze remains. Context measurement and invocation prepare may each count; no cross-request cache or prompt-cache policy change. Proof/decisions: `proof/FIRST-TEST-FIXES-2026-10-08/W2-TERMINAL/`.
+
+W2 cache telemetry keeps runtime protocol25 unchanged. The shared model inspection application adds local `ModelInvocationCommandQuery` v1 (scope, reference, command id) for read-only lookup, then delegates to the exact invocation query after fresh read authorization and immutable identity verification. SQLite uses the existing verified receipt decoder in a read-only reader, not a model replay or new effect path. The terminal normalizes only settled measured-tariff cache dimensions; missing/held/denied/mismatched measurements stay unknown.

@@ -293,7 +293,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(compacted.messages[0]!.content).toContain('- a.ts exports a'); expect(compacted.messages[0]!.content).toContain('1. question 0');
     const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
     // One system message: the service segment ahead of the client's own prompt (TL-C D4); the client's history never holds the segment.
-    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v8\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
+    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v9\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
     expect(sent.filter(message => message.role === 'system')).toHaveLength(1);
     expect(compacted.messages.some(message => message.content.includes('Deckent runtime instructions'))).toBe(false);
     // The summary call never carries the switch when the model does not declare it (TL-C D8).
@@ -329,7 +329,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const sent = f.state.requests[0]!['messages'] as { role: string; content: string }[];
     expect(sent.map(message => message.role)).toEqual(['system', 'user']);
     const system = sent[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v8]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
+    expect(system.startsWith('[Deckent runtime instructions v9]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
     expect(system).toContain('Context contract: carry v1, render v1.'); expect(system).toContain(`Project root: ${f.project}`);
     expect(system).toContain('Deckent data root: .deckent/live-data'); expect(system).not.toContain('terminal-sessions'); expect(system).toMatch(/saved conversations[^\n]*protected/);
     expect(system).toContain('.deckent/config.json'); expect(system).toContain('you are native-chat (Deckent catalog: provider local-openai v1, model chat v1), running inside Deckent');
@@ -464,6 +464,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const cfgPath = join(f.project, '.deckent/config.json'), cfg = JSON.parse(await readFile(cfgPath, 'utf8'));
     cfg.provider_invocation_profiles.profiles[0].adapter.definition.maxOutputTokens = 20_000;
     cfg.terminal.chat.maxCompletionTokens = 16_384;
+    // This repro isolates the byte headroom (262144); the absolute token threshold (registry 100000) is set out of its way.
+    cfg.terminal.chat.compactionThresholdTokens = 1_000_000;
     await writeFile(cfgPath, JSON.stringify(cfg)); await f.start();
     f.state.script = [{ summary: '{"objective":"o","findings":[],"decisions":[],"unresolved":[],"nextActions":[],"inspectedAreas":[]}' },
       { content: 'b'.repeat(64_000) }, { content: 'Next answer.' }];

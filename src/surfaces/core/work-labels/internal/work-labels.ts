@@ -96,7 +96,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       restartPrompt: t('terminal.window.restartPrompt', {}, locale),
       restartKept: t('terminal.window.restartKept', {}, locale) },
     live: { monitorTitle: t('terminal.live.monitorTitle', {}, locale), runsTitle: t('terminal.live.runsTitle', {}, locale), tasksTitle: t('terminal.live.tasksTitle', {}, locale),
-      hints: t('terminal.live.hints', {}, locale), monitorHints: t('terminal.live.monitorHints', {}, locale), statusWorkers: t('terminal.live.statusWorkers', {}, locale),
+      hints: t('terminal.live.hints', {}, locale), tasksHints: t('terminal.live.tasksHints', {}, locale), watchHints: t('terminal.live.watchHints', {}, locale), monitorHints: t('terminal.live.monitorHints', {}, locale), statusWorkers: t('terminal.live.statusWorkers', {}, locale),
       statusRuns: t('terminal.live.statusRuns', {}, locale), statusTasks: t('terminal.live.statusTasks', {}, locale), empty: t('terminal.live.empty', {}, locale),
       runsMore: t('terminal.live.runsMore', {}, locale), closedWorkers: t('terminal.live.closedWorkers', {}, locale), closedRuns: t('terminal.live.closedRuns', {}, locale),
       closedTasks: t('terminal.live.closedTasks', {}, locale), closedMonitor: t('terminal.live.closedMonitor', {}, locale), monitorFailed: t('terminal.live.monitorFailed', {}, locale) },

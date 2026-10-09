@@ -1479,5 +1479,19 @@
   "terminal.admin.usage.completion": "  Yanıt: {tokens} token",
   "terminal.admin.usage.reasoning": "  Akıl yürütme: {reasoning}",
   "terminal.admin.status.service": "Çalışma servisi şimdi: örnek {instance}, pid {pid}, sürüm {build}",
-  "terminal.slash.provider": "Sağlayıcı bağla (gizli anahtar, ücretsiz deneme) ya da bağlantıyı kaldır"
+  "terminal.slash.provider": "Sağlayıcı bağla (gizli anahtar, ücretsiz deneme) ya da bağlantıyı kaldır",
+  "terminal.info.usage.section.live": "Canlı harcama hesabı",
+  "terminal.info.usage.key.budget": "Bütçe",
+  "terminal.info.usage.key.revision": "Bütçe revizyonu",
+  "terminal.info.usage.key.remaining": "Rezervasyonlardan sonra kalan",
+  "tui.panel.budget.belowSettled": "Seçilen limit ({usd} USD), kayıtlı harcamaya ({settled} USD) eşit veya altında. Yeni çağrılar reddedilir; kayıtlı harcama korunur.",
+  "terminal.live.tasksHints": "↑↓ seçer · Enter konuşma kaydı · x iptal (onay) · Esc kapatır",
+  "terminal.live.watchHints": "Odak girişte kalır · /watch-stop kapatır",
+  "terminal.info.usage.key.cacheRead": "Önbellekten okunan",
+  "terminal.info.usage.key.cacheWrite": "Önbelleğe yazılan",
+  "terminal.info.usage.key.cacheHit": "Önbellek isabet oranı",
+  "terminal.info.usage.cacheNone": "ölçülmedi",
+  "terminal.info.usage.cachePartial": "en az {tokens} token ({reports} raporun {measured} tanesi ölçüldü)",
+  "terminal.info.usage.cacheHit": "%{percent} ({read}/{prompt} istem tokeni)",
+  "terminal.info.usage.cacheHitPartial": "ölçülen raporlarda %{percent} ({measured}/{reports}); tüm oturum bilinmiyor"
 }

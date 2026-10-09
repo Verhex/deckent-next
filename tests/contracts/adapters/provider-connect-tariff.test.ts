@@ -70,3 +70,14 @@ it('the shipped seeds: exactly the models with a verified row (or a published An
   expect(table['zai-cn-api']).toEqual({ 'glm-5.3': false, 'glm-4.7-flash': false, 'glm-4.6': false });
   expect(Object.values(table['anthropic-api']!).every(Boolean)).toBe(true);
 });
+
+it('new Anthropic connections wire the same-origin token counter and the seed declares its capability', async () => {
+  const kind = providerConnectKind('anthropic-api')!;
+  const endpoint = 'https://api.anthropic.com/v1/messages';
+  const built = connectionAdapter(kind, { ...input(endpoint, 'claude-sonnet-5-5'), credentialRef: 'DECKENT_ANTHROPIC_KEY' });
+  expect(built.adapter.definition['tokenCountEndpoint']).toBe('https://api.anthropic.com/v1/messages/count_tokens');
+  const seed = await readProviderConnectSeed('anthropic-api');
+  for (const model of seed.providers.flatMap(provider => provider.models)) {
+    expect(model.protocols[0]!.capabilities).toContainEqual({ id: 'token-count', version: 1, state: 'supported' });
+  }
+});

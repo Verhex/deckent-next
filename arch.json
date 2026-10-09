@@ -270,7 +270,8 @@
         "src/composition/core/model-connect",
         "src/surfaces/core/terminal-turn",
         "src/composition/core/project-instructions",
-        "src/composition/core/backup"
+        "src/composition/core/backup",
+        "src/engine/core/provider-spend"
       ],
       "plan": "SURFACES"
     },
@@ -1977,7 +1978,8 @@
         "src/domain/core/agent-turn",
         "src/platform/core/host",
         "src/domain/core/model-invocation",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -2644,7 +2646,7 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 25000,
+      "adapters": 26000,
       "surfaces": 45000,
       "composition": 6500
     },

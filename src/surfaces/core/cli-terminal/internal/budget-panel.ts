@@ -21,6 +21,7 @@ export function budgetPanelPort(root: string, scopeId: string, host: Host, optio
       if (account) {
         const text = t('tui.budget.current', { usd: usdOf(account.budget.limitMinorUnits), revision: account.budget.revision }, locale);
         return { ...choices, action: 'change', current: account.frozen ? `${text} · ${t('tui.budget.frozen', {}, locale)}` : text, note: null, frozen: account.frozen,
+          settledUsd: Number(account.settledExactMinorUnits) / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd,
           start: Math.min(choices.max, Math.max(choices.min, Math.round(usdOf(account.budget.limitMinorUnits)))) };
       }
       // A budget declared in configuration opens its account at the first call; a governed create beside it is refused, so no action here.

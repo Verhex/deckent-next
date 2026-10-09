@@ -2,6 +2,7 @@ import { isIP } from 'node:net';
 import { z } from 'zod';
 import { modelReferenceSchema, type ModelReference } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection } from '#platform/index.js';
+import chatDefaults from './terminal-chat-defaults.json' with { type: 'json' };
 
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
 export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
@@ -35,9 +36,11 @@ export const terminalConfigSchema = z.object({
     /** Optional since T4-B (owner 2026-10-08, Jev 77898686): a project may drop its own model so the user's `terminal.defaultModel` applies; the
      * chat settings around it stay. With no model anywhere the terminal reports `TERMINAL_CHAT_NOT_CONFIGURED`. */
     reference: modelReferenceSchema.optional(),
-    maxCompletionTokens: z.number().int().positive().safe(),
-    /** Message window of the plain line mode only; the agent conversation is measured and compacted by the runtime (T-L5). */
-    historyMessages: z.number().int().min(2).max(1_000).default(40),
+    maxCompletionTokens: z.number().int().positive().safe().default(chatDefaults.maxCompletionTokens),
+    /** Complete-message window in line and rich modes; tool results keep their assistant call. */
+    historyMessages: z.number().int().min(2).max(1_000).default(chatDefaults.historyMessages),
+    /** Absolute input-token compaction threshold, alongside the window and request-byte guards. */
+    compactionThresholdTokens: z.number().int().positive().safe().default(chatDefaults.compactionThresholdTokens),
     /** Byte ceiling of one agent tool result (T-L5c, owner 2026-09-28): the workspace-read adapter's own default (64 KiB)
      * applies when absent; an additive field, `chat.schemaVersion` stays 1 (same pattern as `historyMessages`). */
     readResultMaxBytes: z.number().int().min(1_024).max(1_048_576).default(65_536),

@@ -68,13 +68,14 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     approvalWatch.current = state;
     if (fresh.length) setApprovalStatus(fillTemplate(work!.approvalNotify, { count: fresh.length }));
   }, error => setApprovalStatus(`${work!.approvalPollFailed}: ${errorText(error)}`));
-  const run = async (command: 'approvals' | 'cancel', _args: string, execution: LocalExecution, selectedApprovalId?: string): Promise<void> => {
+  const run = async (command: 'approvals' | 'cancel', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string): Promise<void> => {
     if (!work || !ledger) return;
     const title = command === 'approvals' ? work.window.approvalsTitle : work.jobs!.runTitle;
     slashSummary.current = [];
     try {
       if (command === 'cancel') {
-        const view = await pickRun(panel, execution, ledger, work, true);
+        const selected = selectedRunId ? await ledger.inspectRun(selectedRunId) : null;
+        const view = selectedRunId ? selected && selected.state?.kind !== 'terminal' && !selected.cancellationRequested ? selected : null : await pickRun(panel, execution, ledger, work, true);
         if (!view || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }
         const answer = await panel.pick(execution, { kind: 'cancel', run: view }, ['allow', 'deny']);
         if (!execution.signal.aborted) await cancelRun(view, answer === 'allow');

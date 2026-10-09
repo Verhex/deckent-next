@@ -65,11 +65,13 @@ export function isInspectSlashCommand(command: string): command is InspectSlashC
  * `reasoningTokens` sums only the reports that carried a reasoning count; `reasoningUnmeasured` counts the reports that did not, so an
  * unreported value stays unknown instead of reading as zero (P2-3a). */
 export interface SessionUsageView { readonly reports: number; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number;
-  readonly reasoningUnmeasured: number }
+  readonly reasoningUnmeasured: number; readonly cache?: { readonly reports: number; readonly readTokens: number; readonly writeTokens: number; readonly promptTokens: number } }
 export const EMPTY_SESSION_USAGE: SessionUsageView = Object.freeze({ reports: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0, reasoningUnmeasured: 0 });
-export function addSessionUsage(total: SessionUsageView, report: Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null }>): SessionUsageView {
+export function addSessionUsage(total: SessionUsageView, report: Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null; cache?: { readTokens: number; writeTokens: number; promptTokens: number } }>): SessionUsageView {
   return Object.freeze({ reports: total.reports + 1, promptTokens: total.promptTokens + report.promptTokens, completionTokens: total.completionTokens + report.completionTokens,
-    reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0), reasoningUnmeasured: total.reasoningUnmeasured + (report.reasoningTokens === null ? 1 : 0) });
+    reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0), reasoningUnmeasured: total.reasoningUnmeasured + (report.reasoningTokens === null ? 1 : 0),
+    cache: { reports: (total.cache?.reports ?? 0) + (report.cache ? 1 : 0), readTokens: (total.cache?.readTokens ?? 0) + (report.cache?.readTokens ?? 0),
+      writeTokens: (total.cache?.writeTokens ?? 0) + (report.cache?.writeTokens ?? 0), promptTokens: (total.cache?.promptTokens ?? 0) + (report.cache?.promptTokens ?? 0) } });
 }
 /** `/status` without a fresh port keeps the launch-time line; with one, a failed read shows its typed error, never that old line. */
 /** `sessionFullAccess` (Astra 2431 P2): this session holds full access (launched so, or switched into for this session only). */

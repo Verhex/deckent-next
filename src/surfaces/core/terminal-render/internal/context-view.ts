@@ -3,7 +3,7 @@ import { fillTemplate } from './status-row.js';
 
 /** The last automatic summary the workline saw in this conversation (`compacted` delta). */
 export interface ContextCompaction { readonly count: number; readonly replacedMessages: number; readonly atMs: number }
-export interface ContextMeasure { readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: 'provider-count' | 'upper-bound' }
+export interface ContextMeasure { readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: 'provider-count' | 'upper-bound'; readonly compactionThresholdTokens?: number }
 
 /**
  * Share of the window after which the runtime summarizes the earlier conversation by itself. Display constant: the rule is the engine's
@@ -62,6 +62,12 @@ export function contextBreakdown(history: readonly AgentChatMessage[]): ContextB
 }
 
 const pct = (part: number, total: number) => total ? Math.round(part * 100 / total) : 0;
+/** Earliest configured token trigger projected by the client; byte pressure and admission remain engine-owned. */
+export function contextCompactionThreshold(measured: ContextMeasure | null) {
+  const limit = measured ? Math.min(measured.windowTokens ? Math.floor(measured.windowTokens * CONTEXT_AUTO_SUMMARY_SHARE) : Infinity, measured.compactionThresholdTokens ?? Infinity) : Infinity;
+  return Number.isFinite(limit) ? { tokens: limit, percent: measured?.windowTokens ? pct(limit, measured.windowTokens) : '?', remaining: Math.max(0, limit - measured!.promptTokens) } : null;
+}
+
 const BAR_WIDTH = 20;
 
 /**
@@ -76,9 +82,10 @@ export function contextViewLines(input: { readonly measured: ContextMeasure | nu
     const percent = Math.ceil(measured.promptTokens * 100 / measured.windowTokens);
     const filled = Math.min(BAR_WIDTH, Math.round(percent * BAR_WIDTH / 100));
     lines.push(fillTemplate(labels.bar, { filled: '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled), width: BAR_WIDTH, percent }));
-    const limit = Math.floor(measured.windowTokens * CONTEXT_AUTO_SUMMARY_SHARE);
-    lines.push(fillTemplate(labels.threshold, { tokens: limit, percent: Math.round(CONTEXT_AUTO_SUMMARY_SHARE * 100), remaining: Math.max(0, limit - measured.promptTokens) }));
+
   }
+  const threshold = contextCompactionThreshold(measured);
+  if (threshold) lines.push(fillTemplate(labels.threshold, threshold));
   if (parts.total > 0) lines.push(fillTemplate(labels.split, { system: pct(parts.system, parts.total), user: pct(parts.user, parts.total),
     assistant: pct(parts.assistant, parts.total), tools: pct(parts.tools, parts.total), attachments: pct(parts.attachments, parts.total) }));
   lines.push(input.compaction ? fillTemplate(labels.compacted, { count: input.compaction.count, replaced: input.compaction.replacedMessages, when: input.when(input.compaction.atMs) })

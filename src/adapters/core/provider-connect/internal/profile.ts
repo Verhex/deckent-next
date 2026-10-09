@@ -42,7 +42,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');
     const tariff = anthropicPublishedTariff(input.nativeId), capability = anthropicModelCapability(input.nativeId);
     if (!tariff || !capability) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNKNOWN');
-    const definition = { endpoint: input.endpoint, maxOutputTokens: Math.min(input.maxOutputTokens, capability.maxOutputTokens),
+    const definition = { endpoint: input.endpoint, ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}), maxOutputTokens: Math.min(input.maxOutputTokens, capability.maxOutputTokens),
       authentication: { type: 'header', name: 'x-api-key', credentialRef: input.credentialRef }, tariff };
     try { parseAnthropicMessagesDefinition(definition); } catch { throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID'); }
     return Object.freeze({ adapter: { id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
@@ -63,7 +63,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   }
   const published = openAiChatLoopback(input.endpoint) ? null : lookupOpenAiCompatibleTariff(input.endpoint, input.nativeId);
   if (!published && !openAiChatLoopback(input.endpoint)) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
-  const definition = { endpoint: input.endpoint, maxOutputTokens: input.maxOutputTokens, dialect: connect.dialect,
+  const definition = { endpoint: input.endpoint, ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}), maxOutputTokens: input.maxOutputTokens, dialect: connect.dialect,
     authentication: secure && input.credentialRef !== null ? { type: 'bearer', credentialRef: input.credentialRef } : { type: 'none' },
     tariff: published ?? { kind: 'operator-static', version: 1, currency: input.currency, inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } };
   try { parseOpenAiChatHttpDefinition(definition); } catch { throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID'); }
