@@ -59,7 +59,8 @@ describe('/model in the workline carries the host budget and shadow ports', () =
     for (const key of [DOWN, ENTER]) { view.stdin.write(key); await settle(30); }
     await until(() => view.stdout.frame.includes("Remove the project's model (your default applies)"), 'shadow choice');
     expect(view.stdout.frame).toContain("Make the project's model this one too");
-    view.stdin.write(ENTER);
+    // The choice is drawn before its key handler mounts (Ink registers input in an effect): let it settle, as before the budget ENTER above.
+    await settle(60); view.stdin.write(ENTER);
     await until(() => asked.length === 1, 'shadow answered');
     expect(asked).toEqual(['remove']);
   });
