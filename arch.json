@@ -1563,6 +1563,7 @@
     },
     "src/adapters/core/provider-connect": {
       "dependencies": [
+        "src/domain/core/model-invocation",
         "src/engine/core/agent-turn",
         "src/domain/core/provider-catalog",
         "src/domain/core/primitives",

@@ -15,7 +15,8 @@ export const OPENAI_CHAT_OPERATOR_TARIFF_METER_ID = 'openai-chat-operator-reserv
  * Pure maximum quote from a verified published tariff or an explicit operator tariff.
  * The input bound uses the dearest input rate; loopback legacy zero tariffs remain supported.
  */
-export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInput): ProviderSpendQuote {
+export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInput, preparedBody?: string, reasoningInputTokensUpperBound = 0): ProviderSpendQuote {
+  if (!Number.isSafeInteger(reasoningInputTokensUpperBound) || reasoningInputTokensUpperBound < 0) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const profile = modelInvocationProfileSchema.parse(input.profile);
   if (!isOpenAiChatHttpAdapter(profile.adapter)) {
     throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
@@ -30,14 +31,19 @@ export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInpu
   const tariff = definition.tariff;
   const rates = openAiCompatibleTariffRates(tariff, definition.endpoint, request.model);
   const tariffDigest = providerSpendEvidenceDigest(tariff);
-  const body = prepareOpenAiChatHttpRequest(definition, profile.limits, request).body;
+  const body = preparedBody ?? prepareOpenAiChatHttpRequest(definition, profile.limits, request).body;
+  // Opaque reasoning replay expands the actual wire prompt; the reservation must bound what is sent, not only the neutral messages.
+  const inputBound = definition.dialect?.protocol === 'responses'
+    ? Math.max(openAiChatPromptUpperBound(input.command.nativeRequest), Buffer.byteLength(body, 'utf8')) + reasoningInputTokensUpperBound : openAiChatPromptUpperBound(input.command.nativeRequest);
+  if (!Number.isSafeInteger(inputBound)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
   const evidence = { schemaVersion: 1, tariffDigest, bodyDigest: createHash('sha256').update(body).digest('hex'),
-    calculation: { schemaVersion: 1, currency: tariff.currency, usdPerMTok: rates, inputBound: openAiChatPromptUpperBound(input.command.nativeRequest), outputBound: request.max_completion_tokens, requestCount: 1 } };
+    calculation: { schemaVersion: 1, currency: tariff.currency, usdPerMTok: rates, inputBound, outputBound: request.max_completion_tokens, requestCount: 1,
+      ...(definition.dialect?.protocol === 'responses' ? { reasoningInputTokensUpperBound } : {}) } };
   return parseProviderSpendQuote({ schemaVersion: 1, scopeId: input.command.scopeId, requestDigest: input.requestDigest,
     profileDigest: input.profileDigest, pricing: { id: tariff.kind === 'operator-static' ? OPERATOR_TARIFF_PRICING_ID : 'openai-compatible-published-tariff', version: tariff.version, digest: tariffDigest, definition: tariff },
     meter: { id: OPENAI_CHAT_OPERATOR_TARIFF_METER_ID, version: 1, evidenceDigest: providerSpendEvidenceDigest(evidence), evidence },
     currency: tariff.currency, maxChargeMinorUnits: ceilProviderSpendExactMinorUnits(measuredTariffExactMinorUnits([
-      { field: 'input', tokens: openAiChatPromptUpperBound(input.command.nativeRequest), usdPerMillionTokens: [rates.input, rates.cachedInput, 'cacheWrite' in rates ? rates.cacheWrite! : rates.input].reduce((a, b) => compareProviderSpendExactMinorUnits(a, b) >= 0 ? a : b) },
+      { field: 'input', tokens: inputBound, usdPerMillionTokens: [rates.input, rates.cachedInput, 'cacheWrite' in rates ? rates.cacheWrite! : rates.input].reduce((a, b) => compareProviderSpendExactMinorUnits(a, b) >= 0 ? a : b) },
       { field: 'output', tokens: request.max_completion_tokens, usdPerMillionTokens: rates.output }])) });
 }
 

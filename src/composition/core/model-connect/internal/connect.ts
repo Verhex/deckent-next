@@ -1,8 +1,9 @@
 import type { ModelConnectResult } from '#domain/index.js';
+import { isDeepStrictEqual } from 'node:util';
 import { AuditApplication, ModelConnectApplication, ModelConnectError, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService,
-  type ProfileCachePlan } from '#engine/index.js';
+  type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName,
-  providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry } from '#adapters/index.js';
+  providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -79,4 +80,14 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
 export async function planConfiguredProfileCache(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileCachePlan> {
   const snapshot = await snapshotConfiguredConfig(projectRoot, options);
   return planProfileCache({ global: snapshot.global as Record<string, unknown>, project: snapshot.project as Record<string, unknown> }, scopeId, providerProfileCacheOffer);
+}
+export type ProfileProtocolPlan = Omit<ProfileChangePlan<ProviderProfileProtocolDetail>, 'writes'> & Readonly<{ writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[] }>;
+export async function planConfiguredProfileProtocol(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileProtocolPlan> {
+  const snapshots = await Promise.allSettled(['global', 'project'].map(layer => snapshotConfiguredConfig(projectRoot, options, layer as 'global' | 'project')));
+  for (const snapshot of snapshots) if (snapshot.status === 'rejected') throw snapshot.reason;
+  const global = (snapshots[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof snapshotConfiguredConfig>>>).value;
+  const project = (snapshots[1] as PromiseFulfilledResult<Awaited<ReturnType<typeof snapshotConfiguredConfig>>>).value;
+  if (!isDeepStrictEqual(global.global, project.global) || !isDeepStrictEqual(global.project, project.project)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+  const plan = planProfileChanges({ global: global.global, project: project.project }, scopeId, providerProfileProtocolOffer);
+  return { ...plan, writes: plan.writes.map(write => ({ ...write, expect: (write.layer === 'global' ? global : project).digest })) };
 }

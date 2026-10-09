@@ -43,7 +43,12 @@ export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOption
         { field: 'input', tokens: usage.data.prompt_tokens - cached - written, usdPerMillionTokens: rates.input },
         { field: 'cached-input', tokens: cached, usdPerMillionTokens: rates.cachedInput },
         ...(tiered ? [{ field: 'cache-write', tokens: written, usdPerMillionTokens: 'cacheWrite' in rates ? rates.cacheWrite! : rates.input }] : []),
-        { field: 'output', tokens: usage.data.completion_tokens, usdPerMillionTokens: rates.output },
+        // Responses reasoning tokens are INCLUDED in output_tokens, at the output tariff. Split for audit, never add twice.
+        ...(prepared.definition.dialect?.protocol === 'responses' ? (() => {
+          const details = usage.data['completion_tokens_details'] as { reasoning_tokens: number };
+          return [{ field: 'output', tokens: usage.data.completion_tokens - details.reasoning_tokens, usdPerMillionTokens: rates.output },
+            { field: 'reasoning', tokens: details.reasoning_tokens, usdPerMillionTokens: rates.output }];
+        })() : [{ field: 'output', tokens: usage.data.completion_tokens, usdPerMillionTokens: rates.output }]),
       ];
       const exactMinorUnits = measuredTariffExactMinorUnits(dimensions);
       return parseProviderSpendTariffMeasurement({ schemaVersion: 1, basis: 'measured-tariff', currency: quote.currency,
@@ -76,6 +81,6 @@ export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOption
     const prepared = input.prepared as PreparedOpenAiChatRequest;
     if (!prepared || typeof prepared !== 'object' || profiles.get(prepared) !== input.profileDigest
       || !isDeepStrictEqual(prepared.request, parseOpenAiChatTextRequest(input.command.nativeRequest, prepared.definition))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
-    const quote = quoteOpenAiChatOperatorTariff(input); quotes.set(prepared, quote); return quote;
+    const quote = quoteOpenAiChatOperatorTariff(input, prepared.body, prepared.reasoningInputTokensUpperBound); quotes.set(prepared, quote); return quote;
   } });
 }

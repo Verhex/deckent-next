@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "source": "Deckent bounded Responses parser and process-local continuation policy, 2026-10-09; not a vendor limit",
+  "continuationMaxEntries": 256,
+  "continuationMaxBytes": 262144,
+  "continuationTtlMs": 3600000,
+  "errorMessageMaxChars": 1024
+}

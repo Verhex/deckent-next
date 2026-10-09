@@ -17,6 +17,7 @@ import { mcpPanelPort } from './mcp-panel.js';
 import { modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
+import { protocolPanelPort } from './protocol-panel.js';
 import { providerPanelPort } from './provider-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
@@ -193,11 +194,14 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   // CACHE-SLICE1: the governed 5-minute cache migration of existing profiles, offered in both windows when the governed config writer is bound.
   const planProfileCache = context.planProfileCache;
   const cache = planProfileCache && context.configApplication && context.resolveConfigPrincipal ? { cache: cachePanelPort(root, scopeId, { ...context, planProfileCache }, options, locale) } : {};
+  const planProfileProtocol = context.planProfileProtocol;
+  const protocol = planProfileProtocol && context.configApplication && context.resolveConfigPrincipal
+    ? { protocol: protocolPanelPort(root, scopeId, { ...context, planProfileProtocol }, options, locale) } : {};
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
-    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache } } : {}),
+    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache, ...protocol } } : {}),
     ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale)), ...budget, ...cache } } : {}) } } };
 }
 

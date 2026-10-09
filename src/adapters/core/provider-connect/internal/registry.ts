@@ -43,6 +43,11 @@ const kindSchema = z.object({
     priceRequired: z.boolean().default(false),
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
     dialect: openAiChatDialectSchema.optional(),
+    /** Per-model wire selection; endpoints and effort choices are sourced registry data, never model-name branches. */
+    protocolRoutes: z.array(z.object({ modelId: z.string().min(1), path: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
+      dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
+      source: z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict() }).strict())
+      .min(1).refine(rows => new Set(rows.map(row => row.modelId)).size === rows.length).readonly().optional(),
     /** Verified first-party endpoint tags and token fields for metadata-priced chat; no provider/model guessing in code. */
     metadataPricing: z.object({ maxAgeMs: positiveLimit(), maxResponseBytes: positiveLimit(), timeoutMs: positiveLimit(),
       routes: z.array(z.object({ modelId: z.string().min(1), endpointTag: z.string().min(1),
@@ -51,6 +56,7 @@ const kindSchema = z.object({
         .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
+    .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
     .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),
 }).strict().readonly();
 function positiveLimit() { return z.number().int().positive().safe(); }

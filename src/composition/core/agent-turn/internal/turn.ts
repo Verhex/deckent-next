@@ -19,14 +19,14 @@ import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
-import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
+import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions, withAgentAudit } from './mode.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound,
+import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, mapOpenAiErrorResponse, openAiProviderRefusal,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 
 /** Service-owned state of running turns: cancellation by the starting principal, service stop, the scratch custody (areas they hold are never
@@ -219,7 +219,21 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         }
         const outcome = result.receipt.outcome;
         if (!outcome) return { status: 'failed', state: 'pending' };
-        if (outcome.state !== 'responded') return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
+        if (outcome.state !== 'responded') {
+          const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
+          if (evidence?.adapter.id === 'openai-chat-http' && evidence.httpStatus === 400) {
+            // Retained vendor content is read through the existing inspect-content policy. Denied/purged content stays unknown.
+            const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
+              invocationId: result.receipt.claim.invocationId, reference, includeResponseContent: true }, peer, options).catch(() => null);
+            const body = inspected?.responseContent?.kind === 'response-body' ? inspected.responseContent.data : null;
+            const diagnostic = mapOpenAiErrorResponse(400, body);
+            return { status: 'failed', state: diagnostic?.message ? t('tui.openai.badRequest', { message: diagnostic.message }, language)
+              : t('tui.openai.badRequestUnknown', {}, language) };
+          }
+          return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
+        }
+        const refusal = openAiProviderRefusal(result.response);
+        if (refusal) return { status: 'failed', state: t('tui.openai.refusal', { message: refusal.message }, language) };
         const message = openAiChatMessageFromInvocation(result);
         if (!message) return { status: 'failed', state: 'unreadable' };
         // What was shown is always a prefix of the governed result; anything else ends the turn, never merged.

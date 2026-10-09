@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "openai-api-2026-10-08",
+  "revision": "openai-api-2026-10-09",
   "providers": [
     {
       "id": "openai-api",
@@ -11,11 +11,11 @@
         "aliases": [],
         "client": null,
         "billing": "per-token",
-        "protocolFamily": "openai-chat-completions",
+        "protocolFamily": "openai-responses",
         "aliasesRefused": [],
         "provenance": {
           "sourceUrl": "https://developers.openai.com/api/docs/models",
-          "fetchedOn": "2026-10-08"
+          "fetchedOn": "2026-10-09"
         }
       },
       "models": [

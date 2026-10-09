@@ -5,10 +5,11 @@ import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, w
 
 export const OPENAI_CHAT_HTTP_ADAPTER_ID = 'openai-chat-http' as const;
 /** v5 (T4-B K1, owner 2026-10-08, Jev d69089cf): the definition carries the provider's request dialect (`dialect`, required); v4 profiles keep
- * working unchanged (no dialect: the OpenAI wire). A profile of either version is served; a new connection writes v5. */
+ * working unchanged (no dialect: the OpenAI wire). Model routes may select v6 Responses; other new connections write v5. */
 export const OPENAI_CHAT_HTTP_ADAPTER_VERSION = 5 as const;
-export const OPENAI_CHAT_HTTP_ADAPTER_VERSIONS = Object.freeze([4, 5] as const);
-/** Whether an adapter identity is one this adapter serves (v4 or v5). */
+export const OPENAI_RESPONSES_HTTP_ADAPTER_VERSION = 6 as const;
+export const OPENAI_CHAT_HTTP_ADAPTER_VERSIONS = Object.freeze([4, 5, 6] as const);
+/** Whether an adapter identity is one this adapter serves (v4/v5 chat or v6 Responses). */
 export function isOpenAiChatHttpAdapter(adapter: Readonly<{ id: string; version: number }>): boolean {
   return adapter.id === OPENAI_CHAT_HTTP_ADAPTER_ID && (OPENAI_CHAT_HTTP_ADAPTER_VERSIONS as readonly number[]).includes(adapter.version);
 }
@@ -38,7 +39,10 @@ export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; versi
  */
 export type OpenAiChatDialect = Readonly<{ tokenLimitField: 'max_tokens' | 'max_completion_tokens'; streamUsage: 'include' | 'omit';
   toolChoice: readonly ('auto' | 'none' | 'required')[]; finalUsageChoice?: 'repeat-finish' | undefined; responseObject?: 'optional' | undefined;
-  finishReasons?: readonly ('sensitive' | 'model_context_window_exceeded' | 'network_error' | 'insufficient_system_resource' | 'aborted')[] | undefined }>;
+  finishReasons?: readonly ('sensitive' | 'model_context_window_exceeded' | 'network_error' | 'insufficient_system_resource' | 'aborted')[] | undefined;
+  /** v6 keeps the typed chat facade but speaks Responses on the wire. Model effort support is registry data. */
+  protocol?: 'responses' | undefined; reasoningEfforts?: readonly OpenAiReasoningEffort[] | undefined; reasoningEffort?: OpenAiReasoningEffort | undefined }>;
+export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export const openRouterEndpointTariffSchema = z.object({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
   metadataEndpoint: z.string().url(), endpointTag: z.string().min(1).max(1024),
   metadataLimits: z.object({ maxAgeMs: z.number().int().positive().safe(), maxResponseBytes: z.number().int().positive().safe(),
@@ -63,7 +67,8 @@ export type OpenAiChatToolDefinition = Readonly<{ type: 'function'; function: Re
 export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly OpenAiChatTextMessage[];
   max_completion_tokens: number; stream?: boolean; stream_options?: Readonly<{ include_usage: true }>; n?: 1;
   tools?: readonly OpenAiChatToolDefinition[]; tool_choice?: 'auto' | 'none' | 'required';
-  chat_template_kwargs?: Readonly<{ enable_thinking: boolean }> }>;
+  chat_template_kwargs?: Readonly<{ enable_thinking: boolean }>; reasoning_effort?: OpenAiReasoningEffort;
+  service_tier?: 'auto' | 'default' | 'flex' | 'priority' }>;
 /** Tool names follow the agent tool contract; ids are the provider's opaque correlation strings. */
 export const OPENAI_CHAT_TOOL_NAME = /^[a-z][a-z0-9_]{1,63}$/;
 export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
@@ -102,11 +107,16 @@ const tariffSchema = z.union([z.object({ kind: z.literal('operator-static'), ver
   z.object({ kind: z.literal('operator-static'), version: z.literal(2), currency: z.literal('USD'),
     inputMinorUnitsPerMillionTokens: operatorRate, outputMinorUnitsPerMillionTokens: operatorRate,
     cachedInputMinorUnitsPerMillionTokens: operatorRate }).strict(), openAiCompatiblePublishedTariffSchema, openRouterEndpointTariffSchema]);
+const reasoningEffortSchema = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 export const openAiChatDialectSchema = z.object({ tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), streamUsage: z.enum(['include', 'omit']),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   toolChoice: z.array(z.union([z.literal('auto'), z.literal('none'), z.literal('required')])).min(1).max(3)
     .refine(values => new Set(values).size === values.length), finalUsageChoice: z.literal('repeat-finish').optional(), responseObject: z.literal('optional').optional(),
-  finishReasons: z.array(z.enum(['sensitive', 'model_context_window_exceeded', 'network_error', 'insufficient_system_resource', 'aborted'])).max(5).optional() }).strict();
+  finishReasons: z.array(z.enum(['sensitive', 'model_context_window_exceeded', 'network_error', 'insufficient_system_resource', 'aborted'])).max(5).optional(),
+  protocol: z.literal('responses').optional(), reasoningEfforts: z.array(reasoningEffortSchema).min(1).max(7)
+    .refine(values => new Set(values).size === values.length).readonly().optional(), reasoningEffort: reasoningEffortSchema.optional() }).strict()
+  .refine(d => d.protocol === 'responses' ? d.reasoningEfforts !== undefined && d.reasoningEffort !== undefined && d.reasoningEfforts.includes(d.reasoningEffort)
+    && d.finalUsageChoice === undefined : d.reasoningEfforts === undefined && d.reasoningEffort === undefined);
 const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: positive, dialect: openAiChatDialectSchema.optional(),
   authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
     z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict()]),
@@ -130,7 +140,9 @@ const requestSchema = z.object({ model: z.string().min(1).max(1024), messages: z
   n: z.literal(1).optional(), tools: z.array(toolSchema).min(1).max(OPENAI_CHAT_MAX_TOOLS).optional(),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   tool_choice: z.union([z.literal('auto'), z.literal('none'), z.literal('required')]).optional(),
-  chat_template_kwargs: z.object({ enable_thinking: z.boolean() }).strict().optional() }).strict()
+  chat_template_kwargs: z.object({ enable_thinking: z.boolean() }).strict().optional(), reasoning_effort: reasoningEffortSchema.optional(),
+  // Vendor wire vocabulary; these are protocol literals, not Deckent config choices.
+  service_tier: z.union([z.literal('auto'), z.literal('default'), z.literal('flex'), z.literal('priority')]).optional() }).strict()
   .refine(value => (value.stream === true) === (value.stream_options !== undefined))
   .refine(value => value.tool_choice === undefined || value.tools !== undefined)
   .refine(value => value.tools === undefined || new Set(value.tools.map(tool => tool.function.name)).size === value.tools.length)
@@ -186,7 +198,8 @@ export function parseOpenAiChatTextRequest(input: unknown, definition: Pick<Open
     ...(data.stream === true ? { stream_options: { include_usage: true as const } } : {}),
     ...(data.n === 1 ? { n: 1 as const } : {}), ...(data.tools ? { tools: data.tools as OpenAiChatToolDefinition[] } : {}),
     ...(data.tool_choice ? { tool_choice: data.tool_choice } : {}),
-    ...(data.chat_template_kwargs ? { chat_template_kwargs: { enable_thinking: data.chat_template_kwargs.enable_thinking } } : {}) });
+    ...(data.chat_template_kwargs ? { chat_template_kwargs: { enable_thinking: data.chat_template_kwargs.enable_thinking } } : {}),
+    ...(data.reasoning_effort ? { reasoning_effort: data.reasoning_effort } : {}), ...(data.service_tier ? { service_tier: data.service_tier } : {}) });
 }
 
 function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer', hasTls: boolean): boolean {

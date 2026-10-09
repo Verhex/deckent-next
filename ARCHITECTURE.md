@@ -695,6 +695,19 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   approval and audit; a profile authored in both layers is named, not changed, because a project profile must equal a user-layer one). Each call
   reads its own profile (model switch, pin and worker paths carry no override); the reservation prices every input token at the dearest enabled
   class (miss + write) plus the full output. No paid keep-alive or prewarm; TTL 5m only; breakpoints/1h/allocator are slice 2.
+- **OpenAI Responses (OPENAI-RESPONSES, owner 2026-10-09; W6 author implementation):** `openai-chat-http@6` speaks `/v1/responses` while
+  preserving the typed `openai-chat-completions@v1` facade and binding digest. Sourced per-model registry routes select Responses for Astra,
+  Sol and Luna; effort support/defaults are route data. Flat function tools/results, typed refusals and bounded SSE reuse the existing transport,
+  egress, cancellation, reservation and spend owner. `store:false` is mandatory; no server conversation. Opaque encrypted reasoning for tool
+  continuations stays process-local, bounded and tied to scope/profile/tools/message prefix; restart/expiry drops it. Reservation bounds actual
+  wire bytes and additionally each replayed opaque block's originating output-token ceiling; ciphertext size is not a token count. Reasoning is a subset of
+  output, split for audit at the output rate; cached reads/writes use the pinned tariff and reported actual tier. Only validated completed/incomplete
+  terminal-event usage measures spend; later contradictions (including a truncated tail) withdraw it. Missing cache-write count or unknown
+  published tier stays unmeasured. Existing v4/v5 exact verified profiles migrate only through `/model` "Güncel protokole geç": route preview,
+  fresh snapshot/digest, governed config write with policy, approval and audit; keys, binding, activation, allocation and scope stay attached.
+  Shared-layer profiles are named and held under the same subset rule as cache migration. HTTP400 vendor details require the existing content
+  inspection policy and localized next step; the common failure wrapper's translation belongs to W6-MODEL-SWITCH. Synthetic parser/SQLite/config
+  author evidence is separate from independent review and live acceptance; sources/proof: `proof/OPENAI-RESPONSES-2026-10-09/`.
 - **Provider rows (Jev da5312fb):** OpenAI, DeepSeek, Z.ai GLM (global) and Zhipu GLM (China) each keep their own secret name; the generic
   OpenAI-compatible row derives `DECKENT_OAICOMPAT_<HOST[_PORT]>` from the chosen address and shows it before saving. Z.ai documents no free
   read: its rows have no probe (the key is kept unverified). Owner 2026-10-08: no paid call to a remote endpoint without a verified price — the
