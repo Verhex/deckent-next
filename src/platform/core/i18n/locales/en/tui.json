@@ -970,5 +970,18 @@
   "terminal.info.usage.key.cacheWrite1h": "Cache write (1 hour)",
   "terminal.info.usage.key.cacheBenefit": "Net cache benefit",
   "terminal.info.usage.cacheBenefit": "{amount}, estimate (same requests at the uncached input price, write premium included)",
-  "terminal.info.usage.cacheBenefitPartial": "{amount}, estimate, in measured reports ({measured}/{reports}); full session unknown"
+  "terminal.info.usage.cacheBenefitPartial": "{amount}, estimate, in measured reports ({measured}/{reports}); full session unknown",
+  "tui.panel.protocol.entry": "Switch to the current protocol",
+  "tui.panel.protocol.title": "OpenAI protocol update",
+  "tui.panel.protocol.confirm": "Apply protocol update",
+  "tui.protocol.detail": "{count} model(s) can use Responses",
+  "tui.protocol.what": "OpenAI reasoning models with tools will use the Responses API.",
+  "tui.protocol.route": "Endpoint: {from} → {to}",
+  "tui.protocol.kept": "API key, model binding, activation, scope and budget remain attached. Responses are sent with store:false.",
+  "tui.protocol.shared": "{count} profile(s) are authored in both layers; they require a governed layer reconciliation before this selection can update them.",
+  "tui.protocol.changed": "Profiles changed after the preview. Reopen /model and review the update again.",
+  "tui.protocol.applied": "Protocol updated for {count} model(s).",
+  "tui.openai.badRequest": "OpenAI rejected the request (HTTP 400). Provider message: {message}. Open /model and choose “Switch to the current protocol”; if it is already current, check the model profile. The call is recorded and is not retried.",
+  "tui.openai.badRequestUnknown": "OpenAI rejected the request (HTTP 400); the provider message is unavailable. Open /model and choose “Switch to the current protocol”; if it is already current, check the model profile. The call is recorded and is not retried.",
+  "tui.openai.refusal": "OpenAI declined to answer: {message}. Revise the request."
 }

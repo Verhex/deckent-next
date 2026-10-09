@@ -970,5 +970,18 @@
   "terminal.info.usage.key.cacheWrite1h": "Önbelleğe yazılan (1 saat)",
   "terminal.info.usage.key.cacheBenefit": "Önbellekten net kazanç",
   "terminal.info.usage.cacheBenefit": "{amount}, tahmin (aynı istekler önbelleksiz giriş fiyatıyla, yazma primi dahil)",
-  "terminal.info.usage.cacheBenefitPartial": "ölçülen raporlarda {amount}, tahmin ({measured}/{reports}); tüm oturum bilinmiyor"
+  "terminal.info.usage.cacheBenefitPartial": "ölçülen raporlarda {amount}, tahmin ({measured}/{reports}); tüm oturum bilinmiyor",
+  "tui.panel.protocol.entry": "Güncel protokole geç",
+  "tui.panel.protocol.title": "OpenAI protokolünü güncelle",
+  "tui.panel.protocol.confirm": "Protokolü güncelle",
+  "tui.protocol.detail": "{count} model Responses kullanabilir",
+  "tui.protocol.what": "Araç kullanan OpenAI reasoning modelleri Responses API üzerinden çalışacak.",
+  "tui.protocol.route": "Uç nokta: {from} → {to}",
+  "tui.protocol.kept": "API anahtarı, model bağlantısı, etkinleştirme, kapsam ve bütçe korunur. İstekler store:false ile gönderilir.",
+  "tui.protocol.shared": "{count} profil iki katmanda da tanımlı; bu seçimden önce yönetilen katman uzlaştırması gerekir.",
+  "tui.protocol.changed": "Önizlemeden sonra profiller değişti. /model penceresini yeniden açıp güncellemeyi tekrar inceleyin.",
+  "tui.protocol.applied": "{count} modelin protokolü güncellendi.",
+  "tui.openai.badRequest": "OpenAI isteği reddetti (HTTP 400). Sağlayıcı mesajı: {message}. /model penceresinde “Güncel protokole geç” seçeneğini kullanın; protokol zaten güncelse model profilini kontrol edin. Çağrı kaydedildi, tekrar denenmeyecek.",
+  "tui.openai.badRequestUnknown": "OpenAI isteği reddetti (HTTP 400); sağlayıcı mesajına erişilemiyor. /model penceresinde “Güncel protokole geç” seçeneğini kullanın; protokol zaten güncelse model profilini kontrol edin. Çağrı kaydedildi, tekrar denenmeyecek.",
+  "tui.openai.refusal": "OpenAI yanıt vermeyi reddetti: {message}. İsteği yeniden düzenleyin."
 }
