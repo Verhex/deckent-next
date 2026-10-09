@@ -115,6 +115,8 @@ export interface WorklineProps {
   readonly panels?: WorklinePanels;
   /** SW-1: bare `/help`, `/status`, `/usage`, `/doctor`, `/scope`, `/context` open information windows (typed models; one summary line on close). Absent: text. */
   readonly info?: WorklineInfo;
+  /** Spend refusal recovery, through the host's governed account/management ports. */
+  readonly spending?: () => Promise<import('#surfaces/core/terminal-window/index.js').InfoView>;
   /** `/clear` erases the screen and the terminal's scrollback; false where escape sequences must not be sent (TERM=dumb, NO_COLOR — owner
    *  2026-10-08). A non-TTY output is never cleared. */
   readonly clearScreen?: boolean;
@@ -318,13 +320,19 @@ export function WorklineApp(props: WorklineProps) {
       }
     } catch (error) {
       history.current = messages;
-      push([notice('error', errorText(error))]); throw error;
+      push([notice('error', errorText(error))]);
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+      if (props.spending && props.info && !signal.aborted && (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN')) {
+        try { await infoWindow.show(await props.spending(), props.info.labels, signal); }
+        catch (failure) { push([notice('error', errorText(failure))]); }
+      }
+      throw error;
     } finally {
       setLive(null); setTurnRunning(false);
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work, panel]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {

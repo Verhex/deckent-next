@@ -7,6 +7,7 @@ import { queryFailureText } from './failure.js';
 import { count } from './human.js';
 import type { TerminalAdminCall } from './context.js';
 import USAGE_DISPLAY from './usage-display.json' with { type: 'json' };
+import { spendRecoveryView } from './spend-recovery.js';
 
 /** `netBenefitUsdE10` is USD x 1e10 (tokens x rate units of 0.0001 USD per million tokens). */
 const USD_E10 = 1e10;
@@ -152,7 +153,10 @@ export async function usageView(call: TerminalAdminCall, usage: SessionUsageView
     : t('terminal.info.usage.summary', { prompt: count(usage.promptTokens, locale), completion: count(usage.completionTokens, locale), reports: count(usage.reports, locale) }, locale);
   const base = { title: t('terminal.info.usage.title', {}, locale), summary };
   const live = await accountSection(call, null);
-  const view = (account: InfoSection | null): InfoView => ({ model: { ...base, sections: [live, conversation, budgetSection, ...(account ? [account] : [])] }, pick: async choice => {
+  const recovery = call.context.manageProviderSpend ? await spendRecoveryView(call).catch(() => null) : null;
+  const actions = recovery?.model.sections.flatMap(section => section.choices?.length ? [{ choices: section.choices }] : []) ?? [];
+  const view = (account: InfoSection | null): InfoView => ({ model: { ...base, sections: [live, conversation, budgetSection, ...(account ? [account] : []), ...actions] }, pick: async choice => {
+    if ((choice === 'reconcile' || choice === 'budget') && recovery?.pick) return recovery.pick(choice);
     const budget = budgets[Number(choice.slice('budget-'.length))];
     return budget && choice.startsWith('budget-') ? view(await accountSection(call, budget)) : null;
   } });
