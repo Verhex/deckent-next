@@ -5,7 +5,7 @@ import { THEME_PALETTES, type PaletteRole, type PaletteTheme } from './generated
  * line (`userBar` rail, `userLabel`), the answer heading (`assistantLabel`), worker cards, windows, selection, diff marks and the mode indicator.
  * SW-1 (2026-10-08): information windows (`sectionHeader`, bold `keyLabel`, `mutedId`, the `chipOk`/`chipWarn`/`chipFail` states) and the
  * system summary line (`systemLabel`, `systemRail`), which must never look like the assistant's answer. */
-export type WorklineInkRole = 'accent' | 'muted' | 'user' | 'assistant' | 'error' | 'code' | 'link' | 'info' | 'success' | 'warning'
+export type WorklineInkRole = 'model' | 'provider' | 'accent' | 'muted' | 'user' | 'assistant' | 'error' | 'code' | 'link' | 'info' | 'success' | 'warning'
   | 'userBar' | 'userLabel' | 'assistantLabel' | 'workerCard' | 'windowBorder' | 'windowTitle' | 'focus' | 'selection' | 'diffAdded' | 'diffRemoved'
   | 'modeIndicator' | 'sectionHeader' | 'keyLabel' | 'mutedId' | 'chipOk' | 'chipWarn' | 'chipFail' | 'systemLabel' | 'systemRail'
   | 'strong' | 'emphasis' | 'strike';
@@ -21,6 +21,7 @@ const ANSI16_NAME: Readonly<Record<string, string>> = {
 
 type AttributeRole = 'strong' | 'emphasis' | 'strike';
 const WORKLINE_ROLE_MAP: Readonly<Record<Exclude<WorklineInkRole, AttributeRole>, PaletteRole>> = {
+  model: 'model', provider: 'provider',
   accent: 'accent',
   muted: 'muted',
   user: 'success',

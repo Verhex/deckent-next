@@ -3,13 +3,14 @@ import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
+import { providerDisplayName } from './provider-label.js';
 
 // The config surface reaches the terminal renderer; load it only when a default-model write happens (startup graph stays light).
 const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/core/config/index.js').terminalConfigWrite>) =>
   (await import('#surfaces/core/config/index.js')).terminalConfigWrite(...args);
 
 type Host = Pick<TerminalLaunchContext, 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
-  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectModelReadiness' | 'prepareModelSwitch'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
+  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
 /** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
 function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
   switch (source) {
@@ -113,6 +114,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
           catch (error) { blocked = readinessReason(error, locale); }
         }
         return { reference, label: display.get(exact) ?? model.id, detail: blocked ? t('tui.model.state.blocked', {}, locale) : t('tui.model.state.ready', {}, locale),
+          providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
       })));

@@ -1,6 +1,8 @@
 {
   "$description": "Terminal semantic roles for the Ink workline. Primitive hex/256 values live in scripts/build-terminal-palette.mjs (PRIMITIVES, per theme); the builder writes src/surfaces/core/terminal-theme/internal/generated/palette.ts. `contrast`: text roles need WCAG 2.2 1.4.3 4.5:1, border roles 1.4.11 3:1 against every reference background of their theme; roles without a primitive use the terminal's own foreground.",
   "roles": {
+    "model": { "primitive": "modelBlue", "ansi16": "94", "class": "primary" },
+    "provider": { "primitive": "providerPurple", "ansi16": "95", "class": "primary" },
     "success": { "primitive": "novaGo", "ansi16": "32", "class": "supplemental" },
     "error": { "primitive": "novaAbort", "ansi16": "31", "class": "supplemental" },
     "warning": { "primitive": "novaAmber", "ansi16": "33", "class": "supplemental" },
@@ -31,10 +33,10 @@
   },
   "themes": {
     "dark": { "backgrounds": ["#000000", "#1E1E1E", "#282C34"] },
-    "light": { "backgrounds": ["#FFFFFF", "#F5F5F5"] },
+    "light": { "backgrounds": ["#FFFFFF", "#F5F5F5"], "ansi16": { "model": "34", "provider": "35" } },
     "dark-daltonized": { "backgrounds": ["#000000", "#1E1E1E", "#282C34"],
       "ansi16": { "success": "94", "error": "93", "diffAdded": "94", "diffRemoved": "93", "workerCard": "94", "chipOk": "94", "chipFail": "93" } },
     "light-daltonized": { "backgrounds": ["#FFFFFF", "#F5F5F5"],
-      "ansi16": { "success": "34", "error": "33", "diffAdded": "34", "diffRemoved": "33", "workerCard": "34", "chipOk": "34", "chipFail": "33" } }
+      "ansi16": { "model": "34", "provider": "35", "success": "34", "error": "33", "diffAdded": "34", "diffRemoved": "33", "workerCard": "34", "chipOk": "34", "chipFail": "33" } }
   }
 }

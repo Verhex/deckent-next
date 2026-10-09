@@ -5,7 +5,7 @@ import { cells, wrapCells } from './text-width.js';
  * roles to the active palette (the `none` tier maps every role and attribute to nothing), so plain text is `spans.text`.
  */
 /** SW-1: information-window roles (section header, bold key, muted id, chip states, selected row) ride the same span path. */
-export type SpanRole = 'accent' | 'muted' | 'code' | 'link' | 'info' | 'success' | 'warning' | 'error' | 'modeIndicator' | 'diffAdded' | 'diffRemoved'
+export type SpanRole = 'model' | 'provider' | 'accent' | 'muted' | 'code' | 'link' | 'info' | 'success' | 'warning' | 'error' | 'modeIndicator' | 'diffAdded' | 'diffRemoved'
   | 'sectionHeader' | 'keyLabel' | 'mutedId' | 'chipOk' | 'chipWarn' | 'chipFail' | 'selection';
 export type Span = Readonly<{ text: string; role?: SpanRole; bold?: boolean; italic?: boolean; strike?: boolean;
   /** Trusted classifier marker identity; a literal look-alike in input never carries this field. */

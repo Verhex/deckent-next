@@ -72,6 +72,7 @@ export interface WorklineProps {
   /** Window of the plain (non-streaming) path only; the agent path sends the whole conversation (T-L5, Astra 2091 R1). */
   readonly historyMessages: number;
   readonly model?: string;
+  readonly provider?: string;
   readonly completeTurn: WorklineCompleteTurn;
   readonly errorText: WorklineErrorText;
   readonly ledger?: WorklineLedgerPorts;
@@ -234,13 +235,15 @@ export function WorklineApp(props: WorklineProps) {
   // conversation's own pin, or none (the configured model) — never another conversation's.
   const [, setModelGeneration] = useState(0);
   const pinnedModels = useRef(new Map<string, ModelPanelReference>());
+  const pinnedLabels = useRef(new Map<string, { model: string; provider: string }>());
   // CACHE-SLICE1: a switch over a large context asks first (registry threshold); "new context" keeps the person's own instructions, never silently.
   const sessionModel = useMemo(() => ({ pinned: () => pinnedModels.current.get(sessionId()) ?? null,
     largeContext: () => { const tokens = sessionNow.current.measuredPrompt(); return tokens !== null && tokens >= MODEL_SWITCH.askFreshContextAtTokens ? tokens : null; },
     pin: (choice: ModelPanelChoice, fresh?: boolean) => {
       if (fresh) history.current = freshContextHistory(history.current);
       sessionNow.current.forgetContext();
-      pinnedModels.current.set(sessionId(), choice.reference); setModelGeneration(value => value + 1);
+      pinnedModels.current.set(sessionId(), choice.reference);
+      pinnedLabels.current.set(sessionId(), { model: choice.label, provider: choice.providerLabel ?? choice.group }); setModelGeneration(value => value + 1);
     } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
@@ -288,12 +291,15 @@ export function WorklineApp(props: WorklineProps) {
         let state = opened.state, answer = '';
         setLive({ step: opened, lead: true }); setTurnRunning(true);
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
+        const turnIdentity = pinnedLabels.current.get(execution.input.context.sessionId)
+          ?? (props.model && props.provider ? { model: props.model, provider: props.provider } : undefined);
         // Forward the session and reasoning choices with the composition's generated binding callback.
         for await (const delta of props.streamTurn(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
           ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
-          session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId; usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, delta)); }
+          session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId;
+            usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, { ...delta, identity: turnIdentity })); }
           if (delta.kind === 'approval') {
             stream.approval(delta);
             if (delta.phase === 'settled' && delta.outcome === 'unsettled') work.noteUnsettled(delta.approvalId);
@@ -493,7 +499,8 @@ export function WorklineApp(props: WorklineProps) {
       {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
       {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
       <Text {...palette.accent}>{labels.banner}</Text>
-      <StatusStrip target={target} model={pinnedModels.current.get(sessionId())?.modelId ?? props.model} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
+      <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
+        state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
         selfSource={props.selfSource} cancellable={turnRunning && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
       {/* T3 L4 (owner 2026-10-07): while the session holds full access one standing line above the composer says so (text and mark; colour is a hint). */}

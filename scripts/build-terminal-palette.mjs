@@ -14,6 +14,7 @@ const outPath = join(root, 'src/surfaces/core/terminal-theme/internal/generated/
  */
 const PRIMITIVES = {
   dark: {
+    modelBlue: { hex: '#87AFFF', ansi256: 111 }, providerPurple: { hex: '#D7AFFF', ansi256: 183 },
     novaGo: { hex: '#43E39A', ansi256: 78 },
     novaAbort: { hex: '#FF6B5E', ansi256: 203 },
     novaAmber: { hex: '#E8B34C', ansi256: 179 },
@@ -22,11 +23,13 @@ const PRIMITIVES = {
     seaTextMuted: { hex: '#7FA3B2', ansi256: 109 },
   },
   light: {
+    modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
     novaGo: { hex: '#16774A' }, novaAbort: { hex: '#B3261E' }, novaAmber: { hex: '#8A5A00' },
     novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' },
   },
   'dark-daltonized': { novaGo: { hex: '#56B4E9' }, novaAbort: { hex: '#E69F00' }, novaAmber: { hex: '#F0E442' } },
   'light-daltonized': {
+    modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
     novaGo: { hex: '#0072B2' }, novaAbort: { hex: '#B85000' }, novaAmber: { hex: '#8A5A00' },
     novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' },
   },

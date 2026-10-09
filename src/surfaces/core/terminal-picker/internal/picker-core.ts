@@ -5,10 +5,12 @@
  * on the surface. A result is a typed value; applying it (config write, model switch) stays with the caller's own authority path.
  */
 
+import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 /** A row. `children` makes it a section that opens a lower level; `blocked.reason` is the already localized why (the row shows it). */
 export type PickerNode = Readonly<{
   id: string;
   label: string;
+  identity?: ModelProviderLabel;
   detail?: string;
   /** Extra words the filter also matches (aliases, ids). */
   keywords?: readonly string[];
@@ -135,7 +137,7 @@ export type PickerView = Readonly<{
   crumbs: readonly string[];
   filter: string;
   /** Rows now shown: the filtered level, or the scopes in the scope step. */
-  rows: readonly Readonly<{ id: string; label: string; detail?: string; section: boolean; blocked: string | null }>[];
+  rows: readonly Readonly<{ id: string; label: string; identity?: ModelProviderLabel; detail?: string; section: boolean; blocked: string | null }>[];
   pos: number;
   /** Total rows before filtering (to tell "no match" from "nothing"). */
   unfiltered: number;
@@ -152,6 +154,7 @@ export function pickerView(tree: PickerTree, state: PickerState): PickerView {
   const nodes = filterPickerNodes(level.nodes, state.filter);
   return { stage: 'list', title: level.title, crumbs: level.titles, filter: state.filter, unfiltered: level.nodes.length,
     rows: nodes.map(node => ({ id: node.id, label: node.label, ...(node.detail !== undefined ? { detail: node.detail } : {}),
+      ...(node.identity ? { identity: node.identity } : {}),
       section: Boolean(node.children), blocked: node.blocked?.reason ?? null })),
     pos: pickerChoice(state.pos, nodes.length) };
 }

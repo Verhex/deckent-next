@@ -1,5 +1,5 @@
 import type { RunView, WorkerObservation, WorkerObservationReport, WorkerSidecars } from '#engine/index.js';
-import type { AssistantUnit } from '#surfaces/core/terminal-render/index.js';
+import type { AssistantUnit, ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 
 export const WORK_LEDGER_SCHEMA_VERSION = 1;
 
@@ -71,6 +71,7 @@ export type WorkLedgerNoticeEntry = Readonly<{
   readonly id: string;
   readonly level: 'info' | 'warning' | 'error';
   readonly text: string;
+  readonly identity?: ModelProviderLabel;
 }>;
 
 export type WorkLedgerEntry = WorkLedgerChatEntry | WorkLedgerRunEntry | WorkLedgerWorkerEntry | WorkLedgerNoticeEntry;

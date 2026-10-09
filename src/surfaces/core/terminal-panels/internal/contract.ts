@@ -1,6 +1,7 @@
 import type { PermissionModeView } from '#domain/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
+import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 
 /**
  * T3 L4 PANELS: the ports and words of the interactive `/mode`, `/config` and `/mcp` windows (T4: `/model` and `/provider`). This unit only presents and collects a choice;
@@ -8,7 +9,7 @@ import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
 export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider';
-export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string }>;
+export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string; identity?: ModelProviderLabel }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
 export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
 
@@ -121,7 +122,7 @@ export type ModelPanelReference = Readonly<{ providerId: string; providerVersion
  * One model of `/model` (T4 MODEL-SWITCH): its words, the provider group it is listed under, and why it cannot be chosen now (not connected in
  * this scope, its key missing, not activated, not readable) — such a row is listed with its reason and is never pickable.
  */
-export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label: string; detail: string; group: string; blocked: string | null;
+export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label: string; providerLabel?: string; detail: string; group: string; blocked: string | null;
   /** Shown dimmed under the list for the focused row only (owner 2026-10-08: human labels first, exact ids and digests never in front): the exact
    * reference, and for a locked row the governed command that would fix it. */
   exact: string; command: string | null;

@@ -72,7 +72,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     // the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it.
     providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
       endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
-      endpointChoices: kind.endpoint.choices, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
+      endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? null, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
       priceRequired: kind.connect?.priceRequired ?? false })),
     endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}),
     legacyKeys: PROVIDER_CONNECT_LEGACY_KEYS,

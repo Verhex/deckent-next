@@ -90,6 +90,7 @@ async function keep(name: string, result: { output: string; frames: [string, str
   if (!directory) return;
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, `${name}.txt`), result.frames.map(([label, text], index) => `===== ${label} =====\n${screen(text.slice(index ? result.frames[index - 1]![1].length : 0))}`).join('\n'));
+  await writeFile(join(directory, `${name}.json`), JSON.stringify(result, null, 2));
 }
 const ESC = '\u001b', DOWN = '\u001b[B', ENTER = '\r', SHIFT_TAB = '\u001b[Z';
 const WORDS = {
@@ -103,6 +104,31 @@ describe('settings windows on a real PTY (T3 L4)', () => {
   beforeEach(context => {
     if (process.platform === 'win32') context.skip('PYTHON_PTY_UNSUPPORTED: Python pty/fork/termios fixture is Unix-only; this does not test Windows ConPTY');
   });
+  for (const [locale, color] of [['en', false], ['tr', true]] as const) {
+    it(`${locale}: model and provider survive status, model selection, switch notice and usage on a PTY`, async () => {
+      const root = await project();
+      const result = await pty([
+        ['Fixture initial', '/model\r', 'status identity'],
+        ['Fixture switched', ENTER, '+model row'],
+        [locale === 'tr' ? 'Bu oturum' : 'This session', ENTER, '+scope confirmation'],
+        ['READY', 'fixture question\r', '+switch notice and status'],
+        ['FIXTURE-ANSWER', '/usage\r', '+turn'],
+        [locale === 'tr' ? 'Kullanılan model' : 'Model', ESC, '+usage identity'],
+      ], [locale, root, '0', color ? 'ansi256' : 'none'], color);
+      await keep(`pty-${locale}-model-provider`, result);
+      expect(result.timeout, result.output?.slice(-2000)).toBeUndefined();
+      const text = screen(result.output);
+      expect(text).toContain('Fixture initial (OpenRouter)');
+      expect(text).toContain('Fixture switched (OpenRouter)');
+      const usage = result.frames.find(([label]) => label === '+usage identity')![1];
+      expect(screen(usage)).toContain('Fixture switched (OpenRouter)');
+      if (color) {
+        expect(result.output).toContain(`${ESC}[38;5;111m`);
+        expect(result.output).toContain(`${ESC}[38;5;183m`);
+      } else expect(result.output).not.toMatch(ANY_COLOR);
+      expect(text).not.toMatch(/Error:|TypeError|ERR:/u);
+    });
+  }
   for (const [locale, color] of [['en', false], ['tr', false], ['tr', true]] as const) {
     it(`${locale}${color ? ' colour' : ' NO_COLOR'}: without the company's grants the person sees locked rows and why; nothing is chosen behind a lock`, async () => {
       const words = WORDS[locale], root = await project();

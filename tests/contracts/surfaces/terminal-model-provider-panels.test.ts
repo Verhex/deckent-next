@@ -70,7 +70,7 @@ describe('/model window', () => {
     const view = mount(element, 60, 40, true);
     await settle(80);
     for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(60);
-    expect(view.frame()).toContain('chat · default');
+    expect(view.frame()).toContain('chat (local-openai) · default');
     await view.press(DOWN);
     expect(view.frame()).toMatch(/x coder/u); expect(view.frame()).toContain('NOT-ACTIVE');
     // The exact reference and the fixing command are shown only for the focused row (dimmed), never in the row itself.
@@ -83,14 +83,14 @@ describe('/model window', () => {
     expect(view.frame()).toContain('This session, and make it my default');
     await view.press(ENTER);
     expect(pins).toEqual(['fast']); expect(calls.closed).toBe(1);
-    expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast from the next turn')]);
+    expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast (local-openai) from the next turn')]);
   });
 
   it('"also make default" is locked with its reason when the host binds no default write', () => {
     const labels = terminalPanelLabels('en').model;
     const tree = modelPanelTree({ ...MODELS, defaultBlocked: 'DECISION-PENDING' }, null, labels, 'T', false);
     expect(tree.scopes).toEqual([{ id: 'session', label: labels.session }, { id: 'default', label: labels.sessionAndDefault, blocked: { reason: 'DECISION-PENDING' } }]);
-    expect(modelPanelTree(MODELS, ref('fast'), labels, 'T', true).items.map(item => item.label)).toEqual(['chat · default', 'coder', 'fast · this session']);
+    expect(modelPanelTree(MODELS, ref('fast'), labels, 'T', true).items.map(item => item.label)).toEqual(['chat (local-openai) · default', 'coder (local-openai)', 'fast (local-openai) · this session']);
     // More than one provider: one section per provider.
     const two = modelPanelTree({ ...MODELS, choices: [...MODELS.choices, { ...MODELS.choices[0]!, reference: ref('chat', 'anthropic'), group: 'anthropic' }] }, null, labels, 'T', true);
     expect(two.items.map(item => [item.label, item.children?.length])).toEqual([['local-openai', 3], ['anthropic', 1]]);
@@ -318,7 +318,7 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     await settleWorkline(60);
     for (const key of [DOWN, DOWN, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
     view.stdin.write(ENTER);
-    await until(() => view.stdout.text.includes('This session uses fast from the next turn'), 'pinned');
+    await until(() => view.stdout.text.includes('This session uses fast (local-openai) from the next turn'), 'pinned');
     view.stdin.write(`again${ENTER}`);
     await until(() => seen.length === 2, 'second turn');
     view.stdin.write(`and again${ENTER}`);
@@ -357,7 +357,7 @@ describe('/model in the workline: the pin rides on the next turn', () => {
       await settleWorkline(60);
       for (const key of [...keys, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
       view.stdin.write(ENTER);
-      await until(() => view.stdout.text.includes(`This session uses ${model} from the next turn`), `pinned ${model}`);
+      await until(() => view.stdout.text.includes(`This session uses ${model} (${MODELS.choices.find(choice => choice.label === model)!.group}) from the next turn`), `pinned ${model}`);
       await until(() => !view.stdout.frame.includes('Models · scope'), 'window closed');
     };
     const say = async (text: string, count: number) => { view.stdin.write(`${text}${ENTER}`); await until(() => turns.length === count, text); await settleWorkline(40); };
@@ -389,7 +389,7 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     // The window shows the resumed conversation's own pin.
     view.stdin.write(`/model${ENTER}`);
     await until(() => view.stdout.frame.includes('Models · scope'), 'model window again'); await settleWorkline(60);
-    expect(view.stdout.frame).toContain('fast · this session'); expect(view.stdout.frame).not.toContain('chat · default · this session');
+    expect(view.stdout.frame).toContain('fast (local-openai) · this session'); expect(view.stdout.frame).not.toContain('chat (local-openai) · default · this session');
   });
 
   it('/provider without its port says the part is unavailable here (no chat turn)', async () => {

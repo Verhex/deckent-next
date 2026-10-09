@@ -135,7 +135,9 @@ export async function usageView(call: TerminalAdminCall, usage: SessionUsageView
     : { title: t('terminal.info.usage.section.conversation', {}, locale), rows: [{ key: t('terminal.info.usage.key.reports', {}, locale), value: count(usage.reports, locale) },
       { key: t('terminal.info.usage.key.prompt', {}, locale), value: t('terminal.info.usage.tokens', { tokens: count(usage.promptTokens, locale) }, locale) },
       { key: t('terminal.info.usage.key.completion', {}, locale), value: t('terminal.info.usage.tokens', { tokens: count(usage.completionTokens, locale) }, locale) },
-      { key: t('terminal.info.usage.key.reasoning', {}, locale), value: reasoningText(usage, locale), ...(usage.reasoningUnmeasured ? { chip: { state: 'neutral' as const, text: t('terminal.info.chip.unknown', {}, locale) } } : {}) }, ...cacheRows(usage, locale)],
+      { key: t('terminal.info.usage.key.reasoning', {}, locale), value: reasoningText(usage, locale), ...(usage.reasoningUnmeasured ? { chip: { state: 'neutral' as const, text: t('terminal.info.chip.unknown', {}, locale) } } : {}) },
+      ...(usage.models ?? []).map(row => ({ key: t('terminal.info.usage.key.model', {}, locale), identity: { model: row.model, provider: row.provider },
+        value: t('terminal.info.usage.model', { model: row.model, provider: row.provider, prompt: count(row.promptTokens, locale), completion: count(row.completionTokens, locale), reports: row.reports }, locale) })), ...cacheRows(usage, locale)],
     notes: [t('terminal.admin.usage.notBilling', {}, locale)] };
   const budgetsTitle = t('terminal.info.usage.section.budgets', {}, locale);
   let budgets: readonly Budget[] = [], budgetSection: InfoSection;
