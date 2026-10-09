@@ -34,6 +34,7 @@ type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnT
  */
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
+  catalogProviderId?: string | null;
   secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
   /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
   connectFamily?: string | null; seeded?: boolean;

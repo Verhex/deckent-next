@@ -72,7 +72,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
   const window = kind && ports && panels && !input.blocked
     // SLASH-WINDOWS: what a settings window reports when it closes (a `/model` pin, a `/config` or `/mcp` outcome, a `/provider` result) is the
     // one system summary line, never a chat notice.
-    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => systemSummaryEntry(item.text, item.level)))}
+    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => ({ ...systemSummaryEntry(item.text, item.level), ...(item.identity ? { identity: item.identity } : {}) })))}
       onError={error => push([systemSummaryEntry(errorText(error), 'error')])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
       onClose={() => { panel.choose(handle.current, 'close'); }} /> : null;
   return { open, openKind: kind, window };

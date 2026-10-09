@@ -19,7 +19,8 @@ const same = (left: ModelPanelReference | null, right: ModelPanelReference) => l
 export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference | null, labels: ModelPanelLabels, title: string, defaultOffered: boolean, largeContext = false): PickerTree {
   const node = (choice: ModelPanelChoice): PickerNode => {
     const marks = [...(same(pinned, choice.reference) ? [labels.pinnedMark] : []), ...(choice.configured ? [labels.configuredMark] : [])];
-    return { id: keyOf(choice.reference), label: marks.length ? `${choice.label} · ${marks.join(' · ')}` : choice.label, detail: choice.detail,
+    const provider = choice.providerLabel ?? choice.group, label = `${choice.label} (${provider})`;
+    return { id: keyOf(choice.reference), label: marks.length ? `${label} · ${marks.join(' · ')}` : label, identity: { model: choice.label, provider }, detail: choice.detail,
       keywords: [choice.reference.modelId, choice.reference.providerId, choice.group], ...(choice.blocked ? { blocked: { reason: choice.blocked } } : {}) };
   };
   const groups = [...new Set(view.choices.map(choice => choice.group))];
@@ -78,7 +79,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     Promise.resolve().then(() => port.prepare?.(choice)).then(async () => {
       if (!mounted.current) return;
       port.pin(choice, fresh === true);
-      push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label }) },
+      push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label, provider: choice.providerLabel ?? choice.group }),
+        identity: { model: choice.label, provider: choice.providerLabel ?? choice.group } },
         ...(tokens === null ? [] : [{ level: 'info' as const, text: fillTemplate(fresh ? words.switch.freshDone : words.switch.keepDone, { model: choice.label }) }])]);
       if (result.kind !== 'selected' || (result.scope !== DEFAULT && result.scope !== FRESH_DEFAULT) || !port.makeDefault) { onClose(); return; }
       const outcome = await port.makeDefault(choice);

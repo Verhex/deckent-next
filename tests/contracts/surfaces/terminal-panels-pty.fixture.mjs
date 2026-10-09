@@ -14,6 +14,7 @@ import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/termina
 import { terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { configPanelPort } from '#surfaces/core/config/index.js';
 import { mcpPanelPort } from '#surfaces/core/cli-terminal/index.js';
+import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 
 const [locale, root, grant, tier] = process.argv.slice(2);
 composeCore();
@@ -51,15 +52,24 @@ const configContext = { configApplication: () => application, resolveConfigPrinc
 const options = { env: { HOME: root, DECKENT_GLOBAL_HOME: `${root}/global` }, heal: false };
 const mcpRun = async (_root, request) => request.verb === 'list' ? { servers: [{ name: 'files', scope: 'local', status: 'trusted', realm: 'prefer-sandbox', command: 'npx', args: ['-y', 'files'],
   pinnedTools: 2 }, { name: 'github', scope: 'project', status: 'pending-approval', realm: 'host', command: 'gh-mcp', args: [] }], problems: [] } : {};
+const admin = terminalAdminPorts({ root, scopeId: 'scope', installationId: 'fixture-installation', projectId: 'fixture-project', options, locale,
+  context: {}, status: async () => '', doctor: async () => undefined });
+const model = { async inspect() { return { title: w('tui.model.title'), notes: [], defaultBlocked: null, choices: [{
+  reference: { providerId: 'openrouter-api', providerVersion: 1, modelId: 'switched', modelVersion: 1 },
+  label: 'Fixture switched', providerLabel: 'OpenRouter', detail: '', group: 'openrouter-api', blocked: null, exact: '', command: null, configured: false,
+}] }; } };
 
 const view = createElement(WorklinePaletteProvider, {
   palette: resolveWorklinePalette(tier === 'none' ? 'none' : 'ansi256'),
   children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(false) }, createElement(WorklineApp, {
     context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' },
-    labels, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 20,
+    labels, target: 'scope', model: 'Fixture initial', provider: 'OpenRouter', systemPrompt: 'SYSTEM', historyMessages: 20,
     errorText: error => `ERR:${error?.code ?? 'error'}`, completeTurn: async () => 'unused', pollMs: 60_000, approvalPollMs: 60_000,
     permissionMode,
-    panels: { labels: terminalPanelLabels(locale), ports: { config: configPanelPort(root, configContext, options, locale), mcp: mcpPanelPort(root, mcpRun, options, locale) } },
+    async *streamTurn() { yield { kind: 'usage', promptTokens: 20, completionTokens: 3, reasoningTokens: null };
+      yield { kind: 'text', text: 'FIXTURE-ANSWER' }; yield { kind: 'done', finish: 'stop' }; },
+    info: admin.info,
+    panels: { labels: terminalPanelLabels(locale), ports: { model, config: configPanelPort(root, configContext, options, locale), mcp: mcpPanelPort(root, mcpRun, options, locale) } },
   })),
 });
 const instance = render(view, { exitOnCtrlC: false, patchConsole: false, interactive: true });

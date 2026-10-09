@@ -22,9 +22,9 @@ export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
   if (error instanceof HandoffError) return ErrorRegistry.createError(error.code);
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
-  if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code, error.nextAction ? { params: { nextAction: error.nextAction } } : {});
+  if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : error.code, error.nextAction ? { params: { nextAction: error.nextAction } } : {});
   if (error instanceof OpenRouterPricingError) return ErrorRegistry.createError(error.code === 'INVALID_REQUEST'
-    ? 'MODEL_INVOCATION_INVALID' : 'PROVIDER_SPEND_UNAVAILABLE');
+    ? 'MODEL_INVOCATION_INVALID' : error.code === 'PRIVACY_UNAVAILABLE' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : 'PROVIDER_SPEND_UNAVAILABLE');
   if (error instanceof OpenRouterChatError) return ErrorRegistry.createError(error.code === 'INVALID_PROFILE'
     ? 'MODEL_INVOCATION_PROFILE_CONFLICT' : error.code === 'TARIFF_CONFLICT' ? 'PROVIDER_SPEND_CONFLICT' : 'MODEL_INVOCATION_INVALID');
   if (error instanceof ModelInvocationError || error instanceof ModelInvocationStoreError || error instanceof OpenAiChatHttpError) return ErrorRegistry.createError(error.code);

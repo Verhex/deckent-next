@@ -1,6 +1,7 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { modelProviderSpans, spanStyle, type ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 
 /**
  * The scrollback entry id of a system summary line (a `notice` entry with this id). SW-2's placeholder `systemSummaryLine(text)` uses the
@@ -18,7 +19,7 @@ export function systemSummaryText(text: string): string {
  * the assistant's answer: its own rail (`systemRail`), its own mark and label (`◆ Deckent system`, `systemLabel`), and the text in the
  * terminal's foreground. The label word and the mark carry the meaning without colour (NO_COLOR, TERM=dumb).
  */
-export function SystemSummaryLine({ text, label, tone = 'info' }: { readonly text: string; readonly label: string; readonly tone?: 'info' | 'warning' | 'error' }) {
+export function SystemSummaryLine({ text, identity, label, tone = 'info' }: { readonly text: string; readonly identity?: ModelProviderLabel | undefined; readonly label: string; readonly tone?: 'info' | 'warning' | 'error' }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const mark = glyphs.ascii ? '#' : '◆';
   return (
@@ -27,7 +28,8 @@ export function SystemSummaryLine({ text, label, tone = 'info' }: { readonly tex
       <Text wrap="wrap">
         <Text {...palette.systemLabel}>{`${mark} ${label}`}</Text>
         <Text {...palette.muted}>{` ${glyphs.separator} `}</Text>
-        <Text {...(tone === 'error' ? palette.error : tone === 'warning' ? palette.warning : {})}>{systemSummaryText(text)}</Text>
+        <Text {...(tone === 'error' ? palette.error : tone === 'warning' ? palette.warning : {})}>{modelProviderSpans(systemSummaryText(text), identity)
+          .map((part, index) => <Text key={index} {...spanStyle(part, palette)}>{part.text}</Text>)}</Text>
       </Text>
     </Box>
   );

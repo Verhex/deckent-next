@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "maxResponseBytes": 16777216,
+  "maxDepth": 16,
+  "maxNodes": 1048576,
+  "maxCodeUnits": 16777216
+}

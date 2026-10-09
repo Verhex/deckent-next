@@ -18,7 +18,11 @@ const source = () => ({ data: { id: 'vendor/model', endpoints: [{ model_id: 'ven
   context_length: 100, max_prompt_tokens: 10, max_completion_tokens: 4, status: 0, supported_parameters: ['max_completion_tokens'],
   pricing: { prompt: '0.01', completion: '0.02', request: '0', input_cache_read: '0', input_cache_write: '0', internal_reasoning: '0', discount: 0 } }] } });
 async function fixture(handler: (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => void) {
-  const server = createServer({ key: privateKey, cert: certificate }, handler); servers.push(server);
+  const server = createServer({ key: privateKey, cert: certificate }, (req, res) => {
+    if (req.url === '/api/v1/endpoints/zdr') { res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: [{ model_id: 'vendor/model', tag: 'provider/region' }] })); return; }
+    handler(req, res);
+  }); servers.push(server);
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS'); return `https://127.0.0.1:${address.port}`;
 }
@@ -71,7 +75,7 @@ it('prepares without POST or credential lookup and emits one exact full-tag rout
   expect(credentials).toBe(0); expect(JSON.parse(seen)).toEqual({ ...request, stream: false, modalities: ['text'],
     plugins: ['web', 'file-parser', 'response-healing', 'context-compression', 'auto-router', 'auto-beta-router', 'pareto-router', 'fusion']
       .map(id => ({ id, enabled: false })), provider: { only: ['provider/region'], order: ['provider/region'],
-    allow_fallbacks: false, require_parameters: true, max_price: { prompt: '10000', completion: '20000', request: '0' } } });
+    allow_fallbacks: false, require_parameters: true, data_collection: 'deny', zdr: true, max_price: { prompt: '10000', completion: '20000', request: '0' } } });
 });
 
 it('fences changed or expired metadata before any POST and consumes each prepared token once', async () => {

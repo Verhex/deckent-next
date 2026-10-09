@@ -24,14 +24,16 @@ afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.
   server.closeAllConnections(); server.close(() => resolve());
 }))); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(withBudget = true, allow = true, completePricing = true, v5 = false) {
+async function fixture(withBudget = true, allow = true, completePricing = true, v5 = false, socketless = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-openrouter-composition-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(data), mkdir(home)]);
   const { key, caPem } = await createLocalTls(root);
   let metadataGets = 0, posts = 0;
   let nativeUsage: Record<string, unknown> | undefined;
-  const server = createServer({ key, cert: caPem }, (request, response) => {
+  const server = socketless ? null : createServer({ key, cert: caPem }, (request, response) => {
+    if (request.url === '/api/v1/endpoints/zdr') { response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ data: [{ model_id: 'vendor/model', tag: 'provider/region' }] })); return; }
     if (request.url === '/api/v1/models/vendor/model/endpoints') {
       metadataGets++; response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ data: { id: 'vendor/model', endpoints: [{
         model_id: 'vendor/model', tag: 'provider/region', provider_name: 'Fixture', context_length: 4096, max_prompt_tokens: 1000,
@@ -49,9 +51,9 @@ async function fixture(withBudget = true, allow = true, completePricing = true, 
     }
     response.writeHead(404); response.end();
   });
-  servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
-  const origin = `https://127.0.0.1:${address.port}`, reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 };
+  if (server) { servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); }); }
+  const address = server?.address(); if (server && (!address || typeof address === 'string')) throw new Error('FIXTURE');
+  const origin = `https://127.0.0.1:${address && typeof address !== 'string' ? address.port : 4443}`, reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 };
   const family = v5 ? 'openai-chat-completions' : 'openrouter-chat-completions';
   const model = { id: 'model', version: 1, nativeId: 'vendor/model', protocols: [{ family, version: 'v1',
     capabilities: v5 ? [{ id: 'tool-calls', version: 1, state: 'supported' }] : [] }] };
@@ -462,4 +464,26 @@ it.skipIf(process.platform !== 'linux')('governed runtime SDK revisions reach re
       evidence: { kind: 'write-off', digest: 'b'.repeat(64) } });
     expect(result.receipt.after.reservedMinorUnits).toBeLessThan(after.account.reservedMinorUnits);
   } finally { await stopTestRuntimeService(service); }
+});
+
+it.each([false, true])('privacy acquisition refusal crosses configured legacy/v5=%s with no POST or durable hold', async v5 => {
+  // Only the external acquisition is replaced: actual composition, policy, activation,
+  // engine acquisition error boundary and SQLite reservation store remain in use.
+  const f = await fixture(true, true, true, v5, true);
+  const document = JSON.parse(await readFile(new URL('../../fixtures/openrouter-endpoints/deepseek--deepseek-v4.1-flash-endpoints.json', import.meta.url), 'utf8')) as
+    { data: { id: string; endpoints: Record<string, unknown>[] } };
+  const first = document.data.endpoints.find(endpoint => endpoint['tag'] === 'deepseek')!;
+  vi.spyOn(adapters, 'fetchOpenRouterTariff').mockImplementationOnce(async options => {
+    // Retained endpoint shape/prices; synthetic selected identity and explicit training-only policy.
+    document.data.id = options.modelId;
+    document.data.endpoints = [{ ...first, model_id: options.modelId, tag: options.endpointTag, data_policy: { training: true, retainsPrompts: true } }];
+    adapters.parseOpenRouterTariff(document, { modelId: options.modelId, endpointTag: options.endpointTag, fetchedAtMs: 100, expiresAtMs: 200 }, { data: [] });
+    throw new Error('TRAINING_ROUTE_MUST_REFUSE');
+  });
+  await expect(invokeConfiguredModel(f.project, f.command, { env: f.env })).rejects.toMatchObject({ code: 'OPENROUTER_PRIVACY_UNAVAILABLE' });
+  expect(f.posts).toBe(0);
+  const reader = await openSqliteProviderSpendIntegrityReader(f.ledger, { busyTimeoutMs: 1000 });
+  // No financial account/checkpoint was opened, so integrity returns absence, not a zero balance.
+  try { expect(await verifyProviderSpendIntegrity(reader, 'scope', 10)).toBeNull(); }
+  finally { reader.close(); }
 });

@@ -3,7 +3,8 @@ import { createHash, X509Certificate } from 'node:crypto';
 import { z } from 'zod';
 import { createImmutableJsonObjectSchema } from '#domain/index.js';
 import { OpenRouterPricingError } from './error.js';
-import { parseOpenRouterTariff, type OpenRouterTariff } from './tariff.js';
+import { parseOpenRouterTariff, parseZdrEndpoints, type OpenRouterTariff } from './tariff.js';
+import PRIVACY_LIMITS from './privacy-limits.json' with { type: 'json' };
 
 const positive = z.number().int().positive().safe();
 const optionsSchema = createImmutableJsonObjectSchema({ maxDepth: 4, maxNodes: 64, maxCodeUnits: 131_072 }).pipe(z.object({
@@ -15,6 +16,7 @@ export type OpenRouterMetadataFetchOptions = z.infer<typeof optionsSchema>;
 export interface OpenRouterMetadataObservation {
   readonly schemaVersion: 1; readonly sourceEndpoint: string; readonly sourceBodyDigest: string;
   readonly receivedBytes: number; readonly observedAtMs: number; readonly tariff: OpenRouterTariff;
+  readonly privacySourceEndpoint?: string; readonly privacyBodyDigest?: string;
 }
 const observations = new WeakSet<OpenRouterMetadataObservation>();
 /** A structural copy/config object is not evidence of this process having completed trusted acquisition. */
@@ -34,16 +36,30 @@ export async function fetchOpenRouterTariff(input: OpenRouterMetadataFetchOption
   const options = parsed.data, endpoint = metadataEndpoint(options);
   const startedAtMs = now();
   if (!Number.isSafeInteger(startedAtMs) || startedAtMs < 0) throw new OpenRouterPricingError('INVALID_METADATA');
-  const body = await fetchBody(endpoint, options, signal);
-  const observedAtMs = now(), expiresAtMs = startedAtMs + options.maxAgeMs;
-  if (!Number.isSafeInteger(observedAtMs) || observedAtMs < startedAtMs || !Number.isSafeInteger(expiresAtMs)
-    || observedAtMs >= expiresAtMs) throw new OpenRouterPricingError('STALE_TARIFF');
+  const deadline = AbortSignal.timeout(options.timeoutMs), boundedSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  const acquire = async (url: URL, limits = options) => {
+    try { return await fetchBody(url, limits, boundedSignal); }
+    catch (error) { if (deadline.aborted && !signal?.aborted) throw new OpenRouterPricingError('METADATA_TIMEOUT'); throw error; }
+  };
+  const body = await acquire(endpoint);
   let metadata: unknown;
   try { metadata = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)); }
   catch { throw new OpenRouterPricingError('INVALID_METADATA'); }
+  // Public endpoint documents may omit policy. Acquire the official endpoint-level ZDR
+  // inventory on the same authorized TLS origin, with the same deadline and no credential.
+  // Keep only this model's identities, never another model's metadata, in the tariff.
+  const privacyEndpoint = new URL('/api/v1/endpoints/zdr', endpoint);
+  const privacyBody = await acquire(privacyEndpoint, { ...options, maxResponseBytes: PRIVACY_LIMITS.maxResponseBytes });
+  let tags: string[];
+  try { tags = parseZdrEndpoints(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(privacyBody)), options.modelId); }
+  catch (error) { if (error instanceof OpenRouterPricingError) throw error; throw new OpenRouterPricingError('INVALID_METADATA'); }
+  const observedAtMs = now(), expiresAtMs = startedAtMs + options.maxAgeMs;
+  if (!Number.isSafeInteger(observedAtMs) || observedAtMs < startedAtMs || !Number.isSafeInteger(expiresAtMs)
+    || observedAtMs >= expiresAtMs) throw new OpenRouterPricingError('STALE_TARIFF');
   const tariff = parseOpenRouterTariff(metadata, { modelId: options.modelId, endpointTag: options.endpointTag,
-    fetchedAtMs: startedAtMs, expiresAtMs });
+    fetchedAtMs: startedAtMs, expiresAtMs }, { data: tags.map(tag => ({ model_id: options.modelId, tag })) });
   const observation = Object.freeze({ schemaVersion: 1 as const, sourceEndpoint: endpoint.href,
+    privacySourceEndpoint: privacyEndpoint.href, privacyBodyDigest: createHash('sha256').update(privacyBody).digest('hex'),
     sourceBodyDigest: createHash('sha256').update(body).digest('hex'), receivedBytes: body.length, observedAtMs, tariff });
   observations.add(observation); return observation;
 }

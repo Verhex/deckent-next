@@ -22,6 +22,7 @@ import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
+import { providerDisplayName } from './provider-label.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
 interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; trustDigest?: string; language?: string; scopeId?: string }
@@ -415,7 +416,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
-    target, model: chatTarget(chat, locale), systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
+    target, model: chat?.reference?.modelId ?? chatTarget(chat, locale),
+    ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
+    systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
     // NO_COLOR concerns colour only, so it does not stop the clear.
     clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',

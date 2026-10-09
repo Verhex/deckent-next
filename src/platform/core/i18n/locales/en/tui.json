@@ -811,7 +811,7 @@
   "tui.panel.model.sessionAndDefault": "This session, and make it my default",
   "tui.panel.model.pinnedMark": "this session",
   "tui.panel.model.configuredMark": "default",
-  "tui.panel.model.pinned": "This session uses {model} from the next turn. If it cannot be used then, the turn stops with the reason; no other model answers in its place.",
+  "tui.panel.model.pinned": "This session uses {model} ({provider}) from the next turn. If it cannot be used then, the turn stops with the reason; no other model answers in its place.",
   "tui.model.title": "Models · {scope}",
   "tui.model.state.ready": "ready (connection not probed)",
   "tui.model.state.blocked": "cannot be chosen now",
@@ -974,5 +974,7 @@
   "tui.model.reason.budget": "Budget blocks this model ({code}). Open Budget in /model to revise or unfreeze it; reconcile held spending before retrying.",
   "tui.model.reason.price": "Price is not verified. Reconnect a priced model in /provider; no paid call will run.",
   "tui.model.reason.protocol": "This connection cannot run terminal turns ({code}). Choose another model in /model or reconnect it with a supported protocol in /provider.",
-  "tui.model.reason.notRunnable": "This model cannot run now ({code}). Check its connection in /provider and select it again in /model."
+  "tui.model.reason.notRunnable": "This model cannot run now ({code}). Check its connection in /provider and select it again in /model.",
+  "terminal.info.usage.key.model": "Model",
+  "terminal.info.usage.model": "{model} ({provider}) · {prompt} input / {completion} output tokens · {reports} reports"
 }

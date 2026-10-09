@@ -187,6 +187,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   PROVIDER_SPEND_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_INVALID', p, l) }) },
   PROVIDER_SPEND_RESULT_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_RESULT_LIMIT', p, l) }) },
   PROVIDER_SPEND_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_UNAVAILABLE', p, l) }) },
+  OPENROUTER_PRIVACY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.OPENROUTER_PRIVACY_UNAVAILABLE', p, l) }) },
   PROVIDER_SPEND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_CONFLICT', p, l) }) },
   PROVIDER_SPEND_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_EXHAUSTED', p, l) }) },
   PROVIDER_SPEND_BUDGET_EXISTS: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_BUDGET_EXISTS', p, l) }) },

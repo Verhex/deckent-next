@@ -6,7 +6,7 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { useWindowLayer, useWindowReserve, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
-import { fillTemplate, truncateEnd, useRenderGlyphs, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, truncateEnd, useRenderGlyphs, wrapCells, modelProviderSpans, spanStyle } from '#surfaces/core/terminal-render/index.js';
 import { ARROW_PICKER_ROWS } from './arrow-picker.js';
 import { PICKER_INITIAL, pickerActionOf, pickerFirstRow, pickerReduce, pickerView, type PickerOutcome, type PickerResult, type PickerState, type PickerTree } from './picker-core.js';
 
@@ -93,7 +93,8 @@ export function ListPicker(props: {
         const at = first + offset, selected = at === view.pos;
         const text = `${selected ? '>' : ' '} ${row.blocked !== null ? lock : ' '} ${row.label}${row.section ? ` ${arrow}` : ''}${row.detail ? `  ${row.detail}` : ''}${row.blocked !== null ? `  [${props.labels.blocked}]` : ''}`;
         const tone = selected ? palette.selection : row.blocked !== null ? palette.muted : {};
-        return <Text key={`${row.id}:${at}`} wrap="truncate" {...tone}>{truncateEnd(text, width, glyphs.ellipsis)}</Text>;
+        return <Text key={`${row.id}:${at}`} wrap="truncate" {...tone}>{modelProviderSpans(truncateEnd(text, width, glyphs.ellipsis), row.identity)
+          .map((part, index) => <Text key={index} {...spanStyle(part, palette)}>{part.text}</Text>)}</Text>;
       })}
       {view.rows.length > pageSize
         ? <Text {...palette.muted} wrap="truncate">{fillTemplate(props.labels.position, { from: first + 1, to: Math.min(view.rows.length, first + pageSize), total: view.rows.length })}</Text> : null}
