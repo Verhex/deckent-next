@@ -6,12 +6,15 @@ import { projectModelIngressField, type ModelIngressProjection } from './model-i
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { LOCALES, t, type Locale } from '#platform/index.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolDiagnostic, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
-  AgentTurnMessage } from '#domain/index.js';
+  AgentTurnMessage, AgentMessageContinuation, AgentProviderStop } from '#domain/index.js';
+
+const providerStopWords = (language: Locale | undefined) => ({ 'content-filter': t('agent.turn.outcome.contentFilter', {}, language), 'context-window': t('agent.turn.outcome.providerContext', {}, language),
+  'network-error': t('agent.turn.outcome.providerNetwork', {}, language), 'resource-exhausted': t('agent.turn.outcome.providerResource', {}, language), 'aborted': t('agent.turn.outcome.providerAborted', {}, language) });
 
 /** One governed model round as the loop sees it: the provider-neutral answer, or why there is none. */
 export type AgentRoundOutcome =
   | { readonly status: 'responded'; readonly content: string; readonly reasoning: string; readonly toolCalls: readonly AgentToolCall[];
-    readonly finish: string; readonly usage: { readonly promptTokens: number; readonly completionTokens: number } | null }
+    readonly finish: string; readonly continuation?: AgentMessageContinuation; readonly providerStop?: AgentProviderStop; readonly usage: { readonly promptTokens: number; readonly completionTokens: number } | null }
   | { readonly status: 'failed'; readonly state: string };
 
 /**
@@ -223,7 +226,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const messages: AgentTurnMessage[] = [];
   for (const message of input.messages) {
     if (message.role === 'user' || message.role === 'tool') messages.push({ ...message, content: await presentModelIngress(message.content, null, input, ports, 0) });
-    else messages.push(message);
+    else if (message.role !== 'assistant' || message.content.trim() || message.toolCalls.length) messages.push(message);
   }
   // The carry is built from the projected request, so a hidden payload never enters the carried context.
   const carry = createAgentContextCarry(messages);
@@ -332,7 +335,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       return finish('error', t('agent.turn.outcome.failed', { state: outcomeState(outcome.state, input.language), summary: summary() }, input.language));
     }
     if (outcome.usage) emit({ kind: 'usage', round: rounds, ...outcome.usage });
-    push({ role: 'assistant', content: outcome.content, toolCalls: outcome.toolCalls });
+    if (outcome.content.trim() || outcome.toolCalls.length) push({ role: 'assistant', content: outcome.content, toolCalls: outcome.toolCalls,
+      ...(outcome.continuation ? { continuation: outcome.continuation } : {}) });
+    if (outcome.providerStop) return finish('error', t('agent.turn.outcome.providerStop', { reason: providerStopWords(input.language)[outcome.providerStop], summary: summary() }, input.language));
     if (outcome.toolCalls.length === 0) {
       if (outcome.content.trim()) return finish(outcome.finish === 'length' ? 'length' : 'stop', null);
       // Legacy RC1: reasoning spent the whole completion budget and left no answer. Close deterministically, no extra round.

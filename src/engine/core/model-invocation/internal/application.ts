@@ -5,7 +5,7 @@ import { authorizeModelInvocationSpending, type ModelInvocationSpendingAuthority
 import { identitySchema, ModelInvocationError, modelActivationActorSchema, modelActivationAuthorizationSchema, parseModelInvocationCommand,
   parseModelInvocationNativeResult, parseModelInvocationPurgeCommand, parseModelInvocationControlRecord, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
   type ModelInvocationClaim, type ModelInvocationNativeResponse, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt,
-  type ModelInvocationPurgeReceipt, type ModelReference, type VerifiedPrincipal, type ModelInvocationDeltaSink } from '#domain/index.js';
+  type ModelInvocationPurgeReceipt, type ModelActivationCommand, type ModelReference, type VerifiedPrincipal, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelActivationReader } from '#engine/core/model-activation/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
@@ -122,7 +122,8 @@ export class ModelInvocationApplication {
     private readonly bindings: Pick<ModelBindingApplication, 'inspect'>, private readonly openActivationReader: () => Promise<ModelActivationReader>,
     private readonly profiles: ModelInvocationProfileSource, private readonly natives: ModelInvocationNativeRegistry,
     private readonly openStore: () => Promise<ModelInvocationStore>, private readonly runtime: ModelInvocationRuntime,
-    private readonly spending?: ModelInvocationSpendingAuthority) {}
+    private readonly spending?: ModelInvocationSpendingAuthority,
+    private readonly refreshActivation?: (command: ModelActivationCommand) => Promise<unknown>) {}
 
   /** Binding, activation and profile of a command as `invoke` admits them, and the native port that serves the profile. */
   private async admittedTarget(command: ReturnType<typeof parseModelInvocationCommand>, preview = false) {
@@ -132,8 +133,16 @@ export class ModelInvocationApplication {
     const activationReader = await this.openActivationReader(); let activation;
     try { activation = await activationReader.loadRecord(command.scopeId, command.reference); }
     finally { activationReader.close(); }
-    if (!activation || activation.state !== 'active' || (!preview && activation.catalogRevision !== command.catalogRevision)
-      || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
+    if (!activation || activation.state !== 'active' || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
+    if (!preview && activation.catalogRevision !== command.catalogRevision) {
+      if (!this.refreshActivation) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
+      await this.refreshActivation({ schemaVersion: 1, action: 'activate', commandId: this.runtime.invocationId(), scopeId: command.scopeId, reference: command.reference,
+        expectedRevision: activation.revision, catalogRevision: command.catalogRevision, expectedBinding: command.expectedBinding });
+      const reader = await this.openActivationReader();
+      try { activation = await reader.loadRecord(command.scopeId, command.reference); } finally { reader.close(); }
+      if (!activation || activation.state !== 'active' || activation.catalogRevision !== command.catalogRevision
+        || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
+    }
     const profile = await this.profiles.resolve(command.scopeId, command.reference);
     if (!profile || profile.scopeId !== command.scopeId || !exactReference(profile.reference, command.reference)
       || profile.bindingDigest !== command.expectedBinding.digest
@@ -173,7 +182,7 @@ export class ModelInvocationApplication {
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke',
       { scopeId: command.scopeId, reference: command.reference }, principal));
-    const { binding, profile, native } = await this.admittedTarget(command);
+    const { binding, profile, native } = await this.admittedTarget(command, true);
     if (!native.measure) return null;
     const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');

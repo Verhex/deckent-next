@@ -12,7 +12,7 @@ export type WorklinePanels = Readonly<{ ports: Omit<PanelPorts, 'mode' | 'model'
 /** T4 MODEL-SWITCH: the session's pinned model, read when a turn starts (the next turn carries it). */
 export type WorklineSessionModel = Readonly<{ pinned: () => ModelPanelReference | null; pin: (choice: ModelPanelChoice, fresh?: boolean) => void;
   /** CACHE-SLICE1: the conversation's measured context at or above the registry threshold, else null. */
-  largeContext?: () => number | null }>;
+  largeContext?: () => number | null; reasoning?: () => 'off' | undefined }>;
 type Mode = Readonly<{ stop: PermissionModeStop | undefined; select: (stop: PermissionModeStop) => Promise<void> }>;
 
 const PANEL_COMMANDS: readonly PanelKind[] = ['mode', 'config', 'mcp', 'model', 'provider'];
@@ -49,7 +49,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
       inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
     // The host's whole `/model` source (budget window, shadow answers) plus the session pin; dropping an optional port hides its rows.
     ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
-      ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice) } : {}),
+      ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice, sessionModel.current?.reasoning?.()) } : {}),
       ...(model.budget ? { budget: model.budget } : {}), ...(model.cache ? { cache: model.cache } : {}),
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
       ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),

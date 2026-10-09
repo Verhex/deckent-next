@@ -975,6 +975,7 @@
   "tui.model.reason.price": "Fiyat doğrulanmadı. /provider ile fiyatı doğrulanmış bir model bağlayın; ücretli çağrı yapılmaz.",
   "tui.model.reason.protocol": "Bu bağlantı terminal turunu çalıştıramıyor ({code}). /model ile başka bir model seçin veya /provider ile desteklenen protokolü kullanarak yeniden bağlayın.",
   "tui.model.reason.notRunnable": "Bu model şu anda çalıştırılamıyor ({code}). /provider ile bağlantıyı kontrol edip /model içinden yeniden seçin.",
+  "tui.model.reason.reasoningOff": "Bu modelde düşünme kapatılamaz. Model değiştirmeden önce düşünmeyi açın.",
   "terminal.info.usage.key.model": "Kullanılan model",
   "terminal.info.usage.model": "{model} ({provider}) · {prompt} girdi / {completion} çıktı tokenı · {reports} ölçüm"
 }

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
 import type { JsonObject, ModelInvocationDelta, ModelInvocationRejectionReason } from '#domain/index.js';
 import type { NativeJsonHttpParsed, NativeJsonHttpStream } from '#adapters/core/provider-http-json/index.js';
-import { OPENAI_CHAT_MAX_TOOL_CALLS, openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema,
+import { OPENAI_CHAT_MAX_TOOL_CALLS, openAiChatUsageSchema, openAiChatWireObjectSchema,
   type OpenAiChatDialect, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from './contract.js';
 import { checkedToolCalls, couldBeDeclaredTool } from './tool-calls.js';
 
@@ -21,10 +22,23 @@ const deltaSchema = z.object({ role: z.literal('assistant').optional(), content:
   reasoning: z.string().nullable().optional(), reasoning_content: z.string().nullable().optional(),
   refusal: z.string().nullable().optional() }).passthrough();
 const choiceSchema = z.object({ index: z.literal(0), delta: deltaSchema,
-  finish_reason: openAiChatFinishReasonSchema.nullable().optional() }).passthrough();
-const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion.chunk'),
+  finish_reason: z.string().nullable().optional() }).passthrough();
+const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion.chunk').optional(),
   created: z.number().int().nonnegative().safe(), model: z.string().min(1), choices: z.array(choiceSchema).max(1),
   usage: z.unknown().optional(), system_fingerprint: z.unknown().optional() }).passthrough();
+
+type NativeReasoning = { content: string | null; contentSeen: boolean; details: JsonObject[]; detailsSeen: boolean };
+/** Keep exact native continuation separately from presentation; null signals malformed structured data. */
+function appendNativeReasoning(delta: Record<string, unknown>, state: NativeReasoning): number | null {
+  const details = delta['reasoning_details'];
+  if (details != null) {
+    if (!reasoningDetailsSchema.safeParse(details).success) return null;
+    state.detailsSeen = true; state.details.push(...details as JsonObject[]);
+  }
+  if (delta['reasoning_content'] === null) state.contentSeen = true;
+  if (typeof delta['reasoning_content'] === 'string') { state.contentSeen = true; state.content = (state.content ?? '') + delta['reasoning_content']; }
+  return details == null ? 0 : Buffer.byteLength(JSON.stringify(details), 'utf8');
+}
 
 /**
  * Incremental OpenAI chat-completions SSE parser. Every `data:` event is bounded and validated like the non-streamed
@@ -49,6 +63,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
   let head: { id: string; created: number; model: string } | null = null, fingerprint: string | null = null;
   // The stream's one authoritative service tier: any chunk may carry it, a conflicting value is an invalid response (PRICING).
   let serviceTier: unknown = undefined;
+  const continuation: NativeReasoning = { content: null, contentSeen: false, details: [], detailsSeen: false };
   let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null, usageReported = false;
   // Chunk positions of the usage and the finish reason: the usage is final only when it arrives with or after the finish chunk.
   let usageChunk = 0, finishChunk = 0;
@@ -76,6 +91,8 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     const copied = openAiChatWireObjectSchema.safeParse(raw), parsed = copied.success ? chunkSchema.safeParse(copied.data) : undefined;
     if (!copied.success || !parsed?.success) { fail('invalid-response'); return false; }
     const chunk = parsed.data; chunks += 1;
+    if ((!chunk.object && dialect?.responseObject !== 'optional') || (chunk.choices[0]?.finish_reason != null
+      && !finishReasonAccepted(chunk.choices[0].finish_reason, dialect))) { fail('invalid-response'); return false; }
     if (chunk['error'] !== undefined && chunk['error'] !== null) { fail('invalid-response'); return false; }
     if (chunk.model !== request.model) { fail('model-mismatch'); return false; }
     if (!head) head = { id: chunk.id, created: chunk.created, model: chunk.model };
@@ -96,7 +113,8 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     // OpenRouter's accounting frame repeats the terminal reason. It carries its own usage and no output of any kind.
     if (finish !== null && dialect?.finalUsageChoice === 'repeat-finish' && chunk.usage != null && choice.finish_reason === finish
       && Object.entries(delta).every(([key, value]) => (key === 'role' && value === 'assistant')
-        || (['content', 'reasoning', 'reasoning_content', 'refusal'].includes(key) && (value === '' || value === null)))) return false;
+        || (['content', 'reasoning', 'reasoning_content', 'refusal'].includes(key) && (value === '' || value === null))
+        || (key === 'reasoning_details' && (value === null || (Array.isArray(value) && value.length === 0))))) return false;
     // vLLM sends these keys as null when there is none. function_call is never accepted; tool_calls only when tools were declared.
     if (finish !== null || (delta['function_call'] ?? null) !== null) { fail('invalid-response'); return false; }
     const toolDeltas = delta['tool_calls'] ?? null;
@@ -125,6 +143,8 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
         assembledBytes += Buffer.byteLength(typeof fn['name'] === 'string' ? fn['name'] : '', 'utf8') + Buffer.byteLength(typeof fn['arguments'] === 'string' ? fn['arguments'] : '', 'utf8');
       }
     }
+    const continuationBytes = appendNativeReasoning(delta, continuation); if (continuationBytes === null) { fail('invalid-response'); return false; }
+    assembledBytes += continuationBytes;
     const thinking = typeof delta.reasoning === 'string' ? delta.reasoning : delta.reasoning_content ?? '';
     if (thinking) { reasoning += thinking; out.push({ kind: 'reasoning', text: thinking }); }
     if (delta.content) { content += delta.content; out.push({ kind: 'text', text: delta.content }); }
@@ -185,7 +205,8 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
       const toolCalls = ordered.length ? ordered.map(([, call]) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) : null;
       const checked = checkedToolCalls(toolCalls, request);
       if (checked === 'invalid' || (finish === 'tool_calls') !== (checked !== null)) return refuse('invalid-response');
-      const message = { role: 'assistant', content: content || null, ...(reasoning ? { reasoning } : {}), ...(refusal ? { refusal } : {}),
+      const message = { role: 'assistant', content: content || null, ...(reasoning ? { reasoning } : {}), ...(continuation.contentSeen ? { reasoning_content: continuation.content } : {}),
+        ...(continuation.detailsSeen ? { reasoning_details: continuation.details } : {}), ...(refusal ? { refusal } : {}),
         ...(checked ? { tool_calls: checked.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) } : {}) };
       const native = { id: head.id, object: 'chat.completion', created: head.created, model: head.model,
         ...(serviceTier === undefined ? {} : { service_tier: serviceTier }),

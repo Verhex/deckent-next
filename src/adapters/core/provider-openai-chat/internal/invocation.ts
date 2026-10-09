@@ -1,5 +1,5 @@
 import type { ModelInvocationResult } from '#engine/index.js';
-import { agentToolCallSchema, type AgentToolCall, type AgentTurnMessage, type JsonObject } from '#domain/index.js';
+import { agentToolCallSchema, type AgentToolCall, type AgentTurnMessage, type JsonObject, agentMessageContinuationSchema, type AgentMessageContinuation, type AgentProviderStop } from '#domain/index.js';
 import { OPENAI_CHAT_METERING } from './metering.js';
 
 function firstChoice(result: ModelInvocationResult): Record<string, unknown> | null {
@@ -30,7 +30,7 @@ export function openAiChatStoppedAtLength(result: ModelInvocationResult): boolea
  * tools), mapped onto the provider-neutral agent tool call. `null` when the result has no readable message.
  */
 export function openAiChatMessageFromInvocation(result: ModelInvocationResult):
-  { content: string; reasoning: string; finish: unknown; toolCalls: readonly AgentToolCall[] } | null {
+  { content: string; reasoning: string; finish: unknown; toolCalls: readonly AgentToolCall[]; continuation?: AgentMessageContinuation; providerStop?: AgentProviderStop } | null {
   const choice = firstChoice(result), message = choice?.['message'];
   if (!choice || !message || typeof message !== 'object') return null;
   const record = message as Record<string, unknown>;
@@ -43,7 +43,13 @@ export function openAiChatMessageFromInvocation(result: ModelInvocationResult):
     if (!parsed.success) return null;
     toolCalls.push(parsed.data);
   }
-  return { content: typeof record['content'] === 'string' ? record['content'] : '', reasoning, finish: choice['finish_reason'], toolCalls: Object.freeze(toolCalls) };
+  const native: Record<string, unknown> = {};
+  if (typeof record['reasoning_content'] === 'string' || record['reasoning_content'] === null) native['reasoning_content'] = record['reasoning_content'];
+  if (Array.isArray(record['reasoning_details'])) native['reasoning_details'] = record['reasoning_details'];
+  const continuation = Object.keys(native).length ? agentMessageContinuationSchema.parse({ schemaVersion: 1, scopeId: result.receipt.request.scopeId,
+    reference: result.receipt.request.reference, profileDigest: result.receipt.profileDigest, native }) : undefined;
+  const providerStop = providerStopOf(choice['finish_reason']);
+  return { ...(continuation ? { continuation } : {}), ...(providerStop ? { providerStop } : {}), content: typeof record['content'] === 'string' ? record['content'] : '', reasoning, finish: choice['finish_reason'], toolCalls: Object.freeze(toolCalls) };
 }
 
 /** Settled token usage of the result; reasoning tokens when the server reports them. */
@@ -57,9 +63,9 @@ export function openAiChatUsageFromInvocation(result: ModelInvocationResult):
 }
 
 /** Provider-neutral agent turn messages in the OpenAI chat request shape (assistant tool calls as `function` calls, tool results by call id). */
-export function openAiChatNativeMessages(messages: readonly AgentTurnMessage[]) {
-  return messages.map(message => message.role === 'assistant'
-    ? { role: 'assistant', content: message.content, ...(message.toolCalls.length ? { tool_calls: message.toolCalls.map(call =>
+export function openAiChatNativeMessages(messages: readonly AgentTurnMessage[], context?: Omit<AgentMessageContinuation, 'schemaVersion' | 'native'>) {
+  return messages.filter(message => message.role !== 'assistant' || message.content.trim() || message.toolCalls.length).map(message => message.role === 'assistant'
+    ? { role: 'assistant', content: message.content, ...continuationFields(message.continuation, context), ...(message.toolCalls.length ? { tool_calls: message.toolCalls.map(call =>
       ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.argumentsJson } })) } : {}) }
     : message.role === 'tool' ? { role: 'tool', tool_call_id: message.toolCallId, content: message.content }
       : { role: message.role, content: message.content });
@@ -75,4 +81,21 @@ export function openAiChatPromptUpperBound(nativeRequest: JsonObject): number {
   const estimate = OPENAI_CHAT_METERING.tokenEstimate;
   return Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + estimate.requestOverheadTokens
     + estimate.messageOverheadTokens * messages.length + estimate.toolOverheadTokens * tools.length;
+}
+
+function continuationFields(value: AgentMessageContinuation | undefined, context: Omit<AgentMessageContinuation, 'schemaVersion' | 'native'> | undefined) {
+  if (!value || !context || value.scopeId !== context.scopeId || value.profileDigest !== context.profileDigest
+    || Object.entries(context.reference).some(([key, field]) => value.reference[key as keyof typeof value.reference] !== field)) return {};
+  return { ...((typeof value.native['reasoning_content'] === 'string' || value.native['reasoning_content'] === null) ? { reasoning_content: value.native['reasoning_content'] } : {}),
+    ...(Array.isArray(value.native['reasoning_details']) ? { reasoning_details: value.native['reasoning_details'] } : {}) };
+}
+function providerStopOf(finish: unknown): AgentProviderStop | undefined {
+  switch (finish) {
+    case 'content_filter': case 'sensitive': return 'content-filter';
+    case 'model_context_window_exceeded': return 'context-window';
+    case 'network_error': return 'network-error';
+    case 'insufficient_system_resource': return 'resource-exhausted';
+    case 'aborted': return 'aborted';
+    default: return undefined;
+  }
 }

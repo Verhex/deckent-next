@@ -42,6 +42,7 @@ export async function scopeBudgeted(config: Record<string, unknown>, scopeId: st
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 function readinessReason(error: unknown, locale: Locale): string {
   const code = errorCode(error);
+  if (code === 'MODEL_INVOCATION_REASONING_UNSUPPORTED') return t('tui.model.reason.reasoningOff', {}, locale);
   if (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN' || code === 'PROVIDER_SPEND_UNAVAILABLE')
     return t('tui.model.reason.budget', { code }, locale);
   if (code === 'PROVIDER_SPEND_TARIFF_UNVERIFIED') return t('tui.model.reason.price', {}, locale);
@@ -60,10 +61,18 @@ function readinessReason(error: unknown, locale: Locale): string {
 export function modelPanelSource(root: string, scopeId: string, host: Host, options: ConfigLoadOptions, locale: Locale): ModelPanelSource {
   const defaultBlocked = () => host.configApplication && host.resolveConfigPrincipal ? null : t('tui.model.defaultReadOnly', {}, locale);
   return {
-    ...(host.prepareModelSwitch ? { async prepare(choice: ModelPanelChoice) {
-      try { await host.prepareModelSwitch!(root, scopeId, choice.reference, options); }
+    ...(host.prepareModelSwitch ? { async prepare(choice: ModelPanelChoice, reasoning?: 'off') {
+      try { await host.prepareModelSwitch!(root, scopeId, choice.reference, options, reasoning); }
       catch (error) { throw ErrorRegistry.createError('TERMINAL_MODEL_SWITCH_REFUSED', { params: { reason: readinessReason(error, locale) } }); }
     } } : {}),
+    async reasoningOffSupported(reference) {
+      const declared = await host.inspectDeclaredModels?.(root, options);
+      const plan = reference ? null : await host.describeTerminalChatPlan?.(root, options);
+      const exact = reference ?? plan?.reference;
+      return declared?.status === 'declared' && !!exact && declared.catalog.providers.some(provider => provider.id === exact.providerId && provider.version === exact.providerVersion
+        && provider.models.some(model => model.id === exact.modelId && model.version === exact.modelVersion && model.protocols.some(protocol =>
+          protocol.capabilities.some(capability => capability.id === 'chat-template-enable-thinking' && capability.version === 1 && capability.state === 'supported'))));
+    },
     async inspect(): Promise<ModelPanelView> {
       const title = t('tui.model.title', { scope: scopeId }, locale), notes: string[] = [];
       const declared = host.inspectDeclaredModels ? await host.inspectDeclaredModels(root, options) : null;
@@ -101,8 +110,10 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         else if (host.inspectModelActivation) {
           try {
             const activation = (await host.inspectModelActivation(root, { schemaVersion: 1, scopeId, reference }, options)).activation;
-            if (activation?.state !== 'active') {
-              const binding = host.inspectModelBinding ? await host.inspectModelBinding(root, reference, options).catch(() => null) : null;
+            const binding = host.inspectModelBinding ? await host.inspectModelBinding(root, reference, options).catch(() => null) : null;
+            if (activation?.state !== 'active' || (!binding && !host.inspectModelReadiness)
+              || (binding && (binding.status !== 'declared' || activation.binding.digest !== binding.binding.digest
+                || (activation.catalogRevision !== binding.catalogRevision && !host.prepareModelSwitch)))) {
               blocked = t('tui.model.reason.inactive', {}, locale);
               command = t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
                 revision: activation?.revision ?? 0, digest: binding?.binding?.digest ?? '<digest>', catalog: binding?.catalogRevision ?? '<revision>' }, locale);

@@ -869,5 +869,6 @@
   "error.PROVIDER_SPEND_BUDGET_ABSENT": "Scope {scope} has no spending budget yet. Create one: deckent models create-budget --scope {scope} --usd <amount> (or /model → Create budget).",
   "agent.spend.budgetAbsent": "This scope has no spending budget. /model → Create budget.",
   "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model switch refused. {reason}",
+  "error.MODEL_INVOCATION_REASONING_UNSUPPORTED": "The selected model cannot turn reasoning off.",
   "error.OPENROUTER_PRIVACY_UNAVAILABLE": "No OpenRouter endpoint satisfies the no-training and zero-retention data policy. No request or spending reservation was created. Check OpenRouter Privacy settings: https://openrouter.ai/settings/privacy; choose a model with compliant endpoints."
 }

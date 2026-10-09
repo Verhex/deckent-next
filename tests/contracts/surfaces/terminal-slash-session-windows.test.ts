@@ -81,7 +81,7 @@ describe('/clear really clears', () => {
 describe('/reasoning is a window', () => {
   it('opens a picker from the palette, sets the state, shows it in the status strip and writes nothing into the chat', async () => {
     const seen: Array<readonly { role: string; content: string }[]> = [], options: Array<Record<string, unknown> | undefined> = [];
-    const view = mountWorkline({ labels: { ...withWindows, reasoning: { on: 'NOTICE-ON', off: 'NOTICE-OFF', usage: 'NOTICE-USAGE' } }, streamTurn: answering(seen, options) as never });
+    const view = mountWorkline({ labels: { ...withWindows, reasoning: { on: 'NOTICE-ON', off: 'NOTICE-OFF', usage: 'NOTICE-USAGE' } }, streamTurn: answering(seen, options) as never, panels: { ports: { model: { inspect: async () => ({ title: '', choices: [], notes: [], defaultBlocked: null }), reasoningOffSupported: async () => true } }, labels: terminalPanelLabels('en') } });
     await ready(view);
     expect(frameOf(view)).toContain('RZ-STATUS-ON');
     await send(view, '/reas\r'); // palette: Enter runs the highlighted command, no argument prompt
@@ -112,11 +112,27 @@ describe('/reasoning is a window', () => {
   });
 
   it('keeps the typed text command where no window words exist (line-style terminal)', async () => {
-    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, reasoning: { on: 'NOTICE-ON', off: 'NOTICE-OFF', usage: 'NOTICE-USAGE' } } });
+    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, reasoning: { on: 'NOTICE-ON', off: 'NOTICE-OFF', usage: 'NOTICE-USAGE' } }, panels: { ports: { model: { inspect: async () => ({ title: '', choices: [], notes: [], defaultBlocked: null }), reasoningOffSupported: async () => true } }, labels: terminalPanelLabels('en') } });
     await ready(view);
     await send(view, '/reasoning off\r');
     await until(() => view.stdout.text.includes('NOTICE-OFF'), 'notice');
     expect(frameOf(view)).not.toContain('RZ-TITLE');
+  });
+
+  it('omits thinking off when the current model has no capability, while retaining preview controls', async () => {
+    const view = mountWorkline({ labels: withWindows }); await ready(view);
+    await send(view, '/reasoning\r'); await until(() => frameOf(view).includes('RZ-TITLE'), 'reasoning window');
+    expect(frameOf(view)).not.toContain('RZ-THINK-OFF'); expect(frameOf(view)).toContain('RZ-PREVIEW-OFF');
+    view.stdin.write(ESC); await until(() => !frameOf(view).includes('RZ-TITLE'), 'closed');
+    expect(frameOf(view)).toContain('RZ-STATUS-ON');
+  });
+
+  it('refuses unsupported off in line mode and preserves the next turn preference', async () => {
+    const seen: Array<readonly { role: string; content: string }[]> = [], options: Array<Record<string, unknown> | undefined> = [];
+    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, reasoning: { on: 'NOTICE-ON', off: 'NOTICE-OFF', usage: 'NOTICE-USAGE', unsupported: 'OFF-UNSUPPORTED' } }, streamTurn: answering(seen, options) as never });
+    await ready(view); await send(view, '/reasoning off\r'); await until(() => view.stdout.text.includes('OFF-UNSUPPORTED'), 'capability refusal');
+    expect(view.stdout.text).not.toContain('NOTICE-OFF'); await send(view, 'hello\r'); await until(() => seen.length === 1, 'turn');
+    expect(options[0]).not.toHaveProperty('reasoning');
   });
 });
 
