@@ -125,13 +125,24 @@ describe('W3: real sandbox negative paths (synthetic files and IPC only)', () =>
 
 });
 
-// Fix round 2026-10-09 (owner Y 2026-09-30 x INS-05): a layout without the turn's hard floor floors the default layout's authority and
-// state resources and the data root, never `.deckent` whole — `.deckent/docs` and other own files stay writable.
-it('without a turn hard floor, authority/state paths are floored and the project own .deckent files are not', async () => {
+// Fix round 2026-10-09 (lead, fail closed; owner Y 2026-09-30): a layout without the turn's hard floor floors `.deckent` whole and the data root
+// (an absolute in-project data root normalized), with only `.deckent/docs` (and the `.deckent` entry needed to create it) left open.
+it('without a turn hard floor: authority, unknown .deckent files and the data root are floored; only .deckent/docs stays open', async () => {
   const { sandboxHardFloored } = await import('#adapters/core/host-shell/index.js');
-  const layout = { project: { root: '/tmp/hf-project', ignoredDirs: new Set<string>(), protectedAnchors: new Set<string>(), denied: () => false },
-    scratchDir: null, writeFloor: null, dataRoot: '.deckent/live-data' } as ShellSandboxLayout;
-  for (const rel of ['.deckent/config.json', '.deckent/policy.json', '.deckent/bindings.json', '.deckent/approvals/-', '.deckent/state/ledger.db',
-    '.deckent/project-identity/-', '.deckent/installation-identity/-', '.deckent/live-data/policy.json']) expect(sandboxHardFloored(layout, rel), rel).toBe(true);
-  for (const rel of ['.deckent/-', '.deckent/docs/-', '.deckent/docs/x.md', '.deckent/notes.md', 'src/a.ts']) expect(sandboxHardFloored(layout, rel), rel).toBe(false);
+  const root = '/tmp/hf-project';
+  const layoutWith = (dataRoot?: string) => ({ project: { root, ignoredDirs: new Set<string>(), protectedAnchors: new Set<string>(), denied: () => false },
+    scratchDir: null, writeFloor: null, ...(dataRoot === undefined ? {} : { dataRoot }) }) as ShellSandboxLayout;
+  for (const layout of [layoutWith(), layoutWith('.deckent/live-data'), layoutWith(`${root}/.deckent/live-data`)]) {
+    for (const rel of ['.deckent/config.json', '.deckent/policy.json', '.deckent/bindings.json', '.deckent/approvals/-', '.deckent/state/ledger.db',
+      '.deckent/project-identity/-', '.deckent/x', '.deckent/notes.md', '.deckent/unknown-dir/-', '.deckent/live-data/policy.json']) expect(sandboxHardFloored(layout, rel), rel).toBe(true);
+    for (const rel of ['.deckent/-', '.deckent/docs', '.deckent/docs/-', '.deckent/docs/x.md', '.deckent/docs/a/b/-', 'src/a.ts']) expect(sandboxHardFloored(layout, rel), rel).toBe(false);
+  }
+  // An absolute data root inside the project is normalized and floored wherever it lives; one outside the project adds nothing here.
+  for (const dataRoot of [`${root}/var/state`, 'var/state']) {
+    expect(sandboxHardFloored(layoutWith(dataRoot), 'var/state/ledger.db'), dataRoot).toBe(true);
+    expect(sandboxHardFloored(layoutWith(dataRoot), 'var/state/-'), dataRoot).toBe(true);
+    expect(sandboxHardFloored(layoutWith(dataRoot), 'var/other.txt'), dataRoot).toBe(false);
+  }
+  expect(sandboxHardFloored(layoutWith(`${root}/.deckent/docs/data`), '.deckent/docs/data/policy.json')).toBe(true);
+  expect(sandboxHardFloored(layoutWith('/elsewhere/data'), 'src/a.ts')).toBe(false);
 });

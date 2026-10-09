@@ -197,7 +197,9 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
     const p = await layoutAt('.deckent/live-data', '.deckent/\n');
     await writeFile(join(p.root, '.deckent', 'config.json'), 'CONFIG\n'); await writeFile(join(p.root, '.deckent', 'notes.md'), 'NOTES\n');
     const approvalFloor = (rel: string) => rel === '.deckent/-' || rel.startsWith('.deckent/'), configOnly = (rel: string) => rel.startsWith('.deckent/config.json');
-    for (const [label, writeFloor, notes] of [['approval floor', approvalFloor, 'r'], ['full-access floor', configOnly, 'w']] as const) {
+    // Lead decision 2026-10-09 (deliberate tightening): this layout carries no turn hard floor, so the fail-closed fallback floors every
+    // existing `.deckent` entry but `docs`; `.deckent/notes.md` is read-only in the full-access floor too (was 'w').
+    for (const [label, writeFloor, notes] of [['approval floor', approvalFloor, 'r'], ['full-access floor', configOnly, 'r']] as const) {
       const layout = { ...p.sandbox, writeFloor };
       const rules = await buildLandlockRules(layout, {}, undefined, { floorReadOnly: true });
       const classOf = (path: string) => rules.ok ? rules.rules.find(([, rule]) => rule === path)?.[0] : 'refused';

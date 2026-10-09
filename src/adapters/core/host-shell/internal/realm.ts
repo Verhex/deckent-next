@@ -2,7 +2,7 @@ import { modelTextPrefix, type AgentShellPosture, type ShellRealm, type ShellRea
 import type { ShellPermissionTier } from '#engine/index.js';
 import type { ShellCapabilities } from './probe.js';
 import { isAbsolute, relative } from 'node:path';
-import { DECKENT_DIR, productResourcePath, resolveProductLayout } from '#platform/index.js';
+import { DECKENT_DIR } from '#platform/index.js';
 import { runHostShell } from './run.js';
 
 /** The host has no write boundary, so it never accepts a write set (SHELL-OVERLAY): such a request is refused, nothing runs. */
@@ -15,21 +15,26 @@ export const HOST_SHELL_POSTURE = 'Runs on this machine as your user in the proj
 export function sandboxHardFloored(layout: ShellSandboxLayout, rel: string): boolean {
   const floor = layout.hardFloor;
   if (floor?.product) return floor.product(rel);
-  // Without the turn's hard floor (owner Y 2026-09-30, INS-05): the default layout's authority and state resources (and the data root)
-  // are floored, never `.deckent` whole — the project's own `.deckent/docs` and notes stay creatable and writable.
-  if (!floor) return defaultProductPaths(layout).some(path => rel === path || rel.startsWith(`${path}/`));
+  // Without the turn's hard floor (lead 2026-10-09, fail closed): `.deckent` is floored whole, and the data root (made project-relative) too.
+  // The only exception is owner decision Y (2026-09-30): `.deckent/docs` and everything below it stay creatable and writable, so the
+  // `.deckent` directory entry itself (`.deckent/-`) is not bound read-only; every existing entry inside it, known or not, is.
+  if (!floor) {
+    const data = projectRelativeDataRoot(layout), under = (path: string) => rel === path || rel.startsWith(`${path}/`);
+    if (data && data !== DECKENT_DIR && under(data)) return true; // the data root wins even if configured below docs
+    if (under(DOCS_DIR) || rel === `${DECKENT_DIR}/-`) return false;
+    return under(DECKENT_DIR);
+  }
   return floor.roots.some(root => {
     const path = relative(layout.project.root, root);
     return path !== '' && !path.startsWith('..') && !isAbsolute(path) && (rel === path || rel.startsWith(`${path}/`));
   });
 }
-function defaultProductPaths(layout: ShellSandboxLayout): readonly string[] {
-  const root = layout.project.root;
-  let defaults: ReturnType<typeof resolveProductLayout>;
-  try { defaults = resolveProductLayout({ projectRoot: root }); } catch { return [DECKENT_DIR]; } // an unexpressible root: fail closed, `.deckent` whole
-  const inProject = (path: string) => { const rel = relative(root, path); return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? [] : [rel.split('\\').join('/')]; };
-  return [...(Object.keys(defaults.resources) as (keyof typeof defaults.resources)[]).flatMap(resource => inProject(productResourcePath(defaults, resource))),
-    ...(layout.dataRoot ? [layout.dataRoot] : [])];
+const DOCS_DIR = `${DECKENT_DIR}/docs`;
+/** The configured data root as a project-relative POSIX path, or null when it lies outside the project (an absolute input is normalized). */
+function projectRelativeDataRoot(layout: ShellSandboxLayout): string | null {
+  if (!layout.dataRoot) return null;
+  const rel = (isAbsolute(layout.dataRoot) ? relative(layout.project.root, layout.dataRoot) : layout.dataRoot).split('\\').join('/').replace(/\/+$/u, '');
+  return rel === '' || rel === '.' || rel.startsWith('..') || isAbsolute(rel) ? null : rel.replace(/^\.\//u, '');
 }
 /**
  * The write facts one sandboxed call's card describes (merge Astra 2170 x MODES-3, owner 2026-09-29): the same `writeFloorReadOnly`/
