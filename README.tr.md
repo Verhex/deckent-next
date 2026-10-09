@@ -22,7 +22,7 @@
 <!-- Node ve pre-release rozetleri bu yerel dalı değil, public main package.json'u okur.
 Her sürümde package.json sürümü ile CHANGELOG.md satırını birlikte güncelleyin.
 npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra açılır. Kapsamsız `deckent` adı kullanılamıyor
-(mevcut bir paketle çakışıyor); planlanan ad kapsamlı `@verhex/deckent` (owner 2026-10-07, kesin değil).
+(mevcut bir paketle çakışıyor); planlanan ad kapsamlı `@verhex/deckent` (önerilen ad; kesinleşmedi).
 [![npm version](https://img.shields.io/npm/v/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 [![npm downloads](https://img.shields.io/npm/dm/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 -->
@@ -93,6 +93,18 @@ flowchart LR
   B --> M["5 · Model seçin<br/><sub>/model · oturum ya da varsayılan</sub>"]
   M --> W["6 · Çalışın<br/><sub>onaylar · modlar</sub>"]
   W --> U["7 · Kullanıma bakın<br/><sub>/usage · harcama hesabı</sub>"]
+```
+
+**Kapsam (scope)**, yetki politikasını, iş kayıtlarını ve harcamayı bu projeye bağlayan sabit kimliktir.
+`--scope my-project` bir dizini veya yalıtım ortamını değil, bu kimliği seçer. Yeni projede ilk politikayı
+önizlerken bir kimlik seçin; mevcut kurulumda ayarlarda tanımlı kapsam kimliğini kullanın. Sonraki
+komutlarda aynı kimliği kullanın. Terminalin varsayılanı `terminal.scopeId` değeridir; bu kapsamı
+açıkça seçmek için `deckent --scope my-project` ile açın. Kapsam ve yürütme ortamı tanımları için
+[sözlüğe](docs/glossary.tr.md) bakın.
+
+```sh
+deckent init policy --scope my-project --preview
+deckent init policy --scope my-project --apply
 ```
 
 1. **Kurulum**, proje başına bir kez: `deckent init policy --scope <id> --preview` ilk kurulum policy'sini gösterir,
@@ -265,7 +277,7 @@ flowchart LR
 
 - **Terminalde ajanla çalışın**: akışlı turlar, dosya düzenleme ve sandbox'lı kabuk, onay ve izleme pencereleri,
   izin modları, MCP araçları, konuşma sıkıştırma, Türkçe ve İngilizce.
-- **İşleri yönetin**: Run, Task ve Attempt kabul edin, bağımlılıkları sıralayın, kapasite ayırın, iptal edin ve
+- **İşleri yönetin**: yürütme (Run), görev (Task) ve deneme (Attempt) kabul edin, bağımlılıkları sıralayın, kapasite ayırın, iptal edin ve
   kurtarın; hepsi kalıcı bir SQLite defterine yazılır.
 - **Kodlama işçileri kullanın**: Git tabanlı çalışma kopyaları ve Claude Code, Codex, Cursor ile Docker işçileri;
   yamalar saklanır, yalıtılmış bir adayda birleştirilir, sonra teslim edilir ya da yayınlanır.
@@ -295,13 +307,23 @@ flowchart LR
 
 ## Başlarken
 
-Deckent, Linux ya da Windows WSL2 üzerinde Node.js ≥ 24.15.0 ile çalışır (Node 24 ve 26 desteklenir); kodlama
-işçileri için Docker gerekir. npm paketi yayımlanana kadar bir kez kaynaktan derleyin:
+Deckent, Linux ya da Windows WSL2 üzerinde Node.js ≥ 24.15.0 ile çalışır (Node 24 ve 26 desteklenir).
+Kilitli bubblewrap build'i ve kodlama işçileri için Docker; native yalıtım yardımcısı için C derleme
+araçları gerekir. npm paketi yayımlanana kadar bir kez kaynaktan derleyin:
 
 ```sh
-git clone https://github.com/Verhex/deckent-next.git && cd deckent-next
-npm ci && npm run build && npm link
+git clone https://github.com/Verhex/deckent-next.git
+cd deckent-next
+npm ci
+node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/first-build
+node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/first-build
+npm run build
+npm link
 ```
+
+Sonraki build için yeni bir `--out` dizini kullanın. Build `bubblewrap=ABSENT` diyorsa yalıtım gerektiren
+işe geçmeyin; `deckent doctor` ile yalıtım durumunu inceleyin. Ön koşullar ve sağlayıcı anahtarı
+gerektirmeyen tek test için [katkıcı hızlı başlangıcına (EN)](CONTRIBUTING.md#a-30-minute-quickstart) bakın.
 
 Bundan sonra her şey `deckent` ile yapılır:
 
@@ -318,7 +340,9 @@ deckent --help                            # tüm komutlar; ayrıntı için decke
 
 ## Daha fazlası
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): sözleşmeler, katmanlar ve değişmezler
+- [Mimariye genel bakış](docs/architecture-overview.tr.md): katmanlar, güvenlik, eklentiler ve bugünkü sınırlar
+- [Sözlük](docs/glossary.tr.md): kapsam, yürütme ortamı, iş yaşam döngüsü, onay ve harcama
+- [ARCHITECTURE.md](ARCHITECTURE.md): ayrıntılı mühendislik sözleşmeleri ve uygulama notları (EN/TR)
 - [İşletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md): işçi araç sürümleri, işçi imajları, kodlama
   profilleri, yama muhafazası ve kurulum muhafaza kuralları
 - [CHANGELOG.md](CHANGELOG.md): her sürümün getirdikleri

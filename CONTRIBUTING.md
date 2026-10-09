@@ -3,199 +3,151 @@
 Contributions in English or Turkish are welcome. Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 Report vulnerabilities privately through [SECURITY.md](SECURITY.md).
 
-## How work enters
+Start with a small fix, test or documentation improvement. For a larger change, open an
+[issue](https://github.com/Verhex/deckent-next/issues) describing the problem, expected behavior
+and an example before investing in an implementation. Fork the repository, create a descriptive
+branch and submit a pull request against `main`.
 
-Start with an issue that describes the problem, expected behavior and evidence. An issue or AI
-recommendation is a proposal; work enters through an owner-admitted card in [PLAN.md](PLAN.md).
-Read [AGENTS.md](AGENTS.md), [ARCHITECTURE.md](ARCHITECTURE.md), PLAN and the repository's
-[core-memory index](.deckent/docs/core-memory/MEMORY.md) and
-[product north star](.deckent/docs/core-memory/project_product_north_star.md) before changing the repo.
-The target is a customer-installed Agent OS with a secure standalone open Core and separately
-distributed proprietary Enterprise. Small slices must preserve that target and accepted contracts.
+## Prerequisites
 
-The lead assigns disjoint lanes and file ownership in separate worktrees based on the recorded
-local `main` HEAD. Keep the base commit and owned diff in the handoff. Preserve concurrent WIP;
-do not reset, clean, stash, amend or overwrite another contributor's changes. Worktree separation
-is a collaboration boundary; filesystem/process/network/secret isolation needs its own controls.
+| Requirement | Why it is needed |
+|---|---|
+| Linux or Windows WSL2 | Current execution and sandbox development path. macOS and native Windows have platform verification but are not equivalent execution targets yet. |
+| Node.js ≥ 24.15.0 and its npm | See [package.json](package.json). Use Node 24 or 26 for the supported CI versions. |
+| Git and a C compiler/build toolchain | Git-backed fixtures and the native Linux sandbox helper built by `npm run build`. On Debian/Ubuntu, the toolchain is provided by `build-essential`. |
+| A running Docker daemon, accessible to your user | Builds the pinned bubblewrap binary; also required by Docker worker tests. Access to the daemon is privileged: use a development machine. |
+| Internet access for setup | Downloads locked npm dependencies, bubblewrap sources and the pinned build image. No provider API key is needed for the quickstart test. |
+| Memory for the selected tests | Keep aggregate local test use within 16 GB; use two workers for targeted runs. This is a development resource limit, not a product capacity claim. |
 
-The host process board owns who holds what and the next step:
+Linux sandbox tests additionally need kernel support and permission for user namespaces;
+Landlock tests need a supported kernel. A binary on disk alone does not prove sandbox support.
+Read the test's setup and skip conditions before choosing an integration test.
 
-```sh
-node .agents/refactor/board.mjs show
-```
+## A 30-minute quickstart
 
-It is coordination data outside Git/npm, not admission, independent review or liveness evidence.
-Sessions update only their own row through `board.mjs`; main reconciles the role map and carries
-workers in its own sub-list. A worker/lane without the shared board leaves the lead a handoff;
-it does not create a competing board. PLAN owns remaining work, COMPLETED-PLAN owns completed work,
-ARCHITECTURE owns contracts, core-memory owns lasting principles, and retained proof stays in the
-external refactor proof area. `follow-up-works/current-flow.md` is a pointer only.
-
-## Human branches and commits
-
-- Use `lane/<card>` for an admitted card and `release/<version>` for an authorized release.
-- Keep a lane bounded and reviewable; agree overlapping paths with the lead before editing.
-- Commit only with owner authorization. Publishing/pushing needs its own authorization.
-- Use the repository's observed `type(scope): description` style, such as
-  `docs(repo): GitHub community standards, bilingual README, PR workflow` or `fix(runtime): …`.
-  Recent history also contains unscoped `docs: …`; this is a convention, not a new commit hook.
-- Preserve accurate attribution trailers. Recent commits use `Co-Authored-By` and a
-  `Claude-Session` URL. Use the actual contributor/model and a real session URL where available;
-  never invent a session or independent reviewer. Attribution does not confer acceptance.
-
-Example with AI assistance (replace the contributor with the actual one):
-
-```text
-docs(repo): describe the admitted repository change
-
-Explain the resulting behavior and scope when needed.
-
-Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>
-```
-
-## Style and machine gates
-
-Core uses TypeScript with ESM/native subpath imports, Node.js **≥ 24.15.0** (see
-[package.json](package.json)), Zod for typed validation and Vitest for contract/e2e tests.
-Use the lockfile and `npm ci`; do not silently upgrade dependencies. Domain stays pure,
-adapters sit behind ports, composition is explicit, and each transition has one application owner.
-Carry principal, scope, resource and policy through operations; persona grants no authority.
-Enterprise/ERP adapters must layer on through registries and public contracts without editing Core.
-
-`npm run lint` aggregates package-metadata validation, typecheck, ESLint, architecture and
-core-memory checks. [arch.json](arch.json) is the current machine contract enforced by
-`scripts/lint-arch.mjs`: dependency direction, pure domain, cycles, public unit imports, package/
-source/test budgets, Markdown and i18n gates. Current limits include 1,500 lines per governed text
-file (800 design target), 2,000 per unit and 8,000 test cases; package/total budgets are in arch.json.
-Do not remove capabilities to fit a budget. The hardcode ratchet rejects new mutable policy/vendor
-hardcoding; its frozen legacy allowlist only shrinks. Put mutable policy in registries/config;
-versioned protocol/security invariants stay in code. Every product user string needs both `en`
-and `tr` catalog entries and the shared i18n renderer; do not inline user-facing literals.
-
-New tracked Markdown needs explicit owner admission in `markdown.trackedAllow` or an admitted glob,
-with a reason in ARCHITECTURE's decision log. Product writers do not write repository standards
-files; preserve `markdown.writerModule` and its existing gate. Keep AGENTS.md/CLAUDE.md byte-identical
-and at most 70 lines. Refresh the core-memory manifest after authorized edits:
+Use the first half hour to install, build and run one test. This is a suggested session plan,
+not a timing guarantee: downloads, Docker access and native compilation vary by machine.
 
 ```sh
-node scripts/lint-core-memory.mjs --write
+git clone https://github.com/Verhex/deckent-next.git
+cd deckent-next
+npm ci
+
+# Build the lock-verified bubblewrap binary, then stage it for source tests.
+# Use a fresh output directory; build-bwrap refuses a non-empty destination.
+node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/contributor
+node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/contributor
+npm run build
+
+# A policy contract test: no Docker fixture or provider key is needed.
+VITEST_MAX_FORKS=2 node_modules/.bin/vitest run --configLoader runner \
+  tests/contracts/policy/permission-mode.test.ts
 ```
 
-## Checks and pull requests
+[`npm ci`](https://docs.npmjs.com/cli/v11/commands/npm-ci/) installs the dependency lockfile;
+it replaces an existing `node_modules`. Do not update dependencies just to get started.
+If installation reports a lockfile mismatch, include the error in your issue.
 
-Run checks appropriate to the admitted slice and put exact commands, exit results and the candidate
-SHA in the [PR template](.github/PULL_REQUEST_TEMPLATE.md). For source changes, the usual set is:
+The bubblewrap recipe and hashes live in [packaging/bwrap/bwrap.lock.json](packaging/bwrap/bwrap.lock.json).
+The explicit staging step supplies the sandbox to source-mode tests and the subsequent build.
+Do not use `--record` to bypass a hash mismatch. For another build, choose a new `--out` path.
+A build reporting `bubblewrap=ABSENT` has not supplied the sandbox; it can still exit successfully
+in the current source revision. Fix staging before testing sandbox behavior.
+
+Check the compiled entry without linking a global executable:
 
 ```sh
-npm run typecheck
-npx eslint <changed-source-files>
+node dist/composition/core/cli/internal/entry.js --version
+```
+
+## Run one test file
+
+From the repository root, pass its path to Vitest. `run` exits after the selected tests;
+[`--configLoader runner`](https://vitest.dev/guide/cli.html) loads this repository's configuration.
+
+```sh
+VITEST_MAX_FORKS=2 node_modules/.bin/vitest run --configLoader runner \
+  tests/contracts/policy/permission-mode.test.ts
+
+# Narrow further by test name.
+VITEST_MAX_FORKS=2 node_modules/.bin/vitest run --configLoader runner \
+  tests/contracts/policy/permission-mode.test.ts -t 'never lowers deny'
+```
+
+Replace the path with the file relevant to your change. Most contract tests use temporary
+project and global state; they do not require a configured personal installation. Source-mode
+sandbox tests still need the staged bundle; tests that spawn `dist` entries need the build.
+
+| Check | Runtime and environment notes |
+|---|---|
+| One contract test file | Start here. Time and memory depend on the file; report the duration printed by Vitest, rather than assuming a suite-wide estimate. |
+| Docker integration tests | Need Docker and `DECKENT_TEST_DOCKER_IMAGE` pointing to a locally available image ID. Without it, some files skip; inspect the skipped count. |
+| Sandbox integration tests | Need staged bubblewrap and host kernel capabilities. An unsupported-host skip does not verify isolation. |
+| Full test suite / `npm run verify` | Broad, resource-intensive checks coordinated by maintainers. The configuration defaults to four workers; use targeted tests for a normal PR. Do not run a build while a test suite is active. |
+
+A sample of the quickstart policy test on 2026-10-09 (Linux x64, Node 24.21.0, Vitest 5.0.1,
+two-worker limit) passed 9 tests with no skips in 2.59 seconds. GNU `time -v` reported a maximum
+process RSS of about 464 MiB; this is not aggregate suite memory. It is one local sample, not a
+setup-time or full-suite estimate. Docker and sandbox execution were not exercised by that test.
+
+To prepare the Docker test fixture on a Linux amd64 development host:
+
+```sh
+docker pull --platform linux/amd64 \
+  node@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
+export DECKENT_TEST_DOCKER_IMAGE="$(docker image inspect --format '{{.Id}}' \
+  node@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe)"
+VITEST_MAX_FORKS=2 node_modules/.bin/vitest run --configLoader runner \
+  tests/contracts/adapters/docker-image.test.ts
+```
+
+The pull reference pins the image content. The environment variable uses the resolved local
+image ID, which can differ from the pull digest. This is the test fixture, not a coding-worker
+image. Other host architectures need a compatible fixture; do not assume amd64 coverage proves
+their behavior. See [scripts/ci-docker-fixture.sh](scripts/ci-docker-fixture.sh) for CI's preflight;
+that script expects `GITHUB_ENV` and is not a local setup command.
+
+## Design and checks
+
+Read the [architecture overview](docs/architecture-overview.md) and [glossary](docs/glossary.md).
+Use the existing typed application contract, keep domain logic pure, put external I/O behind
+ports and carry identity, scope and policy through operations. Preserve negative tests for denied,
+stale, cancelled or uncertain work when they are relevant to your change.
+
+For source changes, run typecheck, ESLint on changed source files, the architecture check and
+relevant test files. Replace `src/path/to/changed.ts` below with the actual changed file.
+For documentation changes, run the architecture and documentation checks and check relative links.
+
+```sh
+npm run --silent typecheck
+node_modules/.bin/eslint src/path/to/changed.ts
 node scripts/lint-arch.mjs
-node scripts/lint-core-memory.mjs
-VITEST_MAX_FORKS=2 npx vitest run <touched-test-files>
+node scripts/lint-docs.mjs
 ```
 
-Angle-bracket paths above are placeholders, not shell commands to paste unchanged. For repository
-standards documentation changes, run `lint-arch`, core-memory validation and relative-link/template
-checks; `npm run lint` is not required for this slice. Add relevant failure/negative evidence for
-behavior changes. Test green is author evidence, not independent acceptance or producer-to-surface proof.
+| If a check reports… | What to do |
+|---|---|
+| A dependency direction or private import violation | Import the unit's public entry and move the responsibility to the correct layer; see [ARCHITECTURE.md](ARCHITECTURE.md) for detailed contracts. |
+| A new mutable policy literal | Reuse the registry or configuration contract. Protocol and security invariants remain versioned code. |
+| A missing translation | Add matching `en` and `tr` catalog entries through the shared renderer. Mention translation help needed in the PR. |
+| An unapproved Markdown path | Propose the exact new documentation path in `arch.json`'s Markdown allowlist; explain its purpose. |
+| A file or unit size violation | Split by responsibility, preserving behavior and coverage; do not remove capabilities to satisfy the limit. |
 
-Local tests stay within 16 GB. Targeted/lane Vitest runs use two forks; full verify uses four by
-default. Do not build during an active test suite. Full `npm run verify` runs only for batches that
-add broad features and only on owner request (2026-10-03); ordinary slices use targeted checks.
+The root `README` files introduce the product, `docs/` explains public concepts and
+`ARCHITECTURE.md` contains detailed engineering contracts. `PLAN.md` and the hidden development
+folders contain maintainer coordination and historical notes, which can include Turkish text.
+You do not need a private development dashboard to submit a contribution.
 
-Open a PR from the admitted branch, filling card id, scope, checks, independent review status,
-risks/limits and whether DOGFOOD/live remained untouched. CI already runs on `pull_request` via
-[ci.yml](.github/workflows/ci.yml). The required cells are Ubuntu on Node 24 and Node 26
-(owner 2026-10-06 ruleset; the earlier six-cell rule of 2026-10-03 is superseded). macOS and Windows run separately in the nightly
-[platform-verification.yml](.github/workflows/platform-verification.yml) and are not merge gates; a red required cell is a real failure, not noise. A CI badge or author checks do not replace independent review of the exact candidate.
-The implementer cannot award their own work independent PASS. In the host review arrangement,
-Sol's channel address remains `astra`; use the assigned independent reviewer, not the author.
+## Pull request expectations
 
-The lead owns landing: independent review + targeted checks for the exact scope/revision,
-resolved blocking findings and owner authorization. Refresh affected docs and preserve proof
-before landing. No direct push to `main` without this landing gate and separate push authority.
-CODEOWNERS names the default owner; automatic review requests and enforcement depend on GitHub
-permissions, the base branch and repository protection settings. These files do not enable settings.
+- Explain the problem, resulting behavior and affected paths. Link an issue when available.
+- Keep the change focused, preserve existing behavior and include relevant failure-path coverage.
+- List exact commands and results, including skipped tests, missing prerequisites and unverified platforms.
+- Update affected documentation and both English and Turkish product strings.
+- Keep secrets, local state and separately distributed proprietary Enterprise code out of the PR.
+- Use descriptive commits; `docs: clarify the scope example` or `fix(policy): preserve a deny` follows existing practice.
 
-## Deckent-worker branches and PRs — WORKER-GIT-PR
-
-This is the owner-admitted **design and documentation** from 2026-10-03. The host PR script
-(`.agents/refactor/pr.mjs`) is present; workers still do not open PRs automatically. Owner test and landing remain open. The intended workflow is:
-
-1. The admitted worker runs in its isolated attempt checkout. Git credentials stay out of worker
-   containers; workers neither push nor open PRs. Existing product patch/delivery custody remains
-   unchanged. The worker delivers its retained patch and final report with card/run id, exact base,
-   scope, checks and outcomes, review status, risks/limits and DOGFOOD/live evidence.
-2. The lead's host tooling checks patch identity, base and owned scope against the report, prepares
-   a separate candidate and refuses conflicts or unknown custody. It creates `lane/<card>-<runId>`
-   from the recorded base plus delivered patch, preserving other worktrees and source HEAD/index/WIP.
-3. With separate push authority, only the lead's host tooling pushes that branch using host-held Git
-   credentials, then opens a PR from it. The PR template is pre-filled from the worker's final report;
-   missing checks/review remain unknown or pending, and attribution stays truthful.
-4. The existing `pull_request` CI runs. Independent review and targeted checks govern landing;
-   only the lead may land after the gate. A worker report, prepared candidate or opened PR is not
-   Task acceptance, independent PASS or live delivery.
-
-Host-kit interface (script present; owner test and landing remain open):
-
-```text
-node .agents/refactor/pr.mjs prepare <patch-dir> --card <id> [--scope <glob>]...
-node .agents/refactor/pr.mjs open <patch-dir> --card <id> --push
-```
-
-[PLAN.md](.deckent/docs/plan/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
-replay/failure checks and owner test planned for **2026-10-04**. The script is present; owner test and landing remain open.
-Credential plumbing, live GitHub push, live PR creation, main landing and a DOGFOOD/live switch stay outside this script.
-
-## Development host
-
-This checkout is the execution workspace. `deckent-dev` is a read-only refactor reference;
-its runtime and workers must not be launched. Local development entry points are below. On the host, `deckent` is a symlink to
-`.agents/refactor/next-entry.mjs` (for example `ln -s "$PWD/.agents/refactor/next-entry.mjs" ~/.local/bin/deckent`), so the
-product command and the host entry are the same; the explicit forms are:
-
-```sh
-node .agents/refactor/next-entry.mjs cli --version
-node .agents/refactor/next-entry.mjs cli workers watch --scope pilot
-node .agents/refactor/next-entry.mjs mcp
-# For local SDK scripts, use the same environment and cwd:
-node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
-```
-
-The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
-`~/.local/state/deckent-next-dev`, outside the checkout (the runtime copies the bundled bubblewrap there,
-and a launcher inside the project is refused). It drops an inherited `DECKENT_HOME` to avoid redirecting project
-runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.
-`DECKENT_GLOBAL_HOME` is a shared CLI/MCP/SDK configuration input; it selects the global
-configuration/state directory independently of project data. Without it, installed product
-defaults remain unchanged. It contains no provider credentials and does not migrate legacy state.
-
-The local observer reads only explicitly configured `inspection.workers.sources` and preserves
-source policy checks. Docker workers see their attempt checkout at `/workspace`; host storage
-is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and `worker.result`
-are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
-safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
-The `pilot` scope and local source catalog are development fixtures, not an installed default.
-DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
-
-The process board (`node .agents/refactor/board.mjs show`) owns who holds what and the next step;
-[PLAN.md](PLAN.md) owns admitted work. The board is host coordination data outside Git/npm,
-not authority or liveness proof. `deckent monitor` observes installations without admitting work.
-If a lane lacks the shared host board, leave the lead a handoff instead of creating a competing board.
-
-### Development duration measurement (A02/W0-3)
-
-`node .agents/refactor/effort.mjs` records how long development slices actually take. It is
-host tooling for M1–M5 forecast updates, not a product feature or a second work ledger.
-
-```sh
-node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
-node .agents/refactor/effort.mjs phase A02-my-slice blocked --reason owner-decision   # active|blocked|verification|rework
-node .agents/refactor/effort.mjs pause A02-my-slice        # time until the next event is unknown, never active
-node .agents/refactor/effort.mjs end A02-my-slice done     # done|canceled|handed-off
-node .agents/refactor/effort.mjs report --format table     # observed hours per kind and milestone
-```
-
-Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ignored). Time is
-counted only between explicit events; unobserved time is reported as unknown and never estimated.
-`--at <ISO>` records an operator-supplied timestamp and is counted separately in reports.
+The current PR template includes maintainer tracking fields. External contributors can mark private
+tracking, deployment and reviewer fields **not applicable**; describe your branch, base revision,
+changes and checks in the public sections. Do not invent a review result. Maintainers handle review,
+integration and release; a passing local test alone does not establish that a change is ready to merge.
