@@ -593,15 +593,15 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   and bounded by `mcp.maxServers`. `propose_mcp_server` (read tool) opens a human window in every mode, carries no secret or reference
   (Jev 30efcb91) and adds the server untrusted; `deckent mcp import` brings Claude Code/Desktop entries untrusted.
 - **Fresh installer secret default (W2-SECRETS, 2026-10-08):** Docker `init apply` also runs the existing encrypted-store default after successful fresh publication on Linux/WSL/macOS. It keeps existing selections, leaves Windows on env, and reports policy/env-guard refusals without undoing installation. A supplied policy must authorize `secret`/`switch`; the installer adds no grant. Replay does not change the store.
-- **First-run policy template v8 (v5 MCP decisions: Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38):** the installing owner holds `mcp-server` for every server in
+- **First-run policy template v9 (v5 MCP decisions: Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38):** the installing owner holds `mcp-server` for every server in
   every scope, the `mcp.tool.call` operation, the read tool `propose_mcp_server`, and in the installed scope the `policy.administer` operation
   and approval inspect/decide (every change still passes card, audit and I2). Existing installations: `deckent init policy --scope <id> --upgrade
   --preview|--apply [--expect <revision>]` (installer authority: only the installation owner — the caller's uid owns both authority documents —
   and only when the first-run read rule names the caller explicitly; anyone else uses the governed path) adds the current template rules that person lacks, removes
   or replaces nothing (same-id rules with other content are kept and named as conflicts; hand-added MCP wire-name rules are named), writes on the
   previewed revision through the archived authority writer and the configured layout; a second run is `current`; an older policy receives
-  only missing rules (an untouched v4 becomes exactly v8: v6 secret-store switch, v7 model activation/invocation and provider spend accounts,
-  v8 installation-wide backup). `deckent policy upgrade --template current [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
+  only missing rules (an untouched v4 becomes exactly v9: v6 secret-store switch, v7 model activation/invocation and provider spend accounts,
+  v8 installation-wide backup, v9 six `inspect`-only observation rules for the person's separate `<host>/mcp` actor — W3-AUTHORITY, owner 2026-10-09). `deckent policy upgrade --template current [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
   person already holds that authority. The deprecated `--template v5` selector uses the same current add-only plan and emits an EN/TR warning.
   A hand-built policy (no first-run read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08, Jev b6dba079) takes the installer plan only with
   `--person <issuer>/<subject>`: the same owner gate, and the person must already be named explicitly (never `all`) on an allow rule listing the

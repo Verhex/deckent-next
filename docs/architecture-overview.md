@@ -8,8 +8,8 @@ a configured execution environment performs it; durable records describe the out
 The open Core is Apache-2.0 and can operate independently. Proprietary Enterprise packages
 are designed to extend its public contracts and remain separately distributed.
 
-This is a reading guide to the current source architecture, dated 2026-10-09 against
-`1.0.0-alpha.18`. It describes mechanisms and boundaries, not a security certification or
+This is a reading guide to the current source architecture, dated 2026-10-09: the released
+`1.0.0-alpha.21` plus the `1.0.0-alpha.22` candidate (sandbox hard floors, separate MCP actor). It describes mechanisms and boundaries, not a security certification or
 capacity benchmark. [ARCHITECTURE.md](../ARCHITECTURE.md) contains the detailed contracts,
 implementation notes and accepted future direction; some of that material is in Turkish.
 
