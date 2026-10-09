@@ -10,16 +10,18 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
 
 /** Code-only host ports (never config or environment): the secret names (to report the key's presence), the service describe (restart state), and a
  * registry document in place of the shipped one (tests, an Enterprise overlay through the same schema). */
-export type ModelConnectHost = Readonly<{ registry?: ProviderConnectRegistry;
+export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ registry?: ProviderConnectRegistry;
   listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 
 /**
  * `models.connect` (T4-B D2) as the CLI, SDK, MCP and the terminal call it: the engine's `ModelConnectApplication` over the configured governed
  * owners — the `/config` writer (policy, approval, audit), the ledger catalog register, the chat activation, the audit log — and the
- * provider-connect registry (kinds, seeds, adapters). It never reads or returns a key value.
+ * provider-connect registry (kinds, seeds, adapters). Seedless discovery resolves the configured key behind its HTTPS reader;
+ * the engine and the command/result never receive a key value.
  */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
   try {
@@ -36,6 +38,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
       secretName: (id, base) => { const kind = kindOf(id); return kind ? providerConnectSecretName(kind, base) : null; },
       seed: readProviderConnectSeed,
+      discover: (id, base, nativeId) => discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host),
       adapter: (id, value) => connectionAdapter(kindOf(id)!, value),
       principal,
       async layers() {

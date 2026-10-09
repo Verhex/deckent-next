@@ -37,7 +37,7 @@ export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; a
   secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
   /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
   connectFamily?: string | null; seeded?: boolean;
-  /** Owner 2026-10-08: a remote address of this kind needs a declared price first (SPEND-SETTLEMENT); its model action is locked until then. */
+  /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
   priceRequired?: boolean }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
 export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified' }>;
@@ -51,6 +51,9 @@ export interface ProviderConnectHost {
   readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
   secretName?(kind: string, endpoint: string | null): string | null;
   seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string; priced?: boolean }>[]>;
+  /** Seedless endpoint discovery after address selection; the same configured read used by models.connect. */
+  discoverModels?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions):
+    Promise<readonly Readonly<{ nativeId: string; displayName: string; priced: boolean }>[]>;
 }
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;

@@ -189,6 +189,8 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
    * `modelBlocked`: why "connect a model" cannot be offered now (e.g. no key stored yet), null when it can; a model's own `blocked` (stage 1:
    * no verified price) locks that row only. */
   models: readonly Readonly<{ id: string; label: string; detail: string; blocked?: string }>[]; modelBlocked: string | null;
+  /** Seedless kinds offer the model action before a list exists; the selected address supplies that list. */
+  discoversModels?: boolean;
   /** K6: shown on the row (muted) when the kind stores a key but no model can be connected to it yet. */
   pendingNote?: string;
   /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
@@ -214,6 +216,7 @@ export interface ProviderPanelPort {
   keyName?(kind: string, endpoint: string | null): string | null;
   /** T4-B: connects the chosen model through the governed `models.connect` operation (absent: the action is not offered). */
   connectModel?(request: ProviderModelRequest): Promise<ProviderModelOutcome>;
+  listModels?(kind: string, endpoint: string | null): Promise<ProviderPanelKind['models']>;
   /** The transparency rows the key step shows: how the key is kept and who else can read it. */
   readonly transparency: readonly PanelLine[];
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */

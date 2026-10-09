@@ -8,7 +8,8 @@ import { exactModelIdSchema, modelReferenceSchema } from '#domain/core/provider-
  * model it declares the model (packaged catalog seed, exact vendor ids), writes the scope's invocation profile (endpoint preset, the connection's
  * secret NAME as `credentialRef`, published tariff where the adapter carries one, limits, binding digest) and activates it — every write on its
  * existing governed path (config writer with policy and approval, ledger catalog register, chat activation), each with its own decision and
- * audit, plus one `model-connect` audit record. It never takes, reads or returns a key value.
+ * audit, plus one `model-connect` audit record. The command/result never carries a key value; seedless discovery resolves the stored key only
+ * behind the configured HTTPS reader, before these writes.
  */
 export const MODEL_CONNECT_OPERATION_ID = 'models.connect';
 export const MODEL_CONNECT_SCHEMA_VERSION = 1;
@@ -22,7 +23,7 @@ export const modelConnectCommandSchema = z.object({
   connection: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u),
   /** The address, only where the kind takes one (a chosen list row or a validated new address); null = the kind's own. */
   endpoint: z.string().min(1).max(2048).nullable().default(null),
-  /** A model of the kind's catalog seed by its exact API id, or a model already declared in the provider catalog by its exact reference. */
+  /** An exact API id from the kind's seed or freshly read endpoint list, or a previously declared exact catalog reference. */
   model: z.union([z.object({ nativeId: exactModelIdSchema }).strict(), z.object({ reference: modelReferenceSchema }).strict()]),
 }).strict().readonly();
 export type ModelConnectCommand = z.infer<typeof modelConnectCommandSchema>;
