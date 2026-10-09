@@ -12,7 +12,7 @@ const options={journalMode:'delete' as const,durability:'full' as const,busyTime
 async function fixture(){const root=await mkdtemp(join(tmpdir(),'deckent-decision-migration-'));roots.push(root);const path=join(root,'ledger.db'),backups=join(root,'backups');await mkdir(backups,{mode:0o700});openSqliteLedger(path,options).close();const db=new DatabaseSync(path);db.exec(DOWNGRADE_TO_V45_LEDGER_SQL);return {path,backups,db};}
 // Batch-27 integration: the lane's v45 is renumbered to v46 because A1/A3 (Run snapshot v4) own v45.
 it('pins the decision port after A1/A3 run parking: v45 is Run parking, v46 decision custody',()=>{
- expect(RUN_PARKING_LEDGER_VERSION).toBe(45);expect(DECISION_PORT_LEDGER_VERSION).toBe(46);expect(CURRENT_LEDGER_VERSION).toBe(48);expect(PREVIOUS_LEDGER_VERSION).toBe(47);
+ expect(RUN_PARKING_LEDGER_VERSION).toBe(45);expect(DECISION_PORT_LEDGER_VERSION).toBe(46);expect(CURRENT_LEDGER_VERSION).toBe(49);expect(PREVIOUS_LEDGER_VERSION).toBe(48);
 });
 it('v45 backup retains original rows and v46 adds only decision tables',async()=>{
  const f=await fixture();f.db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('pool','original-policy');f.db.close();

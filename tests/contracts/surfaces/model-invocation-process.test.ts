@@ -482,7 +482,8 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     if (stepFailed) context.skip('an earlier step of the shared invocation ledger failed');
     context.onTestFailed(() => { stepFailed = true; }); // Also covers a timed-out step, which never reaches a catch.
     await body();
-  });
+  }, 120_000); // Each step spawns the runtime, CLI and MCP processes: 17-29 s per step on a loaded hosted shard 1 even in the last green run
+  // (37616626308), so the 30 s default failed it intermittently (4 of 6 main runs 2026-10-08); a hang still fails at 120 s (as mcp-cli-process).
 
   beforeAll(async () => { await measured('fixture-setup', async () => {
     root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-process-')); roots.push(root);

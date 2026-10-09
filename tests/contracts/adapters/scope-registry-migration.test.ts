@@ -24,7 +24,7 @@ const version = (path: string) => rows(path, 'PRAGMA user_version')[0]?.user_ver
 
 it('upgrades a real v38 ledger through v39 (scope registry) to the current version: versioned backup first, every row kept, every present scope pinned to the configured company', async () => {
   const { path, backups } = await ledger();
-  expect(CURRENT_LEDGER_VERSION).toBe(48); expect(PREVIOUS_LEDGER_VERSION).toBe(47);
+  expect(CURRENT_LEDGER_VERSION).toBe(49); expect(PREVIOUS_LEDGER_VERSION).toBe(48);
   const db = new DatabaseSync(path);
   db.exec(DOWNGRADE_TO_V38_LEDGER_SQL);
   db.prepare('INSERT INTO attempts VALUES(?,?,?,?)').run('alpha', 'a1', 1, '{"attempt":1}');
