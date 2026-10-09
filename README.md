@@ -43,8 +43,9 @@ is the tower and the runway together. It decides what a person or an agent may d
 place, and keeps a durable record you can check afterwards.
 
 You talk to Deckent through its terminal, its `deckent` command, its MCP server or its SDK. All of them use the same
-typed contract, so a human click and an agent's tool call go through exactly the same identity, policy and approval
-checks. The open-source Core (Apache-2.0) works on its own; the proprietary Enterprise edition layers on top
+typed contract for identity, policy and approval checks. MCP uses a separate actor with observation-only default grants;
+changing budgets, activating models or invoking them requires an explicit policy grant naming that MCP actor.
+Human approval decisions require interactive terminal input and output. The open-source Core (Apache-2.0) works on its own; the proprietary Enterprise edition layers on top
 without changing Core.
 
 | | |

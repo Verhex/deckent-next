@@ -36,6 +36,14 @@ tariff expiry and never bypasses MAC integrity or `requestDigest` checks. Cancel
 taken over only when it is at most `now − MAX_WALL_SKEW_MS`, in the atomic claim decision for every entry point (I40-b; cost: every
 retry waits retryDelayMs + 5 s, including a process's own). Config write-lock waits and in-process failure backoff are monotonic;
 lock age subtracts the allowance before age-based reclaim; worker heartbeat age is `max(0, now − mtime − MAX_WALL_SKEW_MS)`.
+W3-AUTHORITY requires nonzero controlling-TTY evidence and matching terminal character devices on the peer's fd0/fd1 for **both** human
+allow and deny; a client-declared channel or a turn capability does not bypass this. `APPROVAL_INTERACTIVE_REQUIRED` leaves the request
+pending and adds no decision. The session rechecks terminal evidence before privileged settlement. Hard-floor allow still requires the
+initiating process's turn-bound capability. There is no automation exception; TTY attestation cannot prove human presence against a same-UID
+process that allocates its own PTY. MCP handlers run under the separate `<host>/mcp` actor, and protocol v26 carries that actor context through
+service calls (lifecycle `[26,25]`); model/spend mutations require a rule explicitly naming that actor. Template v9 adds only MCP observation,
+including through add-only custom-policy upgrades. Existing owner rules/terminal spending authority are preserved.
+
 
 CI-FIX-R5 source candidate (`lane/ci-fix-r5`, 2026-10-04): nonempty stale config-lock recovery retains the
 existing generation tombstone, verifies that the observed generation moved and is no longer named at the lock,
