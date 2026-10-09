@@ -104,7 +104,9 @@ describe('the model cannot reach a config write', () => {
       .filter(path => /createConfiguredConfigApplication|configApplication!?\(|configWrite\(|terminalConfigWrite\(|configPanelPort\(/.test(readFileSync(path, 'utf8')))
       .map(path => path.replaceAll('\\', '/')).sort();
     expect(writers).toEqual(['src/composition/core/cli/internal/entry.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
-      'src/composition/core/model-connect/internal/connect.ts', 'src/composition/core/toolchains/internal/refresh.ts', 'src/surfaces/core/cli-terminal/internal/model-panel.ts',
+      'src/composition/core/model-connect/internal/connect.ts', 'src/composition/core/toolchains/internal/refresh.ts',
+      'src/surfaces/core/cli-terminal/internal/cache-panel.ts', // CACHE-SLICE1 (34270fae): the terminal cache-choice window writes profiles through the same writer
+      'src/surfaces/core/cli-terminal/internal/model-panel.ts',
       'src/surfaces/core/cli-terminal/internal/terminal.ts', 'src/surfaces/core/config/internal/command.ts', 'src/surfaces/core/config/internal/panel.ts',
       'src/surfaces/core/config/internal/records.ts', 'src/surfaces/core/monitor/internal/command.ts']); // records.ts: the /config window's selection-only record editors (8ce20e6f)
     for (const path of writers) expect(path).not.toMatch(/agent-turn|agent-tool|\/mcp\//);

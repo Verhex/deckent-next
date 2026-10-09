@@ -231,13 +231,13 @@ describe('approval window in the real Workline', () => {
     await until(() => view.stdout.frame.includes('What:'), 'approval window over the watch window'); await settle(80);
     const frame = view.stdout.frame;
     proof('workline en 30 rows, approval over a watch window', frame);
-    expect(frame).not.toContain(work.live!.hints); // the watch window steps aside while the approval window is up
+    expect(frame).not.toContain(work.live!.watchHints!); // the watch frame (its own hints since 760c906e) steps aside while the approval window is up
     expect(frame).toMatch(/rows 1–\d+ of \d+/u);
     const live = frame.slice(frame.indexOf('What:') - 400);
     expect(live.split('\n').filter(Boolean).length).toBeLessThanOrEqual(30);
     view.stdin.write('\u001B'); // Esc denies
     await until(() => calls.length === 1, 'decision reached the port'); releaseB();
-    await until(() => view.stdout.frame.includes(work.live!.hints), 'the watch window is back after the decision');
+    await until(() => view.stdout.frame.includes(work.live!.watchHints!), 'the watch window is back after the decision');
   });
 
   it('/approvals rows with the catalog: what, who and how long; no approval id on the row', async () => {

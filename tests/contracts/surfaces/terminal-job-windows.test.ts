@@ -41,6 +41,9 @@ const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en
 };
 const choose = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('\r'); };
 const close = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write(ESC); await until(() => captured.entries.length > 0, 'summary'); };
+// FIRST-TEST-FIXES (760c906e): a watch frame takes no focus (Esc stays with the composer); /watch-stop closes it with its one summary.
+const closeWatch = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('/watch-stop\r'); await until(() => captured.entries.length > 0, 'summary'); };
+const closes = (command: string) => command.startsWith('/watch-') ? closeWatch : close;
 async function snapshot(name: string, view: ReturnType<typeof mountWorkline>) {
   await writeFile(join(renderDir, `${name}.txt`), view.stdout.frame);
   const captureRoot = process.env['SW2_CAPTURE_DIR'];
@@ -106,13 +109,13 @@ describe('SW-2 job windows', () => {
     const decide = vi.fn(), inspect = vi.fn(), view = await open(command, ports({ decideApproval: decide, inspectTranscript: inspect }), 'en', 60, true);
     await until(() => view.stdout.frame.includes(TYPED_ARGUMENT_NOTE), 'window with the note'); expect(captured.entries).toEqual([]);
     expect(view.stdout.frame).not.toContain('ARG-TYPED'); expect(decide).not.toHaveBeenCalled(); expect(inspect).not.toHaveBeenCalled();
-    await close(view); onlySummary(); await settle(40);
+    await closes(command)(view); onlySummary(); await settle(40);
     expect(view.stdout.frame).not.toContain(TYPED_ARGUMENT_NOTE);
   });
-  it.each(['/watch-workers', '/watch-runs', '/tasks'] as const)('%s keeps started/delivery words inside the window and leaves one summary on Esc', async command => {
+  it.each(['/watch-workers', '/watch-runs', '/tasks'] as const)('%s keeps started/delivery words inside the window and leaves one summary when closed (Esc; /watch-stop for a watch frame)', async command => {
     const view = await open(command);
     await until(() => view.stdout.frame.includes('Watching · polling'), 'window status'); await snapshot(command.slice(1), view);
-    expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    expect(captured.entries).toEqual([]); await closes(command)(view); onlySummary();
   });
   it('monitor uses one close summary and does not print its body', async () => {
     const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: EN }, monitorWindow: async () => () => createElement(Text, null, 'MONITOR-BODY') }); mounted.push(view);

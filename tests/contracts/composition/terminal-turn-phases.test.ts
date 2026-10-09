@@ -30,7 +30,7 @@ const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: Str
 const me = [{ issuer: principal.issuer, subject: principal.subject }];
 const SUMMARY = '{"objective":"o","findings":[],"decisions":[],"unresolved":[],"nextActions":[],"inspectedAreas":[]}';
 
-async function runtime(options: { windowTokens?: number; count?: (messages: unknown[]) => number; maxCompletionTokens?: number } = {}) {
+async function runtime(options: { windowTokens?: number; count?: (messages: unknown[]) => number; maxCompletionTokens?: number; compactionThresholdTokens?: number } = {}) {
   const tokenCount = options.count !== undefined;
   const model = { id: 'chat', version: 1, nativeId: 'native-chat', protocols: [{ family: 'openai-chat-completions', version: 'v1',
     capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }, ...(tokenCount ? [{ id: 'token-count', version: 1, state: 'supported' }] : [])] }] };
@@ -74,7 +74,8 @@ async function runtime(options: { windowTokens?: number; count?: (messages: unkn
     ...(options.windowTokens ? { contextWindowTokens: options.windowTokens } : {}) };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
-    terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: options.maxCompletionTokens ?? 128 } },
+    terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: options.maxCompletionTokens ?? 128,
+      ...(options.compactionThresholdTokens ? { compactionThresholdTokens: options.compactionThresholdTokens } : {}) } },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
@@ -140,10 +141,15 @@ describe('summarizing is derived on the client exactly when the service compacts
     expect(Buffer.byteLength(JSON.stringify(history))).toBeLessThan(0.75 * 262_144);
     const deltas = await f.turn(history);
     expect(marks(deltas)[0]).toEqual({ compacting: true, compacted: true });
-    // Just under that room: neither side compacts.
-    const g = await runtime({ maxCompletionTokens: 128 });
+    // Just under that room: neither side compacts (the absolute token threshold raised out of the way, so only the byte room decides).
+    const g = await runtime({ maxCompletionTokens: 128, compactionThresholdTokens: 10_000_000 });
     expect(marks(await g.turn(history))).toEqual([{ compacting: false, compacted: false }]);
     expect(g.calls.summary).toBe(0);
+    // FIRST-TEST-FIXES (760c906e): the default absolute threshold (100 000 input tokens) compacts the same history on both sides, because
+    // without a provider count the measurement is the request's upper bound (well above 100 000 here).
+    const h = await runtime({ maxCompletionTokens: 128 });
+    expect(marks(await h.turn(history))).toEqual([{ compacting: true, compacted: true }, { compacting: false, compacted: false }]);
+    expect(h.calls.summary).toBe(1);
   }, 30_000);
 });
 
@@ -162,7 +168,7 @@ describe('one admission formula for the service and the terminal (engine agentTu
     const f = await runtime({ windowTokens: 100_000, count: () => 900 });
     const admission = await assertTerminalChatReady(f.project, { env: f.env });
     expect(admission).toEqual({ outputReserveTokens: 128, safetyReserveTokens: 2_048, requestMaxBytes: 262_144, requestReserveBytes: 128 * 4 + 32_768,
-      completionLimitTokens: 128 });
+      completionLimitTokens: 128, compactionThresholdTokens: 100_000 }); // the terminal.chat default (760c906e)
     const history = talk(8);
     expect(terminalCompactionExpected(history, { promptTokens: 74_000, windowTokens: 100_000 }, admission)).toBe(true);
     expect(terminalCompactionExpected(history, { promptTokens: 72_000, windowTokens: 100_000 }, admission)).toBe(false);
