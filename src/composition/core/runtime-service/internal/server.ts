@@ -74,7 +74,7 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
   } finally { store.close(); }
   // FIX-2143-SLOTS/INFLIGHT-FIX (Astra 2145 R1): settle this custody's abandoned calls and release settled slots; leave other open calls intact.
   const slots = await releaseSettledModelSlots(path, config.storage.sqlite, custodyId);
-  if (slots.released || slots.settled || slots.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
+  if (slots.released || slots.settled || slots.inconsistent.length || slots.spend.released || slots.spend.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
   // Previews kept for approvals that were pending when the service stopped (none survives a restart).
   await sweepFullPreviews(config.productLayout);
   // Their tool-call approvals can no longer permit anything: still-pending ones (a crash, or a close that failed) are closed now.

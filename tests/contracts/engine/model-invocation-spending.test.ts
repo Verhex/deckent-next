@@ -280,3 +280,25 @@ it('bounds acquisition by the profile timeout and redacts backend errors', async
     .rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE', message: 'MODEL_INVOCATION_UNAVAILABLE' });
   expect(f.events).not.toContain('prepare'); noEffects(f);
 });
+
+it('a certified zero tariff with no money budget creates no financial rows and still enforces invocation policy', async () => {
+  const f = await fixture(1000, false);
+  const authority: ModelInvocationSpendingAuthority = { async authorize(input) {
+    const base = testSpending(input), definition = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+    return { budget: null, quote: { ...base.quote, maxChargeMinorUnits: 0, pricing: { id: 'operator-static-tariff', version: 1, definition, digest: providerSpendEvidenceDigest(definition) } } };
+  } };
+  const result = await f.application(authority).invoke(f.command('zero'));
+  expect(result.receipt.outcome?.state).toBe('unknown'); // no listener: transport is uncertain, the literal zero tariff is not.
+  expect(f.counts()).toMatchObject({ model_invocations: 1, model_invocation_spend_reservations: 0, provider_spend_accounts: 0 });
+  expect((await f.application(authority).invoke(f.command('zero'))).replayed).toBe(true);
+  f.deny();
+  await expect(f.application(authority).invoke(f.command('denied-zero'))).rejects.toThrow('DENIED');
+  expect(f.counts().model_invocations).toBe(1);
+});
+
+it('refuses a zero numeric quote without a certified zero tariff when no budget is supplied', async () => {
+  const f = await fixture(1000, false);
+  await expect(f.application({ async authorize(input) { const value = testSpending(input); return { ...value, budget: null, quote: { ...value.quote, maxChargeMinorUnits: 0 } }; } })
+    .invoke(f.command('fake-free'))).rejects.toThrow('PROVIDER_SPEND_CONFLICT');
+  noEffects(f);
+});

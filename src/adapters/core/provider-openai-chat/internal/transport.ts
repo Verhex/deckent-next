@@ -1,3 +1,4 @@
+import { OPENAI_RESERVATION_POLICY } from './reservation-policy.js';
 import { z } from 'zod';
 import { responseDialect, finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
 import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
@@ -98,11 +99,13 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
   // K1 (v5): the provider's documented dialect shapes the wire; the admitted request (and its digest) is the same for every provider.
   if (nativeRequest.tool_choice && !dialect.toolChoice.includes(nativeRequest.tool_choice)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const responses = dialect.protocol === 'responses';
-  if (!responses && (nativeRequest.reasoning_effort !== undefined || nativeRequest.service_tier !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+  const tiered = definition.tariff.kind === 'vendor-published' && definition.tariff.version === 2;
+  if (!responses && (nativeRequest.reasoning_effort !== undefined || (nativeRequest.service_tier !== undefined && !tiered))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   if (responses && (cacheSalt !== undefined || providerFields !== undefined || definition.tokenizeEndpoint !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const encoded = responses ? responsesBody(definition, nativeRequest, scopeId) : null;
   const body = JSON.stringify(encoded ? encoded.body : { model: nativeRequest.model, messages: nativeRequest.messages,
     [dialect.tokenLimitField]: nativeRequest.max_completion_tokens, stream: streamed,
+    ...(tiered ? { service_tier: nativeRequest.service_tier ?? OPENAI_RESERVATION_POLICY.expectedServiceTier } : {}),
     ...(streamed && dialect.streamUsage === 'include' ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
     ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}),
     ...(nativeRequest.chat_template_kwargs ? { chat_template_kwargs: nativeRequest.chat_template_kwargs } : {}),

@@ -6,7 +6,7 @@ export type { ProviderSpendErrorCode, ProviderSpendNextAction } from './internal
 export { parseProviderSpendReportedMeasurement } from './internal/reported.js';
 export type { ProviderSpendReportedMeasurement } from './internal/reported.js';
 export { subtractProviderSpendExactMinorUnits, addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits,
-  ceilProviderSpendExactMinorUnits, providerSpendExactFromNumericSource } from './internal/exact.js';
+  ceilProviderSpendExactMinorUnits, providerSpendExactWithSafetyMargin, providerSpendExactFromNumericSource } from './internal/exact.js';
 export { createProviderSpendCheckpoint, parseProviderSpendCheckpoint, providerSpendReservationDigest } from './internal/checkpoint.js';
 export type { ProviderSpendCheckpoint } from './internal/checkpoint.js';
 export { verifyProviderSpendIntegrity, validateProviderSpendIntegrityPageSize, PROVIDER_SPEND_INTEGRITY_PAGE_MAX } from './internal/integrity.js';
@@ -29,3 +29,7 @@ export type { ProviderSpendMeasurement, ProviderSpendTariffMeasurement } from '.
 export { ProviderSpendManagementApplication, parseProviderSpendManagementReceipt, parseProviderSpendManagementResultForCommand, reconcileProviderSpend, reviseProviderSpendBudget, createGovernedProviderSpendAccount } from './internal/management.js';
 export type { ProviderSpendManagementAuthorization, ProviderSpendManagementReceipt, ProviderSpendManagementResult, ProviderSpendManagementStore } from './internal/management.js';
 export { settledProviderCacheUsage, type SettledProviderCacheUsage } from './internal/cache-usage.js';
+
+export { providerSpendHasZeroTariff, certifyProviderSpendNoCharge } from './internal/no-charge.js';
+export { recoverProviderSpendHold } from './internal/recovery.js';
+export type { ProviderSpendRecoveryStore, ProviderSpendRecoveryResult } from './internal/recovery.js';

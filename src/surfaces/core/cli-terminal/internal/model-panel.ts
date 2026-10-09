@@ -80,7 +80,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         return { title, choices: [], notes: [t('tui.model.noneDeclared', {}, locale)], defaultBlocked: defaultBlocked() };
       }
       const config = await loadConfig(root, options) as Record<string, unknown>, profiles = profilesOf(config, scopeId);
-      // (a) owner 2026-10-08: every model call reserves against this scope's budget; without one each turn is refused PROVIDER_SPEND_UNAVAILABLE.
+      // The monetary budget applies to priced calls; typed readiness owns each model's zero-tariff exemption.
       const budgeted = await scopeBudgeted(config, scopeId, { root, options, inspect: host.inspectProviderSpendAccount });
       if (!budgeted) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
       let names: readonly string[] | null = null;
@@ -104,7 +104,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
         const profile = profiles.find(item => sameReference(item.reference, reference));
         let blocked: string | null = null, command: string | null = null;
-        if (!budgeted) blocked = t('tui.model.reason.noBudget', {}, locale);
+        if (!budgeted && !host.inspectModelReadiness) blocked = t('tui.model.reason.noBudget', {}, locale);
         else if (!profile) blocked = t('tui.model.reason.noProfile', {}, locale);
         else if (profile.credentialRef && names !== null && !names.includes(profile.credentialRef)) blocked = t('tui.model.reason.keyMissing', { name: profile.credentialRef }, locale);
         else if (host.inspectModelActivation) {

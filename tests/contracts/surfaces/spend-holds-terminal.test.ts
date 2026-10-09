@@ -1,3 +1,4 @@
+import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,7 +9,7 @@ import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSql
   openSqliteProviderSpendManagementStore, openSqliteProviderSpendIntegrityReader, upgradeExistingProductLedger } from '#adapters/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, parseProviderSpendAccountQuery } from '#domain/index.js';
 import { ProviderSpendAccountInspectionApplication, ProviderSpendManagementApplication, modelInvocationProfileDigest,
-  modelInvocationRequestDigest, modelInvocationResponseContentDescriptor, providerSpendQuoteDigest, providerSpendEvidenceDigest, verifyProviderSpendIntegrity,
+  modelInvocationRequestDigest, createModelInvocationResponseEvidence, createProviderSpendCheckpoint, providerSpendReservationDigest, modelInvocationResponseContentDescriptor, providerSpendQuoteDigest, providerSpendEvidenceDigest, verifyProviderSpendIntegrity,
   type ProviderSpendReportedMeasurement } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { spendRecoveryView, terminalAdminPorts, terminalInfoLabels, type TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
@@ -26,7 +27,7 @@ const definition = resolveModelBindingDefinition(parseProviderCatalog({ schemaVe
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: hash(encodeModelBindingDefinition(definition)) };
 
-async function fixture() {
+async function fixture(certified = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-spend-holds-terminal-')); roots.push(root); const path = join(root, 'ledger.db');
   const activations = await openSqliteModelActivationStore(path, options);
   const activation = (await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
@@ -36,7 +37,7 @@ async function fixture() {
     const command = { schemaVersion: 1 as const, commandId: id, scopeId: 'scope', reference, catalogRevision: 'c1', expectedBinding: binding,
       nativeRequest: { model: 'native/model', messages: [{ role: 'user', content: id }] } };
     const profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
-      protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'fixture', version: 1, definition: {} },
+      protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'fixture', version: 1, definition: { endpoint: 'https://api.openai.com/v1/responses' } },
       allocation: { id: 'allocation', maxCalls: 100, maxInFlight: 100 }, limits: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000 } };
     const requestDigest = modelInvocationRequestDigest(command), profileDigest = modelInvocationProfileDigest(profile);
     const quote = { schemaVersion: 1 as const, scopeId: 'scope', requestDigest, profileDigest, currency: 'USD', maxChargeMinorUnits: maximum,
@@ -55,7 +56,18 @@ async function fixture() {
       tariffDigest: input.spending.quote.pricing.digest, selectedEndpointTag: 'fixture' } };
   await store.permitSend(claim.record.receipt.claim, 'owner', 3); await store.recordResponse(claim.record.receipt.claim, response, 4, measurement);
   const hold = await store.claim(admit('held-original', 850)); await store.permitSend(hold.record.receipt.claim, 'owner', 5);
-  await store.recordUnknown(hold.record.receipt.claim, 'transport-error', 6); store.close();
+  if (certified) await store.recordRejected(hold.record.receipt.claim,
+    createModelInvocationResponseEvidence({ id: 'fixture', version: 1 }, 'http-status', 400, Buffer.from('{"error":"admission rejected"}'), true), 6);
+  else await store.recordUnknown(hold.record.receipt.claim, 'transport-error', 6);
+  store.close();
+  if (certified) {
+    const db = new DatabaseSync(path), row = db.prepare("SELECT record FROM model_invocation_spend_reservations WHERE invocation_id='held-original'").get()!;
+    const old = JSON.parse(String(row.record)); old.schemaVersion = 3; old.disposition = { state: 'held', reason: 'unknown', observedMinorUnits: null, evidenceDigest: old.disposition.evidenceDigest };
+    db.prepare("UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE invocation_id='held-original'").run(JSON.stringify(old), providerSpendReservationDigest(old));
+    const accountRow = db.prepare('SELECT record,revision,reservation_count FROM provider_spend_accounts').get()!, account = { ...JSON.parse(String(accountRow.record)), reservedMinorUnits: 850 };
+    const checkpoint = createProviderSpendCheckpoint(account, Number(accountRow.revision), Number(accountRow.reservation_count));
+    db.prepare('UPDATE provider_spend_accounts SET record=?,digest=?').run(JSON.stringify(account), checkpoint.digest); db.close();
+  }
   let denied = false;
   const verifier = { async verify() { return principal; } }, authorizer = { async authorize() { if (denied) throw ErrorRegistry.createError('POLICY_DENIED'); return authorization; } };
   const inspection = new ProviderSpendAccountInspectionApplication(verifier, authorizer, async () => openSqliteProviderSpendAccountReader(path, { busyTimeoutMs: options.busyTimeoutMs }));
@@ -153,4 +165,21 @@ it.each(['en', 'tr'] as const)('opens selections on exhausted turn and on /usage
   expect(view.stdout.frame).toContain(locale === 'tr' ? '8,50 USD' : '8.50 USD');
   expect(info.labels).toEqual(terminalInfoLabels(locale));
   expect(EMPTY_SESSION_USAGE.reports).toBe(0);
+});
+
+it.each(['tr', 'en'] as const)('startup recovery refreshes /usage and the exhaustion window from one account (%s)', async locale => {
+  const f = await fixture(true);
+  const started = await releaseSettledModelSlots(f.path, options, 'a'.repeat(64));
+  expect(started.spend).toEqual({ released: 1, zeroTariff: 0, inconsistent: [] });
+  const snapshot = await f.snapshot();
+  expect(snapshot.account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: '1024.51', budget: { limitMinorUnits: 2500 } });
+  const exhaustion = await spendRecoveryView(f.call(locale));
+  expect(text(exhaustion)).toContain(locale === 'tr' ? '10,2451 USD' : '10.2451 USD');
+  expect(text(exhaustion)).toContain(locale === 'tr' ? '0,00 USD' : '0.00 USD');
+  const usage = await terminalAdminPorts({ ...f.call(locale), installationId: 'fixture', projectId: 'fixture', status: async () => '', doctor: async () => undefined }).info.ports.usage!({ usage: EMPTY_SESSION_USAGE });
+  const output = JSON.stringify(usage.model);
+  expect(output).toContain(locale === 'tr' ? 'Ayrılan (etkin + askıda)' : 'Reserved (active + held)');
+  expect(output).toContain(locale === 'tr' ? '10,2451 USD' : '10.2451 USD');
+  expect(output).toContain(locale === 'tr' ? '25,00 USD' : '25.00 USD');
+  expect((await integrity(f.path))?.reservedMinorUnits).toBe(0);
 });

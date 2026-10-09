@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { immutableJsonObjectSchema, providerSpendBudgetSchema, providerSpendQuoteSchema,
   type ModelBindingDefinition, type ModelInvocationCommand, type ModelInvocationProfile,
   type ProviderSpendBudget, type ProviderSpendQuote } from '#domain/index.js';
-import { ProviderSpendError, providerSpendQuoteDigest, assertProviderSpendCapacity, createProviderSpendAccount, type ProviderSpendAccountReader } from '#engine/core/provider-spend/index.js';
+import { ProviderSpendError, providerSpendQuoteDigest, providerSpendHasZeroTariff, assertProviderSpendCapacity, createProviderSpendAccount, type ProviderSpendAccountReader } from '#engine/core/provider-spend/index.js';
 import { isDeepStrictEqual } from 'node:util';
 
 export interface ModelInvocationSpendingInput {
@@ -14,7 +14,7 @@ export interface ModelInvocationSpendingInput {
   readonly prepared: unknown;
 }
 export interface ModelInvocationSpending {
-  readonly budget: ProviderSpendBudget;
+  readonly budget: ProviderSpendBudget | null;
   readonly quote: ProviderSpendQuote;
 }
 /** Trusted composition-owned source, never a model answer or a public command field.
@@ -30,6 +30,8 @@ export interface ModelInvocationSpendingAuthority {
 }
 /** Observe the same account capacity the atomic claim checks; no account initialization, reservation or settlement. */
 export async function checkModelInvocationCapacity(open: () => Promise<ProviderSpendAccountReader>, { budget, quote }: ModelInvocationSpending): Promise<void> {
+  if (providerSpendHasZeroTariff(quote)) return;
+  if (!budget) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const reader = await open();
   try {
     const snapshot = await reader.loadSnapshot({ schemaVersion: 1, scopeId: budget.scopeId, budgetId: budget.budgetId, budgetRevision: budget.revision });
@@ -39,7 +41,7 @@ export async function checkModelInvocationCapacity(open: () => Promise<ProviderS
   } finally { reader.close(); }
 }
 const spendingSchema = immutableJsonObjectSchema.pipe(z.object({
-  budget: providerSpendBudgetSchema, quote: providerSpendQuoteSchema,
+  budget: providerSpendBudgetSchema.nullable(), quote: providerSpendQuoteSchema,
 }).strict().readonly());
 
 export async function authorizeModelInvocationSpending(authority: ModelInvocationSpendingAuthority | undefined,
@@ -55,8 +57,7 @@ export async function authorizeModelInvocationSpending(authority: ModelInvocatio
   if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const { budget, quote } = parsed.data;
   providerSpendQuoteDigest(quote);
-  if (budget.scopeId !== input.command.scopeId || quote.scopeId !== input.command.scopeId
-    || budget.currency !== quote.currency || quote.requestDigest !== input.requestDigest
+  if ((!budget && !providerSpendHasZeroTariff(quote)) || (budget && (budget.scopeId !== input.command.scopeId || budget.currency !== quote.currency)) || quote.scopeId !== input.command.scopeId || quote.requestDigest !== input.requestDigest
     || quote.profileDigest !== input.profileDigest) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   // The atomic account reservation owns exhaustion: its refusal carries settled and outstanding totals.
   return parsed.data;

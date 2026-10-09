@@ -1,3 +1,4 @@
+import { OPENAI_RESERVATION_POLICY } from './reservation-policy.js';
 import { createHash } from 'node:crypto';
 import { OpenAiChatHttpError, type OpenAiChatHttpDefinition, type OpenAiChatTextRequest } from './contract.js';
 import { RESPONSES_CONTROLS as CONTROLS } from './responses-controls.js';
@@ -50,7 +51,7 @@ export function responsesBody(definition: OpenAiChatHttpDefinition, request: Ope
   }
   return { reasoningInputTokensUpperBound, body: { model: request.model, input, max_output_tokens: request.max_completion_tokens, stream: request.stream === true,
     store: false, include: ['reasoning.encrypted_content'], reasoning: { effort },
-    ...(request.service_tier ? { service_tier: request.service_tier } : {}),
+    service_tier: request.service_tier ?? OPENAI_RESERVATION_POLICY.expectedServiceTier,
     ...(request.tools ? { tools: request.tools.map(tool => ({ type: 'function', ...tool.function, strict: false })) } : {}),
     ...(request.tool_choice ? { tool_choice: request.tool_choice } : {}) } };
 }

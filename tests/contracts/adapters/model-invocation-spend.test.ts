@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
-import { createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
+import { createModelInvocationResponseEvidence, createProviderSpendCheckpoint, providerSpendEvidenceDigest, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -37,7 +37,7 @@ function admission(base: Awaited<ReturnType<typeof fixture>>, commandId: string,
     nativeRequest: { model: 'native/model', messages: [{ role: 'user', content: commandId }] } };
   const profile = { schemaVersion: 1 as const, id: `profile-${allocationId}`, version: 1, scopeId: 'scope', reference,
     bindingDigest: binding.digest, protocol: { family: 'openai-chat-completions', version: 'v1' },
-    adapter: { id: 'fixture', version: 1, definition: {} }, allocation: { id: allocationId, maxCalls: 10, maxInFlight: 10 },
+    adapter: { id: 'fixture', version: 1, definition: { endpoint: 'https://openrouter.ai/api/v1/chat/completions' } }, allocation: { id: allocationId, maxCalls: 10, maxInFlight: 10 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000 } };
   const requestDigest = modelInvocationRequestDigest(command), profileDigest = modelInvocationProfileDigest(profile);
   return { command, requestDigest, actor, authorization, definition, activation: base.activation, profile, profileDigest, invocationId, claimedAtMs: 10,
@@ -280,4 +280,19 @@ it('a model switch cannot release a prior uncertain charge or create a duplicate
   await store.claim(next); expect((await store.claim(next)).replayed).toBe(true); store.close();
   expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 8 }, reservations: [
     { record: { disposition: { state: 'reserved' } } }, { record: { disposition: { state: 'held' } } }] });
+});
+
+it('a zero tariff bypasses a frozen money account and persists no zero reservation', async () => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const paid = await store.claim(admission(base, 'paid', 'paid-id')); await store.permitSend(paid.record.receipt.claim, 'owner', 11);
+  await store.recordUnknown(paid.record.receipt.claim, 'transport-error', 12);
+  const db = new DatabaseSync(base.path), row = db.prepare('SELECT record,revision,reservation_count FROM provider_spend_accounts').get()!;
+  const account = { ...JSON.parse(String(row.record)), frozen: true }, checkpoint = createProviderSpendCheckpoint(account, Number(row.revision), Number(row.reservation_count));
+  db.prepare('UPDATE provider_spend_accounts SET record=?,digest=?').run(JSON.stringify(account), checkpoint.digest); db.close();
+  const zero = admission(base, 'zero', 'zero-id', 'allocation-b', 0), free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+  const input = { ...zero, spending: { ...zero.spending, quote: { ...zero.spending.quote, pricing: { id: 'operator-static-tariff', version: 1, definition: free, digest: providerSpendEvidenceDigest(free) } } } };
+  const claim = await store.claim(input); await store.permitSend(claim.record.receipt.claim, 'owner', 13); await store.recordUnknown(claim.record.receipt.claim, 'transport-error', 14);
+  expect((await store.claim(input)).replayed).toBe(true);
+  await expect(store.claim(admission(base, 'another-paid', 'another-paid-id'))).rejects.toThrow('PROVIDER_SPEND_FROZEN'); store.close();
+  expect(snapshot(base.path)).toMatchObject({ account, invocations: 2, reservations: [{ invocationId: 'paid-id' }] });
 });

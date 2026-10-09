@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "expectedServiceTier": "default",
+  "safetyMarginPercent": 10,
+  "note": "Deckent reservation policy: select the request tier and context band, reserve uncached input and the effective output cap; actual usage settles independently. Explicit auto uses this expectation and may overrun."
+}

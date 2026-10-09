@@ -1,5 +1,6 @@
+import { checkModelInvocationCapacity } from '#engine/index.js';
 import { expect, it } from 'vitest';
-import { createProviderSpendAccount, parseProviderSpendAccount, reserveProviderSpend, settleProviderSpend, providerSpendEvidenceDigest, providerSpendQuoteDigest } from '#engine/core/provider-spend/index.js';
+import { createProviderSpendAccount, parseProviderSpendAccount, reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendEvidenceDigest, providerSpendQuoteDigest } from '#engine/core/provider-spend/index.js';
 
 const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'shared', revision: 1, currency: 'USD', limitMinorUnits: 100 };
 const pricingDefinition = { schemaVersion: 1, kind: 'synthetic-price' }, meterEvidence = { schemaVersion: 1, kind: 'synthetic-meter' };
@@ -76,4 +77,14 @@ it('uses exact safe integer arithmetic at the limit and rejects corrupt totals a
   let invoked = false;
   const accessor = Object.defineProperty({}, 'schemaVersion', { enumerable: true, get() { invoked = true; return 1; } });
   expect(() => parseProviderSpendAccount(accessor)).toThrow('PROVIDER_SPEND_INVALID'); expect(invoked).toBe(false);
+});
+
+it.each([true, false])('verified zero tariff skips money capacity even when frozen=%s and settled exceeds a revised limit', async frozen => {
+  const d = descriptor('zero', 0), free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+  const quote = { ...d.quote, pricing: { id: 'operator-static-tariff', version: 1, definition: free, digest: providerSpendEvidenceDigest(free) } };
+  const account = { ...createProviderSpendAccount(budget), settledMinorUnits: 101, settledExactMinorUnits: '101', frozen,
+    budgetRevisionDigest: 'a'.repeat(64), budgetRevisionCommandId: 'lower-budget' };
+  expect(() => assertProviderSpendCapacity(account, quote)).not.toThrow();
+  await checkModelInvocationCapacity(async () => { throw new Error('money-reader-must-not-open'); }, { budget: null, quote });
+  expect(() => assertProviderSpendCapacity(account, descriptor('paid', 1).quote)).toThrow(frozen ? 'PROVIDER_SPEND_FROZEN' : 'PROVIDER_SPEND_EXHAUSTED');
 });

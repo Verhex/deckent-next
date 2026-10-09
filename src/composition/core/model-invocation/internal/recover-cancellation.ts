@@ -1,4 +1,4 @@
-import { openSqliteModelInvocationCancellationInventory, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { openSqliteModelInvocationCancellationInventory, openSqliteModelInvocationStore, openSqliteProviderSpendRecoveryStore } from '#adapters/index.js';
 import { ModelInvocationCancellationRecoveryApplication, ModelInvocationPolicyAuthorization, endedRuntimeServiceModelOwner,
   ModelInvocationStoreError, modelInvocationCancellationRecoveryCommandSchema,
   type ModelInvocationControllers } from '#engine/index.js';
@@ -31,6 +31,10 @@ export async function recoverConfiguredModelCancellations(projectRoot: string, i
 export async function releaseSettledModelSlots(ledgerPath: string, sqlite: Parameters<typeof openSqliteModelInvocationStore>[1], custodyId: string) {
   const endedOwner = endedRuntimeServiceModelOwner(custodyId);
   const store = await openSqliteModelInvocationStore(ledgerPath, sqlite, 'forbid');
-  try { return await store.releaseSettledSlots({ atMs: new SystemTrustedClock().sample().wallMs, endedOwner }); }
+  let slots;
+  try { slots = await store.releaseSettledSlots({ atMs: new SystemTrustedClock().sample().wallMs, endedOwner }); }
   finally { store.close(); }
+  const recovery = await openSqliteProviderSpendRecoveryStore(ledgerPath, sqlite);
+  try { return { ...slots, spend: await recovery.recoverCertifiedHolds(new SystemTrustedClock().sample().wallMs) }; }
+  finally { recovery.close(); }
 }

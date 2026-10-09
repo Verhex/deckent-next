@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-10-09",
+  "note": "Owner-certified admission rejection policy; not provider-reported invoice evidence. Unknown endpoints have no HTTP certification.",
+  "vendors": [
+    { "vendor": "openai", "endpoints": ["https://api.openai.com/v1/chat/completions", "https://api.openai.com/v1/responses"], "statuses": [400, 401, 403, 404, 413, 422, 429], "source": "https://developers.openai.com/api/docs/guides/error-codes" },
+    { "vendor": "openrouter", "endpoints": ["https://openrouter.ai/api/v1/chat/completions"], "statuses": [400, 401, 402, 403, 404, 413, 422, 429], "source": "https://openrouter.ai/docs/api_reference/errors-and-debugging" },
+    { "vendor": "anthropic", "endpoints": ["https://api.anthropic.com/v1/messages"], "statuses": [400, 401, 402, 403, 404, 413, 429], "source": "https://platform.claude.com/docs/en/api/errors" },
+    { "vendor": "deepseek", "endpoints": ["https://api.deepseek.com/chat/completions"], "statuses": [400, 401, 402, 422, 429], "source": "https://api-docs.deepseek.com/quick_start/error_codes" },
+    { "vendor": "zai", "endpoints": ["https://api.z.ai/api/paas/v4/chat/completions"], "statuses": [400, 401, 403, 404, 429], "source": "https://docs.z.ai/api-reference/api-code" }
+  ]
+}

@@ -1,3 +1,4 @@
+import { providerSpendHasZeroTariff } from './no-charge.js';
 import { createHash } from 'node:crypto';
 import type { ModelInvocationReceipt } from '#domain/index.js';
 import { parseProviderSpendReservation, providerSpendQuoteDigest } from './account.js';
@@ -25,7 +26,8 @@ export function verifyInvocationSpendReservation(input: unknown, receipt: ModelI
     || state.evidenceDigest !== providerSpendOutcomeDigest(receipt)
     || (state.state === 'released-not-sent' ? outcome.state !== 'not-sent' : outcome.state === 'not-sent')
     || (state.state === 'released-no-charge' && !providerSpendRejectionHasNoCharge(outcome))
-    || (state.state === 'settled-local' && outcome.state === 'unknown')
+    || (reservation.recovery && state.state === 'settled-local' && !providerSpendHasZeroTariff(d.quote))
+    || (state.state === 'settled-local' && outcome.state === 'unknown' && !(reservation.schemaVersion === 5 && providerSpendHasZeroTariff(d.quote)))
     || ((state.state === 'settled-provider-reported' || state.state === 'settled-measured-tariff') && ((outcome.state !== 'responded' && outcome.state !== 'unknown')
       || state.amountMinorUnits !== reservation.measurement?.roundedMinorUnits
       || outcome.content?.digest !== reservation.measurement.responseContentDigest))

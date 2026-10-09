@@ -62,8 +62,9 @@ it('uses activation, profile, allocation, spending and durable invocation receip
   expect(first).toMatchObject({ replayed: false, receipt: { actor, profile: { adapter: { id: decisionHttpAdapter.id } }, outcome: { state: 'responded' } },
     response: { native: { decisionAdvice: { choice: 'a', sufficiency: .9, probabilities: { none_of_the_above: .05, insufficient_information: .05 } } } } });
   expect(await f.app.invoke(command)).toEqual({ ...first, replayed: true }); expect(f.requests()).toBe(1); expect(allocations(f.path)).toMatchObject({ lifetime_calls: 1, in_flight: 0 });
-  const db = new DatabaseSync(f.path, { readOnly: true }); try { const row = db.prepare('SELECT record FROM model_invocation_spend_reservations').get();
-    expect(JSON.parse(String(row?.record))).toMatchObject({ disposition: { state: 'settled-local', amountMinorUnits: 0 } });
+  const db = new DatabaseSync(f.path, { readOnly: true }); try {
+    expect(db.prepare('SELECT count(*) AS n FROM model_invocation_spend_reservations').get()?.n).toBe(0);
+    expect(db.prepare('SELECT count(*) AS n FROM provider_spend_accounts').get()?.n).toBe(0);
   } finally { db.close(); }
 });
 

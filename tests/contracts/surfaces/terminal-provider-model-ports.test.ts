@@ -20,7 +20,7 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 async function project(config: Record<string, unknown>) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-t4-ports-')); roots.push(root);
   await mkdir(join(root, '.deckent'), { recursive: true });
-  // Scope 'scope' has a spending budget unless the test removes it (T4-B (a): without one every model row is locked).
+  // Scope 'scope' has a spending budget unless the test removes it; typed readiness decides each model's money requirement.
   const budget = { provider_spending: { schemaVersion: 1, budgets: [{ schemaVersion: 1, scopeId: 'scope', budgetId: 'b', revision: 1, currency: 'USD', limitMinorUnits: 100 }] } };
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify(config['provider_spending'] === null ? Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'provider_spending'))
     : { ...budget, ...config }), { mode: 0o600 });
@@ -331,7 +331,7 @@ describe('/model source', () => {
     expect(store.deletes).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_OPENAI_COMPATIBLE_KEY' }]);
   });
 
-  it('(a) without a spending budget for the scope every model row is locked with the typed reason and the window names the next step', async () => {
+  it('(a) without typed readiness, a missing spending budget conservatively locks every model row and names the next step', async () => {
     const { root, options } = await project({ provider_spending: null, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile(ref('chat'), null)] } });
     const view = await modelPanelSource(root, 'scope', {
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
@@ -353,6 +353,26 @@ describe('/model source', () => {
     // The connected model is ready; the others keep their own (non-budget) reasons.
     expect(opened.choices.find(choice => choice.reference.modelId === 'chat')!.blocked).toBeNull();
     expect(opened.choices.some(choice => choice.blocked?.includes('PROVIDER_SPEND_UNAVAILABLE'))).toBe(false); expect(opened.notes.join('\n')).not.toContain('No spending budget');
+  });
+  it.each(['en', 'tr'] as const)('uses typed readiness without a money budget: zero tariff is selectable and priced calls stay refused (%s)', async locale => {
+    const paid = profile(ref('coder'), null);
+    const { root, options } = await project({ provider_spending: null, provider_invocation_profiles: { schemaVersion: 1,
+      profiles: [profile(ref('chat'), null), { ...paid, adapter: { ...paid.adapter, definition: { ...paid.adapter.definition,
+        tariff: { ...tariff, inputMinorUnitsPerMillionTokens: 100 } } } }] } });
+    const checked: string[] = [];
+    const view = await modelPanelSource(root, 'scope', {
+      inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
+      inspectModelActivation: async () => ({ activation: { state: 'active', revision: 1, catalogRevision: 'catalog-1',
+        binding: { digest: 'd'.repeat(64) } } }) as never,
+      inspectModelReadiness: async (_root, _scope, selected) => {
+        checked.push(selected.modelId);
+        if (selected.modelId === 'coder') throw Object.assign(new Error('money budget absent'), { code: 'PROVIDER_SPEND_UNAVAILABLE' });
+      },
+    }, options, locale).inspect();
+    expect(checked.sort()).toEqual(['chat', 'coder']);
+    expect(view.choices.find(choice => choice.reference.modelId === 'chat')!.blocked).toBeNull();
+    expect(view.choices.find(choice => choice.reference.modelId === 'coder')!.blocked).toContain('PROVIDER_SPEND_UNAVAILABLE');
+    expect(view.notes[0]).toContain(locale === 'en' ? 'zero-tariff models remain available' : 'sıfır tarifeli modeller kullanılabilir');
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});

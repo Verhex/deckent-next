@@ -1,10 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { createProviderSpendAccount, reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest, operatorTariffLocalSettlement,
-  providerSpendReservationDigest, parseProviderSpendMeasurement, ProviderSpendError, providerSpendRejectionHasNoCharge,
+  providerSpendReservationDigest, parseProviderSpendMeasurement, ProviderSpendError, providerSpendHasZeroTariff, certifyProviderSpendNoCharge,
   type ModelInvocationAdmission, type ModelInvocationRecord, type ProviderSpendMeasurement } from '#engine/index.js';
 import { readSpendCheckpoint, writeSpendCheckpoint, decodeSpendReservation, spendOutcomeDigest } from './spend-checkpoint.js';
-
 function requiredTransaction(db: DatabaseSync) {
   if (!db.isTransaction) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
 }
@@ -12,6 +11,7 @@ export function reserveInvocationSpend(db: DatabaseSync, admission: ModelInvocat
   requiredTransaction(db);
   if (!admission.spending) return;
   const { budget, quote } = admission.spending;
+  if (providerSpendHasZeroTariff(quote)) return;
   const current = readSpendCheckpoint(db, admission.command.scopeId), account = current?.account ?? createProviderSpendAccount(budget);
   const next = reserveProviderSpend(account, budget, { schemaVersion: 1, scopeId: admission.command.scopeId,
     invocationId: admission.invocationId, budgetId: budget.budgetId, budgetRevision: budget.revision, currency: budget.currency,
@@ -20,24 +20,20 @@ export function reserveInvocationSpend(db: DatabaseSync, admission: ModelInvocat
   db.prepare('INSERT INTO model_invocation_spend_reservations(scope_id,invocation_id,record,digest) VALUES(?,?,?,?)')
     .run(budget.scopeId, admission.invocationId, JSON.stringify(next.reservation), providerSpendReservationDigest(next.reservation));
 }
-
 /** Replay validates its exact reservation and checkpoint without scanning unrelated history. */
 export function verifyInvocationSpendReplay(db: DatabaseSync, admission: ModelInvocationAdmission, record: ModelInvocationRecord): void {
   requiredTransaction(db);
   const row = db.prepare('SELECT record,digest FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?')
     .get(record.receipt.claim.scopeId, record.receipt.claim.invocationId);
-  if (!row) { if (admission.spending) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT'); return; }
+  if (!row) { if (admission.spending && !providerSpendHasZeroTariff(admission.spending.quote)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT'); return; }
   const checkpoint = readSpendCheckpoint(db, record.receipt.claim.scopeId);
   if (!checkpoint) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const reservation = decodeSpendReservation(row, record.receipt, checkpoint, db);
   if (admission.spending && (!isDeepStrictEqual(reservation.descriptor.quote, admission.spending.quote)
     || !isDeepStrictEqual(checkpoint.account.budget, admission.spending.budget))) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
 }
-
-function reservationRow(db: DatabaseSync, next: ModelInvocationRecord) {
-  return db.prepare('SELECT record,digest FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?')
-    .get(next.receipt.claim.scopeId, next.receipt.claim.invocationId);
-}
+const reservationRow = (db: DatabaseSync, next: ModelInvocationRecord) => db.prepare(
+  'SELECT record,digest FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?').get(next.receipt.claim.scopeId, next.receipt.claim.invocationId);
 function checkedMeasurement(next: ModelInvocationRecord, input: ProviderSpendMeasurement | null | undefined) {
   if (input == null) return null;
   const measurement = parseProviderSpendMeasurement(input);
@@ -45,7 +41,6 @@ function checkedMeasurement(next: ModelInvocationRecord, input: ProviderSpendMea
     || measurement.responseContentDigest !== next.content.descriptor.digest) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   return measurement;
 }
-
 /** Validate a terminal replay against its persisted money evidence without changing either checkpoint. */
 export function verifyInvocationSpendSettlementReplay(db: DatabaseSync, next: ModelInvocationRecord,
   input: ProviderSpendMeasurement | null | undefined): void {
@@ -58,7 +53,6 @@ export function verifyInvocationSpendSettlementReplay(db: DatabaseSync, next: Mo
   const persisted = decodeSpendReservation(row, next.receipt, checkpoint, db);
   if (!isDeepStrictEqual(persisted.measurement, measurement)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
 }
-
 /** The response, allocation and monetary transition share the caller's single transaction. */
 export function settleInvocationSpend(db: DatabaseSync, next: ModelInvocationRecord,
   input: ProviderSpendMeasurement | null | undefined = null): void {
@@ -77,7 +71,7 @@ export function settleInvocationSpend(db: DatabaseSync, next: ModelInvocationRec
     ? { kind: measurement.basis, measurement, evidenceDigest }
     : local !== null
     ? { kind: 'measured-local', amountMinorUnits: local, evidenceDigest }
-    : providerSpendRejectionHasNoCharge(outcome)
+    : certifyProviderSpendNoCharge(next.receipt) !== null
     ? { kind: 'rejected-no-charge', evidenceDigest }
     : outcome.state === 'not-sent'
     ? { kind: 'not-sent', evidenceDigest }
