@@ -27,6 +27,20 @@
 #include <netinet/in.h>
 #include <unistd.h>
 
+// Stable Linux UAPI numbers on the two supported native architectures, even with older build headers.
+// Linux v6.18 arch/x86/entry/syscalls/syscall_64.tbl and scripts/syscall.tbl.
+#if defined(__x86_64__) || defined(__aarch64__)
+#ifndef SYS_fchmodat2
+#define SYS_fchmodat2 452
+#endif
+#ifndef SYS_setxattrat
+#define SYS_setxattrat 463
+#endif
+#ifndef SYS_removexattrat
+#define SYS_removexattrat 466
+#endif
+#endif
+
 // Landlock UAPI values (defined here so an older system header still builds; the kernel ABI is queried at run time).
 #define LL_CREATE_RULESET_VERSION (1U << 0)
 #define LL_RULE_PATH_BENEATH 1
@@ -141,6 +155,37 @@ static void install_seccomp(int tcp_by_landlock) {
 #ifdef X32_SYSCALL_BIT
     BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, X32_SYSCALL_BIT, 0, 1),
     RET(SECCOMP_RET_KILL_PROCESS),
+#endif
+    // Landlock filesystem rights do not mediate chmod/chown. Deny metadata mutation globally:
+    // an approved shell cannot make product authority writable for another process.
+#ifdef SYS_chmod
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_chmod, 0, 1), DENY(EPERM),
+#endif
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_fchmod, 0, 1), DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_fchmodat, 0, 1), DENY(EPERM),
+#ifdef SYS_fchmodat2
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_fchmodat2, 0, 1), DENY(EPERM),
+#endif
+#ifdef SYS_chown
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_chown, 0, 1), DENY(EPERM),
+#endif
+#ifdef SYS_lchown
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_lchown, 0, 1), DENY(EPERM),
+#endif
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_fchown, 0, 1), DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_fchownat, 0, 1), DENY(EPERM),
+    // POSIX ACLs and file capabilities are xattrs; they cannot reopen protected permissions either.
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_setxattr, 0, 1), DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_lsetxattr, 0, 1), DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_fsetxattr, 0, 1), DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_removexattr, 0, 1), DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_lremovexattr, 0, 1), DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_fremovexattr, 0, 1), DENY(EPERM),
+#ifdef SYS_setxattrat
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_setxattrat, 0, 1), DENY(EPERM),
+#endif
+#ifdef SYS_removexattrat
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_removexattrat, 0, 1), DENY(EPERM),
 #endif
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_io_uring_setup, 0, 1),
     DENY(EPERM),

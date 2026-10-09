@@ -439,7 +439,7 @@
   "terminal.approval.window.undo.server-silent": "The server does not say",
   "terminal.approval.window.posture.sandbox": "In the {realm} sandbox: {project}, .git {git}, network {network}",
   "terminal.approval.window.posture.host": "On this machine as your user — not a sandbox: files, processes and the network are reachable",
-  "terminal.approval.window.posture.project.writable": "the project is writable, protected files included",
+  "terminal.approval.window.posture.project.writable": "the project is writable; Deckent authority stays read-only",
   "terminal.approval.window.posture.project.writable-except-floor": "the project is writable except its protected files",
   "terminal.approval.window.posture.project.read-only": "the project is read-only",
   "terminal.approval.window.posture.project.write-set": "the project's writes are kept aside and applied like edits",

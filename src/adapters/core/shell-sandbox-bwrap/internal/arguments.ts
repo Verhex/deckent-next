@@ -51,6 +51,9 @@ export interface BubblewrapView {
    * become an empty tmpfs remounted read-only after every other mount (the scratch area's mount point inside one is made first). Every
    * ancestor of a protective mount is itself a mount point (`ancestorPins`): renaming it fails with EBUSY (R7).
    */
+  /** Product roots sealed in closed views too, before any admitted non-product subtree bind. */
+  readonly sealedPaths?: readonly string[];
+  readonly hiddenPaths?: readonly string[];
   readonly open?: { readonly sealed: readonly string[]; readonly hidden: readonly string[] };
 }
 
@@ -82,13 +85,13 @@ function viewMounts(view: BubblewrapView): ViewMount[] {
   for (const path of view.toolchainPaths) add(path, ['--ro-bind-try', path, path], false, false);
   if (view.overlay) add(view.projectRoot, ['--overlay-src', view.projectRoot, '--overlay', view.overlay.upper, view.overlay.work, view.projectRoot], false, false);
   else add(view.projectRoot, [view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot], !view.projectReadOnly, false);
-  for (const path of view.open?.sealed ?? []) add(path, ['--ro-bind', path, path], false, true);
+  for (const path of view.sealedPaths ?? view.open?.sealed ?? []) add(path, ['--ro-bind', path, path], false, true);
   for (const path of view.writablePaths ?? []) add(path, ['--bind', path, path], true, false);
   for (const path of view.readOnlyPaths) add(path, ['--ro-bind', path, path], false, true);
   for (const path of view.maskedDirectories) add(path, ['--tmpfs', path], false, true);
   for (const path of view.emptiedDirectories ?? []) add(path, ['--perms', '0555', '--tmpfs', path], false, true);
   for (const path of view.maskedFiles) add(path, ['--ro-bind', '/dev/null', path], false, true);
-  for (const path of view.open?.hidden ?? []) add(path, ['--perms', '0700', '--tmpfs', path], false, true);
+  for (const path of view.hiddenPaths ?? view.open?.hidden ?? []) add(path, ['--perms', '0700', '--tmpfs', path], false, true);
   if (view.scratchDir) add(view.scratchDir, ['--bind', view.scratchDir, view.scratchDir], true, true);
   return mounts;
 }
@@ -148,7 +151,7 @@ export function bubblewrapArguments(view: BubblewrapView): string[] {
     : ['--unshare-all', ...(view.network ? ['--share-net'] : []), '--die-with-parent', '--new-session', '--proc', '/proc', '--dev', '/dev', '--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', '/tmp'];
   viewMounts(view).forEach((mount, index) => args.push(...mount.args, ...pins.get(index) ?? []));
   // `--remount-ro` changes only that mount point (man page), so a scratch area bound inside a hidden root stays writable.
-  for (const path of view.open?.hidden ?? []) args.push('--remount-ro', path);
+  for (const path of view.hiddenPaths ?? view.open?.hidden ?? []) args.push('--remount-ro', path);
   for (const path of view.emptiedDirectories ?? []) args.push('--remount-ro', path);
   args.push('--chdir', view.projectRoot);
   return args;

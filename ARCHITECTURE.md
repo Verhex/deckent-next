@@ -442,6 +442,7 @@ refresh, usage and dogfood closure remain open.
   cleanup has retention and ownership rules. Discarding a worktree cannot undo an external API/DB operation.
   Those effects need idempotency, reconciliation or an explicitly supported compensation action.
 - bwrap: yalnız ürün durumu tutan dizin boş salt-okunur tmpfs olur (`BubblewrapView.emptiedDirectories`), içerik ve giriş adları görünmez; karma dizin giriş-başı maskede kalır, layout kökü hiç emptied olmaz; ayrıntı [shell-realms](.deckent/docs/architecture/modules/shell-realms.md).
+- W3-SANDBOX (owner 2026-10-09): sandbox hard floor is independent of call approval. Product authority/configuration stays read-only in both providers; Landlock seccomp also refuses chmod/chown families. Full-access shell requires an open sandbox and refuses host fallback/explicit host. The shared credential registry and host runtime/socket masks apply before execution; details and remaining mask bounds in [shell-realms](.deckent/docs/architecture/modules/shell-realms.md).
 - Proof covers sibling/main-workspace access, symlink/path escape, shared metadata, secrets/network, concurrent
   landing, stale ownership, cancel/restart and partial effects on the supported platform/realm matrix.
 

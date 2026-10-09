@@ -63,7 +63,7 @@ sense of the postures below.
 **Shell write postures (Astra 2170 × MODES-3, lead merge 2026-09-29).** A sandboxed shell call's write posture is derived once, at the
 effect, from who stands behind the call (the call decision hands the effect a typed authority `owner-approved | full-access |
 unattended`, never text) and the planned tier (`shellWritePosture`, host-shell, beside `unattendedWritePosture`):
-- **owner-approved** (the owner's card): the project writes, the write floor included; `.git` stays read-only except in a full-access turn.
+- **owner-approved** (the owner's card): the project writes, the ordinary approval floor included; product authority stays read-only; `.git` stays read-only except in a full-access turn.
 - **full-access** (an audited `full-access-call` of a turn launched in full access while the company grant holds; owner 2026-09-29: full
   access is comprehensive and owner-authorized by the mode): the project, the write floor (existing and new names) and `.git` (and a
   worktree's common repository) write; the configuration file stays read-only (that turn's sandbox floor is only the configuration
@@ -171,7 +171,7 @@ the project's git-tracked files is shown and audited — never blocked, never a 
 **Open view (OPEN-SANDBOX, owner MODES-3 checkpoint 4; live findings 3/4 of session 1d428e9f).** A full-access call in a realm that
 `opens` (bubblewrap) runs with `--unshare-all --share-net`, `--bind / /` then a fresh `/proc` and minimal `/dev` (PID namespace,
 `--die-with-parent`, `--new-session` kept): host network, the real HOME readable and writable, the project and `.git` writable. The hard floor
-is structural, from `ShellSandboxLayout.hardFloor` (`agentShellHardFloor`, `adapters/core/agent-workspace-floor`, full-access turns only): the
+is structural, from `ShellSandboxLayout.hardFloor` (`agentShellHardFloor`, `adapters/core/agent-workspace-floor`, all managed turns): the
 project's product root (`.deckent`), the data root, the bootstrap configuration's directory, the global state root of the service's
 configuration and process environments, and an existing conventional `~/.deckent`. A root inside the project is bound read-only over it (its
 product state still masked by the deny walk) — no name, existing or new, is created there (`.deckent/mcp.json` EROFS); a root outside it is an
@@ -187,15 +187,10 @@ its parent — every ancestor of a protective target (sealed/hidden root, read-o
 other mount (a later host bind would otherwise cover the floor); a non-canonical ancestor or more than `BUBBLEWRAP_ANCESTOR_PIN_MAX`
 (1 024; measured 32, +1.8 ms) refuses the view. A closed view with a writable project (owner-approved; unattended narrow) pins the
 in-project ancestors right after the project bind, before every protective mount (measured 0–10 pins, ≤ +1 ms); an overlay (a pin would
-bypass the write set) or read-only project (EROFS) view pins nothing. An owner-approved call of that turn keeps the
-existing configuration file writable (content only). Fail closed: an open request without the hard floor, a root that holds the project,
-HOME or `/`, a read-only project. A realm that cannot open (`openShellRealm`): `prefer-sandbox` runs the call on the host with a visible
-notice ("full access: no open sandbox (…); running on host … protected by name only"), `require-sandbox` keeps the closed view with a
-notice; the explicit host mode and a host fallback are unchanged. MCP server views are unchanged (`longLivedWritePosture`). Cost (this
+bypass the write set) or read-only project (EROFS) view pins nothing. An owner-approved call keeps configuration read-only (W3, owner 2026-10-09). Fail closed: an open request without the hard floor, a root that holds the project,
+HOME or `/`, a read-only project. A realm that cannot open (`openShellRealm`) refuses full-access shell calls with `SHELL_SANDBOX_UNAVAILABLE`, under every realm selection, including explicit host mode (W3, owner 2026-10-09). MCP server views are unchanged (`longLivedWritePosture`). Cost (this
 machine, empty project, wall clock with view resolution): open ≈ 55–63 ms, closed ≈ 11–13 ms. Open limits: HOME credential masking is by
-pattern and depth-bounded (deeper, linked or hard-linked credential files open); credential stores outside the Core patterns
-(`~/.config/gh/hosts.yml` — used by `git push` here —, `~/.codex/auth.json`, `~/.gnupg`, arbitrarily named `~/.ssh` keys) stay open (owner
-2026-09-30: name patterns for now; follow-up card OPEN-SANDBOX-HIDDEN-PATHS: a policy-managed hidden-path list); other projects' state and a
+pattern and depth-bounded (deeper or hard-linked aliases outside the masks may remain open; a matched symlink credential carrier refuses the open view); the shared `credential-paths.json` registry now masks gh, Docker, kube, Codex, Git credentials and common cloud CLI directories; arbitrary custom locations, `~/.gnupg` and renamed SSH keys still require separate isolation; other projects' state and a
 missing `~/.deckent` under an override are not sealed; minimal `/dev`; Landlock has no open view; the view seals Deckent's state, not its
 code (the service's node under HOME and a dogfood checkout's `dist/` are writable, so a full-access shell can change what the next restart
 runs); non-product FILES at the `.deckent` root and NEW subdirectories stay read-only (a commit adding one fails to check out there).

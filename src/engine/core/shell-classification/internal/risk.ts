@@ -7,12 +7,13 @@ export interface ShellRiskClassification { readonly risk: ShellRisk; readonly re
  * Risk tiers of a shell command (legacy `shell-risk.ts` @a8b67e2a1, kept as is): a lenient segment scanner exposes every compound
  * part and command substitution; the worst part wins; the destructive table (rm -r/-f, rmdir, git push --force, reset --hard,
  * clean -f, chmod/chown -R, dd, mkfs, shred, truncate, kill, docker rm/rmi/system prune, deckent kill/cleanup/recover) is the
- * always-ask floor that no mode lowers; output redirection (to anything but /dev/null or a descriptor), tee and anything unparseable are `modify`. `safe-read` is owned by the
+ * always-ask floor that full-auto never lowers; find -delete, moves and truncating output redirection are also destructive. Appending redirection (to anything but /dev/null or a descriptor), tee and anything unparseable are `modify`. `safe-read` is owned by the
  * read-only classifier alone: the scanner here can never promote a command to it.
  */
 export interface ShellScan {
   segments: string[];
   outputRedirect: boolean;
+  truncatingRedirect: boolean;
   malformed: boolean;
 }
 
@@ -55,7 +56,7 @@ const DESCRIPTOR = /^(?:\d+|-)$/u;
  * as a word. `writes`: the target may be a file — anything but `/dev/null`, or a descriptor number / `-` after `>&`. `malformed`: a
  * duplication without a target, or `<&` to something other than a descriptor (the shell refuses both).
  */
-function redirectionAt(command: string, index: number): { readonly end: number; readonly writes: boolean; readonly malformed: boolean } | null {
+function redirectionAt(command: string, index: number): { readonly end: number; readonly writes: boolean; readonly truncates: boolean; readonly malformed: boolean } | null {
   const char = command[index], next = command[index + 1];
   let end: number, duplication = false, input = false;
   if (char === '>') {
@@ -71,9 +72,9 @@ function redirectionAt(command: string, index: number): { readonly end: number; 
   while (command[at] === ' ' || command[at] === '\t') at++;
   let target = '';
   while (at < command.length && !REDIRECTION_TARGET_STOP.test(command[at]!)) target += command[at++];
-  if (input) return { end, writes: false, malformed: !DESCRIPTOR.test(target) };
-  if (duplication && DESCRIPTOR.test(target)) return { end, writes: false, malformed: false };
-  return { end, writes: target !== DEV_NULL, malformed: duplication && target === '' };
+  if (input) return { end, writes: false, truncates: false, malformed: !DESCRIPTOR.test(target) };
+  if (duplication && DESCRIPTOR.test(target)) return { end, writes: false, truncates: false, malformed: false };
+  return { end, writes: target !== DEV_NULL, truncates: target !== DEV_NULL && !command.slice(index, end).includes('>>'), malformed: duplication && target === '' };
 }
 
 /**
@@ -82,7 +83,7 @@ function redirectionAt(command: string, index: number): { readonly end: number; 
  * not try to execute or expand shell syntax: malformed input remains conservative.
  */
 export function scanShell(command: string): ShellScan {
-  const scan: ShellScan = { segments: [], outputRedirect: false, malformed: false };
+  const scan: ShellScan = { segments: [], outputRedirect: false, truncatingRedirect: false, malformed: false };
   let segment = '';
   let quote: "'" | '"' | null = null;
   let escaped = false;
@@ -137,6 +138,7 @@ export function scanShell(command: string): ShellScan {
       const nested = scanShell(command.slice(index + 2, end));
       scan.segments.push(...nested.segments);
       scan.outputRedirect ||= nested.outputRedirect;
+      scan.truncatingRedirect ||= nested.truncatingRedirect;
       scan.malformed ||= nested.malformed;
       segment += '__shell_substitution__';
       index = end;
@@ -160,6 +162,7 @@ export function scanShell(command: string): ShellScan {
       const nested = scanShell(command.slice(index + 1, end));
       scan.segments.push(...nested.segments);
       scan.outputRedirect ||= nested.outputRedirect;
+      scan.truncatingRedirect ||= nested.truncatingRedirect;
       scan.malformed ||= nested.malformed;
       segment += '__shell_substitution__';
       index = end;
@@ -173,6 +176,7 @@ export function scanShell(command: string): ShellScan {
     if (redirection) {
       if (redirection.malformed) scan.malformed = true;
       if (redirection.writes) scan.outputRedirect = true;
+      if (redirection.truncates) scan.truncatingRedirect = true;
       segment += command.slice(index, redirection.end);
       index = redirection.end - 1;
       continue;
@@ -234,6 +238,9 @@ function destructiveReason(words: string[]): string | null {
   const binary = commandName(words[0] ?? '');
   const args = words.slice(1);
   if (binary === 'rm' && hasAnyOption(args, ['r', 'R', 'f'], ['--recursive', '--force'])) return 'shell.destructive.rm-recursive-or-force';
+  if (binary === 'find' && args.includes('-delete')) return 'shell.destructive.find-delete';
+  // A move removes source names and can overwrite destinations, including outside the project.
+  if (binary === 'mv') return 'shell.destructive.move';
   if (binary === 'rmdir') return 'shell.destructive.rmdir';
   if (binary === 'git') {
     const pushIndex = args.indexOf('push');
@@ -322,6 +329,7 @@ export function classifyShellRisk(command: string, readOnly: ShellReadOnlyVerdic
   if (scan.segments.length === 0) result = { risk: 'modify', reason: 'shell.modify.empty-command' };
   for (const segment of scan.segments) result = combine(result, classifySegment(segment));
   if (scan.malformed) result = combine(result, { risk: 'modify', reason: 'shell.modify.unparseable' });
+  if (scan.truncatingRedirect) result = combine(result, { risk: 'destructive', reason: 'shell.destructive.output-truncation' });
   if (scan.outputRedirect) result = combine(result, { risk: 'modify', reason: 'shell.modify.output-redirection' });
   if (result.risk !== 'safe-read') return Object.freeze(result);
   if (readOnly.readOnly) return Object.freeze({ risk: 'safe-read', reason: `shell.safe-read.${readOnly.programs[0] ?? 'compound'}` });

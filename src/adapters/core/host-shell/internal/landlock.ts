@@ -1,11 +1,11 @@
 import type { Dirent } from 'node:fs';
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import type { ShellCapabilities } from './probe.js';
 import type { ShellSandbox, ShellSandboxLayout, ShellSandboxWriteView } from './realm.js';
-import { describeShellWritePosture, sandboxWriteView } from './realm.js';
+import { describeShellWritePosture, sandboxHardFloored, sandboxWriteView } from './realm.js';
 import { BASH_LAUNCH, runShellProcess } from './run.js';
 import { scanGitDirectory } from './git-objects.js';
 import { fsOpsFor, type FsOps } from './fs-ops.js';
@@ -54,7 +54,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   // directory is carved, so the entry cannot be replaced or removed either). A floor path that does not exist yet is not covered here.
   // Fail closed (Astra 2170 R2): a read-only floor asked of a layout that does not know the floor is refused, never run with it writable.
   if (write.floorReadOnly && !input.writeFloor) return { ok: false, reason: 'the write floor is not known to this sandbox view' };
-  const floored = write.floorReadOnly && input.writeFloor ? input.writeFloor : () => false;
+  const floored = (rel: string) => sandboxHardFloored(input, rel) || (write.floorReadOnly === true && input.writeFloor?.(rel) === true);
   // Astra 2170 R1: an unbounded unattended call sees the whole project read-only (only the scratch area stays writable).
   const projectClass: 'w' | 'r' = write.projectReadOnly ? 'r' : 'w';
   // MODES-3: a full-access turn writes Git metadata (commit, branch): its clean entries take `w` rules; the inode floor is unchanged.
@@ -88,7 +88,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   // protected path is not one read-write grant: it is carved — listing only, its denied entries take no rule, the ancestors of protected
   // paths are carved in turn, every other entry keeps its read-write grant unscanned (as ignored). A symbolic link on such a chain
   // cannot be carved by path → the set is refused.
-  const anchors = [...input.project.protectedAnchors];
+  const anchors = [...input.project.protectedAnchors, '.deckent', ...(input.hardFloor?.roots ?? []).map(path => relative(root, path)).filter(path => path && !path.startsWith('..') && !isAbsolute(path))];
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
   const carveProtected = async (rel: string, depth: number, cls: 'w' | 'r'): Promise<readonly LandlockRule[]> => {
@@ -142,7 +142,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       if (!entry.isFile() || await ops.nlink(join(root, child)) !== 1) return { carve: true };
       return cls === 'w' && floored(child) ? { rules: [['r', child]], carve: true } : { clean: child, carve: false };
     }));
-    if (!verdicts.some(verdict => verdict.carve)) return null;
+    if (!verdicts.some(verdict => verdict.carve) && !anchors.some(path => rel === '.' || path.startsWith(`${rel}/`))) return null;
     return [['l', rel], ...verdicts.flatMap(verdict => verdict.clean ? [[cls, verdict.clean] as const] : []), ...verdicts.flatMap(verdict => verdict.rules ?? [])];
   };
   try {
@@ -153,6 +153,11 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     const node = await realpath(process.execPath), prefix = basename(dirname(node)) === 'bin' ? dirname(dirname(node)) : null;
     for (const path of [...SYSTEM_EXEC, ...(prefix ? [join(prefix, 'bin'), join(prefix, 'lib')] : [])]) if (await exists(path, 'dir')) system.push(['x', path]);
     for (const path of SYSTEM_READ) if (await exists(path, 'dir')) system.push(['r', path]);
+    // An allow grant on a system prefix would reopen installation authority below it.
+    const protectedRoots = await Promise.all((input.hardFloor?.roots ?? [join(root, '.deckent')]).map(path => realpath(path).catch(() => path)));
+    if (system.some(([, path]) => protectedRoots.some(protectedRoot => protectedRoot === path || protectedRoot.startsWith(`${path}/`) || path.startsWith(`${protectedRoot}/`)))) {
+      return { ok: false, reason: 'a system read grant overlaps the installation hard floor' };
+    }
     for (const path of DEVICES) if (await exists(path, 'any')) system.push(['d', path]);
     // The common repository of a worktree (root `.git` file with its own read rule, in the verified shape): read-only under the same floor.
     const commonDir = project.some(([cls, path]) => cls === git && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await gitWorktreeRepository(root) : null;
@@ -177,6 +182,7 @@ export function landlockShellRealm(input: ShellSandboxLayout, abi: number): Shel
   return Object.freeze({
     kind: 'landlock' as const,
     async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
+      if (abi < 3) return refuse('Landlock ABI 3 is required to protect read-only files from truncation');
       if (resolve(request.cwd) !== input.project.root) return refuse('the working directory is not the sandboxed project root');
       // SHELL-OVERLAY: Landlock mounts nothing, so it cannot keep a call's writes aside (design §9); a caller that asks anyway is refused.
       if (request.writeSet) return refuse('this sandbox cannot keep writes aside for review');
@@ -210,7 +216,8 @@ export function landlockShellSandbox(layout: ShellSandboxLayout): ShellSandbox {
   return Object.freeze({ kind: 'landlock' as const,
     usable(capabilities: ShellCapabilities): ReturnType<ShellSandbox['usable']> {
       const abi = capabilities.landlock.status === 'available' ? capabilities.landlock.abi : null;
-      if (abi === null || abi < 1) return { ok: false, reason: `landlock ${capabilities.landlock.status}` };
+      if (abi === null) return { ok: false, reason: `landlock ${capabilities.landlock.status}` };
+      if (abi < 3) return { ok: false, reason: `Landlock ABI ${abi} cannot protect read-only files from truncation (requires ABI 3)` };
       return { ok: true, realm: landlockShellRealm(layout, abi), ...landlockPosture(abi) };
     } });
 }
