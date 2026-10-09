@@ -14,7 +14,7 @@ function metadata(options: { readonly tag?: string; readonly modelId?: string; r
   const endpoint = { model_id: options.endpointModelId ?? 'vendor/model', tag: options.tag ?? 'provider/region', provider_name: 'Provider', data_policy: { training: false, retainsPrompts: false },
     context_length: 10, max_prompt_tokens: options.maxPrompt === undefined ? 3 : options.maxPrompt,
     max_completion_tokens: options.maxCompletion === undefined ? 4 : options.maxCompletion, status: options.status ?? 0,
-    supported_parameters: options.supported ?? ['max_tokens'], pricing, ...(options.extraEndpoint ?? {}) };
+    supports_tool_choice: { auto: true, none: true, required: true }, supported_parameters: options.supported ?? ['max_tokens'], pricing, ...(options.extraEndpoint ?? {}) };
   return { data: { id: options.modelId ?? 'vendor/model', endpoints: options.endpoints ?? [endpoint] } };
 }
 function quoteRequest(extra: Record<string, unknown> = {}) {
@@ -30,6 +30,21 @@ it('selects one exact provider/region endpoint and quotes independently rounded 
     maxPromptTokens: 3, maxCompletionTokens: 2, requestControls: expect.objectContaining({ modalities: ['text'] }), provider: { only: ['provider/region'], allow_fallbacks: false, require_parameters: true, data_collection: 'deny', zdr: true,
       max_price: { prompt: '10000', completion: '20000', request: '0.005' } } });
   expect(parsed.pricedDimensions).toEqual(['completion', 'input_cache_read', 'input_cache_write', 'internal_reasoning', 'prompt', 'request']);
+});
+
+it.each(['none', 'required'] as const)('refuses tool_choice %s when any selected route variant denies it, and binds support into the tariff digest', choice => {
+  const source = metadata({ supported: ['max_tokens', 'tools', 'tool_choice'] });
+  const endpoint = source.data.endpoints[0]!;
+  const request = quoteRequest({ tools: [{ type: 'function', function: { name: 'read', parameters: { type: 'object' } } }], tool_choice: choice });
+  const allowed = parseOpenRouterTariff(source, { ...selection, endpointTag: 'provider' });
+  expect(quoteOpenRouterText(allowed, request, 150).maxChargeMinorUnits).toBeGreaterThan(0);
+  const changed = metadata({ endpoints: [endpoint, { ...endpoint, tag: 'provider/second', supports_tool_choice: { auto: true, none: choice !== 'none', required: choice !== 'required' } }] });
+  const denied = parseOpenRouterTariff(changed, { ...selection, endpointTag: 'provider' });
+  expect(denied.tariffDigest).not.toBe(allowed.tariffDigest);
+  expect(() => quoteOpenRouterText(denied, request, 150)).toThrow(error('INVALID_REQUEST'));
+  const unknown = metadata({ supported: ['max_tokens', 'tools', 'tool_choice'], extraEndpoint: { supports_tool_choice: undefined } });
+  delete (unknown.data.endpoints[0] as { supports_tool_choice?: unknown }).supports_tool_choice;
+  expect(() => quoteOpenRouterText(parseOpenRouterTariff(unknown, selection), request, 150)).toThrow(error('INVALID_REQUEST'));
 });
 
 it('rounds tiny dimension charges independently while explicitly zero dimensions add no cents', () => {

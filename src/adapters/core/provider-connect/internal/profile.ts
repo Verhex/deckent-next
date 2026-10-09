@@ -7,14 +7,12 @@ import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI
 import { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, anthropicMessagesProtocol, anthropicModelCapability,
   anthropicPublishedTariff, parseAnthropicMessagesDefinition } from '#adapters/core/provider-anthropic-messages/index.js';
 import { providerEndpoint, type ProviderConnectKind } from './registry.js';
-
 export class ProviderConnectError extends Error {
   constructor(readonly code: 'MODEL_CONNECT_SEED_UNAVAILABLE' | 'MODEL_CONNECT_TARIFF_UNKNOWN' | 'MODEL_CONNECT_TARIFF_UNVERIFIED' | 'MODEL_CONNECT_KEY_INSECURE'
     | 'MODEL_CONNECT_DEFINITION_INVALID' | 'MODEL_CONNECT_PRICE_REQUIRED') {
     super(code); this.name = 'ProviderConnectError';
   }
 }
-
 /** A packaged catalog seed (`assets/model-catalog/<name>.json`, the same files `models catalog register --seed` reads), strictly parsed. */
 export async function readProviderConnectSeed(name: string): Promise<ProviderCatalogDocument> {
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/u.test(name)) throw new ProviderConnectError('MODEL_CONNECT_SEED_UNAVAILABLE');
@@ -23,7 +21,6 @@ export async function readProviderConnectSeed(name: string): Promise<ProviderCat
   catch { throw new ProviderConnectError('MODEL_CONNECT_SEED_UNAVAILABLE'); }
   try { return parseProviderCatalogDocument(JSON.parse(text)); } catch { throw new ProviderConnectError('MODEL_CONNECT_SEED_UNAVAILABLE'); }
 }
-
 export type ConnectionAdapter = Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>;
   protocol: Readonly<{ family: string; version: string }>; tariff: 'published' | 'unmetered' }>;
 /**
@@ -50,7 +47,8 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     if (!tariff || !capability) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNKNOWN');
     // CACHE-SLICE1: a new profile takes the registry's TTL; an existing one keeps its own value (an absent field stays absent, `none` stays `none`).
     const cache = input.existing ? input.existing['cache'] : connect.cacheDefault;
-    const definition = { endpoint: input.endpoint, ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}), maxOutputTokens: Math.min(input.maxOutputTokens, capability.maxOutputTokens),
+    const workspaceId = input.existing?.['workspaceId'];
+    const definition = { endpoint: input.endpoint, ...(workspaceId === undefined ? {} : { workspaceId }), ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}), maxOutputTokens: Math.min(input.maxOutputTokens, capability.maxOutputTokens),
       authentication: { type: 'header', name: 'x-api-key', credentialRef: input.credentialRef }, tariff, ...(cache === undefined ? {} : { cache }) };
     try { parseAnthropicMessagesDefinition(definition); } catch { throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID'); }
     return Object.freeze({ adapter: { id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
@@ -83,7 +81,6 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
 function openAiChatLoopback(endpoint: string): boolean {
   return ['127.0.0.1', '[::1]', 'localhost'].includes(new URL(endpoint).hostname);
 }
-
 /**
  * Whether a model of a seeded kind can be connected with a price at the kind's default address (the `/provider` model list locks the others before
  * anything is written): Anthropic by its published tariff, the OpenAI chat adapter by an exact verified row, a loopback address always (zero tariff).
@@ -96,7 +93,6 @@ export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: 
   const endpoint = `${base.base}${connect.chatPath}`;
   return openAiChatLoopback(endpoint) || lookupOpenAiCompatibleTariff(endpoint, nativeId) !== null;
 }
-
 /** The protocol family a model connected to this kind must speak (its adapter's), or null when the kind connects no model. */
 export function providerConnectFamily(kind: ProviderConnectKind): string | null {
   if (!kind.connect) return null;

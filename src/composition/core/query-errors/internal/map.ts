@@ -23,6 +23,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof HandoffError) return ErrorRegistry.createError(error.code);
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
   if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : error.code, { params: {
+    ...(error.amounts ? { requested: error.amounts.requested, currency: error.amounts.currency } : {}),
     ...(error.amounts && inspectedAccount?.budget.currency === error.amounts.currency ? { settled: inspectedAccount.settledExactMinorUnits,
       held: inspectedAccount.reservedMinorUnits, requested: error.amounts.requested, limit: inspectedAccount.budget.limitMinorUnits, currency: inspectedAccount.budget.currency } : {}),
     ...(error.nextAction ? { nextAction: error.nextAction } : {}) } });

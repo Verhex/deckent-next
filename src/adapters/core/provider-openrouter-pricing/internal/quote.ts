@@ -3,7 +3,6 @@ import { sumCeilUsdCents, decimalText, multiplyRate, maxRate } from './decimal.j
 import { OpenRouterPricingError } from './error.js';
 import { requireTariffRates, type OpenRouterTariff } from './tariff.js';
 import { openRouterRequestControls } from './request-controls.js';
-
 /** Same tool/message/stream contract as the shared transport; legacy max_tokens spelling remains supported. */
 export function parseOpenRouterTextRequest(input: unknown): Omit<OpenAiChatTextRequest, 'max_completion_tokens'> & { readonly max_tokens?: number; readonly max_completion_tokens?: number } {
   const copied = openAiChatWireObjectSchema.safeParse(input);
@@ -26,7 +25,6 @@ export interface OpenRouterTextReservation {
     data_collection: 'deny'; zdr: true;
     max_price: Readonly<{ prompt: string; completion: string; request: string }> }>;
 }
-
 /** Conservative local reservation for one native text completion. This is not an external invoice guarantee.
  * Input uses the published endpoint bound, never a bytes/token guess. Cache/reasoning prices are added to
  * base prices, so replacement pricing cannot under-reserve. Each dimension covers all captured endpoints and conditional prices.
@@ -44,7 +42,7 @@ export function quoteOpenRouterText(tariff: OpenRouterTariff, input: unknown, no
     throw new OpenRouterPricingError('INVALID_REQUEST');
   }
   if (request.tools && !tariff.supportedParameters.includes('tools')
-    || request.tool_choice && !tariff.supportedParameters.includes('tool_choice')) throw new OpenRouterPricingError('INVALID_REQUEST');
+    || request.tool_choice && !tariff.supportedToolChoices.includes(request.tool_choice)) throw new OpenRouterPricingError('INVALID_REQUEST');
   const dimensions = [multiplyRate(maxRate(rates.prompt, rates.input_cache_read), tariff.maxPromptTokens),
     multiplyRate(maxRate(rates.input_cache_write, rates.input_cache_write_1h), tariff.maxPromptTokens),
     multiplyRate(rates.completion, maxCompletionTokens), multiplyRate(rates.internal_reasoning, maxCompletionTokens), rates.request];

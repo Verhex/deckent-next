@@ -54,7 +54,9 @@ describe.skipIf(process.platform !== 'linux')('well-formed model text through th
     f.state.script = [{ status: 400 }];
     const result = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-rejected', messages: [{ role: 'user', content: 'hi' }] }, () => undefined);
     expect(result.finish).toBe('error');
-    expect(result.note).toContain('The model round ended without an answer (rejected: HTTP 400)');
+    expect(result.note).toContain('The provider rejected the request (HTTP 400)');
+    expect(result.note).not.toContain('OpenAI');
+    expect(result.note).not.toContain('Switch to the current protocol');
     expect(result.note).not.toContain('TextEncodeInput');
   }, 30_000);
 });

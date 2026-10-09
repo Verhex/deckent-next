@@ -17,6 +17,7 @@ import { mcpPanelPort } from './mcp-panel.js';
 import { modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
+import { workspacePanelPort } from './workspace-panel.js';
 import { protocolPanelPort } from './protocol-panel.js';
 import { providerPanelPort } from './provider-panel.js';
 import { policyPanelPort } from './policy-panel.js';
@@ -198,12 +199,14 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   const planProfileProtocol = context.planProfileProtocol;
   const protocol = planProfileProtocol && context.configApplication && context.resolveConfigPrincipal
     ? { protocol: protocolPanelPort(root, scopeId, { ...context, planProfileProtocol }, options, locale) } : {};
+  const openProviderWorkspaces = context.openProviderWorkspaces;
+  const workspace = openProviderWorkspaces && context.configApplication && context.resolveConfigPrincipal ? { workspace: workspacePanelPort(root, scopeId, { ...context, openProviderWorkspaces }, options, locale) } : {};
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
     ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
-    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache, ...protocol } } : {}),
+    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache, ...protocol, ...workspace } } : {}),
     ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale)), ...budget, ...cache } } : {}) } } };
 }
 

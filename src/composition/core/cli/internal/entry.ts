@@ -29,7 +29,7 @@ import { previewSuppliedInstallation, inspectSuppliedInstallation, applySupplied
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand } from '#composition/core/model-invocation/index.js';
@@ -114,7 +114,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     // T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state.
     planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
-    planProfileProtocol: planConfiguredProfileProtocol,
+    planProfileProtocol: planConfiguredProfileProtocol, openProviderWorkspaces: openConfiguredProviderWorkspaces,
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),
     applyPoolCapacity: applyConfiguredPoolCapacity, inspectPoolCapacity: inspectConfiguredPoolCapacity, applyRunLifecycle: applyConfiguredRunLifecycle, applyPoolHold: applyConfiguredPoolHold, inspectPoolHold: inspectConfiguredPoolHold, // K5 typed pool hold (local, ledger-read by the service)

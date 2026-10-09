@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { OpenAiChatHttpError, parseOpenAiChatHttpLimits } from '#adapters/core/provider-openai-chat/index.js';
 import { ANTHROPIC_EFFORT_LEVELS, ANTHROPIC_METERING, anthropicControlsAdmitted } from './model-capabilities.js';
-
 export const ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID = 'anthropic-messages-http' as const;
 /** v2 (2026-09-29): profile `effort`, and thinking/effort/max-output checked against the model capability registry at load. */
 export const ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION = 2 as const;
@@ -16,7 +15,6 @@ export const anthropicMessagesProtocol = Object.freeze({ family: ANTHROPIC_MESSA
 export const ANTHROPIC_MESSAGES_WIRE_LIMITS = MODEL_INVOCATION_NATIVE_JSON_LIMITS;
 /** Versioned local reservation allowance added to the byte-based prompt bound (not an exact vendor count). */
 export const ANTHROPIC_PROMPT_OVERHEAD_TOKENS = ANTHROPIC_METERING.promptOverheadTokens;
-
 const rate = z.string().regex(/^(?:0|[1-9]\d{0,5})(?:\.\d{1,4})?$/);
 const ratesSchema = z.object({ input: rate, cacheWrite5m: rate, cacheWrite1h: rate, cacheRead: rate, output: rate }).strict();
 // Key order is the v1 order (kind, version, currency, modelId, usdPerMTok, source): parsed tariffs keep their serialized bytes and digests.
@@ -42,7 +40,6 @@ export const anthropicTariffSchema = z.union([
     })),
 ]);
 export type AnthropicPublishedTariff = z.infer<typeof anthropicTariffSchema>;
-
 const thinkingSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('model-default'), off: z.enum(['disabled', 'between_tools']).optional() }).strict(),
   z.object({ mode: z.literal('adaptive'), display: z.enum(['summarized', 'omitted']), off: z.enum(['disabled', 'between_tools']).optional() }).strict(),
@@ -58,6 +55,7 @@ const certificate = z.string().min(1).max(65_536).refine(value => {
   } catch { return false; }
 });
 const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: z.number().int().positive().safe(),
+  workspaceId: z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u).optional(),
   authentication: z.object({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/) }).strict(),
   tls: z.object({ caPem: certificate }).strict().optional(), tariff: anthropicTariffSchema,
   /** Absent = the model's default thinking (Opus 5.5 / Fable 5.1 / Sonnet 5.5 / Haiku 5.5: adaptive, thinking text omitted). */
@@ -67,7 +65,6 @@ const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens
   tokenCountEndpoint: z.string().min(1).optional() }).strict();
 export type AnthropicMessagesDefinition = Readonly<z.infer<typeof definitionSchema>>;
 const jsonSchema = createImmutableJsonObjectSchema(ANTHROPIC_MESSAGES_WIRE_LIMITS);
-
 /** Every credential-carrying call is https (the API key never crosses cleartext), canonical, without query, fragment or userinfo. */
 function canonical(endpoint: string): boolean {
   let url: URL;

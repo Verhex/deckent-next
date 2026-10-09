@@ -41,6 +41,9 @@ export async function scopeBudgeted(config: Record<string, unknown>, scopeId: st
 }
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 function readinessReason(error: unknown, locale: Locale): string {
+  const params = (error as { params?: { requested?: unknown; currency?: unknown } })?.params;
+  if (errorCode(error) === 'PROVIDER_SPEND_EXHAUSTED' && typeof params?.requested === 'number' && Number.isSafeInteger(params.requested)
+    && params.requested >= 0 && params.currency === 'USD') return t('tui.model.reason.reservation', { amount: (params.requested / 100).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 }) }, locale);
   const code = errorCode(error);
   if (code === 'MODEL_INVOCATION_REASONING_UNSUPPORTED') return t('tui.model.reason.reasoningOff', {}, locale);
   if (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN' || code === 'PROVIDER_SPEND_UNAVAILABLE')
@@ -99,6 +102,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
           }
         } catch { /* names only; the reference stays the text */ }
       }
+      const reservationBlocked = new Set<string>();
       const choices = await Promise.all(declared.catalog.providers.flatMap(provider => provider.models.map(async (model): Promise<ModelPanelChoice> => {
         const reference: ModelReference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
@@ -122,13 +126,21 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         }
         if (!blocked && host.inspectModelReadiness) {
           try { await host.inspectModelReadiness(root, scopeId, reference, options); }
-          catch (error) { blocked = readinessReason(error, locale); }
+          catch (error) { blocked = readinessReason(error, locale); if (errorCode(error) === 'PROVIDER_SPEND_EXHAUSTED') reservationBlocked.add(exact); }
         }
         return { reference, label: display.get(exact) ?? model.id, detail: blocked ? t('tui.model.state.blocked', {}, locale) : t('tui.model.state.ready', {}, locale),
           providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
       })));
+      // A viable alternative passed all the same readiness checks in this snapshot; no price or cap guess.
+      const alternative = host.inspectModelReadiness ? choices.find(choice => choice.blocked === null) : undefined;
+      for (const choice of choices) {
+        if (reservationBlocked.has(`${choice.reference.providerId}@${choice.reference.providerVersion}/${choice.reference.modelId}@${choice.reference.modelVersion}`)) {
+          (choice as { command: string | null }).command = alternative ? t('tui.model.budgetAlternative', { model: alternative.label, provider: alternative.providerLabel ?? alternative.group }, locale)
+            : t('tui.model.budgetNoAlternative', {}, locale);
+        }
+      }
       const inEffect = plan?.reference ? choices.find(choice => sameReference(choice.reference, plan.reference!)) : undefined;
       const note = winnerNote(plan?.source, inEffect?.label ?? plan?.reference?.modelId ?? '-', locale);
       return { title, choices, notes: [...notes, ...(note ? [note] : [])], defaultBlocked: defaultBlocked() };

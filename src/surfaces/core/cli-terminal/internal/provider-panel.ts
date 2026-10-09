@@ -214,7 +214,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       const using = name ? (await refs().catch(() => [] as readonly string[])).filter(ref => ref === name).length : 0;
       const next: PanelLine = kind.connectFamily === null ? { label: t('tui.provider.field.next', {}, locale), text: t('tui.provider.state.modelsNextSlice', {}, locale), tone: 'muted' }
-        : { label: t('tui.provider.field.next', {}, locale), text: using > 0 ? t('tui.provider.next.bound', { count: using }, locale)
+        : { label: t('tui.provider.field.next', {}, locale), text: probe.workspaceRequired ? t('tui.workspace.required', {}, locale) : using > 0 ? t('tui.provider.next.bound', { count: using }, locale)
         : t('tui.provider.next.unbound', { name: name ?? '-', scope: scopeId }, locale), tone: 'muted' };
       const ok = stored || request.key === null;
       return { stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines: [check, ...where, keyLine, next] };

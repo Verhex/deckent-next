@@ -73,4 +73,25 @@ describe('/model in the workline carries the host budget and shadow ports', () =
     await settle(60);
     expect(view.stdout.frame).not.toContain('Create budget');
   });
+
+  it('carries workspace selection through the workline, confirms the discovered ID and reaches the governed config write', async () => {
+    const applied: unknown[] = [], listed: string[] = [];
+    const view = open({ inspect: async () => MODELS, workspace: {
+      inspect: async () => [{ id: 'profile', label: 'chat', detail: 'unselected' }],
+      list: async id => { listed.push(id); return [{ id: 'wrkspc_Selected', name: 'Team' }]; },
+      apply: async (id, workspaceId) => { applied.push({ id, workspaceId }); return { status: 'applied', lines: ['Workspace selected'], approvalId: null }; },
+    } });
+    await settle(40); view.stdin.write(`/model${ENTER}`);
+    await until(() => view.stdout.frame.includes('Select provider workspace'), 'workspace entry');
+    await settle(60); view.stdin.write(ENTER);
+    await until(() => view.stdout.frame.includes('unselected'), 'profile choices');
+    await settle(60); view.stdin.write(ENTER);
+    await until(() => view.stdout.frame.includes('wrkspc_Selected'), 'discovered workspace choices');
+    expect(listed).toEqual(['profile']); expect(applied).toEqual([]);
+    await settle(60); view.stdin.write(ENTER);
+    await until(() => view.stdout.frame.includes('Use Team (wrkspc_Selected)'), 'workspace confirmation');
+    expect(applied).toEqual([]); await settle(60); view.stdin.write('y');
+    await until(() => applied.length === 1, 'governed workspace write');
+    expect(applied).toEqual([{ id: 'profile', workspaceId: 'wrkspc_Selected' }]);
+  });
 });

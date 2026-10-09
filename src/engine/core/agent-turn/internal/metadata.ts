@@ -17,10 +17,10 @@ export function withMcpNotices(notices: readonly string[], note: string | null):
  * How a round that ended without an answer is named in the turn's note: the outcome state and, when the provider answered, its bounded
  * diagnostic (rejection reason, HTTP status) — never the response body, which stays in the receipt (it may echo the sent input).
  */
-export function chatTurnRoundFailureState(outcome: ModelInvocationOutcome): string {
+export function chatTurnRoundFailureState(outcome: ModelInvocationOutcome, rejectionCodes?: Readonly<Record<string, ProviderRejectionKind>>): string {
   const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
   if (!evidence) return outcome.state;
-  const kind = classifyProviderRejection(evidence);
+  const kind = classifyProviderRejection(evidence, rejectionCodes);
   return `${outcome.state}: ${evidence.reason === 'http-status' && evidence.httpStatus !== null ? `HTTP ${evidence.httpStatus}`
     : `${evidence.reason}${evidence.httpStatus !== null ? `, HTTP ${evidence.httpStatus}` : ''}`}${kind ? ` (${kind})` : ''}`;
 }
@@ -48,7 +48,8 @@ function providerError(data: string | undefined): Readonly<{ type: string; code:
   } catch { return none; }
 }
 /** Classifies an HTTP refusal; anything not recognized stays unclassified (null) rather than guessed. */
-export function classifyProviderRejection(evidence: { readonly reason: ModelInvocationRejectionReason; readonly httpStatus: number | null; readonly body?: object }): ProviderRejectionKind | null {
+export function classifyProviderRejection(evidence: { readonly reason: ModelInvocationRejectionReason; readonly httpStatus: number | null; readonly body?: object },
+  rejectionCodes?: Readonly<Record<string, ProviderRejectionKind>>): ProviderRejectionKind | null {
   if (evidence.reason !== 'http-status' || evidence.httpStatus === null) return null;
   const status = evidence.httpStatus;
   if (status === 401) return 'credential-rejected';
@@ -59,6 +60,7 @@ export function classifyProviderRejection(evidence: { readonly reason: ModelInvo
   const error = providerError(data);
   // Anthropic: the tier cap is a 429 with `enforced_spend_limit_reached` (no retry-after); OpenAI: `insufficient_quota`.
   if (status === 429) {
+    if (Object.hasOwn(rejectionCodes ?? {}, error.code)) return rejectionCodes![error.code]!;
     if (error.code === 'enforced_spend_limit_reached' || error.code === 'insufficient_quota') return 'spend-limit';
     // Only a provider error that names a rate limit is one (Astra 2450 a); an unreadable or unrecognized body stays limit-reached.
     return error.type === 'rate_limit_error' || /^rate_limit/.test(error.code) ? 'rate-limit' : 'limit-reached';

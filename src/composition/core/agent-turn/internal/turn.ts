@@ -8,7 +8,7 @@ import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agent
   agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, boundApprovalPreviewFacts, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { t, MESSAGE_REGISTRY, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, sealedRootEntryRefused, agentDataRootRel, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, effectiveTerminalOutputCap, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
@@ -26,9 +26,8 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions, withAgentAudit } from './mode.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, mapOpenAiErrorResponse, openAiProviderRefusal,
+import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, mapOpenAiErrorResponse, openAiProviderRefusal, providerRequestDiagnosis,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
-
 /** Service-owned state of running turns: cancellation by the starting principal, service stop, the scratch custody (areas they hold are never
  * swept), and how `fetch_url` reaches the network (the system transport; only an in-process test passes another). */
 export interface RuntimeChatTurnHost {
@@ -152,7 +151,6 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
       ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
-
     // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
     const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
       .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
@@ -170,7 +168,6 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         ...roundStream, ...roundThinking,
         ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
           parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
-
     const mcps = (tool: AgentToolSpec) => mcp !== null && tool.toolClass === 'mcp' && mcp.owns(tool.name);
     const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
     /** T2-FOLLOWUP: what the card may say about undoing the call (by what it is) and, for a shell call, its structured posture. */
@@ -196,7 +193,6 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
     const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } });
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
-
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
     registered = !host.running.has(key);
     if (registered) host.running.set(key, { principalKey, controller: cancel });
@@ -222,14 +218,19 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
-          if (evidence?.adapter.id === 'openai-chat-http' && evidence.httpStatus === 400) {
+          if (evidence?.adapter.id === 'openai-chat-http' && (evidence.httpStatus === 400 || evidence.httpStatus === 429)) {
             // Retained vendor content is read through the existing inspect-content policy. Denied/purged content stays unknown.
             const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
               invocationId: result.receipt.claim.invocationId, reference, includeResponseContent: true }, peer, options).catch(() => null);
             const body = inspected?.responseContent?.kind === 'response-body' ? inspected.responseContent.data : null;
-            const diagnostic = mapOpenAiErrorResponse(400, body);
-            return { status: 'failed', state: diagnostic?.message ? t('tui.openai.badRequest', { message: diagnostic.message }, language)
-              : t('tui.openai.badRequestUnknown', {}, language) };
+            const diagnosis = providerRequestDiagnosis(profile);
+            if (evidence.httpStatus === 429) return { status: 'failed', state: chatTurnRoundFailureState({ ...outcome,
+              evidence: { ...evidence, body: { ...evidence.body, ...(body ? { data: body } : {}) } } } as typeof outcome, diagnosis.rejectionCodes) };
+            const diagnostic = mapOpenAiErrorResponse(400, body); const provider = diagnosis.labelKey ? (MESSAGE_REGISTRY.catalogs[language] as Readonly<Record<string, string>>)[diagnosis.labelKey] ?? t('tui.provider.unknown', {}, language)
+              : t('tui.provider.unknown', {}, language);
+            return { status: 'failed', state: [diagnostic?.message ? t('tui.provider.badRequest', { provider, message: diagnostic.message }, language)
+              : t('tui.provider.badRequestUnknown', { provider }, language), diagnosis.migration ? t('tui.provider.badRequestMigration', {}, language)
+                : t('tui.provider.badRequestProfile', {}, language)].join(' ') };
           }
           return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
         }
