@@ -48,8 +48,9 @@ const client = createConfiguredRuntimeClient(process.cwd());
 try { console.log(JSON.stringify(await (process.argv[2] === 'describeService' ? client.describeService()
   : client[process.argv[2]](JSON.parse(process.argv[3] ?? '{}'))))); }
 catch (error) { console.log(JSON.stringify({ code: error.code ?? error.message })); process.exitCode = 2; }`);
-  const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }], grants = [
-    { id: 'ops', effect: 'allow', actions: ['execute', 'inspect'], scopes: ['smoke'], principals, resource: { kind: 'operation', ids: ['smoke.post'] } },
+  // W3-AUTHORITY: MCP calls run as the separate `<host>/mcp` actor; the operation rule names it explicitly, shutdown stays owner-only.
+  const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }], withMcp = [...principals, { issuer: `${hostname()}/mcp`, subject: String(userInfo().uid) }], grants = [
+    { id: 'ops', effect: 'allow', actions: ['execute', 'inspect'], scopes: ['smoke'], principals: withMcp, resource: { kind: 'operation', ids: ['smoke.post'] } },
     { id: 'service', effect: 'allow', actions: ['shutdown'], scopes: ['smoke'], principals, resource: { kind: 'service', ids: ['runtime'] } }];
   const config = { layout: { root: data }, runRuntime: { pollIntervalMs: 2147483647 },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
@@ -120,6 +121,9 @@ composeCore(); (await openConfiguredAttemptStore(process.cwd())).store.close();`
     results.replay = unpack(await mcp.request('tools/call', { name: 'execute_operation', arguments: command('via-mcp') }));
     results.denied = unpack(await mcp.request('tools/call', { name: 'execute_operation', arguments: { ...command('denied'), scopeId: 'elsewhere' } }));
     results.inspected = unpack(await mcp.request('tools/call', { name: 'inspect_operation', arguments: { schemaVersion: 1, scopeId: 'smoke', commandId: 'via-service' } }));
+    // Negative: the owner-only shutdown rule does not reach the MCP actor.
+    results.mcpShutdown = unpack(await mcp.request('tools/call', { name: 'shutdown_runtime_service', arguments: { schemaVersion: 1, commandId: 'mcp-shutdown',
+      serviceId: 'runtime', instanceId: first.instanceId, reason: 'no MCP grant' } }));
     const restarted = await run(cli, ['runtime', 'restart', '--json']);
     if (restarted.status === 0) { const readiness = JSON.parse(restarted.stdout); if (Number.isSafeInteger(readiness.pid)) detached.add(readiness.pid); }
     results.restart = { status: restarted.status, stderr: restarted.stderr };
@@ -148,7 +152,7 @@ composeCore(); (await openConfiguredAttemptStore(process.cwd())).store.close();`
     const negativeMcp = peer(coreMcp, negative); await negativeMcp.initialize();
     results.absentMcp = unpack(await negativeMcp.request('tools/call', { name: 'execute_operation', arguments: command('absent-mcp') }));
     const ok = results.service.status === 'settled' && results.mcp.status === 'settled' && results.afterRestart.status === 'settled'
-      && JSON.stringify(results.replay) === JSON.stringify(results.mcp) && results.denied.code === 'POLICY_DENIED'
+      && JSON.stringify(results.replay) === JSON.stringify(results.mcp) && results.denied.code === 'POLICY_DENIED' && results.mcpShutdown.code === 'POLICY_DENIED'
       && results.inspected.record?.state === 'settled' && results.hints?.readOnlyHint === false && results.hints?.destructiveHint === true
       && results.restart.status === 0 && results.restart.replaced && results.restart.registered && results.writes.length === 3
       && results.unregisteredService.status !== 0 && results.unregisteredService.stderr.includes('OPERATIONS_INVALID')

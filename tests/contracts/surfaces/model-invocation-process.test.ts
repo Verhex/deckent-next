@@ -276,18 +276,20 @@ function invocationId(ledger: string, commandId: string): string {
 }
 function writeProcessPolicy(policyPath: string, identity: ReturnType<typeof readLocalOsIdentity>, target: string,
   allowed: boolean, evidenceAllowed = allowed, purgeAllowed = false, accountAllowed = false, auditAllowed = false) {
+  // W3-AUTHORITY: stdio MCP runs as the separate `<host>/mcp` actor; each rule names it explicitly next to the owner.
+  const people = [{ issuer: identity.issuer, subject: identity.subject }, { issuer: `${identity.issuer}/mcp`, subject: identity.subject }];
   return writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
     revision: allowed ? (evidenceAllowed ? 'allow-with-evidence' : 'allow-without-evidence') : 'deny', restrictions: [], grants: allowed ? [
       { id: 'invoke-inspect', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } },
+        principals: people, resource: { kind: 'model-invocation', ids: [target] } },
       ...(accountAllowed ? [{ id: 'account-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
+        principals: people, resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
       ...(auditAllowed ? [{ id: 'account-audit', effect: 'allow', actions: ['audit'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
+        principals: people, resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
       ...(purgeAllowed ? [{ id: 'purge-content', effect: 'allow', actions: ['purge-content'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+        principals: people, resource: { kind: 'model-invocation', ids: [target] } }] : []),
       ...(evidenceAllowed ? [{ id: 'inspect-content', effect: 'allow', actions: ['inspect-content'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+        principals: people, resource: { kind: 'model-invocation', ids: [target] } }] : []),
     ] : [] }), { mode: 0o600 });
 }
 async function assertAccountSurfaces(project: string, root: string, env: Record<string, string>, ledger: string,
@@ -533,7 +535,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
       { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationInspection;
     expect(cliInspection.invocation).toEqual(first);
     replay = await callMcp(project, env, 'invoke_model', command('first'));
-    expect(replay.isError).not.toBe(true); expect(replay.structuredContent).toMatchObject({ replayed: true, receipt: first,
+    expect(replay.isError, JSON.stringify(replay.content)).not.toBe(true); expect(replay.structuredContent).toMatchObject({ replayed: true, receipt: first,
       contentStatus: 'retained', response: { native: { model: 'vendor/model' } } }); expect(bodies).toHaveLength(1);
   });
 
