@@ -429,6 +429,7 @@
   "error.TOOLCHAIN_HISTORY_INVALID": "Worker image update failed (TOOLCHAIN_HISTORY_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}",
   "error.TOOLCHAIN_RECEIPT_INVALID": "Worker image update failed (TOOLCHAIN_RECEIPT_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}",
   "error.TOOLCHAIN_PLAN_INVALID": "Worker image update failed (TOOLCHAIN_PLAN_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}",
+  "error.TOOLCHAIN_UPDATE_TERMINAL_ONLY": "MCP may only check the worker image toolchains; building or applying an update is refused over MCP. Nothing was planned, built or written. Run the update from the Deckent terminal: deckent toolchains update --apply.",
   "doctor.installationBinding.machine": "Installation binding: machine ({source}) - relocation and copy detection is on",
   "doctor.installationBinding.source.platform": "platform machine identity",
   "doctor.installationBinding.source.configured": "configured source installation.machineIdentity.source",

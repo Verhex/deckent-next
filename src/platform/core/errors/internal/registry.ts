@@ -623,6 +623,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   TOOLCHAIN_HISTORY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_HISTORY_INVALID', { detail: '', ...p }, l) }) },
   TOOLCHAIN_RECEIPT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_RECEIPT_INVALID', { detail: '', ...p }, l) }) },
   TOOLCHAIN_PLAN_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_PLAN_INVALID', { detail: '', ...p }, l) }) },
+  TOOLCHAIN_UPDATE_TERMINAL_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_UPDATE_TERMINAL_ONLY', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },
 });
 for (const definition of Object.values(definitions)) Object.freeze(definition);

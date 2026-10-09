@@ -2,9 +2,9 @@ import { constants } from 'node:fs';
 import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { selectWorkerLineage, workerImageRecipeSchema, failedContextsToPrune, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
-import { assertWorkerImageVersionAvailable, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { assertWorkerImageVersionAvailable, localPrincipalChannel, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
@@ -44,18 +44,23 @@ async function readBuiltLineage(home: string): Promise<{ recipe: unknown; docker
 /** Plan/build with a daemon preflight before artifacts; config/package bytes and running work stay unchanged. */
 export async function updateConfiguredToolchains(projectRoot: string, input: Readonly<{ apply?: boolean | undefined }> = {}, options: ConfigLoadOptions = {},
   dependencies: ToolchainUpdateDependencies = {}): Promise<ToolchainUpdateResult> {
-  const config = await loadConfig(projectRoot, options);
+  // Owner 2026-10-09 (MCP read-only by default): the `<host>/mcp` actor may only check. A build/apply is refused before anything is read
+  // or written; its check plans in memory without the plan artifact or the toolchains directory. The CLI and terminal are unchanged.
+  const mcpCheckOnly = localPrincipalChannel() === 'mcp';
+  if (mcpCheckOnly && toolchainUpdateApplies(input.apply)) throw ErrorRegistry.createError('TOOLCHAIN_UPDATE_TERMINAL_ONLY');
+  const config = await loadConfig(projectRoot, mcpCheckOnly ? { ...options, heal: false } : options);
   const policy = config.toolchains.update;
   const now = dependencies.now ?? (() => new Date().toISOString());
   if (policy.mode === 'off') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'disabled', plan: null, planPath: null, build: null, proposal: null, proposalPath: null });
   const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher);
   const root = dependencies.packageRoot ?? packageRoot; const sources = await readWorkerImageSources(root);
   const plannedAt = now();
-  const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
+  const home = join(mcpCheckOnly ? productResourcePath(config.productLayout, 'workspaces') : await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const lineage = selectWorkerLineage(sources, await readBuiltLineage(home));
   const plan = planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config) });
   if (plan.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  if (mcpCheckOnly) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath: null, build: null, proposal: null, proposalPath: null });
   const apply = toolchainUpdateApplies(input.apply);
   if (apply) await assertWorkerImageVersionAvailable({ packageRoot: root, imageVersion: plan.next!.imageVersion,
     timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env, ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, dependencies.runner);

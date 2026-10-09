@@ -15,6 +15,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const PERSON = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' };
 const SCOPE = 'live';
+const MCP_PERSON = { issuer: `${PERSON.issuer}/mcp`, subject: PERSON.subject };
 const grant = (id: string, kind: string, actions: string[], ids: string[] | 'all', extra: Record<string, unknown> = {}) =>
   ({ id, actions, scopes: [SCOPE], principals: [PERSON], resource: { kind, ids }, effect: 'allow', ...extra });
 /** The live installation's 20 hand-built grants (2026-10-08 shape; model hashes shortened): the person is on every one. */
@@ -62,7 +63,10 @@ async function installation(policy: unknown = handBuilt()) {
   const upgrade = (apply: boolean, options: { expect?: string; person?: { issuer: string; subject: string }; uid?: number } = {}) =>
     upgradePolicyTemplateInstallation(root, SCOPE, apply, options.expect, {}, options.uid ?? process.getuid?.(), options.person);
   const archive = async () => { try { return await readdir(join(data, 'audit', 'authority-revisions')); } catch { return []; } };
-  return { root, policyPath, bytes: () => readFile(policyPath, 'utf8'), upgrade, mcp, archive };
+  /** The person's separate MCP actor (W3-AUTHORITY): one policy decision of `action` on `kind`. */
+  const mcpActor = async (action: string, kind: string) => evaluatePolicy(await source.load(), { principal: { ...principal, id: 'owner@live/mcp', ...MCP_PERSON },
+    scopeId: SCOPE, action, resource: { kind, id: 'any' } }).decision;
+  return { root, policyPath, bytes: () => readFile(policyPath, 'utf8'), upgrade, mcp, mcpActor, archive };
 }
 
 describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --person (hand-built policy, POLICY-UPGRADE-HANDBUILT)', () => {
@@ -91,6 +95,9 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
         resource: { kind: 'provider-spend-account', ids: 'all' } },
       // v8 (BACKUP-COMMAND): installation-wide backup for the named person.
       { id: 'first-run-backup', effect: 'allow', actions: ['create', 'verify', 'restore'], scopes: 'all', principals: [PERSON], resource: { kind: 'backup', ids: 'all' } },
+      // v9 (W3-AUTHORITY, owner 2026-10-09): MCP observation only, for the person's separate MCP actor `<issuer>/mcp`.
+      ...['run', 'scope', 'approval', 'model-activation', 'model-invocation', 'provider-spend-account'].map(kind => ({ id: `first-run-mcp-observe-${kind}`, effect: 'allow',
+        actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind, ids: 'all' } })),
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -107,7 +114,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v8-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v9-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
 
@@ -117,6 +124,10 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(await f.archive()).toHaveLength(1);
     // After: the mcp-server resource allows; the call itself still asks on its card (the `mcp-call` hard-floor cell raises an allow).
     expect(await f.mcp()).toEqual({ server: 'allow', call: 'require-approval' });
+    // v9: the MCP actor observes, but a mutation the person holds (live-invoke, owner-model-catalog) is refused without a grant naming `<issuer>/mcp`.
+    expect(await f.mcpActor('inspect', 'run')).toBe('allow');
+    expect(await f.mcpActor('invoke', 'model-invocation')).toBe('deny');
+    expect(await f.mcpActor('activate', 'model-activation')).toBe('deny');
   });
 
   it('refuses and writes nothing: a person the policy does not name, `all` principals only, a caller who is not the file owner, a stale --expect', async () => {
@@ -156,7 +167,8 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: { issuer: string; subject: string }[]; resource: { ids: unknown } }[] };
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
-      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(rule.id)
+      && !rule.id.startsWith('first-run-mcp-observe-')).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');

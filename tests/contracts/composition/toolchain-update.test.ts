@@ -129,3 +129,31 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     await expect(toolchainsCommand(['toolchains', 'update', '--force'], { root: f.project })).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
 });
+
+// Owner 2026-10-09 (MCP read-only by default): the `<host>/mcp` actor only checks. Its plan stays in memory (no plan artifact, no toolchains
+// directory, no build check); build/apply — the `auto` default's apply included — is refused with the typed, localized refusal and touches nothing.
+// The CLI/terminal path (no MCP channel) is unchanged.
+describe.skipIf(process.platform !== 'linux')('update_toolchains for the MCP actor (check only)', () => {
+  it('MCP check plans without writing; MCP apply is refused with no side effect; the CLI path still writes its plan', async () => {
+    const { withLocalPrincipalChannel } = await import('#adapters/index.js');
+    const { ErrorRegistry } = await import('#platform/index.js');
+    for (const mode of ['propose', 'auto'] as const) {
+      const f = await fixture({ mode });
+      const config = await readFile(join(f.project, '.deckent/config.json'), 'utf8');
+      const deps = { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:00:00.000Z' };
+      const checked = await withLocalPrincipalChannel('mcp', () => updateToolchains(f.project, {}, f.options, deps));
+      expect(checked, mode).toMatchObject({ mode, decision: 'planned', planPath: null, build: null, proposal: null, plan: { next: { imageVersion: 'r5-20260923' } } });
+      for (const apply of [true]) {
+        const refused = withLocalPrincipalChannel('mcp', () => updateToolchains(f.project, { apply }, f.options, deps));
+        await expect(refused, mode).rejects.toMatchObject({ code: 'TOOLCHAIN_UPDATE_TERMINAL_ONLY' });
+      }
+      expect(f.runs, mode).toEqual([]); expect(f.checks, mode).toEqual([]);
+      await expect(readdir(f.home), mode).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await readFile(join(f.project, '.deckent/config.json'), 'utf8'), mode).toBe(config);
+      // The CLI path (no MCP channel) is unchanged: the same check writes its plan artifact.
+      const cli = await updateToolchains(f.project, {}, f.options, deps);
+      expect(cli.planPath, mode).toEqual(expect.stringContaining(join(f.home, 'plans')));
+    }
+    for (const lang of ['en', 'tr'] as const) expect(ErrorRegistry.createError('TOOLCHAIN_UPDATE_TERMINAL_ONLY', { locale: lang }).message).toMatch(/deckent toolchains update --apply/u);
+  });
+});

@@ -1964,7 +1964,10 @@
         "src/platform/core/config",
         "src/platform/core/managed-files",
         "src/platform/core/utils",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/adapters/core/local-principal"
       ],
       "plan": "PROVIDERS"
     },

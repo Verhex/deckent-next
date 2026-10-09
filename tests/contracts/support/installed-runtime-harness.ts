@@ -12,6 +12,8 @@ import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { installationProfile } from './installation-profile.js';
+import { terminalProgram } from './approval-terminal.js';
+import { createTerminalRuntimeClient } from './terminal-runtime-client.js';
 
 const exec = promisify(execFile), cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 const roots: string[] = [];
@@ -135,6 +137,9 @@ export async function installedScenario(mode: string, observed: { root?: string;
 
   const profile = installationProfile({ root: data, shutdown: true, images: [imageId] });
   const principal = { issuer: hostname(), subject: String(userInfo().uid) }, principals = [principal];
+  // W3-AUTHORITY (owner 2026-10-09): MCP tools run as the separate `<host>/mcp` actor, so the rules this scenario exercises over MCP name it
+  // explicitly; approval decisions stay owner-only (MCP has no decision tool) and service shutdown is SDK-only.
+  const withMcp = [principal, { issuer: `${hostname()}/mcp`, subject: principal.subject }];
   const docker = profile.configuration.execution.docker;
   Object.assign(docker, { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 });
@@ -162,14 +167,14 @@ export async function installedScenario(mode: string, observed: { root?: string;
       + "process.exit(released?0:3)}setTimeout(hold,50)})()"
       : "process.stdout.write(require('node:fs').readFileSync('/workspace/input','utf8'))"] };
   profile.policy.grants = [
-    { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope-1'], principals, resource: { kind: 'scope', ids: ['scope-1'] } },
-    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect', 'cancel'], scopes: ['scope-1'], principals, resource: { kind: 'run', ids: ['run-1'] } },
-    { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['scope-1'], principals, resource: { kind: 'pool', ids: ['pool-1'] } },
-    { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'cancel', 'reconcile', 'recover-output'], scopes: ['scope-1'], principals, resource: { kind: 'attempt', ids: 'all' } },
+    { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope-1'], principals: withMcp, resource: { kind: 'scope', ids: ['scope-1'] } },
+    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect', 'cancel'], scopes: ['scope-1'], principals: withMcp, resource: { kind: 'run', ids: ['run-1'] } },
+    { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['scope-1'], principals: withMcp, resource: { kind: 'pool', ids: ['pool-1'] } },
+    { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'cancel', 'reconcile', 'recover-output'], scopes: ['scope-1'], principals: withMcp, resource: { kind: 'attempt', ids: 'all' } },
     { id: 'shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['scope-1'], principals, resource: { kind: 'service', ids: ['service-1'] } },
   ];
   if (approvals) profile.policy.grants.push(
-    { id: 'approve-task', effect: 'require-approval', actions: ['execute'], scopes: ['scope-1'], principals, resource: { kind: 'task', ids: ['held'] } },
+    { id: 'approve-task', effect: 'require-approval', actions: ['execute'], scopes: ['scope-1'], principals: withMcp, resource: { kind: 'task', ids: ['held'] } },
     { id: 'approval', effect: 'allow', actions: ['inspect', 'decide', 'renew'], scopes: ['scope-1'], principals, resource: { kind: 'approval', ids: 'all' } },
   );
   await writeFile(profilePath, JSON.stringify(rehash(profile)), { mode: 0o600 });
@@ -237,11 +242,23 @@ export async function installedScenario(mode: string, observed: { root?: string;
       const commandPath = join(root, 'approval.json'); await writeFile(commandPath, JSON.stringify(command));
       // B1 (owner 2026-10-01): MCP has no decision tool (unknown tool, the request stays pending); the CLI allows the task approval (peer-session),
       // and a replay of the same command through the runtime SDK returns the CLI's exact receipt.
+      // W3-AUTHORITY negative: the owner-only shutdown rule does not reach the MCP actor.
+      const shutdownDescriptor = await runtimeClient.describeService();
+      const mcpShutdown = await client.callTool({ name: 'shutdown_runtime_service', arguments: { schemaVersion: 1, commandId: 'mcp-shutdown', serviceId: 'service-1',
+        instanceId: shutdownDescriptor.instanceId, reason: 'no MCP grant' } });
+      expect(mcpShutdown.isError).toBe(true); expect(JSON.stringify(mcpShutdown.content)).toContain('POLICY_DENIED');
       const mcpDecision = await client.callTool({ name: 'decide_approval', arguments: command });
       expect(mcpDecision.isError).toBe(true); expect(JSON.stringify(mcpDecision.content)).toContain('MCP_TOOL_UNKNOWN');
-      const cliDecision = await exec(process.execPath, [cli, 'approval', 'decide', '--input', commandPath, '--json'], { cwd: project, env });
+      // W3-AUTHORITY: a headless CLI decision (pipes, no controlling terminal) is refused and decides nothing; the same command from a real PTY decides.
+      await expect(exec(process.execPath, [cli, 'approval', 'decide', '--input', commandPath, '--json'], { cwd: project, env }))
+        .rejects.toMatchObject({ stderr: expect.stringContaining('APPROVAL_INTERACTIVE_REQUIRED') });
+      expect((await runtimeClient.listApprovals(query) as { status: string }[])[0]).toMatchObject({ status: 'pending' });
+      const tty = await terminalProgram([process.execPath, cli, 'approval', 'decide', '--input', commandPath, '--json'], env, project);
+      expect(tty.status, tty.output).toBe(0);
+      const cliDecision = { stdout: tty.output.split(/\r?\n/u).find(line => line.startsWith('{'))! };
       expect(JSON.parse(cliDecision.stdout)).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-cli', assurance: 'peer-session' } });
-      expect(await runtimeClient.decideApproval({ ...command, channel: 'local-cli' })).toEqual(JSON.parse(cliDecision.stdout));
+      // The SDK replay of the same command returns the CLI's exact receipt; decisions need a controlling terminal, so it runs in a real PTY client.
+      expect(await createTerminalRuntimeClient(project, options).decideApproval({ ...command, channel: 'local-cli' } as never)).toEqual(JSON.parse(cliDecision.stdout));
       const replay = await runtimeClient.reserveRunTasks({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1', commandId: 'reserve', expectedRevision: 0 });
       expect(replay.reservation.identities.map(value => value.taskId)).toEqual(['task-1']);
       const fresh = await runtimeClient.reserveRunTasks({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1', commandId: 'reserve-approved', expectedRevision: 3 });
