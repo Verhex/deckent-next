@@ -1,5 +1,13 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.20 — 2026-10-09 (PR #57)
+
+- **İnen işler (PR #57, merge `cfe6d2e4`; parti `wave/batch-b`):** CONFIG-RECORD-EDITORS (beş yapılandırma alanı seçimle düzenlenir, yönetilen katalog içe aktarma; `admission.registry` ve `identity.packages` salt okunur); SECRET-SWITCH-ENV-GUARD, SECRET-DEFAULT-INIT-APPLY ve INSTALLER-POLICY-AUDIT (env adı koruması, Docker `init apply` şifreli varsayılanı, mühürlü installer policy denetimi); EXT-SERVICE-ENTRY (`runtime serve` ve `deckent-mcp` `deckent/extensions` girişinden başlar); DOCS-GUARD (lint-docs sürüm ve landing kapısı; eski yardım ve i18n metinleri kaldırıldı); BACKUP-FIXES (D1–D4, O1, O4–O6; yedek geri yükleme, anahtarı hedefin etkin config'ine bağlar). Ledger 49, protokol 25, policy değişikliği yok.
+- **İnceleme zinciri:** Astra 2475 REVISE (yedek anahtar bağlama R1, pano N1) → düzeltmeler `8fac3f86` (R1) ve `bdc880c2` (N1) → Astra 2477 PASS, exact head `bdc880c2`.
+- **Açık owner kararları ve sınırlar:** `admission.registry` ve `identity.packages` tanım kaynağı (PLAN `CONFIG-SOURCE-DECISION`); DOCS-GUARD F6 (veri) ve F7 (görseller) ayrı; DOCS-GUARD runtime kanıtı loopback EPERM nedeniyle izinli ortamda bekliyor; DOGFOOD OFF.
+- **Canlı durum:** Canlı ve N1 alpha.18'de kalır. alpha.20 `cfe6d2e4` staged (`cfe6d2e46f8b-5a66b3f7d07a`); owner `proof/ALPHA20-LIVE-2026-10-09/alpha20-owner.sh` ile cumartesi geçirir. alpha.19 atlandı; sıradaki Batch A alpha.21 olarak iner.
+- **Kanıt:** `proof/BATCH-B-2026-10-09/`, `proof/BACKUP-FIXES-2026-10-09/`, `proof/S1-DRILL-2026-10-09/` (dış proof klasörü).
+
 ## alpha.18 — 2026-10-09 (PR #53)
 
 - **İnen işler (PR #53, merge `94a8d089`; parti `wave/batch-1008b`):** BACKUP-COMMAND (`deckent backup create|verify|restore`; kimlik doğrulamalı şifreli kurtarma kümeleri, işlem başına denetim, yalnız servis durmuşken geri yükleme ve dayanıklı `BACKUP_RESTORE_HOLD` ile geri yükleme bitene kadar normal kabul tutulur, geri yüklenen config ve yayın için tek hedef düzeni, zamanlama ve saklama seçimle; ilk çalıştırma policy şablonu v8 `first-run-backup` kuralı); DECKENT-MD (native terminalde `DECKENT.md` (yedek `AGENTS.md`), `deckent init` önizleme/onay, digest bağlı onay, write floor; worker bağlantısı ertelendi, PLAN `DECKENT-MD-WORKERS`); SECRET-DIR-MODE (kurulum dizinleri 0700 yaratılır, mevcut dizine sessiz chmod yok) ve küçük düzeltmeler; kompozisyon rahatlatması 6332/6500 satır.
