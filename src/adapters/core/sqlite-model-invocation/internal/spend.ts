@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { createProviderSpendAccount, reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest, operatorTariffLocalSettlement,
-  providerSpendReservationDigest, parseProviderSpendMeasurement, ProviderSpendError, providerSpendHasZeroTariff, certifyProviderSpendNoCharge,
+  providerSpendReservationDigest, parseProviderSpendMeasurement, ProviderSpendError, certifyProviderSpendNoCharge,
   type ModelInvocationAdmission, type ModelInvocationRecord, type ProviderSpendMeasurement } from '#engine/index.js';
 import { readSpendCheckpoint, writeSpendCheckpoint, decodeSpendReservation, spendOutcomeDigest } from './spend-checkpoint.js';
 function requiredTransaction(db: DatabaseSync) {
@@ -9,9 +9,9 @@ function requiredTransaction(db: DatabaseSync) {
 }
 export function reserveInvocationSpend(db: DatabaseSync, admission: ModelInvocationAdmission): void {
   requiredTransaction(db);
-  if (!admission.spending) return;
+  // A budget-less (local zero-tariff) claim reserves nothing, but an integrity freeze of the scope account blocks every new call.
+  if (!admission.spending) { if (readSpendCheckpoint(db, admission.command.scopeId)?.account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN'); return; }
   const { budget, quote } = admission.spending;
-  if (providerSpendHasZeroTariff(quote)) return;
   const current = readSpendCheckpoint(db, admission.command.scopeId), account = current?.account ?? createProviderSpendAccount(budget);
   const next = reserveProviderSpend(account, budget, { schemaVersion: 1, scopeId: admission.command.scopeId,
     invocationId: admission.invocationId, budgetId: budget.budgetId, budgetRevision: budget.revision, currency: budget.currency,
@@ -25,7 +25,7 @@ export function verifyInvocationSpendReplay(db: DatabaseSync, admission: ModelIn
   requiredTransaction(db);
   const row = db.prepare('SELECT record,digest FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?')
     .get(record.receipt.claim.scopeId, record.receipt.claim.invocationId);
-  if (!row) { if (admission.spending && !providerSpendHasZeroTariff(admission.spending.quote)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT'); return; }
+  if (!row) { if (admission.spending) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT'); return; }
   const checkpoint = readSpendCheckpoint(db, record.receipt.claim.scopeId);
   if (!checkpoint) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const reservation = decodeSpendReservation(row, record.receipt, checkpoint, db);

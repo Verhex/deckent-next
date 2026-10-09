@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ModelInvocationReceipt, ProviderSpendQuote } from '#domain/index.js';
+import type { ModelInvocationProfile, ModelInvocationReceipt, ProviderSpendQuote } from '#domain/index.js';
 import data from './no-charge-policy.json' with { type: 'json' };
 import { providerSpendEvidenceDigest, providerSpendQuoteDigest } from './account.js';
 import { providerSpendRejectionHasNoCharge } from './invocation.js';
@@ -20,6 +20,19 @@ export function providerSpendHasZeroTariff(quote: ProviderSpendQuote): boolean {
   const rates = tariff['usdPerMTok'];
   return !!rates && typeof rates === 'object' && !Array.isArray(rates) && Object.keys(rates).length >= 3 && Object.values(rates).every(zero)
     && tariff['offPeakUsdPerMTok'] === undefined;
+}
+
+/** PROVIDER-LOCALITY: only a literal loopback IP is this machine; the name `localhost`, LAN and WSL addresses are not. */
+function literalLoopback(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try { const host = new URL(value).hostname; return host === '127.0.0.1' || host === '[::1]'; } catch { return false; }
+}
+
+/** Budget exemption (owner 2026-10-09, Jev 3f877ac4): a literal zero tariff AND every declared endpoint (`endpoint`, `tokenizeEndpoint`, …)
+ * on a literal loopback address. A zero tariff declared for any other host is only a claim: it keeps the budget gate and a 0 reservation. */
+export function providerSpendLocalZeroTariff(profile: ModelInvocationProfile, quote: ProviderSpendQuote): boolean {
+  const endpoints = Object.entries(profile.adapter.definition).filter(([key]) => /endpoint$/iu.test(key));
+  return providerSpendHasZeroTariff(quote) && endpoints.some(([key]) => key === 'endpoint') && endpoints.every(([, value]) => literalLoopback(value));
 }
 
 /** Receipt metadata is validated separately; complete retained body bytes are required by the recovering store. */

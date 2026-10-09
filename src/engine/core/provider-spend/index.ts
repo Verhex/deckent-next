@@ -30,6 +30,6 @@ export { ProviderSpendManagementApplication, parseProviderSpendManagementReceipt
 export type { ProviderSpendManagementAuthorization, ProviderSpendManagementReceipt, ProviderSpendManagementResult, ProviderSpendManagementStore } from './internal/management.js';
 export { settledProviderCacheUsage, type SettledProviderCacheUsage } from './internal/cache-usage.js';
 
-export { providerSpendHasZeroTariff, certifyProviderSpendNoCharge } from './internal/no-charge.js';
+export { providerSpendHasZeroTariff, providerSpendLocalZeroTariff, certifyProviderSpendNoCharge } from './internal/no-charge.js';
 export { recoverProviderSpendHold } from './internal/recovery.js';
 export type { ProviderSpendRecoveryStore, ProviderSpendRecoveryResult } from './internal/recovery.js';

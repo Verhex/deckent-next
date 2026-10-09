@@ -282,17 +282,50 @@ it('a model switch cannot release a prior uncertain charge or create a duplicate
     { record: { disposition: { state: 'reserved' } } }, { record: { disposition: { state: 'held' } } }] });
 });
 
-it('a zero tariff bypasses a frozen money account and persists no zero reservation', async () => {
-  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+const free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+/** A zero-tariff admission. `local` is what the engine admits for a literal-loopback zero tariff: no budget, so no `spending` at all. */
+function zeroAdmission(base: Awaited<ReturnType<typeof fixture>>, commandId: string, invocationId: string, local: boolean) {
+  const zero = admission(base, commandId, invocationId, 'allocation-b', 0);
+  const quote = { ...zero.spending.quote, pricing: { id: 'operator-static-tariff', version: 1, definition: free, digest: providerSpendEvidenceDigest(free) } };
+  if (!local) return { ...zero, spending: { ...zero.spending, quote } };
+  const rest: Omit<typeof zero, 'spending'> & { spending?: unknown } = { ...zero }; delete rest.spending;
+  const profile = { ...rest.profile, adapter: { ...rest.profile.adapter, definition: { endpoint: 'http://127.0.0.1:8000/v1/chat/completions' } } };
+  return { ...rest, profile, profileDigest: modelInvocationProfileDigest(profile) };
+}
+async function frozenAccount(base: Awaited<ReturnType<typeof fixture>>, store: Awaited<ReturnType<typeof openSqliteModelInvocationStore>>) {
   const paid = await store.claim(admission(base, 'paid', 'paid-id')); await store.permitSend(paid.record.receipt.claim, 'owner', 11);
   await store.recordUnknown(paid.record.receipt.claim, 'transport-error', 12);
   const db = new DatabaseSync(base.path), row = db.prepare('SELECT record,revision,reservation_count FROM provider_spend_accounts').get()!;
   const account = { ...JSON.parse(String(row.record)), frozen: true }, checkpoint = createProviderSpendCheckpoint(account, Number(row.revision), Number(row.reservation_count));
   db.prepare('UPDATE provider_spend_accounts SET record=?,digest=?').run(JSON.stringify(account), checkpoint.digest); db.close();
-  const zero = admission(base, 'zero', 'zero-id', 'allocation-b', 0), free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
-  const input = { ...zero, spending: { ...zero.spending, quote: { ...zero.spending.quote, pricing: { id: 'operator-static-tariff', version: 1, definition: free, digest: providerSpendEvidenceDigest(free) } } } };
-  const claim = await store.claim(input); await store.permitSend(claim.record.receipt.claim, 'owner', 13); await store.recordUnknown(claim.record.receipt.claim, 'transport-error', 14);
-  expect((await store.claim(input)).replayed).toBe(true);
+  return account;
+}
+
+// SECURITY-FIX (commit review of 9c8392e3): a zero tariff never passes an integrity freeze, local or remote.
+it('a frozen account refuses a remote zero tariff and a local (budget-less) zero tariff before any claim is written', async () => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid'), account = await frozenAccount(base, store);
+  await expect(store.claim(zeroAdmission(base, 'remote-zero', 'remote-zero-id', false))).rejects.toThrow('PROVIDER_SPEND_FROZEN');
+  await expect(store.claim(zeroAdmission(base, 'local-zero', 'local-zero-id', true))).rejects.toThrow('PROVIDER_SPEND_FROZEN');
   await expect(store.claim(admission(base, 'another-paid', 'another-paid-id'))).rejects.toThrow('PROVIDER_SPEND_FROZEN'); store.close();
-  expect(snapshot(base.path)).toMatchObject({ account, invocations: 2, reservations: [{ invocationId: 'paid-id' }] });
+  expect(snapshot(base.path)).toMatchObject({ account, invocations: 1, controls: 1, reservations: [{ invocationId: 'paid-id' }],
+    allocations: [{ allocation_id: 'allocation-a', lifetime_calls: 1, in_flight: 0 }] });
+});
+
+it('a remote zero tariff keeps its zero reservation and settlement; a local zero tariff keeps only its durable invocation record', async () => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const local = zeroAdmission(base, 'local-zero', 'local-zero-id', true), localClaim = await store.claim(local);
+  await store.permitSend(localClaim.record.receipt.claim, 'owner', 11); await store.recordUnknown(localClaim.record.receipt.claim, 'transport-error', 12);
+  expect((await store.claim(local)).replayed).toBe(true);
+  expect(snapshot(base.path)).toMatchObject({ account: null, reservations: [], invocations: 1, controls: 1 });
+  const remote = zeroAdmission(base, 'remote-zero', 'remote-zero-id', false), remoteClaim = await store.claim(remote);
+  expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 0, frozen: false }, invocations: 2,
+    reservations: [{ invocationId: 'remote-zero-id', record: { descriptor: { quote: { maxChargeMinorUnits: 0 } }, disposition: { state: 'reserved' } } }] });
+  await store.permitSend(remoteClaim.record.receipt.claim, 'owner', 13); await store.recordUnknown(remoteClaim.record.receipt.claim, 'transport-error', 14);
+  expect((await store.claim(remote)).replayed).toBe(true); store.close();
+  // The uncertain remote call is a zero-amount hold on the ledger, never a silent exemption; nothing is frozen by it.
+  expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 0, frozen: false },
+    reservations: [{ invocationId: 'remote-zero-id', record: { disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null } } }] });
+  const db = new DatabaseSync(base.path, { readOnly: true });
+  try { expect(JSON.parse(String(db.prepare('SELECT record FROM model_invocations WHERE invocation_id=?').get('local-zero-id')!.record)))
+    .toMatchObject({ claim: { invocationId: 'local-zero-id' }, outcome: { state: 'unknown' } }); } finally { db.close(); }
 });

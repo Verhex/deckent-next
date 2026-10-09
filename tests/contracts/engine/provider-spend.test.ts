@@ -1,6 +1,6 @@
 import { checkModelInvocationCapacity } from '#engine/index.js';
 import { expect, it } from 'vitest';
-import { createProviderSpendAccount, parseProviderSpendAccount, reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendEvidenceDigest, providerSpendQuoteDigest } from '#engine/core/provider-spend/index.js';
+import { createProviderSpendAccount, parseProviderSpendAccount, reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendEvidenceDigest, providerSpendQuoteDigest, providerSpendLocalZeroTariff } from '#engine/core/provider-spend/index.js';
 
 const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'shared', revision: 1, currency: 'USD', limitMinorUnits: 100 };
 const pricingDefinition = { schemaVersion: 1, kind: 'synthetic-price' }, meterEvidence = { schemaVersion: 1, kind: 'synthetic-meter' };
@@ -79,12 +79,37 @@ it('uses exact safe integer arithmetic at the limit and rejects corrupt totals a
   expect(() => parseProviderSpendAccount(accessor)).toThrow('PROVIDER_SPEND_INVALID'); expect(invoked).toBe(false);
 });
 
-it.each([true, false])('verified zero tariff skips money capacity even when frozen=%s and settled exceeds a revised limit', async frozen => {
+// SECURITY-FIX (commit review of 9c8392e3): an integrity freeze is checked before any zero-tariff shortcut, and the budget-less
+// preview opens the scope account to see that freeze; only exhaustion arithmetic is skipped for a literal zero quote.
+it.each([true, false])('a verified zero tariff never passes a frozen account (frozen=%s); it only skips exhaustion of a revised limit', async frozen => {
   const d = descriptor('zero', 0), free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
   const quote = { ...d.quote, pricing: { id: 'operator-static-tariff', version: 1, definition: free, digest: providerSpendEvidenceDigest(free) } };
   const account = { ...createProviderSpendAccount(budget), settledMinorUnits: 101, settledExactMinorUnits: '101', frozen,
     budgetRevisionDigest: 'a'.repeat(64), budgetRevisionCommandId: 'lower-budget' };
-  expect(() => assertProviderSpendCapacity(account, quote)).not.toThrow();
-  await checkModelInvocationCapacity(async () => { throw new Error('money-reader-must-not-open'); }, { budget: null, quote });
+  if (frozen) expect(() => assertProviderSpendCapacity(account, quote)).toThrow('PROVIDER_SPEND_FROZEN');
+  else expect(() => assertProviderSpendCapacity(account, quote)).not.toThrow();
+  const reader = { async loadSnapshot() { return { checkpoint: { account }, audit: null }; }, close() {} } as never;
+  const preview = checkModelInvocationCapacity(async () => reader, { budget: null, quote });
+  if (frozen) await expect(preview).rejects.toThrow('PROVIDER_SPEND_FROZEN'); else await expect(preview).resolves.toBeUndefined();
+  await expect(checkModelInvocationCapacity(async () => { throw new Error('money-reader-must-not-open'); }, { budget: null, quote: descriptor('paid', 0).quote }))
+    .rejects.toThrow('PROVIDER_SPEND_INVALID');
   expect(() => assertProviderSpendCapacity(account, descriptor('paid', 1).quote)).toThrow(frozen ? 'PROVIDER_SPEND_FROZEN' : 'PROVIDER_SPEND_EXHAUSTED');
+});
+
+it('exempts only a literal zero tariff whose every declared endpoint is a literal loopback IP (PROVIDER-LOCALITY)', () => {
+  const free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+  const zero = { ...descriptor('zero', 0).quote, pricing: { id: 'operator-static-tariff', version: 1, definition: free, digest: providerSpendEvidenceDigest(free) } };
+  const profile = (definition: Record<string, unknown>) => ({ adapter: { id: 'openai-chat-http', version: 4, definition } }) as never;
+  for (const endpoint of ['http://127.0.0.1:8000/v1/chat/completions', 'http://[::1]:11434/v1/chat/completions']) {
+    expect(providerSpendLocalZeroTariff(profile({ endpoint }), zero)).toBe(true);
+    expect(providerSpendLocalZeroTariff(profile({ endpoint, tokenizeEndpoint: endpoint.replace('v1/chat/completions', 'tokenize') }), zero)).toBe(true);
+  }
+  for (const endpoint of ['http://localhost:8000/v1/chat/completions', 'http://192.168.1.20:8000/v1/chat/completions', 'http://172.28.160.1:8000/v1/chat/completions',
+    'https://api.deepseek.com/chat/completions', 'http://127.0.0.1.nip.io/v1/chat/completions', 'not a url']) {
+    expect(providerSpendLocalZeroTariff(profile({ endpoint }), zero)).toBe(false);
+  }
+  expect(providerSpendLocalZeroTariff(profile({ endpoint: 'http://127.0.0.1:8000/chat', tokenizeEndpoint: 'http://localhost:8000/tokenize' }), zero)).toBe(false);
+  expect(providerSpendLocalZeroTariff(profile({ origin: 'http://127.0.0.1:8000' }), zero)).toBe(false);
+  // A numeric zero without a literal zero tariff is not local-free either.
+  expect(providerSpendLocalZeroTariff(profile({ endpoint: 'http://127.0.0.1:8000/chat' }), descriptor('paid', 0).quote)).toBe(false);
 });

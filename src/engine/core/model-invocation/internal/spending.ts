@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { immutableJsonObjectSchema, providerSpendBudgetSchema, providerSpendQuoteSchema,
+import { immutableJsonObjectSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, providerSpendBudgetSchema, providerSpendQuoteSchema,
   type ModelBindingDefinition, type ModelInvocationCommand, type ModelInvocationProfile,
   type ProviderSpendBudget, type ProviderSpendQuote } from '#domain/index.js';
-import { ProviderSpendError, providerSpendQuoteDigest, providerSpendHasZeroTariff, assertProviderSpendCapacity, createProviderSpendAccount, type ProviderSpendAccountReader } from '#engine/core/provider-spend/index.js';
+import { ProviderSpendError, providerSpendQuoteDigest, providerSpendHasZeroTariff, providerSpendLocalZeroTariff, assertProviderSpendCapacity, createProviderSpendAccount, type ProviderSpendAccountReader } from '#engine/core/provider-spend/index.js';
 import { isDeepStrictEqual } from 'node:util';
 
 export interface ModelInvocationSpendingInput {
@@ -28,12 +28,17 @@ export interface ModelInvocationSpendingAuthority {
   /** Read-only account capacity for preview; the real send still reserves atomically under its owner. */
   checkCapacity?(spending: ModelInvocationSpending): Promise<void>;
 }
-/** Observe the same account capacity the atomic claim checks; no account initialization, reservation or settlement. */
+/** Observe the same account capacity the atomic claim checks; no account initialization, reservation or settlement.
+ * A budget-less (local zero-tariff) call has no capacity, but an existing frozen scope account still refuses it, as the claim does. */
 export async function checkModelInvocationCapacity(open: () => Promise<ProviderSpendAccountReader>, { budget, quote }: ModelInvocationSpending): Promise<void> {
-  if (providerSpendHasZeroTariff(quote)) return;
-  if (!budget) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  if (!budget && !providerSpendHasZeroTariff(quote)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const reader = await open();
   try {
+    if (!budget) {
+      const snapshot = await reader.loadSnapshot({ schemaVersion: 1, scopeId: quote.scopeId, budgetId: PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: 1 });
+      if (snapshot.checkpoint?.account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN');
+      return;
+    }
     const snapshot = await reader.loadSnapshot({ schemaVersion: 1, scopeId: budget.scopeId, budgetId: budget.budgetId, budgetRevision: budget.revision });
     const account = snapshot.checkpoint?.account ?? createProviderSpendAccount(budget);
     if (!isDeepStrictEqual(account.budget, budget)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
@@ -57,8 +62,9 @@ export async function authorizeModelInvocationSpending(authority: ModelInvocatio
   if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const { budget, quote } = parsed.data;
   providerSpendQuoteDigest(quote);
-  if ((!budget && !providerSpendHasZeroTariff(quote)) || (budget && (budget.scopeId !== input.command.scopeId || budget.currency !== quote.currency)) || quote.scopeId !== input.command.scopeId || quote.requestDigest !== input.requestDigest
+  if ((!budget && !providerSpendLocalZeroTariff(input.profile, quote)) || (budget && (budget.scopeId !== input.command.scopeId || budget.currency !== quote.currency)) || quote.scopeId !== input.command.scopeId || quote.requestDigest !== input.requestDigest
     || quote.profileDigest !== input.profileDigest) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+  // A null budget is admitted only for a literal zero tariff on literal loopback endpoints (PROVIDER-LOCALITY); the claim still checks a freeze.
   // The atomic account reservation owns exhaustion: its refusal carries settled and outstanding totals.
   return parsed.data;
 }

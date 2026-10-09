@@ -131,8 +131,9 @@ export function reserveProviderSpend(accountInput: unknown, configuredBudgetInpu
 export function assertProviderSpendCapacity(accountInput: unknown, quoteInput: unknown): void {
   const account = parseProviderSpendAccount(accountInput), quote = parseProviderSpendQuote(quoteInput);
   if (account.budget.scopeId !== quote.scopeId || account.budget.currency !== quote.currency) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-  if (providerSpendHasZeroTariff(quote)) return;
+  // An integrity freeze blocks every call first; only then may a literal zero quote skip the exhaustion arithmetic.
   if (account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN');
+  if (providerSpendHasZeroTariff(quote)) return;
   if (BigInt(account.reservedMinorUnits) + BigInt(quote.maxChargeMinorUnits) + BigInt(account.settledMinorUnits) > BigInt(account.budget.limitMinorUnits))
     throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED', { settled: account.settledExactMinorUnits, held: account.reservedMinorUnits,
       requested: quote.maxChargeMinorUnits, limit: account.budget.limitMinorUnits, currency: account.budget.currency });
