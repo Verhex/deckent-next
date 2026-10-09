@@ -43,6 +43,7 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     const path = join(f.project, '.deckent/config.json');
     const config = JSON.parse(await readFile(path, 'utf8'));
     config.service.responseMaxBytes = 1_048_576;
+    config.terminal = { ...config.terminal, scopeId: 'scope' }; // governed config writes (cache panel) resolve the terminal scope
     await writeFile(path, JSON.stringify(config)); clearConfigCache();
     const { key, caPem } = await createLocalTls(f.project), requests: Record<string, unknown>[] = [];
     const server = createServer({ key, cert: caPem }, (req, res) => {
@@ -74,13 +75,18 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     const reference = connected.reference;
     // Fixture TLS is authored before any provider transport. All subsequent mutations go through the real governed config writer.
     const setup = JSON.parse(await readFile(path, 'utf8'));
-    setup.provider_invocation_profiles.profiles.find((p: { reference: ModelReference }) => p.reference.providerId === reference.providerId).adapter.definition.tls = { caPem };
+    const claudeProfile = setup.provider_invocation_profiles.profiles.find((p: { reference: ModelReference }) => p.reference.providerId === reference.providerId);
+    // SPEND-HOLDS x MODEL-SWITCH: a model output cap (64) below the terminal cap (128) stays switchable; readiness previews the effective cap a turn reserves.
+    claudeProfile.adapter.definition.tls = { caPem }; claudeProfile.adapter.definition.maxOutputTokens = 64;
     await writeFile(path, JSON.stringify(setup)); clearConfigCache();
+    const ready = await inspectConfiguredModelReadiness(f.project, 'scope', reference, options) as { command: { nativeRequest: { max_completion_tokens: number } } };
+    expect(ready.command.nativeRequest.max_completion_tokens).toBe(64);
     const host = { inspectDeclaredModels, inspectModelBinding, inspectModelActivation: inspectConfiguredModelActivation, describeTerminalChatPlan: describeTerminalChat,
       inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
       listSecretNames: async () => ({ schemaVersion: 1 as const, backend: 'fixture', names: ['DECKENT_ANTHROPIC_KEY'] }) };
     const source = modelPanelSource(f.project, 'scope', host, options, 'tr');
-    const view = mountWorkline({ model: 'chat', panels: { ports: { model: source }, labels: terminalPanelLabels('tr') },
+    // The composed stream binds its real command to the workline context (as session-approval-terminal); the fixture names that scope.
+    const view = mountWorkline({ model: 'chat', context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' }, panels: { ports: { model: source }, labels: terminalPanelLabels('tr') },
       streamTurn: (messages, signal, input) => streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', messages, options, signal,
         ...input }, { chatTurn: async (_root, command, onEvent) => f.client().chatTurn(command, onEvent), cancelChatTurn: async (_root, command) => f.client().cancelChatTurn(command) }) });
     mounted.push(view); await settle(60);
