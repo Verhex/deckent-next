@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import limits from './inspection-limits.json' with { type: 'json' };
 import { counterSchema, identitySchema, immutableJsonObjectSchema } from '#domain/core/primitives/index.js';
+export const PROVIDER_SPEND_HOLD_PAGE_MAX = limits.maxHoldsPerPage;
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const currencySchema = z.string().regex(/^[A-Z]{3}$/);
@@ -15,10 +17,14 @@ export const providerSpendBudgetSchema = z.object({ schemaVersion: z.literal(1),
 export const PROVIDER_SPEND_SCOPE_BUDGET_ID = 'scope-budget' as const;
 /** An exact account revision, or (stage 1) `current: true`: the scope's account whatever budget id and revision it holds — when none exists, the
  * result names `PROVIDER_SPEND_SCOPE_BUDGET_ID` revision 1 with no checkpoint (what a create would write). */
-export const providerSpendExactAccountQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  budgetId: identitySchema, budgetRevision: counterSchema.positive() }).strict().readonly();
+const holds = z.object({ afterInvocationId: identitySchema.nullable(), limit: counterSchema.positive().max(PROVIDER_SPEND_HOLD_PAGE_MAX) }).strict().readonly();
+const queryVersion = z.union([z.literal(1), z.literal(2)]);
+export const providerSpendExactAccountQuerySchema = z.object({ schemaVersion: queryVersion, scopeId: identitySchema,
+  budgetId: identitySchema, budgetRevision: counterSchema.positive(), holds: holds.optional() }).strict()
+  .refine(query => (query.schemaVersion === 2) === (query.holds !== undefined)).readonly();
 export const providerSpendAccountQuerySchema = z.union([providerSpendExactAccountQuerySchema,
-  z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, current: z.literal(true) }).strict().readonly()]);
+  z.object({ schemaVersion: queryVersion, scopeId: identitySchema, current: z.literal(true), holds: holds.optional() }).strict().readonly()])
+  .refine(query => (query.schemaVersion === 2) === (query.holds !== undefined));
 
 export const providerSpendQuoteSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   requestDigest: digestSchema, profileDigest: digestSchema, pricing: versionedPricingSchema,

@@ -34,7 +34,7 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 49;
+export const CURRENT_LEDGER_VERSION = 50;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
@@ -54,6 +54,9 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  50: `CREATE INDEX model_invocation_spend_unreconciled_holds ON model_invocation_spend_reservations(scope_id,invocation_id COLLATE BINARY)
+    WHERE json_extract(record,'$.disposition.state')='held' AND json_extract(record,'$.reconciliation') IS NULL;
+    PRAGMA user_version=50;`,
   // 44 (execution pool hold, K5): `migrateExecutionPoolHolds` in migration-v44.ts, dispatched below like v43.
   // 43 (ledger model catalog, WORKER-CURRENCY-1): `migrateModelCatalog` in migration-v43.ts, dispatched below like v41.
   // 41 (audit events, general Core audit port): `migrateAuditEvents` in migration-v41.ts, dispatched below like v39.

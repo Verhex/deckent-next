@@ -142,11 +142,17 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
   }
   const stableOptions = Object.freeze({ ...(parseResponse ? { parseResponse: parseResponse as NonNullable<NativeJsonHttpSendOptions['parseResponse']> } : {}),
     ...(resolveCredential ? { resolveCredential: resolveCredential as NonNullable<NativeJsonHttpSendOptions['resolveCredential']> } : {}) });
-  if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_REQUEST_TOO_LARGE');
-  if (outerSignal?.aborted) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_CANCELLED');
   const timeout = AbortSignal.timeout(limits.timeoutMs), signal = outerSignal ? AbortSignal.any([outerSignal, timeout]) : timeout;
-  const credential = await resolveBearer(definition, stableOptions, signal, timeout);
-  if (signal.aborted) throw new NativeJsonHttpError(timeout.aborted ? 'NATIVE_JSON_HTTP_TIMEOUT' : 'NATIVE_JSON_HTTP_CANCELLED');
+  let credential: string | undefined;
+  try {
+    if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_REQUEST_TOO_LARGE');
+    if (signal.aborted) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_CANCELLED');
+    credential = await resolveBearer(definition, stableOptions, signal, timeout);
+    if (signal.aborted) throw new NativeJsonHttpError(timeout.aborted ? 'NATIVE_JSON_HTTP_TIMEOUT' : 'NATIVE_JSON_HTTP_CANCELLED');
+  } catch {
+    // This exact transport has not constructed a POST. No credential or resolver detail enters the receipt.
+    return rejected(adapter.data, 'not-sent', null, Buffer.alloc(0), true);
+  }
   const secret = credential === undefined ? undefined : Buffer.from(credential, 'utf8');
   const endpoint = new URL(definition.endpoint);
   const gate = stream ? new DeltaGate(secret, onDelta as ModelInvocationDeltaSink | undefined) : undefined;

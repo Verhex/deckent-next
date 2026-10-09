@@ -6,6 +6,7 @@ import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 import { createConfiguredModelInvocationNative } from './native.js';
+import { modelSpendRefusal } from './spend-refusal.js';
 export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers }
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) {
@@ -20,7 +21,7 @@ async function invoke(input: ModelInvocationCommand, loadContext: (scopeId: stri
     const parsed = modelInvocationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
     const command = parsed.data as ModelInvocationCommand, context = await loadContext(command.scopeId);
-    return await application(context, options, host).invoke(command, undefined, signal, delivery, onDelta);
+    return await application(context, options, host).invoke(command, undefined, signal, delivery, onDelta).catch(error => modelSpendRefusal(context, command.scopeId, error));
   } catch (error) { throw queryFailure(error); }
 }
 /** Context measurement of a command (T-L5, runtime-internal): the provider's count of exactly what `invoke` would send, under the same peer principal, policy, binding, activation and profile checks; null when the model or server has no counter. */

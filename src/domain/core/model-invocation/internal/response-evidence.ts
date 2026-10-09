@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 
 /** Bounded private response content. Transport headers/credentials are not collected; body content may echo sensitive input; complete is a body observation, not billing or task success. */
-export const modelInvocationRejectionReasonSchema = z.enum(['http-status', 'redirect', 'invalid-response', 'model-mismatch', 'response-limit', 'interrupted']);
+export const modelInvocationRejectionReasonSchema = z.enum(['http-status', 'redirect', 'invalid-response', 'model-mismatch', 'response-limit', 'interrupted', 'not-sent']);
 export const modelInvocationResponseEvidenceSchema = z.object({ schemaVersion: z.literal(1),
   adapter: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(),
   reason: modelInvocationRejectionReasonSchema,
@@ -16,7 +16,8 @@ export const modelInvocationResponseEvidenceSchema = z.object({ schemaVersion: z
   const padding = body.data.endsWith('==') ? 2 : body.data.endsWith('=') ? 1 : 0;
   if (body.data.length / 4 * 3 - padding !== body.byteLength || body.observedBytes < body.byteLength
     || (body.complete && (body.observedBytes !== body.byteLength || value.reason === 'interrupted'))
-    || (!body.complete && value.reason !== 'interrupted' && value.reason !== 'response-limit')) {
+    || (!body.complete && value.reason !== 'interrupted' && value.reason !== 'response-limit')
+    || (value.reason === 'not-sent' && (value.httpStatus !== null || !body.complete || body.observedBytes !== 0))) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_EVIDENCE_INVALID' });
   }
 }).readonly();
@@ -29,7 +30,8 @@ export const modelInvocationResponseSummarySchema = modelInvocationResponseEvide
     const body = value.body;
     if (body.observedBytes < body.byteLength
       || (body.complete && (body.observedBytes !== body.byteLength || value.reason === 'interrupted'))
-      || (!body.complete && value.reason !== 'interrupted' && value.reason !== 'response-limit')) {
+      || (!body.complete && value.reason !== 'interrupted' && value.reason !== 'response-limit')
+      || (value.reason === 'not-sent' && (value.httpStatus !== null || !body.complete || body.observedBytes !== 0))) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_EVIDENCE_INVALID' });
     }
   }).readonly();

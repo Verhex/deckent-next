@@ -12,6 +12,7 @@ const accountSchema = z.object({ schemaVersion: z.literal(2), budget: providerSp
   reservedMinorUnits: amount, settledMinorUnits: amount, settledExactMinorUnits: z.string(), frozen: z.boolean(), budgetRevisionDigest: digest.optional(), budgetRevisionCommandId: identitySchema.optional(), unfrozenAtBudgetRevision: counterSchema.positive().optional() }).strict().readonly();
 const settlementSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('not-sent'), evidenceDigest: digest }).strict(),
+  z.object({ kind: z.literal('rejected-no-charge'), evidenceDigest: digest }).strict(),
   z.object({ kind: z.literal('measured-local'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
   z.object({ kind: z.literal('measured-tariff'), measurement: z.unknown(), evidenceDigest: digest }).strict(),
   z.object({ kind: z.literal('provider-reported'), measurement: z.unknown(), evidenceDigest: digest }).strict(),
@@ -20,12 +21,13 @@ const settlementSchema = z.discriminatedUnion('kind', [
 const dispositionSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('reserved') }).strict(),
   z.object({ state: z.literal('released-not-sent'), evidenceDigest: digest }).strict(),
+  z.object({ state: z.literal('released-no-charge'), evidenceDigest: digest }).strict(),
   z.object({ state: z.literal('settled-local'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
   z.object({ state: z.literal('settled-measured-tariff'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
   z.object({ state: z.literal('settled-provider-reported'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
   z.object({ state: z.literal('held'), reason: holdReason, observedMinorUnits: amount.nullable(), evidenceDigest: digest }).strict(),
 ]).readonly();
-const reservationSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), descriptor: providerSpendReservationDescriptorSchema,
+const reservationSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]), descriptor: providerSpendReservationDescriptorSchema,
   disposition: dispositionSchema, measurement: z.unknown().nullable(), reconciliation: z.object({
     commandId: identitySchema, budgetRevision: counterSchema.positive(), resolution: z.enum(['settle', 'release', 'write-off']), exactMinorUnits: z.string(),
     evidenceKind: z.enum(['provider-usage', 'console-figure', 'write-off']), evidenceDigest: digest, receiptDigest: digest,
@@ -71,7 +73,8 @@ function measurementMatches(value: ProviderSpendReservation, measurement: Provid
 export function parseProviderSpendReservation(input: unknown): ProviderSpendReservation {
   const raw = parse(reservationSchema, input), measurement = raw.measurement === null ? null : parseProviderSpendMeasurement(raw.measurement);
   const value = { ...raw, measurement } as ProviderSpendReservation, cap = value.descriptor.quote.maxChargeMinorUnits, state = value.disposition;
-  if ((value.schemaVersion === 2 && (measurement?.basis === 'measured-tariff' || state.state === 'settled-measured-tariff'))
+  if ((state.state === 'released-no-charge' && value.schemaVersion !== 4)
+    || (value.schemaVersion === 2 && (measurement?.basis === 'measured-tariff' || state.state === 'settled-measured-tariff'))
     || (state.state === 'settled-measured-tariff' && measurement?.basis !== 'measured-tariff')
     || (state.state === 'settled-provider-reported' && measurement?.basis !== 'provider-reported')
     || providerSpendQuoteDigest(value.descriptor.quote) !== value.descriptor.quoteDigest
@@ -85,7 +88,7 @@ export function parseProviderSpendReservation(input: unknown): ProviderSpendRese
       ? state.observedMinorUnits === null || state.observedMinorUnits <= cap
         || (measurement !== null && state.observedMinorUnits !== measurement.roundedMinorUnits)
       : state.observedMinorUnits !== null))) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
-  if (value.reconciliation && (value.schemaVersion !== 3 || (state.state !== 'held' && !isProviderSpendUpperBound(value))
+  if (value.reconciliation && (value.schemaVersion === 2 || (state.state !== 'held' && !isProviderSpendUpperBound(value))
     || (isProviderSpendUpperBound(value) && (value.reconciliation.resolution !== 'settle' || value.reconciliation.evidenceKind === 'write-off'
       || compareProviderSpendExactMinorUnits(value.reconciliation.exactMinorUnits, measurement!.exactMinorUnits) > 0))
     || canonicalProviderSpendExactMinorUnits(value.reconciliation.exactMinorUnits) !== value.reconciliation.exactMinorUnits
@@ -109,7 +112,8 @@ export function reserveProviderSpend(accountInput: unknown, configuredBudgetInpu
   if (descriptor.budgetRevision !== account.budget.revision) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   if (account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN');
   const reserved = BigInt(account.reservedMinorUnits) + BigInt(descriptor.quote.maxChargeMinorUnits);
-  if (reserved + BigInt(account.settledMinorUnits) > BigInt(account.budget.limitMinorUnits)) throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED');
+  if (reserved + BigInt(account.settledMinorUnits) > BigInt(account.budget.limitMinorUnits)) throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED',
+    { settled: account.settledExactMinorUnits, held: account.reservedMinorUnits, requested: descriptor.quote.maxChargeMinorUnits, limit: account.budget.limitMinorUnits, currency: account.budget.currency });
   return Object.freeze({ account: parseProviderSpendAccount({ ...account, reservedMinorUnits: Number(reserved) }),
     reservation: parseProviderSpendReservation({ schemaVersion: 3, descriptor, disposition: { state: 'reserved' }, measurement: null }) });
 }
@@ -132,7 +136,9 @@ export function settleProviderSpend(accountInput: unknown, reservationInput: unk
   const exact = addProviderSpendExactMinorUnits(account.settledExactMinorUnits, added);
   return Object.freeze({ account: parseProviderSpendAccount({ ...account, reservedMinorUnits: account.reservedMinorUnits - maximum,
     settledExactMinorUnits: exact, settledMinorUnits: ceilProviderSpendExactMinorUnits(exact) }),
-    reservation: parseProviderSpendReservation({ ...reservation, measurement, disposition: settlement.kind === 'not-sent'
+    reservation: parseProviderSpendReservation({ ...reservation, ...(settlement.kind === 'rejected-no-charge' ? { schemaVersion: 4 } : {}), measurement, disposition: settlement.kind === 'rejected-no-charge'
+      ? { state: 'released-no-charge', evidenceDigest: settlement.evidenceDigest }
+      : settlement.kind === 'not-sent'
       ? { state: 'released-not-sent', evidenceDigest: settlement.evidenceDigest }
       : settlement.kind === 'measured-local' ? { state: 'settled-local', amountMinorUnits: settlement.amountMinorUnits, evidenceDigest: settlement.evidenceDigest }
       : { state: measurement!.basis === 'measured-tariff' ? 'settled-measured-tariff' : 'settled-provider-reported', amountMinorUnits: measurement!.roundedMinorUnits, evidenceDigest: settlement.evidenceDigest } }) });

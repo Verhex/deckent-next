@@ -45,7 +45,7 @@ export async function authorizeModelInvocationSpending(authority: ModelInvocatio
   if (budget.scopeId !== input.command.scopeId || quote.scopeId !== input.command.scopeId
     || budget.currency !== quote.currency || quote.requestDigest !== input.requestDigest
     || quote.profileDigest !== input.profileDigest) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-  if (quote.maxChargeMinorUnits > budget.limitMinorUnits) throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED');
+  // The atomic account reservation owns exhaustion: its refusal carries settled and outstanding totals.
   return parsed.data;
 }
 
