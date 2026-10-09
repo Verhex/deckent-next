@@ -173,7 +173,7 @@ async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2',
   if (policy !== 'v1') await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: v3 ? 3 : 2, revision: 'b1', bindings: [], modes: [theirs, ...mine] }), { mode: 0o600 });
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
-  const audit = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT kind, record FROM audit_events ORDER BY sequence').all(); } finally { db.close(); } };
+  const audit = () => { const db = new DatabaseSync(ledger, { readOnly: true, timeout: 10_000 }); try { return db.prepare('SELECT kind, record FROM audit_events ORDER BY sequence').all(); } finally { db.close(); } };
   return { projectRoot, data, env, me, theirs, audit };
 }
 
