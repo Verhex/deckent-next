@@ -1,6 +1,7 @@
 import * as http from '#adapters/core/provider-http-json/index.js';
 import { createServer, type Server } from 'node:http';
 import { afterEach, expect, it, vi } from 'vitest';
+import { effectiveTerminalOutputCap } from '#adapters/index.js';
 import { createOpenAiChatPricedNative, lookupOpenAiCompatibleTariff, quoteOpenAiChatOperatorTariff } from '#adapters/core/provider-openai-chat/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendQuoteDigest, createProviderSpendAccount, reserveProviderSpend, settleProviderSpend } from '#engine/index.js';
 const servers: Server[] = [];
@@ -19,6 +20,43 @@ function fixture(endpoint: string, tariff: unknown, model = 'chat-latest') {
   return { profile, definition, request, command, requestDigest: modelInvocationRequestDigest(command), profileDigest: modelInvocationProfileDigest(profile), prepared: {} };
 }
 const free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+it('quotes the effective terminal output cap sent on the wire, retaining explicit larger requests', async () => {
+  const tariff = { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: 0,
+    cachedInputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 1000 };
+  const f = fixture('https://operator.example/chat', tariff);
+  f.profile.adapter.definition.maxOutputTokens = 128000;
+  const config = (cap?: number) => ({ terminal: { chat: { schemaVersion: 1, reference, ...(cap ? { maxCompletionTokens: cap } : {}) } },
+    provider_invocation_profiles: { profiles: [f.profile] } });
+  const priced = createOpenAiChatPricedNative(), wire: number[] = [], amounts: number[] = [];
+  vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async request => {
+    wire.push(JSON.parse(request.body).max_completion_tokens);
+    return { kind: 'rejected', evidence: { schemaVersion: 1, reason: 'http-status', httpStatus: 400,
+      adapter: { id: 'openai-chat-http', version: 4 }, body: { encoding: 'base64', data: '', digest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', complete: true, observedBytes: 0 } } } as never;
+  });
+  for (const cap of [undefined, 32768, 128000]) {
+    f.request.max_completion_tokens = effectiveTerminalOutputCap(config(cap), 'scope', reference);
+    f.requestDigest = modelInvocationRequestDigest(f.command); f.profileDigest = modelInvocationProfileDigest(f.profile);
+    const prepared = await priced.native.prepare(f.profile, f.definition, f.request);
+    amounts.push(priced.quote({ ...f, prepared }).maxChargeMinorUnits); await priced.native.send(prepared);
+  }
+  expect(wire).toEqual([16384, 32768, 128000]); expect(amounts).toEqual([17, 33, 128]);
+  // A $1 budget can admit the default $0.17 output reservation; the absolute maximum $1.28 cannot fit.
+  const base = createProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', budgetId: 'b', revision: 1, currency: 'USD', limitMinorUnits: 100 });
+  expect(base.budget.limitMinorUnits).toBeGreaterThan(amounts[0]!); expect(base.budget.limitMinorUnits).toBeLessThan(amounts[2]!);
+});
+
+it('uses the pinned scope/model effort and clamps to the adapter limit without expanding the chat default', () => {
+  const f = fixture('https://operator.example/chat', free), profile = { ...f.profile,
+    adapter: { ...f.profile.adapter, definition: { ...f.profile.adapter.definition, maxOutputTokens: 128000, effort: 'low' } } };
+  const foreign = { ...profile, scopeId: 'other', adapter: { ...profile.adapter, definition: { ...profile.adapter.definition, effort: 'ultra' } } };
+  const config = { terminal: { chat: { schemaVersion: 1, reference } }, provider_invocation_profiles: { profiles: [foreign, profile] } };
+  expect(effectiveTerminalOutputCap(config, 'scope', reference)).toBe(4096);
+  expect(effectiveTerminalOutputCap(config, 'other', reference)).toBe(16384);
+  expect(effectiveTerminalOutputCap(config, 'scope', { ...reference, modelVersion: 2 })).toBe(16384);
+  profile.adapter.definition.maxOutputTokens = 2000; expect(effectiveTerminalOutputCap(config, 'scope', reference)).toBe(2000);
+  profile.adapter.definition.maxOutputTokens = 128000;
+  expect(effectiveTerminalOutputCap({ ...config, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 32768 } } }, 'scope', reference)).toBe(32768);
+});
 it('reserves verified vendor maximums and refuses unverified remote, forged price and mismatched model rows', () => {
   for (const [endpoint, model] of [['https://api.openai.com/v1/chat/completions', 'chat-latest'],
     ['https://api.z.ai/api/paas/v4/chat/completions', 'glm-4.7'], ['https://api.deepseek.com/chat/completions', 'deepseek-flash']]) {

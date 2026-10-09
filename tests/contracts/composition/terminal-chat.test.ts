@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { completeTerminalChatTurn, describeTerminalChat, type TerminalChatInvocationPorts } from '#composition/core/terminal-chat/index.js';
+import { completeTerminalChatTurn, describeTerminalChat, streamTerminalChatTurn, assertTerminalChatReady, type TerminalChatInvocationPorts } from '#composition/core/terminal-chat/index.js';
 import { extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/index.js';
@@ -28,7 +28,7 @@ async function project(config: Record<string, unknown>) {
 
 function reply(content: string): ModelInvocationResult {
   return { replayed: false, receipt: {} as never, contentStatus: 'retained', purge: null,
-    response: { schemaVersion: 1, native: { choices: [{ message: { content } }] }, usage: null } } as unknown as ModelInvocationResult;
+    response: { schemaVersion: 1, native: { choices: [{ finish_reason: 'stop', message: { content } }] }, usage: null } } as unknown as ModelInvocationResult;
 }
 
 function ports(result: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>) {
@@ -60,6 +60,26 @@ describe('terminal chat configuration through the real config loader', () => {
 });
 
 describe('terminal chat turn is one governed model invocation', () => {
+  it('carries the selected effective cap from config into plain/stream commands and agent preflight', async () => {
+    const base = await project({ provider_catalog: catalog, terminal: { scopeId: 'team-a', chat: { schemaVersion: 1, reference } } });
+    const binding = await inspectModelBinding(base.projectRoot, reference, base.options);
+    for (const selected of [undefined, 32768]) {
+      const config = { provider_catalog: catalog, terminal: { scopeId: 'team-a', chat: { schemaVersion: 1, reference, ...(selected ? { maxCompletionTokens: selected } : {}) } },
+        provider_invocation_profiles: { schemaVersion: 1, profiles: [{ schemaVersion: 1, id: 'profile', version: 1, scopeId: 'team-a', reference, bindingDigest: binding.binding.digest,
+          protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'fixture', version: 1, definition: { maxOutputTokens: 128000, effort: 'low' } },
+          allocation: { id: 'allocation', maxCalls: 10, maxInFlight: 2 }, limits: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000 } }] } };
+      await writeFile(join(base.projectRoot, '.deckent/config.json'), JSON.stringify(config)); clearConfigCache();
+      const input = { projectRoot: base.projectRoot, scopeId: 'team-a', messages: [{ role: 'user' as const, content: 'hi' }], options: base.options };
+      const plain = ports(async () => reply('ok')); await completeTerminalChatTurn(input, plain.value);
+      let streamed: ModelInvocationCommand | undefined;
+      const events = [];
+      for await (const event of streamTerminalChatTurn(input, { invokeStream: async (_root, command) => { streamed = command; return { ...reply('ok'), receipt: { outcome: { state: 'responded' } } as never }; }, cancel: plain.value.cancel })) events.push(event);
+      expect(events.at(-1)).toMatchObject({ kind: 'done', finish: 'stop' });
+      expect(plain.invoked[0]!.nativeRequest['max_completion_tokens']).toBe(selected ?? 4096);
+      expect(streamed!.nativeRequest['max_completion_tokens']).toBe(selected ?? 4096);
+      expect(await assertTerminalChatReady(base.projectRoot, base.options, reference, 'team-a')).toMatchObject({ completionLimitTokens: selected ?? 4096, outputReserveTokens: selected ?? 4096 });
+    }
+  });
   it('sends the caller scope, fresh catalog binding and an OpenAI chat request the provider adapter accepts', async () => {
     const f = await project({ provider_catalog: catalog, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 256 } } });
     const p = ports(async () => reply('  merhaba  '));
