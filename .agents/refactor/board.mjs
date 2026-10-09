@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { renderBoardPage, collectSources } from './board-render.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MAX = 256 * 1024, TEXT = 2000;
 export const DEFAULT_SLOTS = Object.freeze([
@@ -356,7 +357,9 @@ function configuration() {
   const cfg = JSON.parse(safeRead(path.join(here, 'workspace.json'), 8192));
   if (cfg.version !== 1 || typeof cfg.board !== 'string') throw fail('BOARD_CONFIG', 'workspace.json needs version 1 and board');
   return { file: path.resolve(here, cfg.board), html: path.resolve(here, cfg.boardHtml ?? cfg.board.replace(/\.json$/, '.html')),
-    report: cfg.ownerReport ? path.resolve(here, cfg.ownerReport) : null };
+    report: cfg.ownerReport ? path.resolve(here, cfg.ownerReport) : null,
+    channel: typeof cfg.channel === 'string' ? path.resolve(here, cfg.channel) : null, cutoff: cfg.historicalThrough,
+    project: typeof cfg.productRoot === 'string' ? path.resolve(here, cfg.productRoot) : null, journal: path.resolve(here, '../../.deckent/host/jev') };
 }
 function options(args) {
   const out = { positional: [] };
@@ -379,7 +382,7 @@ async function main() {
     case 'init': return print(initBoard(cfg.file));
     case 'get': { const board = readBoard(cfg.file); return print(opts.positional[0] ? board.sessions.find(s => s.slot === opts.positional[0]) ?? (() => { throw fail('BOARD_SLOT', opts.positional[0]); })() : board); }
     case 'show': return process.stdout.write(renderText(readBoard(cfg.file)));
-    case 'render': { const out = opts.out ? path.resolve(opts.out) : cfg.html; const html = renderHtml(readBoard(cfg.file));
+    case 'render': { const out = opts.out ? path.resolve(opts.out) : cfg.html; const html = renderBoardPage(readBoard(cfg.file), collectSources({ channelFile: cfg.channel, journalRoot: cfg.journal, projectRoot: cfg.project, cutoff: cfg.cutoff }));
       writeAtomic(out, html, { create: !fs.existsSync(out) }); return print({ written: out, bytes: Buffer.byteLength(html) }); }
     case 'report': { const [source] = opts.positional; if (!source || !cfg.report) throw fail('BOARD_USAGE', 'report BODY_FILE|- (workspace.json ownerReport)');
       const html = renderOwnerReport(await body(source), readBoard(cfg.file)); fs.mkdirSync(path.dirname(cfg.report), { recursive: true });

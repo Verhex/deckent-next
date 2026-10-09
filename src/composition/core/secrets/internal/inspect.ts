@@ -1,19 +1,20 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { assertActorAssurance, principalToActor, resolveLocalOsPrincipal, type ConfigLoadOptions } from '#platform/index.js';
 import { openConfiguredSecretStore, openRegisteredSecretStore, readSecretsConfig, registeredSecretStores } from '#adapters/index.js';
-import type { SecretStoreInspection } from '#engine/index.js';
+import { inspectSecretEnvironmentGuard, isSecretName, missingSecretReferenceNames, type SecretStore, type SecretStoreInspection } from '#engine/index.js';
 
 /** `doctor`'s secret store line (SECRET-K1, owner S1): which backend this installation uses and whether it can be read now. */
 export interface SecretStoreInspectionView extends SecretStoreInspection {
   readonly schemaVersion: 1; readonly backend: string; readonly writable: boolean; readonly enumerable: boolean;
   /** Present when another Core store holds names (`entries`) or could not be listed now (`unverified`). */
+  readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
   readonly leftover?: Readonly<{ backends: readonly string[]; entries: number; unverified: readonly string[] }>;
 }
 export interface SecretNamesView { readonly schemaVersion: 1; readonly backend: string; readonly names: readonly string[] }
 
-/** The selection only: the configuration is read without resolving any reference (no value is read for a report about the store itself). */
+/** Read the selection without resolving any secret value. */
 async function selectedStore(projectRoot: string, options: ConfigLoadOptions) {
-  const config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning: () => {} });
+  const config = await loadComposedConfig(projectRoot, { ...options, force: true, heal: false, secretResolver: async () => undefined, onWarning: () => {} });
   return { config, store: openConfiguredSecretStore(config, options.env ?? process.env, options.platform) };
 }
 /** Never throws for the store's own state: an unsafe, corrupt or unavailable store is reported with its typed code. */
@@ -21,11 +22,10 @@ export async function inspectConfiguredSecretStore(projectRoot: string, options:
   const { store } = await selectedStore(projectRoot, options), health = await store.inspect();
   const leftover = await leftoverEntries(store.descriptor.id, options);
   return Object.freeze({ schemaVersion: 1, backend: store.descriptor.id, writable: store.descriptor.writable, enumerable: store.descriptor.enumerable, ...health,
+    ...(store.descriptor.id === 'core.secret-store.env@1' ? { envGuard: await environmentGuard(projectRoot, options) } : {}),
     ...(leftover.entries || leftover.unverified.length ? { leftover } : {}) });
 }
-/** SECRET-STORE-SWITCH: how many names another Core store still holds beside the selected one (an interrupted switch, or keys never moved);
- * names are counted, never read or shown. A store that cannot be listed now is `unverified` — not counted as empty (Astra 2456 N2): a copy
- * there can be neither shown nor ruled out. */
+/** Other-store names are counted without values; unlistable stores remain unverified (Astra 2456 N2). */
 async function leftoverEntries(selected: string, options: ConfigLoadOptions) {
   const env = options.env ?? process.env, backends: string[] = [], unverified: string[] = []; let entries = 0;
   for (const id of registeredSecretStores()) {
@@ -49,5 +49,21 @@ export async function listConfiguredSecretNames(projectRoot: string, options: Co
 /** SECRET-STORE-SWITCH picker: the registered stores and the installation's selection (store ids only; nothing is resolved or read from a store). */
 export async function listConfiguredSecretStores(projectRoot: string, options: ConfigLoadOptions = {}) {
   const { config } = await selectedStore(projectRoot, options);
-  return Object.freeze({ schemaVersion: 1 as const, current: readSecretsConfig(config).store, stores: registeredSecretStores() });
+  return Object.freeze({ schemaVersion: 1 as const, current: readSecretsConfig(config).store, stores: registeredSecretStores(),
+    ...(readSecretsConfig(config).store === 'core.secret-store.env@1' ? { envGuard: await environmentGuard(projectRoot, options) } : {}) });
 }
+
+async function environmentGuard(root: string, options: ConfigLoadOptions) {
+  return inspectSecretEnvironmentGuard(await configuredEnvironmentReferenceNames(root, options), registeredSecretStores()
+    .filter(id => id !== 'core.secret-store.env@1').map(id => openRegisteredSecretStore(id, options.env ?? process.env, options.platform)));
+}
+/** Collect unresolved config reference names; a forced read avoids the effective-config cache. */
+export async function configuredEnvironmentReferenceNames(root: string, options: ConfigLoadOptions): Promise<readonly string[]> {
+  const names = new Set<string>(), env = options.env ?? process.env;
+  await loadComposedConfig(root, { ...options, force: true, heal: false, onWarning: () => {}, secretResolver: async name => {
+    if (isSecretName(name) && Object.hasOwn(env, name) && typeof env[name] === 'string' && env[name] !== '') names.add(name);
+    return undefined; } });
+  return Object.freeze([...names].sort());
+}
+export async function missingEnvironmentReferenceNames(root: string, options: ConfigLoadOptions, target: SecretStore) {
+  return missingSecretReferenceNames(await configuredEnvironmentReferenceNames(root, options), target); }

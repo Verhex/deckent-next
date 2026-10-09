@@ -11,7 +11,11 @@ export interface ImageRefreshDoctorView { readonly status: string; readonly reas
 export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid'; readonly strength?: 'machine' | 'weak' | null; readonly source?: string | null; readonly required?: boolean }
 /** The installation's secret store as doctor shows it (SECRET-K1): backend id, status and typed code only; never a value. */
 export interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
+  readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
   readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] } }
+
+/** Recovery files an interrupted backup restore left behind (S1 D4); absolute paths of this user's own installation. */
+export interface RecoveryFilesDoctorView { readonly leftovers: readonly string[]; readonly installationDirectory?: { readonly path: string; readonly mode: string } | null }
 
 /** What the human rendering reads from the collected doctor report; the pool readiness lines arrive already rendered. */
 export interface DoctorRenderInput {
@@ -24,6 +28,7 @@ export interface DoctorRenderInput {
   readonly imageRefresh: ImageRefreshDoctorView | null;
   readonly installationBinding: InstallationBindingReport | null;
   readonly shellRealm: ShellRealmDoctorView | null;
+  readonly recoveryFiles?: RecoveryFilesDoctorView | null;
   /** Running service vs. the restart-apply configuration now in effect; absent/null when not asked. */
   readonly serviceConfig?: 'current' | 'stale' | 'unknown' | 'stopped' | null;
 }
@@ -60,8 +65,14 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale), ...secretStoreCustodyLine(result.secretStore.backend, locale),
+    ...Object.entries(result.secretStore.envGuard ?? {}).flatMap(([to, guard]) => guard.code
+      ? [t('doctor.secretStore.envUnverified', { to, code: guard.code }, locale)]
+      : guard.names.length ? [t('doctor.secretStore.envMissing', { to, names: guard.names.join(', ') }, locale)] : []),
     ...(result.secretStore.leftover?.entries ? [t('doctor.secretStore.leftover', { entries: result.secretStore.leftover.entries, backends: result.secretStore.leftover.backends.join(', ') }, locale)] : []),
     ...(result.secretStore.leftover?.unverified?.length ? [t('doctor.secretStore.leftoverUnverified', { backends: result.secretStore.leftover.unverified.join(', ') }, locale)] : [])] : []),
+  ...(result.recoveryFiles?.installationDirectory && (parseInt(result.recoveryFiles.installationDirectory.mode, 8) & 0o077)
+    ? [t('doctor.installationDirectoryOpen', result.recoveryFiles.installationDirectory, locale)] : []),
+  ...(result.recoveryFiles?.leftovers.length ? [t('doctor.recoveryLeftovers', { paths: result.recoveryFiles.leftovers.join(', ') }, locale)] : []),
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
   ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),

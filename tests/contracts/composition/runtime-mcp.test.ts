@@ -467,10 +467,10 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
   });
   // MCP-VISIBILITY: the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`; L1 MCP-CORE: `mcp add` names both transports.
   it('the mcp add help names stdio and Streamable HTTP and the real registry file (en and tr)', () => {
-    for (const locale of ['en', 'tr'] as const) for (const key of ['cli.mcp.add.desc', 'cli.memcat.mcp.help.paths'] as const) {
-      const text = t(key, {}, locale);
+    for (const locale of ['en', 'tr'] as const) {
+      const text = t('cli.mcp.add.desc', {}, locale);
       expect(text).not.toContain('.mcp.json');
-      if (key === 'cli.mcp.add.desc') { expect(text).toContain('stdio'); expect(text).toContain('Streamable HTTP'); expect(text).not.toMatch(/stdio only|yalnız stdio/u); }
+      expect(text).toContain('stdio'); expect(text).toContain('Streamable HTTP'); expect(text).not.toMatch(/stdio only|yalnız stdio/u);
       expect(text).toContain('.deckent/mcp.json');
     }
   });

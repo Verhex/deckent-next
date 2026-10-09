@@ -1,0 +1,1246 @@
+{
+  "en": {
+    "cli.batch.deprecated.archive_debt": {
+      "before": "Command \"archive-debt\" is deprecated; use \"status --debt\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.attach": {
+      "before": "Command \"attach\" is deprecated; use \"watch\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.audit_verify": {
+      "before": "Command \"audit-verify\" is deprecated; use \"audit verify\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.autonomous_mission": {
+      "before": "Command \"autonomous-mission\" is deprecated; use \"autonomous mission\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.checkpoint": {
+      "before": "Command \"checkpoint\" is deprecated; use \"approvals\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.confirmations": {
+      "before": "Command \"confirmations\" is deprecated; use \"approvals\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.dashboard": {
+      "before": "Command \"dashboard\" is deprecated; use \"status --watch\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.explain": {
+      "before": "Command \"explain\" is deprecated; use \"retro --explain\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.output": {
+      "before": "Command \"output\" is deprecated; use \"watch output\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.plan_nl": {
+      "before": "Command \"plan-nl\" is deprecated; use \"do\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.recall": {
+      "before": "Command \"recall\" is deprecated; use \"memory recall\" instead.",
+      "after": null
+    },
+    "cli.batch.deprecated.remember": {
+      "before": "Command \"remember\" is deprecated; use \"memory remember\" instead.",
+      "after": null
+    },
+    "cli.batch.limits.unavailable": {
+      "before": "unavailable",
+      "after": null
+    },
+    "cli.batch.truth.no_proof": {
+      "before": "—",
+      "after": null
+    },
+    "cli.dashboard.desc": {
+      "before": "Show terminal dashboard with auto-refresh (see also: deckent status --watch)",
+      "after": null
+    },
+    "cli.help.policy": {
+      "before": "Usage: deckent policy vocabulary [--json]\n  deckent policy grants [--scope <id>] --mine [--json]\n  deckent policy revoke <id> [--scope <id>] [--yes] [--json]\n  deckent policy upgrade --template v5 [--scope <id>] [--preview|--apply|--rollback] [--expect <revision>] [--json]",
+      "after": "Usage: deckent policy vocabulary [--json]\n  deckent policy grants [--scope <id>] --mine [--json]\n  deckent policy revoke <id> [--scope <id>] [--yes] [--json]\n  deckent policy upgrade --template current [--scope <id>]\n    [--preview|--apply|--rollback] [--expect <revision>] [--json]"
+    },
+    "cli.help.root_footer": {
+      "before": "\nRun `deckent info` for a localized (TR/EN) quick-reference of common commands.\n",
+      "after": null
+    },
+    "cli.init.policyUpgrade.current": {
+      "before": "This first-run policy already has the v5 rules; nothing to do.",
+      "after": "This first-run policy already has the current first-run rules; nothing to do."
+    },
+    "cli.init.policyUpgrade.currentPerson": {
+      "before": "The named person already has the v5 rules in this policy; nothing to do.",
+      "after": "The named person already has the current first-run rules in this policy; nothing to do."
+    },
+    "cli.init.policyUpgrade.notOwner": {
+      "before": "Only the installation's owner (the user who owns its policy files) may upgrade it here; nothing was written. Use the governed path: deckent policy upgrade --template v5 --scope {scope} --preview",
+      "after": "Only the installation's owner (the user who owns its policy files) may upgrade it here; nothing was written. Use the governed path: deckent policy upgrade --template current --scope {scope} --preview"
+    },
+    "cli.init.policyUpgrade.preview": {
+      "before": "The first-run policy (revision {revision}) can take the v5 rules below; nothing was written. Apply: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}",
+      "after": "The first-run policy (revision {revision}) can take the current first-run rules below; nothing was written. Apply: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}"
+    },
+    "cli.init.policyUpgrade.previewPerson": {
+      "before": "This hand-built policy (revision {revision}) can give the named person the v5 rules below; nothing was written. Apply: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}",
+      "after": "This hand-built policy (revision {revision}) can give the named person the current first-run rules below; nothing was written. Apply: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}"
+    },
+    "cli.init.policyUpgrade.unavailable": {
+      "before": "This policy is not a first-run policy naming you, so it is not changed; add the v5 rules with your own policy authority (deckent policy upgrade --template v5 --preview shows them).",
+      "after": "This policy is not a first-run policy naming you, so it is not changed; add the current first-run rules with your own policy authority (deckent policy upgrade --template current --preview shows them)."
+    },
+    "cli.init.policyUpgrade.upgraded": {
+      "before": "The first-run policy now has the v5 rules below (the previous documents are archived); everything else was kept.",
+      "after": "The first-run policy now has the current first-run rules below (the previous documents are archived); everything else was kept."
+    },
+    "cli.init.policyUpgrade.upgradedPerson": {
+      "before": "The policy now gives the named person the v5 rules below (the previous documents are archived); every existing rule was kept.",
+      "after": "The policy now gives the named person the current first-run rules below (the previous documents are archived); every existing rule was kept."
+    },
+    "cli.memcat.agent.arg.name": {
+      "before": "Agent name exactly as the agent entry records it",
+      "after": null
+    },
+    "cli.memcat.agent.arg.new_name": {
+      "before": "Name for the new agent entry",
+      "after": null
+    },
+    "cli.memcat.agent.delete.opt.force": {
+      "before": "Delete without the interactive confirmation prompt",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.description": {
+      "before": "Write a new description onto the agent entry",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.disable": {
+      "before": "Mark the agent entry disabled",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.enable": {
+      "before": "Mark the agent entry enabled",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.model": {
+      "before": "Write a new model onto the agent entry",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.sync_prompt": {
+      "before": "Re-read PROMPT.md and write it back onto the entry as systemPrompt",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.triggers": {
+      "before": "Replace the trigger keywords on the agent entry",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.decision": {
+      "before": "Replacement evaluation: DONE | GO_WITH_TECH_DEBT | NO_GO",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.no_audit": {
+      "before": "Do not write the audit-trail entry into the memory store",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.reason": {
+      "before": "Free-form justification recorded on the audit-trail entry",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.run": {
+      "before": "Run ID whose stored task entry is being reclassified",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.task": {
+      "before": "Task ID within that run",
+      "after": null
+    },
+    "cli.memcat.archive.help.paths": {
+      "before": "\nRead paths: `archive inspect`, `archive verify`, `archive terminal-inspect`, `archive terminal-verify`\n  — they build projections over archived evidence and change no archive state.\nMutation paths: `archive reconcile --apply` and `archive terminal-repair` rewrite archive state.\n  `archive reconcile` without --apply stays a dry-run projection.\n",
+      "after": null
+    },
+    "cli.memcat.audit.arg.run_id": {
+      "before": "Run ID to audit; omit it and use a subcommand for the query/compliance paths",
+      "after": null
+    },
+    "cli.memcat.audit.error.run_required": {
+      "before": "audit: a run ID is required (for example `deckent audit <run-id>`), or use `deckent audit query [options]`",
+      "after": null
+    },
+    "cli.memcat.audit.help.paths": {
+      "before": "\nRead paths: `audit <run-id>`, `audit query`, `audit compliance` — they only project stored audit events.\nMutation paths: `audit forward` writes an export target, `audit retention --apply` prunes or archives stored events.\nWithout --apply the retention path is a dry-run projection.\n",
+      "after": null
+    },
+    "cli.memcat.audit.opt.action": {
+      "before": "query path: keep only audit events recorded for this action/channel",
+      "after": null
+    },
+    "cli.memcat.audit.opt.apply": {
+      "before": "retention path: apply the plan — without it the run stays a dry-run",
+      "after": null
+    },
+    "cli.memcat.audit.opt.company": {
+      "before": "query path: keep only audit events recorded for this company ID",
+      "after": null
+    },
+    "cli.memcat.audit.opt.keep_count": {
+      "before": "retention path: archive audit events beyond the most recent n",
+      "after": null
+    },
+    "cli.memcat.audit.opt.keep_days": {
+      "before": "retention path: prune audit events older than n days",
+      "after": null
+    },
+    "cli.memcat.audit.opt.out": {
+      "before": "forward path: output file (default: .deckent/siem-export.jsonl)",
+      "after": null
+    },
+    "cli.memcat.audit.opt.role": {
+      "before": "query path: caller role enforced by RBAC — admin | operator | viewer",
+      "after": null
+    },
+    "cli.memcat.audit.opt.run": {
+      "before": "Run ID used by the query, compliance, forward and retention subcommands",
+      "after": null
+    },
+    "cli.memcat.audit.opt.since": {
+      "before": "query path: keep only audit events at or after this ISO 8601 timestamp",
+      "after": null
+    },
+    "cli.memcat.audit.opt.syslog": {
+      "before": "forward path: send audit records to an RFC 5424 syslog collector (takes precedence over --out)",
+      "after": null
+    },
+    "cli.memcat.audit.opt.syslog_protocol": {
+      "before": "forward path: syslog wire protocol — udp | tcp",
+      "after": null
+    },
+    "cli.memcat.audit.opt.url": {
+      "before": "forward path: POST audit records to an HTTP(S) SIEM endpoint (takes precedence over --syslog and --out)",
+      "after": null
+    },
+    "cli.memcat.cost.help.paths": {
+      "before": "\nRead path: `cost show` projects stored pricing and writes nothing.\nMutation paths: `cost update` refreshes stored pricing from upstream sources;\n  `cost budget` with any of --set/--daily/--monthly writes budget configuration.\n  `cost budget` with no flag is a read-only projection.\n",
+      "after": null
+    },
+    "cli.memcat.cost.opt.daily": {
+      "before": "Write the daily maximum budget, in USD",
+      "after": null
+    },
+    "cli.memcat.cost.opt.dry_run": {
+      "before": "Project the pricing delta without writing it back",
+      "after": null
+    },
+    "cli.memcat.cost.opt.model": {
+      "before": "Project the detail view for a single model ID",
+      "after": null
+    },
+    "cli.memcat.cost.opt.monthly": {
+      "before": "Write the monthly maximum budget, in USD",
+      "after": null
+    },
+    "cli.memcat.cost.opt.provider_filter": {
+      "before": "Restrict the pricing projection to one provider (anthropic, openai, google)",
+      "after": null
+    },
+    "cli.memcat.cost.opt.provider_update": {
+      "before": "Refresh stored pricing for this provider only",
+      "after": null
+    },
+    "cli.memcat.cost.opt.set": {
+      "before": "Write the per-run maximum budget, in USD",
+      "after": null
+    },
+    "cli.memcat.cost.opt.skip_validation": {
+      "before": "Skip the OpenRouter delta cross-check before writing",
+      "after": null
+    },
+    "cli.memcat.docs.arg.path": {
+      "before": "Path of the document to track as a doc entry",
+      "after": null
+    },
+    "cli.memcat.docs.arg.path_or_id": {
+      "before": "Tracked document path, or the doc entry ID",
+      "after": null
+    },
+    "cli.memcat.docs.opt.add_auto": {
+      "before": "Add auto-update sections to the entry (comma-separated)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.add_protect": {
+      "before": "Add protected sections to the entry (comma-separated)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.auto": {
+      "before": "Comma-separated section headings the doc runner may rewrite",
+      "after": null
+    },
+    "cli.memcat.docs.opt.check": {
+      "before": "After the scan, exit non-zero if any CRITICAL_STALE doc entry remains (CI gate)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.max_lines": {
+      "before": "Line cap for auto-updated sections",
+      "after": null
+    },
+    "cli.memcat.docs.opt.max_rank": {
+      "before": "With --check, gate only on entries whose doc_rank is at most n",
+      "after": null
+    },
+    "cli.memcat.docs.opt.no_cache": {
+      "before": "Clear the doc cache before the run",
+      "after": null
+    },
+    "cli.memcat.docs.opt.no_write": {
+      "before": "Record scan results in the store only; leave document front-matter untouched",
+      "after": null
+    },
+    "cli.memcat.docs.opt.protect": {
+      "before": "Comma-separated section headings the doc runner must never touch",
+      "after": null
+    },
+    "cli.memcat.docs.opt.prune": {
+      "before": "Delete doc entries whose document no longer exists",
+      "after": null
+    },
+    "cli.memcat.docs.opt.rank": {
+      "before": "Restrict the projection to entries whose doc_rank is at most n",
+      "after": null
+    },
+    "cli.memcat.docs.opt.remove_auto": {
+      "before": "Remove auto-update sections from the entry (comma-separated)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.set_max_lines": {
+      "before": "Replace the line cap for auto-updated sections",
+      "after": null
+    },
+    "cli.memcat.docs.opt.skills": {
+      "before": "Comma-separated skill IDs attached to the doc entry",
+      "after": null
+    },
+    "cli.memcat.docs.opt.stale": {
+      "before": "Restrict the projection to DRIFT, STALE and CRITICAL_STALE entries",
+      "after": null
+    },
+    "cli.memcat.features.opt.category": {
+      "before": "Filter the projection by category: active, lightly_used, dormant, dead, all",
+      "after": null
+    },
+    "cli.memcat.features.opt.id": {
+      "before": "Project the detail view for a single feature ID",
+      "after": null
+    },
+    "cli.memcat.help_info.opt.lang": {
+      "before": "Language override for the quick reference: en | tr",
+      "after": null
+    },
+    "cli.memcat.history.opt.agent": {
+      "before": "Restrict the projection to entries recorded for this agent",
+      "after": null
+    },
+    "cli.memcat.history.opt.skill": {
+      "before": "Restrict the projection to entries recorded for this skill",
+      "after": null
+    },
+    "cli.memcat.kpi.opt.n": {
+      "before": "Number of run entries included in the trend projection (default: 10)",
+      "after": null
+    },
+    "cli.memcat.kpi.opt.run": {
+      "before": "Run ID to score (defaults to the current run entry)",
+      "after": null
+    },
+    "cli.memcat.kpi.opt.trend": {
+      "before": "Project the trend series for a single KPI ID",
+      "after": null
+    },
+    "cli.memcat.local_llm.help.paths": {
+      "before": "\nRead path: `status` probes health and the advertised model list; it starts nothing.\nMutation paths: `start` launches the project-scoped server, `stop` terminates it.\n",
+      "after": null
+    },
+    "cli.memcat.mcp.arg.args": {
+      "before": "Extra arguments passed to a stdio server launch command",
+      "after": null
+    },
+    "cli.memcat.mcp.arg.cmd_or_url": {
+      "before": "Launch command for a stdio server, or the endpoint URL for an http server",
+      "after": null
+    },
+    "cli.memcat.mcp.arg.name": {
+      "before": "Server name, unique within the selected scope",
+      "after": null
+    },
+    "cli.memcat.mcp.desc": {
+      "before": "Manage Model Context Protocol servers — an open standard, portable across every MCP-capable host",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.env": {
+      "before": "stdio environment variable as key=value; repeat for several variables",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.scope_add": {
+      "before": "Config scope written to: project | user | local",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.scope_remove": {
+      "before": "Restrict removal to one scope: project | user | local (default: search all)",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.transport": {
+      "before": "Transport: stdio | http (auto-detected when omitted)",
+      "after": null
+    },
+    "cli.memcat.models.arg.model": {
+      "before": "Model ID exactly as the catalog entry records it",
+      "after": null
+    },
+    "cli.memcat.models.arg.policy_mode": {
+      "before": "Policy mode to write: implicit-active | explicit-active; omit to read the current mode",
+      "after": null
+    },
+    "cli.memcat.models.arg.policy_provider": {
+      "before": "Provider whose activation policy is read or written; omit to project every provider",
+      "after": null
+    },
+    "cli.memcat.models.help.paths": {
+      "before": "\nRead paths: `models list`, `models activation`, `models active-set`, `models tier`,\n  and `models policy <provider>` with no mode — all project the stored catalog.\nMutation paths: `models activate`, `models deactivate`, `models refresh`, and\n  `models policy <provider> <mode>` — all write catalog or activation state.\n",
+      "after": null
+    },
+    "cli.memcat.models.opt.offline": {
+      "before": "Read the cached or bundled catalog only; never reach the network",
+      "after": null
+    },
+    "cli.memcat.models.opt.provider_filter": {
+      "before": "Restrict the catalog projection to one provider ({providers})",
+      "after": null
+    },
+    "cli.memcat.models.opt.provider_required": {
+      "before": "Provider that serves this model",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.dir": {
+      "before": "Plugin directory to inspect",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.name": {
+      "before": "Plugin name exactly as the plugin entry records it",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.new_name": {
+      "before": "Name for the new plugin entry",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.source": {
+      "before": "Install source: a local path or a remote plugin reference",
+      "after": null
+    },
+    "cli.memcat.plugin.opt.force": {
+      "before": "Overwrite an existing plugin entry instead of failing",
+      "after": null
+    },
+    "cli.memcat.recall.arg.query": {
+      "before": "Full-text query matched against stored memory entries (title, summary, content)",
+      "after": null
+    },
+    "cli.memcat.recall.help.paths": {
+      "before": "\nRead path: this command only queries the memory store; it never writes an entry.\nUse `deckent remember` to add one.\n",
+      "after": null
+    },
+    "cli.memcat.recall.opt.limit": {
+      "before": "Maximum number of matched entries in the projection",
+      "after": null
+    },
+    "cli.memcat.recall.opt.mode": {
+      "before": "Full-text token join: or (default, broader) | and (every token must match)",
+      "after": null
+    },
+    "cli.memcat.recall.opt.run_min": {
+      "before": "Drop entries recorded before this run number",
+      "after": null
+    },
+    "cli.memcat.recall.opt.type": {
+      "before": "Restrict to these entry types, comma-separated: adr, memory, run, debt, pattern",
+      "after": null
+    },
+    "cli.memcat.remember.arg.note": {
+      "before": "Note body stored as the entry content",
+      "after": null
+    },
+    "cli.memcat.remember.help.paths": {
+      "before": "\nMutation path: this command inserts one entry into the memory store.\nRead it back with `deckent recall`.\n",
+      "after": null
+    },
+    "cli.memcat.remember.opt.tags": {
+      "before": "Comma-separated tags indexed with the entry",
+      "after": null
+    },
+    "cli.memcat.remember.opt.title": {
+      "before": "Entry title (default: the first 60 characters of the note)",
+      "after": null
+    },
+    "cli.memcat.remember.opt.type": {
+      "before": "Entry type recorded on the new row (default: memory)",
+      "after": null
+    },
+    "cli.memcat.retro.opt.compare": {
+      "before": "Add a delta projection against the previous run entry",
+      "after": null
+    },
+    "cli.memcat.retro.opt.perf": {
+      "before": "Add the agent and skill performance projections",
+      "after": null
+    },
+    "cli.memcat.retro.opt.raw": {
+      "before": "Print the stored RETRO.md source instead of the rendered projection",
+      "after": null
+    },
+    "cli.memcat.retro.opt.trend": {
+      "before": "Add a success-rate trend projection across the last N run entries (default: 5)",
+      "after": null
+    },
+    "cli.memcat.shared.opt.json": {
+      "before": "Emit the read-model projection as JSON instead of a rendered table",
+      "after": null
+    },
+    "cli.memcat.shared.opt.json_raw": {
+      "before": "Emit the raw projection as JSON and print nothing else",
+      "after": null
+    },
+    "cli.memcat.shared.opt.lang": {
+      "before": "Language override for this invocation: en | tr",
+      "after": null
+    },
+    "cli.memcat.skill.arg.name": {
+      "before": "Skill name exactly as the skill entry records it",
+      "after": null
+    },
+    "cli.memcat.skill.arg.new_name": {
+      "before": "Name for the new skill entry",
+      "after": null
+    },
+    "cli.memcat.skill.arg.source": {
+      "before": "Install source: a local path, or a marketplace/registry reference",
+      "after": null
+    },
+    "cli.memcat.skill.opt.category": {
+      "before": "Restrict the projection to one category",
+      "after": null
+    },
+    "cli.memcat.skill.opt.force": {
+      "before": "Overwrite an existing entry instead of failing",
+      "after": null
+    },
+    "cli.memcat.skill.opt.stats": {
+      "before": "Add the recorded usage statistics to the projection",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.arg.query": {
+      "before": "Search query matched against published registry entries",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.arg.skill_path": {
+      "before": "Local path of the skill to sign and publish",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.category": {
+      "before": "Restrict registry results to one category",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.dry_run": {
+      "before": "Validate and sign locally without uploading to the registry",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.key_dir": {
+      "before": "Keypair directory (default: ~/.deckent/keys)",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.limit": {
+      "before": "Maximum registry results per page",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.no_sign": {
+      "before": "Skip Ed25519 signing and upload to the registry unsigned",
+      "after": null
+    },
+    "cli.memcat.truth.baseline_note": {
+      "before": "Pinned half-wire candidate ratchet. Regenerate with `deckent truth --check --write`.",
+      "after": null
+    },
+    "cli.memcat.truth.opt.check": {
+      "before": "Ratchet: compare current half-wire candidates against the pinned baseline (exit 1 = new candidate, exit 2 = no baseline)",
+      "after": null
+    },
+    "cli.memcat.truth.opt.json": {
+      "before": "Emit the raw truth projection as JSON",
+      "after": null
+    },
+    "cli.memcat.truth.opt.write": {
+      "before": "With --check: rewrite the pinned baseline to the current candidate set (mutation)",
+      "after": null
+    },
+    "cli.memcat.usage.help.authority": {
+      "before": "\nAuthority: the token/limit table is parsed from Claude Code JSONL transcripts on this machine.\nThat is the only source it reads — no other provider transcript format is aggregated, so a\nsession run through another provider does not appear in this table.\n`--lineage` switches to a different authority: archived task and result evidence, not transcripts.\n",
+      "after": null
+    },
+    "cli.policy.upgrade.current": {
+      "before": "This policy already has the v5 rules; nothing to do.",
+      "after": "This policy already has the current first-run rules; nothing to do."
+    },
+    "cli.policy.upgrade.nothing": {
+      "before": "No v5 rule to remove; nothing was written.",
+      "after": "No first-run rule to remove; nothing was written."
+    },
+    "cli.policy.upgrade.preview": {
+      "before": "The first-run policy (revision {revision}) can take these v5 rules; nothing was written. Apply: deckent policy upgrade --template v5 --scope {scope} --apply --expect {revision}",
+      "after": "The first-run policy (revision {revision}) can take the missing first-run rules; nothing was written. Apply: deckent policy upgrade --template current --scope {scope} --apply --expect {revision}"
+    },
+    "cli.policy.upgrade.reason": {
+      "before": "First-run policy v4 → v5: MCP server authority, the MCP call operation and the proposal tool",
+      "after": "Add the missing current first-run policy rules"
+    },
+    "cli.policy.upgrade.rolledBack": {
+      "before": "The v5 rules were removed ({ids}); the earlier documents stay archived.",
+      "after": "The first-run rules were removed ({ids}); the earlier documents stay archived."
+    },
+    "cli.policy.upgrade.unavailable": {
+      "before": "This policy is not a first-run policy ({reason}); add the v5 rules with your own policy authority.",
+      "after": "This policy is not a first-run policy ({reason}); add the current first-run rules with your own policy authority."
+    },
+    "cli.policy.upgrade.upgraded": {
+      "before": "The v5 rules were added through the governed policy change (audited; the previous documents are archived). Undo: deckent policy upgrade --template v5 --scope {scope} --rollback",
+      "after": "The first-run rules were added through the governed policy change (audited; the previous documents are archived). Undo: deckent policy upgrade --template current --scope {scope} --rollback"
+    },
+    "cli.root_help.prompt_do": {
+      "before": "deckent do \"<goal>\"    plan a run from a goal (dry-run first)",
+      "after": null
+    },
+    "mcp.grant.reason.delegation": {
+      "before": "you may not grant this server in this scope (your own policy does not hold mcp-server authority); a policy administrator can, and a first-run installation takes the v5 rules with deckent init policy --scope <id> --upgrade --preview, then --apply",
+      "after": "you may not grant this server in this scope (your own policy does not hold mcp-server authority); a policy administrator can, and a first-run installation takes the missing first-run rules with deckent init policy --scope <id> --upgrade --preview, then --apply"
+    }
+  },
+  "tr": {
+    "cli.batch.deprecated.archive_debt": {
+      "before": "\"archive-debt\" komutu kullanımdan kaldırılıyor; bunun yerine \"status --debt\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.attach": {
+      "before": "\"attach\" komutu kullanımdan kaldırılıyor; bunun yerine \"watch\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.audit_verify": {
+      "before": "\"audit-verify\" komutu kullanımdan kaldırılıyor; bunun yerine \"audit verify\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.autonomous_mission": {
+      "before": "\"autonomous-mission\" komutu kullanımdan kaldırılıyor; bunun yerine \"autonomous mission\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.checkpoint": {
+      "before": "\"checkpoint\" komutu kullanımdan kaldırılıyor; bunun yerine \"approvals\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.confirmations": {
+      "before": "\"confirmations\" komutu kullanımdan kaldırılıyor; bunun yerine \"approvals\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.dashboard": {
+      "before": "\"dashboard\" komutu kullanımdan kaldırılıyor; bunun yerine \"status --watch\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.explain": {
+      "before": "\"explain\" komutu kullanımdan kaldırılıyor; bunun yerine \"retro --explain\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.output": {
+      "before": "\"output\" komutu kullanımdan kaldırılıyor; bunun yerine \"watch output\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.plan_nl": {
+      "before": "\"plan-nl\" komutu kullanımdan kaldırılıyor; bunun yerine \"do\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.recall": {
+      "before": "\"recall\" komutu kullanımdan kaldırılıyor; bunun yerine \"memory recall\" kullanın.",
+      "after": null
+    },
+    "cli.batch.deprecated.remember": {
+      "before": "\"remember\" komutu kullanımdan kaldırılıyor; bunun yerine \"memory remember\" kullanın.",
+      "after": null
+    },
+    "cli.batch.limits.unavailable": {
+      "before": "kullanılamıyor",
+      "after": null
+    },
+    "cli.batch.truth.no_proof": {
+      "before": "—",
+      "after": null
+    },
+    "cli.dashboard.desc": {
+      "before": "Terminal dashboard'u otomatik yenilemeyle gösterin (ayrıca bkz. deckent status --watch)",
+      "after": null
+    },
+    "cli.help.policy": {
+      "before": "Kullanım: deckent policy vocabulary [--json]\n  deckent policy grants [--scope <id>] --mine [--json]\n  deckent policy revoke <id> [--scope <id>] [--yes] [--json]\n  deckent policy upgrade --template v5 [--scope <id>] [--preview|--apply|--rollback] [--expect <revizyon>] [--json]",
+      "after": "Kullanım: deckent policy vocabulary [--json]\n  deckent policy grants [--scope <id>] --mine [--json]\n  deckent policy revoke <id> [--scope <id>] [--yes] [--json]\n  deckent policy upgrade --template current [--scope <id>]\n    [--preview|--apply|--rollback] [--expect <revizyon>] [--json]"
+    },
+    "cli.help.root_footer": {
+      "before": "\nYaygın komutların yerelleştirilmiş (TR/EN) hızlı başvurusu için `deckent info` çalıştırın.\n",
+      "after": null
+    },
+    "cli.init.policyUpgrade.current": {
+      "before": "Bu ilk kurulum policy'sinde v5 kuralları zaten var; yapılacak bir şey yok.",
+      "after": "Bu ilk kurulum policy'sinde güncel ilk kurulum kuralları zaten var; yapılacak bir şey yok."
+    },
+    "cli.init.policyUpgrade.currentPerson": {
+      "before": "Adı verilen kişi bu policy'de v5 kurallarına zaten sahip; yapılacak bir şey yok.",
+      "after": "Adı verilen kişi bu policy'de güncel ilk kurulum kurallarına zaten sahip; yapılacak bir şey yok."
+    },
+    "cli.init.policyUpgrade.notOwner": {
+      "before": "Bunu burada yalnız kurulumun sahibi (policy dosyalarının sahibi kullanıcı) yükseltebilir; hiçbir şey yazılmadı. Yönetilen yolu kullanın: deckent policy upgrade --template v5 --scope {scope} --preview",
+      "after": "Bunu burada yalnız kurulumun sahibi (policy dosyalarının sahibi kullanıcı) yükseltebilir; hiçbir şey yazılmadı. Yönetilen yolu kullanın: deckent policy upgrade --template current --scope {scope} --preview"
+    },
+    "cli.init.policyUpgrade.preview": {
+      "before": "İlk kurulum policy'si (revizyon {revision}) aşağıdaki v5 kurallarını alabilir; hiçbir şey yazılmadı. Uygulamak için: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}",
+      "after": "İlk kurulum policy'si (revizyon {revision}) aşağıdaki güncel ilk kurulum kurallarını alabilir; hiçbir şey yazılmadı. Uygulamak için: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}"
+    },
+    "cli.init.policyUpgrade.previewPerson": {
+      "before": "Elle yazılmış bu policy (revizyon {revision}) adı verilen kişiye aşağıdaki v5 kurallarını verebilir; hiçbir şey yazılmadı. Uygulamak için: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}",
+      "after": "Elle yazılmış bu policy (revizyon {revision}) adı verilen kişiye aşağıdaki güncel ilk kurulum kurallarını verebilir; hiçbir şey yazılmadı. Uygulamak için: deckent init policy --scope {scope} --upgrade --apply --expect {revision}{person}"
+    },
+    "cli.init.policyUpgrade.unavailable": {
+      "before": "Bu policy sizi adlandıran bir ilk kurulum policy'si değil; değiştirilmedi. v5 kurallarını kendi policy yetkinizle ekleyin (deckent policy upgrade --template v5 --preview gösterir).",
+      "after": "Bu policy sizi adlandıran bir ilk kurulum policy'si değil; değiştirilmedi. güncel ilk kurulum kurallarını kendi policy yetkinizle ekleyin (deckent policy upgrade --template current --preview gösterir)."
+    },
+    "cli.init.policyUpgrade.upgraded": {
+      "before": "İlk kurulum policy'sine aşağıdaki v5 kuralları eklendi (önceki belgeler arşivde); diğer her şey korundu.",
+      "after": "İlk kurulum policy'sine aşağıdaki güncel ilk kurulum kuralları eklendi (önceki belgeler arşivde); diğer her şey korundu."
+    },
+    "cli.init.policyUpgrade.upgradedPerson": {
+      "before": "Policy artık adı verilen kişiye aşağıdaki v5 kurallarını veriyor (önceki belgeler arşivde); mevcut kuralların hepsi korundu.",
+      "after": "Policy artık adı verilen kişiye aşağıdaki güncel ilk kurulum kurallarını veriyor (önceki belgeler arşivde); mevcut kuralların hepsi korundu."
+    },
+    "cli.memcat.agent.arg.name": {
+      "before": "Agent entry’sinde kayıtlı olduğu şekliyle agent adı",
+      "after": null
+    },
+    "cli.memcat.agent.arg.new_name": {
+      "before": "Yeni agent entry’si için ad",
+      "after": null
+    },
+    "cli.memcat.agent.delete.opt.force": {
+      "before": "Etkileşimli onay istemi olmadan sil",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.description": {
+      "before": "Agent entry’sine yeni bir açıklama yaz",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.disable": {
+      "before": "Agent entry’sini devre dışı olarak işaretle",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.enable": {
+      "before": "Agent entry’sini etkin olarak işaretle",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.model": {
+      "before": "Agent entry’sine yeni bir model yaz",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.sync_prompt": {
+      "before": "PROMPT.md dosyasını yeniden okuyup entry’ye systemPrompt olarak geri yaz",
+      "after": null
+    },
+    "cli.memcat.agent.edit.opt.triggers": {
+      "before": "Agent entry’sindeki tetikleyici anahtar kelimeleri değiştir",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.decision": {
+      "before": "Yerine yazılacak değerlendirme: DONE | GO_WITH_TECH_DEBT | NO_GO",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.no_audit": {
+      "before": "Audit-trail entry’sini bellek deposuna yazma",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.reason": {
+      "before": "Audit-trail entry’sine kaydedilen serbest biçimli gerekçe",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.run": {
+      "before": "Kayıtlı task entry’si yeniden sınıflandırılan run ID",
+      "after": null
+    },
+    "cli.memcat.agent.reclassify.opt.task": {
+      "before": "O run içindeki task ID",
+      "after": null
+    },
+    "cli.memcat.archive.help.paths": {
+      "before": "\nOkuma yolları: `archive inspect`, `archive verify`, `archive terminal-inspect`, `archive terminal-verify`\n  — arşivlenmiş kanıt üzerinde projeksiyon üretir, arşiv durumunu değiştirmez.\nMutasyon yolları: `archive reconcile --apply` ve `archive terminal-repair` arşiv durumunu yeniden yazar.\n  `archive reconcile` --apply olmadan dry-run projeksiyonu olarak kalır.\n",
+      "after": null
+    },
+    "cli.memcat.audit.arg.run_id": {
+      "before": "Denetlenecek run ID; query/compliance yolları için bunu boş bırakıp alt komut kullanın",
+      "after": null
+    },
+    "cli.memcat.audit.error.run_required": {
+      "before": "audit: bir run ID gerekli (örneğin `deckent audit <run-id>`) ya da `deckent audit query [seçenekler]` kullanın",
+      "after": null
+    },
+    "cli.memcat.audit.help.paths": {
+      "before": "\nOkuma yolları: `audit <run-id>`, `audit query`, `audit compliance` — yalnızca kayıtlı audit olaylarını projekte eder.\nMutasyon yolları: `audit forward` bir dışa aktarma hedefine yazar, `audit retention --apply` kayıtlı olayları budar veya arşivler.\n--apply olmadan retention yolu bir dry-run projeksiyonudur.\n",
+      "after": null
+    },
+    "cli.memcat.audit.opt.action": {
+      "before": "query yolu: yalnızca bu action/channel için kaydedilen audit olaylarını tut",
+      "after": null
+    },
+    "cli.memcat.audit.opt.apply": {
+      "before": "retention yolu: planı uygula — bu olmadan çalıştırma dry-run kalır",
+      "after": null
+    },
+    "cli.memcat.audit.opt.company": {
+      "before": "query yolu: yalnızca bu company ID için kaydedilen audit olaylarını tut",
+      "after": null
+    },
+    "cli.memcat.audit.opt.keep_count": {
+      "before": "retention yolu: en yeni n olayın ötesindeki audit olaylarını arşivle",
+      "after": null
+    },
+    "cli.memcat.audit.opt.keep_days": {
+      "before": "retention yolu: n günden eski audit olaylarını buda",
+      "after": null
+    },
+    "cli.memcat.audit.opt.out": {
+      "before": "forward yolu: çıktı dosyası (varsayılan: .deckent/siem-export.jsonl)",
+      "after": null
+    },
+    "cli.memcat.audit.opt.role": {
+      "before": "query yolu: RBAC tarafından uygulanan çağıran rolü — admin | operator | viewer",
+      "after": null
+    },
+    "cli.memcat.audit.opt.run": {
+      "before": "query, compliance, forward ve retention alt komutlarının kullandığı run ID",
+      "after": null
+    },
+    "cli.memcat.audit.opt.since": {
+      "before": "query yolu: yalnızca bu ISO 8601 zaman damgasında veya sonrasındaki audit olaylarını tut",
+      "after": null
+    },
+    "cli.memcat.audit.opt.syslog": {
+      "before": "forward yolu: audit kayıtlarını RFC 5424 syslog toplayıcısına gönder (--out’tan önceliklidir)",
+      "after": null
+    },
+    "cli.memcat.audit.opt.syslog_protocol": {
+      "before": "forward yolu: syslog aktarım protokolü — udp | tcp",
+      "after": null
+    },
+    "cli.memcat.audit.opt.url": {
+      "before": "forward yolu: audit kayıtlarını bir HTTP(S) SIEM uç noktasına POST et (--syslog ve --out’tan önceliklidir)",
+      "after": null
+    },
+    "cli.memcat.cost.help.paths": {
+      "before": "\nOkuma yolu: `cost show` kayıtlı fiyatlandırmayı projekte eder, hiçbir şey yazmaz.\nMutasyon yolları: `cost update` kayıtlı fiyatlandırmayı yukarı akış kaynaklarından yeniler;\n  `cost budget` --set/--daily/--monthly bayraklarından biriyle bütçe yapılandırmasını yazar.\n  Bayraksız `cost budget` salt-okunur bir projeksiyondur.\n",
+      "after": null
+    },
+    "cli.memcat.cost.opt.daily": {
+      "before": "Günlük maksimum bütçeyi USD olarak yaz",
+      "after": null
+    },
+    "cli.memcat.cost.opt.dry_run": {
+      "before": "Fiyatlandırma deltasını geri yazmadan projekte et",
+      "after": null
+    },
+    "cli.memcat.cost.opt.model": {
+      "before": "Tek bir model ID için detay görünümünü projekte et",
+      "after": null
+    },
+    "cli.memcat.cost.opt.monthly": {
+      "before": "Aylık maksimum bütçeyi USD olarak yaz",
+      "after": null
+    },
+    "cli.memcat.cost.opt.provider_filter": {
+      "before": "Fiyatlandırma projeksiyonunu tek bir provider ile sınırla (anthropic, openai, google)",
+      "after": null
+    },
+    "cli.memcat.cost.opt.provider_update": {
+      "before": "Yalnızca bu provider için kayıtlı fiyatlandırmayı yenile",
+      "after": null
+    },
+    "cli.memcat.cost.opt.set": {
+      "before": "Run başına maksimum bütçeyi USD olarak yaz",
+      "after": null
+    },
+    "cli.memcat.cost.opt.skip_validation": {
+      "before": "Yazmadan önceki OpenRouter delta çapraz kontrolünü atla",
+      "after": null
+    },
+    "cli.memcat.docs.arg.path": {
+      "before": "Doc entry olarak takip edilecek dokümanın yolu",
+      "after": null
+    },
+    "cli.memcat.docs.arg.path_or_id": {
+      "before": "Takip edilen doküman yolu veya doc entry ID’si",
+      "after": null
+    },
+    "cli.memcat.docs.opt.add_auto": {
+      "before": "Entry’ye otomatik güncellenen bölümler ekle (virgülle ayrılmış)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.add_protect": {
+      "before": "Entry’ye korumalı bölümler ekle (virgülle ayrılmış)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.auto": {
+      "before": "Doc runner’ın yeniden yazabileceği, virgülle ayrılmış bölüm başlıkları",
+      "after": null
+    },
+    "cli.memcat.docs.opt.check": {
+      "before": "Tarama sonrasında CRITICAL_STALE bir doc entry kalırsa sıfırdan farklı çık (CI kapısı)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.max_lines": {
+      "before": "Otomatik güncellenen bölümler için satır üst sınırı",
+      "after": null
+    },
+    "cli.memcat.docs.opt.max_rank": {
+      "before": "--check ile birlikte, yalnızca doc_rank değeri en fazla n olan entry’lerde kapı uygula",
+      "after": null
+    },
+    "cli.memcat.docs.opt.no_cache": {
+      "before": "Çalıştırmadan önce doc önbelleğini temizle",
+      "after": null
+    },
+    "cli.memcat.docs.opt.no_write": {
+      "before": "Tarama sonuçlarını yalnızca depoya kaydet; doküman front-matter’ına dokunma",
+      "after": null
+    },
+    "cli.memcat.docs.opt.protect": {
+      "before": "Doc runner’ın asla dokunmaması gereken, virgülle ayrılmış bölüm başlıkları",
+      "after": null
+    },
+    "cli.memcat.docs.opt.prune": {
+      "before": "Dokümanı artık var olmayan doc entry’lerini sil",
+      "after": null
+    },
+    "cli.memcat.docs.opt.rank": {
+      "before": "Projeksiyonu doc_rank değeri en fazla n olan entry’lere kısıtla",
+      "after": null
+    },
+    "cli.memcat.docs.opt.remove_auto": {
+      "before": "Entry’den otomatik güncellenen bölümleri kaldır (virgülle ayrılmış)",
+      "after": null
+    },
+    "cli.memcat.docs.opt.set_max_lines": {
+      "before": "Otomatik güncellenen bölümler için satır üst sınırını değiştir",
+      "after": null
+    },
+    "cli.memcat.docs.opt.skills": {
+      "before": "Doc entry’sine iliştirilen, virgülle ayrılmış skill ID’leri",
+      "after": null
+    },
+    "cli.memcat.docs.opt.stale": {
+      "before": "Projeksiyonu DRIFT, STALE ve CRITICAL_STALE entry’lerine kısıtla",
+      "after": null
+    },
+    "cli.memcat.features.opt.category": {
+      "before": "Projeksiyonu kategoriye göre filtrele: active, lightly_used, dormant, dead, all",
+      "after": null
+    },
+    "cli.memcat.features.opt.id": {
+      "before": "Tek bir feature ID için detay görünümünü projekte et",
+      "after": null
+    },
+    "cli.memcat.help_info.opt.lang": {
+      "before": "Hızlı başvuru için dil geçersiz kılma: en | tr",
+      "after": null
+    },
+    "cli.memcat.history.opt.agent": {
+      "before": "Projeksiyonu bu agent için kaydedilen entry’lere kısıtla",
+      "after": null
+    },
+    "cli.memcat.history.opt.skill": {
+      "before": "Projeksiyonu bu skill için kaydedilen entry’lere kısıtla",
+      "after": null
+    },
+    "cli.memcat.kpi.opt.n": {
+      "before": "Trend projeksiyonuna dahil edilen run entry sayısı (varsayılan: 10)",
+      "after": null
+    },
+    "cli.memcat.kpi.opt.run": {
+      "before": "Puanlanacak run ID (varsayılan: mevcut run entry’si)",
+      "after": null
+    },
+    "cli.memcat.kpi.opt.trend": {
+      "before": "Tek bir KPI ID için trend serisini projekte et",
+      "after": null
+    },
+    "cli.memcat.local_llm.help.paths": {
+      "before": "\nOkuma yolu: `status` sağlığı ve sunulan model listesini yoklar; hiçbir şey başlatmaz.\nMutasyon yolları: `start` proje kapsamlı sunucuyu başlatır, `stop` sonlandırır.\n",
+      "after": null
+    },
+    "cli.memcat.mcp.arg.args": {
+      "before": "stdio sunucusu başlatma komutuna geçirilen ek argümanlar",
+      "after": null
+    },
+    "cli.memcat.mcp.arg.cmd_or_url": {
+      "before": "stdio sunucusu için başlatma komutu ya da http sunucusu için uç nokta URL’si",
+      "after": null
+    },
+    "cli.memcat.mcp.arg.name": {
+      "before": "Seçilen scope içinde benzersiz olan sunucu adı",
+      "after": null
+    },
+    "cli.memcat.mcp.desc": {
+      "before": "Model Context Protocol sunucularını yönetin — MCP destekleyen her host arasında taşınabilir açık bir standart",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.env": {
+      "before": "key=value biçiminde stdio ortam değişkeni; birden fazlası için tekrarlayın",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.scope_add": {
+      "before": "Yazılacak yapılandırma scope’u: project | user | local",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.scope_remove": {
+      "before": "Kaldırmayı tek bir scope ile sınırla: project | user | local (varsayılan: tümünde ara)",
+      "after": null
+    },
+    "cli.memcat.mcp.opt.transport": {
+      "before": "Taşıma: stdio | http (verilmezse otomatik algılanır)",
+      "after": null
+    },
+    "cli.memcat.models.arg.model": {
+      "before": "Katalog entry’sinde kayıtlı olduğu şekliyle model ID’si",
+      "after": null
+    },
+    "cli.memcat.models.arg.policy_mode": {
+      "before": "Yazılacak policy modu: implicit-active | explicit-active; mevcut modu okumak için boş bırakın",
+      "after": null
+    },
+    "cli.memcat.models.arg.policy_provider": {
+      "before": "Aktivasyon policy’si okunacak veya yazılacak provider; tümünü projekte etmek için boş bırakın",
+      "after": null
+    },
+    "cli.memcat.models.help.paths": {
+      "before": "\nOkuma yolları: `models list`, `models activation`, `models active-set`, `models tier`\n  ve mod verilmeden `models policy <provider>` — tümü kayıtlı katalogu projekte eder.\nMutasyon yolları: `models activate`, `models deactivate`, `models refresh` ve\n  `models policy <provider> <mode>` — tümü katalog veya aktivasyon durumunu yazar.\n",
+      "after": null
+    },
+    "cli.memcat.models.opt.offline": {
+      "before": "Yalnızca önbellekteki veya paketlenmiş katalogu oku; ağa hiç çıkma",
+      "after": null
+    },
+    "cli.memcat.models.opt.provider_filter": {
+      "before": "Katalog projeksiyonunu tek bir provider ile sınırla ({providers})",
+      "after": null
+    },
+    "cli.memcat.models.opt.provider_required": {
+      "before": "Bu modeli sunan provider",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.dir": {
+      "before": "İncelenecek plugin dizini",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.name": {
+      "before": "Plugin entry’sinde kayıtlı olduğu şekliyle plugin adı",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.new_name": {
+      "before": "Yeni plugin entry’si için ad",
+      "after": null
+    },
+    "cli.memcat.plugin.arg.source": {
+      "before": "Kurulum kaynağı: yerel bir yol ya da uzak bir plugin referansı",
+      "after": null
+    },
+    "cli.memcat.plugin.opt.force": {
+      "before": "Hata vermek yerine mevcut plugin entry’sinin üzerine yaz",
+      "after": null
+    },
+    "cli.memcat.recall.arg.query": {
+      "before": "Kayıtlı bellek entry’lerine (başlık, özet, içerik) karşı eşleştirilen tam metin sorgusu",
+      "after": null
+    },
+    "cli.memcat.recall.help.paths": {
+      "before": "\nOkuma yolu: bu komut yalnızca bellek deposunu sorgular, asla entry yazmaz.\nEntry eklemek için `deckent remember` kullanın.\n",
+      "after": null
+    },
+    "cli.memcat.recall.opt.limit": {
+      "before": "Projeksiyondaki eşleşen entry sayısı üst sınırı",
+      "after": null
+    },
+    "cli.memcat.recall.opt.mode": {
+      "before": "Tam metin token birleştirme: or (varsayılan, daha geniş) | and (her token eşleşmeli)",
+      "after": null
+    },
+    "cli.memcat.recall.opt.run_min": {
+      "before": "Bu run numarasından önce kaydedilen entry’leri ele",
+      "after": null
+    },
+    "cli.memcat.recall.opt.type": {
+      "before": "Yalnızca bu entry tiplerine kısıtla, virgülle ayrılmış: adr, memory, run, debt, pattern",
+      "after": null
+    },
+    "cli.memcat.remember.arg.note": {
+      "before": "Entry içeriği olarak saklanan not gövdesi",
+      "after": null
+    },
+    "cli.memcat.remember.help.paths": {
+      "before": "\nMutasyon yolu: bu komut bellek deposuna bir entry ekler.\n`deckent recall` ile geri okuyun.\n",
+      "after": null
+    },
+    "cli.memcat.remember.opt.tags": {
+      "before": "Entry ile birlikte indekslenen, virgülle ayrılmış etiketler",
+      "after": null
+    },
+    "cli.memcat.remember.opt.title": {
+      "before": "Entry başlığı (varsayılan: notun ilk 60 karakteri)",
+      "after": null
+    },
+    "cli.memcat.remember.opt.type": {
+      "before": "Yeni satıra kaydedilen entry tipi (varsayılan: memory)",
+      "after": null
+    },
+    "cli.memcat.retro.opt.compare": {
+      "before": "Önceki run entry’sine karşı bir delta projeksiyonu ekle",
+      "after": null
+    },
+    "cli.memcat.retro.opt.perf": {
+      "before": "Agent ve skill performans projeksiyonlarını ekle",
+      "after": null
+    },
+    "cli.memcat.retro.opt.raw": {
+      "before": "Render edilmiş projeksiyon yerine kayıtlı RETRO.md kaynağını yazdır",
+      "after": null
+    },
+    "cli.memcat.retro.opt.trend": {
+      "before": "Son N run entry’si boyunca başarı oranı trend projeksiyonu ekle (varsayılan: 5)",
+      "after": null
+    },
+    "cli.memcat.shared.opt.json": {
+      "before": "Render edilmiş tablo yerine read-model projeksiyonunu JSON olarak yazdır",
+      "after": null
+    },
+    "cli.memcat.shared.opt.json_raw": {
+      "before": "Ham projeksiyonu JSON olarak yazdır ve başka hiçbir şey yazdırma",
+      "after": null
+    },
+    "cli.memcat.shared.opt.lang": {
+      "before": "Bu çağrı için dil geçersiz kılma: en | tr",
+      "after": null
+    },
+    "cli.memcat.skill.arg.name": {
+      "before": "Skill entry’sinde kayıtlı olduğu şekliyle skill adı",
+      "after": null
+    },
+    "cli.memcat.skill.arg.new_name": {
+      "before": "Yeni skill entry’si için ad",
+      "after": null
+    },
+    "cli.memcat.skill.arg.source": {
+      "before": "Kurulum kaynağı: yerel bir yol ya da bir marketplace/registry referansı",
+      "after": null
+    },
+    "cli.memcat.skill.opt.category": {
+      "before": "Projeksiyonu tek bir kategoriye kısıtla",
+      "after": null
+    },
+    "cli.memcat.skill.opt.force": {
+      "before": "Hata vermek yerine mevcut entry’nin üzerine yaz",
+      "after": null
+    },
+    "cli.memcat.skill.opt.stats": {
+      "before": "Kaydedilmiş kullanım istatistiklerini projeksiyona ekle",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.arg.query": {
+      "before": "Yayımlanmış registry entry’lerine karşı eşleştirilen arama sorgusu",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.arg.skill_path": {
+      "before": "İmzalanıp yayımlanacak skill’in yerel yolu",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.category": {
+      "before": "Registry sonuçlarını tek bir kategoriye kısıtla",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.dry_run": {
+      "before": "Registry’ye yüklemeden yerel olarak doğrula ve imzala",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.key_dir": {
+      "before": "Anahtar çifti dizini (varsayılan: ~/.deckent/keys)",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.limit": {
+      "before": "Sayfa başına maksimum registry sonucu",
+      "after": null
+    },
+    "cli.memcat.skill_marketplace.opt.no_sign": {
+      "before": "Ed25519 imzalamayı atla ve registry’ye imzasız yükle",
+      "after": null
+    },
+    "cli.memcat.truth.baseline_note": {
+      "before": "Sabitlenmiş half-wire aday ratchet’i. `deckent truth --check --write` ile yeniden üretin.",
+      "after": null
+    },
+    "cli.memcat.truth.opt.check": {
+      "before": "Ratchet: mevcut half-wire adaylarını sabitlenmiş baseline ile karşılaştır (çıkış 1 = yeni aday, çıkış 2 = baseline yok)",
+      "after": null
+    },
+    "cli.memcat.truth.opt.json": {
+      "before": "Ham truth projeksiyonunu JSON olarak yazdır",
+      "after": null
+    },
+    "cli.memcat.truth.opt.write": {
+      "before": "--check ile birlikte: sabitlenmiş baseline’ı mevcut aday kümesine göre yeniden yaz (mutasyon)",
+      "after": null
+    },
+    "cli.memcat.usage.help.authority": {
+      "before": "\nOtorite: token/limit tablosu bu makinedeki Claude Code JSONL transcript’lerinden ayrıştırılır.\nOkuduğu tek kaynak budur — başka bir provider transcript formatı toplanmaz, dolayısıyla başka bir\nprovider üzerinden çalıştırılan bir oturum bu tabloda görünmez.\n`--lineage` farklı bir otoriteye geçer: transcript’ler değil, arşivlenmiş task ve result kanıtı.\n",
+      "after": null
+    },
+    "cli.policy.upgrade.current": {
+      "before": "Bu policy'de v5 kuralları zaten var; yapılacak bir şey yok.",
+      "after": "Bu policy'de güncel ilk kurulum kuralları zaten var; yapılacak bir şey yok."
+    },
+    "cli.policy.upgrade.nothing": {
+      "before": "Kaldırılacak v5 kuralı yok; hiçbir şey yazılmadı.",
+      "after": "Kaldırılacak ilk kurulum kuralı yok; hiçbir şey yazılmadı."
+    },
+    "cli.policy.upgrade.preview": {
+      "before": "İlk kurulum policy'si (revizyon {revision}) bu v5 kurallarını alabilir; hiçbir şey yazılmadı. Uygulamak için: deckent policy upgrade --template v5 --scope {scope} --apply --expect {revision}",
+      "after": "İlk kurulum policy'si (revizyon {revision}) bu güncel ilk kurulum kurallarını alabilir; hiçbir şey yazılmadı. Uygulamak için: deckent policy upgrade --template current --scope {scope} --apply --expect {revision}"
+    },
+    "cli.policy.upgrade.reason": {
+      "before": "İlk kurulum policy v4 → v5: MCP sunucu yetkisi, MCP çağrı işlemi ve öneri aracı",
+      "after": "Eksik güncel ilk kurulum policy kurallarını ekle"
+    },
+    "cli.policy.upgrade.rolledBack": {
+      "before": "v5 kuralları kaldırıldı ({ids}); önceki belgeler arşivde duruyor.",
+      "after": "Güncel ilk kurulum kuralları kaldırıldı ({ids}); önceki belgeler arşivde duruyor."
+    },
+    "cli.policy.upgrade.unavailable": {
+      "before": "Bu policy bir ilk kurulum policy'si değil ({reason}); v5 kurallarını kendi policy yetkinizle ekleyin.",
+      "after": "Bu policy bir ilk kurulum policy'si değil ({reason}); güncel ilk kurulum kurallarını kendi policy yetkinizle ekleyin."
+    },
+    "cli.policy.upgrade.upgraded": {
+      "before": "v5 kuralları yönetilen policy değişikliğiyle eklendi (audit'li; önceki belgeler arşivde). Geri almak için: deckent policy upgrade --template v5 --scope {scope} --rollback",
+      "after": "Güncel ilk kurulum kuralları yönetilen policy değişikliğiyle eklendi (audit'li; önceki belgeler arşivde). Geri almak için: deckent policy upgrade --template current --scope {scope} --rollback"
+    },
+    "cli.root_help.prompt_do": {
+      "before": "deckent do \"<hedef>\"   bir hedeften run planla (önce dry-run)",
+      "after": null
+    },
+    "mcp.grant.reason.delegation": {
+      "before": "bu sunucu için bu kapsamda izin veremezsiniz (kendi policy kurallarınız mcp-server yetkisini içermiyor); bir policy yöneticisi verebilir, ilk kurulum ise v5 kurallarını deckent init policy --scope <id> --upgrade --preview ve ardından --apply ile alır",
+      "after": "bu sunucu için bu kapsamda izin veremezsiniz (kendi policy kurallarınız mcp-server yetkisini içermiyor); bir policy yöneticisi verebilir, ilk kurulum ise eksik ilk kurulum kurallarını deckent init policy --scope <id> --upgrade --preview ve ardından --apply ile alır"
+    }
+  }
+}

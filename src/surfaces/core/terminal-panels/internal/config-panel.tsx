@@ -3,13 +3,14 @@ import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { ListPicker, pickerView, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { configEntryAllowed } from '#platform/index.js';
+import { ConfigRecordWindow } from './config-records.js';
 import { ConfigNumberWindow } from './config-stepper.js';
 import { EntryWindow } from './entry.js';
 import { usePickerRoom } from './lines.js';
 import type { ConfigPanelField, ConfigPanelLabels, ConfigPanelLayer, ConfigPanelPort, ConfigPanelView, PanelLabels, PanelNotice } from './contract.js';
 
 /** Value-level row ids that are not schema choices (a schema choice id never starts with `:`). */
-const FREE = ':entry', UNSET = ':unset', STEPPER = ':stepper', REGENERATE = ':regenerate';
+const RECORDS = ':records', FREE = ':entry', UNSET = ':unset', STEPPER = ':stepper', REGENERATE = ':regenerate';
 const LAYERS: readonly ConfigPanelLayer[] = ['project', 'global'];
 /** The focused key's rows: description, facts, what it takes. */
 const FOCUS_ROWS = 4;
@@ -24,9 +25,9 @@ export function configPanelTree(view: ConfigPanelView, labels: ConfigPanelLabels
   for (const field of view.fields) {
     const section = sectionOf(field.key, labels.general), list = sections.get(section) ?? [];
     const blocked = LAYERS.every(layer => field.locks[layer].blocked) ? field.locks.project.blocked : null;
-    const values: PickerNode[] = [...field.choices.map(choice => ({ id: choice.id, label: choice.label === field.value ? `${choice.label} · ${labels.current}` : choice.label, ...(choice.detail ? { detail: choice.detail.length > 28 ? choice.detail.slice(0, 25) + '…' : choice.detail, keywords: [choice.detail] } : {}) })),
+    const values: PickerNode[] = [...(field.records ? [{ id: RECORDS, label: labels.records.edit }] : []),...field.choices.map(choice => ({ id: choice.id, label: choice.label === field.value ? `${choice.label} · ${labels.current}` : choice.label, ...(choice.detail ? { detail: choice.detail.length > 28 ? choice.detail.slice(0, 25) + '…' : choice.detail, keywords: [choice.detail] } : {}) })),
       ...(field.free && configEntryAllowed(field.key, field.sensitive) ? [{ id: FREE, label: labels.freeEntry }] : []),
-      ...(field.stepper ? [{ id: STEPPER, label: labels.stepper }] : []), ...(field.generated ? [{ id: REGENERATE, label: labels.regenerate }] : []), ...(field.unsettable ? [{ id: UNSET, label: labels.unset }] : [])];
+      ...(field.stepper ? [{ id: STEPPER, label: labels.stepper }] : []), ...(field.generated ? [{ id: REGENERATE, label: labels.regenerate }] : []), ...(field.unsettable && !field.records ? [{ id: UNSET, label: labels.unset }] : [])];
     list.push({ id: field.key, label: section === labels.general ? field.key : field.key.slice(section.length + 1),
       detail: rowFacts(field), keywords: [field.key, field.description],
       ...(blocked || field.readOnly ? { blocked: { reason: blocked ?? field.readOnly! } } : {}), childTitle: field.key, children: values });
@@ -46,7 +47,7 @@ function focusLines(field: ConfigPanelField | undefined, labels: ConfigPanelLabe
     ...(field.choiceNotice ? [{ spans: [span(field.choiceNotice, { role: 'warning' })] }] : [])];
 }
 
-type Step = Readonly<{ kind: 'pick' } | { kind: 'entry' | 'number'; field: ConfigPanelField; layer: ConfigPanelLayer } | { kind: 'preview'; field: ConfigPanelField; layer: ConfigPanelLayer; value: unknown }>;
+type Step = Readonly<{ kind: 'pick' } | { kind: 'entry' | 'number' | 'records'; field: ConfigPanelField; layer: ConfigPanelLayer } | { kind: 'preview'; field: ConfigPanelField; layer: ConfigPanelLayer; value: unknown }>;
 
 /**
  * `/config` as a window: sections → key → value, then the layer (project or user) with each layer's policy lock. Choosing writes through the
@@ -88,6 +89,7 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
     if (result.kind !== 'selected') { onClose(); return; }
     const [, key, value] = result.path, target = view.fields.find(item => item.key === key), layer = LAYERS.find(item => item === result.scope) ?? 'project';
     if (!target) { onClose(); return; }
+    if (value === RECORDS && port.records) { setStep({ kind: 'records', field: target, layer }); return; }
     if (value === REGENERATE) { void reload().catch(onError); return; }
     if (value === STEPPER && target.stepper) { setStep({ kind: 'number', field: target, layer }); return; }
     if (value === FREE && configEntryAllowed(target.key, target.sensitive)) { setStep({ kind: 'entry', field: target, layer }); return; }
@@ -96,6 +98,12 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
     if (choice) void write({ action: 'set', keyPath: target.key, value: choice.value, layer }, at);
   };
   const cancelStep = () => { setState(backToKeys(state)); setGeneration(value => value + 1); setStep({ kind: 'pick' }); };
+  if (step.kind === 'records' && port.records) return <ConfigRecordWindow port={port.records} keyPath={step.field.key} title={step.field.description} layer={step.layer} labels={labels}
+    onClose={cancelStep} onError={onError} onResult={outcome => {
+      push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: fillTemplate(words.summary, { text: outcome.lines[0] ?? view.title }) }]);
+      if (outcome.status === 'approval-pending' && outcome.approvalId) { onClose(); openApproval(outcome.approvalId); return; }
+      void reload().catch(onError); cancelStep();
+    }} />;
   if (step.kind === 'number' && step.field.stepper) return <ConfigNumberWindow title={step.field.key} stepper={step.field.stepper} hints={words.stepperHint}
     position={labels.position} onCancel={cancelStep} onSubmit={value => { void write({ action: 'set', keyPath: step.field.key, value, layer: step.layer }, state); }} />;
   if (step.kind === 'preview') return <Window title={[span(words.preview, { bold: true })]} body={[...focusLines(step.field, words),

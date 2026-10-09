@@ -4,12 +4,10 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createHmacIntegrity, resolveProductLayout, productResourcePath, sha256, type ProductLayout } from '#platform/index.js';
 import { type BackupResult } from '#engine/index.js';
-import { BACKUP_RESOURCES, archiveState, unpackState, type BackupLimits, type BackupState } from './archive.js';
+import { BACKUP_RESOURCES, archiveState, unpackState, type BackupConfigLayers, type BackupLimits, type BackupState } from './archive.js';
 import { decryptKey, encryptKey } from './crypto.js';
 import { ledgerFingerprint } from './fingerprint.js';
 import { digestFile, inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
-/** node:sqlite loads only when a recovery set is made, so importing the SDK never loads the native module (sqlite-ledger-lazy). */
-const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 const SOURCE_BUSY_BUDGET = 1000;
 const PAYLOAD = ['ledger.db', 'ledger.fingerprint.json', 'state.archive.json.gz'] as const;
 const FILES = [...PAYLOAD, 'authority.key.enc'] as const;
@@ -21,7 +19,7 @@ export class VerifiedBackup {
   async restoreKey(path: string) { await writePrivate(path, this.#key); }
   close() { this.#key.fill(0); }
   result(action: BackupResult['action']): BackupResult { return { schemaVersion: 1, action, set: this.set, ledgerDigest: this.ledgerDigest,
-    files: this.state.entries.length, createdAt: this.state.createdAt, relocation: null, preserved: [] }; }
+    files: this.state.entries.length, createdAt: this.state.createdAt, relocation: null, globalConfig: null, preserved: [] }; }
 }
 export async function verifyBackupSet(set: string, passphrase: string, limits: BackupLimits): Promise<VerifiedBackup> {
   await safePath(set); await privateDirectoryExisting(set);
@@ -66,7 +64,7 @@ async function privateDirectoryExisting(path: string) {
   if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
 }
 export async function createBackupSet(layout: ProductLayout, projectRoot: string, installationId: string, keyFile: string,
-  destination: string, passphrase: string, limits: BackupLimits, configDocument?: Buffer): Promise<BackupResult> {
+  destination: string, passphrase: string, limits: BackupLimits, config?: BackupConfigLayers): Promise<BackupResult> {
   const set = await safePath(destination);
   for (const resource of BACKUP_RESOURCES) if (inside(productResourcePath(layout, resource), set)) return refuse('BACKUP_PATH_UNSAFE');
   if ((inside(layout.root, set) && !inside(productResourcePath(layout, 'ledgerBackups'), set)) || (inside(join(projectRoot, '.deckent'), set) && !inside(productResourcePath(layout, 'ledgerBackups'), set))) return refuse('BACKUP_PATH_UNSAFE');
@@ -78,17 +76,18 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
     const sourcePath = await safePath(productResourcePath(layout, 'ledger'));
     const info = await lstat(sourcePath);
     if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
-    const { backup, DatabaseSync } = nativeSqlite();
-    const db = new DatabaseSync(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET });
+    const { backup, DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite'), db = new DatabaseSync(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET });
     const ledger = join(staging, 'ledger.db');
     await writePrivate(ledger, new Uint8Array()); // 0600 before the backup API opens its output.
     const deadline = Date.now() + 60000;
     try { await backup(db, ledger, { rate: 1000, progress({ totalPages }) { if (totalPages * Number(db.prepare('PRAGMA page_size').get()?.['page_size']) > limits.maxTotalBytes) return refuse('BACKUP_LIMIT'); if (Date.now() > deadline) return refuse('BACKUP_TIMEOUT'); return 1000; } }); }
     finally { db.close(); }
     await chmod(ledger, 0o600);
+    // S1 O6: the snapshot keeps the source's WAL header; as rollback-journal file it is self-contained and no reader creates sidecars.
+    const snapshot = new DatabaseSync(ledger); try { snapshot.exec('PRAGMA journal_mode=DELETE'); } finally { snapshot.close(); }
     const ledgerHandle = await import('node:fs/promises').then(fs => fs.open(ledger, 'r')); try { await ledgerHandle.sync(); } finally { await ledgerHandle.close(); }
     await writePrivate(join(staging, 'ledger.fingerprint.json'), ledgerFingerprint(ledger));
-    await writePrivate(join(staging, 'state.archive.json.gz'), await archiveState(layout, projectRoot, installationId, keyFile, limits, createdAt, configDocument));
+    await writePrivate(join(staging, 'state.archive.json.gz'), await archiveState(layout, projectRoot, installationId, keyFile, limits, createdAt, config));
     const payload: string[] = [];
     for (const name of PAYLOAD) payload.push(manifestLine(await digestFile(join(staging, name)), name));
     const material = await readPrivate(join(productResourcePath(layout, 'approvals'), keyFile), 32);

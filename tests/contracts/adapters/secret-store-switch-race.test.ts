@@ -51,7 +51,7 @@ async function fixture() {
       set: async (name: string, value: string) => { if (role === 'target') await pause('copy'); return store.set(name, value); },
       delete: async (name: string) => { if (role === 'source') await pause('delete'); return store.delete(name); },
       listNames: () => store.listNames(), inspect: () => store.inspect() });
-    const ports: SecretStoreSwitchPorts = { has: isRegisteredSecretStore,
+    const ports: SecretStoreSwitchPorts = { environmentReferences: async () => [], has: isRegisteredSecretStore,
       open: id => id === to ? wrap(open(id), 'target') : wrap(open(id), 'source'),
       selection: { read: () => selection.read(), publish: async (store, digest) => { await pause('publish'); return selection.publish(store, digest); } },
       authorize: allow, audit: () => undefined, now: () => 1, custody: createInstallationSecretCustody(env, 'linux') };
@@ -113,7 +113,7 @@ describe.skipIf(process.platform !== 'linux')('secret changes against a running 
     await run.arrived;
     // Parked between "identical" and the removal of the old copies: a change of the selected store and a confirmed switch back to the file store.
     const onSelected = code(f.change(SEALED, 10_000).set('A_KEY', 'new-a'));
-    const back = new SecretStoreSwitch({ has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
+    const back = new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
       now: () => 1, custody: createInstallationSecretCustody(f.env, 'linux', 10_000) })
       .switch({ principal: me, scopeId: 'installation', to: FILE, confirmDowngrade: true });
     run.release();
@@ -143,7 +143,7 @@ describe.skipIf(process.platform !== 'linux')('secret changes against a running 
         holder.once('exit', () => { clearTimeout(timer); reject(new Error(`HOLDER_EXIT:${stderr}`)); });
       });
       expect(await code(f.change(FILE, 300).set('A_KEY', 'new-a'))).toBe('SECRET_STORE_BUSY');
-      const blocked = new SecretStoreSwitch({ has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
+      const blocked = new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
         now: () => 1, custody: createInstallationSecretCustody(f.env, 'linux', 300) });
       expect(await code(blocked.switch({ principal: me, scopeId: 'installation', to: SEALED, confirmDowngrade: false }))).toBe('SECRET_STORE_BUSY');
       expect(await f.contents(FILE)).toEqual({ A_KEY: 'old-a', B_KEY: 'old-b' }); expect((await f.selection.read()).store).toBe(FILE);
@@ -153,4 +153,27 @@ describe.skipIf(process.platform !== 'linux')('secret changes against a running 
       expect(await f.contents(FILE)).toEqual({ A_KEY: 'new-a', B_KEY: 'old-b' });
     } finally { if (holder.exitCode === null && holder.signalCode === null) { holder.kill('SIGKILL'); await once(holder, 'exit'); } }
   }, 30_000);
+});
+
+describe.skipIf(process.platform !== 'linux')('store switch target privacy (S1 O1)', () => {
+  it('a switch into a global home others can read is refused with the path before anything is recorded or selected; the directory is not chmod\'ed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-secret-switch-private-')); roots.push(root);
+    const home = join(root, 'home'), global = join(home, 'global'); await mkdir(home, { mode: 0o700 }); await mkdir(global, { mode: 0o700 });
+    const { chmod, lstat } = await import('node:fs/promises'); await chmod(global, 0o755);
+    const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: global }, selection = createInstallationSecretStoreSelection(env, 'linux');
+    const audits: unknown[] = [];
+    const run = () => new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, 'linux'), selection, authorize: allow,
+      audit: event => { audits.push(event); }, now: () => 1, custody: createInstallationSecretCustody(env, 'linux') })
+      .switch({ principal: me, scopeId: 'installation', to: SEALED, confirmDowngrade: false });
+    await expect(run()).rejects.toMatchObject({ code: 'SECRET_STORE_UNSAFE', params: { path: global } });
+    expect(audits).toEqual([]); expect((await selection.read()).store).toBeNull(); expect((await lstat(global)).mode & 0o777).toBe(0o755);
+    // A fresh global home is created owner-only and the same switch is admitted; the store then accepts a secret.
+    const fresh = join(root, 'fresh'), freshEnv = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: fresh };
+    await new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, freshEnv, 'linux'), selection: createInstallationSecretStoreSelection(freshEnv, 'linux'),
+      authorize: allow, audit: () => undefined, now: () => 1, custody: createInstallationSecretCustody(freshEnv, 'linux') })
+      .switch({ principal: me, scopeId: 'installation', to: SEALED, confirmDowngrade: false });
+    expect((await lstat(fresh)).mode & 0o777).toBe(0o700);
+    await openRegisteredSecretStore(SEALED, freshEnv, 'linux').set('A_KEY', 'synthetic-a');
+    expect(await openRegisteredSecretStore(SEALED, freshEnv, 'linux').get('A_KEY')).toBe('synthetic-a');
+  });
 });

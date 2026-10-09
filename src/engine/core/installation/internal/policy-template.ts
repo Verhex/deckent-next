@@ -3,6 +3,8 @@ import { firstRunPolicyTemplate, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEM
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
+import { installerAuthorityChangeEvent } from './authority-audit.js';
+import type { AuditEvent } from '#domain/index.js';
 
 // Tool names + operation ids as data (engine may not import the adapters defining them); pinned against the real tool specs and
 // Core operation descriptors by tests/contracts/installation/first-run-template-catalog.test.ts. Product-fixed template content,
@@ -18,6 +20,11 @@ export const FIRST_RUN_EDIT_SHELL_TOOL_NAMES = Object.freeze(['edit_file', 'writ
 export const FIRST_RUN_SCRATCH_WRITE_OPERATION_ID = 'workspace.scratch.write';
 export const FIRST_RUN_WRITE_OPERATION_ID = 'workspace.file.write';
 export const FIRST_RUN_SHELL_OPERATION_ID = 'host.shell.run';
+/** The concrete Core tool/operation template contract, shared by installer composition and external catalog pin tests. */
+export const FIRST_RUN_TOOL_NAMES: FirstRunToolNames = Object.freeze({ readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
+  scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
+  shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
+  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID });
 export interface PolicyTemplateSource { load(): Promise<unknown> }
 /** Doctor's read-soft recognition: the application service the domain decision (`matchFirstRunPolicyTemplate`) is
  * invoked through (composition-purity), never called from composition directly. `source.load()` is the raw
@@ -201,7 +208,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   /** The explicitly named person (`--person`): required for a hand-built policy; on a template policy it must be the person the template names. */
   readonly person?: Person;
   /** At most this many named people in a refusal hint (display only; the policy may name more): the installation's inspection page size. */
-  readonly peopleLimit: number }): Promise<PolicyTemplateUpgradeResult> {
+  readonly peopleLimit: number; readonly audit: (event: AuditEvent) => void; readonly now: () => number }): Promise<PolicyTemplateUpgradeResult> {
   const scopeId = identitySchema.parse(input.scopeId);
   const named = input.person === undefined ? null : { issuer: identitySchema.safeParse(input.person.issuer), subject: identitySchema.safeParse(input.person.subject) };
   const person = named === null ? null : named.issuer.success && named.subject.success ? { issuer: named.issuer.data, subject: named.subject.data } : undefined;
@@ -256,6 +263,10 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     if (revisionOf(snapshot.policy) !== first.revision) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
     const again = plan(snapshot.policy);
     if (again.result.status !== 'preview' || again.next === null) return { write: null, result: again.result };
+    input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
+      template: { id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, commandId: key,
+      inputDigest: digestOf(canonical(again.next as object)), before: first.revision!, after: revisionOf(again.next)!,
+      grantsAdded: again.result.rules.length, atMs: input.now() }));
     return { write: { policy: again.next, bindings: null, order: 'policy-first' }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
   }, key);
 }

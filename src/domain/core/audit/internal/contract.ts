@@ -37,7 +37,7 @@ const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), ver
  * mode-eligible, turning `require-approval` into `allow` for exactly this tool call. Other subject kinds join this union as
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
-export const auditSubjectSchema = z.discriminatedUnion('kind', [
+const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   /** Config document write intent, recorded before atomic publication; digests only, no authored values. `approvalId` (T3 L2, lead
    * 2026-10-07): the config-change approval this write consumed — present only then, so every other config write keeps its earlier shape. */
   z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),
@@ -180,6 +180,13 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('model-ingress'), fieldDigest: digest, projectedDigest: digest, decodedDigest: digest.nullable(),
     codePoints: counterSchema, disposition: z.enum(['note', 'quarantine']) }).strict(),
+]);
+/** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
+export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
+  z.object({ kind: z.literal('authority-change'), installer: z.object({ basis: z.enum(['first-run', 'named-person']),
+    template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), person: auditPrincipalSchema }).strict(),
+    commandId: identitySchema, inputDigest: digest, revision: z.object({ before: identitySchema, after: identitySchema }).strict(),
+    counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict() }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();

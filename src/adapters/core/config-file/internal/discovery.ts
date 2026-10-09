@@ -49,10 +49,8 @@ export async function discoverConfigFiles(directory: string, limits: ConfigDisco
   }
   return paths;
 }
-/** node:sqlite loads only when a ledger is actually opened, so importing the SDK never loads the native module (sqlite-ledger-lazy). */
-const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 export function discoverConfigPools(path: string, busyTimeoutMs: number, maxEntries: number): readonly string[] {
-  const db = new (nativeSqlite().DatabaseSync)(path, { readOnly: true });
+  const db = new (createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')).DatabaseSync(path, { readOnly: true }); // lazy: SDK import never loads it
   try { db.exec(`PRAGMA busy_timeout=${busyTimeoutMs}`); return db.prepare('SELECT pool_id FROM execution_pools ORDER BY pool_id LIMIT ?').all(maxEntries).map(row => String(row['pool_id'])); }
   finally { db.close(); }
 }
