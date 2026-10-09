@@ -24,3 +24,5 @@ export { isStandingGrantId, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, STANDING
 export { isMcpGrantId, MCP_GRANT_PREFIX, mcpGrantRuleIds, mcpToolGrantChange, mcpToolGrantRevokeChange } from './internal/mcp-grant.js';
 export type { SessionCell, SessionPattern, SessionPatternResult, StandingCell, StandingPattern, StandingPatternResult, StandingRefusal } from './internal/standing.js';
 export { policyRoleSchema, principalGrants } from './internal/schema.js';
+export { mcpCapabilityGroupSchema, mcpCapabilityRules, sameMcpCapabilityRule } from './internal/mcp-capabilities.js';
+export type { McpCapabilityGroup, McpCapabilityAction, McpCapabilitySelection, McpCapabilityRequest, McpCapabilityState, McpCapabilityView, McpCapabilityPreview } from './internal/mcp-capabilities.js';

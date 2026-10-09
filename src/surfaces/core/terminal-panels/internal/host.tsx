@@ -3,6 +3,7 @@ import { McpPanel } from './mcp-panel.js';
 import { ModePanel } from './mode-panel.js';
 import { ModelPanel } from './model-panel.js';
 import { ProviderPanel } from './provider-panel.js';
+import { PolicyPanel } from './policy-panel.js';
 import type { PanelKind, PanelLabels, PanelNotice, PanelPorts } from './contract.js';
 
 /**
@@ -13,6 +14,7 @@ export function SettingsPanel({ kind, ports, labels, push, onError, errorText, o
   readonly labels: PanelLabels; readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly errorText: (error: unknown) => string;
   readonly openApproval: (approvalId: string) => void; readonly onClose: () => void }) {
   if (kind === 'mode' && ports.mode) return <ModePanel port={ports.mode} labels={labels} onError={onError} onClose={onClose} />;
+  if (kind === 'policy' && ports.policy && labels.policy) return <PolicyPanel port={ports.policy} labels={labels} push={push} onError={onError} onClose={onClose} />;
   if (kind === 'config' && ports.config) return <ConfigPanel port={ports.config} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={onClose} />;
   if (kind === 'model' && ports.model) return <ModelPanel port={ports.model} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={onClose} />;
   if (kind === 'provider' && ports.provider) return <ProviderPanel port={ports.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={onClose} />;

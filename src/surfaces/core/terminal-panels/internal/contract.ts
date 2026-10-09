@@ -7,7 +7,7 @@ import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
  * every read, write, policy decision and trust record stays behind the port the trusted composition binds (the same paths as the text
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
-export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider';
+export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
 export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
 export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
@@ -261,6 +261,7 @@ export interface BudgetPanelLabels {
   readonly belowSettled?: string;
 }
 export interface PanelLabels {
+  readonly policy?: PolicyPanelLabels;
   readonly picker: PickerLabels;
   readonly position: string;
   readonly loading: string;
@@ -273,9 +274,25 @@ export interface PanelLabels {
   readonly cache: CachePanelLabels;
 }
 export interface PanelPorts {
+  readonly policy?: PolicyPanelPort;
   readonly mode?: ModePanelPort;
   readonly config?: ConfigPanelPort;
   readonly mcp?: McpPanelPort;
   readonly model?: ModelPanelPort;
   readonly provider?: ProviderPanelPort;
+}
+/** Localized presentation of the shared typed MCP capability contract. No typed values or rule editor. */
+export interface PolicyPanelPort {
+  scopes(): Promise<readonly string[]>;
+  inspect(scopeId: string): Promise<Readonly<{ groups: readonly Readonly<{ id: string; label: string; detail: string; note: string }>[] }>>;
+  preview(scopeId: string, groupId: string, action: 'grant' | 'revoke'): Promise<PolicyPanelPreview>;
+  apply(preview: PolicyPanelPreview): Promise<readonly PanelNotice[]>;
+}
+export interface PolicyPanelPreview {
+  readonly scopeId: string; readonly groupId: string; readonly action: 'grant' | 'revoke'; readonly digest: string;
+  readonly lines: readonly PanelLine[]; readonly applicable: boolean;
+}
+export interface PolicyPanelLabels {
+  readonly title: string; readonly scope: string; readonly groups: string; readonly preview: string;
+  readonly grant: string; readonly revoke: string; readonly confirm: string; readonly back: string; readonly hints: string; readonly empty: string;
 }

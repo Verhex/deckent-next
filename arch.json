@@ -400,7 +400,8 @@
     "src/composition/core/root": {
       "dependencies": [
         "src/adapters/core/contract",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/engine/core/approval"
       ],
       "plan": "FOUNDATION"
     },
@@ -876,7 +877,9 @@
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/monitor",
         "src/surfaces/core/terminal-picker",
-        "src/surfaces/core/terminal-panels"
+        "src/surfaces/core/terminal-panels",
+        "src/domain/core/policy",
+        "src/platform/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -1873,7 +1876,8 @@
         "src/engine/core/effect",
         "src/domain/core/audit",
         "src/platform/core/redaction",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/domain/core/adapter-registry"
       ],
       "plan": "SECURITY"
     },
@@ -1915,7 +1919,10 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/contract",
         "src/adapters/core/attempt-store",
-        "src/composition/core/policy"
+        "src/composition/core/policy",
+        "src/domain/core/policy",
+        "src/composition/core/root",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "SECURITY"
     },
@@ -3465,6 +3472,21 @@
           "file": "src/platform/core/i18n/locales/tr/tui.json",
           "count": 1,
           "reason": "tui.slash.desc.cd example path names the frozen reference checkout; use a neutral example and remove."
+        },
+        {
+          "file": "src/engine/core/approval/internal/mcp-capabilities.json",
+          "count": 3,
+          "reason": "Owner W5 2026-10-09 explicitly requests Dogfood worker as a selectable, proposed capability preset; catalog/UI naming only, no host execution coupling."
+        },
+        {
+          "file": "src/platform/core/i18n/locales/en/cli.json",
+          "count": 4,
+          "reason": "Owner W5 2026-10-09 explicitly requests Dogfood worker as a selectable, proposed capability preset; catalog/UI naming only, no host execution coupling."
+        },
+        {
+          "file": "src/platform/core/i18n/locales/tr/cli.json",
+          "count": 4,
+          "reason": "Owner W5 2026-10-09 explicitly requests Dogfood worker as a selectable, proposed capability preset; catalog/UI naming only, no host execution coupling."
         }
       ]
     },

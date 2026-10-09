@@ -48,7 +48,7 @@ export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cw
   const result = JSON.parse(stdout) as { status: number; output: string };
   return result;
 }
-export async function terminalApplication<T = unknown>(f: { project: string; env: NodeJS.ProcessEnv }, operation: 'policy-upgrade' | 'decide', scopeId: string, input: unknown): Promise<T> {
+export async function terminalApplication<T = unknown>(f: { project: string; env: NodeJS.ProcessEnv }, operation: 'policy-upgrade' | 'mcp-capability' | 'decide', scopeId: string, input: unknown): Promise<T> {
   const argv = [process.execPath, resolve('tests/fixtures/approval-terminal-application.mjs'), f.project, JSON.stringify({ operation, scopeId, input })];
   const value = await driveTerminal(argv, f.env);
   if (!value.response.ok) throw ErrorRegistry.createError(value.response.error!.code);

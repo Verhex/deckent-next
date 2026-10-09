@@ -1,0 +1,1346 @@
+{
+  "live": {
+    "policy": {
+      "schemaVersion": 2,
+      "revision": "fixture-live",
+      "roles": [],
+      "grants": [
+        {
+          "id": "local-monitor",
+          "actions": [
+            "inspect"
+          ],
+          "scopes": [
+            "pilot"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "scope",
+            "ids": [
+              "pilot"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-activate",
+          "actions": [
+            "activate",
+            "deactivate",
+            "inspect"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-activation",
+            "ids": [
+              "c690105a8afc2023b95763f38e0eb63b85ba2db74cac557aaceed293ca42ff66",
+              "56b8a8dcd59517ad3d0a5c9badcbbb1b100fff025bab2b781bd8710a15e4467a",
+              "fbd198f20b22ea666375c0b5357b992e86f81cd50beba9eacaacba8735f34232",
+              "450b2ffc4df702925208faa222966b5a02bb54f5b0f94ff72a11df8be405caaa",
+              "533b637e8d6cfd59d2d6ff4120f1335d4551aff4d0e39f4daf0520a0d16d4032"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-invoke",
+          "actions": [
+            "invoke",
+            "inspect",
+            "cancel-invocation"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-invocation",
+            "ids": [
+              "cfa84547f1c3b83578da12a14c14cd32c41b9ffd9970352575bf7afae825244e",
+              "de1b840f94aadcb90535e48fe63ae73e6486d8d7a1efb25a919620c1148c88e8",
+              "87e1617043682f5c1689069fadcb4fc1ef8a5537c0a228e6fb3a062ef26c9d1c",
+              "52c273cf372c28c129fa740759bb26704b042aadf89774547860eeb9d559b7d7",
+              "79c2906fd8e317e19db2d436ededd1d03e1e6fcce28888fc20d202edd83e58b0"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-scope",
+          "actions": [
+            "inspect"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "scope",
+            "ids": [
+              "live"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-service-shutdown",
+          "actions": [
+            "shutdown"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "service",
+            "ids": [
+              "local"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-read-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "read_file",
+              "list_dir",
+              "grep",
+              "glob"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-approval-inspect",
+          "actions": [
+            "inspect",
+            "decide"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "approval",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-scratch-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "scratch_write",
+              "scratch_read",
+              "scratch_list"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-edit-shell-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "edit_file",
+              "write_file",
+              "run_shell"
+            ]
+          },
+          "effect": "require-approval",
+          "modeEligible": true
+        },
+        {
+          "id": "first-run-write-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "workspace.file.write"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-shell-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "host.shell.run"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-scratch-write-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "workspace.scratch.write"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-permission-modes",
+          "actions": [
+            "set"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "permission-mode",
+            "ids": [
+              "full-auto",
+              "full-access"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "owner-secret-store",
+          "actions": [
+            "set",
+            "delete"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "secret",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "owner-mcp-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "mcp__context7__resolve_library_id",
+              "mcp__context7__query_docs"
+            ]
+          },
+          "effect": "require-approval",
+          "modeEligible": true
+        },
+        {
+          "id": "owner-mcp-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "mcp.tool.call"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-attempt-release",
+          "actions": [
+            "release"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "attempt",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "owner-config-write",
+          "actions": [
+            "write"
+          ],
+          "scopes": "all",
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "config",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "owner-model-catalog",
+          "actions": [
+            "activate",
+            "deactivate",
+            "inspect"
+          ],
+          "scopes": "all",
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-activation",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "owner-invoke-local-vllm",
+          "actions": [
+            "invoke",
+            "inspect",
+            "cancel-invocation"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-invocation",
+            "ids": [
+              "d3b0417af2e375737b979f88052a1741967c0a1ccbbd407e6ba3d65785d89ae9"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-mcp-servers",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": "all",
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "mcp-server",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-mcp-propose-tool",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "propose_mcp_server"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-policy-administer",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "policy.administer"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-secret-switch",
+          "actions": [
+            "switch"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "secret",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-model-invocation",
+          "actions": [
+            "invoke",
+            "inspect",
+            "inspect-content",
+            "cancel-invocation"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-invocation",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-provider-spending",
+          "actions": [
+            "inspect",
+            "audit",
+            "reconcile",
+            "budget-revision"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "provider-spend-account",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-backup",
+          "actions": [
+            "create",
+            "verify",
+            "restore"
+          ],
+          "scopes": "all",
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "backup",
+            "ids": "all"
+          },
+          "effect": "allow"
+        }
+      ],
+      "restrictions": [],
+      "separationOfDuties": []
+    },
+    "bindings": {
+      "schemaVersion": 3,
+      "revision": "fixture-bindings",
+      "bindings": [],
+      "modes": [
+        {
+          "id": "fixture-mode",
+          "principal": {
+            "issuer": "fixture-owner",
+            "subject": "fixture-user"
+          },
+          "scopes": [
+            "scope"
+          ],
+          "mode": "full-auto"
+        }
+      ]
+    }
+  },
+  "n1": {
+    "policy": {
+      "schemaVersion": 2,
+      "revision": "fixture-n1",
+      "roles": [],
+      "grants": [
+        {
+          "id": "local-monitor",
+          "actions": [
+            "inspect"
+          ],
+          "scopes": [
+            "pilot"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "scope",
+            "ids": [
+              "pilot"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-activate",
+          "actions": [
+            "activate",
+            "deactivate",
+            "inspect"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-activation",
+            "ids": [
+              "c690105a8afc2023b95763f38e0eb63b85ba2db74cac557aaceed293ca42ff66",
+              "56b8a8dcd59517ad3d0a5c9badcbbb1b100fff025bab2b781bd8710a15e4467a",
+              "fbd198f20b22ea666375c0b5357b992e86f81cd50beba9eacaacba8735f34232",
+              "450b2ffc4df702925208faa222966b5a02bb54f5b0f94ff72a11df8be405caaa",
+              "533b637e8d6cfd59d2d6ff4120f1335d4551aff4d0e39f4daf0520a0d16d4032"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-invoke",
+          "actions": [
+            "invoke",
+            "inspect",
+            "cancel-invocation"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-invocation",
+            "ids": [
+              "cfa84547f1c3b83578da12a14c14cd32c41b9ffd9970352575bf7afae825244e",
+              "de1b840f94aadcb90535e48fe63ae73e6486d8d7a1efb25a919620c1148c88e8",
+              "87e1617043682f5c1689069fadcb4fc1ef8a5537c0a228e6fb3a062ef26c9d1c",
+              "52c273cf372c28c129fa740759bb26704b042aadf89774547860eeb9d559b7d7",
+              "79c2906fd8e317e19db2d436ededd1d03e1e6fcce28888fc20d202edd83e58b0"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-scope",
+          "actions": [
+            "inspect"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "scope",
+            "ids": [
+              "live"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-service-shutdown",
+          "actions": [
+            "shutdown"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "service",
+            "ids": [
+              "local"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-read-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "read_file",
+              "list_dir",
+              "grep",
+              "glob"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-approval-inspect",
+          "actions": [
+            "inspect",
+            "decide"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "approval",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-scratch-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "scratch_write",
+              "scratch_read",
+              "scratch_list"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-edit-shell-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "edit_file",
+              "write_file",
+              "run_shell"
+            ]
+          },
+          "effect": "require-approval",
+          "modeEligible": true
+        },
+        {
+          "id": "first-run-write-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "workspace.file.write"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-shell-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "host.shell.run"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-scratch-write-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "workspace.scratch.write"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "live-permission-modes",
+          "actions": [
+            "set"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "permission-mode",
+            "ids": [
+              "full-auto",
+              "full-access"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "owner-secret-store",
+          "actions": [
+            "set",
+            "delete"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "secret",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "owner-mcp-tools",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "mcp__context7__resolve_library_id",
+              "mcp__context7__query_docs"
+            ]
+          },
+          "effect": "require-approval",
+          "modeEligible": true
+        },
+        {
+          "id": "owner-mcp-operation",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "mcp.tool.call"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "dogfood-run",
+          "actions": [
+            "create",
+            "reserve",
+            "inspect",
+            "cancel"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "run",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "dogfood-pool",
+          "actions": [
+            "use",
+            "inspect"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "pool",
+            "ids": [
+              "dogfood"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "dogfood-attempt",
+          "actions": [
+            "execute",
+            "evaluate",
+            "read-output",
+            "recover-output",
+            "cancel",
+            "reconcile",
+            "release",
+            "prepare-integration",
+            "deliver-integration",
+            "adopt-integration",
+            "rollback-integration"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "attempt",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "dogfood-model-catalog",
+          "actions": [
+            "activate",
+            "deactivate",
+            "inspect"
+          ],
+          "scopes": "all",
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-activation",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "dogfood-config-write",
+          "actions": [
+            "write"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "config",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "dogfood-pool-8",
+          "actions": [
+            "use",
+            "inspect"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "pool",
+            "ids": [
+              "dogfood-8"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "dogfood-pool-16",
+          "actions": [
+            "use",
+            "inspect"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "pool",
+            "ids": [
+              "dogfood-16"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-mcp-servers",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": "all",
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "mcp-server",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-mcp-propose-tool",
+          "actions": [
+            "invoke"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "agent-tool",
+            "ids": [
+              "propose_mcp_server"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-policy-administer",
+          "actions": [
+            "execute"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "operation",
+            "ids": [
+              "policy.administer"
+            ]
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-secret-switch",
+          "actions": [
+            "switch"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "secret",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-model-invocation",
+          "actions": [
+            "invoke",
+            "inspect",
+            "inspect-content",
+            "cancel-invocation"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "model-invocation",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-provider-spending",
+          "actions": [
+            "inspect",
+            "audit",
+            "reconcile",
+            "budget-revision"
+          ],
+          "scopes": [
+            "scope"
+          ],
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "provider-spend-account",
+            "ids": "all"
+          },
+          "effect": "allow"
+        },
+        {
+          "id": "first-run-backup",
+          "actions": [
+            "create",
+            "verify",
+            "restore"
+          ],
+          "scopes": "all",
+          "principals": [
+            {
+              "issuer": "fixture-owner",
+              "subject": "fixture-user"
+            }
+          ],
+          "resource": {
+            "kind": "backup",
+            "ids": "all"
+          },
+          "effect": "allow"
+        }
+      ],
+      "restrictions": [],
+      "separationOfDuties": []
+    },
+    "bindings": {
+      "schemaVersion": 3,
+      "revision": "fixture-bindings",
+      "bindings": [],
+      "modes": [
+        {
+          "id": "fixture-mode",
+          "principal": {
+            "issuer": "fixture-owner",
+            "subject": "fixture-user"
+          },
+          "scopes": [
+            "scope"
+          ],
+          "mode": "full-auto"
+        }
+      ]
+    }
+  }
+}
