@@ -188,6 +188,17 @@ may become an approval.
 
 ## Safety model
 
+External MCP clients start with observation-only permissions. Open `/policy` (**MCP permissions**), choose an existing scope and a capability group, then grant or revoke it after reviewing the exact rules. Applying requires an attested terminal approval and is audited; no policy JSON needs typing. Pool control, catalog registration and global model configuration are marked **all scopes**. Revoking a group preserves other grants, which may still allow a tool. “Dogfood worker” is a proposed work-only preset; its exact N1 MCP usage is unverified.
+
+CLI choices come from `deckent policy mcp list --json`:
+
+```sh
+deckent policy mcp grant --group work --scope <existing-scope> --preview
+deckent policy mcp grant --group work --scope <existing-scope> \
+  --apply --expect <preview-digest>
+# Revoke: the same two steps with `revoke` instead of `grant`.
+```
+
 Every tool call an agent makes is decided by two things together: your organization's policy and the permission mode
 you chose. You move between the modes you are allowed with <kbd>Shift</kbd>+<kbd>Tab</kbd>, or with `/mode`.
 

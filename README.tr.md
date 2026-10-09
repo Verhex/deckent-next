@@ -186,6 +186,18 @@ değişiklik policy'den geçer ve bir onaya dönüşebilir.
 
 ## Güvenlik modeli
 
+Dış MCP istemcileri başlangıçta yalnız gözlem izni alır. **MCP izinleri** için `/policy` penceresini açıp mevcut kapsamı ve yetki grubunu seçin; değişecek kuralları inceleyip izin verin ya da kaldırın. Uygulama doğrulanmış terminal onayı ister ve denetim kaydına alınır; `policy.json` dosyasına kural yazmanız gerekmez. Havuz yönetimi, katalog kaydı ve genel model yapılandırması **tüm kapsamlar** olarak gösterilir. Grup iznini kaldırmak başka izinleri silmez; araç bu izinlerle açık kalabilir. “Dogfood çalışanı” yalnız iş yetkilerini içeren bir öneridir; kesin N1 MCP kullanımı doğrulanmadı.
+
+CLI seçeneklerini `deckent policy mcp list --json` listeler:
+
+```sh
+deckent policy mcp grant --group work --scope <mevcut-kapsam> --preview
+deckent policy mcp grant --group work --scope <mevcut-kapsam> \
+  --apply --expect <önizleme-özeti>
+# Kaldırma: aynı iki adımda `grant` yerine `revoke` kullanın.
+```
+
+
 Ajanın yaptığı her araç çağrısına iki şey birlikte karar verir: kurumunuzun policy'si ve seçtiğiniz izin modu.
 Yetkili olduğunuz modlar arasında <kbd>Shift</kbd>+<kbd>Tab</kbd> ya da `/mode` ile geçersiniz.
 
