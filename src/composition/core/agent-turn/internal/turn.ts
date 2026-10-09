@@ -136,8 +136,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel, language,
       config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout), fullAccess, authority, selfSource: selfSource && !fullAccess, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
-      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(agentDataRootRel(projectRoot, context.layout) ? { dataRoot: agentDataRootRel(projectRoot, context.layout)! } : {}), ...(fullAccess ? { repositoryWritable: true,
-        hardFloor: agentShellHardFloor(projectRoot, context.layout, [options.env ?? process.env, process.env]) } : {}) }) }) : null;
+      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(agentDataRootRel(projectRoot, context.layout) ? { dataRoot: agentDataRootRel(projectRoot, context.layout)! } : {}), ...(fullAccess ? { repositoryWritable: true } : {}),
+        hardFloor: agentShellHardFloor(projectRoot, context.layout, [options.env ?? process.env, process.env]) }) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a

@@ -19,7 +19,7 @@ async function fixture() {
     mkdir(join(home, 'node_modules/pkg'), { recursive: true }), mkdir(join(home, '.ssh'), { recursive: true })]);
   await Promise.all([writeFile(join(project, '.deckent/data/policy.json'), '{}'), writeFile(join(project, '.deckent/config.json'), '{}'), writeFile(join(home, '.npmrc'), 't'), writeFile(join(home, '.ssh/id_ed25519'), 'k'),
     writeFile(join(home, 'a/b/key.pem'), 'k'), writeFile(join(home, 'a/b/c/deep.pem'), 'k'), writeFile(join(home, 'node_modules/pkg/x.pem'), 'k'), writeFile(join(home, 'notes.txt'), 'n')]);
-  await symlink(join(home, 'notes.txt'), join(home, 'link.pem'));
+  await symlink(join(home, 'notes.txt'), join(home, 'link.txt'));
   const deny = [...DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)), '.deckent/data/policy.json*', '.deckent/data/state/scratch*', '.deckent/data/state/scratch/**'];
   const layout: ShellSandboxLayout = { project: await createWorkspaceScope(project, deny), scratchDir: scratch, writeFloor: rel => rel.startsWith('.deckent/config.json'), repositoryWritable: true,
     hardFloor: { roots: [join(project, '.deckent'), join(project, '.deckent/data'), global], homeDenied } };
@@ -42,20 +42,15 @@ describe('OPEN-SANDBOX posture', () => {
     expect(bubblewrapPosture(sandboxWriteView({}, shellWritePosture('owner-approved', 'unrecognized', false)))).toContain('there is no network');
   });
 
-  it('a realm that cannot open: prefer-sandbox moves the call to the host, require-sandbox keeps it closed; both say so', () => {
+  it('full access refuses every provider without an open sandbox, including explicit host mode', () => {
     const landlock: Extract<ShellRealmResolution, { ok: true }> = { ok: true, realm: { kind: 'landlock', run: hostShellRealm.run }, marker: 'sandbox: landlock', notice: null,
-      posture: () => 'Runs in a Landlock sandbox', containment: 'sandbox', rejected: [{ kind: 'bubblewrap', reason: 'bubblewrap restricted' }] };
-    const host = openShellRealm(landlock, 'prefer-sandbox');
-    expect({ kind: host.realm.kind, marker: host.marker, containment: host.containment }).toEqual({ kind: 'host', marker: 'sandbox: none', containment: 'host' });
-    expect(host.notice).toContain('full access: no open sandbox (bubblewrap: bubblewrap restricted; landlock cannot open the network and HOME); running on host');
-    const kept = openShellRealm(landlock, 'require-sandbox');
-    expect({ kind: kept.realm.kind, marker: kept.marker }).toEqual({ kind: 'landlock', marker: 'sandbox: landlock' });
-    expect(kept.notice).toContain('require-sandbox keeps this call in the closed landlock view');
-    expect(kept.posture({ projectReadOnly: false, writeFloorReadOnly: true, repositoryWritable: true, open: true })).toContain('full access: no open sandbox');
-    // A realm that opens, the host mode and a host fallback are unchanged.
-    expect(openShellRealm({ ...landlock, opens: true }, 'prefer-sandbox')).toMatchObject({ marker: 'sandbox: landlock', notice: null });
-    const hostMode: Extract<ShellRealmResolution, { ok: true }> = { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: () => 'host', containment: 'host' };
-    expect(openShellRealm(hostMode, 'host')).toBe(hostMode);
+      posture: () => 'Landlock', containment: 'sandbox' };
+    for (const mode of ['prefer-sandbox', 'require-sandbox', 'host'] as const) {
+      expect(openShellRealm(landlock, mode)).toMatchObject({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+      expect(openShellRealm({ ...landlock, realm: hostShellRealm, containment: 'host' }, mode)).toMatchObject({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    }
+    const open = { ...landlock, opens: true };
+    expect(openShellRealm(open, 'prefer-sandbox')).toBe(open);
   });
 });
 
@@ -94,10 +89,7 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
     expect({ readOnly: view.readOnlyPaths.includes(config), writable: view.writablePaths?.includes(config) ?? false }).toEqual({ readOnly: true, writable: false });
     const approved = await resolveBubblewrapView(f.layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: false, open: true });
     if (!approved.ok) throw new Error(approved.reason);
-    expect({ readOnly: approved.view.readOnlyPaths.includes(config), writable: approved.view.writablePaths?.includes(config) ?? false }).toEqual({ readOnly: false, writable: true });
-    const approvedArgs = bubblewrapArguments(approved.view);
-    expect(approvedArgs.join('\0').indexOf(['--ro-bind', join(f.project, '.deckent'), join(f.project, '.deckent')].join('\0')))
-      .toBeLessThan(approvedArgs.join('\0').indexOf(['--bind', config, config].join('\0')));
+    expect({ readOnly: approved.view.readOnlyPaths.includes(config), writable: approved.view.writablePaths?.includes(config) ?? false }).toEqual({ readOnly: true, writable: false });
     // The closed view of the same layout is unchanged: no network, HOME a tmpfs.
     const closed = await resolveBubblewrapView(f.layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true });
     if (!closed.ok) throw new Error(closed.reason);
@@ -186,7 +178,7 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
       // `.deckent/data` is itself the emptied tmpfs's mount target (a rename of it fails with EBUSY) and `.deckent/data/state` lies inside that
       // tmpfs, remounted read-only (EROFS), so neither needs the pin it had above the former per-file masks.
       expect(closed.view.emptiedDirectories).toEqual([join(f.project, '.deckent/data')]);
-      expect({ write, pins: [...pins].sort() }).toEqual({ write, pins: [join(f.project, '.deckent'), join(f.project, 'a'), join(f.project, 'a/b')].sort() });
+      expect({ write, pins: [...pins].sort() }).toEqual({ write, pins: [join(f.project, 'a'), join(f.project, 'a/b')].sort() });
       const project = at('--bind', f.project, f.project);
       expect(args.slice(project + 3, project + 3 + pins.length * 3)).toEqual(pins.flatMap(path => ['--bind', path, path]));
       const depths = pins.map(path => path.split('/').length);

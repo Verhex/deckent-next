@@ -98,15 +98,15 @@ describe('shell risk tiers (legacy parity)', () => {
     ...['rm -r x', 'rm -f x', 'rm -rf x', 'rm -fr x', 'rm --recursive x', 'rm --force x', 'rmdir empty', 'git push --force origin main', 'git push -f origin main',
       'git reset --hard HEAD', 'git clean -fd', 'chmod -R 700 dir', 'chown -R me dir', 'dd if=/dev/zero of=x', 'mkfs.ext4 /dev/x', 'shred secret',
       'truncate -s 0 file', 'kill 123', 'pkill node', 'killall node', 'docker rm box', 'docker rmi image', 'docker system prune', 'deckent kill',
-      'deckent cleanup', 'deckent recover'].map(command => [command, 'destructive'] as [string, ShellRisk]),
-    ...['curl https://example.test', 'rm file.txt', 'git branch new-feature', 'node script.js', 'npm test', 'npx tsc', 'env sh -c true', 'find . -delete',
+      'deckent cleanup', 'deckent recover', 'find . -delete', 'mv src /tmp/x', 'mv src dst', '> file', ': > file', 'echo x >| file', 'echo x &> file'].map(command => [command, 'destructive'] as [string, ShellRisk]),
+    ...['curl https://example.test', 'rm file.txt', 'git branch new-feature', 'node script.js', 'npm test', 'npx tsc', 'env sh -c true',
       'find . -exec echo {} ;', 'find . -execdir echo {} ;', '', 'echo "unterminated'].map(command => [command, 'modify'] as [string, ShellRisk]),
     ['ls && npm test || cat error.log', 'modify'], ['pwd; rm -rf /tmp/x', 'destructive'], ['cat file | wc -l', 'safe-read'], ['echo $(rm -rf /tmp/x)', 'destructive'],
-    ['echo `npm test`', 'modify'], ['echo hello > file', 'modify'], ['cat input >> output', 'modify'], ['cat input | tee output', 'modify'],
-    ['echo "> literal"', 'safe-read'], ["mkdir -p /tmp/deckent-x && printf 'test' > /tmp/deckent-x/file.txt", 'modify'],
+    ['echo `npm test`', 'modify'], ['echo hello > file', 'destructive'], ['cat input >> output', 'modify'], ['cat input | tee output', 'modify'],
+    ['echo "> literal"', 'safe-read'], ["mkdir -p /tmp/deckent-x && printf 'test' > /tmp/deckent-x/file.txt", 'destructive'],
     // B2 (owner test 2026-10-07): reads that only silence or merge their streams stay reads; a file target stays a modification.
     ['cat f 2>/dev/null', 'safe-read'], ['ls -la src/deneme.md 2>&1', 'safe-read'], ['find . -name x 2>/dev/null', 'safe-read'], ['ls &>/dev/null', 'safe-read'],
-    ['ls >&2', 'safe-read'], ['ls 2>&1 | head', 'safe-read'], ['ls > x.txt', 'modify'], ['ls &> out.txt', 'modify'], ['ls >& out.txt', 'modify'], ['ls 2> err.log', 'modify'],
+    ['ls >&2', 'safe-read'], ['ls 2>&1 | head', 'safe-read'], ['ls > x.txt', 'destructive'], ['ls &> out.txt', 'destructive'], ['ls >& out.txt', 'destructive'], ['ls 2> err.log', 'destructive'],
     ['ls 2>&1 >> log', 'modify'], ['rm deneme.md && ls deneme.md 2>&1 || true', 'modify'], ['rm -f x 2>/dev/null', 'destructive'],
   ])('%s → %s', async (command, expected) => { expect(await risk(command), command).toBe(expected); });
 });

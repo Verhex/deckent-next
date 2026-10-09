@@ -163,8 +163,8 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
       const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS[realm] });
       const writeSet = realm === 'bubblewrap' && measured.bubblewrap.launcher?.overlay === true;
       const created = ['src/package.json', '.github/workflows/x.yml', 'Makefile', 'sub/Dockerfile', 'notes.txt'];
-      const commands = ['f=pack; echo X > src/${f}age.json', 'd=.git; mkdir -p ${d}hub/workflows && echo x > ${d}hub/workflows/x.yml', 'm=Make; echo x > ${m}file',
-        'mkdir -p sub && d=Docker; echo x > sub/${d}file', 'echo hi > notes.txt && cat notes.txt'];
+      const commands = ['f=pack; echo X >> src/${f}age.json', 'd=.git; mkdir -p ${d}hub/workflows && echo x >> ${d}hub/workflows/x.yml', 'm=Make; echo x >> ${m}file',
+        'mkdir -p sub && d=Docker; echo x >> sub/${d}file', 'echo hi >> notes.txt && cat notes.txt'];
       for (const [index, command] of commands.entries()) {
         const result = await f.call('run_shell', { command });
         expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: writeSet ? 'ok' : 'error' });
@@ -173,7 +173,7 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
       for (const path of created) await expect(access(join(f.project, path))).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(access(join(f.project, 'sub'))).rejects.toMatchObject({ code: 'ENOENT' });
       // Reading and writing outside the project stay silent and work; the narrow set writes the project as before.
-      expect(await f.call('run_shell', { command: 'cat src/a.ts && echo "$(date +%s)" > "$TMPDIR/stamp" 2>/dev/null; ls src' })).toMatchObject({ card: false });
+      expect(await f.call('run_shell', { command: 'cat src/a.ts && echo "$(date +%s)" >> "$TMPDIR/stamp" 2>/dev/null; ls src' })).toMatchObject({ card: false });
       // (`src/`: the Landlock realm's project root cannot gain entries — its carve, unchanged by this slice.)
       expect(await f.call('run_shell', { command: 'cp src/a.ts src/out.ts' })).toMatchObject({ card: false, status: 'ok' });
       expect(await readFile(join(f.project, 'src/out.ts'), 'utf8')).toBe('export const a = 1;\n');

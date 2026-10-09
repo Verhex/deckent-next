@@ -161,7 +161,7 @@ describe.skipIf(process.platform === 'win32')('bubblewrap realm selection (S9; r
     expect(view.view.emptiedDirectories ?? []).not.toContain(join(f.scope.root, '.deckent'));
     expect(view.view.maskedDirectories).toEqual(expect.arrayContaining([join(f.scope.root, '.deckent', 'host'), join(f.scope.root, 'locked'),
       join(f.scope.root, Array.from({ length: 33 }, () => 'd').join('/'))]));
-    expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git')]);
+    expect([...view.view.readOnlyPaths].sort()).toEqual([join(f.scope.root, '.deckent'), join(f.scope.root, '.git')].sort());
     const all = [...view.view.maskedFiles, ...view.view.maskedDirectories, ...view.view.emptiedDirectories ?? []];
     expect(all).not.toContain(join(f.scope.root, 'env-link')); expect(all).not.toContain(join(f.scope.root, 'src', 'a.ts'));
     expect(all.some(path => path.includes('node_modules'))).toBe(false);

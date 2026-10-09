@@ -164,19 +164,40 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access vie
     expect(await readFile(join(f.project, '.deckent/docs/n.md'), 'utf8')).toBe('ok\n');
   }, 180_000);
 
-  it.skipIf(landlockAbi < 6)('without bubblewrap: prefer-sandbox runs a full-access call on the host with a visible notice; require-sandbox keeps the closed Landlock view', async () => {
-    const f = await openRuntime({ schemaVersion: 1, realm: 'prefer-sandbox' }, landlockOnly);
-    const port = await loopback();
-    const host = await f.call('run_shell', { command: `${fetchCommand(port)}; cat "$HOME/notes.txt"` }, 'deny', fa);
-    expect(host.text).toMatch(/^\[deckent\] run_shell: sandbox: none; exit 0/u);
-    expect(host.text).toContain('open-sandbox-pong');
-    expect(host.text).toContain('home-notes');
-    expect(host.text).toContain('full access: no open sandbox');
-    await closeModeRuntimes();
-    const g = await openRuntime({ schemaVersion: 1, realm: 'require-sandbox' }, landlockOnly);
-    const closed = await g.call('run_shell', { command: 'cat "$HOME/notes.txt"' }, 'deny', fa);
-    expect(closed.text).toMatch(/^\[deckent\] run_shell: sandbox: landlock;/u);
-    expect(closed.text).toContain('full access: no open sandbox');
-    expect(closed.text).not.toContain('home-notes');
+  it.skipIf(landlockAbi < 6)('without bubblewrap, full access is refused without a card or any host effect', async () => {
+    for (const realm of ['prefer-sandbox', 'require-sandbox'] as const) {
+      const f = await openRuntime({ schemaVersion: 1, realm }, landlockOnly);
+      const marker = join(f.home, 'full-access-must-not-run');
+      const result = await f.call('run_shell', { command: `cat "$HOME/notes.txt"; echo leaked > "${marker}"` }, 'deny', fa);
+      expect(result.text).toContain('SHELL_SANDBOX_UNAVAILABLE');
+      expect(result.text).not.toContain('home-notes');
+      expect(result.card).toBe(false);
+      expect(await exists(marker)).toBe(false);
+      await closeModeRuntimes();
+    }
   }, 180_000);
+  for (const provider of ['bubblewrap', 'landlock'] as const) {
+    it.skipIf(provider === 'bubblewrap' ? !bwrapReady : landlockAbi < 6)(`${provider}: full-auto asks for deletion, truncation and moves before any sandbox effect`, async () => {
+      const f = await modeRuntime({ shell: { schemaVersion: 1, realm: 'require-sandbox' }, mode: 'full-auto',
+        grants: [rule('shell', 'agent-tool', ['run_shell'], 'require-approval', true), rule('run', 'operation', ['host.shell.run'], 'allow')],
+        ...(provider === 'landlock' ? { sandboxes: landlockOnly } : {}) });
+      const original = await readFile(join(f.project, 'src/a.ts'), 'utf8');
+      for (const command of ['find src -delete', '> src/a.ts', `mv src '${join(f.project, 'must-not-move')}'`]) {
+        const result = await f.call('run_shell', { command }, 'deny');
+        expect(result).toMatchObject({ card: true, status: 'denied' });
+        expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe(original);
+      }
+      expect(await exists(join(f.project, 'must-not-move'))).toBe(false);
+      await f.writeAuthority([rule('shell', 'agent-tool', ['run_shell'], 'require-approval', true), rule('run', 'operation', ['host.shell.run'], 'allow')], 'ask', 'floor');
+      const config = join(f.project, '.deckent/config.json'), before = await readFile(config, 'utf8');
+      const approved = await f.call('run_shell', { command: 'printf X >> "$(printf .deck)ent/config.json"' }, 'allow');
+      expect(approved).toMatchObject({ card: true, status: 'error' });
+      expect(approved.text).toMatch(/Read-only file system|Permission denied/u);
+      expect(await readFile(config, 'utf8')).toBe(before);
+      const card = approved.events.find(event => event.kind === 'approval.requested');
+      expect(JSON.stringify(card)).not.toContain('protected files included');
+
+    }, 120_000);
+  }
+
 });
