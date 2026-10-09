@@ -7,7 +7,7 @@ import { BudgetWindow, budgetEntry } from './budget-panel.js';
 import { CacheWindow, cacheEntry } from './cache-panel.js';
 import type { BudgetPanelView, CachePanelView, ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
 
-const SESSION = 'session', DEFAULT = 'default', BUDGET = ':budget', CACHE = ':cache', FRESH = 'fresh', KEEP = 'keep';
+const SESSION = 'session', DEFAULT = 'default', BUDGET = ':budget', CACHE = ':cache', FRESH = 'fresh', FRESH_DEFAULT = 'fresh-default';
 const keyOf = (reference: ModelPanelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 const same = (left: ModelPanelReference | null, right: ModelPanelReference) => left !== null && keyOf(left) === keyOf(right);
 
@@ -16,7 +16,7 @@ const same = (left: ModelPanelReference | null, right: ModelPanelReference) => l
  * it is and its state; a model that cannot be used now is listed with its reason and is never pickable. Choosing a model asks its scope: this
  * session (pinned for the next turn), or this session and the user default (the governed `/config` writer; locked with its reason when not offered).
  */
-export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference | null, labels: ModelPanelLabels, title: string, defaultOffered: boolean): PickerTree {
+export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference | null, labels: ModelPanelLabels, title: string, defaultOffered: boolean, largeContext = false): PickerTree {
   const node = (choice: ModelPanelChoice): PickerNode => {
     const marks = [...(same(pinned, choice.reference) ? [labels.pinnedMark] : []), ...(choice.configured ? [labels.configuredMark] : [])];
     return { id: keyOf(choice.reference), label: marks.length ? `${choice.label} · ${marks.join(' · ')}` : choice.label, detail: choice.detail,
@@ -27,8 +27,10 @@ export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference
     ? groups.map(group => { const children = view.choices.filter(choice => choice.group === group).map(node);
       return { id: `group:${group}`, label: group, detail: String(children.length), childTitle: group, children }; })
     : view.choices.map(node);
-  return { title, items, scopes: [{ id: SESSION, label: labels.session },
-    { id: DEFAULT, label: labels.sessionAndDefault, ...(defaultOffered && view.defaultBlocked === null ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } }) }] };
+  const blocked = defaultOffered && view.defaultBlocked === null ? {} : { blocked: { reason: view.defaultBlocked ?? labels.sessionAndDefault } };
+  return { title, items, scopes: [{ id: SESSION, label: largeContext ? `${labels.session} · ${labels.switch.keep}` : labels.session },
+    { id: DEFAULT, label: largeContext ? `${labels.sessionAndDefault} · ${labels.switch.keep}` : labels.sessionAndDefault, ...blocked },
+    ...(largeContext ? [{ id: FRESH, label: `${labels.session} · ${labels.switch.fresh}` }, { id: FRESH_DEFAULT, label: `${labels.sessionAndDefault} · ${labels.switch.fresh}`, ...blocked }] : [])] };
 }
 
 export function ModelPanel({ port, labels, push, openApproval, onError, onClose }: { readonly port: ModelPanelPort; readonly labels: PanelLabels;
@@ -42,56 +44,53 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const [budget, setBudget] = useState<BudgetPanelView | null>(null), [budgetOpen, setBudgetOpen] = useState(false);
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice) and the model-switch question over a large context.
   const [cache, setCache] = useState<CachePanelView | null>(null), [cacheOpen, setCacheOpen] = useState(false);
-  const [switching, setSwitching] = useState<Readonly<{ choice: ModelPanelChoice; result: PickerResult; tokens: number }> | null>(null);
+  const [preparing, setPreparing] = useState(false), preparingRef = useRef(false);
+  const mounted = useRef(true);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
   // Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed).
   const room = usePickerRoom(2);
   useEffect(() => {
+    mounted.current = true;
     let live = true;
     port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     port.budget?.inspect().then(value => { if (live) setBudget(value); }, () => undefined);
     port.cache?.inspect().then(value => { if (live) setCache(value); }, () => undefined);
-    return () => { live = false; };
+    return () => { live = false; mounted.current = false; };
   }, [port]);
   if (!view) return <Window title={[span(labels.loading)]} hints={words.hints} position={labels.position} onClose={onClose} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
   if (cacheOpen && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
-  const entry = budgetEntry(budget, labels.budget), cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault));
+  const tokens = port.largeContext?.() ?? null;
+  const entry = budgetEntry(budget, labels.budget), cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault), tokens !== null);
   const tree: PickerTree = { ...listed, items: [...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail, unscoped: true }] : []),
     ...(cacheRow ? [{ id: CACHE, label: cacheRow.label, detail: cacheRow.detail, unscoped: true }] : []), ...listed.items] };
-  const chosen = (result: PickerResult, fresh?: boolean) => {
+  const chosen = (result: PickerResult) => {
     if (result.kind === 'selected' && result.id === BUDGET) { setBudgetOpen(true); return; }
     if (result.kind === 'selected' && result.id === CACHE) { setCacheOpen(true); return; }
     const choice = result.kind === 'selected' ? view.choices.find(item => keyOf(item.reference) === result.id && item.blocked === null) : undefined;
     if (!choice) { onClose(); return; }
-    // A switch to another model over a large context never resets or carries it silently: the person answers "new context / continue" first.
-    const current = port.pinned() ?? view.choices.find(item => item.configured)?.reference ?? null, tokens = port.largeContext?.() ?? null;
-    if (fresh === undefined && tokens !== null && !same(current, choice.reference)) { setSwitching({ choice, result, tokens }); return; }
-    // The session pin first: the next turn carries it whatever the default write answers (the service uses it exactly or refuses).
-    port.pin(choice, fresh === true);
-    push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label }) },
-      ...(fresh === undefined ? [] : [{ level: 'info' as const, text: fillTemplate(fresh ? words.switch.freshDone : words.switch.keepDone, { model: choice.label }) }])]);
-    if (result.kind !== 'selected' || result.scope !== DEFAULT || !port.makeDefault) { onClose(); return; }
-    port.makeDefault(choice).then(outcome => {
+    // Scope and context are one confirmation: a large history is continued or replaced only by the selected answer.
+    const fresh = result.kind === 'selected' && (result.scope === FRESH || result.scope === FRESH_DEFAULT);
+    if (preparingRef.current) return;
+    preparingRef.current = true; setPreparing(true);
+    // Recheck at confirmation; only a successful governed preparation can change the session pin.
+    Promise.resolve().then(() => port.prepare?.(choice)).then(async () => {
+      if (!mounted.current) return;
+      port.pin(choice, fresh === true);
+      push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label }) },
+        ...(tokens === null ? [] : [{ level: 'info' as const, text: fillTemplate(fresh ? words.switch.freshDone : words.switch.keepDone, { model: choice.label }) }])]);
+      if (result.kind !== 'selected' || (result.scope !== DEFAULT && result.scope !== FRESH_DEFAULT) || !port.makeDefault) { onClose(); return; }
+      const outcome = await port.makeDefault(choice);
       // A project model that keeps winning: the same window asks how to resolve it (two governed writes, or keep it) before the one summary line.
       if (outcome.status === 'applied' && outcome.shadow && port.resolveShadow) { setShadow({ choice, projectModel: outcome.shadow.projectModel, first: outcome.lines }); return; }
       push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]);
       onClose();
       if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
-    }, error => { onError(error); onClose(); });
+    }).catch(error => { if (mounted.current) { onError(error); onClose(); } }).finally(() => { preparingRef.current = false; if (mounted.current) setPreparing(false); });
   };
-  if (switching) {
-    const ask: PickerTree = { title: fillTemplate(words.switch.title, { model: switching.choice.label, tokens: switching.tokens }),
-      items: [{ id: FRESH, label: words.switch.fresh }, { id: KEEP, label: words.switch.keep }] };
-    const answer = (result: PickerResult) => {
-      // Esc: no switch at all (nothing pinned, the context untouched).
-      if (result.kind !== 'selected') { setSwitching(null); return; }
-      setSwitching(null); chosen(switching.result, result.id === FRESH);
-    };
-    return <Window title={[span(ask.title, { bold: true })]} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-      footer={focused => <ListPicker key="switch" tree={ask} labels={labels.picker} active={focused} maxRows={room.rows} onResult={answer} />} />;
-  }
+  if (preparing) return <Window title={[span(labels.loading)]} hints={words.hints} position={labels.position}
+    onInput={(_input, key) => !key.escape} onClose={() => { mounted.current = false; onClose(); }} />;
   if (shadow) {
     const tree: PickerTree = { title: fillTemplate(words.shadowTitle, { model: shadow.projectModel }), items: [{ id: 'remove', label: words.shadowRemove },
       { id: 'align', label: words.shadowAlign }, { id: 'keep', label: words.shadowKeep }] };
@@ -109,6 +108,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   }
   const shown = pickerView(tree, state), focused = shown.stage === 'list' ? view.choices.find(item => keyOf(item.reference) === shown.rows[shown.pos]?.id) : undefined;
   const body = [...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
+    ...(tokens !== null && focused ? [{ spans: [span(fillTemplate(words.switch.title, { model: focused.label, tokens }), { role: 'warning' as const })] }] : []),
     ...(focused ? [{ spans: [span(focused.exact, { role: 'muted' as const })] }, ...(focused.command ? [{ spans: [span(focused.command, { role: 'muted' as const })] }] : [])] : [])];
   return <Window title={[span(view.title, { bold: true })]} body={body} hints={words.hints} position={labels.position}
     footerRows={room.footerRows} onInput={() => true}

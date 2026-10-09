@@ -13,3 +13,4 @@ export * from './internal/status-row.js';
 export * from './internal/stream-segmenter.js';
 export * from './internal/table.js';
 export * from './internal/text-width.js';
+export { formatContextTokens } from './internal/token-count.js';

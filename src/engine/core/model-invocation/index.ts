@@ -34,3 +34,6 @@ export type { ModelInvocationCancellationRecoveryCommand, ModelInvocationCancell
 export { ModelInvocationCancellationRecoveryApplication } from './internal/cancellation-recovery.js';
 export type { ModelInvocationCancellationRecoveryStatus, ModelInvocationCancellationRecoveryOutcome,
   ModelInvocationCancellationRecoveryPage } from './internal/cancellation-recovery.js';
+export { inspectModelSwitch, prepareModelSwitch } from './internal/model-switch.js';
+export type { ModelSwitchPorts, ModelSwitchPreview } from './internal/model-switch.js';
+export { checkModelInvocationCapacity } from './internal/spending.js';

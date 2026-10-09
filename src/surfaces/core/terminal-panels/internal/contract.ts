@@ -135,6 +135,8 @@ export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPa
 export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
+  /** Rechecks runnability and refreshes an eligible stale activation through its governed owner before any session pin. */
+  prepare?(choice: ModelPanelChoice): Promise<void>;
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */
   readonly budget?: BudgetPanelPort;
   /** CACHE-SLICE1: the governed one-step "turn the 5-minute prompt cache on" for existing profiles (absent: not offered). */

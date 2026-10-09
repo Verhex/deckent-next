@@ -537,7 +537,8 @@
         "src/composition/core/root",
         "src/composition/core/backup",
         "src/engine/core/backup",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/platform/core/i18n"
       ],
       "plan": "EXECUTION"
     },
@@ -1377,7 +1378,13 @@
         "src/composition/core/scoped-request",
         "src/composition/core/query-errors",
         "src/composition/core/model-invocation",
-        "src/composition/core/model-activation"
+        "src/composition/core/model-activation",
+        "src/composition/core/root",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/provider-anthropic-messages",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/contract"
       ],
       "plan": "PROVIDERS"
     },
@@ -1400,7 +1407,8 @@
         "src/engine/core/model-activation",
         "src/engine/core/provider-catalog",
         "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/domain/core/agent-tool"
       ],
       "plan": "PROVIDERS"
     },

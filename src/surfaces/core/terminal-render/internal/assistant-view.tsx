@@ -9,6 +9,7 @@ import { HiddenTextNotice, useHumanTextSecrets } from './human-text-view.js';
 import type { LiveTail } from './stream-segmenter.js';
 import { fillTemplate } from './status-row.js';
 import { cells, truncateEnd } from './text-width.js';
+import { formatContextTokens } from './token-count.js';
 
 /** Catalog strings (terminal.render.*) resolved by the surface; placeholders are filled here. */
 /** The human sentence for the provider refusal token in a failed round's note (the engine's `classifyProviderRejection` names), or null. */
@@ -18,6 +19,7 @@ export function providerRejectionHint(note: string | null | undefined, labels: A
 }
 
 export type AssistantRenderLabels = Readonly<{
+  locale?: 'en' | 'tr';
   assistant: string; thinking: string; thought: string; elapsed: string; tokens: string; reasoningTokens: string;
   /** Catalog count for the complete transported answer projection, before live line clipping. */
   hiddenCount?: string;
@@ -101,7 +103,7 @@ export function footerText(unit: FooterUnit, labels: AssistantRenderLabels, sepa
   if (unit.promptTokens !== null && unit.completionTokens !== null) parts.push(fillTemplate(labels.tokens, { prompt: unit.promptTokens, completion: unit.completionTokens }));
   if (unit.reasoningTokens) parts.push(fillTemplate(labels.reasoningTokens, { count: unit.reasoningTokens }));
   if (unit.context?.windowTokens) parts.push(fillTemplate(labels.context, { approx: unit.context.quality === 'upper-bound' ? '~' : '',
-    percent: Math.min(999, Math.ceil(unit.context.promptTokens * 100 / unit.context.windowTokens)), window: unit.context.windowTokens }));
+    percent: Math.min(999, Math.ceil(unit.context.promptTokens * 100 / unit.context.windowTokens)), window: formatContextTokens(unit.context.windowTokens, labels.locale) }));
   if (unit.finish === 'cancelled') parts.push(unit.cancelledDuring ? (labels.cancelledDuring ?? NEUTRAL_CANCELLED_DURING)[unit.cancelledDuring] : labels.cancelled);
   if (unit.finish === 'error') parts.push(labels.failed);
   return parts.join(` ${separator} `);

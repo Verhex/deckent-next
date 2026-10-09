@@ -5,7 +5,7 @@ import type { InfoSurfaceLabels } from '#surfaces/core/terminal-window/index.js'
 export function terminalInfoLabels(locale: Locale): InfoSurfaceLabels {
   return { hints: t('terminal.info.hints', {}, locale), pickHints: t('terminal.info.pickHints', {}, locale), position: t('terminal.info.position', {}, locale), systemLabel: t('terminal.info.systemLabel', {}, locale),
     help: { note: t('terminal.info.help.note', {}, locale), summary: t('terminal.info.help.summary', {}, locale) },
-    context: { title: t('terminal.info.context.title', {}, locale),
+    context: { locale, title: t('terminal.info.context.title', {}, locale),
       section: { window: t('terminal.info.context.section.window', {}, locale), split: t('terminal.info.context.section.split', {}, locale), summaries: t('terminal.info.context.section.summaries', {}, locale),
         suggestion: t('terminal.info.context.section.suggestion', {}, locale) },
       key: { fill: t('terminal.info.context.key.fill', {}, locale), used: t('terminal.info.context.key.used', {}, locale), auto: t('terminal.info.context.key.auto', {}, locale), messages: t('terminal.info.context.key.messages', {}, locale),

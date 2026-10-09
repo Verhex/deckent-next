@@ -238,7 +238,8 @@ export function WorklineApp(props: WorklineProps) {
   const sessionModel = useMemo(() => ({ pinned: () => pinnedModels.current.get(sessionId()) ?? null,
     largeContext: () => { const tokens = sessionNow.current.measuredPrompt(); return tokens !== null && tokens >= MODEL_SWITCH.askFreshContextAtTokens ? tokens : null; },
     pin: (choice: ModelPanelChoice, fresh?: boolean) => {
-      if (fresh) { history.current = freshContextHistory(history.current); sessionNow.current.forgetContext(); }
+      if (fresh) history.current = freshContextHistory(history.current);
+      sessionNow.current.forgetContext();
       pinnedModels.current.set(sessionId(), choice.reference); setModelGeneration(value => value + 1);
     } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);

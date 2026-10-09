@@ -49,6 +49,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
       inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
     // The host's whole `/model` source (budget window, shadow answers) plus the session pin; dropping an optional port hides its rows.
     ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
+      ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice) } : {}),
       ...(model.budget ? { budget: model.budget } : {}), ...(model.cache ? { cache: model.cache } : {}),
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
       ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),

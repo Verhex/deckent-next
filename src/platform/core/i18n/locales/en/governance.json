@@ -867,5 +867,6 @@
   "models.budget.unfrozen": "The overrun freeze is lifted.",
   "models.budget.replayed": "(already recorded; nothing changed)",
   "error.PROVIDER_SPEND_BUDGET_ABSENT": "Scope {scope} has no spending budget yet. Create one: deckent models create-budget --scope {scope} --usd <amount> (or /model → Create budget).",
-  "agent.spend.budgetAbsent": "This scope has no spending budget. /model → Create budget."
+  "agent.spend.budgetAbsent": "This scope has no spending budget. /model → Create budget.",
+  "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model switch refused. {reason}"
 }
