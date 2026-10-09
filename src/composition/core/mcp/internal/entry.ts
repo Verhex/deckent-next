@@ -48,10 +48,12 @@ export async function main(root = process.cwd()) {
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },
   });
 }
+/** Shared argument contract for Core and a distribution executable using `deckent/extensions`. */
+export async function run(argv: readonly string[] = process.argv.slice(2)) {
+  const { values } = parseArgs({ args: [...argv], options: { project: { type: 'string' } }, strict: true, allowPositionals: false });
+  if (values.project !== undefined && !values.project.trim()) throw new Error('MCP_PROJECT_INVALID');
+  return main(resolve(values.project ?? process.cwd()));
+}
 if (isMainModule(import.meta)) {
-  void (async () => {
-    const { values } = parseArgs({ options: { project: { type: 'string' } }, strict: true, allowPositionals: false });
-    if (values.project !== undefined && !values.project.trim()) throw new Error('MCP_PROJECT_INVALID');
-    await main(resolve(values.project ?? process.cwd()));
-  })().catch(() => { process.stderr.write('MCP_START_FAILED\n'); process.exitCode = 1; });
+  void run().catch(() => { process.stderr.write('MCP_START_FAILED\n'); process.exitCode = 1; });
 }

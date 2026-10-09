@@ -8,7 +8,7 @@ export type StandingGrantsHandler = (root: string, scopeId: string, options: { r
 export type StandingRevokeHandler = (root: string, input: { readonly scopeId: string; readonly id: string; readonly reason: string; readonly confirm: (grant: StandingGrantRow) => Promise<boolean> },
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<{ readonly revoked: boolean; readonly grant: StandingGrantRow | null }>;
 
-/** The governed first-run v4 → v5 upgrade (owner 2026-10-07): the engine's result, which the surface only words. */
+/** The governed current first-run upgrade: the engine's result, which the surface only words. */
 export interface PolicyUpgradeView { readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null }
 export type PolicyUpgradeHandler = (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string; readonly reason: string },
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<PolicyUpgradeView>;
@@ -62,8 +62,8 @@ export async function policyGrantsCommand(argv: readonly string[], context: Comm
 }
 
 /**
- * `deckent policy upgrade --template v5 [--scope <id>] [--preview|--apply|--rollback] [--expect <revision>] [--json]` (owner 2026-10-07): preview is the
- * default and writes nothing; apply and rollback go through `policy.administer@1` (I2, audit, archive). Only the `v5` template exists.
+ * `deckent policy upgrade --template current`: preview writes nothing; apply and rollback use
+ * `policy.administer@1` (I2, audit, archive). The deprecated `v5` selector uses the same current plan.
  */
 async function policyUpgradeCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   let json = false, template: string | undefined, scope: string | undefined, language: string | undefined, expect: string | undefined, mode: 'preview' | 'apply' | 'rollback' | undefined;
@@ -78,12 +78,13 @@ async function policyUpgradeCommand(argv: readonly string[], context: CommandCon
       else throw ErrorRegistry.createError('CLI_USAGE');
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
-  if (template !== 'v5' || (expect !== undefined && mode !== 'apply') || !context.upgradePolicyTemplate) throw ErrorRegistry.createError('CLI_USAGE');
+  if ((template !== 'current' && template !== 'v5') || (expect !== undefined && mode !== 'apply') || !context.upgradePolicyTemplate) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, config = await loadConfig(root, { env });
   const locale = resolveLocale(language, env, config.language); context.onLocale?.(locale);
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = scope ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  if (template === 'v5') (context.stderr ?? process.stderr).write(`${t('cli.policy.upgrade.deprecated', { scope: scopeId }, locale)}\n`);
   const result = await context.upgradePolicyTemplate(root, scopeId, { mode: mode ?? 'preview', reason: t('cli.policy.upgrade.reason', {}, locale), ...(expect ? { expect } : {}) }, { env });
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const missing = (view: PolicyUpgradeView) => view.missing.map(item => item === 'policy-administer' ? t('cli.policy.upgrade.missing.policyAdminister', {}, locale)

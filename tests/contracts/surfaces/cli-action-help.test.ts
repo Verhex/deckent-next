@@ -41,6 +41,8 @@ it.each([
   [['run', '--help', '--lang', 'tr'], 'Kullanım: deckent run'],
   [['run', 'create', '--help'], 'Usage: deckent run <action>'],
   [['task', 'execute', '--help', '--lang', 'tr'], 'Kullanım: deckent task <eylem>'],
+  [['secret', 'store', '--help', '--lang', 'en'], 'deckent secret store'],
+  [['secret', 'store', '--help', '--lang', 'tr'], 'deckent secret store'],
 ] as const)('covers localized and action-scoped help: %j', async (args, heading) => {
   const f = context(); expect(await main(args, f.context)).toBe(0);
   const output = outputs.join(''); expect(output).toContain(heading);

@@ -38,7 +38,7 @@ export function acceptSecretChangeResult(operation: 'setSecret' | 'deleteSecret'
  * and select it; no actor field. */
 const storeId = z.string().max(128).regex(SECRET_STORE_ID_PATTERN);
 export const secretStoreSwitchCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, to: storeId,
-  confirmDowngrade: z.boolean() }).strict().readonly();
+  confirmDowngrade: z.boolean(), confirmEnvMissing: z.boolean().optional() }).strict().readonly();
 /** The answer names stores and counts only: never a secret name or value. */
 export const secretStoreSwitchResultSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, status: z.enum(['switched', 'current']),
   from: storeId, to: storeId, entries: z.number().int().nonnegative().safe(), downgrade: z.boolean(), cleaned: z.boolean() }).strict().readonly();

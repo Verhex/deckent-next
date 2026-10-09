@@ -1,4 +1,4 @@
-import { emit, ErrorRegistry, formatValue, resolveLocale, t } from '#platform/index.js';
+import { emit, ErrorRegistry, formatValue, loadConfigLanguage, resolveLocale, t } from '#platform/index.js';
 import { backupCommandSchema, type BackupCommand, type BackupResult } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { readHidden, readPiped } from './secret.js';
@@ -21,15 +21,20 @@ export async function backupCommand(argv: readonly string[], context: CommandCon
   const input = backupCommandSchema.safeParse({ schemaVersion: 1, action, set, scopeId,
     ...(target ? { target } : {}), ...(confirmTarget ? { confirmTarget } : {}) });
   if (!input.success || !context.executeBackup) throw ErrorRegistry.createError('CLI_USAGE');
-  const locale = resolveLocale(language, context.env); context.onLocale?.(locale);
+  // S1 O5: the installation's saved language too (read without config admission, so a restore hold is reported in it).
+  const root = context.root ?? process.cwd();
+  const saved = await loadConfigLanguage(root, { ...(context.env ? { env: context.env } : {}) }).catch(() => undefined);
+  const locale = resolveLocale(language, context.env, saved); context.onLocale?.(locale);
   const stdin = context.stdin ?? process.stdin;
   if (stdin.isTTY && !(stdin as { setRawMode?: unknown }).setRawMode) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_INVALID');
   const passphrase = stdin.isTTY ? await readHidden(stdin, context.stderr ?? process.stderr, t('cli.backup.passphrase', {}, locale)) : await readPiped(stdin);
-  const result = await context.executeBackup(context.root ?? process.cwd(), input.data, passphrase, { ...(context.env ? { env: context.env } : {}) });
+  const result = await context.executeBackup(root, input.data, passphrase, { ...(context.env ? { env: context.env } : {}) });
   emit(result, { json, render: data => {
     const action = data.action === 'create' ? t('cli.backup.created', {}, locale)
       : data.action === 'verify' ? t('cli.backup.verified', {}, locale) : t('cli.backup.restored', {}, locale);
     return t('cli.backup.result', { action, set: data.set }, locale)
     + (data.relocation?.required ? '\n' + t('cli.backup.relocated', { target: data.relocation.target }, locale) : '')
+    + (data.globalConfig?.added.length ? '\n' + t('cli.backup.globalAdded', { path: data.globalConfig.path, sections: data.globalConfig.added.join(', ') }, locale) : '')
+    + (data.globalConfig?.kept.length ? '\n' + t('cli.backup.globalKept', { path: data.globalConfig.path, sections: data.globalConfig.kept.join(', ') }, locale) : '')
     + '\n' + formatValue(data); }, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
 }

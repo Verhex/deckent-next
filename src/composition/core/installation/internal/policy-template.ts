@@ -1,22 +1,17 @@
 import { lstat, readFile, stat } from 'node:fs/promises';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, inspectInstallationFile, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
+import { FileInstallationIdentityStore, FileProjectIdentityStore, inspectInstallationFile, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
 import { userInfo } from 'node:os';
-import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
-  FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, inspectFirstRunPolicyTemplate, InstallationPublicationError,
-  PolicyTemplateInstallationApplication, preparePolicyTemplateInstallation, upgradePolicyTemplate, type FirstRunToolNames, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { getConfigFieldDefault, productResourcePath, resolveProductLayout, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication,
+  preparePolicyTemplateInstallation, upgradePolicyTemplate, type PolicyTemplatePublishTarget } from '#engine/index.js';
+import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
-const TOOL_NAMES: FirstRunToolNames = Object.freeze({ readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
-  scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
-  shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
-  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID });
 /** No project config is read or required: a policy-only installation works without Docker/pool/registry. */
 function prepare(projectRoot: string, scopeId: string) {
   const layout = resolveProductLayout({ projectRoot }), identity = readLocalOsIdentity(); const installation = getConfigFieldDefault('installation'), inspection = getConfigFieldDefault('inspection');
   const prepared = preparePolicyTemplateInstallation({ scopeId, principal: { issuer: identity.issuer, subject: identity.subject },
-    paths: { policy: productResourcePath(layout, 'policy'), bindings: productResourcePath(layout, 'bindings') }, toolNames: TOOL_NAMES });
+    paths: { policy: productResourcePath(layout, 'policy'), bindings: productResourcePath(layout, 'bindings') }, toolNames: FIRST_RUN_TOOL_NAMES });
   return { prepared, layout, maxBytes: Math.min(installation.profileMaxBytes, inspection.policyMaxBytes), timeoutMs: installation.writeLockTimeoutMs };
 }
 export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string) { return prepare(projectRoot, scopeId).prepared.preview; }
@@ -48,8 +43,13 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   const owns = async (path: string) => { try { const stat = await lstat(path); return callerUid !== undefined && stat.isFile() && !stat.isSymbolicLink() && stat.uid === callerUid; } catch { return false; } };
   const owner = await owns(productResourcePath(layout, 'policy')) && await owns(productResourcePath(layout, 'bindings'));
   const writer = createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes);
-  return upgradePolicyTemplate(writer, { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: TOOL_NAMES, apply, owner,
-    peopleLimit: config.inspection.maxPageSize, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) });
+  const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner,
+    peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) };
+  const preview = await upgradePolicyTemplate(writer, { ...input, apply: false, audit: () => { throw new Error('INSTALLER_PREVIEW_WRITE'); } });
+  if (!apply || preview.status !== 'preview') return preview;
+  const store = await openSqliteAuditStore(await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'allow');
+  try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true));
+    return await upgradePolicyTemplate(writer, { ...input, apply: true, audit: event => { audit.record(event); } }); } finally { store.close(); }
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */
 export async function inspectPolicyTemplate(projectRoot: string) {

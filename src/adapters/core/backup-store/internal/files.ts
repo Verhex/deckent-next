@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, open, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { ErrorRegistry } from '#platform/index.js';
-export const refuse = (code: string): never => { throw ErrorRegistry.createError(code); };
+export const refuse = (code: string, params?: Record<string, string>): never => { throw ErrorRegistry.createError(code, params ? { params } : undefined); };
 export const inside = (parent: string, child: string) => child === parent || child.startsWith(parent + sep);
 /** Reject links in every existing ancestor, special files and foreign owners. Same-uid path swapping is outside the trusted host boundary. */
 export async function safePath(path: string): Promise<string> {
@@ -17,12 +17,22 @@ export async function safePath(path: string): Promise<string> {
   }
   return normalized;
 }
+/**
+ * A directory backup writes into: created 0700; an existing one must be this user's and not writable by group/other (S1 D2, the rule of
+ * the policy, artifact and installation-file owners). Files inside stay 0600; a loose mode is reported by doctor, never chmod'ed here.
+ */
 export async function privateDirectory(path: string): Promise<void> {
   await safePath(path);
   const found = await lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
   if (!found) { await privateDirectoryParent(path); await mkdir(path, { mode: 0o700 }); }
-  const info = await lstat(path);
-  if (!info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o077)) refuse('BACKUP_PATH_UNSAFE');
+  await ownerOnlyWritable(path);
+}
+/** Refuses before any write with the exact path and its `chmod 700` next step; an absent directory passes (it is created 0700). */
+export async function ownerOnlyWritable(path: string): Promise<void> {
+  const info = await lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  if (!info) return;
+  if (!info.isDirectory()) return refuse('BACKUP_PATH_UNSAFE');
+  if (info.uid !== process.getuid?.() || (info.mode & 0o022)) return refuse('BACKUP_DIRECTORY_UNSAFE', { path });
 }
 async function privateDirectoryParent(path: string) {
   const parent = dirname(path);

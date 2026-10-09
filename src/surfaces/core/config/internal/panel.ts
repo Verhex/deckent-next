@@ -3,6 +3,7 @@ import { parseConfigInput, type ConfigFieldView, type ConfigWritePermission } fr
 import { CONFIG_VALUE_CHOICES, configEntryAllowed } from '#platform/index.js';
 import { configValueModel, type ConfigChoiceSourcePort, type ConfigValueModel } from './choices.js';
 export { configSchemaChoices } from './choices.js';
+import { CONFIG_RECORD_KEYS, CONFIG_IMPORT_KEYS, configRecordPort, configRecordSupported } from './records.js';
 import { configValueWord, schemaWord, sourceWord, applyWord } from './render.js';
 import { terminalConfigWrite, type ConfigCommandContext } from './command.js';
 
@@ -10,7 +11,7 @@ type Layer = 'project' | 'global';
 const LAYERS: readonly Layer[] = ['project', 'global'];
 /** The panel's view of one key (the shape the terminal's `/config` window takes; localized words only). */
 export type ConfigPanelFieldView = Readonly<{ key: string; section: string; description: string; value: string; source: string; apply: string; expected: string;
-  choices: ConfigValueModel['choices']; free: boolean; stepper: ConfigValueModel['stepper']; readOnly: string | null; generated: boolean; choiceNotice: string | null; unsettable: boolean; sensitive: boolean;
+  records: boolean; choices: ConfigValueModel['choices']; free: boolean; stepper: ConfigValueModel['stepper']; readOnly: string | null; generated: boolean; choiceNotice: string | null; unsettable: boolean; sensitive: boolean;
   locks: Readonly<Record<Layer, Readonly<{ blocked: string | null; note: string | null }>>> }>;
 
 /** What a layer's policy decision means for the person: a lock with its reason, a note (asks for approval), or nothing. */
@@ -35,6 +36,7 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
   const expected = new Map<string, string>(), current = new Map<string, unknown>(), sensitive = new Set<string>();
   const described = (field: ConfigFieldView) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description;
   return {
+    records: configRecordPort(root, context, options, locale, sources),
     async inspect() {
       const view = await application().inspect({}), readOnly = !context.resolveConfigPrincipal, notes: string[] = [];
       const config = await loadConfig(root, options), scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
@@ -44,6 +46,10 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
         if (rule.kind === 'document' || rule.kind === 'container' || rule.kind === 'reference') {
           try { inspected.push(await application().explain({ keyPath: parent })); } catch { /* Optional extension is absent. */ }
         }
+      }
+      for (const key of [...CONFIG_RECORD_KEYS, ...CONFIG_IMPORT_KEYS]) {
+        if (inspected.some(field => field.key === key)) continue;
+        try { const field = await application().explain({ keyPath: key }); if (field.key === key) inspected.push(field); } catch { /* Uninstalled optional section. */ }
       }
       let permissions: readonly ConfigWritePermission[] | null = null;
       if (!readOnly && scopeId) {
@@ -63,11 +69,11 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
         current.set(field.key, field.value); if (field.redacted) sensitive.add(field.key);
         expected.set(field.key, schemaWord(field.schema, locale));
         const model = await configValueModel(field, root, locale, discovery);
-        if (model.hidden) return null;
+        if (model.hidden && !configRecordSupported(field.key)) return null;
         const value = configValueWord(field.value, field.redacted, locale);
         const of = (layer: Layer) => permissions?.find(item => item.keyPath === field.key && item.layer === layer);
         return { key: field.key, section: field.key.split('.')[0]!, description: described(field), value, source: sourceWord(field.source, locale), apply: applyWord(field.apply, locale),
-          expected: schemaWord(field.schema, locale), choices: model.choices, stepper: model.stepper, readOnly: model.readOnly, generated: model.generated, choiceNotice: model.notice,
+          expected: schemaWord(field.schema, locale), choices: model.choices, stepper: model.stepper, readOnly: configRecordSupported(field.key) ? null : model.readOnly, records: configRecordSupported(field.key), generated: model.generated, choiceNotice: model.notice,
           free: model.free, unsettable: field.source === 'project' || field.source === 'global', sensitive: field.redacted,
           locks: { project: layerLock(of('project'), readOnly, locale), global: layerLock(of('global'), readOnly, locale) } };
       }))).filter((field): field is ConfigPanelFieldView => field !== null);

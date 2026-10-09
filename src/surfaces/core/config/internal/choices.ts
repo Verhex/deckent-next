@@ -8,7 +8,9 @@ import { configValueWord } from './render.js';
 export type ConfigValueChoice = Readonly<{ id: string; label: string; value: unknown; detail?: string }>;
 /** Read-only, principal-scoped reference discovery. Implementations belong to trusted composition. */
 export interface ConfigChoiceSourcePort {
-  list(source: ConfigChoiceSource, keyPath: string): Promise<readonly ConfigValueChoice[]>;
+  list(source: ConfigChoiceSource, keyPath: string, context?: Readonly<{ path: string }>): Promise<readonly ConfigValueChoice[]>;
+  browse?(directory: string): Promise<readonly import('./records.js').ConfigFileChoice[]>;
+  readDocument?(path: string): Promise<unknown>;
 }
 export type ConfigValueModel = Readonly<{ choices: readonly ConfigValueChoice[]; free: boolean; hidden: boolean; readOnly: string | null;
   stepper: ConfigStepper | null; generated: boolean; notice: string | null }>;

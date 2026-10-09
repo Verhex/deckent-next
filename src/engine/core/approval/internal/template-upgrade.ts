@@ -7,7 +7,7 @@ export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | '
 export interface TemplateUpgradeResult {
   readonly schemaVersion: 1;
   /** `preview`: would add `rules`; `upgraded`: added now; `current`: nothing to add; `refused`: `missing` names why (nothing written);
-   * `unavailable`: not a first-run lineage (`reason`); `rolled-back` / `nothing-to-roll-back`: the v5 rules removed / none held. */
+   * `unavailable`: not a first-run lineage (`reason`); `rolled-back` / `nothing-to-roll-back`: upgrade rules removed / none held. */
   readonly status: 'preview' | 'upgraded' | 'current' | 'refused' | 'unavailable' | 'rolled-back' | 'nothing-to-roll-back' | 'conflict';
   readonly revision: string;
   readonly rules: readonly PolicyGrant[];
@@ -17,11 +17,11 @@ export interface TemplateUpgradeResult {
 }
 
 /**
- * `deckent policy upgrade --template v5` (owner 2026-10-07): the first-run v4 → v5 rules added through the governed `policy.administer@1` chain —
+ * `deckent policy upgrade --template current`: missing current first-run rules added through the governed `policy.administer@1` chain —
  * the same chain, delegation bound (I2), `authority-change` audit and authority archive (the backup of every change) as every policy change.
  * Preview reads only and names what the person lacks; apply submits only a non-empty plan on the revision read (`expect`: the caller's previewed
- * revision, else the current one), so a second run is `current` and writes nothing. Rollback removes exactly the v5 rules this upgrade adds (by
- * id), through the same chain; nothing else is touched.
+ * revision, else the current one), so a second run is `current` and writes nothing. Rollback removes held upgrade-rule ids (by
+ * id), through the same chain; nothing else is touched. Historical `template-v5` audit tags remain stable.
  */
 export class PolicyTemplateUpgrade {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve' | 'policy'>,

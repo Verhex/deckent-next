@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveLocale, t } from '../../../src/platform/index.js';
+import { MESSAGE_REGISTRY, resolveLocale, t } from '../../../src/platform/index.js';
 
 describe('kernel/i18n contract', () => {
   it('interpolates named placeholders', () => {
@@ -15,5 +15,16 @@ describe('kernel/i18n contract', () => {
   });
   it('renders Turkish when asked', () => {
     expect(t('cli.unknownCommand', { command: 'x', name: 'deckent' }, 'tr')).toContain('Bilinmeyen komut');
+  });
+  it.each(['en', 'tr'] as const)('keeps upgrade explanations independent of the template number in %s', locale => {
+    const catalog = MESSAGE_REGISTRY.catalogs[locale];
+    for (const [key, value] of Object.entries(catalog)) {
+      if (key.startsWith('cli.init.policyUpgrade.') || key.startsWith('cli.policy.upgrade.')) {
+        expect(value).not.toMatch(/v\d+\s+(?:rules|kurallar)|v\d+\s*→\s*v\d+/u);
+      }
+    }
+    expect(t('mcp.grant.reason.delegation', {}, locale)).not.toMatch(/v\d+/u);
+    expect(t('cli.init.policyUpgrade.notOwner', { scope: 'scope' }, locale)).toContain('--template current --scope scope --preview');
+    expect(t('cli.policy.upgrade.reason', {}, locale)).toContain(locale === 'en' ? 'current first-run' : 'güncel ilk kurulum');
   });
 });

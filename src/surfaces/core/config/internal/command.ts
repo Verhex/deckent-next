@@ -116,7 +116,7 @@ const pendingWrites = new Map<string, { readonly commandId: string; readonly exp
 const PENDING_WRITES_KEPT = 32;
 
 /** One terminal config write (`/config set|unset`, `/config key=value`, the `/config` panel, T3 L4): the principal'd port with the pending-command memory. */
-export async function terminalConfigWrite(root: string, request: Omit<ConfigWriteRequest, 'scopeId' | 'commandId' | 'expect'>, context: ConfigCommandContext, options: ConfigLoadOptions,
+export async function terminalConfigWrite(root: string, request: Omit<ConfigWriteRequest, 'scopeId' | 'commandId'>, context: ConfigCommandContext, options: ConfigLoadOptions,
   locale: Locale): Promise<{ readonly status: ConfigChangeOutcome['status']; readonly lines: readonly string[]; readonly approvalId: string | null }> {
   const scopeId = ((await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');

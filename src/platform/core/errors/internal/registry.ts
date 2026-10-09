@@ -53,6 +53,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   BACKUP_POLICY_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_POLICY_DENIED', p, l) }) },
   BACKUP_PASSPHRASE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PASSPHRASE_INVALID', p, l) }) },
   BACKUP_PATH_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PATH_UNSAFE', p, l) }) },
+  BACKUP_POLICY_UNREADABLE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_POLICY_UNREADABLE', p, l) }) },
+  BACKUP_TARGET_CONFIG_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_TARGET_CONFIG_CONFLICT', p, l) }) },
+  BACKUP_DIRECTORY_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_DIRECTORY_UNSAFE', p, l) }) },
   BACKUP_LIMIT: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_LIMIT', p, l) }) },
   BACKUP_KEY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_KEY_INVALID', p, l) }) },
   BACKUP_SET_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_SET_INVALID', p, l) }) },
@@ -451,6 +454,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   SECRET_STORE_SWITCH_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_SWITCH_UNVERIFIED', p, l) }) },
   SECRET_STORE_SWITCH_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_SWITCH_DENIED', p, l) }) },
   // Astra 2456 P1-1: another secret change or store switch holds the installation's custody section past the wait bound (nothing changed).
+  SECRET_STORE_ENV_UNCONFIRMED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_ENV_UNCONFIRMED', p, l) }) },
   SECRET_STORE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_BUSY', p, l) }) },
   // A store switch published another store after this change opened {backend}: nothing was decided, recorded or written.
   SECRET_STORE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_CHANGED', p, l) }) },
@@ -501,6 +505,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CONFIG_WRITE_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_WRITE_LOCKED', p, l) }) },
   CONFIG_VERSION_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_VERSION_UNSUPPORTED', p, l) }) },
   CONFIG_SECTION_DUPLICATE: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECTION_DUPLICATE', p, l) }) },
+  CONFIG_RECORD_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_RECORD_INVALID', p, l) }) },
   CONFIG_SECTION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECTION_INVALID', p, l) }) },
   CONFIG_KEY_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.CONFIG_KEY_UNKNOWN', p, l) }) },
   LAYOUT_VERSION_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.LAYOUT_VERSION_UNSUPPORTED', p, l) }) },

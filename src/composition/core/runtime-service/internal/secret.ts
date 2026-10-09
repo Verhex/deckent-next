@@ -6,6 +6,7 @@ import { createInstallationSecretCustody, createInstallationSecretStoreSelection
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
+import { missingEnvironmentReferenceNames } from '#composition/core/secrets/index.js';
 
 /** v18 secret changes (SECRET-WRITE, option A, S3): the socket peer's change is decided on the `secret` cell of this installation's policy and
  * sealed as `secret-change` in the same installation's ledger before the store is written (MCP user-trust precedent). The value goes from the
@@ -56,9 +57,10 @@ async function switchStore(projectRoot: string, request: RuntimeServiceRequest, 
       const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)), clock = new SystemTrustedClock();
       return await new SecretStoreSwitch({ has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, platform),
         selection: createInstallationSecretStoreSelection(env, platform), authorize: policySecretStoreSwitchAuthorization(context.document, context.principal),
-        audit: event => { audit.record(event); }, now: () => clock.sample().wallMs, custody: createInstallationSecretCustody(env, platform) })
+        audit: event => { audit.record(event); }, now: () => clock.sample().wallMs, custody: createInstallationSecretCustody(env, platform),
+        environmentReferences: target => missingEnvironmentReferenceNames(projectRoot, options, target) })
         .switch({ principal: { issuer: context.principal.issuer, subject: context.principal.subject }, scopeId: command.scopeId, to: command.to,
-          confirmDowngrade: command.confirmDowngrade });
+          confirmDowngrade: command.confirmDowngrade, confirmEnvMissing: command.confirmEnvMissing ?? false });
     } finally { store.close(); }
   } catch (error) {
     if (error instanceof RuntimeServiceProtocolError) throw error;
