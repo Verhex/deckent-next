@@ -1,5 +1,5 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
+import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailureState, modelInvocationProfileDigest } from '#engine/index.js';
 export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
@@ -165,7 +165,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
       schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
       scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-      nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
+      nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt), profile ? { scopeId: command.scopeId, reference, profileDigest: modelInvocationProfileDigest(profile) } : undefined), max_completion_tokens: chat.maxCompletionTokens,
         ...roundStream, ...roundThinking,
         ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
           parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
@@ -228,6 +228,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (message.content.length > shownText.length) onDelta({ kind: 'text', text: message.content.slice(shownText.length) });
         const usage = openAiChatUsageFromInvocation(result);
         return { status: 'responded', content: message.content, reasoning: message.reasoning, toolCalls: message.toolCalls,
+          ...(message.continuation ? { continuation: message.continuation } : {}), ...(message.providerStop ? { providerStop: message.providerStop } : {}),
           finish: typeof message.finish === 'string' ? message.finish : 'unknown',
           usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
       },

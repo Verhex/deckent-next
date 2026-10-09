@@ -9,3 +9,6 @@ export { WORKSPACE_ATTACHMENT_MAX_BYTES, WORKSPACE_ATTACHMENT_REFUSALS, WORKSPAC
 export type { WorkspaceAttachment, WorkspaceAttachmentRefusal, WorkspaceAttachmentRequest, WorkspaceFileMatches, WorkspaceFileQuery } from './internal/workspace-files.js';
 export { parseScratchQuery, SCRATCH_VIEW_MAX_FILES, scratchClearanceSchema, scratchQuerySchema, scratchViewSchema } from './internal/scratch.js';
 export type { ScratchClearance, ScratchQuery, ScratchView } from './internal/scratch.js';
+
+export { agentMessageContinuationSchema } from './internal/continuation.js';
+export type { AgentMessageContinuation, AgentProviderStop } from './internal/continuation.js';

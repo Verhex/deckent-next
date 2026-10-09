@@ -22,6 +22,21 @@ describe('terminal turn-outcome catalog guard', () => {
   });
 
   for (const locale of ['en', 'tr'] as const) {
+    it.each(['content-filter', 'context-window', 'network-error', 'resource-exhausted', 'aborted'] as const)(`${locale}: provider %s keeps usage and closes without a retry or tool effect`, async providerStop => {
+      let sends = 0, executions = 0;
+      const events: { kind: string; note?: string | null }[] = [];
+      const result = await runAgentTurn({ language: locale, messages: [{ role: 'user', content: 'hi' }], tools: [], signal: new AbortController().signal,
+        emit: event => events.push(event) }, {
+        invokeRound: async () => { sends++; return { status: 'responded', content: '', reasoning: '', toolCalls: [], finish: 'vendor-stop', providerStop,
+          usage: { promptTokens: 10, completionTokens: 2 } }; }, authorize: async () => 'allow', describe: () => null,
+        execute: async () => { executions++; return { status: 'ok', text: '' }; }, now: () => 1,
+      });
+      expect(result.finish).toBe('error'); expect(sends).toBe(1); expect(executions).toBe(0);
+      expect(events.filter(event => event.kind === 'usage')).toHaveLength(1); expect(events.filter(event => event.kind === 'message')).toHaveLength(0);
+      expect(events.at(-1)).toMatchObject({ kind: 'done', note: result.note });
+      expect(result.note).toContain(locale === 'tr' ? 'Sağlayıcı bu turu durdurdu' : 'The provider stopped this turn');
+      expect(result.note).toContain(locale === 'tr' ? 'geçerli son ölçüm' : 'final measurement');
+    });
     it.each([
       ['HTTP refusal', { status: 'failed', state: 'rejected: HTTP 400' }, 'error', 'Model turu yanıt alınamadan'],
       ['empty response', { status: 'responded', content: '', reasoning: '', toolCalls: [], finish: 'stop', usage: null }, 'error', 'Model yanıt vermedi'],

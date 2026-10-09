@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { agentMessageContinuationSchema } from './continuation.js';
 import { agentToolCallSchema, agentToolCleanupSchema, type AgentToolCleanup } from '#domain/core/agent-tool/index.js';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
@@ -12,7 +13,7 @@ import { agentShellPostureSchema, agentToolCardCallSchema, agentToolUndoSchema, 
 export const agentTurnMessageSchema = z.discriminatedUnion('role', [
   z.object({ role: z.literal('system'), content: z.string().min(1) }).strict(),
   z.object({ role: z.literal('user'), content: z.string().min(1) }).strict(),
-  z.object({ role: z.literal('assistant'), content: z.string(), toolCalls: z.array(agentToolCallSchema).readonly() }).strict(),
+  z.object({ role: z.literal('assistant'), content: z.string(), toolCalls: z.array(agentToolCallSchema).readonly(), continuation: agentMessageContinuationSchema.optional() }).strict(),
   z.object({ role: z.literal('tool'), toolCallId: z.string().min(1).max(256), name: z.string().min(1).max(64), content: z.string() }).strict(),
 ]);
 export type AgentTurnMessage = z.infer<typeof agentTurnMessageSchema>;

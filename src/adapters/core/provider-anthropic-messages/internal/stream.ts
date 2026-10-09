@@ -42,7 +42,7 @@ type Open = { type: string; index: number; text: string; signature: string; json
  * such a delta reports nothing (unknown, reservation held); a completed stream whose final delta lacks its own output count is an
  * invalid response (Astra 2459 R1, 2462 R1).
  */
-export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope, onFinalUsage?: (usage: AnthropicUsage) => void): NativeJsonHttpStream {
+export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope, onFinalUsage?: (usage: AnthropicUsage) => void, onFinalUsageWithdrawn?: () => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, events = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [], eventName: string | null = null;
@@ -50,7 +50,10 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
   let head: { id: string; model: string } | null = null, usage: AnthropicUsage | null = null, stopReason: string | null = null;
   const blocks: AnthropicContentBlock[] = [];
   let current: Open | null = null, toolBlocks = 0;
-  const fail = (reason: Reject) => { invalid ??= reason; return false; };
+  let reported = false, withdrawn = false;
+  const withdraw = () => { if (reported && !withdrawn) { withdrawn = true; onFinalUsageWithdrawn?.(); } };
+  const fail = (reason: Reject) => { withdraw(); invalid ??= reason; return false; };
+  const refuse = () => { withdraw(); return { reason: 'invalid-response' as const }; };
 
   function event(text: string, name: string | null, out: ModelInvocationDelta[]): boolean {
     if (stopped) return fail('invalid-response');
@@ -63,7 +66,7 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
     if (type === 'ping') return false;
     // The provider ended its own stream: bytes are no longer parsed; finish() reports the uncertain outcome (never `rejected` with
     // complete evidence, which the evidence contract forbids for `interrupted`).
-    if (type === 'error') { errored = true; return false; }
+    if (type === 'error') { withdraw(); errored = true; return false; }
     if (type === 'message_start') {
       const parsed = start.safeParse(copied.data);
       if (!parsed.success || head) return fail('invalid-response');
@@ -115,7 +118,7 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
       // The input side may be restated or inherited from message_start; the output count must be the final delta's own.
       finalOutput = parsed.data.usage.output_tokens !== undefined;
       stopReason = parsed.data.delta.stop_reason; usage = mergeUsage(usage, parsed.data.usage);
-      if (finalOutput) onFinalUsage?.(usage);
+      if (finalOutput) { reported = true; onFinalUsage?.(usage); }
       return false;
     }
     if (type === 'message_stop' && simple.safeParse(copied.data).success && !current && stopReason !== null) { stopped = true; return false; }
@@ -165,11 +168,13 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
     finish(): NativeJsonHttpParsed {
       if (invalid) return { reason: invalid };
       if (errored) return { reason: 'interrupted' };
-      if (lineBytes > 0 || data.length > 0 || current) return { reason: stopped ? 'invalid-response' : 'interrupted' };
+      if (lineBytes > 0 || data.length > 0 || current) return stopped ? refuse() : { reason: 'interrupted' };
       if (!stopped || !head || stopReason === null) return { reason: 'interrupted' };
-      if (!finalOutput) return { reason: 'invalid-response' };
-      return assembleAnthropicMessage({ id: head.id, model: head.model, blocks, stopReason, usage,
+      if (!finalOutput) return refuse();
+      const result = assembleAnthropicMessage({ id: head.id, model: head.model, blocks, stopReason, usage,
         deckent: { stream: { schemaVersion: 1, events, wireBytes, wireSha256: hash.digest('hex') } } }, request, limits, memory);
+      if ('reason' in result && result.reason !== 'response-limit') withdraw();
+      return result;
     },
   });
 }

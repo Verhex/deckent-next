@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { responseDialect, finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
 import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_DEFAULT_DIALECT, isOpenAiChatHttpAdapter, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
-  openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
+  openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
   type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
 import { createOpenAiChatStream } from './stream.js';
@@ -32,10 +33,10 @@ export interface OpenAiChatNativePortOptions {
    * prefix-cache-salt: without it, or when it fails, nothing is sent (fail closed, never a derivable salt). */
   readonly cacheSalt?: (scopeId: string) => Promise<string>;
 }
-const finishReason = openAiChatFinishReasonSchema, usageSchema = openAiChatUsageSchema;
+const finishReason = z.string(), usageSchema = openAiChatUsageSchema;
 const messageSchema = z.object({ role: z.literal('assistant'), content: z.string().nullable(), refusal: z.string().nullable().optional() }).passthrough();
 const choiceSchema = z.object({ index: z.literal(0), finish_reason: finishReason, message: messageSchema }).passthrough();
-const responseSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion'), created: z.number().int().nonnegative().safe(),
+const responseSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion').optional(), created: z.number().int().nonnegative().safe(),
   model: z.string().min(1), choices: z.array(choiceSchema).length(1), usage: z.unknown().optional() }).passthrough();
 
 /** Largest `/tokenize` answer read (the server lists every token id: ~7 bytes each, so a 131k-token prompt is about 1 MiB). */
@@ -113,7 +114,9 @@ function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { res
   if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > prepared.limits.responseMaxBytes) {
     return { reason: 'response-limit' };
   }
-  const choice = parsed.data.choices[0]!;
+  const choice = parsed.data.choices[0]!, dialect = responseDialect(prepared.definition);
+  if ((!parsed.data.object && dialect.responseObject !== 'optional') || !finishReasonAccepted(choice.finish_reason, dialect)
+    || (choice.message['reasoning_details'] != null && !reasoningDetailsSchema.safeParse(choice.message['reasoning_details']).success)) return { reason: 'invalid-response' };
   // Servers such as vLLM always send these keys, as null, when there is none. The legacy function_call is never accepted;
   // tool_calls only when the request declared tools, and only for declared names (T-L2).
   if ((choice.message['function_call'] ?? null) !== null) return { reason: 'invalid-response' };
@@ -139,7 +142,7 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
     // A streamed request is parsed incrementally whether or not a caller observes its deltas.
     prepared.request.stream === true
       ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, (usage, serviceTier, frame) => options.onFinalUsage?.(prepared, usage, serviceTier, frame),
-        () => options.onFinalUsageWithdrawn?.(prepared), prepared.definition.dialect), ...(onDelta ? { onDelta } : {}) }
+        () => options.onFinalUsageWithdrawn?.(prepared), responseDialect(prepared.definition)), ...(onDelta ? { onDelta } : {}) }
       : { ...transport, parseResponse: body => { const result = parseResponse(body, prepared);
         if ('response' in result) options.onResponse?.(prepared, body, result.response); return result; } }, signal);
   } catch (error) {

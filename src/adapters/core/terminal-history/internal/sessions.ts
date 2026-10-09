@@ -56,7 +56,7 @@ export function openTerminalSessionStore(directory: string, limits = TERMINAL_SE
     async save(input) {
       // An oversized history is refused before any redaction work (redaction never grows text beyond a small constant).
       if (Buffer.byteLength(JSON.stringify(input.messages), 'utf8') > limits.maxFileBytes) throw new RangeError('TERMINAL_SESSION_TOO_LARGE');
-      const snapshot = snapshotSchema.parse({ ...input, messages: input.messages.filter(message => message.role !== 'system').map(redacted) });
+      const snapshot = snapshotSchema.parse({ ...input, messages: input.messages.filter(message => message.role !== 'system' && (message.role !== 'assistant' || message.content.trim() || message.toolCalls.length)).map(redacted) });
       const body = JSON.stringify(snapshot);
       if (Buffer.byteLength(body, 'utf8') > limits.maxFileBytes) throw new RangeError('TERMINAL_SESSION_TOO_LARGE');
       const target = pathOf(snapshot.sessionId), temporary = `${target}.${process.pid}.tmp`;
@@ -77,7 +77,7 @@ export function openTerminalSessionStore(directory: string, limits = TERMINAL_SE
     async load(scopeId, sessionId) {
       if (!sessionIdSchema.safeParse(sessionId).success) return null;
       const snapshot = await read(pathOf(sessionId));
-      return snapshot && snapshot.scopeId === scopeId && snapshot.sessionId === sessionId ? Object.freeze(snapshot.messages) : null;
+      return snapshot && snapshot.scopeId === scopeId && snapshot.sessionId === sessionId ? Object.freeze(snapshot.messages.filter(message => message.role !== 'assistant' || message.content.trim() || message.toolCalls.length)) : null;
     },
   };
   return Object.freeze(store);

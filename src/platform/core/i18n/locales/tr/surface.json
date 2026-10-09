@@ -631,5 +631,11 @@
   "agent.turn.outcome.restart": "Çalışma servisi yeniden başlatıldığı için tur kesildi. Tamamlanan araç çağrıları kayıtlıdır. İsteği yeni bir turda tekrar gönderin.",
   "agent.turn.outcome.rejected": "reddedildi",
   "agent.turn.outcome.unknown": "sonuç belirsiz",
-  "agent.turn.outcome.prevented": "çağrı engellendi"
+  "agent.turn.outcome.prevented": "çağrı engellendi",
+  "agent.turn.outcome.providerStop": "Sağlayıcı bu turu durdurdu: {reason}. {summary}. Bu yanıttaki araçlar çalıştırılmadı. Kullanım yalnız geçerli son ölçüm varsa kesinleştirilir.",
+  "agent.turn.outcome.contentFilter": "içerik sağlayıcı tarafından engellendi",
+  "agent.turn.outcome.providerContext": "modelin bağlam sınırı aşıldı; isteği kısaltın veya yeni bir konuşma açın",
+  "agent.turn.outcome.providerNetwork": "sağlayıcı ağ hatası bildirdi; yeni tur göndermeden bağlantıyı kontrol edin",
+  "agent.turn.outcome.providerResource": "sağlayıcının kaynakları yetersiz kaldı; başka bir model seçin veya daha sonra yeni bir tur gönderin",
+  "agent.turn.outcome.providerAborted": "sağlayıcı üretimi yarıda kesti; gerekiyorsa yeni bir tur gönderin"
 }

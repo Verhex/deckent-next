@@ -37,7 +37,8 @@ export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; versi
  * (`omit`: the provider has no such option and reports usage on its last chunk, e.g. Z.ai) and which `tool_choice` values it accepts.
  */
 export type OpenAiChatDialect = Readonly<{ tokenLimitField: 'max_tokens' | 'max_completion_tokens'; streamUsage: 'include' | 'omit';
-  toolChoice: readonly ('auto' | 'none' | 'required')[]; finalUsageChoice?: 'repeat-finish' | undefined }>;
+  toolChoice: readonly ('auto' | 'none' | 'required')[]; finalUsageChoice?: 'repeat-finish' | undefined; responseObject?: 'optional' | undefined;
+  finishReasons?: readonly ('sensitive' | 'model_context_window_exceeded' | 'network_error' | 'insufficient_system_resource' | 'aborted')[] | undefined }>;
 export const openRouterEndpointTariffSchema = z.object({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
   metadataEndpoint: z.string().url(), endpointTag: z.string().min(1).max(1024),
   metadataLimits: z.object({ maxAgeMs: z.number().int().positive().safe(), maxResponseBytes: z.number().int().positive().safe(),
@@ -53,7 +54,7 @@ export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTok
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
 export type OpenAiChatToolCall = Readonly<{ id: string; type: 'function'; function: Readonly<{ name: string; arguments: string }> }>;
 export type OpenAiChatTextMessage = Readonly<{ role: 'developer' | 'system' | 'user'; content: string }>
-  | Readonly<{ role: 'assistant'; content: string | null; tool_calls?: readonly OpenAiChatToolCall[] }>
+  | Readonly<{ role: 'assistant'; content: string | null; tool_calls?: readonly OpenAiChatToolCall[]; reasoning_content?: string | null; reasoning_details?: readonly JsonObject[] }>
   | Readonly<{ role: 'tool'; tool_call_id: string; content: string }>;
 export type OpenAiChatToolDefinition = Readonly<{ type: 'function'; function: Readonly<{ name: string; description?: string; parameters: JsonObject }> }>;
 /** `stream: true` requires `stream_options.include_usage` so every streamed call ends with settleable usage. `tools` is sent only
@@ -104,7 +105,8 @@ const tariffSchema = z.union([z.object({ kind: z.literal('operator-static'), ver
 export const openAiChatDialectSchema = z.object({ tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), streamUsage: z.enum(['include', 'omit']),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   toolChoice: z.array(z.union([z.literal('auto'), z.literal('none'), z.literal('required')])).min(1).max(3)
-    .refine(values => new Set(values).size === values.length), finalUsageChoice: z.literal('repeat-finish').optional() }).strict();
+    .refine(values => new Set(values).size === values.length), finalUsageChoice: z.literal('repeat-finish').optional(), responseObject: z.literal('optional').optional(),
+  finishReasons: z.array(z.enum(['sensitive', 'model_context_window_exceeded', 'network_error', 'insufficient_system_resource', 'aborted'])).max(5).optional() }).strict();
 const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: positive, dialect: openAiChatDialectSchema.optional(),
   authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
     z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict()]),
@@ -115,7 +117,8 @@ const toolCallSchema = z.object({ id: z.string().min(1).max(256), type: z.litera
   function: z.object({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME), arguments: z.string() }).strict() }).strict();
 const messageSchema = z.union([
   z.object({ role: z.enum(['developer', 'system', 'user']), content: z.string().min(1) }).strict(),
-  z.object({ role: z.literal('assistant'), content: z.string().nullable(), tool_calls: z.array(toolCallSchema).min(1).max(OPENAI_CHAT_MAX_TOOL_CALLS).optional() }).strict()
+  z.object({ role: z.literal('assistant'), content: z.string().nullable(), tool_calls: z.array(toolCallSchema).min(1).max(OPENAI_CHAT_MAX_TOOL_CALLS).optional(),
+    reasoning_content: z.string().nullable().optional(), reasoning_details: z.array(createImmutableJsonObjectSchema(OPENAI_CHAT_WIRE_LIMITS)).optional() }).strict()
     .refine(message => (message.content !== null && message.content.length > 0) || message.tool_calls !== undefined),
   z.object({ role: z.literal('tool'), tool_call_id: z.string().min(1).max(256), content: z.string() }).strict(),
 ]);
