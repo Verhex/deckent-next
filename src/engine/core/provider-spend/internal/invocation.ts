@@ -3,6 +3,15 @@ import type { ModelInvocationReceipt } from '#domain/index.js';
 import { parseProviderSpendReservation, providerSpendQuoteDigest } from './account.js';
 import { ProviderSpendError } from './error.js';
 
+/** A complete admission rejection, never a 2xx parse failure, timeout, conflict or interrupted body. */
+export function providerSpendRejectionHasNoCharge(outcome: ModelInvocationReceipt['outcome']): boolean {
+  if (outcome?.state !== 'rejected' || !outcome.evidence.body.complete) return false;
+  const evidence = outcome.evidence;
+  if (evidence.reason === 'not-sent') return evidence.httpStatus === null && evidence.body.observedBytes === 0;
+  return evidence.reason === 'http-status' && evidence.httpStatus !== null
+    && [400, 401, 402, 403, 404, 405, 406, 407, 410, 411, 412, 413, 414, 415, 416, 417, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451].includes(evidence.httpStatus);
+}
+
 export function providerSpendOutcomeDigest(receipt: ModelInvocationReceipt): string {
   return createHash('sha256').update(`deckent.provider-spend-outcome.v1\n${JSON.stringify(receipt.outcome)}`).digest('hex');
 }
@@ -15,6 +24,7 @@ export function verifyInvocationSpendReservation(input: unknown, receipt: ModelI
   if (state.state === 'reserved' ? outcome !== null : outcome === null
     || state.evidenceDigest !== providerSpendOutcomeDigest(receipt)
     || (state.state === 'released-not-sent' ? outcome.state !== 'not-sent' : outcome.state === 'not-sent')
+    || (state.state === 'released-no-charge' && !providerSpendRejectionHasNoCharge(outcome))
     || (state.state === 'settled-local' && outcome.state === 'unknown')
     || ((state.state === 'settled-provider-reported' || state.state === 'settled-measured-tariff') && ((outcome.state !== 'responded' && outcome.state !== 'unknown')
       || state.amountMinorUnits !== reservation.measurement?.roundedMinorUnits

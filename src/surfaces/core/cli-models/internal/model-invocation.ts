@@ -56,6 +56,7 @@ function renderSpending(spending: ProviderSpendReservation | null, locale: Local
   if (spending.disposition.state === 'reserved') return t('models.invocation.spendingReserved', parameters, locale);
   if (spending.disposition.state === 'held') return t('models.invocation.spendingHeld', { ...parameters, reason: renderSpendingReason(spending.disposition.reason, locale) }, locale);
   if (spending.disposition.state === 'released-not-sent') return t('models.invocation.spendingReleasedNotSent', parameters, locale);
+  if (spending.disposition.state === 'released-no-charge') return t('models.invocation.spendingReleasedNoCharge', parameters, locale);
   if (spending.disposition.state === 'settled-measured-tariff') {
     if (!spending.measurement || spending.measurement.basis !== 'measured-tariff') throw new Error('PROVIDER_SPEND_INVALID');
     if (upperBoundLine) return upperBoundLine;

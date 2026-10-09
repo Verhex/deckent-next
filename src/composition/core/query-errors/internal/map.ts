@@ -1,6 +1,6 @@
 import { DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
 import { DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
-import { ProviderSpendError, ModelInvocationStoreError } from '#engine/index.js';
+import { ProviderSpendError, ModelInvocationStoreError, type ProviderSpendAccount } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
 import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError, InstallationIdentityError, ProjectIdentityError } from '#engine/index.js';
@@ -14,15 +14,18 @@ import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } fr
 import { HandoffError, RunLifecycleError, reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
 const GRAPH_INPUT_CODES: ReadonlySet<string> = new Set(['TASK_GRAPH_INVALID', 'TASK_DUPLICATE', 'TASK_DEPENDENCY_DUPLICATE', 'TASK_DEPENDENCY_MISSING',
   'TASK_GRAPH_CYCLE', 'TASK_ACCEPTANCE_DUPLICATE', 'TASK_CRITERION_DEFINITION_MISSING', 'TASK_CRITERION_DEFINITION_UNUSED', 'TASK_CRITERION_DEFINITION_DUPLICATE']);
-/** Preserve stable failure identities without exposing paths, database messages or query contents. */
-export function queryFailure(error: unknown): DeckentError {
+/** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
+export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
   if (error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
     || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
   if (error instanceof DeckentError) return error;
   if (error instanceof HandoffError) return ErrorRegistry.createError(error.code);
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
-  if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : error.code, error.nextAction ? { params: { nextAction: error.nextAction } } : {});
+  if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : error.code, { params: {
+    ...(error.amounts && inspectedAccount?.budget.currency === error.amounts.currency ? { settled: inspectedAccount.settledExactMinorUnits,
+      held: inspectedAccount.reservedMinorUnits, requested: error.amounts.requested, limit: inspectedAccount.budget.limitMinorUnits, currency: inspectedAccount.budget.currency } : {}),
+    ...(error.nextAction ? { nextAction: error.nextAction } : {}) } });
   if (error instanceof OpenRouterPricingError) return ErrorRegistry.createError(error.code === 'INVALID_REQUEST'
     ? 'MODEL_INVOCATION_INVALID' : error.code === 'PRIVACY_UNAVAILABLE' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : 'PROVIDER_SPEND_UNAVAILABLE');
   if (error instanceof OpenRouterChatError) return ErrorRegistry.createError(error.code === 'INVALID_PROFILE'

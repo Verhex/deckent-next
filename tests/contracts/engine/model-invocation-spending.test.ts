@@ -26,7 +26,7 @@ function testSpending(input: ModelInvocationSpendingInput): ModelInvocationSpend
       pricing: { id: 'synthetic-price', version: 1, digest: '291f395a66cb728f57612b09b06f9512815b982e9a5d65e3fafec28256ff0aa9', definition: { schemaVersion: 1, kind: 'synthetic-price' } },
       meter: { id: 'synthetic-meter', version: 1, evidenceDigest: '446658cc1c39184b672f423a7f970bffab0e8f38e851c5b5dacd3f38eb85051f', evidence: { schemaVersion: 1, kind: 'synthetic-meter' } }, currency: 'USD', maxChargeMinorUnits: 6 } };
 }
-async function fixture(timeoutMs = 1000) {
+async function fixture(timeoutMs = 1000, contactProvider = true) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-spend-app-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const path = join(root, 'ledger.db'), events: string[] = [];
   const server = createServer((request, response) => {
@@ -35,12 +35,14 @@ async function fixture(timeoutMs = 1000) {
     response.end(JSON.stringify({ id: 'owned', object: 'chat.completion', created: 1, model: 'owned-fixture', choices: [{ index: 0,
       message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }));
   });
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  cleanup.push(() => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }));
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
+  if (contactProvider) {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    cleanup.push(() => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }));
+  }
+  const address = server.address(); if (contactProvider && (!address || typeof address === 'string')) throw new Error('FIXTURE');
   let profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
-      definition: { endpoint: `http://127.0.0.1:${address.port}/chat`, maxOutputTokens: 8, authentication: { type: 'none' },
+      definition: { endpoint: `http://127.0.0.1:${address && typeof address !== 'string' ? address.port : 1234}/chat`, maxOutputTokens: 8, authentication: { type: 'none' },
         tariff: { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } } },
     allocation: { id: 'calls', maxCalls: 10, maxInFlight: 10 }, limits: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs } };
   const activations = await openSqliteModelActivationStore(path, sqlite);
@@ -110,7 +112,7 @@ it('replays the winning claim when concurrent native tariff observations differ 
 });
 
 it('fails closed without a trusted quote source and redacts its backend failures before claim or native HTTP', async () => {
-  const f = await fixture();
+  const f = await fixture(1000, false);
   await expect(f.application().invoke(f.command('missing'))).rejects.toMatchObject({ code: 'PROVIDER_SPEND_UNAVAILABLE' });
   const failed = f.application({ async authorize() { throw new Error('/private/api-key=synthetic-secret'); } });
   await expect(failed.invoke(f.command('failed'))).rejects.toMatchObject({ code: 'PROVIDER_SPEND_UNAVAILABLE', message: 'PROVIDER_SPEND_UNAVAILABLE' });
@@ -130,7 +132,7 @@ it('does not turn an account budget conflict without a matching command into a r
 });
 
 it.each(['scope', 'currency', 'request', 'profile', 'ceiling', 'accessor', 'pricing-definition', 'meter-evidence'] as const)('rejects invalid %s spend evidence before any reservation or send', async kind => {
-  const f = await fixture(); let accessorRead = false;
+  const f = await fixture(1000, false); let accessorRead = false;
   const app = f.application({ async authorize(input) {
     const value = testSpending(input);
     if (kind === 'accessor') return Object.defineProperty({}, 'budget', { enumerable: true, get() { accessorRead = true; return value.budget; } }) as ModelInvocationSpending;
@@ -145,11 +147,13 @@ it.each(['scope', 'currency', 'request', 'profile', 'ceiling', 'accessor', 'pric
   } });
   await expect(app.invoke(f.command('invalid'))).rejects.toMatchObject({ code: ['accessor', 'pricing-definition', 'meter-evidence'].includes(kind) ? 'PROVIDER_SPEND_INVALID'
     : kind === 'ceiling' ? 'PROVIDER_SPEND_EXHAUSTED' : 'PROVIDER_SPEND_CONFLICT' });
-  expect(accessorRead).toBe(false); noEffects(f);
+  expect(accessorRead).toBe(false);
+  if (kind === 'ceiling') { expect(f.events).not.toContain('http'); expect(f.events).not.toContain('secret'); expect(Object.values(f.counts())).toEqual([0, 0, 0, 0, 0]); }
+  else noEffects(f);
 });
 
 it.each(['policy', 'profile', 'cancel'] as const)('rechecks %s after asynchronous quote resolution', async kind => {
-  const f = await fixture(), controller = new AbortController();
+  const f = await fixture(1000, false), controller = new AbortController();
   const app = f.application({ async authorize(input) {
     const value = testSpending(input);
     if (kind === 'policy') f.deny(); else if (kind === 'profile') f.changeProfile(); else controller.abort();

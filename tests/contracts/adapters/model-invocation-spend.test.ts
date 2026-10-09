@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -58,31 +58,43 @@ function snapshot(path: string) {
       allocations: [...db.prepare('SELECT allocation_id,lifetime_calls,in_flight FROM model_invocation_allocations ORDER BY allocation_id').iterate()] };
   } finally { db.close(); }
 }
-const claimant = `
-import { readFile } from 'node:fs/promises';
+const claimant = String.raw`
+import { readFile, writeFile } from 'node:fs/promises';
 import { openSqliteModelInvocationStore } from './dist/adapters/index.js';
 const [path,inputPath] = process.argv.slice(1);
 const store = await openSqliteModelInvocationStore(path,{journalMode:'delete',durability:'full',busyTimeoutMs:2000},'forbid');
-process.stdout.write('READY\\n');
-await new Promise(resolve => process.stdin.once('data', resolve));
-try { await store.claim(JSON.parse(await readFile(inputPath,'utf8'))); process.stdout.write('COMMITTED\\n'); }
-catch (error) { process.stdout.write('ERROR:' + String(error?.code ?? error?.message) + '\\n'); }
+await writeFile(inputPath + '.ready', 'READY');
+const deadline = Date.now() + 10000;
+for (;;) {
+  try { await readFile(inputPath + '.go'); break; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (Date.now() > deadline) throw new Error('CLAIMANT_GATE_TIMEOUT');
+  await new Promise(resolve => setTimeout(resolve, 5));
+}
+try { await store.claim(JSON.parse(await readFile(inputPath,'utf8'))); await writeFile(inputPath + '.result','COMMITTED'); }
+catch (error) { await writeFile(inputPath + '.result', String(error?.code ?? error?.message)); }
 finally { store.close(); }
 `;
 async function competingClaim(path: string, inputPath: string) {
   const child = spawn(process.execPath, ['--input-type=module', '-e', claimant, path, inputPath],
     { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
-  let output = '', errors = ''; child.stdout.on('data', chunk => { output += String(chunk); }); child.stderr.on('data', chunk => { errors += String(chunk); });
-  const until = async (predicate: () => boolean, label: string) => {
+  let errors = ''; child.stderr.on('data', chunk => { errors += String(chunk); });
+  const untilFile = async (suffix: string) => {
     const deadline = Date.now() + 5_000;
-    while (!predicate()) { if (Date.now() > deadline || child.exitCode !== null) throw new Error(`${label}:${errors}`); await new Promise(resolve => setTimeout(resolve, 5)); }
+    for (;;) {
+      try { return await readFile(inputPath + suffix, 'utf8'); }
+      catch (error) { if ((error as { code: string }).code !== 'ENOENT') throw error; }
+      if (Date.now() > deadline || child.exitCode !== null) throw new Error(`CLAIMANT${suffix}:${errors}`);
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
   };
-  await until(() => output.includes('READY\n'), 'CLAIMANT_READY');
-  return { child, release: () => child.stdin.write('GO\n'), result: async () => {
-    await until(() => output.includes('COMMITTED\n') || output.includes('ERROR:'), 'CLAIMANT_RESULT');
-    child.stdin.end(); await new Promise<void>((resolve, reject) => { const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('CLAIMANT_EXIT')); }, 5_000);
-      child.once('exit', code => { clearTimeout(timer); if (code === 0) resolve(); else reject(new Error(`CLAIMANT_CODE:${code}:${errors}`)); }); });
-    return output.includes('COMMITTED\n') ? 'COMMITTED' : output.trim().split('ERROR:').at(-1)!;
+  await untilFile('.ready');
+  return { child, release: () => writeFile(inputPath + '.go', 'GO'), result: async () => {
+    const result = await untilFile('.result');
+    if (child.exitCode === null) await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('CLAIMANT_EXIT')); }, 5_000);
+      child.once('exit', code => { clearTimeout(timer); if (code === 0) resolve(); else reject(new Error(`CLAIMANT_CODE:${code}:${errors}`)); });
+    });
+    return result;
   } };
 }
 
@@ -158,7 +170,7 @@ it.each([
   if (kind === 'responded') await store.recordResponse(claimed.record.receipt.claim,
     { schemaVersion: 1, native: { id: 'response' }, usage: { total_tokens: 1 } }, 12);
   else await store.recordRejected(claimed.record.receipt.claim,
-    createModelInvocationResponseEvidence({ id: 'fixture', version: 1 }, 'http-status', 429, Buffer.from('{"error":"denied"}'), true), 12);
+    createModelInvocationResponseEvidence({ id: 'fixture', version: 1 }, 'http-status', 500, Buffer.from('{"error":"failed"}'), true), 12);
   store.close();
   expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 6, settledMinorUnits: 0 },
     reservations: [{ record: { disposition: { state: 'held', reason } } }], allocations: [{ in_flight: 0 }] });
@@ -171,7 +183,7 @@ it('atomically admits only one of two processes competing for one scoped budget'
   const children: ChildProcessWithoutNullStreams[] = [];
   try {
     const first = await competingClaim(base.path, firstPath), second = await competingClaim(base.path, secondPath);
-    children.push(first.child, second.child); first.release(); second.release();
+    children.push(first.child, second.child); await Promise.all([first.release(), second.release()]);
     expect([await first.result(), await second.result()].sort()).toEqual(['COMMITTED', 'PROVIDER_SPEND_EXHAUSTED']);
   } finally {
     for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -179,4 +191,93 @@ it('atomically admits only one of two processes competing for one scoped budget'
   expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 6, settledMinorUnits: 0 }, invocations: 1, controls: 1,
     reservations: [{ record: { disposition: { state: 'reserved' } } }] });
   expect(snapshot(base.path).allocations).toHaveLength(1);
+});
+
+
+it.each([400, 401, 402, 403, 404, 413, 422, 429])('releases a complete HTTP %s rejection once and preserves the rejected receipt', async status => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const claimed = await store.claim(admission(base, 'rejected', 'rejected-id'));
+  await store.permitSend(claimed.record.receipt.claim, 'owner', 11);
+  const evidence = createModelInvocationResponseEvidence({ id: 'fixture', version: 1 }, 'http-status', status, Buffer.from('{"error":"rejected"}'), true);
+  const record = await store.recordRejected(claimed.record.receipt.claim, evidence, 12);
+  expect(await store.recordRejected(claimed.record.receipt.claim, evidence, 12)).toEqual(record);
+  store.close();
+  expect(record.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { httpStatus: status } });
+  expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 0, settledExactMinorUnits: '0' },
+    reservations: [{ record: { schemaVersion: 4, disposition: { state: 'released-no-charge' } } }], allocations: [{ in_flight: 0 }] });
+});
+
+it.each([408, 409, 499, 500, 503])('keeps uncertain HTTP %s spending held', async status => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const claimed = await store.claim(admission(base, 'uncertain', 'uncertain-id'));
+  await store.permitSend(claimed.record.receipt.claim, 'owner', 11);
+  await store.recordRejected(claimed.record.receipt.claim,
+    createModelInvocationResponseEvidence({ id: 'fixture', version: 1 }, 'http-status', status, Buffer.from('{}'), true), 12);
+  store.close(); expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 6, settledExactMinorUnits: '0' },
+    reservations: [{ record: { disposition: { state: 'held' } } }], allocations: [{ in_flight: 0 }] });
+});
+
+it('releases a transport-certified pre-POST refusal and keeps a cut 400 response held', async () => {
+  const before = await fixture(), store = await openSqliteModelInvocationStore(before.path, options, 'forbid');
+  const claimed = await store.claim(admission(before, 'not-sent', 'not-sent-id'));
+  await store.permitSend(claimed.record.receipt.claim, 'owner', 11);
+  await store.recordRejected(claimed.record.receipt.claim,
+    createModelInvocationResponseEvidence({ id: 'fixture', version: 1 }, 'not-sent', null, Buffer.alloc(0), true), 12);
+  store.close(); expect(snapshot(before.path)).toMatchObject({ account: { reservedMinorUnits: 0 },
+    reservations: [{ record: { disposition: { state: 'released-no-charge' } } }] });
+  const cut = await fixture(), reader = await openSqliteModelInvocationStore(cut.path, options, 'forbid');
+  const second = await reader.claim(admission(cut, 'cut', 'cut-id'));
+  await reader.permitSend(second.record.receipt.claim, 'owner', 11);
+  await reader.recordUnknown(second.record.receipt.claim, 'transport-error', 12,
+    createModelInvocationResponseEvidence({ id: 'fixture', version: 1 }, 'interrupted', 400, Buffer.from('{'), false));
+  reader.close(); expect(snapshot(cut.path)).toMatchObject({ account: { reservedMinorUnits: 6 }, reservations: [{ record: { disposition: { state: 'held' } } }] });
+});
+
+it('cancellation after permission keeps spending held after the local send closes', async () => {
+  const base = await fixture(), input = admission(base, 'cancel-after', 'cancel-after-id'), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const claimed = await store.claim(input); await store.permitSend(claimed.record.receipt.claim, 'owner', 11);
+  await store.cancelInvocation({ command: { schemaVersion: 1, commandId: 'cancel', scopeId: 'scope', targetCommandId: input.command.commandId,
+    reference, expectedRequestDigest: input.requestDigest }, actor, authorization, requestedAtMs: 12 });
+  expect(snapshot(base.path).allocations).toMatchObject([{ in_flight: 1 }]);
+  await store.recordUnknown(claimed.record.receipt.claim, 'transport-error', 13); store.close();
+  expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 6 }, reservations: [{ record: { disposition: { state: 'held' } } }], allocations: [{ in_flight: 0 }] });
+});
+
+it('restart only recovers the ended send owner; another endpoint and unpermitted claims remain protected', async () => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  for (const [suffix, owner] of [['dead', 'dead-owner'], ['foreign', 'other-endpoint'], ['unpermitted', null]] as const) {
+    const claimed = await store.claim(admission(base, suffix, suffix, `allocation-${suffix}`, 2));
+    if (owner) await store.permitSend(claimed.record.receipt.claim, owner, 11);
+  }
+  store.close(); const restarted = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  expect(await restarted.releaseSettledSlots({ atMs: 20, endedOwner: owner => owner === 'dead-owner' })).toMatchObject({ settled: 1, inconsistent: [] });
+  expect(await restarted.releaseSettledSlots({ atMs: 21, endedOwner: owner => owner === 'dead-owner' })).toMatchObject({ settled: 0, inconsistent: [] });
+  restarted.close(); expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 6 }, reservations: [
+    { invocationId: 'dead', record: { disposition: { state: 'held', reason: 'unknown' } } },
+    { invocationId: 'foreign', record: { disposition: { state: 'reserved' } } },
+    { invocationId: 'unpermitted', record: { disposition: { state: 'reserved' } } }] });
+});
+
+it('a model switch cannot release a prior uncertain charge or create a duplicate reservation', async () => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const first = await store.claim(admission(base, 'old-model', 'old-model', 'old-allocation', 4));
+  await store.permitSend(first.record.receipt.claim, 'owner', 11); await store.recordUnknown(first.record.receipt.claim, 'transport-error', 12);
+  const nextReference = { ...reference, modelId: 'new-model' };
+  const nextDefinition = { ...definition, model: { ...definition.model, id: 'new-model', nativeId: 'native/new-model' } };
+  const nextBinding = { ...binding, digest: createHash('sha256').update(encodeModelBindingDefinition(nextDefinition)).digest('hex') };
+  const activations = await openSqliteModelActivationStore(base.path, options, 'forbid');
+  const activated = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate-next', scopeId: 'scope',
+    reference: nextReference, expectedRevision: 0, catalogRevision: 'catalog', expectedBinding: nextBinding }, actor,
+    authorization, admittedAtMs: 13, definition: nextDefinition });
+  activations.close();
+  const next = admission(base, 'new-model', 'new-model', 'new-allocation', 4);
+  next.command = { ...next.command, reference: nextReference, expectedBinding: nextBinding,
+    nativeRequest: { ...next.command.nativeRequest, model: 'native/new-model' } };
+  next.definition = nextDefinition; next.activation = activated.receipt.record;
+  next.profile = { ...next.profile, reference: nextReference, bindingDigest: nextBinding.digest };
+  next.requestDigest = modelInvocationRequestDigest(next.command); next.profileDigest = modelInvocationProfileDigest(next.profile);
+  next.spending.quote = { ...next.spending.quote, requestDigest: next.requestDigest, profileDigest: next.profileDigest };
+  await store.claim(next); expect((await store.claim(next)).replayed).toBe(true); store.close();
+  expect(snapshot(base.path)).toMatchObject({ account: { reservedMinorUnits: 8 }, reservations: [
+    { record: { disposition: { state: 'reserved' } } }, { record: { disposition: { state: 'held' } } }] });
 });

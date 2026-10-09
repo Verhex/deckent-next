@@ -70,5 +70,5 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
     const picked = await show(view, labels, execution.signal);
     return { handled: true, picked: name === 'help' && !execution.signal.aborted ? picked : null };
   }, [show]);
-  return { run };
+  return { run, show };
 }
