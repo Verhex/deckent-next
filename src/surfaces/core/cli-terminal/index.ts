@@ -11,3 +11,4 @@ export { modelPanelSource } from './internal/model-panel.js';
 export { providerPanelPort, providerOutcomeWord } from './internal/provider-panel.js';
 export { cachePanelPort, cachePaybackReuses } from './internal/cache-panel.js';
 export { protocolPanelPort } from './internal/protocol-panel.js';
+export { policyPanelPort } from './internal/policy-panel.js';

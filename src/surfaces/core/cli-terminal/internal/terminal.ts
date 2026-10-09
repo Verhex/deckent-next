@@ -19,6 +19,7 @@ import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
 import { protocolPanelPort } from './protocol-panel.js';
 import { providerPanelPort } from './provider-panel.js';
+import { policyPanelPort } from './policy-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts, spendRecoveryView } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
@@ -198,6 +199,7 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   const protocol = planProfileProtocol && context.configApplication && context.resolveConfigPrincipal
     ? { protocol: protocolPanelPort(root, scopeId, { ...context, planProfileProtocol }, options, locale) } : {};
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
+    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).

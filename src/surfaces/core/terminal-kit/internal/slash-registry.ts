@@ -40,6 +40,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'scratch', group: 'session', descriptionKey: 'terminal.slash.scratch' },
   // MCP-CLIENT: the project's MCP servers (`/mcp approve|reconnect|remove <name>` typed); runs at once from the palette.
   { name: 'mcp', group: 'settings', descriptionKey: 'terminal.slash.mcp' },
+  { name: 'policy', group: 'settings', descriptionKey: 'terminal.slash.policy' },
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
   { name: 'config', group: 'settings', descriptionKey: 'config.surface.slashDescription' },
   // T4 PROVIDER-CONNECT: connect a provider (masked key, free check, secret store) or disconnect it; a window only.

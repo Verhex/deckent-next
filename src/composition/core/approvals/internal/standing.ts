@@ -14,7 +14,7 @@ function withStanding<T>(root: string, scopeId: string, options: ConfigLoadOptio
   return withPolicyAdministration(root, scopeId, options, access, (deps, person) => use(new PersistentStanding(deps), person));
 }
 /** The local OS person's governed `policy.administer@1` chain (read: a policy source only; write: the administration, and the approval decided as that person). */
-async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
+export async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
   use: (deps: PersistentStandingDependencies, person: Person) => Promise<T>): Promise<T> {
   try {
     const { config, layout, principal, path } = await loadConfiguredScopeContext(root, scopeId, options, access);

@@ -56,6 +56,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;
   upgradePolicyTemplate?: import('./policy-grants.js').PolicyUpgradeHandler;
+  mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
