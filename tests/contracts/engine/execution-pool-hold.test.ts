@@ -229,7 +229,7 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
   }
   const read = (path: string, sql: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   it('upgrades a v43 ledger losslessly: 0600 backup at v43, every existing table unchanged, two empty hold tables; a v43 open refuses v44', async () => {
-    expect(CURRENT_LEDGER_VERSION).toBe(48); expect(POOL_HOLD_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(47);
+    expect(CURRENT_LEDGER_VERSION).toBe(49); expect(POOL_HOLD_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(48);
     const { path, backups } = await ledger();
     const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V43_LEDGER_SQL);
     db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('p', '{"kept":true}');

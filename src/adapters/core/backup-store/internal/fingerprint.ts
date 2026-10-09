@@ -1,11 +1,11 @@
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { refuse } from './files.js';
 /** S1 O6: a set's ledger is opened immutable, so reading it (also a WAL-header snapshot of an alpha.18 set) never leaves -wal/-shm beside it. */
-export function openSetLedger(path: string): DatabaseSync {
+export function openSetLedger(path: string): import('node:sqlite').DatabaseSync {
   const url = pathToFileURL(path); url.searchParams.set('immutable', '1');
-  return new DatabaseSync(url, { readOnly: true });
+  return new (createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')).DatabaseSync(url, { readOnly: true }); // lazy (sqlite-ledger-lazy)
 }
 /** Stable table content fingerprint of the immutable online snapshot; identifiers are quoted, all integers read as bigint. */
 export function ledgerFingerprint(path: string): string {

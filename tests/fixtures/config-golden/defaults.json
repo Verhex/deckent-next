@@ -16,6 +16,10 @@
       "maxPathBytes": 1024
     }
   },
+  "backup": {
+    "retention": 7,
+    "schedule": "off"
+  },
   "cancellation": null,
   "cancellationRuntime": null,
   "cli": {

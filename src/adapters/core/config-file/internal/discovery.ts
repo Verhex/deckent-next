@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import { probeDockerImageAvailability, runNodeDockerCommand, type DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
 const exec = promisify(execFile);
 export interface ConfigDiscoveryLimits { readonly timeoutMs: number; readonly outputBytes: number; readonly maxEntries: number }
@@ -50,7 +50,7 @@ export async function discoverConfigFiles(directory: string, limits: ConfigDisco
   return paths;
 }
 export function discoverConfigPools(path: string, busyTimeoutMs: number, maxEntries: number): readonly string[] {
-  const db = new DatabaseSync(path, { readOnly: true });
+  const db = new (createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')).DatabaseSync(path, { readOnly: true }); // lazy: SDK import never loads it
   try { db.exec(`PRAGMA busy_timeout=${busyTimeoutMs}`); return db.prepare('SELECT pool_id FROM execution_pools ORDER BY pool_id LIMIT ?').all(maxEntries).map(row => String(row['pool_id'])); }
   finally { db.close(); }
 }

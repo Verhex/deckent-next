@@ -129,7 +129,8 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
     release();
     await until(() => read.mock.calls.some(call => call[0].join(',') === 'run,worker') && inFlight === 0, 'queued invalidation settles');
     expect(maximum).toBe(1);
-    view.stdin.write(ESC); await until(() => view.stdout.text.includes('Workers window closed'), 'Esc closes the window and stops the watch'); await settle(150);
+    // FIRST-TEST-FIXES (760c906e): the watch frame takes no focus; /watch-stop closes it and stops the watch.
+    await type(view.stdin, '/watch-stop\r'); await until(() => view.stdout.text.includes('Workers window closed'), '/watch-stop closes the window and stops the watch'); await settle(150);
     const stopped = read.mock.calls.length;
     await settle(350); expect(read).toHaveBeenCalledTimes(stopped);
   } finally { release(); }
@@ -249,8 +250,8 @@ it('stops watched cards without stopping approval observation and refreshes when
   await snapshotDone(read, 1);
   await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'watched revision');
-  // The run window owns the keyboard while open (SLASH-WINDOWS): Esc closes it and stops the watch, the same close path as `/watch-stop`.
-  view.stdin.write(ESC); await settle(100);
+  // FIRST-TEST-FIXES (760c906e): the run watch frame takes no focus; `/watch-stop` closes it and stops the watch.
+  await type(view.stdin, '/watch-stop\r'); await settle(100);
   f.advanceRun(3); f.addApproval('still-observed'); await settle(180);
   expect(view.stdout.text).not.toContain('rev 3');
   await type(view.stdin, '/watch-runs\r'); await until(() => view.stdout.text.includes('rev 3'), 'fresh watch activation');

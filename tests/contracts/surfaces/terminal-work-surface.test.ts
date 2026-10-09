@@ -102,8 +102,10 @@ describe('work surface: live worker panel', () => {
     // Single-flight polls never run faster than the heartbeat: at most one per interval after the first. Intervals use the
     // monotonic clock: the WSL wall clock steps back by seconds (a -2877 ms interval was observed in a full verify).
     for (let index = 1; index < polls.length; index++) expect(polls[index]! - polls[index - 1]!).toBeGreaterThanOrEqual(55);
-    // The window owns the keyboard (the composer is idle); Esc closes it and stops the watch, leaving one summary line in the scrollback.
-    view.stdin.write('\u001B');
+    // FIRST-TEST-FIXES (760c906e): the watch frame takes no focus, so Esc (the composer's key) leaves it open; /watch-stop closes it and
+    // stops the watch, leaving one summary line in the scrollback.
+    view.stdin.write('\u001B'); await settle(200); expect(view.frame()).toContain('LIVE-PANEL');
+    await view.type('/watch-stop\r');
     await until(() => view.frame().includes('Workers window closed') && !view.frame().includes('LIVE-PANEL'), 'window closed when the watch stops');
   });
 

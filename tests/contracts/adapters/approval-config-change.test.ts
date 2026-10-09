@@ -10,7 +10,7 @@ import { approvalSubject, type ApprovalRecord } from '#domain/index.js';
 import { approvalRequestDigest, approvalResultForProtocol, approvalSubjectsHiddenFromProtocol, CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION, ConfigChangeApprovalBroker, configChangeApprovalActionDigest,
   requestTaskApproval, RUNTIME_SERVICE_SCHEMA_VERSION, sealApproval, verifyApproval, type ConfigChangeSubject } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V47_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject — ledger v48, the broker's pending/allow/deny/expiry/window, protocol hiding.
 const roots: string[] = [];
@@ -36,16 +36,18 @@ function decide(store: ReturnType<typeof openSqliteApprovalStore>['store'], reco
 describe('ledger v48: config-change approvals', () => {
   it('upgrades the previous ledger (v47) row for row; v47 refuses a config-change row, v48 stores and finds one by its digest only under its own kind', async () => {
     const path = await ledger(), backups = join(path, '..', 'backups'); await mkdir(backups, { mode: 0o700 });
-    expect(CONFIG_CHANGE_APPROVAL_LEDGER_VERSION).toBe(CURRENT_LEDGER_VERSION); expect(PREVIOUS_LEDGER_VERSION).toBe(CURRENT_LEDGER_VERSION - 1);
+    // v49 (measured-tariff spending) came after v48; the v47 fixture goes back past both, so the upgrade crosses v48 and every later step.
+    expect(CONFIG_CHANGE_APPROVAL_LEDGER_VERSION).toBe(48); expect(CURRENT_LEDGER_VERSION).toBeGreaterThan(CONFIG_CHANGE_APPROVAL_LEDGER_VERSION);
     const seeded = openSqliteApprovalStore(path, options);
     const task = requestTaskApproval(seeded.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'a', requester, actionDigest: digest('task-a'), policyRevision: 'p1', summary: 'a', createdAt: 1_000, expiresAt: 61_000 });
     seeded.close();
-    const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+    const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V47_LEDGER_SQL);
+    expect(db.prepare('PRAGMA user_version').get()!['user_version']).toBe(CONFIG_CHANGE_APPROVAL_LEDGER_VERSION - 1);
     expect(() => db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
       .run('scope', 'cfg', 'config-change', null, null, digest('cfg'), 0, '{}')).toThrow(/CHECK/);
     const before = db.prepare('SELECT * FROM approvals ORDER BY approval_id').all(); db.close();
     const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-10-07T00:00:00.000Z'));
-    expect(upgrade).toMatchObject({ from: PREVIOUS_LEDGER_VERSION, to: CURRENT_LEDGER_VERSION });
+    expect(upgrade).toMatchObject({ from: CONFIG_CHANGE_APPROVAL_LEDGER_VERSION - 1, to: CURRENT_LEDGER_VERSION });
     const store = openSqliteApprovalStore(path, options);
     try {
       const check = new DatabaseSync(path, { readOnly: true });

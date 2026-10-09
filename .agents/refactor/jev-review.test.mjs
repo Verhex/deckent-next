@@ -316,7 +316,10 @@ test('full wire budget and secrets in the injected charter fail before network',
   const prepared = prepare(c, policy);
   const bytesWithoutCharter = Buffer.byteLength(JSON.stringify({ model: config.model, state: c, questions: prepared.input.questions }));
   await assert.rejects(consult({ ...config, maxRequestBytes: bytesWithoutCharter }, policy, c, root, key, fake), /JEV_REQUEST_TOO_LARGE/);
-  await assert.rejects(consult(config, policy, c, root, 'customer-installed Agent OS', fake), /JEV_SECRET_IN_JOURNAL/);
+  // A key that appears only inside the injected north-star charter (category renamed 2026-10-07; formerly "Agent OS") is still caught.
+  const inCharter = 'customer-installed Agent Control & Execution Plane';
+  assert.ok(prepared.input.state.northStar.text.includes(inCharter));
+  await assert.rejects(consult(config, policy, c, root, inCharter, fake), /JEV_SECRET_IN_JOURNAL/);
   assert.equal(calls, 0);
   assert.deepEqual(await readdir(root), []);
 }));

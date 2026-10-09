@@ -93,7 +93,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
-  const note = useWindowNote(), noteText = note && focused && priority !== WINDOW_PRIORITY.approval ? note.text : null;
+  // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
+  const note = useWindowNote(), noteText = note && (focused || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
   useEffect(() => { if (noteText === null || !note) return undefined; return () => note.consume(); }, [noteText, note]);
   const width = Math.max(1, columns - FRAME_COLUMNS);
   const { rows, starts } = layoutWindowRows(body, width);

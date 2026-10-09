@@ -1,4 +1,4 @@
-import { backup, DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import { chmod, lstat, mkdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -76,7 +76,7 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
     const sourcePath = await safePath(productResourcePath(layout, 'ledger'));
     const info = await lstat(sourcePath);
     if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
-    const db = new DatabaseSync(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET });
+    const { backup, DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite'), db = new DatabaseSync(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET });
     const ledger = join(staging, 'ledger.db');
     await writePrivate(ledger, new Uint8Array()); // 0600 before the backup API opens its output.
     const deadline = Date.now() + 60000;
