@@ -34,9 +34,9 @@ async function runScheduledBackup(root: string, options: ConfigLoadOptions, trig
   await pruneScheduledSets(directory, ordered, config.backup.retention, passphrase, config.installation.packageMeasurement);
   await report(observer, { trigger, status: 'created', code: null });
 }
-/** Called under service ledger custody before schema migration; failure prevents the upgrade. Fresh installs have nothing to back up. */
 /** node:sqlite loads only when a ledger is actually opened, so importing the SDK never loads the native module (sqlite-ledger-lazy). */
 const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+/** Called under service ledger custody before schema migration; failure prevents the upgrade. Fresh installs have nothing to back up. */
 export async function prepareScheduledBackup(root: string, options: ConfigLoadOptions, observer: BackupScheduleObserver = {}) {
   const config = await loadComposedConfig(root, { ...options, heal: false });
   if (config.backup.schedule !== 'before-upgrade') return;
