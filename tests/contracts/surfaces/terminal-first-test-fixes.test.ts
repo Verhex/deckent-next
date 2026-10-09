@@ -83,7 +83,8 @@ it.each(['tr', 'en'] as const)('renders spend refusal from the turn loop in %s w
   } }); views.push(view);
   await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
   await until(() => view.stdout.text.includes('PROVIDER_SPEND_EXHAUSTED'), 'localized refusal');
-  expect(view.stdout.text).toContain(language === 'tr' ? '/model → Bütçeyi değiştir' : '/model → Change budget');
+  // SPEND-HOLDS: the budget next step moved to /usage (reconcile held reservations or change budget).
+  expect(view.stdout.text).toContain(language === 'tr' ? '/usage → Bekleyen rezervasyonları uzlaştır veya Bütçeyi değiştir' : '/usage → Reconcile held reservations or Change budget');
   expect(view.stdout.text).not.toContain('The model round ended without an answer');
 });
 

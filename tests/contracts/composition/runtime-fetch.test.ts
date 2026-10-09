@@ -162,7 +162,7 @@ describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime ser
     expect(toolNames(f.state.requests[0]!)).not.toContain('fetch_url');
     expect(systemOf(f.state.requests[0]!)).toContain('Network access: none');
     // The provider adapter refuses a call to an undeclared tool: the round ends, nothing runs.
-    expect(result).toMatchObject({ finish: 'error', toolCalls: 0 }); expect(result.note).toContain('no tool call ran');
+    expect(result).toMatchObject({ finish: 'error', toolCalls: 0 }); expect(result.note).toContain('No tool call ran'); // MODEL-SWITCH 257c43f5: localized turn outcome (agent.turn.outcome.noTools)
     expect(finished(events)).toEqual([]);
     expect(t.resolved).toEqual([]); expect(t.dialed).toEqual([]);
   }, 60_000);

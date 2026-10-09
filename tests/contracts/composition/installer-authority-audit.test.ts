@@ -51,9 +51,11 @@ it.skipIf(process.platform === 'win32').each([false, true])('installer template/
 
 it.skipIf(process.platform === 'win32')('an unavailable audit ledger prevents installer policy publication', async () => {
   const f = await fixture(false), before = await readFile(f.path, 'utf8');
-  // A directory at the ledger file path makes audit preparation fail safely.
-  await mkdir(dirname(productResourcePath(f.config.productLayout, 'ledger')), { recursive: true, mode: 0o700 });
-  await mkdir(productResourcePath(f.config.productLayout, 'ledger'), { mode: 0o700 });
+  // A directory at the ledger file path makes audit preparation fail safely. INSTALL-FLOW: the fresh install already created the ledger; replace it.
+  const ledger = productResourcePath(f.config.productLayout, 'ledger');
+  for (const suffix of ['', '-wal', '-shm', '-journal']) await rm(`${ledger}${suffix}`, { force: true });
+  await mkdir(dirname(ledger), { recursive: true, mode: 0o700 });
+  await mkdir(ledger, { mode: 0o700 });
   await expect(f.upgrade(true)).rejects.toThrow();
   expect(await readFile(f.path, 'utf8')).toBe(before);
 });

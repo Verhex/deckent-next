@@ -103,9 +103,10 @@ it('refuses before any request when the budget cannot hold the bound, the policy
   await expect(invokeConfiguredModel(denied.project, denied.command, { env: denied.env, secretResolver: denied.secretResolver })).rejects.toThrow();
   expect(denied.seen).toHaveLength(0);
   const keyless = await fixture();
-  // A missing key is an effect-free failure recorded as an uncertain outcome (never a response, never a request on the wire).
+  // A missing key is an effect-free failure (never a response, never a request on the wire). SPEND-HOLDS: it is recorded as a certified
+  // empty not-sent rejection, so its reservation is released without charge instead of staying held as an uncertain outcome.
   const unresolved = await invokeConfiguredModel(keyless.project, keyless.command, { env: keyless.env, secretResolver: async () => undefined });
-  expect(unresolved.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: null, content: null });
+  expect(unresolved.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'not-sent', httpStatus: null, body: { complete: true, byteLength: 0 } } });
   expect(keyless.seen).toHaveLength(0);
   // The environment is not a fallback for a resolver that answered: the reference names one exact secret source.
   const viaEnv = await fixture();

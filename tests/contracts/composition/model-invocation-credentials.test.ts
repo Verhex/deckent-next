@@ -114,7 +114,8 @@ it.each(['policy', 'profile', 'cancel'] as const)('does not send if %s changes w
     return secret;
   } };
   const result = await invokeConfiguredModel(f.project, f.command('one'), options, abort.signal);
-  expect(result.receipt.outcome).toMatchObject({ state: 'unknown' }); expect(f.headers).toEqual([]); expect(lookups).toBe(1);
+  // SPEND-HOLDS: a refusal before the POST is a certified empty not-sent rejection (reservation released, never charged).
+  expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'not-sent', httpStatus: null } }); expect(f.headers).toEqual([]); expect(lookups).toBe(1);
   expect(f.metadataHeaders).toEqual([undefined]);
   expect(JSON.stringify(result)).not.toContain(secret); expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
   await f.policy(true);
@@ -122,7 +123,7 @@ it.each(['policy', 'profile', 'cancel'] as const)('does not send if %s changes w
   // Nothing was sent and the request never opened: the slot (maxInFlight 1) admits the next command (INFLIGHT-FIX). The resolver
   // repeats its policy/profile change, so only the cancel case reaches the provider this time.
   const next = await invokeConfiguredModel(f.project, f.command('next'), options);
-  expect(next.receipt.outcome).toMatchObject({ state: change === 'cancel' ? 'responded' : 'unknown' });
+  expect(next.receipt.outcome).toMatchObject(change === 'cancel' ? { state: 'responded' } : { state: 'rejected', evidence: { reason: 'not-sent', httpStatus: null } });
   expect(lookups).toBe(2); expect(f.headers).toEqual(change === 'cancel' ? [`Bearer ${secret}`] : []);
 });
 
@@ -141,7 +142,7 @@ it.each(['missing', 'backend-error'] as const)('keeps %s secret resolution failu
     if (mode === 'backend-error') throw new Error(`private backend context ${secret}`);
     return undefined;
   } });
-  expect(result.receipt.outcome).toMatchObject({ state: 'unknown' }); expect(f.headers).toEqual([]);
+  expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'not-sent', httpStatus: null } }); expect(f.headers).toEqual([]); // SPEND-HOLDS: certified not-sent
   expect(f.metadataHeaders).toEqual([undefined]);
   expect(JSON.stringify(result)).not.toContain(secret); expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
 });

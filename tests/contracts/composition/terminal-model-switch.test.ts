@@ -91,33 +91,46 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
         ...input }, { chatTurn: async (_root, command, onEvent) => f.client().chatTurn(command, onEvent), cancelChatTurn: async (_root, command) => f.client().cancelChatTurn(command) }) });
     mounted.push(view); await settle(60);
     const press = async (...keys: string[]) => { for (const key of keys) { view.stdin.write(key); await settle(35); } };
-    const switchTo = async (providerIndex: number) => {
-      await press('/model', ENTER); await until(() => view.stdout.frame.includes('anthropic-api'), 'provider groups');
-      await press(...Array.from({ length: providerIndex }, () => DOWN), ENTER, ENTER);
+    // The /model provider groups follow the canonical catalog order (provider id): anthropic-api, then local-openai.
+    const CLAUDE = 'anthropic-api', LOCAL = 'local-openai';
+    // Each picker step renders asynchronously (group list, model list, readiness, confirmation), so every key waits for the step it acts on.
+    const switchTo = async (provider: typeof CLAUDE | typeof LOCAL) => {
+      const frame = () => view.stdout.frame, loading = t('tui.panel.loading', {}, 'tr');
+      // The status line and transcript also name providers, so wait for the loaded group rows themselves.
+      await press('/model', ENTER); await until(() => frame().includes(`${CLAUDE} ›`) && frame().includes(`${LOCAL} ›`) && !frame().includes(loading), 'provider groups');
+      if (provider === LOCAL) { await press(DOWN); await until(() => new RegExp(`> +${LOCAL} ›`).test(frame()), 'provider cursor'); }
+      await press(ENTER); await until(() => frame().includes(`› ${provider}`) && !frame().includes(loading), 'provider models');
+      await press(ENTER);
       expect(requests.length).toBeLessThanOrEqual(3);
+      // Choosing the model first prepares the switch (readiness); the confirmation step appears only after it.
+      await until(() => frame().includes(t('tui.panel.model.session', {}, 'tr')), 'confirmation step');
       await press(ENTER); // the only confirmation after choosing the model
-      await until(() => !view.stdout.frame.includes(t('tui.model.title', { scope: 'scope' }, 'tr')) && view.stdout.frame.includes('READY'), 'switch closes');
+      // After the confirmation the window shows its loading state until the switch is prepared; typing before it closes goes to the window.
+      await until(() => !frame().includes(t('tui.model.title', { scope: 'scope' }, 'tr')) && !frame().includes(loading) && frame().includes('READY'), 'switch closes');
     };
-    const localTurn = async () => { f.state.script.push({ content: 'Local fixture yanıtı.' }); await press('local turn', ENTER); await until(() => view.stdout.text.includes('Local fixture yanıtı.'), 'local answer'); };
+    const localTurn = async () => { f.state.script.push({ content: 'Local fixture yanıtı.' }); await press('local turn', ENTER); await until(() => view.stdout.text.includes('Local fixture yanıtı.'), 'local answer');
+      await until(() => view.stdout.frame.includes('READY') && !view.stdout.frame.includes('QUEUED'), 'local turn settled'); }; // a /model typed mid-turn is queued
     await localTurn();
-    await switchTo(1); await press('Claude turn', ENTER);
+    await switchTo(CLAUDE); await press('Claude turn', ENTER);
     await until(() => requests.length === 1 && view.stdout.text.includes('Claude fixture yanıtı.'), 'new model next turn');
     expect(requests[0]!.model).toBe('claude-sonnet-5-5'); expect(f.state.requests).toHaveLength(1);
     const activationBefore = (await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference }, options)).activation;
     const app = createConfiguredConfigApplication(f.project, options), principal = await resolveConfiguredConfigPrincipal(f.project, 'scope', options);
-    const cache = cachePanelPort(f.project, 'scope', { planProfileCache: planConfiguredProfileCache, configApplication: app,
+    // The cache window binds the config application factory (ConfigCommandContext.configApplication), as the terminal does (terminal.ts).
+    const cache = cachePanelPort(f.project, 'scope', { planProfileCache: planConfiguredProfileCache, configApplication: createConfiguredConfigApplication,
       resolveConfigPrincipal: resolveConfiguredConfigPrincipal }, options, 'tr');
     expect((await cache.apply()).status).toBe('applied');
     expect((await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference }, options)).activation).toEqual(activationBefore);
     const cached = await f.client().chatTurn({ schemaVersion: 1, turnId: 'cache-only', scopeId: 'scope', reference, messages: [{ role: 'user', content: 'cache-only' }] }, () => undefined);
     expect(cached.finish).toBe('stop'); expect(requests[1]!.cache_control).toEqual({ type: 'ephemeral' });
-    await switchTo(0);
+    await switchTo(LOCAL);
     const current = JSON.parse(await readFile(path, 'utf8'));
-    const changed = await app.submit('set', { keyPath: 'provider_catalog', value: { ...current.provider_catalog, revision: 'catalog-after-cache' }, layer: 'project', scopeId: 'scope', principal });
+    const changed = await app.submit('set', { keyPath: 'provider_catalog', value: { ...current.provider_catalog, revision: 'catalog-after-cache' }, layer: 'project', scopeId: 'scope', principal,
+      commandId: 'catalog-after-cache' });
     expect(changed.status).toBe('applied');
     const stale = await f.client().chatTurn({ schemaVersion: 1, turnId: 'stale-proof', scopeId: 'scope', reference, messages: [{ role: 'user', content: 'stale' }] }, () => undefined);
     expect(stale.note).toContain('MODEL_INVOCATION_ACTIVATION_CONFLICT'); expect(requests).toHaveLength(2);
-    await switchTo(1); await press('after migration', ENTER);
+    await switchTo(CLAUDE); await press('after migration', ENTER);
     await until(() => requests.length === 3, 'current activation next turn');
     const activationAfter = (await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference }, options)).activation!;
     expect(activationAfter.revision).toBe(activationBefore!.revision + 1);

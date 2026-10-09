@@ -25,9 +25,9 @@ async function setup() {
 }
 describe('configured config through real policy, ledger audit and atomic writer', () => {
   it('sets, snapshots a versioned backup, records value-free sealed audit and unsets', async () => {
-    const f = await setup();
+    const f = await setup(); const installed = await readFile(f.path, 'utf8'); // INSTALL-FLOW: the fresh policy install also writes the first-session config
     const first = await f.app.set({ ...f.command, keyPath: 'max_workers', value: 2 });
-    expect(first.backupPath).toBeNull(); expect((await loadConfig(f.root, f.options)).max_workers).toBe(2);
+    expect(first.backupPath).not.toBeNull(); expect(await readFile(first.backupPath!, 'utf8')).toBe(installed); expect((await loadConfig(f.root, f.options)).max_workers).toBe(2);
     const bytes = await readFile(f.path, 'utf8'); const inspected = await f.app.inspect();
     const result = await f.app.set({ ...f.command, commandId: 'c2', keyPath: 'max_workers', value: 3, expect: inspected.digest });
     expect(result.backupPath).not.toBeNull(); expect(await readFile(result.backupPath!, 'utf8')).toBe(bytes);
@@ -39,12 +39,14 @@ describe('configured config through real policy, ledger audit and atomic writer'
   it('refuses invalid value, stale preimage, secrets and denied authority without file changes', async () => {
     const f = await setup(); await f.app.set({ ...f.command, keyPath: 'max_workers', value: 2 });
     const inspected = await f.app.inspect(), bytes = await readFile(f.path, 'utf8');
+    const backups = async () => (await readdir(join(f.root, '.deckent'))).filter(name => name.includes('.bak.'));
+    const before = await backups(); // INSTALL-FLOW: the first set backs up the installer-written config; refusals add none
     await expect(f.app.set({ ...f.command, keyPath: 'max_workers', value: -1 })).rejects.toThrow(); expect(await readFile(f.path, 'utf8')).toBe(bytes);
     await writeFile(f.path, `${JSON.stringify({ schema_version: 4, max_workers: 3 })}\n`); const changed = await readFile(f.path, 'utf8');
     await expect(f.app.set({ ...f.command, keyPath: 'max_workers', value: 4, expect: inspected.digest })).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
     await expect(f.app.set({ ...f.command, keyPath: 'secrets.backend', value: 'should-never-print' })).rejects.toMatchObject({ code: 'CONFIG_SECRET_SECTION_REFUSED' });
     await expect(f.app.set({ ...f.command, principal: { ...f.principal, subject: 'other' }, keyPath: 'max_workers', value: 4 })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    expect(await readFile(f.path, 'utf8')).toBe(changed); expect((await readdir(join(f.root, '.deckent'))).filter(name => name.includes('.bak.'))).toHaveLength(0);
+    expect(await readFile(f.path, 'utf8')).toBe(changed); expect(await backups()).toEqual(before); expect(before).toHaveLength(1);
   });
   it('identifies env overrides and leaves project value explicitly overridden', async () => {
     const f = await setup(); const app = createConfiguredConfigApplication(f.root, { env: { ...f.options.env, DECKENT_LANGUAGE: 'tr' } });

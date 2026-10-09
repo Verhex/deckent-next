@@ -53,7 +53,9 @@ describe('private native response evidence', () => {
       const bytes = Buffer.alloc(length, 0xff);
       for (const complete of [true, false]) {
         if ((complete && reason === 'interrupted') || (!complete && reason !== 'interrupted' && reason !== 'response-limit')) continue;
-        const saved = createModelInvocationResponseEvidence(profile.adapter, reason, complete ? 599 : null,
+        // SPEND-HOLDS: `not-sent` exists only as the certified empty, complete body with no HTTP status.
+        if (reason === 'not-sent' && (length !== 0 || !complete)) continue;
+        const saved = createModelInvocationResponseEvidence(profile.adapter, reason, complete && reason !== 'not-sent' ? 599 : null,
           bytes, complete, complete ? length : Number.MAX_SAFE_INTEGER);
         expect(BigInt(Buffer.byteLength(JSON.stringify(saved), 'utf8'))).toBeLessThanOrEqual(bound);
       }

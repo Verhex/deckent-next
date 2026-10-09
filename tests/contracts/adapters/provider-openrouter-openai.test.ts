@@ -102,7 +102,7 @@ it.each([false, true])('reserves tools and stream=%s, settles raw usage.cost as 
     evidenceDigest: 'b'.repeat(64) }).account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: exactCents, frozen: false });
   expect(f.seen()).toMatchObject({ max_tokens: 10, tools, modalities: ['text'], plugins: expect.arrayContaining([
     { id: 'web', enabled: false }, { id: 'file-parser', enabled: false }, { id: 'fusion', enabled: false },
-  ]), provider: { only: (document as { data: { endpoints: { tag: string }[] } }).data.endpoints.filter(e => e.tag === tag || e.tag.startsWith(`${tag}/`)).map(e => e.tag).sort(), data_collection: 'deny', zdr: true, allow_fallbacks: false, require_parameters: true } });
+  ]), provider: { only: [tag], data_collection: 'deny', zdr: true, allow_fallbacks: false, require_parameters: true } }); // the default metadata has one endpoint under the tag
   expect((f.seen()['plugins'] as { enabled: boolean }[]).every(plugin => plugin.enabled === false)).toBe(true);
   expect(f.seen()).not.toHaveProperty('max_completion_tokens'); expect(f.seen()).not.toHaveProperty('stream_options');
   if (streamed) expect(deltas).toEqual([{ kind: 'text', text: 'ok' }]);

@@ -52,14 +52,14 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage: refuses
     expect(error).toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED', params: { missing } });
     for (const locale of ['en', 'tr'] as const) {
       const text = formatHumanError(error as Error, { noColor: true, locale });
-      expect(text).toContain(missing); expect(text).not.toContain('{'); expect(text).toContain('deckent init --help');
+      expect(text).toContain(missing); expect(text).not.toContain('{'); expect(text).toContain('deckent init policy --scope <id> --apply');
     }
   }
   // Even a producer without details shows a localized unknown rather than an uninterpolated placeholder.
   for (const locale of ['en', 'tr'] as const) {
     const text = formatHumanError(ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED'), { noColor: true, locale });
     expect(text).not.toContain('{missing}'); expect(text).toContain(locale === 'tr' ? 'bilinmiyor' : 'unknown');
-    expect(text).toContain('deckent init --help');
+    expect(text).toContain('deckent init policy --scope <id> --apply');
   }
 });
 
@@ -74,8 +74,8 @@ it.skipIf(process.platform === 'win32')('runtime serve on a fresh install withou
     expect(code).not.toBe(0); expect(output).toEqual([]);
     const text = errors.join('');
     expect(text).toContain('CANCELLATION_NOT_CONFIGURED'); expect(text).toContain('cancellation, cancellationRuntime');
-    expect(text).toContain('deckent init --help'); expect(text).not.toContain('{missing}');
-    expect(text).toContain(locale === 'tr' ? 'Kurulumu tamamladıktan sonra' : 'Complete the installation');
+    expect(text).toContain('deckent init policy --scope <id> --apply'); expect(text).not.toContain('{missing}');
+    expect(text).toContain(locale === 'tr' ? 'Yeni projede' : 'For a fresh project'); // INSTALL-FLOW 577e8337: the next step names the fresh-project init and the existing-installation config choice
   }
   await expect(readFile(join(project, '.deckent/config.json'))).rejects.toMatchObject({ code: 'ENOENT' });
 });

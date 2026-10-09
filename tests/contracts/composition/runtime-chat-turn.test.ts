@@ -23,6 +23,7 @@ import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#pla
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
+import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 const roots: string[] = [], servers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 // S9: the real host measurement gates the bubblewrap turn; other shell tests pin the realm to `host` or inject `() => []`.
@@ -426,7 +427,9 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const streamTurn = (messages: readonly AgentTurnMessage[], signal: AbortSignal, turn?: { readonly reasoning?: 'off' }) => streamTerminalAgentTurn({
       projectRoot: f.project, scopeId: 'scope', messages, options: { env: f.env }, signal, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}) },
     { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn });
-    const view = mountWorkline({ streamTurn });
+    // CONVO-PARSERS (A06-A08): `/reasoning off` asks the model port first; this catalog declares the thinking switch (thinkingSwitch: true).
+    const view = mountWorkline({ streamTurn, panels: { ports: { model: { inspect: async () => ({ title: '', choices: [], notes: [], defaultBlocked: null }),
+      reasoningOffSupported: async () => true } }, labels: terminalPanelLabels('en') } });
     try {
       await until(() => view.stdout.text.includes('READY'), 'ready');
       view.stdin.write('one\r'); await until(() => f.state.requests.length === 1 && view.stdout.text.includes('First.'), 'first');
