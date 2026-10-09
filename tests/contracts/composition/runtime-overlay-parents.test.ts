@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -105,6 +105,29 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     expect(result.text).toContain('(denied by policy)');
     expect(workspaceFiles(f)).toEqual([]);
   }, 120_000);
+
+  // Astra 2486 P1: an existing `.deckent/docs` file reached by an approved destructive call goes through the write set like any entry —
+  // a company deny keeps it unchanged with no effect and no approved-entry record; an allowed write is applied and audited.
+  for (const [label, deny] of [['denied', true], ['allowed', false]] as const) {
+    custodyIt(`[requires Linux /proc/self/fd custody] standard mode: an approved write to an existing .deckent/docs file is ${label} through the write set`, async () => {
+      const f = await modeRuntime({ grants: deny ? [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')] : GRANTS, mode: 'ask',
+        shell: { schemaVersion: 1, realm: 'require-sandbox' } });
+      await mkdir(join(f.project, '.deckent', 'docs'), { recursive: true }); await writeFile(join(f.project, '.deckent', 'docs', 'report.md'), 'original\n');
+      const result = await f.call('run_shell', { command: 'd=.deckent/docs; echo changed > "$d/report.md"; echo done' }, 'allow');
+      expect(result.card).toBe(true);
+      expect(result).toMatchObject({ status: 'ok' });
+      const approved = f.audit().map(record => record.event.subject).filter(subject => subject.kind === 'sandbox-write-approved');
+      if (deny) {
+        expect(await readFile(join(f.project, '.deckent', 'docs', 'report.md'), 'utf8')).toBe('original\n');
+        expect(result.text).toContain('.deckent/docs/report.md (denied by policy)');
+        expect(workspaceFiles(f)).toEqual([]); expect(approved).toEqual([]);
+      } else {
+        expect(await readFile(join(f.project, '.deckent', 'docs', 'report.md'), 'utf8')).toBe('changed\n');
+        expect(workspaceFiles(f)).toEqual(['.deckent/docs/report.md']);
+        expect(approved).toEqual([expect.objectContaining({ approvalId: expect.any(String), summary: { kind: 'edit', path: '.deckent/docs/report.md' } })]);
+      }
+    }, 120_000);
+  }
 
   it('a company write deny makes no parent directory', async () => {
     const f = await runtime([...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);

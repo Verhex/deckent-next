@@ -377,7 +377,9 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   if (seal?.ok) {
     // Owner Y (2026-09-30): an existing subdirectory of a sealed root that is not Deckent's state (a tracked `.deckent/docs`) is the project's —
     // bound writable over the read-only root (the deny masks inside it still follow); the root's own names stay read-only, none can be added.
-    const product = layout.hardFloor?.product;
+    // Astra 2486 P1: only over the plain writable host project. Over an overlay (a write set) or a read-only project a host bind would let
+    // writes bypass the write set's decisions; there the subtree stays in the overlay (decided like any entry) or read-only.
+    const product = !overlay && write.projectReadOnly !== true ? layout.hardFloor?.product : undefined;
     for (const sealed of product ? seal.sealed : []) {
       let names;
       try { names = await readdir(sealed, { withFileTypes: true }); } catch { continue; }
@@ -401,7 +403,10 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   }
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
   const view: BubblewrapView = Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir,
-    systemPaths: BUBBLEWRAP_SYSTEM_PATHS, ...(seal?.ok ? { sealedPaths: seal.sealed, hiddenPaths: seal.hidden } : {}), toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
+    systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
+    // Astra 2486 P1: an overlay keeps the in-project sealed roots inside the write set (a read-only host bind over it would hide `.deckent/docs`
+    // from the overlay); its entries there are decided after the call (`sealedEntryRefused`), the product state stays masked or read-only.
+    ...(seal?.ok ? { sealedPaths: overlay ? seal.sealed.filter(path => !nested(path, root) && path !== root) : seal.sealed, hiddenPaths: seal.hidden } : {}), toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
   // R7 follow-up: a closed view with a writable project pins the in-project ancestors of its masks and read-only paths too.
   const refusedPins = await canPinAncestors(view);
   return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };

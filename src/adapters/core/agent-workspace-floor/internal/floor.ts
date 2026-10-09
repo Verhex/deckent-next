@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { globalStateRoot, productResourcePath, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { createGlobMatcher, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
@@ -56,6 +56,21 @@ export function agentShellHardFloor(projectRoot: string, layout: ProductLayout, 
     inProject(layout.root), inProject(layout.bootstrapConfigPath), MCP_PROJECT_REGISTRY_PATH, ...DEFAULT_WORKSPACE_READ_DENY.filter(pattern => pattern.startsWith(`${dirname(MCP_PROJECT_REGISTRY_PATH)}/`)).map(pattern => pattern.split('/*')[0]!)];
   return Object.freeze({ roots: Object.freeze([...new Set(roots)]), homeDenied: (path: string) => credentials.some(match => match(path)), product: (path: string) =>
     products.some(product => product === path || product.startsWith(`${path}/`) || path.startsWith(`${product}/`)) });
+}
+/**
+ * Astra 2486 P1: a write set keeps a sealed in-project root (`.deckent`) inside the overlay, so its entries are refused here unless they lie in
+ * the owner-Y exception — the root's `docs` subtree (creatable) or another EXISTING non-product, non-link subdirectory; the root's own names
+ * and product paths never reach the host from a write set.
+ */
+export function sealedRootEntryRefused(projectRoot: string, hardFloor: ReturnType<typeof agentShellHardFloor>): (rel: string) => boolean {
+  const inside = hardFloor.roots.map(root => relative(projectRoot, root).split(sep).join('/')).filter(rel => rel !== '' && !rel.startsWith('..') && !isAbsolute(rel));
+  return rel => inside.some(root => {
+    if (rel !== root && !rel.startsWith(`${root}/`)) return false;
+    const child = rel.slice(root.length + 1).split('/')[0] ?? '', dir = `${root}/${child}`;
+    if (root === '.deckent' && child === 'docs') return false;
+    if (!child || rel === dir || hardFloor.product?.(dir)) return true;
+    try { const info = lstatSync(join(projectRoot, dir)); return !info.isDirectory(); } catch { return true; }
+  });
 }
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {

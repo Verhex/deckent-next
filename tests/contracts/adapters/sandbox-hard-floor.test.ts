@@ -146,3 +146,39 @@ it('without a turn hard floor: authority, unknown .deckent files and the data ro
   expect(sandboxHardFloored(layoutWith(`${root}/.deckent/docs/data`), '.deckent/docs/data/policy.json')).toBe(true);
   expect(sandboxHardFloored(layoutWith('/elsewhere/data'), 'src/a.ts')).toBe(false);
 });
+
+// Astra 2486 P1: the owner-Y `.deckent/docs` subtree is a writable HOST bind only over the plain writable host project. Over an overlay (a
+// write set) it stays inside the overlay and the in-project sealed root is not bound over it; a read-only project (the write set's
+// allocation-failure posture) keeps docs read-only, even for an approved call with the ordinary floor writable.
+describe.skipIf(measured.bubblewrap.status !== 'available')('Astra 2486 P1: no writable host docs bind over an overlay or a read-only project', () => {
+  async function withDocs() {
+    const f = await fixture();
+    await mkdir(join(f.project, '.deckent', 'docs'), { recursive: true }); await writeFile(join(f.project, '.deckent', 'docs', 'report.md'), 'original\n');
+    const upper = await mkdtemp(join(tmpdir(), 'deckent-w3-upper-')), work = await mkdtemp(join(tmpdir(), 'deckent-w3-work-')); roots.push(upper, work);
+    // The live shape: the data root below `.deckent` (with the data root `.deckent` itself every entry is product state, so no docs bind exists).
+    const live = resolveProductLayout({ projectRoot: f.project, root: join(f.project, '.deckent', 'live-data') });
+    await mkdir(live.root, { recursive: true });
+    const layout: ShellSandboxLayout = { ...f.layout, project: await createWorkspaceScope(f.project, agentWorkspaceDeny(f.project, live, false)), dataRoot: '.deckent/live-data',
+      hardFloor: agentShellHardFloor(f.project, live, [f.environment]) };
+    return { ...f, layout, upper, work, docs: join(f.project, '.deckent', 'docs') };
+  }
+  it('the plain writable view binds docs writable; the overlay and read-only views never do, and the overlay keeps .deckent inside it', async () => {
+    const f = await withDocs();
+    const plain = await resolveBubblewrapView(f.layout, f.environment, {}, { floorReadOnly: false });
+    expect(plain.ok && plain.view.writablePaths).toEqual([f.docs]);
+    const overlay = await resolveBubblewrapView(f.layout, f.environment, {}, { floorReadOnly: false, writeSet: { upper: f.upper, work: f.work } });
+    expect(overlay.ok, overlay.ok ? '' : overlay.reason).toBe(true);
+    if (overlay.ok) { expect(overlay.view.writablePaths).toBeUndefined(); expect(overlay.view.sealedPaths ?? []).not.toContain(join(f.project, '.deckent')); }
+    const readOnly = await resolveBubblewrapView(f.layout, f.environment, {}, { floorReadOnly: false, projectReadOnly: true });
+    expect(readOnly.ok && readOnly.view.writablePaths).toBeUndefined();
+  });
+  it('write set unavailable (read-only project, approved floor): a docs write is refused, the file is unchanged', async () => {
+    const f = await withDocs();
+    const usable = bubblewrapShellSandbox(f.layout).usable(measured);
+    if (!usable.ok) throw new Error(usable.reason);
+    const out = await usable.realm.run({ command: 'd=.deckent/docs; echo changed > "$d/report.md"; echo "rc=$?"', cwd: f.project, environment: f.environment,
+      fixedEnv: { TMPDIR: join(f.root, 'scratch') }, timeoutMs: 10_000, writeFloorReadOnly: false, projectReadOnly: true });
+    expect(out.output).not.toContain('rc=0');
+    expect(await readFile(join(f.docs, 'report.md'), 'utf8')).toBe('original\n');
+  });
+});
