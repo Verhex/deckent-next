@@ -47,7 +47,7 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 | NPM-PUBLISH | Paketi npm'de yayımlamak: kapsamsız `deckent` adı mevcut bir paketle çakışıyor; planlanan ad `@verhex/deckent` (owner 2026-10-07, kesin değil). CLI komut adı `deckent` kalır (bin) | Paket henüz yayımlanmadı; package.json adı `deckent`. Owner 2026-10-07: yayın ürün kararlı (stabil) yürüdüğünde | Ad kararı + scope sahipliği + imzalı/provenance yayın; README kurulum satırı `npm install -g @verhex/deckent` olur | — |
 | CONFIG-GROWTH | N1 `config.json` 6 günde 127 KB → 1,96 MB (admission registry her kart türüyle büyüyor) | Gözlem (S1 tatbikatı) | Ölçüm + budama/ayırma kartı | `proof/W4-S1-RECOVERY-2026-10-06/` |
 | IDENTITY-PROFILES | Solo/ekip/enterprise/özel sürümlü kimlik profilleri (I0–I5), K1–K3 = A | I0 + I1 (profil registry + yetkisiz taslak önizleme) main'de (dalga 4) | I2 | `proof/IDENTITY-PROFILES-DESIGN-2026-10-05/design.md` |
-| MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1+P2 canlıda (alpha.7) | P3 araç/MCP şema + argüman JSON (sonraki partinin ilk güvenlik işi) | [work-list](.deckent/docs/plan/work-list.md) |
+| MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1+P2 canlıda (alpha.7); W9 P3 adayı `lane/ingress-p3`, taban `04fd206a`: ortak JSON anahtar/değer reddi, şema metni projeksiyonu, MCP/worker ortak giriş denetimi | Lead: kesin aday batch incelemesi ve hosted/iniş; native worker araç yürütücüsü, scopesuz audit ve meşru ZWJ/VS sınırları açık | `proof/INGRESS-P3-2026-10-10/WORKER.md` |
 | FLAKY-RECOVERY | Installed offline completion/cancellation | Kaynak indi | Gerçek Docker ile doğrulama | [work-list](.deckent/docs/plan/work-list.md) |
 | CI-DEBT | Kalan CI hataları tek iş (ubuntu-only ruleset owner komutu) | Owner'ın ayrı Codex ajanı | Ajan STATUS çıktısını izle | `proof/CI-DEBT-2026-10-05/STATUS.md` |
 | NODE-26 | Node 26 geçişi | Hedef LTS 2026-10-28 | O tarihte tam verify | owner-decisions |
@@ -93,7 +93,7 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 
 - **P0:** belgelenmiş açık P0 yok (2026-10-05).
 - **P1 AOF-HANDOFF R1** (Astra 2300: platform yeteneği/taşınabilir testler): dar şeritte düzeltildi; birleşik aday için bağımsız kabul yok → [work-list](.deckent/docs/plan/work-list.md).
-- **P1-benzeri güvenlik takibi MODEL-INGRESS-P3:** araç/MCP şema açıklaması ve argüman JSON'unda gizli Unicode; sonraki batch'in ilk güvenlik işi.
+- **P1-benzeri güvenlik takibi MODEL-INGRESS-P3:** W9 kaynak adayı şema açıklamalarını ve argüman JSON anahtar/değerlerini ortak denetimden geçirir; yazar hedefli kanıtı dış proof'ta, bağımsız batch kabulü/iniş henüz yok. Native worker'ın kendi araçları Deckent giriş yolunun dışında.
 - **Dalga 2 takipleri** (lead kararları 2026-10-06): patch-prepare reddi tipli makbuz (`attempt_receipts`, ledger sürümü + göç); `LayoutError` insan metni (config dışı yüzeyler); **MARK-LOST-ATOMIC (owner 2026-10-06, takip kartı; Astra 2384):** `mark-lost` dalgadan çıkarıldı; kart: `unknown` gözlemi + Run hold'u tek işlemde, **KARAR 12 (lead/owner)** slot bırakma (tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı), mühürlü audit, MCP aracı, kaybolan dispatch kaydı (#13); o zamana dek kaybolan deneme `active`, slot tutulu; CI'ya ayrı perf job; MODEL-INGRESS-P3 yukarıda. Ayrıntı [open-findings](.deckent/docs/plan/open-findings.md).
 - Etiketsiz açıklar (SBOM gömülü kopya tespiti Astra 2192, SURROGATE-CUT sınırları, terminal/provider açıkları): [open-findings](.deckent/docs/plan/open-findings.md).
 
