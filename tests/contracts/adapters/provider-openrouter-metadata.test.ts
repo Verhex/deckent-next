@@ -47,7 +47,7 @@ it('fetches the exact TLS metadata path without auth or proxy and quotes only fu
     expect((observation.tariff.metadata['data'] as { authoritative: { revision: string } }).authoritative.revision).toBe('source-revision');
     expect(quoteOpenRouterText(observation.tariff, { model: 'vendor/model', messages: [{ role: 'user', content: 'x' }],
       max_completion_tokens: 10 }, 10)).toMatchObject({ currency: 'USD', provider: { only: ['provider/region'], allow_fallbacks: false } });
-    const incompleteBody = JSON.stringify(metadata({ prompt: '0.1', completion: '0.2' }));
+    const incompleteBody = JSON.stringify(metadata({ prompt: '0.1', completion: '0.2', request: null }));
     servers[0]!.removeAllListeners('request'); servers[0]!.on('request', (_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(incompleteBody);
     });

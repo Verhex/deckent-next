@@ -14,13 +14,18 @@ import { checkedToolCalls } from './tool-calls.js';
 const adapterOf = (definition: OpenAiChatHttpDefinition) => ({ id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: definition.dialect ? OPENAI_CHAT_HTTP_ADAPTER_VERSION : 4 });
 export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDefinition; limits: OpenAiChatHttpLimits;
   request: OpenAiChatTextRequest; body: string }>;
+interface ProviderRequestFields {
+  readonly provider: JsonObject;
+  readonly modalities: readonly ['text'];
+  readonly plugins: readonly Readonly<{ id: string; enabled: false }>[];
+}
 export interface OpenAiChatNativePortOptions {
   /** A streamed send's final usage only (seen with or after its finish reason) with the stream's authoritative service tier; an interim usage never reaches it. */
   readonly onFinalUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject, serviceTier?: unknown, frame?: string) => void;
   /** A contradiction after that final usage (e.g. a later conflicting service tier) withdraws it: it no longer settles money (Astra 2467). */
   readonly onFinalUsageWithdrawn?: (prepared: PreparedOpenAiChatRequest) => void;
   /** Pure pricing adapter ports: routing is appended before size checking; raw validated response bytes preserve monetary decimals. */
-  readonly providerRouting?: (definition: OpenAiChatHttpDefinition, request: OpenAiChatTextRequest) => JsonObject;
+  readonly providerRequestFields?: (definition: OpenAiChatHttpDefinition, request: OpenAiChatTextRequest) => ProviderRequestFields;
   readonly onResponse?: (prepared: PreparedOpenAiChatRequest, body: Buffer, response: OpenAiChatHttpResponse) => void;
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
   /** The scope's secret prefix-cache salt (composition: HMAC under the installation's salt secret). Required by a binding that declares
@@ -81,7 +86,7 @@ async function secretCacheSalt(options: OpenAiChatNativePortOptions, scopeId: st
 
 /** Pure preparation: it has no network, credential, or profile-resolution effect. */
 export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInput: unknown, nativeRequestInput: unknown, cacheSalt?: string,
-  provider?: JsonObject): PreparedOpenAiChatRequest {
+  providerFields?: ProviderRequestFields): PreparedOpenAiChatRequest {
   const definition = parseOpenAiChatHttpDefinition(definitionInput), limits = parseOpenAiChatHttpLimits(limitsInput);
   const nativeRequest = parseOpenAiChatTextRequest(nativeRequestInput, definition);
   const streamed = nativeRequest.stream === true, dialect = definition.dialect ?? OPENAI_CHAT_DEFAULT_DIALECT;
@@ -92,8 +97,8 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
     ...(streamed && dialect.streamUsage === 'include' ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
     ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}),
     ...(nativeRequest.chat_template_kwargs ? { chat_template_kwargs: nativeRequest.chat_template_kwargs } : {}),
-    ...(cacheSalt ? { cache_salt: cacheSalt } : {}), ...(provider ? { provider } : {}) });
-  if ((definition.tariff.kind === 'openrouter-endpoint') !== (provider !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+    ...(cacheSalt ? { cache_salt: cacheSalt } : {}), ...(providerFields ?? {}) });
+  if ((definition.tariff.kind === 'openrouter-endpoint') !== (providerFields !== undefined)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
   return Object.freeze({ definition, limits, request: nativeRequest, body });
 }
@@ -183,7 +188,7 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
         || (request.chat_template_kwargs && !declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request,
         declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? await secretCacheSalt(options, parsedProfile.data.scopeId) : undefined,
-        options.providerRouting?.(adapterDefinition, request));
+        options.providerRequestFields?.(adapterDefinition, request));
       preparedTokens.add(prepared);
       // A counter is used only for a model whose binding declares it (catalog data) and a profile that names its endpoint.
       if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(prepared);

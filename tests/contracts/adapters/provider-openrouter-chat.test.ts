@@ -68,7 +68,9 @@ it('prepares without POST or credential lookup and emits one exact full-tag rout
   const prepared = await adapter.native.prepare(profile(origin), binding, request);
   expect(posts).toBe(0); expect(credentials).toBe(0);
   await adapter.native.send(prepared);
-  expect(credentials).toBe(0); expect(JSON.parse(seen)).toEqual({ ...request, stream: false, provider: { only: ['provider/region'], order: ['provider/region'],
+  expect(credentials).toBe(0); expect(JSON.parse(seen)).toEqual({ ...request, stream: false, modalities: ['text'],
+    plugins: ['web', 'file-parser', 'response-healing', 'context-compression', 'auto-router', 'auto-beta-router', 'pareto-router', 'fusion']
+      .map(id => ({ id, enabled: false })), provider: { only: ['provider/region'], order: ['provider/region'],
     allow_fallbacks: false, require_parameters: true, max_price: { prompt: '10000', completion: '20000', request: '0' } } });
 });
 
