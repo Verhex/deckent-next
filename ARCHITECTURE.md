@@ -721,6 +721,15 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   Shared-layer profiles are named and held under the same subset rule as cache migration. HTTP400 vendor details require the existing content
   inspection policy and localized next step; the common failure wrapper's translation belongs to W6-MODEL-SWITCH. Synthetic parser/SQLite/config
   author evidence is separate from independent review and live acceptance; sources/proof: `proof/OPENAI-RESPONSES-2026-10-09/`.
+- **Provider diagnosis and workspace selection (W9 author candidate, 2026-10-09):** HTTP400 names the exact registry endpoint kind;
+  protocol migration is suggested only when that exact profile has a migration offer. Unknown endpoints use neutral EN/TR text.
+  Registry-scoped Z.ai 429 codes 1113/1302 distinguish spend/rate only with authorized retained content; unknown content stays unknown.
+  Anthropic `workspaceId` is optional profile data, selected in `/model` from the bounded free organization workspace list; it supplies
+  `anthropic-workspace-id` on count and generation. Scoped keys retain header omission. The engine owns fresh identity, invoke authorization
+  and selection custody; config owns snapshot-guarded writes, policy, approval and audit. Shared-layer profile ownership is held.
+  Picker budget refusals show the newly computed USD reservation and an alternative that passed readiness; retained account totals still require
+  separate inspection. DeepSeek thinking-mode `required` is refused, and OpenRouter quotes require explicit tool-choice value support on every routed variant.
+  Flash seeds carry a conservative 200000-token guard; existing authored profile limits and unmeasured served limits remain separate. Proof: `proof/PROVIDER-ERRORS-2026-10-10/`.
 - **Provider rows (Jev da5312fb):** OpenAI, DeepSeek, Z.ai GLM (global) and Zhipu GLM (China) each keep their own secret name; the generic
   OpenAI-compatible row derives `DECKENT_OAICOMPAT_<HOST[_PORT]>` from the chosen address and shows it before saving. Z.ai documents no free
   read: its rows have no probe (the key is kept unverified). Owner 2026-10-08: no paid call to a remote endpoint without a verified price — the
