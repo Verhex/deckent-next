@@ -39,7 +39,7 @@
 - Verify actual producer-to-surface behavior and relevant failure paths; test green alone is not closure.
 - Targeted checks per slice (typecheck, eslint on changed files, lint-arch, the touched test files); full `npm run verify` only for batches that add broad features, and only when the owner asks (owner 2026-10-03: repeated full verifies cost time, tokens and machine); no build during an active test suite.
 - Local tests stay within 16 GB: full verify uses 4 workers (default), targeted/lane runs `VITEST_MAX_FORKS=2`; not a product limit.
-- Commit only with owner authorization; publish/push needs its own authorization.
+- Commit inside the assigned scope without asking; workers never push. The lead lands a batch (merge/push to main) after Astra PASS without waiting for the owner (owner 2026-10-09).
 - Refresh the memory manifest after authorized edits: `node scripts/lint-core-memory.mjs --write`.
 - Keep both `AGENTS.md` and `CLAUDE.md` at or below 70 lines.
 
@@ -51,10 +51,11 @@
 - `PLAN.md` holds durable workstreams; the host process board (`.deckent/host/process-board.json`, outside Git, own row only, main reconciles, workers as main sub-list) holds who holds what and what is next.
 - Main notifies the owner only when the owner must act (decision with Jev scores, owner-only command, landing/live done, blocker), at most two lines; no interim or worker notifications (owner 2026-10-03).
 - Current machine gates remain enforced; host-kit Markdown is an owner-authorized exception.
-- DOGFOOD stays OFF until explicitly admitted; historical receipts do not prove Next completion.
+- DOGFOOD is APPROVED (owner 2026-10-09): open it at the first possible moment, then run 4–8 workers continuously; worker priority Codex → Cursor → Sonnet 5.5 → Haiku 5.5; at 92% of a 5h subscription window wait for the reset. Historical receipts do not prove Next completion.
+- After landing, the lead runs the N1 and live switches without waiting for the owner: verified backup first, then a health check, rollback if it fails. Product steps that need human presence stay with the owner (owner 2026-10-09).
 - Review channel (owner 2026-09-23): Opus implements, Astra reviews via `.agents/refactor/channel.mjs`; recipients consume handled entries.
 - Owner 2026-10-05: CI green first in one lane, then frozen current-closure landing; no new preparation/analysis lanes until both land.
-- Review once per batch before landing; do not review preparation, plans or documents separately. At most one correction round, then logged Jev selection >=0.90 decides; below that ask owner.
+- Review once per batch before landing; do not review preparation, plans or documents separately. At most one correction round, then logged Jev selection >=0.85 with context sufficiency >=0.67 decides; below that ask owner (owner 2026-10-09; was 0.90/0.75).
 - Current-closure changes reopen only for real P0/P1. After these land, use 4–6 parallel product-author lanes, with no more review lanes than author lanes.
 - Owner 2026-10-05: Qwen development-host tool uses separate source/docs commits and a PR; Astra review is exempt for this host-tool delivery only. Model-quality/HF publication acceptance stays separate.
 - Never fabricate independent review or treat Jev/self-review as independent PASS.

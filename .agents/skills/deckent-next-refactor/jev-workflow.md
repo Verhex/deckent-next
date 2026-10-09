@@ -49,8 +49,8 @@ Owner 2026-09-19: Jev choice consultations must always include both none_of_the_
 
 ### Context sufficiency preparation — owner 2026-09-28
 
-For this development workflow, report selection probability against 0.90 and context sufficiency
-against 0.75; aim for at least 0.85 sufficiency on the first well-prepared call. These are owner
+For this development workflow, report selection probability against 0.85 and context sufficiency
+against 0.67 (owner 2026-10-09; was 0.90/0.75); aim for at least 0.85 sufficiency on the first well-prepared call. These are owner
 review criteria, not automatic tool gates or evidence of decision correctness. Never repeat an
 unchanged question to chase a score. Preserve option meaning in context-only comparisons.
 
