@@ -301,6 +301,44 @@ describe('/provider window', () => {
   });
 });
 
+describe('/provider seedless discovery window', () => {
+  it.each(['en', 'tr'] as const)('seedless %s: choose address before discovering models; select exact id; an unpriced row stays locked', async locale => {
+    const { port } = providerPort();
+    const original = (await port.inspect()).kinds.find(kind => kind.id === 'local-openai')!;
+    const target = { ...original, keyStored: false, models: [], modelBlocked: null, discoversModels: true };
+    const listed: unknown[] = [], connected: unknown[] = [];
+    const dynamic: ProviderPanelPort = { ...port, inspect: async () => ({ title: 'Providers', kinds: [target], notes: [] }),
+      listModels: async (kind, endpoint) => { listed.push({ kind, endpoint }); return [
+        { id: 'seed:Org/Exact:Q4', label: 'Org/Exact:Q4', detail: 'Org/Exact:Q4' },
+        { id: 'seed:unpriced', label: 'Unpriced', detail: 'unpriced', blocked: 'PRICE REQUIRED: choose a priced provider or loopback' }]; },
+      connectModel: async request => { connected.push(request); return { connected: true, title: 'Connected exact ID', lines: [], summary: 'Exact ID connected', approvalId: null }; } };
+    const { element, calls } = panel('provider', { provider: dynamic }, locale), screen = mount(element, 100, 40);
+    await settle(80); await screen.press(`${ENTER}${DOWN}${ENTER}`, 80);
+    expect(listed).toEqual([]); // opening the address picker grants no request
+    await screen.press(ENTER, 100);
+    expect(listed).toEqual([{ kind: 'local-openai', endpoint: original.endpointChoices[0]!.url }]);
+    expect(screen.frame()).toContain('Org/Exact:Q4');
+    await screen.press(`${DOWN}${ENTER}`, 60);
+    expect(screen.frame()).toContain('PRICE REQUIRED'); expect(connected).toEqual([]);
+    await screen.press(`${'\u001b[A'}${ENTER}`, 100);
+    expect(connected).toEqual([{ kind: 'local-openai', endpoint: original.endpointChoices[0]!.url, model: 'seed:Org/Exact:Q4' }]);
+    expect(screen.frame()).toContain('Connected exact ID'); expect(calls.notices).toEqual([]);
+    await screen.press(ENTER, 80); expect(calls.notices).toEqual([{ level: 'info', text: 'Exact ID connected' }]);
+  });
+
+  it('a failed discovery reports the error and returns to the provider list without a connection', async () => {
+    const { port } = providerPort(), original = (await port.inspect()).kinds.find(kind => kind.id === 'local-openai')!;
+    const { element, calls } = panel('provider', { provider: { ...port,
+      inspect: async () => ({ title: 'Providers', kinds: [{ ...original, keyStored: false, models: [], modelBlocked: null, discoversModels: true }], notes: [] }),
+      listModels: async () => { throw Object.assign(new Error('unreachable'), { code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' }); } } });
+    const screen = mount(element); await settle(80);
+    await screen.press(`${ENTER}${DOWN}${ENTER}${ENTER}`, 100);
+    expect(calls.errors).toMatchObject([{ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' }]);
+    expect(calls.notices).toEqual([]); expect(screen.frame()).toContain('Providers');
+  });
+
+});
+
 describe('/model in the workline: the pin rides on the next turn', () => {
   it('a bare /model opens the window; the chosen model is the next turn\'s exact reference, and later turns keep it', async () => {
     const { port } = modelPort(MODELS);

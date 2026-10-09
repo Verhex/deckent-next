@@ -662,7 +662,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   Turn closure/restart prose comes from EN/TR catalogs (old English restart receipts are localized on replay without rewriting evidence).
   Context counts stay numeric for admission and use locale-aware compact units for display; model windows come from the selected profile and
   provider count, taking the smaller known window. Local author proof and unperformed HTTP/TLS fixture gate: external `proof/MODEL-SWITCH-2026-10-09/`.
-- **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v1; ChatGPT sign-in listed
+- **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v2; ChatGPT sign-in listed
   unavailable). Connect: the address, where the kind takes one, is chosen from a list (owner 2026-10-08 D3: the configured `inference_serving`
   server, the registry's known local servers, the provider default; a typed "new address…" is the last row only, checked by the endpoint rule —
   https, plain http only to loopback — and previewed) → masked key (the one permitted typed value) under the custody note → one free
@@ -682,7 +682,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 - **`models.connect` (D2):** one operation, one contract (`modelConnectCommandSchema` → `ModelConnectResult`) on CLI `deckent models connect`,
   MCP `connect_model`, SDK `connectModel` and the terminal (`/provider` → "Connect a model"). Engine `ModelConnectApplication` over ports,
   composition unit `model-connect`: the provider-connect registry (v2) names each kind's adapter, chat path and packaged seed
-  (`assets/model-catalog/<seed>.json`, v3, exact vendor ids). Steps, each on its owner's governed path: ledger catalog register when the
+  (`assets/model-catalog/<seed>.json`, v3, exact vendor ids); a seedless kind uses endpoint discovery below. Steps, each on its owner's governed path: ledger catalog register when the
   channel/model is missing → declaration in `provider_catalog` on the layer that authors it (a new content-named revision) → this scope's
   activations still valid under the new revision are re-admitted (a catalog revision change otherwise breaks every activation) → the invocation
   profile on every layer that authors profiles (user first: a project snapshot stays a subset) with endpoint preset, the connection's secret NAME
@@ -690,6 +690,16 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   exact verified row of `lookupOpenAiCompatibleTariff(endpoint, nativeId)` (`published`); a remote model without one is refused before any
   catalog/config write (`MODEL_CONNECT_TARIFF_UNVERIFIED`; the adapter step runs first), only loopback keeps the zero tariff (`unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver → chat activation →
   one `model-connect` audit subject. A config approval stops the run (`approval-pending`); the same command id continues. No key value is taken.
+- **Seedless provider discovery (PROVIDERS-CLAIMS, owner 2026-10-09):** when the provider-connect kind has no seed, `/provider` offers model
+  connection before a list exists. Address selection precedes a read-only `GET /v1/models` through the existing probe transport/endpoint rules
+  (HTTPS, HTTP only loopback, no redirect/retry). Registry bounds are 8 s, 262144 decoded response bytes and 128 entries; malformed, oversized,
+  unreachable or cancelled responses yield no selection. Scope membership and existing model-catalog `inspect` policy precede network/credential
+  resolution and are rechecked after it. Credentials stay in the configured resolver/HTTPS header, never in a command or result.
+  `models.connect` re-reads the list and requires the selected exact ID before any write (CLI/SDK/MCP/terminal share the unchanged v1 command);
+  the adapter's published-price gate runs before discovery for binding an unpriced remote model. Only the selected ID is registered through
+  the existing catalog/config/activation/audit owners; channel identity includes kind + canonical endpoint, internal model identity hashes the
+  exact ID, and `nativeId` is stored/sent unchanged. No alias, tool/context/vision/reasoning capability or user tariff is inferred from a list.
+  Loopback stays free-measured; remote models need the existing verified published tariff. The generic row's refusal names reason and next step.
 - **Prompt cache, first slice (CACHE-SLICE1, owner 2026-10-09):** the provider-connect row's `cacheDefault` (Anthropic only, `none|5m`; shipped
   `anthropic-api` = `5m`) is written into a NEW profile's definition (`cache: '5m'` → the adapter's existing top-level automatic `cache_control`).
   An existing profile keeps its own value on every re-run (absent stays absent, `none` stays `none`; the adapter port receives the written
@@ -714,10 +724,10 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 - **Provider rows (Jev da5312fb):** OpenAI, DeepSeek, Z.ai GLM (global) and Zhipu GLM (China) each keep their own secret name; the generic
   OpenAI-compatible row derives `DECKENT_OAICOMPAT_<HOST[_PORT]>` from the chosen address and shows it before saving. Z.ai documents no free
   read: its rows have no probe (the key is kept unverified). Owner 2026-10-08: no paid call to a remote endpoint without a verified price — the
-  generic row's remote address is refused (`MODEL_CONNECT_PRICE_REQUIRED`, its window row locked) until a declared-price picker exists (the
-  operator tariff v2 data path is in SPEND-SETTLEMENT); vendor rows take the verified price at one point (`connectionAdapter`, provider-connect)
-  and the `/provider` model list locks an unpriced seed model ("Price not verified — paid calls are refused"). Snapshot 2026-10-08: among the
-  OpenAI-compatible seeds only DeepSeek `deepseek-flash`/`deepseek-v4-pro` are priced (their peak/off-peak rows settle held until reconciled).
+  generic row refuses an unpriced remote model (`MODEL_CONNECT_PRICE_REQUIRED`, endpoint-selected row locked); local loopback or an exact
+  verified published row can bind. A user price-declaration picker is a separate owner decision, not this connection flow; vendor rows take the verified price at one point (`connectionAdapter`, provider-connect)
+  and the `/provider` model list locks an unpriced seed model ("Price not verified — paid calls are refused"). Current packaged published rows include OpenAI v2, DeepSeek peak/off-peak and Z.ai global
+  (PRICING above); DeepSeek missing-tier usage settles at peak as an upper bound with the governed one-time reduction.
   Seeds exist for Anthropic, OpenAI, DeepSeek, Z.ai global, Zhipu China and OpenRouter (verified exact ids/tags;
   China remains locked on unsupported currency; OpenRouter call admission still checks fresh metadata). Open decisions (DeepSeek/Z.ai wire parameters, metered OpenAI-chat tariff) are in external
   `proof/T4B-2026-10-08/DECISIONS.md`.

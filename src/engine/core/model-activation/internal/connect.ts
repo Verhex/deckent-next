@@ -19,6 +19,8 @@ export interface ModelConnectPorts {
   endpoint(text: string): string | null;
   secretName(kind: string, base: string): string | null;
   seed(name: string): Promise<ProviderCatalogDocument>;
+  /** Seedless kinds: a fresh bounded endpoint list must contain the selected exact id before any write. */
+  discover?(kind: string, endpoint: string, nativeId: string): Promise<ProviderCatalogDocument>;
   /** The adapter part of the profile, validated by the adapter's own parser. `existing`: the adapter definition already written for this model on
    * the layer being written (null: a new profile), so the adapter keeps the person's own choices in it (CACHE-SLICE1: the cache TTL). */
   adapter(kind: string, input: Readonly<{ endpoint: string; credentialRef: string | null; nativeId: string; maxOutputTokens: number; currency: string; existing?: JsonObject | null }>):
@@ -85,15 +87,13 @@ export class ModelConnectApplication {
     const address = command.endpoint ?? kind.endpoint.default, base = address === null ? null : ports.endpoint(address);
     if (base === null) throw new ModelConnectError('MODEL_CONNECT_ENDPOINT_INVALID');
     const endpoint = `${base}${kind.connect.chatPath}`, secure = new URL(endpoint).protocol === 'https:', keyName = ports.secretName(kind.id, base);
-    // Owner 2026-10-08: no paid call to a remote endpoint whose price is not verified; the declared price comes with SPEND-SETTLEMENT.
-    if (kind.connect.priceRequired && secure) throw new ModelConnectError('MODEL_CONNECT_PRICE_REQUIRED');
     if (kind.keyRequired && secure && keyName === null) throw new ModelConnectError('MODEL_CONNECT_KEY_NAME_UNAVAILABLE');
     // A key is only ever named over https; a plain-http local server is reached without one (the adapters refuse a cleartext credential).
     const credentialRef = secure ? keyName : null, { scopeId } = command;
     const principal = await ports.principal();
     let layers = await ports.layers();
     const effective = (): ProviderCatalog | null => layers.effective['provider_catalog'] === undefined ? null : parseProviderCatalog(layers.effective['provider_catalog']);
-    const target = await this.target(kind, command, effective());
+    const target = await this.target(kind, command, effective(), base);
     const steps: { catalog: ModelConnectStepState; declaration: ModelConnectStepState; profile: ModelConnectStepState; activation: ModelConnectStepState; carried: number } =
       { catalog: 'skipped', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 };
     let tariff: ModelConnectResult['tariff'] = 'unmetered';
@@ -180,13 +180,13 @@ export class ModelConnectApplication {
     return result('connected', null, credentialRef ? await ports.keyStored(credentialRef) : null, await ports.service());
   }
 
-  /** The command's model: a seed model by exact API id (declared from the seed), or a model the provider catalog already declares. */
-  private async target(kind: ModelConnectKind, command: ModelConnectCommand, catalog: ProviderCatalog | null): Promise<Target> {
+  /** Exact seed/discovered id, or an already declared reference. Discovery is a port: no network or endpoint fact is guessed in the engine. */
+  private async target(kind: ModelConnectKind, command: ModelConnectCommand, catalog: ProviderCatalog | null, base: string): Promise<Target> {
     const fallback = this.ports.defaults.maxOutputTokens;
     if ('nativeId' in command.model) {
       const seedName = kind.connect?.seed, nativeId = command.model.nativeId;
-      if (!seedName) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
-      const seed = await this.ports.seed(seedName);
+      if (!seedName && !this.ports.discover) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
+      const seed = seedName ? await this.ports.seed(seedName) : await this.ports.discover!(kind.id, base, nativeId);
       for (const provider of seed.providers) {
         const model = provider.models.find(item => item.nativeId === nativeId);
         if (!model) continue;

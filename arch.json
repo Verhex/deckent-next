@@ -1376,6 +1376,7 @@
       "dependencies": [
         "src/domain/core/model-activation",
         "src/engine/core/model-activation",
+        "src/engine/core/policy",
         "src/engine/core/audit",
         "src/engine/core/config",
         "src/engine/core/model-invocation",

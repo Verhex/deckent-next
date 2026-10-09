@@ -4,7 +4,8 @@
 
 **Agent Control & Execution Plane**
 
-İnsanların, yapay zekâ ajanlarının ve araçların her eylemi sizin altyapınızda yetkilendirilir, yalıtılır, çalıştırılır ve kanıtlanır.
+Deckent, müşterinin kendi altyapısına kurduğu çalışma ortamını, her ücretli API çağrısından önce bütçe tavanını,
+sandbox içindeki araçlar ve MCP’yi, policy kontrollü onayları ve insan ile AI girişleri için tek tipli sözleşmeyi birleştirir.
 
 *policy-driven agent runtime · governed execution · self-hosted agent control plane*
 
@@ -33,23 +34,25 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 
 ## Deckent nedir
 
-Yapay zekâ ajanları artık kendi başına kod yazıyor, komut çalıştırıyor ve araç çağırıyor. Zor soru artık *ajan bunu
-yapabilir mi* değil; *yapmalı mı, nerede, kimin yetkisiyle ve ne olduğunu nasıl bileceğiz*. Çoğu ürün bu sorunun
-yalnız yarısını cevaplar: kimisi ajanları çalıştırır, kimisi başka yerde çalışan ajanları yönetir.
+Deckent kendi makinelerinizde çalışır; policy, onaylar, yürütme ve kalıcı kayıtları bir araya getirir. Ücretli API
+çağrısından önce çağrının tutabileceği en yüksek tutarı kapsamın bütçesinden ayırır; fiyat bilinmiyorsa ya da bütçe
+yetmiyorsa çağrıyı reddeder. İnsanlar terminali veya `deckent` komutunu, AI ajanları ve entegrasyonlar MCP veya SDK’yı
+kullanır. Bu giriş yolları tek tipli uygulama sözleşmesini paylaşır.
 
-Deckent iki yarıyı tek üründe, sizin makinelerinize kurulu olarak birleştirir. Bir havalimanı düşünün: **kule** kimin
-kalkacağına karar verir ve her uçuşu kaydeder, **pist** ise uçuşun gerçekten yapıldığı yerdir. Deckent kule ile
-pisttir. Bir insanın ya da ajanın neyi yapabileceğine karar verir, o işi yalıtılmış bir ortamda çalıştırır ve sonradan
-kontrol edebileceğiniz kalıcı bir kayıt tutar.
+MCP, varsayılanı yalnız gözlem olan ayrı bir aktör kullanır; bütçe değiştirmek, model etkinleştirmek veya çağırmak o MCP
+aktörünü adıyla anan açık bir policy izni ister. İnsan onay kararları etkileşimli terminal girişi ve çıkışı gerektirir.
 
-Deckent'le terminali, `deckent` komutu, MCP sunucusu ya da SDK üzerinden konuşursunuz. Hepsi aynı tipli sözleşmeyi
-kullanır; bir insanın tıklaması ile bir ajanın araç çağrısı aynı kimlik, policy ve onay kontrollerinden geçer. Açık
-kaynak Core (Apache-2.0) tek başına çalışır; proprietary Enterprise sürümü Core'u değiştirmeden üstüne eklenir.
+Açık kaynak Core (Apache-2.0) tek başına çalışır. Ayrı dağıtılacak proprietary Enterprise sürümü, Core'u değiştirmeden
+kayıt defteri (registry) üzerinden üstüne katmanlanacak şekilde tasarlanmıştır. Bugün public uzantı girişi, CLI
+dağıtımının etki adaptörleri ve gizli depo adaptörleri kaydetmesini sağlar. alpha.20’den beri aynı dağıtım,
+kayıtlarıyla servis ve MCP girişini de başlatabilir; otomatik servis başlatma ve yeniden başlatma dağıtımın girişini
+yeniden çalıştırır. Core'un yalın çalıştırılabilir dosyaları bu modülleri kendiliğinden keşfetmez. Enterprise SSO, ERP
+entegrasyonları ve filo yönetimi planlanan yeteneklerdir.
 
 | | |
 |---|---|
 | 🗼 **Yönetir** | İnsanlar ve yapay zekâ ajanları için tek kimlik, kapsam ve policy modeli. Bir iş onay isterse pencere neyin onaylandığını tam gösterir: tam komut, nerede çalışacağı, kimin adına, risk, geri alınıp alınamayacağı ve süre. Persona ya da model tavsiyesi asla yetki vermez. |
-| 🛫 **Yürütür** | İşler (Run), görevler ve işçiler sizin makinelerinizde kabul edilir, sıralanır ve kurtarılır. Ajanın kabuk komutları ve MCP sunucuları sandbox içinde (bubblewrap, Landlock), işçiler Docker'da çalışır. Anthropic, OpenAI, DeepSeek, Z.ai (GLM), OpenAI uyumlu uç noktalar, OpenRouter (şimdilik yalnız anahtar) ve yerel vLLM modelleriyle; Claude Code, Codex ve Cursor işçileriyle çalışır. |
+| 🛫 **Yürütür** | İşler (Run), görevler ve işçiler sizin makinelerinizde kabul edilir, sıralanır ve kurtarılır. Ajanın kabuk komutları ve MCP sunucuları sandbox içinde (bubblewrap, Landlock), işçiler Docker'da çalışır. Anthropic, OpenAI, DeepSeek, Z.ai (GLM), yerel sunucu veya fiyatı yayımlanmış OpenAI uyumlu uç noktalar ve OpenRouter model bağlantılarıyla (ücretli çağrı için fiyat ve yönlendirme doğrulanmalı); Claude Code, Codex ve Cursor işçileriyle çalışır. |
 | 📜 **Kanıtlar** | Her karar ve etki kalıcı bir defter ve denetim izine yazılır. Onaylar mühürlenir, yamalar saklanır ve değişiklikler teslimden önce yalıtılmış bir adayda birleştirilir. |
 
 ## Bir istek nasıl akar
@@ -113,14 +116,18 @@ deckent init policy --scope my-project --apply
    anahtar saklamanıza ve bütçe belirlemenize izin verir; bu eylemlerin her biri yine kontrol edilir ve kaydedilir.
    Linux, WSL ve macOS'ta yeni bir kurulum şifreli anahtar deposuyla başlar.
 2. **Terminali açın**: `deckent` (kapsamı açıkça seçmek için `deckent --scope my-project`).
-3. **Sağlayıcı bağlayın**: `/provider` ile Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, herhangi bir OpenAI uyumlu
-   adres ya da vLLM gibi yerel bir sunucu. Anahtarı gizlenen bir alana yazarsınız; Deckent onu ücretsiz bir istekle
-   dener ve gizli depoya adıyla saklar; denemenin reddettiği anahtar asla saklanmaz. Ücretsiz denemesi olmayan bir
-   sağlayıcıda anahtar doğrulanmadan saklanır ve olası reddi ilk tur gösterir. Değer bir daha gösterilmez ve hiçbir
-   ajan ya da işçi onu almaz. Ardından o sağlayıcının kataloğundan **Model bağla**'yı seçin. Yayımlanmış fiyatı
-   doğrulanmamış bir model listede görünür ama nedeniyle kilitlidir (Zhipu GLM Çin, fiyatları CNY olduğu için kilitli
-   kalır). OpenRouter şimdilik yalnız anahtar saklar. Aynısı komut satırından: `deckent secret set <AD>` ve
-   `deckent models connect --scope <id> --connection <tür> --command-id <id> --model <birebir kimlik>`.
+3. **Sağlayıcı bağlayın**: `/provider` ile Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, vLLM gibi yerel
+   bir sunucu veya fiyatı yayımlanmış OpenAI uyumlu bir uç nokta. Anahtarı gizlenen bir alana yazarsınız;
+   Deckent onu ücretsiz bir istekle dener ve gizli depoya adıyla saklar; denemenin reddettiği anahtar asla
+   saklanmaz. Ücretsiz denemesi olmayan bir sağlayıcıda anahtar doğrulanmadan saklanır ve olası reddi ilk tur
+   gösterir. Değer bir daha gösterilmez ve hiçbir ajan ya da işçi onu almaz. Ardından **Model bağla**'yı seçin.
+   Paketlenmiş kataloğu olan sağlayıcılar o modelleri sunar; kataloğu olmayanlarda önce adresi, sonra sınırlı
+   `/v1/models` listesinden birebir model kimliğini seçersiniz. Deckent bu kimliği aynen saklar. Bu makinedeki
+   yerel modeller ücretsiz ölçülür; yayımlanmış fiyatı doğrulanmamış uzak model, nedeni ve sonraki adımıyla
+   kilitli görünür (Zhipu GLM Çin, fiyatları CNY olduğu için kilitli kalır). OpenRouter model bağlantıları
+   sunar; ücretli çağrı için fiyat ve yönlendirme yine doğrulanmalıdır. Aynısı komut satırından: `deckent secret
+   set <AD>` ve `deckent models connect --scope <id> --connection <tür> --command-id <id> --model <birebir
+   kimlik>`.
 4. **Bütçe belirleyin.** Her model turu, kapsamın tek ve ortak USD bütçesinden pay ayırır; bütçe yoksa her tur
    reddedilir ve pencereler bunu söyler. `/provider`'ın ilk satırı **Bütçe oluştur** bütçe penceresini açar: 5, 10, 25,
    50 ya da 100 USD veya ok tuşlarıyla 1 ile 1000 arasında başka bir tam dolar tutarı, ardından bir onay adımı. Sonra
@@ -176,7 +183,7 @@ değişiklik policy'den geçer ve bir onaya dönüşebilir.
     <td width="50%"><img src=".github/assets/screenshots/tr/07-mcp.png" alt="/mcp penceresi"><br><sub><b>/mcp.</b> Adım adım sunucu ekleme; yapılandırılmış sunucular güven durumlarıyla.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/08-saglayici.png" alt="Sağlayıcı türlerini listeleyen /provider penceresi"><br><sub><b>/provider.</b> Her sağlayıcının durumu; OpenRouter satırı şimdilik yalnız anahtar tuttuğunu söyler.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/08-saglayici.png" alt="Sağlayıcı türlerini listeleyen /provider penceresi"><br><sub><b>/provider.</b> Her sağlayıcının durumu. OpenRouter artık model bağlantıları sunar; bu ekran görüntüsü o değişiklikten öncedir.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/14-ayarlar.png" alt="Terminal temasını seçen /config penceresi"><br><sub><b>/config.</b> Bölüm, anahtar, sonra izin verilen değerlerden biri; geçerli olan işaretli.</sub></td>
   </tr>
   <tr>

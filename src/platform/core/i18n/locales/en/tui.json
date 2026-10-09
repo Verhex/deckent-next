@@ -911,7 +911,7 @@
   "tui.panel.provider.modelTitle": "{kind} · model to connect",
   "tui.panel.provider.modelEmpty": "This provider lists no model to connect yet.",
   "tui.panel.provider.keyName": "Key name",
-  "tui.provider.model.priceRequired": "A remote address needs a verified price first; declaring one here is not available yet (paid calls are refused).",
+  "tui.provider.model.priceRequired": "This remote endpoint has no verified published price for the selected model. Paid calls are refused and nothing was connected. Choose a priced provider or a local loopback server; entering your own price is not supported.",
   "tui.provider.model.currencyUnsupported": "CNY pricing — scope budgets support USD only. Model connection is locked.",
   "tui.provider.model.priceUnverified": "Price not verified — paid calls are refused.",
   "tui.provider.model.field.carried": "Kept active",
