@@ -44,7 +44,7 @@ export const terminalConfigSchema = z.object({
     /** Byte ceiling of one agent tool result (T-L5c, owner 2026-09-28): the workspace-read adapter's own default (64 KiB)
      * applies when absent; an additive field, `chat.schemaVersion` stays 1 (same pattern as `historyMessages`). */
     readResultMaxBytes: z.number().int().min(1_024).max(1_048_576).default(65_536),
-  }).strict().optional(),
+  }).strict().default({ schemaVersion: 1 }),
   /** The agent's host shell (T-L4 slice 3c): its per-command deadline, and variable names copied from the service environment in
    * addition to the built-in allowlist (credentials never pass unless named here). */
   shell: z.object({

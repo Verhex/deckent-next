@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runMcpCommand, type McpCommandContext, type McpCommandRequest } from '#adapters/core/mcp-client/index.js';
-import { clearConfigCache, loadConfig } from '#platform/index.js';
+import { clearConfigCache, loadConfig, type DeckentError } from '#platform/index.js';
 
 // MCP-REGISTRY-AUDIT (top-20 #5, 2026-10-06): the registry file is written only after the audited trust decision. `add` and `remove` used to write the
 // file first, so an audit failure left an entry (or a removal) with no audit event, and a project add recorded nothing at all.
@@ -37,6 +37,14 @@ async function workspace() {
 }
 
 describe.skipIf(process.platform !== 'linux')('MCP registry writes follow the audited trust decision', () => {
+  it('default sandbox-net refuses without a launchable sandbox and reports its cause and explicit realm choice', async () => {
+    const w = await workspace(); const { realm: ignored, ...entry } = w.entry; void ignored;
+    const error = await w.run({ verb: 'add', name: 'blocked', scope: 'user', entry }).catch(error => error) as DeckentError;
+    expect(error).toMatchObject({ code: 'MCP_SANDBOX_UNAVAILABLE', params: expect.objectContaining({ realm: 'sandbox-net', reason: 'no sandbox mechanism is available' }) });
+    expect(error.message).toContain('--realm <realm>');
+    expect(error.localize?.('tr').message).toContain('sandbox-net realm içinde başlatılamıyor');
+    expect(w.read(w.files.personal)).toBeNull();
+  });
   it('a failing audit leaves the registry and the trust record untouched on add (personal and project scope)', async () => {
     const w = await workspace();
     w.state.failAudit = true;
