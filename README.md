@@ -2,9 +2,10 @@
 
 # Deckent
 
-**The Agent Control & Execution Plane**
+**Agent Control & Execution Plane**
 
-Every action by people, AI agents and tools is authorized, isolated, executed and proven inside your own infrastructure.
+Deckent combines a customer-installed runtime, a budget ceiling before every paid API call, sandboxed tools and MCP,
+governed approvals, and one typed application contract for human and AI entry points.
 
 *policy-driven agent runtime · governed execution · self-hosted agent control plane*
 
@@ -33,24 +34,22 @@ package); the planned name is the scoped `@verhex/deckent` (owner 2026-10-07, no
 
 ## What is Deckent
 
-AI agents can now write code, run commands and call tools on their own. The hard part is no longer *can the agent
-do it*, but *should it, where, on whose authority, and how do we know what happened*. Most products answer only half
-of that question: some run agents, others govern agents that run somewhere else.
+Deckent runs on your own machines and brings policy, approvals, execution and durable records together. Before a
+paid API call it reserves the maximum charge against the scope's budget; an unknown price or insufficient budget
+refuses the call. People use the terminal or `deckent` command; AI agents and integrations use MCP or the SDK.
+These entry points share one typed application contract.
 
-Deckent is both halves in one product, installed on your own machines. Think of an airport: the **control tower**
-decides who may take off and records every flight, and the **runway** is where the flight actually happens. Deckent
-is the tower and the runway together. It decides what a person or an agent may do, runs that work in an isolated
-place, and keeps a durable record you can check afterwards.
-
-You talk to Deckent through its terminal, its `deckent` command, its MCP server or its SDK. All of them use the same
-typed contract, so a human click and an agent's tool call go through exactly the same identity, policy and approval
-checks. The open-source Core (Apache-2.0) works on its own; the proprietary Enterprise edition layers on top
-without changing Core.
+The open-source Core (Apache-2.0) works on its own. The planned proprietary Enterprise edition is designed
+to layer on through the registry without editing Core, as a separate distribution. Today the public extension entry lets a CLI
+distribution register effect adapters and secret-store adapters. Since alpha.20, that distribution can also start
+the service and MCP entry with its registrations; automatic service start and restart replay the distribution's
+entry. Core's bare executables do not discover those modules. Enterprise SSO, ERP integrations and fleet management
+remain planned capabilities.
 
 | | |
 |---|---|
 | 🗼 **Govern** | One identity, scope and policy model for people and AI agents. When something needs approval, the window shows exactly what: the full command, where it runs, on whose behalf, the risk, whether it can be undone, and a deadline. A persona or a model's advice never grants authority. |
-| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); workers run in Docker. Works with Anthropic, OpenAI, DeepSeek, Z.ai (GLM), OpenAI-compatible endpoints, OpenRouter (key only so far) and local vLLM models, and with Claude Code, Codex and Cursor workers. |
+| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); workers run in Docker. Works with Anthropic, OpenAI, DeepSeek, Z.ai (GLM), a local server or an OpenAI-compatible endpoint with published pricing, and OpenRouter model connections (paid calls require verified pricing and routing), and with Claude Code, Codex and Cursor workers. |
 | 📜 **Prove** | Every decision and effect lands in a durable ledger and audit trail. Approvals are sealed, patches are retained, and changes are integrated in an isolated candidate before anything is delivered. |
 
 ## How a request flows
@@ -101,14 +100,18 @@ flowchart LR
    budgets in that scope; every one of those actions is still checked and recorded. On Linux, WSL and macOS a fresh
    installation starts on the encrypted key store.
 2. **Open the terminal** with `deckent`.
-3. **Connect a provider** with `/provider`: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, any OpenAI-compatible
-   address or a local server such as vLLM. You type the key into a masked field; Deckent checks it with a free request
-   and stores it in the secret store under its name; a key the check rejects is never stored. Where a provider has no
-   free check, the key is kept unverified and the first turn shows any rejection. The value is never shown again and
-   no agent or worker ever receives it. Then choose **Connect a model** from that provider's catalog. A model
-   without a verified published price is listed but locked, with the reason (Zhipu GLM China stays locked because its
-   prices are in CNY). OpenRouter stores a key only for now. The same from the command line: `deckent secret set <NAME>`
-   and `deckent models connect --scope <id> --connection <kind> --command-id <id> --model <exact id>`.
+3. **Connect a provider** with `/provider`: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, a local server
+   such as vLLM, or an OpenAI-compatible endpoint with published pricing. You type the key into a masked field;
+   Deckent checks it with a free request and stores it in the secret store under its name; a key the check
+   rejects is never stored. Where a provider has no free check, the key is kept unverified and the first turn
+   shows any rejection. The value is never shown again and no agent or worker ever receives it. Then choose
+   **Connect a model**. Providers with a packaged catalog offer those models; for a provider without one, choose
+   an address, then select an exact ID from its bounded `/v1/models` list. Deckent stores that ID unchanged.
+   Local loopback models are free-measured; a remote model without a verified published price is listed but
+   locked, with the reason and the next step (Zhipu GLM China stays locked because its prices are in CNY).
+   OpenRouter offers model connections; paid calls still require verified pricing and routing. The same from the
+   command line: `deckent secret set <NAME>` and `deckent models connect --scope <id> --connection <kind>
+   --command-id <id> --model <exact id>`.
 4. **Set a budget.** Every model turn reserves against one shared USD budget of the scope; without one, every turn is
    refused and the windows say so. The first row of `/provider`, **Create budget**, opens the budget window: 5, 10, 25,
    50 or 100 USD, or another whole-dollar amount from 1 to 1000 with the arrow keys, then a confirm step. Later the
