@@ -32,7 +32,7 @@ else {
   const config = read(join(process.cwd(), '.deckent/config.json')), state = join(config.layout.root, 'state');
   const ledger = join(state, 'ledger.db'), service = join(state, 'fake-service.json'), backups = join(state, 'backups');
   const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  const current = () => { try { const s = read(service); return alive(s.pid) ? s : null; } catch { return null; } };
+  const current = () => { try { const s = read(service); return alive(s.pid) && (s.endpoint ?? 'legacy') === (behavior.socketPath ?? 'legacy') ? s : null; } catch { return null; } };
   if (args[0] === 'runtime' && args[1] === 'serve') {
     mkdirSync(backups, { recursive: true, mode: 0o700 });
     const fd = openSync(ledger + '-lock', constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
@@ -49,7 +49,7 @@ else {
     db.close(); chmodSync(ledger, 0o600);
     if (behavior.serveExit) { process.stderr.write('FAKE_SERVE_EXIT\n'); process.exit(1); }
     const build = behavior.wrongBuild ? { sourceTreeSha256: '0'.repeat(64), sourceCommit: '0'.repeat(40) } : { sourceTreeSha256: identity.sourceTreeSha256, sourceCommit: identity.sourceCommit };
-    writeFileSync(service, JSON.stringify({ pid: process.pid, instanceId: randomUUID(), build }), { mode: 0o600 });
+    writeFileSync(service, JSON.stringify({ pid: process.pid, instanceId: randomUUID(), build, endpoint: behavior.socketPath ?? 'legacy' }), { mode: 0o600 });
     out({ schemaVersion: 1, event: 'ready', endpoint: 'fake' });
     const keep = setInterval(() => undefined, 1000);
     process.on('SIGTERM', () => { clearInterval(keep); try { if (read(service).pid === process.pid) unlinkSync(service); } catch {} closeSync(fd); out({ schemaVersion: 1, event: 'stopped' }); process.exit(0); });

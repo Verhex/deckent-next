@@ -27,7 +27,7 @@ function fixture() {
   mkdirSync(home, { mode: 0o700 }); mkdirSync(join(bwrap, 'out'), { recursive: true });
   const fake = fakeRepository(repo, join(base, 'origin.git'));
   mkdirSync(join(repo, '.agents/refactor'), { recursive: true });
-  for (const name of ['dev-release.mjs', 'next-entry.mjs']) copyFileSync(join(here, name), join(repo, '.agents/refactor', name));
+  for (const name of ['dev-release.mjs', 'dev-release-service.mjs', 'next-entry.mjs']) copyFileSync(join(here, name), join(repo, '.agents/refactor', name));
   mkdirSync(join(repo, '.deckent'), { mode: 0o700 });
   writeFileSync(join(repo, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }), { mode: 0o600 });
   const env = { ...process.env, HOME: home }; delete env.DECKENT_NEXT_INSTALL_ROOT; delete env.DECKENT_HOME;
@@ -440,4 +440,137 @@ releaseTest('package version: a second stage with the live version is refused, w
   assert.equal(releaseOf(bumped).sameVersionWaived, false); assert.equal(releaseOf(bumped).packageVersion, '1.0.0-alpha.8');
   const bare = f.tool('stage', f.fake.commit('bare', { version: null })); assert.equal(bare.status, 0, bare.stdout + bare.stderr);
   assert.equal(releaseOf(bare).packageVersion, null); assert.equal(releaseOf(bare).sameVersionWaived, false);
+});
+
+for (const [oldPath, nextPath] of [['legacy', 'private-tmp'], ['private-tmp', 'legacy']]) {
+  releaseTest(`socket migration ${oldPath} → ${nextPath}: hidden service is stopped through its own CLI before replacement`, async t => {
+    const f = fixture(); t.after(f.cleanup);
+    const old = f.tool('stage', f.fake.commit('old-path', { behavior: { socketPath: oldPath } })).json.id;
+    assert.equal(f.tool('switch', old).status, 0);
+    const before = f.describe();
+    const client = f.tool('stage', f.fake.commit('new-client', { behavior: { socketPath: nextPath } })).json.id;
+    const target = f.tool('stage', f.fake.commit('target', { behavior: { socketPath: nextPath } })).json.id;
+    // The pointer/client has advanced while the previous release's process still owns the ledger.
+    rmSync(join(f.installRoot, 'current')); symlinkSync(`versions/${client}`, join(f.installRoot, 'current'));
+    assert.equal(f.describe(), null, 'new client cannot see the old socket');
+    assert.throws(() => ledgerLock(`${f.ledger}-lock`), { code: 'DEV_RELEASE_LEDGER_BUSY' });
+    assert.equal(f.tool('status').json.service.processId, before.processId);
+    assert.equal(f.tool('start').json.already, true, 'no second runtime while the old one is present');
+    const switched = f.tool('switch', target);
+    assert.equal(switched.status, 0, switched.stdout + switched.stderr);
+    assert.equal(switched.json.fromBuild.sourceCommit, before.build.sourceCommit);
+    assert.equal(switched.json.stoppedVia, join(f.installRoot, 'versions', old, 'dist/composition/core/cli/internal/entry.js'));
+    const shutdown = JSON.parse(readFileSync(join(f.data, 'state/shutdowns.jsonl'), 'utf8').trim().split('\n').at(-1));
+    assert.equal(shutdown.instanceId, before.instanceId); assert.equal(shutdown.commandId, switched.json.shutdownCommandId);
+    assert.equal(shutdown.via, switched.json.stoppedVia);
+    assert.equal(existsSync(`/proc/${before.processId}`), false);
+    assert.notEqual(switched.json.service.processId, before.processId);
+    assert.equal(f.current(), `versions/${target}`);
+  });
+}
+
+releaseTest('unidentified ledger holder blocks a switch instead of starting a replacement', async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const old = f.tool('stage', f.fake.commit('old')).json.id, next = f.tool('stage', f.fake.commit('next')).json.id;
+  assert.equal(f.tool('switch', old).status, 0);
+  const service = f.describe();
+  assert.equal(f.cli('runtime', 'shutdown', '--service', 'runtime', '--instance', service.instanceId, '--command-id', 'test-unidentified', '--reason', 'test', '--json').status, 0);
+  for (let i = 0; i < 100 && existsSync(`/proc/${service.processId}`); i++) await sleep(50);
+  const holder = spawn('flock', [`${f.ledger}-lock`, process.execPath, '-e', 'setInterval(() => {}, 1000)', f.base], { detached: true, stdio: 'ignore' });
+  t.after(() => { try { process.kill(-holder.pid, 'SIGKILL'); } catch { /* fixture gone */ } });
+  let held = false;
+  for (let i = 0; i < 100 && !held; i++) { await sleep(50); try { ledgerLock(`${f.ledger}-lock`)(); } catch (error) { held = error.code === 'DEV_RELEASE_LEDGER_BUSY'; } }
+  assert.equal(held, true);
+  const refused = f.tool('switch', next);
+  assert.equal(refused.json.code, 'DEV_RELEASE_SERVICE_UNREACHABLE', refused.stdout);
+  assert.equal(f.current(), `versions/${old}`); assert.equal(f.describe(), null);
+});
+
+// Fake manager I/O drives real temporary runtime processes. No user manager or live/N1 unit is contacted.
+function managedFixture(f) {
+  const calls = [], group = '/user.slice/user-1000.slice/user@1000.service/app.slice/deckent-n1.service';
+  let properties = {}, failures = 0;
+  const opts = { node: process.execPath, stopTimeoutMs: 20_000, startTimeoutMs: 20_000, waiveSmoke: [],
+    spawn: () => { throw new Error('raw launch forbidden for managed service'); },
+    readCgroup: () => `0::${group}\n`,
+    systemctl: args => {
+      calls.push(args);
+      assert.equal(args[0], '--user'); assert.equal(args[2], 'deckent-n1.service');
+      if (args[1] === 'show') {
+        const pid = f.describe()?.processId ?? 0;
+        return { status: 0, stdout: Object.entries({ LoadState: 'loaded', WorkingDirectory: f.repo, ControlGroup: group,
+          MainPID: pid, UMask: '0022', Restart: 'on-failure', ExecStart: `{ path=${process.execPath} ; argv[]=${process.execPath} ${f.repo}/.agents/refactor/next-entry.mjs cli runtime serve --json ; }`,
+          Environment: `DECKENT_NEXT_INSTALL_ROOT=${f.installRoot}`, ...properties }).map(([key, value]) => `${key}=${value}`).join('\n') };
+      }
+      if (args[1] === 'restart') {
+        assert.equal(f.describe(), null, 'governed shutdown completes before restart');
+        ledgerLock(`${f.ledger}-lock`)();
+        if (failures-- > 0) return { status: 1, stderr: 'injected systemctl failure' };
+        const child = spawn(process.execPath, [join(f.repo, '.agents/refactor/next-entry.mjs'), 'cli', 'runtime', 'serve', '--json'],
+          { cwd: f.repo, env: f.env, detached: true, stdio: 'ignore' });
+        child.unref(); return { status: 0, stdout: '' };
+      }
+      if (args[1] === 'stop') { assert.equal(f.describe(), null); return { status: 0, stdout: '' }; }
+      throw new Error(`unexpected systemctl command: ${args.join(' ')}`);
+    } };
+  const L = layout({ env: { DECKENT_NEXT_INSTALL_ROOT: f.installRoot }, home: f.home, launcher: join(f.repo, '.agents/refactor/next-entry.mjs') });
+  return { L, opts, calls, setProperties: value => { properties = value; }, failRestarts: n => { failures = n; } };
+}
+
+releaseTest('managed switch, rollback and stopped-service recovery use systemctl --user restart, with governed shutdown receipts', async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const old = f.tool('stage', f.fake.commit('systemd-old')).json.id, next = f.tool('stage', f.fake.commit('systemd-next')).json.id;
+  assert.equal(f.tool('switch', old).status, 0);
+  const before = f.describe(), manager = managedFixture(f);
+  const switched = await switchTo(manager.L, next, manager.opts);
+  assert.equal(switched.serviceManager, 'deckent-n1.service'); assert.notEqual(switched.service.instanceId, before.instanceId);
+  assert.equal(f.current(), `versions/${next}`);
+  const rolled = await rollback(manager.L, manager.opts);
+  assert.equal(rolled.serviceManager, 'deckent-n1.service'); assert.equal(f.current(), `versions/${old}`);
+  const running = f.describe();
+  assert.equal(f.cli('runtime', 'shutdown', '--service', 'runtime', '--instance', running.instanceId, '--command-id', 'test-managed-stop', '--reason', 'test', '--json').status, 0);
+  for (let i = 0; i < 100 && existsSync(`/proc/${running.processId}`); i++) await sleep(50);
+  assert.equal((await start(manager.L, manager.opts)).ok, true);
+  assert.deepEqual(manager.calls.filter(args => args[1] !== 'show'), Array.from({ length: 3 }, () => ['--user', 'restart', 'deckent-n1.service']));
+  const receipts = readFileSync(join(f.data, 'state/shutdowns.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(receipts[0].commandId, switched.shutdownCommandId); assert.equal(receipts[1].commandId, rolled.shutdownCommandId);
+});
+
+releaseTest('managed restart failure rolls back through systemd without a raw launch', async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const old = f.tool('stage', f.fake.commit('systemd-old')).json.id, next = f.tool('stage', f.fake.commit('systemd-next')).json.id;
+  assert.equal(f.tool('switch', old).status, 0);
+  const before = f.describe(), manager = managedFixture(f); manager.failRestarts(1);
+  await assert.rejects(switchTo(manager.L, next, manager.opts), error => {
+    assert.equal(error.code, 'DEV_RELEASE_SWITCH_FAILED'); assert.equal(error.detail.launchError, 'SYSTEMCTL_RESTART_FAILED');
+    assert.equal(error.detail.previousService.ok, true); return true;
+  });
+  assert.equal(f.current(), `versions/${old}`); assert.equal(f.describe().build.sourceCommit, before.build.sourceCommit);
+  assert.equal(manager.calls.filter(args => args[1] === 'restart').length, 2);
+});
+
+releaseTest('invalid unit custody, umask and automatic clean-exit restart refuse before shutdown or pointer changes', async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const old = f.tool('stage', f.fake.commit('systemd-old')).json.id, next = f.tool('stage', f.fake.commit('systemd-next')).json.id;
+  assert.equal(f.tool('switch', old).status, 0);
+  const before = f.describe(), manager = managedFixture(f);
+  for (const properties of [{ UMask: '0077' }, { Restart: 'always' }, { WorkingDirectory: f.home }, { ControlGroup: '/foreign/deckent-n1.service' },
+    { ExecStart: '/foreign/entry.js cli runtime serve' }, { Environment: 'DECKENT_NEXT_INSTALL_ROOT=/foreign/install' }]) {
+    manager.setProperties(properties);
+    await assert.rejects(switchTo(manager.L, next, manager.opts), error => error.code === 'DEV_RELEASE_SYSTEMD_CUSTODY_INVALID');
+    assert.equal(f.current(), `versions/${old}`); assert.equal(f.describe().instanceId, before.instanceId);
+    assert.equal(existsSync(join(f.data, 'state/shutdowns.jsonl')), false);
+  }
+  assert.equal(manager.calls.some(args => args[1] === 'restart'), false);
+});
+
+releaseTest('unavailable systemd control refuses before governed shutdown; no raw fallback', async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const old = f.tool('stage', f.fake.commit('systemd-old')).json.id, next = f.tool('stage', f.fake.commit('systemd-next')).json.id;
+  assert.equal(f.tool('switch', old).status, 0);
+  const before = f.describe(), manager = managedFixture(f);
+  manager.opts.systemctl = () => ({ status: null, error: { code: 'ENOENT' } });
+  await assert.rejects(switchTo(manager.L, next, manager.opts), error => error.code === 'DEV_RELEASE_SYSTEMD_UNAVAILABLE');
+  assert.equal(f.current(), `versions/${old}`); assert.equal(f.describe().instanceId, before.instanceId);
+  assert.equal(existsSync(join(f.data, 'state/shutdowns.jsonl')), false);
 });

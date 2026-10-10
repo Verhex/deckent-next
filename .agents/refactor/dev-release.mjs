@@ -36,6 +36,8 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { cliOfProcess, discoverService as discover, systemdManager, retainManager, restartManaged, stopManaged } from './dev-release-service.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const KEEP = 3;
 const CLI_ENTRY = 'dist/composition/core/cli/internal/entry.js';
@@ -227,29 +229,29 @@ function describe(L, cli, node) {
   if (result.status !== 0) return { descriptor: null, stderr: result.stderr.trim().slice(-400) };
   try { return { descriptor: lastJson(result.stdout) }; } catch { return { descriptor: null, stderr: result.stdout.slice(-400) }; }
 }
-function cliOfProcess(pid) {
-  try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').find(arg => arg.endsWith(`/${CLI_ENTRY}`)) ?? null; } catch { return null; }
-}
+const discoverService = (L, cli, node) => discover(L, cli, node, describe);
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
 
 /** Governed stop through the service's own CLI: describe → shutdown with a fresh command id → absence (describe fails, process gone). */
 async function stopService(L, fallbackCli, opts, purpose) {
-  const found = describe(L, fallbackCli, opts.node);
+  const found = discoverService(L, fallbackCli, opts.node);
   if (!found.descriptor) {
     if (ledgerHeld(dataPaths(L.project).lock)) fail('DEV_RELEASE_SERVICE_UNREACHABLE', { stderr: found.stderr });
-    return { state: 'absent' };
+    return { state: 'absent', manager: systemdManager(L, undefined, opts, fail) };
   }
   const d = found.descriptor;
+  const manager = systemdManager(L, d.processId, opts, fail);
+  retainManager(L, manager);
   if (!d.shutdownAvailable) fail('DEV_RELEASE_SHUTDOWN_UNAVAILABLE', { instanceId: d.instanceId });
-  const cli = (d.processId && cliOfProcess(d.processId)) || fallbackCli;
+  const cli = found.cli === fallbackCli ? (d.processId && cliOfProcess(d.processId)) || fallbackCli : found.cli;
   const commandId = `dev-release-${purpose}-${stamp()}`;
   const shutdown = run(opts.node, [cli, 'runtime', 'shutdown', '--service', d.identity.serviceId, '--instance', d.instanceId,
     '--command-id', commandId, '--reason', `dev-release ${purpose}`, '--json'], { cwd: L.project, env: productEnv(L), timeout: 60_000 });
   if (shutdown.status !== 0) fail('DEV_RELEASE_SHUTDOWN_REFUSED', { commandId, stderr: shutdown.stderr.trim().slice(-800) });
   const started = Date.now();
   while (Date.now() - started < opts.stopTimeoutMs) {
-    if (!(d.processId && alive(d.processId)) && !describe(L, cli, opts.node).descriptor) {
-      return { state: 'stopped', instanceId: d.instanceId, processId: d.processId, build: d.build ?? null, cli, commandId, stopMs: Date.now() - started };
+    if (!(d.processId && alive(d.processId)) && !describe(L, cli, opts.node).descriptor && !ledgerHeld(dataPaths(L.project).lock)) {
+      return { state: 'stopped', instanceId: d.instanceId, processId: d.processId, build: d.build ?? null, cli, commandId, manager, stopMs: Date.now() - started };
     }
     await sleep(150);
   }
@@ -266,11 +268,14 @@ async function startService(L, expect, opts) {
   // callers' discard / ledger-compatibility / pointer-rollback / record path runs instead of an unhandled event killing the tool.
   let child = null, launchError = null, exited = null;
   try {
-    child = (opts.spawn ?? spawn)(opts.node, [L.launcher, 'cli', 'runtime', 'serve', '--json'], { cwd: L.project, env: { ...process.env, DECKENT_NEXT_INSTALL_ROOT: L.installRoot },
+    if (opts.manager) {
+      launchError = restartManaged(L, opts, fail);
+      writeFileSync(log, JSON.stringify({ event: 'systemd-restart', unit: opts.manager.unit, ok: !launchError }) + '\n', { flag: 'a' });
+    } else child = (opts.spawn ?? spawn)(opts.node, [L.launcher, 'cli', 'runtime', 'serve', '--json'], { cwd: L.project, env: { ...process.env, DECKENT_NEXT_INSTALL_ROOT: L.installRoot },
       detached: true, stdio: ['ignore', fd, fd] });
-    child.on('error', error => { launchError ??= error; });
-    child.on('exit', (code, signal) => { exited = { code, signal }; });
-    child.unref?.();
+    child?.on('error', error => { launchError ??= error; });
+    child?.on('exit', (code, signal) => { exited = { code, signal }; });
+    child?.unref?.();
   } catch (error) { launchError = error; } finally { closeSync(fd); }
   const cli = join(codeDir(L, expect.id), CLI_ENTRY), started = Date.now();
   const events = () => readFileSync(log, 'utf8').split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
@@ -281,8 +286,13 @@ async function startService(L, expect, opts) {
     await sleep(150);
     if (launchError) return launchFailed();
     const { descriptor } = describe(L, cli, opts.node);
+    // systemd owns stdout/stderr (journal); its automatic pre-upgrade backup is discovered by rollback if needed.
     const upgraded = events().find(event => event.event === 'ledger-upgraded') ?? null;
     if (descriptor) {
+      if (opts.manager) {
+        try { systemdManager(L, descriptor.processId, opts, fail); }
+        catch (error) { return { ok: false, log, descriptor, custodyError: error.code, startMs: Date.now() - started, ledgerUpgrade: upgraded, tail: error.message }; }
+      }
       const ok = descriptor.build?.sourceCommit === expect.sourceCommit && descriptor.build?.sourceTreeSha256 === expect.sourceTreeSha256;
       return { ok, log, launcherPid: child?.pid ?? null, descriptor, startMs: Date.now() - started, ledgerUpgrade: upgraded };
     }
@@ -293,6 +303,7 @@ async function startService(L, expect, opts) {
 /** Stop a started service that failed verification: governed when it answers, else the launcher's process group. */
 async function discard(L, started, opts, id) {
   if (started.descriptor) { try { await stopService(L, join(codeDir(L, id), CLI_ENTRY), opts, 'discard'); return; } catch { /* fall through */ } }
+  if (opts.manager) { stopManaged(L, opts, fail); return; }
   if (started.launcherPid && alive(started.launcherPid)) {
     try { process.kill(-started.launcherPid, 'SIGTERM'); } catch { /* gone */ }
     for (let i = 0; i < 100 && alive(started.launcherPid); i++) await sleep(100);
@@ -421,12 +432,13 @@ export async function switchTo(L, id, opts) {
     if (from === id) fail('DEV_RELEASE_ALREADY_CURRENT', { id });
     const paths = dataPaths(L.project), fromCode = codeDir(L, from);
     const stopped = await stopService(L, join(fromCode, CLI_ENTRY), opts, `switch-${id}`);
+    opts = { ...opts, manager: stopped.manager };
     const ledgerBefore = ledgerVersion(paths.ledger), snapshot = snapshotState(L, paths);
     setCurrent(L, id);
     const started = await startService(L, expectOf(L, id), opts);
     const ledgerAfter = ledgerVersion(paths.ledger);
     const base = { action: 'switch', from, to: id, fromBuild: stopped.build ?? null, shutdownCommandId: stopped.commandId ?? null, stoppedVia: stopped.cli ?? null, stopMs: stopped.stopMs ?? null,
-      startMs: started.startMs, ledgerBefore, ledgerAfter, ledgerBackup: started.ledgerUpgrade?.backupPath ?? null, snapshot, log: started.log,
+      serviceManager: stopped.manager?.unit ?? 'launcher', startMs: started.startMs, ledgerBefore, ledgerAfter, ledgerBackup: started.ledgerUpgrade?.backupPath ?? null, snapshot, log: started.log,
       launchError: started.launchError ?? null };
     if (started.ok) {
       writePrevious(L, from); record(L, { ...base, ok: true, instanceId: started.descriptor.instanceId });
@@ -466,6 +478,7 @@ export async function rollback(L, opts) {
       if (!backup) fail('DEV_RELEASE_BACKUP_MISSING', { targetOpens: supports, recorded: recorded ?? null, backups: paths.backups });
     }
     const stopped = await stopService(L, join(codeDir(L, from), CLI_ENTRY), opts, `rollback-${to}`);
+    opts = { ...opts, manager: stopped.manager };
     const snapshot = lastSwitchTo(L, from)?.snapshot ?? null, stateChanges = changedState(snapshot);
     let restored = null;
     if (restore) {
@@ -500,7 +513,7 @@ export async function rollback(L, opts) {
     setCurrent(L, to); writePrevious(L, from);
     const started = await startService(L, expectOf(L, to), opts);
     const entry = { action: 'rollback', from, to, ledgerBefore: ledgerNow, ledgerAfter: ledgerVersion(paths.ledger), restored, stateChanges, stateRestored, launchError: started.launchError ?? null,
-      shutdownCommandId: stopped.commandId ?? null, log: started.log, ok: started.ok };
+      shutdownCommandId: stopped.commandId ?? null, serviceManager: stopped.manager?.unit ?? 'launcher', log: started.log, ok: started.ok };
     record(L, entry);
     if (!started.ok) fail('DEV_RELEASE_START_FAILED', { ...entry, tail: started.tail, reported: started.descriptor?.build ?? null });
     return { ok: true, ...entry, service: started.descriptor };
@@ -511,9 +524,10 @@ export async function start(L, opts) {
   const unlock = installLock(L.installRoot);
   try {
     const id = currentId(L) ?? 'checkout', cli = join(codeDir(L, id), CLI_ENTRY);
-    const running = describe(L, cli, opts.node).descriptor;
+    const running = discoverService(L, cli, opts.node).descriptor;
     if (running) return { ok: true, already: true, service: running };
     if (ledgerHeld(dataPaths(L.project).lock)) fail('DEV_RELEASE_SERVICE_UNREACHABLE', {});
+    opts = { ...opts, manager: systemdManager(L, undefined, opts, fail) };
     const started = await startService(L, expectOf(L, id), opts);
     if (!started.ok) { await discard(L, started, opts, id); fail('DEV_RELEASE_START_FAILED', { id, launchError: started.launchError ?? null, tail: started.tail, reported: started.descriptor?.build ?? null }); }
     return { ok: true, id, service: started.descriptor, log: started.log };
@@ -537,7 +551,7 @@ export function status(L, opts) {
   const versions = existsSync(L.versions) ? readdirSync(L.versions).filter(name => ID.test(name)).map(name => { try { const r = readRelease(L, name);
     return { id: name, sourceCommit: r.sourceCommit, ledgerVersion: r.ledgerVersion, protocolVersion: r.protocolVersion, preview: r.preview, local: r.local, stagedAt: r.stagedAt }; }
   catch { return { id: name, invalid: true }; } }) : [];
-  const { descriptor } = describe(L, join(codeDir(L, id ?? 'checkout'), CLI_ENTRY), opts.node);
+  const { descriptor } = discoverService(L, join(codeDir(L, id ?? 'checkout'), CLI_ENTRY), opts.node);
   const runsFrom = descriptor?.processId ? cliOfProcess(descriptor.processId) : null;
   return { ok: true, installRoot: L.installRoot, project: L.project, current: id, previous: previousId(L), versions,
     service: descriptor ? { instanceId: descriptor.instanceId, build: descriptor.build ?? null, processId: descriptor.processId ?? null, runsFrom,
