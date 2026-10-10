@@ -153,6 +153,21 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   Legacy task parking requires attempt:evaluate. A typed expiry refusal is reported for that Run; other Runs still progress.
   No-due progression needs no cancel grant and opens no lifecycle writer. Deadline polls enter the write transaction
   only for a due deadline.
+  W12 source candidate (2026-10-10, WORKER-NEEDS-INPUT + RUN-OPERATOR-HOLD): final worker report v1 optionally
+  carries `exit {schemaVersion: 1, kind: needs-input, question}`. Only a clean host-proven process exit and complete,
+  verified exact-attempt output can produce the A3 `needs-input` decision; no acceptance or automatic retry follows.
+  The Run parks with its existing bounded deadline and the task exposes the question. Previously reserved work can
+  finish and be evaluated; new reservations refuse. Human `run resume --task --answer` / SDK lifecycle `answer`
+  requires freshly verified os-user assurance and the source attempt's evaluate authority. It preserves the old
+  attempt/receipts, admits eligibility for a new generated identity (generation +1), and carries source/question/answer
+  through the existing bounded prompt and a read-only input artifact. Needs-input cannot be accepted without answering.
+  `run hold --reason` / SDK lifecycle `hold` / MCP `control_run` parks with `operator-hold` and a bounded note under
+  Run cancel policy; resume uses Run reserve policy. MCP executes as its separately granted actor and cannot answer,
+  accept or reject. Resume clears only an operator hold; unanswered questions and dependency barriers survive.
+  The single lifecycle application, pure transition owner and ledger CAS persist state, command replay and sealed audit
+  atomically; audit records input digests. Expiry/close never erase live custody or unresolved effects. Historical JSON
+  contracts remain readable through additive fields, with new payloads explicitly versioned. Author verification is
+  external `proof/RUN-NEEDS-INPUT-2026-10-10/`; independent, hosted, packaged and live acceptance remain open.
   Store open requires the configured clock/parking timeout; pure transitions and terminal-dispatch cancellation settlement require explicit timing.
   Monitor treats parked Runs as open/stuck, projects decision reason/deadline and shows not-ready evaluation as pending.
   Its legacy v3 snapshot compatibility is a read-only projection; ledger45 owns durable conversion. Ledger v45 explicitly migrates snapshot/receipt v3 to v4,
