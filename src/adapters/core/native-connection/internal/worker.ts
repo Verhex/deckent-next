@@ -11,8 +11,8 @@ import { createHash } from 'node:crypto';
 // so the shapes are mirrored and the host re-validates every event. Redaction happens before any byte leaves the container.
 type BridgeEvent = Record<string, unknown> & { kind: string };
 // B7 GENERATED REDACTOR BEGIN
-// Canonical source+table sha256: 95a87a207de58b6f541f2d9832244040d317065db467290380925cccea7ab8fb; scripts/sync-worker-redactor.mjs --check
-const REDACTION_TABLE = {"knownLabel":{"prefix":"‹secret:","suffix":"›","anonymous":"[REDACTED]"},"patterns":[{"id":"provider-token","source":"\\b(?:sk-(?:ant-)?[\\w-]+|gh[pousr]_[\\w]+|github_pat_[\\w]+|AKIA[A-Z0-9]{16}|xox[abp]-[A-Za-z0-9_-]{8,}|npm_[A-Za-z0-9]+|AIza[A-Za-z0-9_-]+)\\b","flags":"g","replacement":"[REDACTED]"},{"id":"bearer-token","source":"(Bearer\\s+)[A-Za-z0-9._~+/=-]{16,}","recordSource":"(Bearer\\s+)\\S+","flags":"gi","replacement":"$1[REDACTED]"},{"id":"url-userinfo","source":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]+(@)","flags":"gi","replacement":"$1[REDACTED]$2"},{"id":"key-value","source":"((?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*=\\s*)[^\\s;|&$()\\x60\\x27\\x22<>]+","flags":"gi","replacement":"$1[REDACTED]"},{"id":"jwt","source":"\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b","flags":"g","replacement":"[REDACTED]"}]};
+// Canonical source+table sha256: a65f05ff702d193ea737cf9f0aa7f4912e7e83c643dd8a32e02d5523ecd6189b; scripts/sync-worker-redactor.mjs --check
+const REDACTION_TABLE = {"knownLabel":{"prefix":"‹secret:","suffix":"›","anonymous":"[REDACTED]"},"patterns":[{"id":"provider-token","source":"\\b(?:sk-(?:ant-)?[\\w-]+|gh[pousr]_[\\w]+|github_pat_[\\w]+|AKIA[A-Z0-9]{16}|xox[abp]-[A-Za-z0-9_-]{8,}|npm_[A-Za-z0-9]+|AIza[A-Za-z0-9_-]+)\\b","flags":"g","replacement":"[REDACTED]","streamPreviewSource":"\\b(?:sk-(?:ant-)?[\\w-]*|gh[pousr]_\\w*|github_pat_\\w*|AKIA[A-Z0-9]*|xox[abp]-[A-Za-z0-9_-]*|npm_[A-Za-z0-9]*|AIza[A-Za-z0-9_-]*)$"},{"id":"bearer-token","source":"(Bearer\\s+)[A-Za-z0-9._~+/=-]{16,}","recordSource":"(Bearer\\s+)\\S+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"\\bBearer\\s*$"},{"id":"url-userinfo","source":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]+(@)","flags":"gi","replacement":"$1[REDACTED]$2","streamPreviewSource":"(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]*(@?)$"},{"id":"key-value","source":"((?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*=\\s*)[^\\s;|&$()\\x60\\x27\\x22<>]+","flags":"gi","replacement":"$1[REDACTED]","streamSource":"(?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*(?:=\\s*)?$"},{"id":"jwt","source":"\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b","flags":"g","replacement":"[REDACTED]","streamPreviewSource":"\\beyJ[\\w-]*(?:\\.[\\w-]*){0,2}$"}]};
 
 export interface NamedKnownSecret { readonly name: string | null; readonly value: string }
 export interface RedactionMatch { readonly kind: string; readonly count: number }
@@ -22,6 +22,8 @@ export interface KnownSecretSpan { readonly start: number; readonly end: number;
 export interface KnownSecretSnapshot {
   readonly spans: (text: string) => readonly KnownSecretSpan[];
   /** Record attribution only; raw known values take priority over this snapshot's own label lookalikes. */
+  /** Earliest suffix that can still grow into an exact known value; never exposes the values. */
+  readonly pendingStart: (text: string) => number;
   readonly recordSpans: (text: string) => readonly KnownSecretSpan[];
   readonly apply: (text: string, redactRest: (text: string) => string) => { readonly text: string; readonly matches: number };
 }
@@ -37,9 +39,23 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
   const source = [...names.keys()].map(escape).join('|');
   const spans = (text: string): readonly KnownSecretSpan[] => Object.freeze(source ? [...text.matchAll(new RegExp(`(?=(${source}))`, 'g'))]
     .map(match => Object.freeze({ start: match.index, end: match.index + match[1]!.length, label: label(names.get(match[1]!) ?? null) })) : []);
+  // RECORD also covers a known value deliberately line-wrapped by its producer. DECISION still uses exact source bytes.
+  const foldLines = (text: string) => {
+    const offsets: number[] = [];
+    for (let at = 0; at < text.length; at++) if (text[at] !== '\n' && !(text[at] === '\r' && text[at + 1] === '\n')) offsets.push(at);
+    return { text: text.replace(/\r?\n/g, ''), offsets };
+  };
+  const lineSpans = (text: string): readonly KnownSecretSpan[] => {
+    if (!source || !text.includes('\n')) return [];
+    const flat = foldLines(text);
+    return spans(flat.text).flatMap(span => {
+      const start = flat.offsets[span.start]!, end = flat.offsets[span.end - 1]! + 1;
+      return end - start > span.end - span.start ? [Object.freeze({ ...span, start, end })] : [];
+    });
+  };
   const recordSource = [...new Set([...names.values()].filter(name => name !== null).map(label))].map(escape).join('|');
   const recordSpans = (text: string): readonly KnownSecretSpan[] => {
-    const raw = spans(text), records: KnownSecretSpan[] = [];
+    const raw = [...spans(text), ...lineSpans(text)].sort((a, b) => a.start - b.start || b.end - a.end), records: KnownSecretSpan[] = [];
     let rawIndex = 0, rawEnd = 0;
     if (recordSource) for (const match of text.matchAll(new RegExp(`(?=(${recordSource}))`, 'g'))) {
       const start = match.index, end = start + match[1]!.length;
@@ -49,7 +65,26 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
     }
     return Object.freeze([...raw, ...records]);
   };
-  return Object.freeze({ spans, recordSpans, apply(text: string, redactRest: (text: string) => string) {
+  const suffixStart = (text: string): number => {
+    let start = text.length;
+    for (const value of names.keys()) for (let length = Math.min(text.length, value.length - 1); length > text.length - start; length--) {
+      if (value.startsWith(text.slice(-length))) { start = text.length - length; break; }
+    }
+    return start;
+  };
+  const pendingStart = (text: string): number => {
+    if (!source) return text.length;
+    const exact = suffixStart(text);
+    // A trailing CR may be the first byte of a CRLF split across deltas; it cannot release a known prefix.
+    if (text.endsWith('\r')) {
+      const candidate = text.replace(/\r+$/g, ''), before = pendingStart(candidate);
+      return Math.min(exact, before < candidate.length ? before : text.length);
+    }
+    if (!text.includes('\n')) return exact;
+    const flat = foldLines(text), start = suffixStart(flat.text);
+    return Math.min(exact, start < flat.text.length ? flat.offsets[start]! : text.length);
+  };
+  return Object.freeze({ spans, recordSpans, pendingStart, apply(text: string, redactRest: (text: string) => string) {
     const matches = spans(text), merged: { start: number; end: number; labels: string[] }[] = [];
     for (const match of matches) {
       const previous = merged.at(-1);

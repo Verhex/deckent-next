@@ -6,3 +6,5 @@ export { RunWorkspaceAcquisitionApplication } from './internal/acquire.js';
 export type { RunWorkspaceProvider } from './internal/acquire.js';
 export { WorkTargetError, assertWorkTarget } from './internal/work-target.js';
 export type { WorkTargetErrorCode, WorkTargetObservation, WorkTargetContext } from './internal/work-target.js';
+export { createWorkspaceFileIndexCache, rankWorkspacePaths, workspacePathRank } from './internal/file-index.js';
+export type { RuntimeWorkspaceFileHost, WorkspaceFileIndex } from './internal/file-index.js';

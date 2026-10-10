@@ -7,9 +7,15 @@ import { afterEach, expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSqliteProviderSpendRecoveryStore,
   openSqliteProviderSpendIntegrityReader, openSqliteProviderSpendAccountReader } from '#adapters/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
+import { registerProviderSpendNoChargeCertification } from '../../../src/extensions.js';
 import { parseProviderSpendReservation, recoverProviderSpendHold, createProviderSpendCheckpoint, modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest,
   providerSpendQuoteDigest, providerSpendReservationDigest, createModelInvocationResponseEvidence, verifyProviderSpendIntegrity } from '#engine/index.js';
 
+// Law 10 (batch F, E2 law audit): startup recovery reads the same sealed registry as live settlement, so a distribution's dated overlay row
+// certifies its own endpoint for historical holds too; nothing else about recovery changes.
+const overlay = { vendor: 'acme.llm', endpoints: ['https://llm.acme.example/v1/chat/completions'], statuses: [400, 422], source: 'https://acme.example/docs/errors',
+  retrievedAt: '2026-10-10' };
+registerProviderSpendNoChargeCertification(overlay);
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 const options = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2000 };
@@ -127,4 +133,18 @@ it('validates the retained pure recovery audit independently of SQLite', async (
     JSON.parse(String(state.invocations[0]!.record)), 20);
   expect(result?.account.reservedMinorUnits).toBe(0);
   expect(() => parseProviderSpendReservation({ ...result!.reservation, recovery: { ...result!.reservation.recovery, previousDigest: '0'.repeat(64) } })).toThrow('PROVIDER_SPEND_INVALID');
+});
+
+it('recovers a complete historical rejection at an overlay-certified endpoint and status only, with the overlay row in its certification digest', async () => {
+  const endpoint = overlay.endpoints[0]!;
+  const path = await fixture([{ amount: 7, status: 422, endpoint }, { amount: 5, status: 429, endpoint }, { amount: 3, status: 503, endpoint },
+    { amount: 2, status: 422, endpoint, incomplete: true }, { amount: 1, status: 400, endpoint: 'https://llm.acme.example/v1/responses' }]);
+  const before = records(path), store = await openSqliteProviderSpendRecoveryStore(path, options);
+  expect(await store.recoverCertifiedHolds(20)).toEqual({ released: 1, zeroTariff: 0, inconsistent: [] }); store.close();
+  const after = records(path);
+  expect(JSON.parse(String(after.account!.record))).toMatchObject({ reservedMinorUnits: 11, settledExactMinorUnits: '0' });
+  expect(JSON.parse(String(after.reservations[0]!.record))).toMatchObject({ schemaVersion: 5, disposition: { state: 'released-no-charge' },
+    recovery: { certificationDigest: providerSpendEvidenceDigest({ schemaVersion: 1, kind: 'vendor-admission-rejection', ...overlay }) } });
+  // An uncertified status (429 is not in the overlay row), an uncertain 5xx, an incomplete body and another path on that host keep their holds unchanged.
+  expect(after.reservations.slice(1)).toEqual(before.reservations.slice(1));
 });

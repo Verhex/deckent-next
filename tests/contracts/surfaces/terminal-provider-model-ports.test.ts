@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -127,6 +127,27 @@ describe('/provider port', () => {
 });
 
 describe('/provider addresses (owner 2026-10-08, D3: chosen from a list; a typed address is the narrow exception)', () => {
+  it.each(['en', 'tr'] as const)('%s: a refused HTTP address names the literal loopback alternatives and suggests 127.0.0.1', async locale => {
+    const { root, options } = await project({});
+    const store = secrets(), host = connectHost('ok');
+    const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: host }, options, locale, errorText);
+    const reason = locale === 'en'
+      ? 'Plain http is allowed only for 127.0.0.1 / [::1]; use 127.0.0.1 for a local server, or https for other addresses.'
+      : 'Düz http yalnız 127.0.0.1 / [::1] için kullanılabilir; yerel sunucu için 127.0.0.1, diğer adresler için https kullanın.';
+    for (const host of ['localhost', '10.0.0.2', '172.28.64.1']) {
+      expect(port.endpoint('local-openai', `http://${host}:8000`)).toEqual({ ok: false, reason });
+      expect(port.endpoint('local-openai', `https://${host}:8000`)).toMatchObject({ ok: true });
+    }
+    for (const host of ['127.0.0.1', '[::1]']) {
+      expect(port.endpoint('local-openai', `http://${host}:8000`)).toEqual({ ok: true, base: `http://${host}:8000`, check: `http://${host}:8000/v1/models` });
+    }
+    for (const text of [terminalPanelLabels(locale).provider.endpointHint, t('error.MODEL_CONNECT_ENDPOINT_INVALID', {}, locale)]) {
+      expect(text).toContain('127.0.0.1 / [::1]');
+      expect(text).not.toContain(locale === 'en' ? 'only on this machine' : 'yalnız bu makinede');
+    }
+    expect(host.probes).toEqual([]); expect(store.sets).toEqual([]);
+  });
+
   it('lists the configured inference server first, then the known local servers; a fixed-endpoint kind lists none; a typed address is checked and previewed', async () => {
     const serving = { schemaVersion: 1, activeProfileId: 'dev', profiles: [{ schemaVersion: 1, id: 'dev', scopeId: 'scope',
       hardware: { gpus: 1, vramGbPerGpu: 32, arch: 'blackwell_consumer', topology: 'single' },
@@ -142,8 +163,8 @@ describe('/provider addresses (owner 2026-10-08, D3: chosen from a list; a typed
     expect(kinds.find(kind => kind.id === 'anthropic-api')!.endpointChoices).toEqual([]);
     expect(port.endpoint('local-openai', 'http://127.0.0.1:9000/v1/')).toEqual({ ok: true, base: 'http://127.0.0.1:9000', check: 'http://127.0.0.1:9000/v1/models' });
     // CONNECT-LOCALITY: only literal loopback is local; a 'localhost' name is refused like any other plain-http host.
-    expect(port.endpoint('local-openai', 'http://localhost:9000/v1/')).toEqual({ ok: false, reason: 'Düz http yalnız bu makinede kullanılabilir; https kullanın.' });
-    expect(port.endpoint('local-openai', 'http://10.0.0.2:8000')).toEqual({ ok: false, reason: 'Düz http yalnız bu makinede kullanılabilir; https kullanın.' });
+    expect(port.endpoint('local-openai', 'http://localhost:9000/v1/')).toEqual({ ok: false, reason: 'Düz http yalnız 127.0.0.1 / [::1] için kullanılabilir; yerel sunucu için 127.0.0.1, diğer adresler için https kullanın.' });
+    expect(port.endpoint('local-openai', 'http://10.0.0.2:8000')).toEqual({ ok: false, reason: 'Düz http yalnız 127.0.0.1 / [::1] için kullanılabilir; yerel sunucu için 127.0.0.1, diğer adresler için https kullanın.' });
   });
 });
 

@@ -2,6 +2,7 @@ name: platform verification
 on:
   schedule:
     - cron: '17 2 * * *'
+    - cron: '41 3 * * 1'
   workflow_dispatch:
 permissions:
   contents: read
@@ -97,5 +98,27 @@ jobs:
         with:
           name: verify-${{ matrix.os }}-node${{ matrix.node }}-${{ github.run_attempt }}
           path: .pack/ci-evidence/
+          if-no-files-found: error
+          retention-days: 7
+  deps-watch:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24', cache: npm }
+      - run: npm ci
+      - run: node scripts/deps-watch.mjs "$RUNNER_TEMP/deps-watch"
+      - name: Upload dependency watch reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deps-watch-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/deps-watch/
           if-no-files-found: error
           retention-days: 7

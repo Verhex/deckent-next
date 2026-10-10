@@ -185,6 +185,7 @@ export function describeMcpTrustCard(card: McpTrustCard, locale?: Locale): strin
 export interface McpCardAskerInput { readonly ledgerPath: () => Promise<string>; readonly sqlite: Parameters<typeof openSqliteApprovalStore>[1];
   readonly integrity: () => ReturnType<typeof openLocalIntegrityAuthority>; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
   readonly requester: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly policyRevision: string; readonly ttlMs: number;
+  readonly locale?: Locale;
   /** B1 (Sol 2237 R2b): the card facts from the same request-time policy snapshot as `policyRevision`; sealed in the record, the event repeats them. */
   readonly facts: AgentToolApprovalFacts;
   readonly signal: AbortSignal; readonly emit: (event: { readonly kind: 'approval.requested'; readonly callId: string; readonly approvalId: string; readonly revision: number;
@@ -198,7 +199,7 @@ export interface McpCardAskerInput { readonly ledgerPath: () => Promise<string>;
  */
 export function mcpCardApprovalAsker(input: McpCardAskerInput, indexBase: number) {
   let asked = 0;
-  return async (card: { readonly tool: string; readonly name: string; readonly phase: string; readonly text: string }): Promise<boolean | null> => {
+  return async (card: { readonly tool: string; readonly name: string; readonly phase: string; readonly text: string; readonly preview?: string }): Promise<boolean | null> => {
     const journal = openSqliteApprovalStore(await input.ledgerPath(), input.sqlite);
     // `mcp_trust` keeps its digest and call id scheme (`mcp-trust-card:1`, `mcp-trust-<server>-<phase>`); another card tool gets its own.
     const kind = card.tool.replace(/_/gu, '-'), argsDigest = createHash('sha256').update(`${kind}-card:1\0${card.text}`).digest('hex'), callId = `${kind}-${card.name}-${card.phase}`;
@@ -212,7 +213,7 @@ export function mcpCardApprovalAsker(input: McpCardAskerInput, indexBase: number
       // The event's facts come from the sealed record itself (an existing record keeps its own), so the card and the record never disagree.
       const sealed = record.request.schemaVersion === 3 ? record.request.facts : null;
       input.emit({ kind: 'approval.requested', callId, approvalId: requested, revision: record.revision, summary: record.request.summary,
-        preview: boundApprovalPreview(card.text), expiresAt: record.request.expiresAt, ...(sealed ? { risk: sealed.risk?.source === 'cell' ? sealed.risk.cell : null,
+        preview: boundApprovalPreview(card.preview ?? card.text), expiresAt: record.request.expiresAt, ...(sealed ? { risk: sealed.risk?.source === 'cell' ? sealed.risk.cell : null,
           requiredAssurance: sealed.requiredAssurance } : {}) });
       outcome = await awaitAgentToolApproval(journal.store, integrity, record, input.clock, input.signal, 250, started);
       return outcome === 'allow' ? true : outcome === 'deny' ? false : null;
@@ -227,5 +228,7 @@ export const MCP_TRUST_CARD_TOOL = 'mcp_trust';
 /** The turn's first-use trust question (owner 2026-09-28): each card one single-use approval of the turn (`mcpCardApprovalAsker`, tool `mcp_trust`). */
 export function mcpTrustApprovalAsker(input: McpCardAskerInput): McpTrustAsk {
   const ask = mcpCardApprovalAsker(input, 1_000_000);
-  return card => ask({ tool: MCP_TRUST_CARD_TOOL, name: card.name, phase: card.phase, text: describeMcpTrustCard(card) });
+  // Approval binds the canonical English text; display language must never change its digest.
+  return card => ask({ tool: MCP_TRUST_CARD_TOOL, name: card.name, phase: card.phase, text: describeMcpTrustCard(card),
+    ...(input.locale ? { preview: describeMcpTrustCard(card, input.locale) } : {}) });
 }

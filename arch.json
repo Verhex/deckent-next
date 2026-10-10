@@ -320,6 +320,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/composition/core/monitor",
         "src/adapters/core/local-principal",
         "src/composition/core/scoped-request",
         "src/composition/core/runs",
@@ -548,7 +549,8 @@
         "src/engine/core/backup",
         "src/composition/core/secrets",
         "src/platform/core/i18n",
-        "src/adapters/core/installation-files"
+        "src/adapters/core/installation-files",
+        "src/engine/core/workspaces"
       ],
       "plan": "EXECUTION"
     },
@@ -865,6 +867,7 @@
     },
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/engine/core/monitor",
         "src/domain/core/agent-turn",
         "src/platform/core/output",
@@ -976,6 +979,8 @@
     },
     "src/surfaces/core/terminal-ledger": {
       "dependencies": [
+        "src/platform/core/redaction",
+        "src/platform/core/output",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/approval-presentation",
         "src/domain/core/inference-serving",
@@ -1158,6 +1163,7 @@
     },
     "src/surfaces/core/mcp": {
       "dependencies": [
+        "src/engine/core/monitor",
         "src/platform/core/validate",
         "src/domain/core/attempt",
         "src/domain/core/model-activation",
@@ -1475,6 +1481,7 @@
     },
     "src/composition/core/agent-turn": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/adapters/core/approval-store",
         "src/adapters/core/local-keyring",
         "src/engine/core/approval",
@@ -1521,7 +1528,8 @@
         "src/adapters/core/mcp-import",
         "src/composition/core/approvals",
         "src/composition/core/config",
-        "src/adapters/core/provider-connect"
+        "src/adapters/core/provider-connect",
+        "src/engine/core/workspaces"
       ],
       "plan": "SURFACES"
     },
@@ -1817,7 +1825,8 @@
         "src/adapters/core/host-shell",
         "src/adapters/core/mcp-client",
         "src/platform/core/host",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/engine/core/effect"
       ],
       "plan": "SURFACES"
     },
@@ -1834,7 +1843,8 @@
     "src/adapters/core/workspace-read": {
       "dependencies": [
         "src/domain/core/agent-tool",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/engine/core/workspaces"
       ],
       "plan": "SURFACES"
     },
@@ -2137,6 +2147,7 @@
     },
     "src/engine/core/audit": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/domain/core/audit",
         "src/domain/core/command",
         "src/platform/core/integrity"
@@ -2178,7 +2189,8 @@
         "src/adapters/core/host-shell",
         "src/adapters/core/workspace-read",
         "src/domain/core/agent-tool",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },

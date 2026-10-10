@@ -4,7 +4,8 @@ import { ProviderSpendNoChargeRegistry, providerSpendNoChargeRegistry } from '#e
 // Law 10 (lead 2026-10-10, E2 round 3): the packaged no-charge policy is the seed; a distribution adds its own vendor certifications through
 // `deckent/extensions` before composeCore seals. Add-only: an overlay can never widen an existing certification.
 const core = { vendor: 'vendor', endpoints: ['https://api.vendor.example/v1/chat/completions'], statuses: [400, 429], source: 'https://vendor.example/errors' };
-const overlay = { vendor: 'acme.llm', endpoints: ['https://llm.acme.example/v1/chat/completions'], statuses: [400, 422], source: 'https://acme.example/errors' };
+const overlay = { vendor: 'acme.llm', endpoints: ['https://llm.acme.example/v1/chat/completions'], statuses: [400, 422], source: 'https://acme.example/errors',
+  retrievedAt: '2026-10-10' };
 const code = (value: string) => expect.objectContaining({ name: 'RegistryError', code: value });
 
 it('adds a namespaced vendor certification and finds it only for its exact endpoint and statuses', () => {
@@ -39,4 +40,23 @@ it('refuses every registration after sealing; an undefined provider stays uncert
   expect(providerSpendNoChargeRegistry.find('https://127.0.0.1:8443/v1/chat/completions', 400)).toBeNull();
   expect(providerSpendNoChargeRegistry.find('https://api.openai.com/v1/chat/completions', 400)).toMatchObject({ vendor: 'openai' });
   expect(providerSpendNoChargeRegistry.find('https://api.openai.com/v1/chat/completions', 500)).toBeNull();
+});
+
+it('an overlay cannot widen a certified host through another path or port, and must date its source (batch F, E2 law audit)', () => {
+  const registry = new ProviderSpendNoChargeRegistry([core]);
+  // Host-level widening: another endpoint on a host a row already certifies is refused, whatever its path or port.
+  for (const endpoint of ['https://api.vendor.example/v1/embeddings', 'https://api.vendor.example:8443/v1/chat/completions', 'https://api.vendor.example/v2/chat'])
+    expect(() => registry.register({ ...overlay, endpoints: [endpoint] })).toThrow(code('REGISTRY_ADAPTER_DUPLICATE'));
+  expect(registry.find('https://api.vendor.example/v1/embeddings', 400)).toBeNull();
+  // A mixed row (one fresh endpoint + one on the certified host) is refused whole; nothing of it is admitted.
+  expect(() => registry.register({ ...overlay, endpoints: ['https://llm.acme.example/v1/chat/completions', 'https://api.vendor.example/v1/x'] })).toThrow(code('REGISTRY_ADAPTER_DUPLICATE'));
+  expect(registry.find('https://llm.acme.example/v1/chat/completions', 400)).toBeNull();
+  // Provenance: an overlay row without (or with a malformed) source date is invalid; the seed's rows are dated by the policy file instead.
+  const undated = Object.fromEntries(Object.entries(overlay).filter(([key]) => key !== 'retrievedAt'));
+  for (const input of [undated, { ...overlay, retrievedAt: '10/10/2026' }, { ...overlay, retrievedAt: '' }]) expect(() => registry.register(input)).toThrow(code('REGISTRY_MANIFEST_INVALID'));
+  expect(() => new ProviderSpendNoChargeRegistry([{ ...core, retrievedAt: '2026-10-09' }])).toThrow(code('REGISTRY_MANIFEST_INVALID'));
+  registry.register(overlay);
+  expect(registry.find('https://llm.acme.example/v1/chat/completions', 400)).toMatchObject({ vendor: 'acme.llm', retrievedAt: '2026-10-10' });
+  // A second overlay cannot widen the first one's host either.
+  expect(() => registry.register({ ...overlay, vendor: 'acme.other', endpoints: ['https://llm.acme.example/v1/responses'] })).toThrow(code('REGISTRY_ADAPTER_DUPLICATE'));
 });

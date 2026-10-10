@@ -33,7 +33,7 @@ it('registers a non-Core secret backend before the composition root seals, and r
   const capability = { schemaVersion: 1 as const, id: 'overlay.erp', version: 1, labelKey: 'overlay.erp.label', noteKey: 'overlay.erp.note', proposed: false,
     cells: [{ id: 'inspect', tools: { erp_inspect: ['inspect'] }, actions: ['inspect'], resource: { kind: 'operation', ids: ['overlay.erp.inspect'] }, scope: 'selected' as const, source: 'literal' as const }] };
   extensions.registerMcpCapabilityGroup(capability);
-  const certification = { vendor: 'overlay.erp-llm', endpoints: ['https://llm.erp.example/v1/chat/completions'], statuses: [400, 429], source: 'https://erp.example/docs/errors' };
+  const certification = { vendor: 'overlay.erp-llm', endpoints: ['https://llm.erp.example/v1/chat/completions'], statuses: [400, 429], source: 'https://erp.example/docs/errors', retrievedAt: '2026-10-10' };
   extensions.registerProviderSpendNoChargeCertification(certification);
   composeCore();
   expect(providerSpendNoChargeRegistry.find('https://llm.erp.example/v1/chat/completions', 429)).toMatchObject({ vendor: 'overlay.erp-llm' });

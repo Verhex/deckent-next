@@ -33,7 +33,7 @@ vi.mock('node:https', async importOriginal => {
 });
 // Law 10: a separately distributed package certifies its own vendor endpoint through `deckent/extensions` before the composition root seals.
 registerProviderSpendNoChargeCertification({ vendor: 'acme.llm', endpoints: ['https://llm.acme.example/v1/chat/completions'], statuses: [400, 422],
-  source: 'https://acme.example/docs/errors' });
+  source: 'https://acme.example/docs/errors', retrievedAt: '2026-10-10' });
 const roots: string[] = [], servers: Server[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
 const MODEL = 'operator-chat';

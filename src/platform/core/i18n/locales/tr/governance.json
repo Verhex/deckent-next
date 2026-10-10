@@ -555,7 +555,7 @@
   "error.MODEL_CONNECT_INVALID": "Model bağlama isteği geçerli değil.",
   "error.MODEL_CONNECT_NOT_CONNECTABLE": "Bu bağlantı türüne henüz model bağlanamıyor.",
   "error.MODEL_CONNECT_ENDPOINT_FIXED": "Bu sağlayıcının adresi sabittir; adres verilemez.",
-  "error.MODEL_CONNECT_ENDPOINT_INVALID": "Adres eksik ya da izinli değil (https; düz http yalnız bu makinede).",
+  "error.MODEL_CONNECT_ENDPOINT_INVALID": "Adres eksik ya da izinli değil (https; düz http yalnız 127.0.0.1 / [::1] için); yerel sunucu için 127.0.0.1 kullanın.",
   "error.MODEL_CONNECT_MODEL_UNKNOWN": "Bu model sağlayıcının kataloğunda yok: listedekilerden birini seçin.",
   "error.MODEL_CONNECT_DECLARATION_CONFLICT": "Sağlayıcı kataloğu bu modeli farklı tanımlıyor; değiştirilmedi.",
   "error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE": "Bu adresten anahtar adı türetilemiyor.",

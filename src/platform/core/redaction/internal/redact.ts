@@ -8,6 +8,8 @@ export interface KnownSecretSpan { readonly start: number; readonly end: number;
 export interface KnownSecretSnapshot {
   readonly spans: (text: string) => readonly KnownSecretSpan[];
   /** Record attribution only; raw known values take priority over this snapshot's own label lookalikes. */
+  /** Earliest suffix that can still grow into an exact known value; never exposes the values. */
+  readonly pendingStart: (text: string) => number;
   readonly recordSpans: (text: string) => readonly KnownSecretSpan[];
   readonly apply: (text: string, redactRest: (text: string) => string) => { readonly text: string; readonly matches: number };
 }
@@ -23,9 +25,23 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
   const source = [...names.keys()].map(escape).join('|');
   const spans = (text: string): readonly KnownSecretSpan[] => Object.freeze(source ? [...text.matchAll(new RegExp(`(?=(${source}))`, 'g'))]
     .map(match => Object.freeze({ start: match.index, end: match.index + match[1]!.length, label: label(names.get(match[1]!) ?? null) })) : []);
+  // RECORD also covers a known value deliberately line-wrapped by its producer. DECISION still uses exact source bytes.
+  const foldLines = (text: string) => {
+    const offsets: number[] = [];
+    for (let at = 0; at < text.length; at++) if (text[at] !== '\n' && !(text[at] === '\r' && text[at + 1] === '\n')) offsets.push(at);
+    return { text: text.replace(/\r?\n/g, ''), offsets };
+  };
+  const lineSpans = (text: string): readonly KnownSecretSpan[] => {
+    if (!source || !text.includes('\n')) return [];
+    const flat = foldLines(text);
+    return spans(flat.text).flatMap(span => {
+      const start = flat.offsets[span.start]!, end = flat.offsets[span.end - 1]! + 1;
+      return end - start > span.end - span.start ? [Object.freeze({ ...span, start, end })] : [];
+    });
+  };
   const recordSource = [...new Set([...names.values()].filter(name => name !== null).map(label))].map(escape).join('|');
   const recordSpans = (text: string): readonly KnownSecretSpan[] => {
-    const raw = spans(text), records: KnownSecretSpan[] = [];
+    const raw = [...spans(text), ...lineSpans(text)].sort((a, b) => a.start - b.start || b.end - a.end), records: KnownSecretSpan[] = [];
     let rawIndex = 0, rawEnd = 0;
     if (recordSource) for (const match of text.matchAll(new RegExp(`(?=(${recordSource}))`, 'g'))) {
       const start = match.index, end = start + match[1]!.length;
@@ -35,7 +51,26 @@ export function snapshotKnownSecrets(input: readonly NamedKnownSecret[]): KnownS
     }
     return Object.freeze([...raw, ...records]);
   };
-  return Object.freeze({ spans, recordSpans, apply(text: string, redactRest: (text: string) => string) {
+  const suffixStart = (text: string): number => {
+    let start = text.length;
+    for (const value of names.keys()) for (let length = Math.min(text.length, value.length - 1); length > text.length - start; length--) {
+      if (value.startsWith(text.slice(-length))) { start = text.length - length; break; }
+    }
+    return start;
+  };
+  const pendingStart = (text: string): number => {
+    if (!source) return text.length;
+    const exact = suffixStart(text);
+    // A trailing CR may be the first byte of a CRLF split across deltas; it cannot release a known prefix.
+    if (text.endsWith('\r')) {
+      const candidate = text.replace(/\r+$/g, ''), before = pendingStart(candidate);
+      return Math.min(exact, before < candidate.length ? before : text.length);
+    }
+    if (!text.includes('\n')) return exact;
+    const flat = foldLines(text), start = suffixStart(flat.text);
+    return Math.min(exact, start < flat.text.length ? flat.offsets[start]! : text.length);
+  };
+  return Object.freeze({ spans, recordSpans, pendingStart, apply(text: string, redactRest: (text: string) => string) {
     const matches = spans(text), merged: { start: number; end: number; labels: string[] }[] = [];
     for (const match of matches) {
       const previous = merged.at(-1);

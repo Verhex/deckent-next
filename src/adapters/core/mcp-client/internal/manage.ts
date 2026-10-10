@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ErrorRegistry, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
-  SystemTrustedClock, type ProductLayout } from '#platform/index.js';
+  SystemTrustedClock, type Locale, type ProductLayout } from '#platform/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
 import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, mcpToolsChangedRecord, mcpWithheldTools, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
   type McpStartNoticeRenderer } from './failures.js';
@@ -296,6 +296,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
 export async function openTurnMcp(input: { readonly registry: McpRegistryContext; readonly pool: McpPoolView; readonly cwd: string; readonly sandboxes: McpLaunchContext['sandboxes'];
   readonly principal: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly sqlite: Parameters<typeof mcpTrustAuditWriter>[0]['sqlite'];
   readonly keyFile: string; readonly requestTtlMs: number; readonly inputMaxBytes: number; readonly resultMaxBytes: number; readonly scopeId: string; readonly turnId: string;
+  readonly locale?: Locale;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof mcpTrustApprovalAsker>[0]['emit']; readonly ledgerPath: () => Promise<string>;
   /** One request-time policy snapshot (B1, Sol 2237 R2b): its revision and the trust cards' facts (Core minimum raised by the snapshot's rules). */
   readonly requestPolicy: () => Promise<{ readonly revision: string; readonly trustFacts: AgentToolApprovalFacts }>; readonly now?: () => number;
@@ -323,7 +324,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
       audit: mcpTrustAuditWriter({ layout, sqlite: input.sqlite, keyFile: input.keyFile, scopeId, principal, policyRevision }) }, input.cwd);
     const ask = mcpTrustApprovalAsker({ ledgerPath: input.ledgerPath, sqlite: input.sqlite, integrity: () => openLocalIntegrityAuthority(layout, input.keyFile, true),
       clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, policyRevision, facts: trustFacts,
-      ttlMs: input.requestTtlMs, signal: input.signal, emit: input.emit });
+      ttlMs: input.requestTtlMs, signal: input.signal, emit: input.emit, ...(input.locale ? { locale: input.locale } : {}) });
     for (const server of undecided) {
       const known = findMcpStartFailure(failures, server);
       if (known) { notices.push(mcpStartFailedNotice(server.name, known)); continue; }

@@ -9,32 +9,37 @@
       "id": "provider-token",
       "source": "\\b(?:sk-(?:ant-)?[\\w-]+|gh[pousr]_[\\w]+|github_pat_[\\w]+|AKIA[A-Z0-9]{16}|xox[abp]-[A-Za-z0-9_-]{8,}|npm_[A-Za-z0-9]+|AIza[A-Za-z0-9_-]+)\\b",
       "flags": "g",
-      "replacement": "[REDACTED]"
+      "replacement": "[REDACTED]",
+      "streamPreviewSource": "\\b(?:sk-(?:ant-)?[\\w-]*|gh[pousr]_\\w*|github_pat_\\w*|AKIA[A-Z0-9]*|xox[abp]-[A-Za-z0-9_-]*|npm_[A-Za-z0-9]*|AIza[A-Za-z0-9_-]*)$"
     },
     {
       "id": "bearer-token",
       "source": "(Bearer\\s+)[A-Za-z0-9._~+/=-]{16,}",
       "recordSource": "(Bearer\\s+)\\S+",
       "flags": "gi",
-      "replacement": "$1[REDACTED]"
+      "replacement": "$1[REDACTED]",
+      "streamSource": "\\bBearer\\s*$"
     },
     {
       "id": "url-userinfo",
       "source": "(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]+(@)",
       "flags": "gi",
-      "replacement": "$1[REDACTED]$2"
+      "replacement": "$1[REDACTED]$2",
+      "streamPreviewSource": "(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]*(@?)$"
     },
     {
       "id": "key-value",
       "source": "((?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*=\\s*)[^\\s;|&$()\\x60\\x27\\x22<>]+",
       "flags": "gi",
-      "replacement": "$1[REDACTED]"
+      "replacement": "$1[REDACTED]",
+      "streamSource": "(?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*(?:=\\s*)?$"
     },
     {
       "id": "jwt",
       "source": "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b",
       "flags": "g",
-      "replacement": "[REDACTED]"
+      "replacement": "[REDACTED]",
+      "streamPreviewSource": "\\beyJ[\\w-]*(?:\\.[\\w-]*){0,2}$"
     }
   ]
 }

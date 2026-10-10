@@ -10,11 +10,14 @@ export const PROVIDER_SPEND_NO_CHARGE_STATUSES: readonly number[] = Object.freez
   417, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451]);
 const exactEndpoint = z.string().url().refine(value => { const url = new URL(value); return url.protocol === 'https:' && url.href === value && !url.username && !url.password && !url.search && !url.hash; });
 const certificationSchema = z.object({ vendor: z.string().min(1).max(128), endpoints: z.array(exactEndpoint).min(1).max(32),
-  statuses: z.array(z.number().int().refine(status => PROVIDER_SPEND_NO_CHARGE_STATUSES.includes(status))).min(1), source: z.string().url() }).strict();
+  statuses: z.array(z.number().int().refine(status => PROVIDER_SPEND_NO_CHARGE_STATUSES.includes(status))).min(1), source: z.string().url(),
+  retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional() }).strict();
 type Certification = z.infer<typeof certificationSchema>;
 const policy = z.object({ schemaVersion: z.literal(1), retrievedAt: z.string(), note: z.string(), vendors: z.array(certificationSchema) }).strict().parse(data);
 /** Law 10: the packaged policy is the seed; a distribution adds its own vendor rows (dotted ids) through `deckent/extensions` before composeCore
- * seals. Add-only: a row can never widen an existing certification (no shared endpoint, no core namespace); registration grants nothing. */
+ * seals. Add-only: a row can never widen an existing certification (no endpoint on a host another row certifies, no core namespace). An overlay
+ * row names the date its source was read (`retrievedAt`, the seed's is file-level), so its certification digest carries that provenance.
+ * Registration grants no authority; it only lets settlement release a hold after a documented rejection at the row's exact endpoints. */
 export class ProviderSpendNoChargeRegistry {
   private readonly rows: Certification[] = []; private sealed = false;
   constructor(core: readonly Certification[]) { for (const row of core) this.admit(row, true); }
@@ -22,7 +25,9 @@ export class ProviderSpendNoChargeRegistry {
     const parsed = certificationSchema.safeParse(input);
     if (!parsed.success) throw new RegistryError('REGISTRY_MANIFEST_INVALID');
     if (core === parsed.data.vendor.includes('.')) throw new RegistryError('REGISTRY_NAMESPACE_RESERVED');
-    if (this.rows.some(row => row.vendor === parsed.data.vendor || row.endpoints.some(endpoint => parsed.data.endpoints.includes(endpoint))))
+    if (core === (parsed.data.retrievedAt !== undefined)) throw new RegistryError('REGISTRY_MANIFEST_INVALID');
+    const hosts = new Set(parsed.data.endpoints.map(endpoint => new URL(endpoint).hostname));
+    if (this.rows.some(row => row.vendor === parsed.data.vendor || row.endpoints.some(endpoint => hosts.has(new URL(endpoint).hostname))))
       throw new RegistryError('REGISTRY_ADAPTER_DUPLICATE');
     this.rows.push(Object.freeze({ ...parsed.data, endpoints: Object.freeze([...parsed.data.endpoints]), statuses: Object.freeze([...parsed.data.statuses]) }) as Certification);
   }

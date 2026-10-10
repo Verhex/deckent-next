@@ -49,8 +49,16 @@ describe('live shell output in the terminal (T-L4 slice 3c-ii)', () => {
     state = renderAssistantStream(state, { kind: 'output', callId: 'c1', stream: 'stdout', text: 'building \u001b[32mok\u001b[0m\n' }, 2).state;
     state = renderAssistantStream(state, { kind: 'output', callId: 'other', stream: 'stdout', text: 'not mine\n' }, 3).state;
     expect(state.activeTool).toMatchObject({ callId: 'c1', output: 'building ok\n' });
-    state = renderAssistantStream(state, { kind: 'output', callId: 'c1', stream: 'stderr', text: 'x'.repeat(5_000) }, 4).state;
+    // Ordinary whitespace-separated output (5000 chars): the live tail stays bounded at the last LIVE_OUTPUT_TAIL_CHARS.
+    state = renderAssistantStream(state, { kind: 'output', callId: 'c1', stream: 'stderr', text: 'xxxx\n'.repeat(1_000) }, 4).state;
     expect(state.activeTool!.output.length).toBe(LIVE_OUTPUT_TAIL_CHARS);
+    // REDACTOR-REMAINING (batch F): one unbroken atom over the 4096-unit record lookback cannot be proven secret-free, so the rest of the
+    // field is withheld behind one canonical mask and nothing of the atom is shown (security invariant, platform redaction stream).
+    let token = renderAssistantStream(startAssistantStream(0), { kind: 'tool', phase: 'started', callId: 't1', name: 'run_shell', target: 'make', status: null, ms: null }, 1).state;
+    token = renderAssistantStream(token, { kind: 'output', callId: 't1', stream: 'stderr', text: 'x'.repeat(5_000) }, 2).state;
+    expect(token.activeTool!.output).toBe('[REDACTED]');
+    token = renderAssistantStream(token, { kind: 'output', callId: 't1', stream: 'stderr', text: ' later ordinary text\n' }, 3).state;
+    expect(token.activeTool!.output).toBe('[REDACTED]');
     const finished = renderAssistantStream(state, { kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'make', status: 'ok', ms: 5 }, 5);
     expect(finished.state.activeTool).toBeNull();
     expect(finished.staticUnits).toEqual([{ kind: 'tool', name: 'run_shell', target: 'make', status: 'ok', ms: 5 }]);
