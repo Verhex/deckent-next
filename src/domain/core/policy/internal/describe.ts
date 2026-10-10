@@ -30,6 +30,7 @@ export function describePolicyChange(files: { readonly policy: unknown; readonly
   const now = <T>(map: Map<string, T>, id: string, render: (value: T) => string) => { const value = map.get(id); return value === undefined ? '(not found)' : render(value); };
   const lines = change.data.changes.map((item: PolicyChange['changes'][number]) => {
     switch (item.kind) {
+      case 'role.add': return `+ role ${text(item.role.id)}: ${item.role.permissions.map(permission => `${text(permission.id)} ${permission.effect} ${text(permission.resource.kind)}${list(permission.resource.ids)} actions${list(permission.actions)}`).join('; ')}`;
       case 'grant.add': return `+ grant ${text(item.grant.id)}: ${grantText(item.grant)}`;
       case 'grant.remove': return `- grant ${text(item.id)}: ${now(grants, item.id, grantText)}`;
       case 'grant.replace': return `~ grant ${text(item.grant.id)}: ${now(grants, item.grant.id, grantText)} → ${grantText(item.grant)}`;

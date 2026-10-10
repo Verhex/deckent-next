@@ -799,10 +799,10 @@
   "identity.profile.team": "Team",
   "identity.profile.enterprise": "Enterprise",
   "identity.profile.custom": "Custom",
-  "identity.summary": "Identity profiles and draft previews",
+  "identity.summary": "Identity profiles, draft previews and governed distribution",
   "identity.profilesSummary": "List identity profile templates",
   "identity.previewSummary": "Preview a draft without granting authority",
-  "identity.help": "Usage: deckent identity profiles [--registry <file>] [--json] [--lang en|tr]\n       deckent identity preview [--profile <namespace:id>] --scope <id>\n         [--profile-version <n>] [--input <file|->] [--registry <file>]\n         [--json] [--lang en|tr]\nInput: members, organization, assignments, removeBindingIds; optional\nprojectScopeIds and includeFutureProjects. Registry: custom package array.\nPreview only; no authority, deployment, identity verification or model call.\nOmit --profile to use installation identity.profile.",
+  "identity.help": "Usage: deckent identity profiles [--registry <file>] [--json] [--lang en|tr]\n       deckent identity preview [--profile <namespace:id>] --scope <id>\n         [--profile-version <n>] [--input <file|->] [--registry <file>]\n         [--json] [--lang en|tr]\nInput: members, organization, assignments, removeBindingIds; optional\nprojectScopeIds and includeFutureProjects. Registry: custom package array.\nPreview only; no authority, deployment, identity verification or model call.\nOmit --profile to use installation identity.profile.\nUsage: deckent identity choices --scope <id>\n       deckent identity distribute --input <selection-file|-> [--json]\n       deckent identity distribute --apply --input <submission-file|->\n         --expect <preview-digest> [--json]\n       deckent identity distribute --scope <id> [--apply]\nSelection: schemaVersion=1, profile, scopeId, assignments\n(principalId, roleId, scopeIds), removeBindingIds. Use catalog choices.\nInteractive input uses numbered selections and an explicit confirmation.\nApply requires an admin, an attested terminal and existing identities.\nKeep the preview submission envelope for exact replay; preview grants\nno authority. Current separation-of-duties rules remain in force.",
   "identity.list": "Identity profiles · registry {version} · {digest}",
   "identity.profileLine": "{label} · {id}@{version} · digest {digest}",
   "identity.preview": "Draft {profile}@{version} · fixed project scopes: {scopes}",
@@ -901,5 +901,14 @@
   "terminal.spend.reason.overrun": "Charge exceeded reservation",
   "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model switch refused. {reason}",
   "error.MODEL_INVOCATION_REASONING_UNSUPPORTED": "The selected model cannot turn reasoning off.",
-  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "No OpenRouter endpoint satisfies the no-training and zero-retention data policy. No request or spending reservation was created. Check OpenRouter Privacy settings: https://openrouter.ai/settings/privacy; choose a model with compliant endpoints."
+  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "No OpenRouter endpoint satisfies the no-training and zero-retention data policy. No request or spending reservation was created. Check OpenRouter Privacy settings: https://openrouter.ai/settings/privacy; choose a model with compliant endpoints.",
+  "identity.choicesSummary": "List verified identity distribution choices",
+  "identity.distributeSummary": "Preview or apply selected identity profile bindings",
+  "identity.distributionHelp": "Usage: deckent identity choices --scope <id>\n       deckent identity distribute --input <selection-file|-> [--json]\n       deckent identity distribute --apply --input <submission-file|->\n         --expect <preview-digest> [--json]\n       deckent identity distribute --scope <id> [--apply]\nSelection: schemaVersion=1, profile, scopeId, assignments\n(principalId, roleId, scopeIds), removeBindingIds. Use catalog choices.\nInteractive input uses numbered selections and an explicit confirmation.\nApply requires an admin, an attested terminal and existing identities.\nKeep the preview submission envelope for exact replay; preview grants\nno authority. Current separation-of-duties rules remain in force.",
+  "identity.distributionExpect": "Distribution preview digest: {digest}",
+  "identity.distributionResult": "Identity distribution: {status}",
+  "identity.selectNumber": "Select a number: ",
+  "identity.approveDistribution": "Approve and distribute",
+  "identity.cancelDistribution": "Cancel",
+  "identity.distributionReason": "Reviewed identity profile distribution"
 }

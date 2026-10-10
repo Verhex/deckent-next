@@ -17,7 +17,7 @@ Onaylar:
   policy      Politikayı ve kalıcı izinleri incele
 Kurulum/Bakım:
   backup      Kurtarma seti oluştur, doğrula ve geri yükle
-  identity    Kimlik profilleri ve taslak önizlemeleri
+  identity    Kimlik profilleri, taslak önizleme ve yönetilen dağıtım
   config      Yapılandırmayı incele ve değiştir
   mcp         MCP sunucularını yönet
   secret      Saklanan gizli değerleri yönet

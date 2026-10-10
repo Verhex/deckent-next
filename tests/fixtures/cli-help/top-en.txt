@@ -17,7 +17,7 @@ Approvals:
   policy      Inspect policy and standing grants
 Setup / Maintenance:
   backup      Create, verify and restore recovery sets
-  identity    Identity profiles and draft previews
+  identity    Identity profiles, draft previews and governed distribution
   config      Inspect and change configuration
   mcp         Manage MCP servers
   secret      Manage stored secrets

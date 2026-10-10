@@ -799,10 +799,10 @@
   "identity.profile.team": "Ekip",
   "identity.profile.enterprise": "Kurumsal",
   "identity.profile.custom": "Özel",
-  "identity.summary": "Kimlik profilleri ve taslak önizlemeleri",
+  "identity.summary": "Kimlik profilleri, taslak önizleme ve yönetilen dağıtım",
   "identity.profilesSummary": "Kimlik profili şablonlarını listele",
   "identity.previewSummary": "Yetki vermeden taslak önizle",
-  "identity.help": "Kullanım: deckent identity profiles [--registry <dosya>] [--json] [--lang en|tr]\n          deckent identity preview [--profile <namespace:id>] --scope <id>\n            [--profile-version <n>] [--input <dosya|->] [--registry <dosya>]\n            [--json] [--lang en|tr]\nGirdi: members, organization, assignments, removeBindingIds; isteğe bağlı\nprojectScopeIds ve includeFutureProjects. Registry: özel paket dizisi.\nYalnız önizleme; yetki, dağıtım, kimlik doğrulama veya model çağrısı yok.\n--profile verilmezse kurulum identity.profile seçimi kullanılır.",
+  "identity.help": "Kullanım: deckent identity profiles [--registry <dosya>] [--json] [--lang en|tr]\n          deckent identity preview [--profile <namespace:id>] --scope <id>\n            [--profile-version <n>] [--input <dosya|->] [--registry <dosya>]\n            [--json] [--lang en|tr]\nGirdi: members, organization, assignments, removeBindingIds; isteğe bağlı\nprojectScopeIds ve includeFutureProjects. Registry: özel paket dizisi.\nYalnız önizleme; yetki, dağıtım, kimlik doğrulama veya model çağrısı yok.\n--profile verilmezse kurulum identity.profile seçimi kullanılır.\nKullanım: deckent identity choices --scope <id>\n          deckent identity distribute --input <seçim-dosyası|-> [--json]\n          deckent identity distribute --apply --input <komut-dosyası|->\n            --expect <önizleme-özeti> [--json]\n          deckent identity distribute --scope <id> [--apply]\nSeçim: schemaVersion=1, profile, scopeId, assignments\n(principalId, roleId, scopeIds), removeBindingIds. Katalogdan seçilir.\nEtkileşimli giriş numaralı seçim ve açık onay kullanır.\nUygulama admin, doğrulanmış terminal ve mevcut kimlik gerektirir.\nTam tekrar için önizlemenin submission zarfını saklayın; önizleme\nyetki vermez. Mevcut ikinci kişi kuralları uygulanmaya devam eder.",
   "identity.list": "Kimlik profilleri · kayıt sürümü {version} · {digest}",
   "identity.profileLine": "{label} · {id}@{version} · içerik özeti {digest}",
   "identity.preview": "Taslak {profile}@{version} · sabit proje kapsamları: {scopes}",
@@ -901,5 +901,14 @@
   "terminal.spend.reason.overrun": "Ücret rezervasyonu aştı",
   "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model değiştirilemedi. {reason}",
   "error.MODEL_INVOCATION_REASONING_UNSUPPORTED": "Seçilen modelde düşünme kapatılamaz.",
-  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "OpenRouter’da eğitim ve veri saklama yasağına uygun uç nokta yok. İstek gönderilmedi, harcama rezervasyonu oluşturulmadı. OpenRouter Gizlilik ayarlarını kontrol edin: https://openrouter.ai/settings/privacy; uygun uç noktası olan bir model seçin."
+  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "OpenRouter’da eğitim ve veri saklama yasağına uygun uç nokta yok. İstek gönderilmedi, harcama rezervasyonu oluşturulmadı. OpenRouter Gizlilik ayarlarını kontrol edin: https://openrouter.ai/settings/privacy; uygun uç noktası olan bir model seçin.",
+  "identity.choicesSummary": "Doğrulanmış kimlik dağıtım seçimlerini listele",
+  "identity.distributeSummary": "Seçilen kimlik profili bağlarını önizle veya uygula",
+  "identity.distributionHelp": "Kullanım: deckent identity choices --scope <id>\n          deckent identity distribute --input <seçim-dosyası|-> [--json]\n          deckent identity distribute --apply --input <komut-dosyası|->\n            --expect <önizleme-özeti> [--json]\n          deckent identity distribute --scope <id> [--apply]\nSeçim: schemaVersion=1, profile, scopeId, assignments\n(principalId, roleId, scopeIds), removeBindingIds. Katalogdan seçilir.\nEtkileşimli giriş numaralı seçim ve açık onay kullanır.\nUygulama admin, doğrulanmış terminal ve mevcut kimlik gerektirir.\nTam tekrar için önizlemenin submission zarfını saklayın; önizleme\nyetki vermez. Mevcut ikinci kişi kuralları uygulanmaya devam eder.",
+  "identity.distributionExpect": "Dağıtım önizlemesi özeti: {digest}",
+  "identity.distributionResult": "Kimlik dağıtımı: {status}",
+  "identity.selectNumber": "Numara seçin: ",
+  "identity.approveDistribution": "Onayla ve dağıt",
+  "identity.cancelDistribution": "İptal",
+  "identity.distributionReason": "Kimlik profili dağıtımı incelendi"
 }

@@ -112,6 +112,8 @@ export const CLI_CATALOG = [
   { name: 'identity', group: 'setup', summary: 'identity.summary', detail: 'identity.help', children: [
     action('profiles', 'setup', 'identity.profilesSummary', 'identity.help'),
     action('preview', 'setup', 'identity.previewSummary', 'identity.help'),
+    action('choices', 'setup', 'identity.choicesSummary', 'identity.distributionHelp'),
+    action('distribute', 'setup', 'identity.distributeSummary', 'identity.distributionHelp'),
   ] },
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', children: [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', 'independent'),
