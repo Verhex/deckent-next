@@ -992,7 +992,6 @@
   "terminal.info.usage.key.model": "Model",
   "terminal.info.usage.model": "{model} ({provider}) · {prompt} input / {completion} output tokens · {reports} reports",
   "tui.provider.unknown": "The provider",
-  "tui.provider.badRequest": "{provider} rejected the request (HTTP 400). Provider message: {message}.",
   "tui.provider.badRequestUnknown": "{provider} rejected the request (HTTP 400); the provider message is unavailable.",
   "tui.provider.badRequestMigration": "Open /model and choose “Switch to the current protocol”. The call is recorded and is not retried.",
   "tui.provider.badRequestProfile": "Check the model profile and request settings in /model. The call is recorded and is not retried.",

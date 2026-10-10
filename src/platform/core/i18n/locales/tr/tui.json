@@ -992,7 +992,6 @@
   "terminal.info.usage.key.model": "Kullanılan model",
   "terminal.info.usage.model": "{model} ({provider}) · {prompt} girdi / {completion} çıktı tokenı · {reports} ölçüm",
   "tui.provider.unknown": "Sağlayıcı",
-  "tui.provider.badRequest": "{provider} isteği reddetti (HTTP 400). Sağlayıcı mesajı: {message}.",
   "tui.provider.badRequestUnknown": "{provider} isteği reddetti (HTTP 400); sağlayıcı mesajına erişilemiyor.",
   "tui.provider.badRequestMigration": "/model penceresinde “Güncel protokole geç” seçeneğini kullanın. Çağrı kaydedildi, tekrar denenmeyecek.",
   "tui.provider.badRequestProfile": "/model penceresinde model profilini ve istek ayarlarını kontrol edin. Çağrı kaydedildi, tekrar denenmeyecek.",

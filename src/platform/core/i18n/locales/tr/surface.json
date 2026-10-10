@@ -649,5 +649,7 @@
   "model.invocable.budget": "Kapsam bütçesi bu isteği kabul edemiyor ({code}). Askıdaki harcamaları uzlaştırın veya bütçe oluşturun ya da değiştirin.",
   "model.invocable.policy": "Bu kapsamda çağrı yetkisi yok ({code}).",
   "model.invocable.protocol": "Çağrı protokolü veya istek desteklenmiyor ({code}). Uyumlu profille yeniden bağlayın.",
-  "model.invocable.unavailable": "Modelin hazır olduğu doğrulanamıyor ({code})."
+  "model.invocable.unavailable": "Modelin hazır olduğu doğrulanamıyor ({code}).",
+  "model.invocable.unavailableNext": "/model ile başka bir model seçin veya /provider ile desteklenen protokolü kullanarak yeniden bağlayın.",
+  "model.invocable.subscription": "Abonelik modeli: hazırlık doğrulanamıyor (sağlayıcı bu denetimi sunmuyor)."
 }

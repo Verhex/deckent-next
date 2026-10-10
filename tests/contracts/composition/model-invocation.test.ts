@@ -206,7 +206,7 @@ describe('native endpoint version and historical receipt boundaries', () => {
     expect((await readFile(f.ledger)).includes(secret)).toBe(false);
   });
 
-  it('reserves and settles an operator zero tariff at zero in the scope ledger, and rejects a currency mismatch before HTTP', async () => {
+  it('sends a literal-loopback operator zero tariff without a money reservation, and rejects a currency mismatch before HTTP', async () => {
     const f = await fixture();
     const zero = { kind: 'operator-static' as const, version: 1 as const, currency: 'USD', inputMinorUnitsPerMillionTokens: 0 as const, outputMinorUnitsPerMillionTokens: 0 as const };
     const local = (currency: string) => ({ ...f.profile, protocol: { family: 'openai-chat-completions', version: 'v1' },
@@ -220,11 +220,16 @@ describe('native endpoint version and historical receipt boundaries', () => {
     expect(result.receipt.outcome).toMatchObject({ state: 'responded' }); expect(f.requests).toBe(1); expect(f.metadataGets).toBe(0);
     const inspected = await inspectConfiguredModelInvocation(f.project,
       { schemaVersion: 2, scopeId: 'scope', invocationId: result.receipt.claim.invocationId, reference }, { env: f.env });
-    expect(inspected.spending).toMatchObject({ descriptor: { budgetId: 'budget', currency: 'USD',
-      quote: { pricing: { id: 'operator-static-tariff', version: 1, definition: zero }, maxChargeMinorUnits: 0 } },
-    // SPEND-SETTLEMENT: reported usage is measured against the (zero) tariff, so the charge settles as measured-tariff at exactly zero.
-    disposition: { state: 'settled-measured-tariff', amountMinorUnits: 0 }, measurement: { basis: 'measured-tariff', exactMinorUnits: '0' } });
+    // CORE-BUDGET-HOLD (owner 2026-10-09): the literal-loopback zero tariff waives money (no reservation, no spending record); the currency
+    // validation above still applies to it (lead 2026-10-10, E2 1a).
+    expect(inspected.spending).toBeNull();
     expect(JSON.parse(f.bodies[0]!)).toEqual({ model: 'vendor/model', messages: [{ role: 'user', content: 'prompt-must-not-persist' }], max_completion_tokens: 4, stream: false });
+    // Without any scope budget the exempt tariff is still validated against Core's money currency (USD): EUR is refused before HTTP.
+    f.setProfile(local('EUR')); await f.writeConfig();
+    const path = join(f.project, '.deckent/config.json'), unbudgeted = JSON.parse(await readFile(path, 'utf8'));
+    delete unbudgeted.provider_spending; await writeFile(path, JSON.stringify(unbudgeted), { mode: 0o600 }); clearConfigCache();
+    await expect(invokeConfiguredModel(f.project, f.command('wrong-currency-unbudgeted'), { env: f.env })).rejects.toMatchObject({ code: 'PROVIDER_SPEND_CONFLICT' });
+    expect(f.requests).toBe(1);
   });
 
   it('reads an unchanged historical adapter1 claim without executing it; new sends require the current adapter', async () => {

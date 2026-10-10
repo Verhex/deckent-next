@@ -32,7 +32,9 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
       line(t('monitor.map.models', { count: map.models.length, active: map.models.filter(model => model.availability?.invocable).length }, locale), 'accent'),
       ...map.models.map(model => ({ kind: 'line' as const, line: [span(`  ${model.availability?.invocable ? marks.active : marks.off} `, model.availability?.invocable ? 'success' : 'muted'),
         span(`${model.channelId}${model.reference ? `@${model.reference.providerVersion}` : ''} / ${model.modelId}${model.reference ? `@${model.reference.modelVersion}` : ''}${model.scopeId ? ` · ${model.scopeId}` : ''}${model.vendorId || model.billing ? ` · ${model.vendorId ?? '—'} · ${model.billing ?? '—'}` : ''}`),
-        span(` (${modelInvocabilityText(model.availability ?? { invocable: false, reason: { kind: 'unavailable', code: 'MODEL_INVOCATION_UNAVAILABLE' } }, locale)})`, 'muted')] satisfies MonitorLine })),
+        // A subscription channel offers no readiness check: say so plainly instead of a generic unverifiable state (lead 2026-10-10, E2 4).
+        span(` (${!model.availability && model.billing === 'subscription' ? t('model.invocable.subscription', {}, locale)
+          : modelInvocabilityText(model.availability ?? { invocable: false, reason: { kind: 'unavailable', code: 'MODEL_INVOCATION_UNAVAILABLE' } }, locale)})`, 'muted')] satisfies MonitorLine })),
       ...(map.models.length ? [] : [line(`  ${none}`, 'muted')]),
       line(policy ? t('monitor.map.policy', { grants: policy.grants, kinds: Object.entries(policy.byResourceKind).map(([kind, count]) => `${kind} ${count}`).join(', ') || none,
         sod: policy.separationOfDuties }, locale) : t('monitor.map.policyNone', {}, locale), 'accent'),

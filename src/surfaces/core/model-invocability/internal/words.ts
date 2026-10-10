@@ -12,10 +12,11 @@ export function modelInvocabilityText(state: ModelInvocability, locale: Locale):
     case 'delivery-unfit': return t('model.invocable.delivery', {}, locale);
     case 'no-credential': return t('model.invocable.credential', {}, locale);
     case 'tariff': return t('model.invocable.tariff', { code }, locale);
-    case 'budget': return state.reason.reservation ? t('tui.model.reason.reservation', { amount: (state.reason.reservation.requestedMinorUnits / 100)
-      .toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 }) }, locale) : t('model.invocable.budget', { code }, locale);
+    // PROVIDER-ERRORS N01: the refused call's own reservation leads; the typed code and the reconcile/budget next step always stay.
+    case 'budget': return `${state.reason.reservation ? `${t('tui.model.reason.reservation', { amount: (state.reason.reservation.requestedMinorUnits / 100)
+      .toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 }) }, locale)} ` : ''}${t('model.invocable.budget', { code }, locale)}`;
     case 'policy': return t('model.invocable.policy', { code }, locale);
     case 'protocol': return t('model.invocable.protocol', { code }, locale);
-    case 'unavailable': return t('model.invocable.unavailable', { code }, locale);
+    case 'unavailable': return `${t('model.invocable.unavailable', { code }, locale)} ${t('model.invocable.unavailableNext', {}, locale)}`;
   }
 }

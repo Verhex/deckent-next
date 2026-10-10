@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:https';
 import type { ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it, vi } from 'vitest';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSqliteModelInvocationReader, openSqliteProviderSpendIntegrityReader, readLocalOsIdentity } from '#adapters/index.js';
@@ -17,11 +17,24 @@ import { createLocalTls } from '../../fixtures/local-tls.js';
 // https OpenAI-compatible server with a non-zero operator-static v2 tariff: only the final event's own usage settles money. An interim usage
 // chunk before the finish reason is never promoted to the final count by a later finish marker; the reservation stays held. Astra 2467:
 // a contradiction after the final usage withdraws it, so a bounded (retention-capped) refusal also holds instead of settling.
+// CORE-BUDGET-HOLD certified release (lead 2026-10-10, E2 1b): a request to the exact certified vendor URL is routed, in this test process only,
+// to the local TLS server (certificate names the vendor host, SNI kept); every other host passes through untouched, so no network call is made.
+const route = vi.hoisted(() => ({ host: 'api.openai.com', port: 0 }));
+vi.mock('node:https', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:https')>();
+  const request = ((url: URL, options: import('node:https').RequestOptions, callback: (response: import('node:http').IncomingMessage) => void) => {
+    if (!(url instanceof URL) || url.hostname !== route.host) return actual.request(url, options, callback);
+    if (!route.port) throw new Error('vendor host is not routed in this test');
+    return actual.request({ ...options, protocol: 'https:', hostname: '127.0.0.1', port: route.port, path: `${url.pathname}${url.search}`,
+      servername: route.host, headers: { ...options.headers, host: route.host } }, callback);
+  }) as typeof actual.request;
+  return { ...actual, request, default: { ...actual, request } };
+});
 const roots: string[] = [], servers: Server[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
 const MODEL = 'operator-chat';
 afterEach(async () => {
-  clearConfigCache();
+  clearConfigCache(); route.port = 0;
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); })));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -33,14 +46,15 @@ const jsonReply: Reply = response => {
   response.end(JSON.stringify({ id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: MODEL,
     choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'partial answer' } }], usage }));
 };
-async function fixture(reply: Reply, listen = true) {
+async function fixture(reply: Reply, listen = true, vendorEndpoint?: string) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-openai-stream-spend-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(data), mkdir(home)]);
-  const { key, caPem } = await createLocalTls(root);
+  const { key, caPem } = await createLocalTls(root, vendorEndpoint ? { dnsNames: [route.host] } : {});
   const server = createServer({ key, cert: caPem }, (request, response) => { request.resume(); request.on('end', () => reply(response)); });
   if (listen) { servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); }); }
   const address = server.address(); if (listen && (!address || typeof address === 'string')) throw new Error('FIXTURE');
+  if (vendorEndpoint && address && typeof address !== 'string') route.port = address.port;
   const reference = { providerId: 'operator', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
   const model = { id: 'chat', version: 1, nativeId: MODEL, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog', providers: [{ id: 'operator', version: 1, models: [model] }] };
@@ -48,7 +62,7 @@ async function fixture(reply: Reply, listen = true) {
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
-      definition: { endpoint: `https://127.0.0.1:${address && typeof address !== 'string' ? address.port : 1234}/chat`, maxOutputTokens: 64, authentication: { type: 'none' }, tls: { caPem },
+      definition: { endpoint: vendorEndpoint ?? `https://127.0.0.1:${address && typeof address !== 'string' ? address.port : 1234}/chat`, maxOutputTokens: 64, authentication: { type: 'none' }, tls: { caPem },
         tariff: { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: 200, cachedInputMinorUnitsPerMillionTokens: 50,
           outputMinorUnitsPerMillionTokens: 1000 } } },
     allocation: { id: 'allocation', maxCalls: 3, maxInFlight: 2 }, limits: { requestMaxBytes: 8192, responseMaxBytes: 8192, timeoutMs: 2000 } };
@@ -128,15 +142,37 @@ it.each([
     checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
 });
 
-it.each([400, 422, 429, 500, 503])('HTTP %s reaches atomic spend settlement through the real TLS producer', async status => {
+it.each([400, 422, 429, 500, 503])('HTTP %s from an uncertified (local) endpoint stays held through the real TLS producer', async status => {
+  // CORE-BUDGET-HOLD (owner, Jev 3f877ac4): money is released only with an exact vendor endpoint/status certificate (no-charge-policy.json).
   const f = await fixture(response => { response.writeHead(status, { 'content-type': 'application/json' }); response.end('{"error":{"message":"invalid_request_error"}}'); });
   const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
   const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
   expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'http-status', httpStatus: status } });
-  const released = status < 500;
-  expect(inspection!.spending!.disposition.state).toBe(released ? 'released-no-charge' : 'held');
-  expect(integrity.reservedMinorUnits).toBe(released ? 0 : inspection!.spending!.descriptor.quote.maxChargeMinorUnits);
+  expect(inspection!.spending!.disposition).toMatchObject({ state: 'held', reason: 'unknown' });
+  expect(integrity.reservedMinorUnits).toBe(inspection!.spending!.descriptor.quote.maxChargeMinorUnits);
+  expect(integrity.reservedMinorUnits).toBeGreaterThan(0);
   expect(integrity.settledMinorUnits).toBe(0);
+});
+
+it.each([400, 422, 429])('HTTP %s from the certified vendor endpoint releases no-charge through the real TLS producer', async status => {
+  let requests = 0;
+  const f = await fixture(response => { requests++; response.writeHead(status, { 'content-type': 'application/json' }); response.end('{"error":{"message":"invalid_request_error"}}'); },
+    true, 'https://api.openai.com/v1/chat/completions');
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(requests).toBe(1);
+  expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'http-status', httpStatus: status } });
+  expect(inspection!.spending!.disposition.state).toBe('released-no-charge');
+  expect(integrity.reservedMinorUnits).toBe(0); expect(integrity.settledMinorUnits).toBe(0);
+});
+
+it.each([500, 503])('HTTP %s from the certified vendor endpoint is not certified by status and stays held', async status => {
+  const f = await fixture(response => { response.writeHead(status, { 'content-type': 'application/json' }); response.end('{"error":{"message":"server"}}'); },
+    true, 'https://api.openai.com/v1/chat/completions');
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(inspection!.spending!.disposition.state).toBe('held');
+  expect(integrity.reservedMinorUnits).toBe(inspection!.spending!.descriptor.quote.maxChargeMinorUnits);
 });
 
 it('a credential/policy refusal before POST releases its claim without contacting the TLS producer', async () => {

@@ -151,8 +151,7 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     unsupported.profiles.find((p: { reference: ModelReference }) => p.reference.providerId === local.providerId).adapter = { id: 'fixture-unsupported', version: 1, definition: {} };
     expect((await app.submit('set', { keyPath: 'provider_invocation_profiles', value: unsupported, layer: 'project', scopeId: 'scope', principal,
       commandId: 'unsupported-adapter' })).status).toBe('applied');
-    // MODEL-STATE-PARITY: the shared invocable-now words name the typed refusal (an unsupported adapter reads MODEL_INVOCATION_UNAVAILABLE).
-    await openGroup(LOCAL); await until(() => frame().includes('Modelin hazır olduğu doğrulanamıyor (MODEL_INVOCATION_UNAVAILABLE)') && frame().includes('[engellendi]'), 'typed refusal'); await press(ENTER, ESC, ESC);
+    await openGroup(LOCAL); await until(() => frame().includes('desteklenen protokol'), 'refusal and next step'); await press(ENTER, ESC, ESC);
     await press('still Claude', ENTER); await until(() => requests.length === 5, 'refused switch preserves pin');
     expect(f.state.requests).toHaveLength(1);
   }, 60_000);

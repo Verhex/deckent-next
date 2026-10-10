@@ -151,7 +151,10 @@ describe('W6: in-process terminal model switch with governed owners', () => {
     if (kind === 'protocol') { const profile = f.profiles.get('local')!; f.profiles.set('local', { ...profile, adapter: { ...profile.adapter, id: 'unsupported' } }); }
     else if (kind === 'price') f.unprice(); else f.exhaust();
     const local = (await f.source.inspect()).choices.find(choice => choice.group === 'local')!;
-    expect(local.blocked).toBe(modelInvocabilityText({ invocable: false, reason: { kind: kind === 'protocol' ? 'unavailable' : kind === 'price' ? 'tariff' : 'budget', code: kind === 'budget' ? 'PROVIDER_SPEND_EXHAUSTED' : kind === 'price' ? 'PROVIDER_SPEND_TARIFF_UNVERIFIED' : 'MODEL_INVOCATION_UNAVAILABLE' } }, locale));
+    const words = modelInvocabilityText({ invocable: false, reason: { kind: kind === 'protocol' ? 'unavailable' : kind === 'price' ? 'tariff' : 'budget', code: kind === 'budget' ? 'PROVIDER_SPEND_EXHAUSTED' : kind === 'price' ? 'PROVIDER_SPEND_TARIFF_UNVERIFIED' : 'MODEL_INVOCATION_UNAVAILABLE' } }, locale);
+    // PROVIDER-ERRORS N01 (merged with MODEL-STATE-PARITY): a budget refusal leads with the refused call's own reservation, then the same shared words.
+    if (kind === 'budget') expect(local.blocked).toMatch(new RegExp(`^${locale === 'en' ? 'Required reservation' : 'Gerekli rezervasyon'}: \\d+[.,]\\d{2} USD\\. .+ ${words.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+    else expect(local.blocked).toBe(words);
     await f.press('/model', ENTER); await until(() => f.view.stdout.frame.includes('local'), 'blocked provider'); await f.press('local', ENTER, ENTER);
     expect(f.sends).toHaveLength(0); await f.press(ESC, ESC); await f.turn(); expect(f.sends[0]!.provider).toBe('claude');
   });

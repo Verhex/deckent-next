@@ -649,5 +649,7 @@
   "model.invocable.budget": "The scope budget cannot admit this request ({code}). Reconcile held spending or create or revise the budget.",
   "model.invocable.policy": "Invocation authority is unavailable in this scope ({code}).",
   "model.invocable.protocol": "The invocation protocol or request is unsupported ({code}). Reconnect with a compatible profile.",
-  "model.invocable.unavailable": "Model readiness cannot be verified ({code})."
+  "model.invocable.unavailable": "Model readiness cannot be verified ({code}).",
+  "model.invocable.unavailableNext": "Choose another model in /model or reconnect it with a supported protocol in /provider.",
+  "model.invocable.subscription": "Subscription model: readiness cannot be verified (the provider does not offer this check)."
 }

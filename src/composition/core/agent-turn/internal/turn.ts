@@ -26,7 +26,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions, withAgentAudit } from './mode.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, mapOpenAiErrorResponse, openAiProviderRefusal, providerRequestDiagnosis,
+import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, openAiProviderRefusal, providerRequestDiagnosis,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 /** Service-owned state of running turns: cancellation by the starting principal, service stop, the scratch custody (areas they hold are never
  * swept), and how `fetch_url` reaches the network (the system transport; only an in-process test passes another). */
@@ -219,18 +219,21 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
           if (evidence?.adapter.id === 'openai-chat-http' && (evidence.httpStatus === 400 || evidence.httpStatus === 429)) {
-            // Retained vendor content is read through the existing inspect-content policy. Denied/purged content stays unknown.
-            const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
-              invocationId: result.receipt.claim.invocationId, reference, includeResponseContent: true }, peer, options).catch(() => null);
-            const body = inspected?.responseContent?.kind === 'response-body' ? inspected.responseContent.data : null;
             const diagnosis = providerRequestDiagnosis(profile);
-            if (evidence.httpStatus === 429) return { status: 'failed', state: chatTurnRoundFailureState({ ...outcome,
-              evidence: { ...evidence, body: { ...evidence.body, ...(body ? { data: body } : {}) } } } as typeof outcome, diagnosis.rejectionCodes) };
-            const diagnostic = mapOpenAiErrorResponse(400, body); const provider = diagnosis.labelKey ? (MESSAGE_REGISTRY.catalogs[language] as Readonly<Record<string, string>>)[diagnosis.labelKey] ?? t('tui.provider.unknown', {}, language)
+            if (evidence.httpStatus === 429) {
+              // Retained vendor content is read through the inspect-content policy only to classify the limit (a typed kind); its text is never shown.
+              const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
+                invocationId: result.receipt.claim.invocationId, reference, includeResponseContent: true }, peer, options).catch(() => null);
+              const body = inspected?.responseContent?.kind === 'response-body' ? inspected.responseContent.data : null;
+              return { status: 'failed', state: chatTurnRoundFailureState({ ...outcome,
+                evidence: { ...evidence, body: { ...evidence.body, ...(body ? { data: body } : {}) } } } as typeof outcome, diagnosis.rejectionCodes) };
+            }
+            // Lead 2026-10-10 (E2, P1): a provider's rejection body never reaches the person or the turn; only the provider and HTTP status are named.
+            // The body stays in the governed retained-content record (inspect-content policy, redacted inspection).
+            const provider = diagnosis.labelKey ? (MESSAGE_REGISTRY.catalogs[language] as Readonly<Record<string, string>>)[diagnosis.labelKey] ?? t('tui.provider.unknown', {}, language)
               : t('tui.provider.unknown', {}, language);
-            return { status: 'failed', state: [diagnostic?.message ? t('tui.provider.badRequest', { provider, message: diagnostic.message }, language)
-              : t('tui.provider.badRequestUnknown', { provider }, language), diagnosis.migration ? t('tui.provider.badRequestMigration', {}, language)
-                : t('tui.provider.badRequestProfile', {}, language)].join(' ') };
+            return { status: 'failed', state: [t('tui.provider.badRequestUnknown', { provider }, language), diagnosis.migration
+              ? t('tui.provider.badRequestMigration', {}, language) : t('tui.provider.badRequestProfile', {}, language)].join(' ') };
           }
           return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
         }

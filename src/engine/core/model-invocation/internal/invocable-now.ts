@@ -44,7 +44,9 @@ export function modelInvocabilityRefusal(error: unknown): ModelInvocability {
     : code.startsWith('PROVIDER_SPEND_') ? 'budget'
     : code.startsWith('POLICY_') || code.startsWith('PRINCIPAL_') || code.startsWith('SCOPE_') ? 'policy'
     : code.startsWith('OPENAI_CHAT_') || code.startsWith('ANTHROPIC_') || code === 'MODEL_INVOCATION_NATIVE_REQUEST_INVALID' ? 'protocol' : 'unavailable';
-  const params = (error as { params?: { requested?: unknown; currency?: unknown } } | null)?.params, requested = params?.requested;
+  // A raw ProviderSpendError carries `amounts`; a query-mapped refusal carries the same two public fields as `params` (never account totals here).
+  const typed = error as { params?: { requested?: unknown; currency?: unknown }; amounts?: { requested?: unknown; currency?: unknown } } | null;
+  const params = typed?.params ?? typed?.amounts, requested = params?.requested;
   if (code === 'PROVIDER_SPEND_EXHAUSTED' && typeof requested === 'number' && Number.isSafeInteger(requested) && requested >= 0 && params?.currency === 'USD')
     return { invocable: false, reason: { kind, code, reservation: { requestedMinorUnits: requested, currency: 'USD' } } };
   return { invocable: false, reason: { kind, code } };

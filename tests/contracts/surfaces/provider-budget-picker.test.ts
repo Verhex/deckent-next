@@ -31,6 +31,13 @@ it.each(['en', 'tr'] as const)('shows reservation USD and a ready alternative in
   const view = await source.inspect(), blocked = view.choices.find(row => row.reference.modelId !== 'cheap')!;
   expect(blocked.blocked).toContain(locale === 'en' ? '1,024.51 USD' : '1.024,51 USD');
   expect(blocked.command).toContain('cheap'); expect(view.choices.find(row => row.reference.modelId === 'cheap')!.blocked).toBeNull();
+  // The composed reader sees the raw engine refusal (amounts, not query params): the same reservation text, still without account totals.
+  const raw = new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED', { requested: 102451, currency: 'USD', settled: '0.00', held: 12345, limit: 99999 });
+  const direct = await modelPanelSource(f.project, 'scope', { inspectDeclaredModels: async () => declared as never,
+    inspectInvocableModels: invocable(async reference => { if (reference.modelId !== 'cheap') throw raw; }) }, { env: f.env, heal: false }, locale).inspect();
+  const directBlocked = direct.choices.find(row => row.reference.modelId !== 'cheap')!;
+  expect(directBlocked.blocked).toContain(locale === 'en' ? '1,024.51 USD' : '1.024,51 USD');
+  expect(directBlocked.blocked).not.toContain('123.45'); expect(directBlocked.blocked).not.toContain('999.99'); expect(directBlocked.command).toContain('cheap');
   const unavailable = await modelPanelSource(f.project, 'scope', { inspectDeclaredModels: async () => declared as never,
     inspectInvocableModels: invocable(async () => { throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE'); }) }, { env: f.env, heal: false }, locale).inspect();
   expect(unavailable.choices.every(row => row.blocked !== null)).toBe(true);
