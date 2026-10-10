@@ -8,6 +8,17 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow,
 [the architecture overview](docs/architecture-overview.md) for the product model
 and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
+## Core memory (binding)
+
+Before every task, plan, decision or delivery read
+[core memory](.deckent/docs/core-memory/MEMORY.md) and the
+[product north star](.deckent/docs/core-memory/project_product_north_star.md);
+check the work against every law and name any conflict before acting.
+Judge each change from two perspectives: Deckent developing itself (dogfood) and
+the finished product, where customers run business processes on their own
+systems (ERP, CRM) with no test suite. Code verification is one adapter's
+evidence, never the product's acceptance model.
+
 ## Setup and checks
 
 Use a Node.js version supported by [package.json](package.json) and its npm.
