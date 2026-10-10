@@ -494,5 +494,10 @@
   "cli.backup.trigger.before-upgrade": "yükseltmeden önce",
   "cli.backup.created": "Yedek oluşturuldu",
   "cli.backup.verified": "Yedek doğrulandı",
-  "cli.backup.restored": "Yedek geri yüklendi"
+  "cli.backup.restored": "Yedek geri yüklendi",
+  "cli.help.summary.audit": "Kapsamın mühürlü denetim checkpoint zincirini doğrula",
+  "cli.help.action.audit.verify": "Doğrula ve son checkpoint kaydını dışa ver",
+  "cli.help.audit": "Denetim mühürlerini ve checkpoint sürekliliğini doğrulayın.\ndeckent audit verify --scope <id> [--anchor-sequence <n> --anchor-digest <sha256>] [--json] [--lang en|tr]",
+  "cli.audit.verified": "Denetim mühürleri ve checkpoint zinciri doğrulandı; kuyruk kesilmesini tespit etmek için dışa verilen çapayı ayrıca saklayın.",
+  "cli.audit.missing": "Beklenen bir denetim checkpoint kaydı eksik."
 }

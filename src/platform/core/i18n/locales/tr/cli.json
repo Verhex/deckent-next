@@ -1406,5 +1406,6 @@
   "policy.mcp.note.approvals": "Onay yenileme ve karar inceleme. Onaylara izin ver/ret kararı verme yetkisi içermez.",
   "policy.mcp.note.service": "Bu kapsamdan çalışma servisini kapatma.",
   "policy.mcp.note.dogfood-worker": "Run oluşturma, inceleme ve ayırma; deneme yürütme, değerlendirme ve çıktı okuma; havuz ve iş hedefi kullanma. İptal, yönetim, model, harcama veya servis yönetimi yok.",
-  "terminal.slash.policy": "MCP izinlerini seçimle yönet"
+  "terminal.slash.policy": "MCP izinlerini seçimle yönet",
+  "config.field.audit_checkpoints": "Kapsam başına denetim checkpoint sıklığı ve doğrulama iş sınırları"
 }

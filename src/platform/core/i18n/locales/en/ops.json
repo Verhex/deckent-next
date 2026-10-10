@@ -494,5 +494,10 @@
   "cli.backup.trigger.before-upgrade": "before upgrade",
   "cli.backup.created": "Backup created",
   "cli.backup.verified": "Backup verified",
-  "cli.backup.restored": "Backup restored"
+  "cli.backup.restored": "Backup restored",
+  "cli.help.summary.audit": "Verify scoped sealed audit checkpoints",
+  "cli.help.action.audit.verify": "Verify and export the latest checkpoint",
+  "cli.help.audit": "Verify audit seals and checkpoint continuity.\ndeckent audit verify --scope <id> [--anchor-sequence <n> --anchor-digest <sha256>] [--json] [--lang en|tr]",
+  "cli.audit.verified": "Audit seals and checkpoint chain verified; retain the exported anchor externally to detect tail truncation.",
+  "cli.audit.missing": "An expected audit checkpoint is missing."
 }

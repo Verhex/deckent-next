@@ -146,12 +146,12 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
 }
 
 /** The audit port of trust changes over the project's ledger (the same sealed audit application as permission-mode events). */
-export function mcpTrustAuditWriter(input: { readonly layout: ProductLayout; readonly sqlite: Parameters<typeof openSqliteAuditStore>[1]; readonly keyFile: string;
+export function mcpTrustAuditWriter(input: { readonly layout: ProductLayout; readonly sqlite: Parameters<typeof openSqliteAuditStore>[1]; readonly keyFile: string; readonly checkpointPolicy?: unknown;
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string }; readonly policyRevision: string; readonly now?: () => number }): McpTrustAudit {
   return async change => {
     const store = await openSqliteAuditStore(await prepareProductFile(input.layout, 'ledger', ['-wal', '-shm', '-journal']), input.sqlite, 'allow');
     try {
-      await new AuditApplication(store, await openLocalIntegrityAuthority(input.layout, input.keyFile, true)).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
+      await new AuditApplication(store, await openLocalIntegrityAuthority(input.layout, input.keyFile, true), input.checkpointPolicy).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
         eventId: createHash('sha256').update(`mcp-trust:1\0${randomUUID()}`).digest('hex'), scopeId: input.scopeId,
         principal: { issuer: input.principal.issuer, subject: input.principal.subject }, policyRevision: input.policyRevision, atMs: (input.now ?? Date.now)(),
         subject: { kind: 'mcp-trust', action: change.action, scope: change.scope, server: change.name, definitionDigest: change.definitionDigest, toolsDigest: change.toolsDigest } });

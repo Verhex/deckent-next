@@ -13,7 +13,7 @@ export function createConfigFileAuthority(loadContext: (scopeId: string) => Prom
     async audit(event) {
       const context = await loadContext(event.scopeId);
       const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-      try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)).record(event); }
+      try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), context.config['audit_checkpoints']).record(event); }
       finally { store.close(); }
     },
   };

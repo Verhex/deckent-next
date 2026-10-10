@@ -65,7 +65,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         configuredModelInvocationDeliverySurfaces(effective as never).map(([surface, frame]) => [surface, { maxResultBytes: frame.maxResultBytes - spare }] as const)).length === 0,
       async audit(event) {
         const context = await scope(), store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-        try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)).record(event); } finally { store.close(); }
+        try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), context.config['audit_checkpoints']).record(event); } finally { store.close(); }
       },
       async policyRevision() { return (await scope()).document.revision; },
       async keyStored(name) { if (!host.listSecretNames) return null; try { return (await host.listSecretNames(projectRoot, options)).names.includes(name); } catch { return null; } },

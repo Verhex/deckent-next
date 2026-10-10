@@ -30,7 +30,7 @@ const hostOf = (args: Record<string, unknown>) => { try { return new URL(String(
 /** One use of the Core audit port for a turn (the integrity key is created on first use, like an approval's). */
 export async function withAgentAudit<T>(context: Context, work: (audit: AuditApplication) => T): Promise<T> {
   const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-  try { return work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true))); }
+  try { return work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), context.config['audit_checkpoints'])); }
   finally { store.close(); }
 }
 

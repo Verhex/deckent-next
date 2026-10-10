@@ -42,6 +42,7 @@ it('the application seals inside the store append, verifies every listed record 
   const store: AuditStore = {
     append: (event, seal) => { const record = seal(rows.length + 1); rows.push(record); return record; },
     page: (scopeId, after, limit) => rows.filter(r => r.event.scopeId === scopeId && r.sequence > after).slice(0, limit),
+    latestCheckpoint: () => null, snapshot: work => work(),
     increment: () => { throw new Error('unused'); }, counters: () => [],
   };
   const audit = new AuditApplication(store, integrity);

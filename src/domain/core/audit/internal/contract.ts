@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { auditCheckpointSubjectSchema } from './checkpoint.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
@@ -190,7 +191,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     codePoints: counterSchema, disposition: z.enum(['note', 'quarantine']) }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
-export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
+export const auditSubjectSchema = z.union([governedAuditSubjectSchema, auditCheckpointSubjectSchema,
   z.object({ kind: z.literal('authority-change'), installer: z.object({ basis: z.enum(['first-run', 'named-person']),
     template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), person: auditPrincipalSchema }).strict(),
     commandId: identitySchema, inputDigest: digest, revision: z.object({ before: identitySchema, after: identitySchema }).strict(),
@@ -207,5 +208,5 @@ export type AuditSubject = z.infer<typeof auditSubjectSchema>;
 export type AuditRecord = z.infer<typeof auditRecordSchema>;
 export type AuditCounter = z.infer<typeof auditCounterSchema>;
 export class AuditError extends Error {
-  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE') { super(code); this.name = 'AuditError'; }
+  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_LIMIT' | 'AUDIT_CHECKPOINT_MISSING') { super(code); this.name = 'AuditError'; }
 }

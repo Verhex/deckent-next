@@ -3,6 +3,7 @@ Başlarken:
   terminal    Etkileşimli terminali aç
   init        Kurulumu hazırla
 İzleme:
+  audit       Kapsamın mühürlü denetim checkpoint zincirini doğrula
   monitor     Kurulumları ve işleri izle
   workers     İşçileri listele veya izle
 İş yürütme:

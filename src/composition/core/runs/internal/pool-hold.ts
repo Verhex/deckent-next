@@ -16,7 +16,7 @@ async function poolControl<T>(root: string, input: unknown, options: ConfigLoadO
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
     try {
       const args = [{ async verify() { return principal; } }, new PoolControlPolicyAuthorization({ async load() { return document; } }),
-        store, (audit: import('#engine/index.js').AuditStore) => new AuditApplication(audit, integrity!), () => clock.sample().wallMs, config.admission?.poolId ?? null] as const;
+        store, (audit: import('#engine/index.js').AuditStore) => new AuditApplication(audit, integrity!, config['audit_checkpoints']), () => clock.sample().wallMs, config.admission?.poolId ?? null] as const;
       return await use(new ExecutionPoolHoldApplication(...args), new ExecutionPoolCapacityApplication(...args), parsed);
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

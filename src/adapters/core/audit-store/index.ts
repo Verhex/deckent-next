@@ -9,3 +9,9 @@ export async function openSqliteAuditStore(path: string, options: SqliteLedgerOp
 }
 // A store on a caller's open ledger connection, so an audit event commits in the caller's transaction (K5 pool hold); no driver load.
 export { SqliteAuditStore } from './internal/store.js';
+
+/** A physically read-only ledger reader for bounded checkpoint verification. */
+export async function openSqliteAuditReader(path: string, options: SqliteLedgerOptions): Promise<AuditStore & { close(): void }> {
+  const implementation = await import('./internal/open.js');
+  return implementation.openSqliteAuditReader(path, options);
+}

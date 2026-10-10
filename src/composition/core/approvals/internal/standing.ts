@@ -26,7 +26,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
     const effects = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid'), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
     const auditStore = await openSqliteAuditStore(ledger, config.storage.sqlite, 'forbid');
     try {
-      const audit = new AuditApplication(auditStore, integrity);
+      const audit = new AuditApplication(auditStore, integrity, config['audit_checkpoints']);
       const administration = new PolicyAdministrationApplication({ authority: source, policy: source, effects, approvals: journal.store, integrity, sessions, clock,
         requestTtlMs: config.approvals.requestTtlMs, audit: event => { audit.record(event); } });
       const approve = async (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => {

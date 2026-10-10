@@ -1,0 +1,5 @@
+{
+  "everyRecords": 1000,
+  "maxRecords": 100000,
+  "pageSize": 1000
+}

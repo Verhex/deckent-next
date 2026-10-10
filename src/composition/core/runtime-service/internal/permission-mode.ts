@@ -29,7 +29,7 @@ export async function executeConfiguredRuntimePermissionModeOperation(projectRoo
       const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {
         // A producer of audit evidence, like the approval request: the integrity key is created on first use.
-        const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true));
+        const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), context.config['audit_checkpoints']);
         const clock = new SystemTrustedClock();
         result = await new PermissionModeApplication(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes),
           event => { audit.record(event); }, () => clock.sample().wallMs).set(context.principal, request.input);

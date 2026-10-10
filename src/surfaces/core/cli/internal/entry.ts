@@ -11,6 +11,7 @@ import { toolchainsCommand } from './toolchains.js';
 import { mcpCommand } from './mcp.js';
 import { operationCommand } from './operation.js';
 import { policyGrantsCommand } from './policy-grants.js';
+import { auditCommand } from './audit.js';
 import { backupCommand } from './backup.js';
 import { secretCommand } from './secret.js';
 import { poolCommand } from './pool.js';
@@ -22,7 +23,7 @@ export type { ExitCode } from '#platform/index.js';
 
 /** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
-  backup: backupCommand, identity: identityCommand,
+  audit: auditCommand, backup: backupCommand, identity: identityCommand,
   terminal: async (argv, context) => (await import('./terminal.js')).terminalCommand(argv, context),
   init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
   pool: poolCommand, models: modelsCommand, approval: approvalsCommand,

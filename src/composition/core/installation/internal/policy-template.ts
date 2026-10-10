@@ -64,7 +64,7 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   const preview = await upgradePolicyTemplate(writer, { ...input, apply: false, audit: () => { throw new Error('INSTALLER_PREVIEW_WRITE'); } });
   if (!apply || preview.status !== 'preview') return preview;
   const store = await openSqliteAuditStore(await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'allow');
-  try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true));
+  try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), config['audit_checkpoints']);
     return await upgradePolicyTemplate(writer, { ...input, apply: true, audit: event => { audit.record(event); } }); } finally { store.close(); }
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */

@@ -11,9 +11,9 @@ export class SqliteAuditStore implements AuditStore {
   constructor(private readonly db: DatabaseSync) {}
   private transaction<T>(work: () => T): T {
     const owned = !this.db.isTransaction;
-    if (owned) this.db.exec('BEGIN IMMEDIATE');
-    try { const value = work(); if (owned) this.db.exec('COMMIT'); return value; }
-    catch (error) { if (owned) { try { this.db.exec('ROLLBACK'); } catch { /* connection lost: nothing committed */ } } throw error; }
+    this.db.exec(owned ? 'BEGIN IMMEDIATE' : 'SAVEPOINT audit_append');
+    try { const value = work(); this.db.exec(owned ? 'COMMIT' : 'RELEASE audit_append'); return value; }
+    catch (error) { try { this.db.exec(owned ? 'ROLLBACK' : 'ROLLBACK TO audit_append; RELEASE audit_append'); } catch { /* connection lost */ } throw error; }
   }
   private guard<T>(work: () => T): T {
     try { return work(); }
@@ -29,7 +29,7 @@ export class SqliteAuditStore implements AuditStore {
     }
     return record;
   }
-  append(event: AuditEvent, seal: (sequence: number) => AuditRecord): AuditRecord {
+  append(event: AuditEvent, seal: (sequence: number) => AuditRecord, finalize?: (record: AuditRecord) => void): AuditRecord {
     return this.guard(() => this.transaction(() => {
       const existing = this.db.prepare('SELECT scope_id,sequence,event_id,kind,at_ms,key_id,mac,record FROM audit_events WHERE scope_id=? AND event_id=?')
         .get(event.scopeId, event.eventId) as Record<string, unknown> | undefined;
@@ -42,6 +42,7 @@ export class SqliteAuditStore implements AuditStore {
       const record = seal(Number(last) + 1);
       this.db.prepare('INSERT INTO audit_events(scope_id,sequence,event_id,kind,at_ms,key_id,mac,record) VALUES(?,?,?,?,?,?,?,?)')
         .run(record.event.scopeId, record.sequence, record.event.eventId, record.event.subject.kind, record.event.atMs, record.keyId, record.mac, JSON.stringify(record));
+      finalize?.(record);
       return record;
     }));
   }
@@ -64,6 +65,18 @@ export class SqliteAuditStore implements AuditStore {
     if (!identitySchema.safeParse(scopeId).success) throw new AuditError('AUDIT_INVALID');
     return this.guard(() => Object.freeze(this.db.prepare('SELECT scope_id,counter,count,updated_at_ms FROM audit_counters WHERE scope_id=? ORDER BY counter').all(scopeId)
       .map(row => auditCounterSchema.parse({ scopeId: row.scope_id, counter: row.counter, count: row.count, updatedAtMs: row.updated_at_ms }))));
+  }
+  latestCheckpoint(scopeId: string): AuditRecord | null {
+    return this.guard(() => {
+      const row = this.db.prepare("SELECT scope_id,sequence,event_id,kind,at_ms,key_id,mac,record FROM audit_events WHERE scope_id=? AND kind='audit-checkpoint' ORDER BY sequence DESC LIMIT 1").get(scopeId);
+      return row ? this.decode(row) : null;
+    });
+  }
+  snapshot<T>(work: () => T): T {
+    const owned = !this.db.isTransaction;
+    if (owned) this.db.exec('BEGIN');
+    try { const value = work(); if (owned) this.db.exec('COMMIT'); return value; }
+    catch (error) { if (owned) this.db.exec('ROLLBACK'); throw error; }
   }
   close() { this.db.close(); }
 }

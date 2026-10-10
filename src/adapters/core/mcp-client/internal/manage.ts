@@ -294,7 +294,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
  * definition, so its first-use card is not asked again every turn until `/mcp approve` (or a changed entry) retries it.
  */
 export async function openTurnMcp(input: { readonly registry: McpRegistryContext; readonly pool: McpPoolView; readonly cwd: string; readonly sandboxes: McpLaunchContext['sandboxes'];
-  readonly principal: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly sqlite: Parameters<typeof mcpTrustAuditWriter>[0]['sqlite'];
+  readonly principal: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly sqlite: Parameters<typeof mcpTrustAuditWriter>[0]['sqlite']; readonly checkpointPolicy?: unknown;
   readonly keyFile: string; readonly requestTtlMs: number; readonly inputMaxBytes: number; readonly resultMaxBytes: number; readonly scopeId: string; readonly turnId: string;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof mcpTrustApprovalAsker>[0]['emit']; readonly ledgerPath: () => Promise<string>;
   /** One request-time policy snapshot (B1, Sol 2237 R2b): its revision and the trust cards' facts (Core minimum raised by the snapshot's rules). */
@@ -320,7 +320,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   if (undecided.length) {
     const { revision: policyRevision, trustFacts } = await input.requestPolicy(), layout = registry.layout;
     const trust = mcpTrustContext({ ...registry, scopeId, sandboxes: input.sandboxes, principal, inputMaxBytes: input.inputMaxBytes, ...(input.grants ? { grants: input.grants } : {}),
-      audit: mcpTrustAuditWriter({ layout, sqlite: input.sqlite, keyFile: input.keyFile, scopeId, principal, policyRevision }) }, input.cwd);
+      audit: mcpTrustAuditWriter({ layout, sqlite: input.sqlite, keyFile: input.keyFile, checkpointPolicy: input.checkpointPolicy, scopeId, principal, policyRevision }) }, input.cwd);
     const ask = mcpTrustApprovalAsker({ ledgerPath: input.ledgerPath, sqlite: input.sqlite, integrity: () => openLocalIntegrityAuthority(layout, input.keyFile, true),
       clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, policyRevision, facts: trustFacts,
       ttlMs: input.requestTtlMs, signal: input.signal, emit: input.emit });

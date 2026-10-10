@@ -1406,5 +1406,6 @@
   "policy.mcp.note.approvals": "Renew approvals and inspect decisions. Never allows approval allow/deny decisions.",
   "policy.mcp.note.service": "Shut down the runtime service from this scope.",
   "policy.mcp.note.dogfood-worker": "Create/inspect/reserve Runs, execute/evaluate/read attempts, use pools and work targets. No cancellation, administration, model, spending or service management.",
-  "terminal.slash.policy": "MCP permissions by selection"
+  "terminal.slash.policy": "MCP permissions by selection",
+  "config.field.audit_checkpoints": "Scoped audit checkpoint cadence and verification work bounds"
 }

@@ -9,7 +9,7 @@ import { openSqliteLedger, requireLedgerVersion, DECISION_PORT_LEDGER_VERSION, t
 import type { IntegrityAuthority } from '#platform/index.js';
 class SqliteDecisionStore implements DecisionStore {
  private readonly audit:AuditApplication;
- constructor(private readonly db:DatabaseSync,private readonly integrity:IntegrityAuthority){this.audit=new AuditApplication(new SqliteAuditStore(db),integrity);}
+ constructor(private readonly db:DatabaseSync,private readonly integrity:IntegrityAuthority,checkpointPolicy?:unknown){this.audit=new AuditApplication(new SqliteAuditStore(db),integrity,checkpointPolicy);}
  private seal(value:unknown){const body=encodeCommandProjection('decision-store:1',value);return JSON.stringify({value,keyId:this.integrity.keyId,mac:this.integrity.sign(body)});}
  private decode(input:unknown):unknown {try{const sealed=JSON.parse(String(input)) as {value:unknown;mac:string;keyId:string};
   if(!this.integrity.verify(encodeCommandProjection('decision-store:1',sealed.value),sealed.mac,sealed.keyId))throw Error();return sealed.value;
@@ -45,9 +45,9 @@ class SqliteDecisionStore implements DecisionStore {
   return {replayed:false,record:next.record};});}
  close(){this.db.close();}
 }
-export function openSqliteDecisionStore(path:string,options:SqliteLedgerOptions,integrity:IntegrityAuthority,access:'read'|'write'):DecisionStore {
- if(access==='write')return new SqliteDecisionStore(openSqliteLedger(path,options,'forbid'),integrity);
+export function openSqliteDecisionStore(path:string,options:SqliteLedgerOptions,integrity:IntegrityAuthority,access:'read'|'write',checkpointPolicy?:unknown):DecisionStore {
+ if(access==='write')return new SqliteDecisionStore(openSqliteLedger(path,options,'forbid'),integrity,checkpointPolicy);
  const {DatabaseSync:NativeDatabase}=createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
  const db=new NativeDatabase(path,{readOnly:true,timeout:options.busyTimeoutMs,enableForeignKeyConstraints:true});
- try{requireLedgerVersion(db,DECISION_PORT_LEDGER_VERSION);return new SqliteDecisionStore(db,integrity);}catch(error){db.close();throw error;}
+ try{requireLedgerVersion(db,DECISION_PORT_LEDGER_VERSION);return new SqliteDecisionStore(db,integrity,checkpointPolicy);}catch(error){db.close();throw error;}
 }

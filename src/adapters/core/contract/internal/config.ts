@@ -1,3 +1,4 @@
+import { registerAuditCheckpointConfig } from './audit-checkpoint.js';
 import { registerIdentityProfileConfig } from './identity-profile.js';
 import { registerDecisionConfig } from './decision.js';
 import { registerProviderCatalogConfig } from './catalog.js';
@@ -13,6 +14,7 @@ let registered = false;
 /** Called by application ingress before config resolution; kernel never imports provider policy. */
 export function registerProviderConfig(): void {
   if (registered) return;
+  registerAuditCheckpointConfig();
   registerProviderCatalogConfig();
   registerInvocationProfileConfig();
   registerProviderSpendingConfig();

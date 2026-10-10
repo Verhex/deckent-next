@@ -30,7 +30,7 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
       const restriction = action !== 'decide' ? undefined : { catalog: resolveOperationCatalog(readOperationsConfig(config as unknown as Record<string, unknown>)),
         refused: async (event: AuditEvent) => {
           const store = await openSqliteAuditStore(await context.path(), config.storage.sqlite, 'forbid');
-          try { new AuditApplication(store, integrity).record(event); } finally { store.close(); }
+          try { new AuditApplication(store, integrity, config['audit_checkpoints']).record(event); } finally { store.close(); }
         } };
       const app = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
         { load: async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)

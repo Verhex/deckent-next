@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { verifyConfiguredAuditCheckpoints } from '#composition/core/audit/index.js';
 import { inspectInstallationStartability } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
@@ -42,7 +43,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: composeCore, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
-    executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
+    verifyAuditCheckpoints: verifyConfiguredAuditCheckpoints, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
     deliverWorkspaceIntegration: deliverConfiguredWorkspaceIntegration,
     adoptWorkspaceIntegration: adoptConfiguredWorkspaceIntegration, rollbackWorkspaceIntegration: rollbackConfiguredWorkspaceIntegration,

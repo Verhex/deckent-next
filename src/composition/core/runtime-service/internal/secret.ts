@@ -28,7 +28,7 @@ export async function executeConfiguredRuntimeSecretOperation(projectRoot: strin
     if (Buffer.byteLength(JSON.stringify(answer(set ? null : false)), 'utf8') > capacity) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT');
     const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
     try {
-      const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)), clock = new SystemTrustedClock();
+      const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), context.config['audit_checkpoints']), clock = new SystemTrustedClock();
       const administration = new SecretStoreAdministration(secrets, policySecretChangeAuthorization(context.document, context.principal),
         event => { audit.record(event); }, () => clock.sample().wallMs, createInstallationSecretCustody(env, platform));
       const change = { principal: { issuer: context.principal.issuer, subject: context.principal.subject }, scopeId: command.scopeId, name: command.name };
@@ -54,7 +54,7 @@ async function switchStore(projectRoot: string, request: RuntimeServiceRequest, 
     const context = await loadConfiguredPeerScopeContext(projectRoot, command.scopeId, options, peer, 'write');
     const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
     try {
-      const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)), clock = new SystemTrustedClock();
+      const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true), context.config['audit_checkpoints']), clock = new SystemTrustedClock();
       return await new SecretStoreSwitch({ has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, platform),
         selection: createInstallationSecretStoreSelection(env, platform), authorize: policySecretStoreSwitchAuthorization(context.document, context.principal),
         audit: event => { audit.record(event); }, now: () => clock.sample().wallMs, custody: createInstallationSecretCustody(env, platform),

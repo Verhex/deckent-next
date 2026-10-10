@@ -7,7 +7,10 @@ import type { AuditCounter, AuditEvent, AuditRecord } from '#domain/index.js';
 export interface AuditStore {
   /** Appends `event` as the next record of its scope, or returns the existing record of the same event id and content
    * (`AUDIT_CONFLICT` when the content differs). Any failure to persist is `AUDIT_UNAVAILABLE`: the caller applies no effect. */
-  append(event: AuditEvent, seal: (sequence: number) => AuditRecord): AuditRecord;
+  append(event: AuditEvent, seal: (sequence: number) => AuditRecord, finalize?: (record: AuditRecord) => void): AuditRecord;
+  /** Finalize runs before commit, only on insertion; failure rolls back event + checkpoint. Snapshot reads one consistent cut. */
+  latestCheckpoint(scopeId: string): AuditRecord | null;
+  snapshot<T>(work: () => T): T;
   /** Records of one scope with `sequence > afterSequence`, ascending, at most `limit`; other scopes are never visible. */
   page(scopeId: string, afterSequence: number, limit: number): readonly AuditRecord[];
   /** Adds `by` to a summary counter of one scope (created at zero); `atMs` is the caller's trusted clock. */

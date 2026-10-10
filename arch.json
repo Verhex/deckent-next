@@ -132,7 +132,8 @@
         "src/adapters/core/worker-observation",
         "src/domain/core/decision",
         "src/domain/core/identity-profile",
-        "src/engine/core/identity-profile"
+        "src/engine/core/identity-profile",
+        "src/engine/core/audit"
       ],
       "plan": "PROVIDERS"
     },
@@ -272,7 +273,8 @@
         "src/surfaces/core/terminal-turn",
         "src/composition/core/project-instructions",
         "src/composition/core/backup",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/composition/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -1099,7 +1101,9 @@
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/work-labels",
         "src/surfaces/core/cli-terminal",
-        "src/engine/core/backup"
+        "src/engine/core/backup",
+        "src/domain/core/audit",
+        "src/engine/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -2657,6 +2661,18 @@
         "src/platform/core/managed-files"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/composition/core/audit": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors"
+      ],
+      "plan": "SECURITY"
     }
   },
   "composition": {
@@ -2922,6 +2938,22 @@
           3
         ],
         "reason": "RFC 3339 fractional seconds: the first 3 digits are milliseconds, later digits are sub-millisecond evidence; format invariant (2026-10-03, batch-27 integration)."
+      },
+      {
+        "file": "src/domain/core/audit/internal/checkpoint.ts",
+        "symbol": "AUDIT_SEQUENCE_STEP",
+        "values": [
+          1
+        ],
+        "reason": "Audit sequence adjacency and checkpoint schema v1 are versioned protocol invariants, independent of registry cadence/work bounds (W12 2026-10-10)."
+      },
+      {
+        "file": "src/domain/core/audit/internal/checkpoint.ts",
+        "symbol": "AUDIT_CHECKPOINT_SCHEMA_VERSION",
+        "values": [
+          1
+        ],
+        "reason": "Audit sequence adjacency and checkpoint schema v1 are versioned protocol invariants, independent of registry cadence/work bounds (W12 2026-10-10)."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

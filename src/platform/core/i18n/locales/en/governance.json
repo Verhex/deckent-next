@@ -901,5 +901,7 @@
   "terminal.spend.reason.overrun": "Charge exceeded reservation",
   "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model switch refused. {reason}",
   "error.MODEL_INVOCATION_REASONING_UNSUPPORTED": "The selected model cannot turn reasoning off.",
-  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "No OpenRouter endpoint satisfies the no-training and zero-retention data policy. No request or spending reservation was created. Check OpenRouter Privacy settings: https://openrouter.ai/settings/privacy; choose a model with compliant endpoints."
+  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "No OpenRouter endpoint satisfies the no-training and zero-retention data policy. No request or spending reservation was created. Check OpenRouter Privacy settings: https://openrouter.ai/settings/privacy; choose a model with compliant endpoints.",
+  "error.AUDIT_LIMIT": "Audit checkpoint verification reached its configured record limit; no complete verification is claimed.",
+  "error.AUDIT_CHECKPOINT_MISSING": "An expected audit checkpoint is missing; check the exported anchor and retained ledger."
 }

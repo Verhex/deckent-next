@@ -16,7 +16,7 @@ async function execute(projectRoot:string,action:DecisionAction,input:unknown,op
    authorize:(...args)=>new DecisionPolicyAuthorization(source).authorize(...args),openStore:async(mode)=>{
     // Queries never create an integrity key, a database or a migration. The service owns backed-up upgrades.
     const integrity=await openLocalIntegrityAuthority(context.layout,context.config.approvals.keyFile,mode==='write');
-    return openSqliteDecisionStore(await context.path(),context.config.storage.sqlite,integrity,mode);
+    return openSqliteDecisionStore(await context.path(),context.config.storage.sqlite,integrity,mode,context.config['audit_checkpoints']);
    },invoke:async(command,_credential,abort)=>invokeConfiguredModel(projectRoot,command,{...options,heal:false},abort),now:()=>clock.sample().wallMs,eventId:randomUUID});
   if(action==='prepare')return await app.prepare(parsed);
   if(action==='ask')return await app.ask(parsed,undefined,signal);

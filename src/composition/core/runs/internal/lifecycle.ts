@@ -20,7 +20,7 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
           const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
           try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
         } }, verifier, authorization,
-        { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!),
+        { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!, config['audit_checkpoints']),
         Date.now, config.runRuntime.parking.timeoutMs, document.revision);
       const receipt = maintain ? await app.advance(command) : await app.execute(command);
       if (!receipt) return null;

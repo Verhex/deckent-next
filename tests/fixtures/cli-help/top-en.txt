@@ -3,6 +3,7 @@ Getting started:
   terminal    Open the interactive terminal
   init        Set up an installation
 Observe:
+  audit       Verify scoped sealed audit checkpoints
   monitor     Watch installations and work
   workers     List or watch workers
 Execute work:
