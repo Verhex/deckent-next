@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { isLiteralLoopbackHostname } from '#platform/index.js';
 import { parseProviderCatalogDocument, type JsonObject, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION,
   OPENAI_RESPONSES_HTTP_ADAPTER_VERSION,
@@ -69,8 +70,9 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     return Object.freeze({ adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
       protocol: { family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION }, tariff: 'published' });
   }
-  const published = openAiChatLoopback(input.endpoint) ? null : lookupOpenAiCompatibleTariff(input.endpoint, input.nativeId);
-  if (!published && !openAiChatLoopback(input.endpoint)) throw new ProviderConnectError(connect.priceRequired ? 'MODEL_CONNECT_PRICE_REQUIRED' : 'MODEL_CONNECT_TARIFF_UNVERIFIED');
+  const loopback = isLiteralLoopbackHostname(new URL(input.endpoint).hostname);
+  const published = loopback ? null : lookupOpenAiCompatibleTariff(input.endpoint, input.nativeId);
+  if (!published && !loopback) throw new ProviderConnectError(connect.priceRequired ? 'MODEL_CONNECT_PRICE_REQUIRED' : 'MODEL_CONNECT_TARIFF_UNVERIFIED');
   const definition = { endpoint: input.endpoint, ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}), maxOutputTokens: input.maxOutputTokens,
     dialect: responses ? input.existing?.['dialect'] ?? route.dialect : connect.dialect,
     authentication: secure && input.credentialRef !== null ? { type: 'bearer', credentialRef: input.credentialRef } : { type: 'none' },
@@ -79,11 +81,6 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   return Object.freeze({ adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: responses ? OPENAI_RESPONSES_HTTP_ADAPTER_VERSION : OPENAI_CHAT_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
     protocol: { family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION }, tariff: published ? 'published' : 'unmetered' });
 }
-/** The spend authority's own loopback rule (provider-openai-chat `openAiCompatibleTariffRates`): only these hosts may keep a zero tariff. */
-function openAiChatLoopback(endpoint: string): boolean {
-  return ['127.0.0.1', '[::1]', 'localhost'].includes(new URL(endpoint).hostname);
-}
-
 /**
  * Whether a model of a seeded kind can be connected with a price at the kind's default address (the `/provider` model list locks the others before
  * anything is written): Anthropic by its published tariff, the OpenAI chat adapter by an exact verified row, a loopback address always (zero tariff).
@@ -94,7 +91,7 @@ export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: 
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) return anthropicPublishedTariff(nativeId) !== null;
   if (connect.metadataPricing) return connect.metadataPricing.routes.some(route => route.modelId === nativeId);
   const endpoint = `${base.base}${connect.chatPath}`;
-  return openAiChatLoopback(endpoint) || lookupOpenAiCompatibleTariff(endpoint, nativeId) !== null;
+  return isLiteralLoopbackHostname(new URL(endpoint).hostname) || lookupOpenAiCompatibleTariff(endpoint, nativeId) !== null;
 }
 
 /** The protocol family a model connected to this kind must speak (its adapter's), or null when the kind connects no model. */

@@ -56,6 +56,21 @@ it('an unpriced remote model is refused (MODEL_CONNECT_TARIFF_UNVERIFIED); a loo
   expect((local.adapter.definition as { tariff: unknown }).tariff).toMatchObject({ kind: 'operator-static', version: 1, inputMinorUnitsPerMillionTokens: 0 });
 });
 
+it.each(['localhost', '192.168.1.5', '172.28.64.1'])('never grants an unmetered connection to %s, including over HTTPS', host => {
+  const kind = providerConnectKind('local-openai')!;
+  for (const scheme of ['http', 'https']) {
+    const endpoint = `${scheme}://${host}:8000/v1/chat/completions`;
+    expect(providerConnectModelPriced(kind, 'unpriced-model', endpoint)).toBe(false);
+    expect(() => connectionAdapter(kind, { ...input(endpoint, 'unpriced-model'), credentialRef: null })).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED');
+  }
+});
+
+it.each(['127.0.0.1', '[::1]'])('keeps literal loopback %s connectable without a published tariff', host => {
+  const kind = providerConnectKind('local-openai')!, endpoint = `http://${host}:8000/v1/chat/completions`;
+  expect(providerConnectModelPriced(kind, 'unpriced-model', endpoint)).toBe(true);
+  expect(connectionAdapter(kind, { ...input(endpoint, 'unpriced-model'), credentialRef: null }).tariff).toBe('unmetered');
+});
+
 it('the shipped seeds: exactly the models with a verified row (or a published Anthropic tariff) are connectable with a price', async () => {
   const table: Record<string, Record<string, boolean>> = {};
   for (const kind of PROVIDER_CONNECT_KINDS) {
