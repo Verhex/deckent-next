@@ -16,6 +16,7 @@ type Annotations = Readonly<{ readOnlyHint: boolean; destructiveHint: boolean; i
 const EXPECTED: Readonly<Record<string, Annotations>> = Object.freeze({
   inspect_run: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inspect_inventory: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  inspect_monitor: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   policy_vocabulary: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inspect_decision: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   renew_approval: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
@@ -69,6 +70,7 @@ const noop = async () => ({});
 // Every optional application handler is supplied so the real server advertises all tools; only
 // tools/list is exercised here, so stub bodies never execute a real effect.
 const applications: McpApplications = {
+  inspectMonitor: noop,
   inspectDecision: noop, renewApproval: noop, listApprovals: noop, inspectApproval: noop,
   inspectModelActivation: noop, admitModelActivation: noop, inspectModelCatalog: noop, applyModelCatalog: noop, connectModel: noop, inspectPoolHold: noop, applyPoolHold: noop, inspectModelInvocation: noop, invokeModel: noop,
   purgeModelInvocationContent: noop, cancelModelInvocation: noop, inspectProviderSpendAccount: noop,

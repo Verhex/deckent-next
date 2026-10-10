@@ -90,6 +90,8 @@ export { inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegrat
 export type { WorkspacePatch, IntegrationQuery, IntegrationCommand, IntegrationManifest } from '#engine/index.js';
 
 export { inspectConfiguredWorkers } from '#composition/index.js';
+export { inspectMonitor } from '#composition/index.js';
+export type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/index.js';
 export type { McpCapabilityGroup, McpCapabilityRequest, McpCapabilityView, McpCapabilityPreview } from '#domain/index.js';
 export { inspectConfiguredToolchainCurrency as inspectToolchainCurrency, updateConfiguredToolchains as updateToolchains } from '#composition/index.js';

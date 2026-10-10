@@ -2,7 +2,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { listSurfaceRunIds, prepareMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
-import { MonitorApplication, authorizeApproval, runtimeConfigFreshness, type SurfaceNotInitialized, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
+import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -21,10 +21,11 @@ export async function* followLedgerSurface(root: string, scopeId: string, option
   if (signal.aborted) return; const authorize = () => authorizeSurfaceRead(root, scopeId, options), initial = await authorize();
   if (!initial) { yield { access: 'denied' as const, scopeId, kinds: ['approval', 'run', 'worker'] as const, stopped: true }; return; } if ('access' in initial) { yield initial; return; }
   yield* readLedgerSurface(initial, async () => { const current = await authorize(); return current && !('access' in current) ? current : null; }, signal, onReady); }
-export async function inspectMonitor(root: string, options: ConfigLoadOptions = {}): Promise<MonitorSnapshot> {
+export async function inspectMonitor(root: string, options: ConfigLoadOptions = {}, query: MonitorQuery = { schemaVersion: 1 }): Promise<MonitorSnapshot> {
+  const selection = monitorQuerySchema.parse(query);
   const config = await loadComposedConfig(root, { ...options, heal: false }).catch(error => { throw queryFailure(error); });
   const targets = [{ id: 'current', path: resolve(root) }, ...config.inspection.workers.sources.filter(source => source.kind === 'next-project')
-    .map(source => ({ id: source.id, path: resolve(source.path) }))].filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
+    .map(source => ({ id: source.id, path: resolve(source.path) }))];
   const contexts = new Map<string, ReturnType<typeof loadConfiguredScopeContext>>(), scope = (path: string, scopeId: string) => contexts.get(`${path}\0${scopeId}`)
     ?? contexts.set(`${path}\0${scopeId}`, loadConfiguredScopeContext(path, scopeId, options, 'read')).get(`${path}\0${scopeId}`)!;
   const captures = new Map<string, Awaited<ReturnType<typeof prepareMonitorInstall>>>(); return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
@@ -48,7 +49,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
       } catch (error) { if (DENIED.has(queryFailure(error).code)) return { access: 'denied', workers: [], workerStatus: 'denied', truncated: false }; throw error; }
       return { access: 'admitted', workers, workerStatus: page.status, truncated: after !== null, approvals: await granted(async () => {
         const c = await scope(target.path, scopeId); authorizeApproval(c.document, 'inspect', scopeId, scopeId, c.principal); }) };
-    } }).inspect(targets);
+    } }).inspect(targets, selection);
 }
 /** Snapshot reads use the stream's fresh collection admission. */ export async function inspectSurfaceAccess(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read && !('access' in read) ? { binding: read.binding, kinds: read.kinds } : null; }
 export async function inspectSurfaceRunIds(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read && !('access' in read) && read.kinds.includes('run') ? listSurfaceRunIds(read) : []; }

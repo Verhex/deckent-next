@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createRun, parkTaskAwaitingDecision, resolveTaskDecision, expireParkedRun, type RunSnapshot, type TaskProgress } from '#domain/index.js';
 import { deriveRunBlocker, deriveRunState, MONITOR_FINISHED_WORKERS, MonitorApplication, projectMonitorRun, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool,
   type MonitorRunEvidence, type WorkerObservation } from '#engine/index.js';
@@ -173,6 +173,22 @@ describe('monitor run blocker and state derivation (pure)', () => {
 });
 
 describe('monitor application over ports', () => {
+  it('selects collection before every per-target port, including service and image reads', async () => {
+    const ledger = { ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [] };
+    const readLedger = vi.fn(async () => ledger), readShown = vi.fn(async () => ledger);
+    const describeService = vi.fn(async () => ({ schemaVersion: 1 as const, instanceId: 'i', shutdownAvailable: false, identity: null }));
+    const readConfigFreshness = vi.fn(async () => 'current' as const);
+    const readImageRefresh = vi.fn(async () => ({ status: 'unknown' as const, reason: null, imageVersion: null }));
+    const observeScope = vi.fn(async () => ({ access: 'admitted' as const, workers: [], workerStatus: 'available', truncated: false }));
+    const app = new MonitorApplication({ now: () => NOW, readLedger, readShown, describeService, readConfigFreshness, readImageRefresh, observeScope });
+    const selected = { id: 'current', path: '/fixture/current' }, poison = { id: 'poison', path: '/fixture/poison' };
+    const value = await app.inspect([selected, poison], { schemaVersion: 1, install: 'current' });
+    expect(value.sourcesRead).toEqual(['current']); expect(Object.isFrozen(value.sourcesRead)).toBe(true);
+    for (const port of [readLedger, readShown, describeService, readConfigFreshness, readImageRefresh, observeScope]) {
+      expect(port).toHaveBeenCalledTimes(1);
+      expect(port.mock.calls.map(call => (call as readonly unknown[])[0])).toEqual([selected]);
+    }
+  });
   const reading = (scopeIds: string[]) => ({ ledgerVersion: 44, scopeIds, diagnostics: ['info:ledger-version-older:43'], approvals: [{ ...approval('a'), scopeId: 's' }, { ...approval('a'), scopeId: 'hidden', approvalId: 'h' }],
     pools: [pool({ execution: 1, inFlight: 1, hold: { state: 'held' as const, changedAtMs: 400, changedBy: 'ops' } })],
     runs: [{ snapshot: snapshot([{ id: 'a', phase: 'active' }]), poolId: 'p', admitted: true, createdAtMs: 50, attempts: [attempt('a')] },

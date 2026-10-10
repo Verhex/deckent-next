@@ -3,6 +3,11 @@ import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.
 import type { TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
+import { z } from 'zod';
+
+/** Exact installation/source id; absence retains collection of every configured Next source. */
+export const monitorQuerySchema = z.object({ schemaVersion: z.literal(1), install: z.string().min(1).optional() }).strict();
+export type MonitorQuery = z.infer<typeof monitorQuerySchema>;
 
 /**
  * MONITOR (owner 2026-10-02, Jev 47725dae): the one read-only snapshot a human monitors Deckent from — every observed install
@@ -139,4 +144,7 @@ export interface MonitorMap {
 }
 export interface MonitorSnapshot {
   readonly schemaVersion: 1; readonly observedAt: number; readonly installs: readonly MonitorInstall[]; readonly control: 'observe-only';
+  /** Collection targets attempted, in order (including denied/unavailable targets); no unlisted source is collected.
+   * Additive v1 field: this is an access-boundary report, not proof of a successful ledger read or scope admission. */
+  readonly sourcesRead: readonly string[];
 }

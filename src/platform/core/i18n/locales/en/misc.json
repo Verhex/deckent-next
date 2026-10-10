@@ -568,6 +568,7 @@
   "mcp.tool.inferencePlan": "Read the configured inference serving plan. This is a capacity estimate, not a running server and not Run admission.",
   "mcp.tool.inferenceBudget": "Read an empty-budget token estimate for the configured inference profile. This does not reserve capacity.",
   "mcp.tool.inspectInventory": "Read a bounded page of recorded execution attempts in one authorized scope. Does not start or stop workers.",
+  "mcp.tool.inspectMonitor": "Read the observe-only monitor snapshot. install selects current or one configured Next source before collection; unselected sources are never opened. sourcesRead lists collection targets attempted, including unavailable or denied sources. Each selected installation retains its own scope and output policy checks.",
   "mcp.tool.inspectToolchainCurrency": "Compare admitted worker CLI versions with published distributions (one bounded registry read per package when policy allows). Reports only; never updates, rebuilds or activates.",
   "mcp.tool.updateToolchains": "Plan (and, under policy or with apply, build) the next worker image version when admitted toolchains are stale; writes plan/receipt/proposal artifacts, never installed config.",
   "mcp.tool.policyVocabulary": "List built-in policy resource and action identifiers. This metadata grants no permissions.",

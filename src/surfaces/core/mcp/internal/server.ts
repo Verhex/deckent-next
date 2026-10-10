@@ -1,5 +1,6 @@
 import { providerSpendManagementCommandSchema, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult } from '#engine/index.js';
+import { monitorQuerySchema, type MonitorQuery, type MonitorSnapshot } from '#engine/index.js';
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
@@ -19,6 +20,7 @@ import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrenc
 import { poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 export interface McpApplications {
+  inspectMonitor?(query: MonitorQuery): Promise<MonitorSnapshot>;
   inspectDecision?(query: DecisionQuery): Promise<DecisionInspection>;
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -81,6 +83,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
   const renewApproval = applications.renewApproval;
+  const inspectMonitor = applications.inspectMonitor;
+  if (inspectMonitor) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_monitor',
+    description: t('mcp.tool.inspectMonitor', {}, locale), schema: monitorQuerySchema,
+    invoke: input => inspectMonitor.call(applications, monitorQuerySchema.parse(input)) });
   const inspectDecision = applications.inspectDecision;
   if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
     description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,

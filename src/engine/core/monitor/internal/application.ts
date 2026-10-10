@@ -1,6 +1,7 @@
 import { projectTaskBrief, projectResultBrief } from '#engine/core/runs/index.js';
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, MonitorSnapshot, MonitorWorker } from './contract.js';
+import { monitorQuerySchema, type MonitorQuery } from './contract.js';
 import type { MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
 import { projectMonitorRun } from './derive.js';
@@ -28,10 +29,15 @@ async function service(ports: MonitorPorts, target: MonitorTarget, diagnostics: 
  */
 export class MonitorApplication {
   constructor(private readonly ports: MonitorPorts) {}
-  async inspect(targets: readonly MonitorTarget[]): Promise<MonitorSnapshot> {
+  async inspect(targets: readonly MonitorTarget[], query: MonitorQuery = { schemaVersion: 1 }): Promise<MonitorSnapshot> {
+    const { install } = monitorQuerySchema.parse(query);
+    // Select before any port call and before path deduplication, so an explicitly selected alias keeps its id.
+    const selected = targets.filter(target => install === undefined || target.id === install)
+      .filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
     const observedAt = this.ports.now(); const installs: MonitorInstall[] = [];
-    for (const target of targets) installs.push(await this.install(target, observedAt));
-    return Object.freeze({ schemaVersion: 1, observedAt, installs: Object.freeze(installs), control: 'observe-only' });
+    for (const target of selected) installs.push(await this.install(target, observedAt));
+    return Object.freeze({ schemaVersion: 1, observedAt, installs: Object.freeze(installs), control: 'observe-only',
+      sourcesRead: Object.freeze(selected.map(target => target.id)) });
   }
   /** Typed diagnostics, never an exception: `info:image-updating`, `info:image-current:<version>`, or the problem `image-refresh-failed:<reason>`. */
   private async imageRefresh(target: MonitorTarget, diagnostics: string[]) {

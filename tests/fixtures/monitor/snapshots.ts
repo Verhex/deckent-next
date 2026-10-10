@@ -92,7 +92,7 @@ const MAP: MonitorMap = {
   memory: { available: false },
 };
 
-export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', installs: [
+export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', sourcesRead: ['current', 'dogfood', 'remote-lab'], installs: [
   { id: 'current', path: '/home/owner/projects/deckent-next', status: 'available', scopeIds: ['scope-a'], service: SERVICE, ledgerVersion: 44,
     runs: currentRuns,
     workers: [worker('build'), worker('lint', {}, { ageMs: 95_000, freshness: 'stale' }, 'running'),
@@ -112,12 +112,12 @@ export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBS
     diagnostics: ['ledger-unavailable:LEDGER_LOCKED', 'service-unavailable:LOCAL_RUNTIME_DENIED'] },
 ] };
 
-export const emptySnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', installs: [
+export const emptySnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', sourcesRead: ['current'], installs: [
   { id: 'current', path: '/home/owner/projects/fresh', status: 'available', scopeIds: [], service: null, ledgerVersion: 44, runs: [], workers: [], approvals: [], pools: [],
     diagnostics: [] }] };
 
 const LONG = 'run-2026-10-02-extremely-long-identifier-for-a-delivery-run-0123456789abcdef';
-export const longIdSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', installs: [
+export const longIdSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', sourcesRead: ['current'], installs: [
   { id: 'current', path: '/home/owner/a/very/deep/directory/structure/that/never/ends/projects/deckent-next-with-a-long-name', status: 'available',
     scopeIds: ['scope-with-a-really-long-name-for-enterprise-unit-alpha'], service: SERVICE, ledgerVersion: 44,
     runs: [run(LONG, 'blocked', 'worker-stale-heartbeat', ago(2 * 86_400_000 + 3 * HOUR), { scopeId: 'scope-with-a-really-long-name-for-enterprise-unit-alpha',

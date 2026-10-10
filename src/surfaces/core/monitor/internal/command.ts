@@ -2,7 +2,7 @@ import { configCommand } from '#surfaces/core/config/index.js';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { ErrorRegistry, colorTier, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { MonitorSnapshot } from '#engine/index.js';
+import type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { prefersAsciiGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { MonitorCommandContext } from './context.js';
@@ -11,7 +11,7 @@ import { renderMonitorText } from './text.js';
 import { filterSnapshot, type MonitorFilters } from './view.js';
 
 /** The data lane's read (composition): every observed install as one observe-only MonitorSnapshot. */
-export type MonitorHandler = (root: string, options: ConfigLoadOptions) => Promise<MonitorSnapshot>;
+export type MonitorHandler = (root: string, options: ConfigLoadOptions, query?: MonitorQuery) => Promise<MonitorSnapshot>;
 interface Parsed { once: boolean; json: boolean; help: boolean; noColor: boolean; install?: string; scope?: string; language?: string }
 const DEFAULT_TEXT_WIDTH = 120;
 const FLAGS = { '--help': 'help', '--once': 'once', '--json': 'json', '--no-color': 'noColor' } as const;
@@ -74,7 +74,9 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   const root = context.root ?? process.cwd(), options: ConfigLoadOptions = { env };
   const config = await loadConfig(root, { ...options, heal: false });
   locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
-  const inspect = context.inspectMonitor, filters = filtersOf(parsed), ascii = prefersAsciiGlyphs(env);
+  const read = context.inspectMonitor, query: MonitorQuery = { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) };
+  const inspect = (at: string, configOptions: ConfigLoadOptions) => read(at, configOptions, query);
+  const filters = filtersOf(parsed), ascii = prefersAsciiGlyphs(env);
   if (parsed.json) { emit(filterSnapshot(await inspect(root, options), filters), { ...sinks, json: true }); return; }
   if (parsed.once || !interactive(context)) {
     emit(await inspect(root, options), { ...sinks, render: snapshot => renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters }) });
@@ -96,6 +98,6 @@ export async function runMonitorSlash(root: string, args: string, context: Monit
   const parsed = parse(['monitor', ...args.split(/\s+/).filter(Boolean)], 1);
   if (parsed.once || parsed.json || parsed.help || parsed.language || parsed.noColor) return [t('monitor.slash.usage', {}, locale)];
   if (!context.inspectMonitor) throw ErrorRegistry.createError('MONITOR_UNAVAILABLE');
-  const snapshot = await context.inspectMonitor(root, options);
+  const snapshot = await context.inspectMonitor(root, options, { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) });
   return renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed) }).split('\n');
 }
