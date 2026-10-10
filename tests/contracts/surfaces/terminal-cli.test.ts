@@ -313,3 +313,25 @@ it('dispatches deckent --scope to the same terminal command, including typed TTY
     expect(out.text()).not.toContain('Unknown command');
     expect(await main(['--scope', 's', '--scope', 'other'], context)).toBe(2);
   });
+
+// W12: an exact registered value may itself include a newline, so the previous line cannot be committed early.
+it('W12 line mode masks a multiline known value across complete-line and delta boundaries, preserving raw history', async () => {
+  registerProviderConfig();
+  const f = await fixture(), out = sink(), err = sink(), canary = 'W12-first-part\nsecond-part-012345';
+  await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:LINE_TEST' }));
+  const histories: string[] = [];
+  const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: { ...f.env, LINE_TEST: canary }, stdout: out.output, stderr: err.output,
+    stdin: Object.assign(Readable.from(['go\n', 'again\n', '/exit\n']), { isTTY: false }), initialize() {}, async describeTerminalChatPlan() { return { ...plan, historyMessages: 40 }; },
+    async completeTerminalChat() { throw new Error('must use the streaming path'); },
+    async *streamTerminalChat(_root: string, input: { messages: readonly { role: string; content: string }[] }) {
+      histories.push(JSON.stringify(input.messages));
+      for (const text of ['prefix ', 'W12-first-part\n', 'second-part-', '012345 suffix\n']) {
+        yield { kind: 'text', text }; await settle(1);
+        for (const fragment of ['first-part', 'second-part', '012345']) expect(out.text()).not.toContain(fragment);
+      }
+      yield { kind: 'message', message: { role: 'assistant', content: canary, toolCalls: [] } };
+      yield { kind: 'done', finish: 'stop', note: null };
+    } });
+  expect(code).toBe(0); expect(out.text()).toBe('prefix ‹secret:LINE_TEST› suffix\nprefix ‹secret:LINE_TEST› suffix\n');
+  expect(histories[1]).toContain('W12-first-part\\nsecond-part-012345');
+});

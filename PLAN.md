@@ -73,7 +73,7 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 | AOF-DECISION-PORT | Karar portu (ledger v46) | Main'de ve canlıda | Ücret tavanı, pending-intent uzlaştırma/retention | [work-list](.deckent/docs/plan/work-list.md) |
 | CONFIG-SURFACE | Registry config yüzeyi | Main'de ve canlıda | Native/built binary kanıtı; restart akışı alpha.8'de (CONFIG-SURFACE-RESTART) | [work-list](.deckent/docs/plan/work-list.md) |
 | HARDCODE-P1 | Sabit-kod ratchet borcu (19 grup) | A/B alt grupları kısmi aday | Kalan P1 grupları, bağımsız inceleme | [work-list](.deckent/docs/plan/work-list.md) |
-| SECRET-REDACTOR (B7) | Gizli bilgi redaksiyonu | B7+S06+SAFE-APPROVAL-A1 indi | Bölünmüş sırlar, tüm yüzeylerin kapsamı | [work-list](.deckent/docs/plan/work-list.md) |
+| SECRET-REDACTOR (B7) | Gizli bilgi redaksiyonu | B7+S06+SAFE-APPROVAL-A1 indi | W12 yazar adayı: sınırlı akış kuyruğu + yüzey kanıtı; bağımsız inceleme/entegrasyon açık | [work-list](.deckent/docs/plan/work-list.md) |
 | DOGFOOD-STAGES / EXEC-RELEASE | Dogfood D4, S1 kapı kodu | DOGFOOD owner onaylı (2026-10-09), açılıyor; D4 denemeleri N1'de | Owner izinli sınırlı denemeler | [work-list](.deckent/docs/plan/work-list.md) |
 | Hazır kart girdileri | DALGA-1…6, NEXT-DEFECTS-W6, G31, LONG-LIVED-AGENTS, LEGAL-HOLD, LEGACY-CODES-RETIRE, HOST-RULES-CLEANUP, AUDIT-CHECKPOINT, REASONING-RETENTION, TUI-COMPLETION, S-API | Çoğu uygulanmadı | Lead/Jev sırasıyla kart açılışı | [work-list](.deckent/docs/plan/work-list.md) |
 

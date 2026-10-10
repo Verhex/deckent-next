@@ -1,6 +1,6 @@
 import { describeAgentToolCallTarget, summarizeAgentToolResult, trackedChangesOfToolResult, type AgentChatMessage, type ToolResultSummary, type ToolTrackedChanges,
   type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
-import { terminalSafeText } from '#platform/index.js';
+import { EMPTY_KNOWN_SECRETS, EMPTY_RECORD_STREAM, feedRecordStream, finishRecordStream, previewRecordStream, type RecordStreamState, type KnownSecretSnapshot, terminalLineEnd, terminalSafeText } from '#platform/index.js';
 import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from './stream-segmenter.js';
 
 /**
@@ -48,9 +48,15 @@ export const REASONING_PREVIEW_CHARS = 2_048;
 /** Lines of the reasoning preview under the narration. */
 export const REASONING_PREVIEW_LINES = 2;
 
+const EMPTY_TOOL_RECORD = Object.freeze({ stdout: EMPTY_RECORD_STREAM, stderr: EMPTY_RECORD_STREAM });
+
 type Usage = Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null }>;
 export type AssistantStreamState = Readonly<{
   startedAtMs: number;
+  known: KnownSecretSnapshot;
+  answerRecord: RecordStreamState;
+  reasoningRecord: RecordStreamState;
+  outputRecord: Readonly<Record<'stdout' | 'stderr', RecordStreamState>>;
   phase: 'waiting' | 'reasoning' | 'answering' | 'done';
   segmenter: SegmenterState;
   reasoningChars: number;
@@ -94,15 +100,15 @@ export type AssistantStreamStep = Readonly<{
 /** Roughly four characters per token until the provider reports reasoning usage. */
 const approxTokens = (chars: number): number => Math.ceil(chars / 4);
 
-export function startAssistantStream(nowMs: number): AssistantStreamState {
-  return Object.freeze({ startedAtMs: nowMs, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
+export function startAssistantStream(nowMs: number, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): AssistantStreamState {
+  return Object.freeze({ startedAtMs: nowMs, known, answerRecord: EMPTY_RECORD_STREAM, reasoningRecord: EMPTY_RECORD_STREAM, outputRecord: EMPTY_TOOL_RECORD, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
     earlierCompletionTokens: 0, activeTool: null, context: null, waitingFor: 'model', waitingSinceMs: nowMs, reasoningTail: '', toolLineTargets: new Map(),
     toolLineSummaries: new Map(), toolLineTracked: new Map(), toolLineDeclined: new Set<string>() });
 }
 
 /** The first step of a turn, before any delta: the model is being prepared (TL-A D1). */
-export function openAssistantStream(nowMs: number): AssistantStreamStep {
-  return step(startAssistantStream(nowMs), []);
+export function openAssistantStream(nowMs: number, known?: KnownSecretSnapshot): AssistantStreamStep {
+  return step(startAssistantStream(nowMs, known), []);
 }
 
 /** The last non-empty lines of reasoning text, sanitized like any untrusted output (TL-A D6). */
@@ -137,9 +143,14 @@ export function narrationOf(state: AssistantStreamState): Narration | null {
 }
 
 function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[], footer: FooterUnit | null = null): AssistantStreamStep {
-  return Object.freeze({ state, staticUnits: Object.freeze([...staticUnits]), liveTail: segmenterTail(state.segmenter), narration: narrationOf(state), footer,
-    activeTool: state.activeTool, waiting: waitingOf(state),
-    reasoningPreview: Object.freeze(state.phase === 'reasoning' ? reasoningPreviewLines(state.reasoningTail) : []) });
+  const tail = segmenterTail(state.segmenter);
+  const pending = previewRecordStream(state.answerRecord, state.known, terminalSafeText);
+  const joiner = pending && state.segmenter.partial === '' && state.segmenter.block.length > 0 ? '\n' : '';
+  const liveTail = { ...tail, markdown: tail.markdown + joiner + pending };
+  const activeTool = state.activeTool ? { ...state.activeTool, output: (state.activeTool.output + previewRecordStream(state.outputRecord.stdout, state.known, terminalSafeText) + previewRecordStream(state.outputRecord.stderr, state.known, terminalSafeText)).slice(-LIVE_OUTPUT_TAIL_CHARS) } : null;
+  return Object.freeze({ state, staticUnits: Object.freeze([...staticUnits]), liveTail, narration: narrationOf(state), footer,
+    activeTool, waiting: waitingOf(state),
+    reasoningPreview: Object.freeze(state.phase === 'reasoning' ? reasoningPreviewLines(state.reasoningTail + previewRecordStream(state.reasoningRecord, state.known, terminalSafeText)) : []) });
 }
 
 /** A tool call's display target comes from the model's arguments (a path, pattern or command line): shown sanitized, on one line. */
@@ -167,8 +178,9 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   if (delta.kind === 'output') {
     const active = state.activeTool;
     if (!active || active.callId !== delta.callId) return step(state, []);
-    const output = `${active.output}${terminalSafeText(delta.text)}`.slice(-LIVE_OUTPUT_TAIL_CHARS);
-    return step(Object.freeze({ ...state, activeTool: Object.freeze({ ...active, output }) }), []);
+    const fed = feedRecordStream(state.outputRecord[delta.stream], delta.text, state.known, terminalSafeText, terminalLineEnd);
+    const output = `${active.output}${fed.text}`.slice(-LIVE_OUTPUT_TAIL_CHARS);
+    return step(Object.freeze({ ...state, outputRecord: Object.freeze({ ...state.outputRecord, [delta.stream]: fed.state }), activeTool: Object.freeze({ ...active, output }) }), []);
   }
   if (delta.kind === 'message') return step(noteToolLine(state, delta.message), []);
   // DENY-WORDING: the card's settlement says who refused a call; the line then says "you declined", not a policy refusal.
@@ -192,9 +204,11 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   if (delta.kind === 'tool') {
     // Text before a tool call is printed first; the call is one line; the next round starts a fresh reasoning narration.
     const pending = state.phase === 'reasoning' ? [reasoningSummary(state, nowMs)] : [];
-    const flushed = flushSegmenter(state.segmenter);
-    const text = answerUnits(flushed.segments, state.answered);
-    const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, reasoningChars: 0, reasoningStartedAtMs: null, reasoningTail: '',
+    const settled = feedSegmenter(state.segmenter, finishRecordStream(state.answerRecord, state.known, terminalSafeText));
+    const flushed = flushSegmenter(settled.state);
+    const segments = [...settled.segments, ...flushed.segments];
+    const text = answerUnits(segments, state.answered);
+    const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, answerRecord: EMPTY_RECORD_STREAM, reasoningRecord: EMPTY_RECORD_STREAM, outputRecord: EMPTY_TOOL_RECORD, reasoningChars: 0, reasoningStartedAtMs: null, reasoningTail: '',
       answered: state.answered || text.length > 0, waitingFor: 'model' as const, waitingSinceMs: nowMs };
     const target = safeTarget(state.toolLineTargets.get(delta.callId) ?? delta.target);
     if (delta.phase === 'started') {
@@ -214,24 +228,27 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   }
   if (delta.kind === 'reasoning') {
     const reasoning = state.phase === 'answering' ? {} : { phase: 'reasoning' as const, reasoningStartedAtMs: state.reasoningStartedAtMs ?? nowMs };
-    return step(Object.freeze({ ...state, ...reasoning, reasoningChars: state.reasoningChars + delta.text.length,
-      reasoningTail: `${state.reasoningTail}${delta.text}`.slice(-REASONING_PREVIEW_CHARS) }), []);
+    const fed = feedRecordStream(state.reasoningRecord, delta.text, state.known, terminalSafeText, terminalLineEnd);
+    return step(Object.freeze({ ...state, ...reasoning, reasoningRecord: fed.state, reasoningChars: state.reasoningChars + delta.text.length,
+      reasoningTail: `${state.reasoningTail}${fed.text}`.slice(-REASONING_PREVIEW_CHARS) }), []);
   }
   const summary = state.phase === 'reasoning' ? [reasoningSummary(state, nowMs)] : [];
   if (delta.kind === 'text') {
     // Model text is untrusted too (it may quote files or command output): it is sanitized before it reaches the renderer.
-    const fed = feedSegmenter(state.segmenter, terminalSafeText(delta.text));
+    const record = feedRecordStream(state.answerRecord, delta.text, state.known, terminalSafeText, terminalLineEnd);
+    const fed = feedSegmenter(state.segmenter, record.text);
     const units = answerUnits(fed.segments, state.answered);
-    return step(Object.freeze({ ...state, phase: 'answering', segmenter: fed.state, answered: state.answered || units.length > 0 }), [...summary, ...units]);
+    return step(Object.freeze({ ...state, phase: 'answering', answerRecord: record.state, reasoningRecord: EMPTY_RECORD_STREAM, segmenter: fed.state, answered: state.answered || units.length > 0 }), [...summary, ...units]);
   }
-  const flushed = flushSegmenter(state.segmenter);
+  const settled = feedSegmenter(state.segmenter, finishRecordStream(state.answerRecord, state.known, terminalSafeText));
+  const flushed = flushSegmenter(settled.state);
   const usage = state.usage;
   const footer: FooterUnit = Object.freeze({ kind: 'footer', elapsedMs: Math.max(0, nowMs - state.startedAtMs), promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage ? state.earlierCompletionTokens + usage.completionTokens : null, reasoningTokens: usage?.reasoningTokens ?? null, finish: delta.finish,
     ...(delta.note ? { note: delta.note } : {}), ...(state.context ? { context: state.context } : {}),
     ...(delta.finish === 'cancelled' ? { cancelledDuring: stageOf(state) } : {}) });
-  const done = Object.freeze({ ...state, phase: 'done' as const, segmenter: flushed.state, answered: true, activeTool: null });
-  return step(done, [...summary, ...answerUnits(flushed.segments, state.answered)], footer);
+  const done = Object.freeze({ ...state, phase: 'done' as const, answerRecord: EMPTY_RECORD_STREAM, reasoningRecord: EMPTY_RECORD_STREAM, outputRecord: EMPTY_TOOL_RECORD, segmenter: flushed.state, answered: true, activeTool: null });
+  return step(done, [...summary, ...answerUnits([...settled.segments, ...flushed.segments], state.answered)], footer);
 }
 
 /** Non-streaming adapter: a complete reply is the text deltas of one turn followed by `done`. */
