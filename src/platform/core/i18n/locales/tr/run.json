@@ -345,5 +345,19 @@
   "error.HANDOFF_ARTIFACT_MISMATCH": "Devirdeki dosya kaydedilmiş çıktı ile eşleşmiyor.",
   "error.HANDOFF_PATCH_UNAPPLICABLE": "Kabul edilmiş öncül yaması Run tabanına uygulanamıyor; işçi başlamadı.",
   "error.HANDOFF_INVALID": "Yapılandırılmış devir notu geçersiz.",
-  "error.HANDOFF_LIMIT_EXCEEDED": "Devir notları yapılandırılmış sınırları aşıyor."
+  "error.HANDOFF_LIMIT_EXCEEDED": "Devir notları yapılandırılmış sınırları aşıyor.",
+  "error.SUPERVISOR_REQUEST_INVALID": "Supervisor isteği veya salt okunur girdisi geçersiz; worker başlatılmadı.",
+  "error.SUPERVISOR_WORKSPACE_INVALID": "Supervisor çalışma alanı geçersiz.",
+  "error.SUPERVISOR_IDENTITY_CONFLICT": "Supervisor kimliği veya gerçekleşen bağlantılar kabul edilmiş istekle uyuşmuyor.",
+  "error.SUPERVISOR_PROFILE_INVALID": "Tutulan supervisor profili geçersiz.",
+  "error.SUPERVISOR_PROFILE_ORIGIN_MISMATCH": "Supervisor daemon kimliği tutulan profille uyuşmuyor.",
+  "error.SUPERVISOR_OPTIONS_INVALID": "Supervisor ayarları hazırlanmış görev girdilerini reddetti; sabitlenmiş yürütme profilini inceleyin.",
+  "error.SUPERVISOR_CANCELLED": "Supervisor yürütümü iptal edildi.",
+  "error.SUPERVISOR_CONTROL_FAILED": "Supervisor kontrolü kullanılamıyor; daemon ve yürütme sorumluluğu kanıtını inceleyin.",
+  "error.SUPERVISOR_NOT_TERMINAL": "Supervisor terminal sonuç kanıtına sahip değil; yürütme sorumluluğu korunuyor.",
+  "error.SUPERVISOR_RELEASE_UNCONFIRMED": "Supervisor bırakma işlemi doğrulanmadı; uzlaştırma gerekiyor.",
+  "error.QUERY_UNEXPECTED_FAILURE": "Beklenmeyen işlem hatası ({errorClass}); tanı: {diagnosticId}",
+  "error.RUN_PROGRESSION_PARKED": "Run ilerlemesi yapılandırılmış hata sınırında park edildi. Hata kodunu inceleyin, nedeni düzeltin ve süre dolmadan açıkça devam ettirin. Canlı yürütme sorumluluğu korunuyor.",
+  "error.RUN_PROGRESSION_PARK_UNAVAILABLE": "Run ilerlemesi durduruldu ancak kalıcı park yazılamıyor. İptal politikasını veya depolama erişimini düzeltip runtime hizmetini yeniden başlatın; bu yürütücü yeni dispatch denemeyecek.",
+  "cli.run.lifecycle.failure": "İlerleme hatası: {code}. Nedeni düzeltip süre dolmadan açıkça devam ettirin; canlı yürütme sorumluluğu korunur."
 }

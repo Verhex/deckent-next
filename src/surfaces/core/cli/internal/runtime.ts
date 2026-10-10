@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, formatDuration, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, emit, formatDuration, loadConfig, resolveLocale, t, type DeckentError, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
   type ServiceShutdownAdmissionResult, type ShutdownCommand, type BackupScheduleObserver } from '#engine/index.js';
@@ -11,8 +11,9 @@ export interface RuntimeServiceHost {
   stop(): Promise<RuntimeServiceDrainResult>;
 }
 export interface RuntimeServiceObserver extends BackupScheduleObserver {
+  onQueryFailure?(event: { readonly code: string; readonly diagnosticId: string; readonly detail: string }): void | Promise<void>;
   onRunProgression?(query: ProgressionCursor, result: Readonly<{ run: RunView; attempted: number; stopped: boolean; waitedForSlotMs?: number }>): void | Promise<void>;
-  onRunProgressionError?(query: ProgressionCursor | null, error: { readonly code: string }): void | Promise<void>;
+  onRunProgressionError?(query: ProgressionCursor | null, error: Pick<DeckentError, 'code'> & Partial<Pick<DeckentError, 'params' | 'localize' | 'message'>>): void | Promise<void>;
   onReconciliationPage?(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
   onReconciliationError?(command: ReconciliationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onPage(command: CancellationRecoveryCommand, result: CancellationRecoveryPageResult): void | Promise<void>;
@@ -90,6 +91,8 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
   }
   if (!context.startRuntimeService || !context.signal) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
   const host = await context.startRuntimeService(root, {
+    onQueryFailure: async event => { output({ schemaVersion: 1, event: 'query-failed', ...event },
+      () => `${t('error.QUERY_UNEXPECTED_FAILURE', { errorClass: 'Error', diagnosticId: event.diagnosticId }, locale)}: ${event.detail}`, 'error'); },
     onRunProgression: async (query, result) => {
       if (result.attempted || result.run.tasks.every(task => ['accepted', 'failed', 'cancelled'].includes(task.phase))) {
         output({ schemaVersion: 1, event: 'run-progression', query, result },
@@ -97,8 +100,8 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
       }
     },
     onRunProgressionError: async (query, error) => {
-      output({ schemaVersion: 1, event: 'run-progression-failed', query, code: error.code },
-        () => `${query ? `${query.scopeId}/${query.runId}: ` : ''}${t('cli.runtime.runProgressionFailed', { code: error.code }, locale)}`, 'error');
+      output({ schemaVersion: 1, event: 'run-progression-failed', query, code: error.code, params: error.params },
+        () => `${query ? `${query.scopeId}/${query.runId}: ` : ''}${t('cli.runtime.runProgressionFailed', { code: error.code }, locale)}: ${error.localize?.(locale).message ?? error.message ?? error.code}`, 'error');
     },
     onReconciliationPage: async (command, result) => {
       const changed = result.outcomes.filter(outcome => outcome.status !== 'skipped');

@@ -192,6 +192,22 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   Current local driver refills same-Run capacity after verified acceptance within a configured automatic-turn
   reservation budget. At the budget boundary it drains existing custody and rotates paged Run intents.
   This is nonpreemptive allocation-turn fairness, not a time guarantee; slow tails, restart fairness and fleet scale remain open.
+- **Batch G run progression, query diagnostics and needs-input mount (source candidate, batch G, alpha.28; not live):**
+  Run state gains `parked/progression-failed{failureCode}` (`src/domain/core/run/internal/contract.ts`; the reason and `failureCode`
+  must appear together). `runRuntime.maxConsecutiveFailures` (default 3, presets) lives in the config registry and bounds consecutive
+  progression failures per pinned revision with `failureBackoffMs`; success or a new revision resets the counter, which is held in the
+  current runtime epoch. The park goes through the single lifecycle application as audit action `park-progression`
+  (`src/engine/core/runs/internal/lifecycle.ts`, `src/adapters/core/attempt-store/internal/runs.ts`): fresh Run cancel policy and a mandatory
+  audit record; history, custody and unresolved effects are kept and no terminal result or acceptance is invented. If the park cannot be
+  written the same runtime stops dispatching that Run and surfaces `RUN_PROGRESSION_PARK_UNAVAILABLE` (policy/storage repair plus runtime
+  restart); the ledger state may stay running, so there is no unauthorized park or slot release.
+  `QUERY_UNEXPECTED_FAILURE` diagnostic custody (`src/platform/core/errors/internal/redact.ts`): the client (CLI, SDK, MCP) receives only the code,
+  a safe class name from a closed list and a `diagnosticId` (UUID); the full diagnostic goes to the existing runtime-service record, scanned
+  first with the real known-secret snapshot (`getConfigKnownSecrets`) and cut to the bound afterwards. There is no raw fallback; a config or
+  sink failure drops the detail. Unregistered coded errors become `INVENTORY_UNAVAILABLE` without detail.
+  The docker supervisor allow-list accepts exactly one extra read-only handoff target, `/deckent/inputs/_needs-input.json`
+  (`src/adapters/core/docker-supervisor/internal/options.ts`); arbitrary or duplicate targets stay refused.
+  Version limit: an older binary cannot read the new park variant or audit action; rollback needs the pre-switch ledger backup.
 - **Attempt kapanışı: launch-refused (RUN-YAŞAM, 2026-10-06, `wave/2`; Astra 2382/2384 sonrası):** dispatch claim'inden önce kalıcı ret (`EXECUTION_NOT_CONFIGURED|EXECUTION_HOST_UNSUPPORTED|EXECUTION_PROFILE_INVALID|DISPATCH_ARTIFACT_REQUIRED`, engine `classifyLaunchRefusal`) tipli `launch-refused {code}` gözlemi olarak bir kez kaydedilir (geçici retler kayıt yazmaz); görev `failed`, bağımlılar aynı projeksiyonda kapanır. Başlatılmış (granted) deneme için kapanış türü yoktur (`abandoned`/`failed` yolu kaldırıldı). Çalışanı kaybolan başlatılmış deneme main davranışında kalır: sessizce `active`, slotunu tutar, başarısız sayılmaz. `mark-lost` takip kartına ertelendi (owner 2026-10-06: atomik mark-lost — `unknown` gözlemi ile Run hold'u tek işlemde — + KARAR 12 slot bırakma kararı; Astra 2384). Ortak kaydedici `recordAttemptClosure`; ledger 47 değişmedi. Ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).
 - **Monitor teslim görünümü (M2/M3, `wave/2`):** worker anlatısı yalnız kanıtlı alanlardan; `MonitorRun.deliveryOutlook` (`none|patch-not-prepared|awaiting-delivery`, makbuz her zaman öncelikli); `ResultBrief` opsiyonel `failedTests`/`deliveryOutlook`; düşen testler `verify-failed-test:` satırlarından read-output kapısı altında. Kaydedilmemiş PATCH_LIMIT sebebi uydurulmaz.
 - **MONITOR-SOURCE-FILTER (batch F, alpha.26 candidate):** `MonitorQuery` v1 `{schemaVersion: 1, install?: string}` (engine `monitorQuerySchema`, strict) selects installations in `MonitorApplication` before collection: service, image, freshness, ledger, scope and shown-content ports are called only for selected targets, and composition opens no unselected source (selection precedes same-path deduplication). `MonitorSnapshot.sourcesRead` lists the collection targets attempted, including denied or unavailable ones; it is not proof of a successful read, a scope grant or filesystem isolation, and excludes the caller's own configuration discovery. An unknown id collects nothing and yields an empty view (a typed `MONITOR_INSTALL_UNKNOWN` is a tracked follow-up). Surfaces: SDK `inspectMonitor(root, options, query?)` (no query keeps all-source behavior), CLI `monitor --install current|<id>` (JSON/once/pipe/live and `/monitor`), optional read-only MCP `inspect_monitor` with the same schema under the MCP principal. Scope display filtering and per-install read authorization stay with their existing owners. Within v1 only additive fields are allowed; the Desktop connector keeps refusing snapshots without `sourcesRead`. Evidence: external `proof/MONITOR-SOURCE-FILTER-2026-10-10/`.
@@ -606,6 +622,16 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   before any send or lookup (operator recovery). A compare-and-swap loser of a concurrent identical replay reloads and
   returns the settled record. The HTTP target bounds the whole exchange, not only socket idleness. One target kind maps
   to one endpoint per installation (config rejects duplicate kinds), which is what makes kind+id busy scoping sound.
+- **Batch G M5 foundations (source candidate, batch G, alpha.28; not live):** (1) WorkClass registry `schemaVersion` 1|2 in
+  `src/domain/core/run/internal/work-class.ts`: v1 stays readable; v2 adds `acceptanceProfile`, closed criterion and evidence type enums,
+  weighted rubric and score ceilings, and merges over Core add-only with a composite revision. The enums are deliberately closed in code;
+  whether an Enterprise or ERP adapter may extend them through the registry is decided in the M5 wiring wave. (2) DECKENT-METRICS v1
+  (`src/domain/core/run/internal/metrics.ts`) is a pure attributed result contract. No record or screen consumes either yet.
+  (3) The pure dispatch-fence decision (`assessLostDispatch` in `src/engine/core/dispatch/internal/loss.ts`, `decideDispatchLoss` in
+  `src/domain/core/attempt/internal/dispatch-loss.ts`) has no production caller. In production `finishDispatch`, a late exit keeps a durable unknown
+  Attempt observation (`src/engine/core/dispatch/internal/settle.ts`) and no success is invented; real slot release and a durable lock are open.
+  (4) Test-ERP is a test fixture only (`tests/fixtures/test-erp`): no ERP-specific code exists in Core; it goes through the generic
+  http-conditional adapter, the operation catalog and the approval path.
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and
   Lane B (the contracts above, company scope, IFS scenario design and sandbox proof moved ahead of M4).
 
@@ -991,6 +1017,8 @@ config sections wait for C1.
 - `tests/e2e/` — real binary journeys (`doctor`, `run`, `start`, `do`, …) on fixture projects under `tests/fixtures/`.
   Current state 2026-10-01: `tests/e2e/` holds `cli-version`, `i18n-renderer`, `kernel-config`, `product-paths`; there is no
   `start` or `do` command yet and no `tests/golden/` directory.
+- Batch G (source candidate, alpha.28; not live): the test-ERP scenarios (`tests/contracts/composition/test-erp-operations.test.ts`) are skipped off Linux without a typed
+  refusal or verify-not-run record; that platform evidence gap stays open until the next batch.
 - `tests/golden/` — normalized outputs of deterministic commands, captured from the legacy binary and
   diffed against the new one during the port.
 - Budget: ≤ 8,000 test cases total, every test file ≤ 1,500 lines (lint; 800 design target). Legacy invariant titles are in

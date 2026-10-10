@@ -57,3 +57,10 @@ describe('bounded concurrent Run configuration (schema 4 additive)', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });
+
+
+it('resolves the consecutive progression failure limit through config and refuses invalid budgets', () => {
+  expect(validateConfig({}).config.runRuntime.maxConsecutiveFailures).toBe(3);
+  expect(validateConfig({ runRuntime: { maxConsecutiveFailures: 2 } }).config.runRuntime.maxConsecutiveFailures).toBe(2);
+  for (const value of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, null]) expect(() => validateConfig({ runRuntime: { maxConsecutiveFailures: value } })).toThrow();
+});

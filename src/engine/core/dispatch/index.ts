@@ -8,3 +8,4 @@ export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerm
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from './internal/inventory.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from './internal/inventory.js';
 export { parseRetainedOutputEnvelope, verifyRetainedOutputEnvelope, verifyRetainedFileReceipts } from './internal/output.js';
+export { assessLostDispatch, dispatchFenceReceiptId } from './internal/loss.js';

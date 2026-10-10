@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "scopeId": "test-erp-company",
+  "targetKind": "test-erp-record",
+  "recordId": "purchase-order-1",
+  "initialVersion": 1,
+  "initialStatus": "pending",
+  "approvedStatus": "approved",
+  "keyPrefix": "test-erp-key",
+  "versionPrefix": "revision-",
+  "http": { "host": "127.0.0.1", "port": 0, "timeoutMs": 200, "responseMaxBytes": 65536, "inputMaxBytes": 4096 },
+  "operations": { "read": { "id": "test.erp.read", "version": 1 }, "approve": { "id": "test.erp.approve", "version": 1 }, "undo": { "id": "test.erp.undo", "version": 1 } },
+  "policy": { "revision": "test-erp-policy", "fourEyesRuleId": "test-erp-four-eyes" }
+}

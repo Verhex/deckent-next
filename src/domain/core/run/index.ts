@@ -12,6 +12,8 @@ export type { RunExecutionSnapshot } from './internal/registry.js';
 export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';
 
-export { workClassRegistrySchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError } from './internal/work-class.js';
-export type { WorkClassRegistry } from './internal/work-class.js';
-export { holdRun, answerTaskInput } from './internal/lifecycle.js';
+export { workClassRegistrySchema, workClassAcceptanceProfileSchema, mergeWorkClassRegistries, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError } from './internal/work-class.js';
+export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy } from './internal/work-class.js';
+export { holdRun, answerTaskInput, parkRunProgression } from './internal/lifecycle.js';
+export { deckentMetricsSchema, deriveDeckentMetrics } from './internal/metrics.js';
+export type { DeckentMetrics, DeckentMetricsMeasurements } from './internal/metrics.js';

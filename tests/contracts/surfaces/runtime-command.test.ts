@@ -47,3 +47,22 @@ it.each([[true, 'en'], [false, 'en'], [false, 'tr']] as const)('logs a typed lif
   if (json) expect(JSON.parse(errors.join(''))).toMatchObject({ event: 'run-progression-failed', query, code: 'POLICY_DENIED' });
   else { expect(errors.join('')).toContain(query.runId); expect(errors.join('')).toContain('POLICY_DENIED'); }
 });
+
+
+it.each([[true, 'en'], [false, 'en'], [false, 'tr']] as const)('logs server diagnostics separately from content-free progression errors (json=%s locale=%s)', async (json, locale) => {
+  const controller = new AbortController(); controller.abort(); const service = host(), errors: string[] = [];
+  const failure = ErrorRegistry.createError('QUERY_UNEXPECTED_FAILURE', { params: { errorClass: 'Error', diagnosticId: 'query-fixture' } });
+  expect(await main(['runtime', 'serve', ...(json ? ['--json'] : []), '--lang', locale], {
+    root: '/fixture/project', env: { HOME: '/fixture/home' }, signal: controller.signal, stdout: { write() {} },
+    stderr: { write(text: string) { errors.push(text); } }, async startRuntimeService(_root, observer) {
+      await observer.onQueryFailure?.({ code: failure.code, diagnosticId: 'query-fixture', detail: 'adapter timeout [PATH] [REDACTED]' });
+      await observer.onRunProgressionError?.({ scopeId: 's', runId: 'r' }, failure); return service.value;
+    },
+  })).toBe(0);
+  if (json) { const [diagnostic, progression] = errors.map(text => JSON.parse(text));
+    expect(diagnostic).toMatchObject({ event: 'query-failed', code: 'QUERY_UNEXPECTED_FAILURE', diagnosticId: 'query-fixture', detail: 'adapter timeout [PATH] [REDACTED]' });
+    expect(progression).toMatchObject({ event: 'run-progression-failed', code: 'QUERY_UNEXPECTED_FAILURE', params: { errorClass: 'Error', diagnosticId: 'query-fixture' } });
+    expect(progression.params).not.toHaveProperty('detail');
+  }
+  else { expect(errors.join('')).toContain('adapter timeout'); expect(errors.join('')).toContain(locale === 'en' ? 'Unexpected operation failure' : 'Beklenmeyen işlem hatası'); }
+});

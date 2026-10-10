@@ -354,3 +354,9 @@ Ayrıntı ve kanıt ilgili PLAN satırlarında (iş kimliği) ve ARCHITECTURE "S
 - **OPENROUTER-TERMINAL** (Jev 7e0348c4 `c_now_b_after_spend` 0,96/0,76, K6): T4-B OpenRouter'ı yalnız anahtarla indirir; model eylemi sonraki dilim. **LLMTR:** yerel pazar sağlayıcısı, hedef haftaya (owner). **DECKENT-MD:** satıcıdan bağımsız proje talimat dosyası, CLAUDE.md okunmaz (Jev 6d5c040d 0,97/0,72 → owner).
 - **PROVIDER-SPEND-LIMITS** (Jev 8884c07b 0,99/0,80): A sağlayıcı/anahtar/ortam başına Deckent bütçeleri + B normal anahtarla okunan bakiye/limit; C (yönetici anahtarı gerektiren sınırlar) ayrı karar. **INSTALLER-POLICY-AUDIT** ayrı kart (Jev 1a1d6d0a 0,83/0,64 → owner). **CONFIG-RECORD-EDITORS** (owner).
 - **BETA-LAUNCH:** sürüm pazar 2026-10-11'de alfadan betaya geçer; 2026-10-12'den itibaren tanıtım ve dış katkı (owner).
+
+## Owner kararları — 2026-10-11 (beta etiketi, Astra kapsamı, N1 otomatik geçiş)
+Ayrıntı ilgili PLAN satırlarında (BETA-LAUNCH) ve CHANGELOG alpha.28 satırında.
+- **BETA-LAUNCH:** Batch G 1.0.0-alpha.28 olarak iner; 1.0.0-beta.1 M5 bağlama dalgası (D1 kayıt/ekran bağlama, D2 N1 devir kanıtı, K10 gerçek kilit, ilk uçtan uca test-ERP süreci) inince verilir. Bu karar 2026-10-11 beta tarihinin yerine geçer. Tanıtım ve dış katkı tarihi beta inince yeniden sorulur.
+- **ASTRA-KAPSAMI:** alpha.25, alpha.26 ve alpha.27 için iniş sonrası inceleme; Batch G için inişten önce inceleme (inişi durdurmaz); eski iki istek iptal.
+- **N1-OTOMATİK-GEÇİŞ:** her canlı geçişten sonra lead N1'i otomatik geçirir ve sağlık kontrolü yapar; sağlık başarısız olursa N1 önceki sürüme sabitlenir.

@@ -22,3 +22,15 @@ it('still prints an existing Run with exit 0', async () => {
   expect(await main(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', 'en'], h.context)).toBe(0);
   expect(h.out.join('')).toContain('recorded revision'); expect(h.err.join('')).toBe('');
 });
+
+
+it.each(['en', 'tr'] as const)('shows the durable progression failure code and deadline on run inspect in %s', async locale => {
+  const state = { kind: 'parked', reason: 'progression-failed', failureCode: 'SUPERVISOR_OPTIONS_INVALID', since: 10, deadline: 1010 };
+  const out: string[] = [];
+  expect(await main(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', locale], {
+    env: { NO_COLOR: '1', TERM: 'dumb' }, stdout: { write(text: string) { out.push(text); } }, stderr: { write() {} },
+    async inspectRun() { return { schemaVersion: 1, layout, run: { ...run, state } }; },
+  } as never)).toBe(0);
+  expect(out.join('')).toContain('SUPERVISOR_OPTIONS_INVALID'); expect(out.join('')).toContain('progression-failed');
+  expect(out.join('')).toContain(locale === 'en' ? 'explicitly resume' : 'açıkça devam');
+});

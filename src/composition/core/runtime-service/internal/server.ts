@@ -8,7 +8,7 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, resolveLocale, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
+import { ErrorRegistry, reportQueryError, getConfigKnownSecrets, resolveLocale, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
@@ -31,6 +31,7 @@ import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js'
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
 import { executeConfiguredRuntimeSecretOperation } from './secret.js';
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver, ToolchainRefreshObserver, BackupScheduleObserver {
+  onQueryFailure?(event: { readonly code: string; readonly diagnosticId: string; readonly detail: string }): void | Promise<void>;
   onRunProgression?: RunProgressionObserver['onRun'];
   onRunProgressionError?: RunProgressionObserver['onError'];
   onReconciliationPage?: ConfiguredReconciliationRuntimeObserver['onPage'];
@@ -163,9 +164,11 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });
+  const reportFailure = (failure: DeckentError) => reportQueryError(failure, async () => getConfigKnownSecrets(await loadComposedConfig(projectRoot, { ...options, heal: false })), observer.onQueryFailure);
   const preparedRunRuntime = await prepareConfiguredRunRuntime(projectRoot, {
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
-    ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError, onScopeSkipped: (note: DeckentError) => observer.onRunProgressionError?.(null, note) } : {}),
+    onError: async (query, failure) => { await reportFailure(failure); await observer.onRunProgressionError?.(query, failure); },
+    onScopeSkipped: (note: DeckentError) => observer.onRunProgressionError?.(null, note),
   }, (work, onSlotWait) => lifecycle.admitExecution(() => idle.track(work), onSlotWait), options);
   const server = await guard.start((request, peer, stream, turn) => withLocalPrincipalChannel(request.channel, () => idle.track(async () => {
     try {
@@ -198,7 +201,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {
-      const failure = queryFailure(error);
+      const failure = queryFailure(error); await reportFailure(failure).catch(() => undefined);
       const params = runtimeServiceErrorParams(failure.params);
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false,
         error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };

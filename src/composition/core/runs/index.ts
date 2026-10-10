@@ -10,4 +10,4 @@ export { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfig
 export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
 export { recoverConfiguredReconciliation } from './internal/recover-reconciliation.js';
 export { sweepConfiguredAttemptCustody } from './internal/custody-sweep.js';
-export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle } from './internal/lifecycle.js';
+export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle, parkConfiguredRunProgression } from './internal/lifecycle.js';
