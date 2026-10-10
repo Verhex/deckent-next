@@ -2,50 +2,21 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DeckentError, ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
-import { RUNTIME_SERVICE_AUTOSTART_ENV, type RuntimeServiceDescriptor } from '#engine/index.js';
-export interface RuntimeServiceReadiness {
-  readonly mode: 'connected' | 'started';
-  readonly instanceId: string;
-  readonly pid: number | null;
-  readonly logPath: string | null;
-  readonly shutdownAvailable: boolean;
-  readonly build: NonNullable<RuntimeServiceDescriptor['build']> | null;
-  /** Restart-apply configuration fingerprint the service started with, and its idle stop period (null: never); undefined from an older service. */
-  readonly configDigest: string | undefined;
-  readonly idleStopMs: number | null;
-}
-const readiness = (mode: 'connected' | 'started', descriptor: RuntimeServiceDescriptor, pid: number | null, logPath: string | null): RuntimeServiceReadiness =>
-  Object.freeze({ mode, instanceId: descriptor.instanceId, pid, logPath, shutdownAvailable: descriptor.shutdownAvailable, build: descriptor.build ?? null,
-    configDigest: descriptor.configDigest, idleStopMs: descriptor.idleStopMs ?? null });
-/** Only positive evidence of absence starts a service: no endpoint (or its never-created state directory) or a refused
- * connection (nothing listens). A peer that accepts but fails or stays silent may be a live incompatible or unhealthy
- * service, so it is reported, never replaced; ownership/unsafe failures are never auto-repaired (Astra 2054 R2). */
-const ABSENT = new Set(['LOCAL_RUNTIME_UNAVAILABLE']);
+import { RUNTIME_SERVICE_AUTOSTART_ENV, awaitRuntimeServiceStart, awaitRuntimeServiceRestart, describeRuntimeServiceWithin, runtimeServiceReadiness as readiness, runtimeMonotonicDeadline as monotonicDeadline, runtimeDeadlineSignal as within,
+  type RuntimeServiceReadiness, type LifecycleDeadline } from '#engine/index.js';
+export type { RuntimeServiceReadiness } from '#engine/index.js';
 const POLL_MS = 150;
 const ENTRY = fileURLToPath(new URL('./entry.js', import.meta.url));
-/** One monotonic deadline bounds every describe, including an accepting-but-silent peer (wall clock can step back). */
-function monotonicDeadline(timeoutMs: number) {
-  const until = performance.now() + timeoutMs;
-  return { remaining: () => Math.max(0, until - performance.now()), expired: () => performance.now() >= until };
-}
-type LifecycleDeadline = ReturnType<typeof monotonicDeadline>;
-const within = (deadline: LifecycleDeadline) => AbortSignal.timeout(Math.max(1, Math.ceil(deadline.remaining())));
 async function lifecycleDeadline(projectRoot: string, options: ConfigLoadOptions) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
 }
-async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: LifecycleDeadline) {
-  try { return { descriptor: await client.describeService(within(deadline)), code: null }; }
-  catch (error) {
-    const code = error instanceof DeckentError ? error.code : null;
-    if (code !== null && ABSENT.has(code)) return { descriptor: null, code };
-    throw error;
-  }
-}
+const describeWithin = (client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: LifecycleDeadline) =>
+  describeRuntimeServiceWithin(signal => client.describeService(signal), deadline);
 /**
  * Owner 2026-09-23: the interactive terminal starts the local runtime service when none is running, as a detached
  * `runtime serve` of the same executable that keeps running after the terminal exits. An existing service is reused.
@@ -67,19 +38,7 @@ export async function ensureConfiguredRuntimeService(projectRoot: string, option
   if (autoStarted) env[RUNTIME_SERVICE_AUTOSTART_ENV] = '1';
   const { pid } = await launch({ executable: process.execPath, entry, cwd: projectRoot, logPath, env })
     .catch(() => { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); });
-  while (!deadline.expired()) {
-    await delay(Math.min(POLL_MS, deadline.remaining()));
-    if (deadline.expired()) break;
-    const next = await describeWithin(client, deadline).catch(error => {
-      // While our process starts, the endpoint may briefly accept before it answers; only the deadline ends the wait.
-      if (error instanceof DeckentError && (error.code === 'LOCAL_RUNTIME_TRANSPORT' || error.code === 'RUNTIME_SERVICE_TRANSPORT')) return { descriptor: null, code: error.code };
-      throw error;
-    });
-    // A concurrent terminal may have won the start race: its service is used, but it is not reported as our launch.
-    if (next.descriptor) return next.descriptor.processId === pid ? readiness('started', next.descriptor, pid, logPath)
-      : readiness('connected', next.descriptor, null, logPath);
-  }
-  throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } });
+  return awaitRuntimeServiceStart(deadline, pid, logPath, { describe: () => describeWithin(client, deadline), wait: delay, pollMs: POLL_MS });
 }
 /** Governed stop of this project's service without hand-written command fields: the durable command is built from the
  * live descriptor with a fresh command id. A service without a configured identity cannot be stopped this way. Describe and
@@ -102,16 +61,8 @@ export async function restartConfiguredRuntimeService(projectRoot: string, optio
   const deadline = await lifecycleDeadline(projectRoot, options);
   const stopped = await stopConfiguredRuntimeService(projectRoot, options, 'managed restart onto the current build and configuration', deadline);
   const client = createConfiguredRuntimeClient(projectRoot, options);
-  while (!deadline.expired()) {
-    try { await client.describeService(within(deadline)); }
-    catch (error) {
-      if (error instanceof DeckentError && ABSENT.has(error.code)) return ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline, stopped.autoStarted);
-      // The stopping service may close connections while it drains; keep waiting for absence until the deadline.
-      if (!(error instanceof DeckentError && (error.code === 'LOCAL_RUNTIME_TRANSPORT' || error.code === 'RUNTIME_SERVICE_TRANSPORT'))) throw error;
-    }
-    await delay(Math.min(POLL_MS, deadline.remaining()));
-  }
-  throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: '-' } });
+  return awaitRuntimeServiceRestart(deadline, { describe: () => client.describeService(within(deadline)),
+    start: () => ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline, stopped.autoStarted), wait: delay, pollMs: POLL_MS });
 }
 /** The interactive terminal's composer history for this project, or null when disabled in `terminal.persistHistory`.
  * Entries that carried pasted content are not stored (only the visible line would survive, as a chip label). */

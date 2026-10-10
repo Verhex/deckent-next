@@ -22,3 +22,7 @@ export { modelInvocationCancellationCommandSchema, modelInvocationCancellationCo
 export type { ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationControlRecord } from './internal/cancellation.js';
 export { MODEL_INVOCATION_DELTA_TEXT_MAX, modelInvocationDeltaSchema, splitModelInvocationDelta } from './internal/delta.js';
 export type { ModelInvocationDelta, ModelInvocationDeltaSink } from './internal/delta.js';
+export { OpenAiChatHttpError, OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOLS, OPENAI_CHAT_MAX_TOOL_CALLS, parseOpenAiChatProtocolRequest, openAiReasoningEffortSchema, type OpenAiChatHttpErrorCode, type OpenAiReasoningEffort, type OpenAiChatToolCall, type OpenAiChatTextMessage, type OpenAiChatToolDefinition, type OpenAiChatTextRequest } from './internal/chat-request.js';
+export { openAiChatWireObjectSchema, openAiChatUsageSchema, parseOpenAiChatHttpLimits, type OpenAiChatHttpLimits } from './internal/chat-request.js';
+export { OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY } from './internal/chat-request.js';
+export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDialect } from './internal/chat-request.js';
