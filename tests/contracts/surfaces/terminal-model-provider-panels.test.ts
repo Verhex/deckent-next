@@ -2,6 +2,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
+import { t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
@@ -154,7 +155,7 @@ function providerPort(outcome: { stored: boolean; check: string } = { stored: tr
   const requests: ProviderConnectRequest[] = [], removed: string[] = [], models: unknown[] = [];
   const port: ProviderPanelPort = {
     inspect: async () => KINDS,
-    endpoint: (_kind, text) => text.startsWith('http://10.') ? { ok: false as const, reason: 'Plain http is allowed only on this machine; use https.' }
+    endpoint: (_kind, text) => text.startsWith('http://10.') ? { ok: false as const, reason: t('tui.provider.endpoint.insecureRemote', {}, 'en') }
       : { ok: true as const, base: text.trim().replace(/\/v1\/?$/u, ''), check: `${text.trim().replace(/\/v1\/?$/u, '')}/v1/models` },
     connect: async request => { requests.push(request); return { stored: outcome.stored, title: outcome.stored ? 'Connected: X' : 'Not connected: X',
       lines: [{ label: 'Check', text: outcome.check }, { label: 'Key', text: outcome.stored ? 'stored as DECKENT_ANTHROPIC_KEY' : 'not stored.' }] }; },
@@ -227,7 +228,7 @@ describe('/provider window', () => {
     // The last row is the narrow typed exception: refused in place, then previewed before use.
     await view.press(`${ENTER}${ENTER}${DOWN}${DOWN}${ENTER}`, 60); // the list kept its place on the local server
     await view.press(`http://10.0.0.2:8000${ENTER}`, 60);
-    expect(view.frame()).toContain('Plain http is allowed only on this machine');
+    expect(view.frame()).toContain('Plain http is allowed only for 127.0.0.1 / [::1]');
     for (let index = 0; index < 20; index++) await view.press('\u007f');
     await view.press(`http://127.0.0.1:9000/v1${ENTER}`, 60);
     expect(view.frame()).toContain('Use this address?'); expect(view.frame()).toContain('GET http://127.0.0.1:9000/v1/models');

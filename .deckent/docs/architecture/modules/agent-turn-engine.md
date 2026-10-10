@@ -187,7 +187,7 @@ the live installation sets `language: tr` in its configuration at the next live 
 v19 (v18 is released) and ships with the next protocol bundle.
 System prompt **v6** (PROMPT-POSTURE, live 2026-09-30): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
 (the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, Deckent state sealed, the configuration written
-only by an owner-approved call (Astra 2192 R9); closed = no network; host; unavailable), and `Network access: none` stays only when the
+only by an owner-approved call (Astra 2192 R9, historical; superseded by W3 on 2026-10-09: configuration remains read-only in every shell call); closed = no network; host; unavailable), and `Network access: none` stays only when the
 shell has no network. Every turn's request digest changes again.
 System prompt **v7** (TRUNCATED-TOOLCALL, 2026-09-30): when an edit tool is offered it names the per-answer output limit
 (`terminal.chat.maxCompletionTokens`) and the write-in-parts recipe; every turn's request digest changes again.

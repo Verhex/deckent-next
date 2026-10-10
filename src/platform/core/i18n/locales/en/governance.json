@@ -555,7 +555,7 @@
   "error.MODEL_CONNECT_INVALID": "The model connection request is not valid.",
   "error.MODEL_CONNECT_NOT_CONNECTABLE": "This connection kind cannot have models connected to it yet.",
   "error.MODEL_CONNECT_ENDPOINT_FIXED": "This provider has a fixed address; no address can be given for it.",
-  "error.MODEL_CONNECT_ENDPOINT_INVALID": "The address is missing or not allowed (https, or plain http only on this machine).",
+  "error.MODEL_CONNECT_ENDPOINT_INVALID": "The address is missing or not allowed (https, or plain http only for 127.0.0.1 / [::1]); use 127.0.0.1 for a local server.",
   "error.MODEL_CONNECT_MODEL_UNKNOWN": "This model is not in the provider's catalog: choose one the list offers.",
   "error.MODEL_CONNECT_DECLARATION_CONFLICT": "The provider catalog already declares this model differently; it was not changed.",
   "error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE": "No key name can be made from this address.",
