@@ -3,7 +3,7 @@ import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { runSnapshotSchema } from '#domain/core/run/index.js';
-import { workerModelPinSchema, workerProviderSchema } from '#domain/core/worker-event/index.js';
+import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema } from '#domain/core/worker-event/index.js';
 const criterion = z.object({ criterionId: identitySchema, verdict: z.enum(['pass', 'fail', 'unknown']),
   evidenceIds: z.array(identitySchema).readonly(),
 }).strict().superRefine((value, context) => {
@@ -25,6 +25,7 @@ export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend(
   Object.freeze({ ...model, evidenceCapability: model.evidenceCapability ?? readLegacyModelUsageEvidence(model.provider) }));
 export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
+  workerExit: workerNeedsInputSchema.optional(),
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
   sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),
   handoff: z.discriminatedUnion('status', [z.object({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), z.object({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) }).strict()]).optional(),
@@ -58,6 +59,7 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
     || evaluation.attemptRevision !== binding.observedRevision) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
   const task = run.data.graph.tasks.find(value => value.id === evaluation.identity.taskId)!;
   const progress = run.data.progress.find(value => value.taskId === task.id)!;
+  if (progress.decision?.reason === 'needs-input') throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
   const returned = progress.phase === 'awaiting-decision' && evaluation.returnEvidence;
   if (returned && (!progress.decision!.evidenceDigests || !evaluation.evidenceDigests?.includes(returned.digest) || progress.decision!.evidenceDigests.includes(returned.digest)
     || (returned.kind === 'model-seal' && (evaluation.model?.verdict !== 'verified' || evaluation.model.evidence !== 'sealed')))) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
@@ -72,7 +74,7 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
   const gate = taskModelConclusion(normalized.model);
   if (!task.workInput && normalized.workspaceChange) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
   const change = task.workInput ? normalized.workspaceChange ? normalized.workspaceChange.changedFiles > 0 || task.workInput.noChangeAllowed === true ? 'pass' : 'fail' : 'unknown' : 'pass';
-  const conclusion: 'pass' | 'fail' | 'unknown' = gate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
+  const conclusion: 'pass' | 'fail' | 'unknown' = normalized.workerExit ? gate === 'fail' ? 'fail' : 'unknown' : gate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
     : gate === 'unknown' || change === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
   return Object.freeze({ evaluation: normalized, conclusion });
 }

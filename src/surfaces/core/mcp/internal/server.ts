@@ -11,7 +11,7 @@ import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/se
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
-import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
+import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, type RuntimeOperationQuery,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
@@ -45,6 +45,7 @@ export interface McpApplications {
   inspectToolchainCurrency?(): Promise<ToolchainCurrencyReport>;
   updateToolchains?(input: Readonly<{ apply?: boolean | undefined }>): Promise<unknown>;
   createRun?(command: RunAdmission): Promise<unknown>;
+  applyRunControl?(command: Extract<RunLifecycleCommand, { action: 'hold' | 'close' | 'resume' }>): Promise<unknown>;
   reserveRunTasks?(command: RunReservationCommand): Promise<unknown>;
   executeTask?(identity: AttemptIdentity): Promise<unknown>;
   evaluateTask?(command: TaskEvaluationCommand): Promise<unknown>;
@@ -118,6 +119,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (createRun) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'create_run', description: t('mcp.tool.createRun', {}, locale),
     schema: runAdmissionSchema, invoke: (input: unknown) => createRun.call(applications, runAdmissionSchema.parse(input)) });
   const reserveRunTasks = applications.reserveRunTasks;
+  const runControl = applications.applyRunControl;
+  if (runControl) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: false, name: 'control_run',
+    description: t('mcp.tool.controlRun', {}, locale), schema: runControlCommandSchema,
+    invoke: input => runControl.call(applications, runControlCommandSchema.parse(input)) });
   if (reserveRunTasks) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'reserve_run_tasks', description: t('mcp.tool.reserveRunTasks', {}, locale),
     schema: runReservationCommandSchema, invoke: (input: unknown) => reserveRunTasks.call(applications, runReservationCommandSchema.parse(input)) });
   const requestCancellation = applications.requestRunCancellation;

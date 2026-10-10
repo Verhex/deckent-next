@@ -41,7 +41,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
   if (!hasCliAction('run', action)) throw usage();
   const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
-    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
+    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(action === 'hold' ? ['--reason'] : action === 'resume' ? ['--task', '--answer'] : [])];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -96,12 +96,16 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     ].join('\n') });
     return;
   }
-  if (action === 'close' || action === 'resume') {
+  if (action === 'close' || action === 'resume' || action === 'hold') {
     const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
     if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage('--expected-revision');
     if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const answer = values.get('--answer'), taskId = values.get('--task'), holdReason = values.get('--reason');
+    if (action === 'hold' && !holdReason?.trim()) throw usage('--reason');
+    if (action === 'resume' && ((answer !== undefined) !== (taskId !== undefined) || (answer !== undefined && !answer.trim()))) throw usage('--answer');
     const result = await context.applyRunLifecycle(context.root ?? process.cwd(), runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId,
-      action, expectedRevision: Number(revision) }), { env: context.env ?? process.env });
+      action: answer === undefined ? action : 'answer', ...(holdReason === undefined ? {} : { holdReason }),
+      ...(answer === undefined ? {} : { answer, taskId }), expectedRevision: Number(revision) }), { env: context.env ?? process.env });
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => data ? t('cli.run.lifecycle.result', { run: runId, revision: data.lifecycle.run.revision,
       state: data.lifecycle.run.state.kind, reason: 'reason' in data.lifecycle.run.state ? data.lifecycle.run.state.reason : '—' }, locale) : '' }); return;
   }
@@ -131,6 +135,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
       ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
       ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
+      ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),
       run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
       ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale).map(line => `  ${line}`) : []),
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
@@ -139,6 +144,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
         ...(task.notAcceptedReason ? [t('task.acceptance.noChangeProduced', {}, locale)] : []),
         ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
         ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
+        ...(task.decision?.question ? [t('cli.run.lifecycle.question', { question: task.decision.question }, locale)] : []),
         t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale),
         ...(data.models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', { attempt: model.attemptId ?? '—', line: renderWorkerModelLine(model, locale) }, locale)),
         ...(task.handoffs ?? []).map(receipt => t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)),

@@ -25,6 +25,7 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
   if (attempt.revision !== evaluation.attemptRevision || binding.observedRevision !== evaluation.attemptRevision) stale();
   if (attempt.cancelRequested || run.cancelRequested || binding.observedKind !== 'exited' || attempt.lastObservation?.result.kind !== 'exited') notReady();
   if (dispatch.launch !== 'granted' || !dispatch.terminal || !dispatch.output || dispatch.terminal.interrupted === true) notReady();
+  if (evaluation.workerExit && dispatch.terminal.exitCode !== 0) notReady();
   const observed = attempt.lastObservation.result;
   if (dispatch.terminal.exitCode !== observed.exitCode || dispatch.terminal.signal !== observed.signal) stale();
   if (evaluation.workspaceChange && evaluation.workspaceChange.patchDigest !== dispatch.patch?.digest) stale();

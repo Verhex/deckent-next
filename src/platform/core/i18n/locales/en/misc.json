@@ -664,5 +664,6 @@
   "config.records.field.resource": "Layout resource",
   "config.records.budgetNote": "These are configured budgets. An existing spending account takes precedence; change its active limit in /model → Change budget.",
   "config.records.targetNote": "Removing this target restores the lower layer or the project repository. Only one Git work target is supported.",
-  "error.CONFIG_RECORD_INVALID": "The selected config record or file is invalid. Nothing was written."
+  "error.CONFIG_RECORD_INVALID": "The selected config record or file is invalid. Nothing was written.",
+  "mcp.tool.controlRun": "Hold new Run attempts with a reason or resume an operator-held Run under current Run cancel/reserve policy. Existing workers retain custody. Human answers and acceptance decisions are unavailable on MCP. Supply a stable commandId and exact expectedRevision; reuse the exact command after an uncertain response."
 }

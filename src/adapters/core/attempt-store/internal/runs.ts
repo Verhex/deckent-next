@@ -13,8 +13,7 @@ import { assertEvaluationDigests, readEvaluationDigests } from './evaluation-evi
 import type { RunWorkspaceCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from '#domain/index.js';
-import { runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
+import { proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 // Shared reads have no writer timing dependency and expose no mutation path.
 function decodeRunSnapshot(snapshot: unknown, scopeId: string, runId: string) {
   try {
@@ -133,7 +132,7 @@ export class SqliteRunJournal {
   /** Decision, CAS snapshot, replay receipt and the sealed audit event share one transaction. */
   async commitRunLifecycle(input: RunLifecycleWrite, audit?: (store: AuditStore, snapshot: import('#domain/index.js').RunSnapshot) => void): Promise<RunReceipt> {
     const parsed = runLifecycleWriteSchema.parse(input), command = JSON.stringify({ operation: 'run-lifecycle', ...parsed });
-    const { scopeId, runId, commandId, expectedRevision, now, timeoutMs } = parsed;
+    const { scopeId, runId, commandId, expectedRevision, now } = parsed;
     const fingerprint = (encoded: string) => {
       const source = JSON.parse(encoded) as Record<string, unknown>;
       if (source.operation !== 'run-lifecycle') throw new RunStoreError('RUN_COMMAND_CONFLICT');
@@ -141,7 +140,8 @@ export class SqliteRunJournal {
       const data = { ...runLifecycleWriteSchema.parse(source) }; delete (data as Partial<RunLifecycleWrite>).now;
       delete (data as Partial<RunLifecycleWrite>).timeoutMs; return JSON.stringify(data);
     };
-    if (['accept', 'reject'].includes(parsed.action) && (parsed.actor.assurance !== 'os-user' || !audit)) {
+    if ((['accept', 'reject', 'answer'].includes(parsed.action) && parsed.actor.assurance !== 'os-user')
+      || (['accept', 'reject', 'answer', 'hold'].includes(parsed.action) && !audit)) {
       throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     }
     if (parsed.action === 'expire') {
@@ -162,11 +162,7 @@ export class SqliteRunJournal {
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
       const binding = current.bindings.find(value => value.identity.taskId === parsed.taskId);
       const evidence = parsed.action === 'park-task' && binding ? Object.values(readEvaluationDigests(this.db, binding.identity)).filter((value): value is string => value !== undefined) : undefined;
-      const snapshot = parsed.action === 'close' ? closeParkedRun(current, expectedRevision, now, timeoutMs)
-        : parsed.action === 'resume' ? resumeParkedRun(current, expectedRevision, now, timeoutMs)
-          : parsed.action === 'expire' ? expireParkedRun(current, expectedRevision, now, timeoutMs)
-            : parsed.action === 'park-task' ? parkTaskAwaitingDecision(current, expectedRevision, parsed.taskId!, parsed.reason!, now, timeoutMs, undefined, evidence)
-              : resolveTaskDecision(current, expectedRevision, parsed.taskId!, parsed.action, now, timeoutMs);
+      const snapshot = proposeRunLifecycleWrite(current, parsed, !!audit, evidence);
       // Runtime checks that found no transition write neither a revision nor a replay receipt on every poll.
       if (parsed.action === 'expire' && snapshot.revision === current.revision) return Object.freeze({ commandId, command, snapshot });
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')

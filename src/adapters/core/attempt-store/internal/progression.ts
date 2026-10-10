@@ -13,7 +13,9 @@ export class SqliteRunProgression {
         WHERE i.actor_id=? AND i.issuer=? AND i.subject=?
           AND (? IS NULL OR (i.scope_id,i.run_id)>(?,?)) AND (? IS NULL OR EXISTS (SELECT 1 FROM scope_registry s WHERE s.scope_id=i.scope_id AND s.company_id=?))
           AND json_extract(r.snapshot,'$.cancelRequested')=0
-          AND json_extract(r.snapshot,'$.state.kind')='running'
+          AND (json_extract(r.snapshot,'$.state.kind')='running'
+            OR (json_extract(r.snapshot,'$.state.kind')='parked' AND json_extract(r.snapshot,'$.state.reason') IN ('operator-hold','needs-input')
+              AND EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ('active','evaluating','reconciling'))))
           AND EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p
             WHERE json_extract(p.value,'$.phase') IN ('pending','active','evaluating','reconciling'))
         ORDER BY i.scope_id,i.run_id LIMIT ?`).all(query.actor.id, query.actor.issuer, query.actor.subject,

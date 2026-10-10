@@ -155,7 +155,7 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     const wait = progress.phase === 'pending' ? pendingBlocker(ready.get(definition.id)!, e).pool : undefined;
     const provider = worker && worker.provider !== 'unknown' ? worker.provider : attempt?.provider ?? null;
     return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, ...(wait ? { waiting: wait } : {}), profile: profile ? { id: profile.id, version: profile.version } : null,
-      ...(progress.decision ? { decision: { reason: progress.decision.reason, sinceMs: progress.decision.since, deadlineMs: progress.decision.deadline } } : {}),
+      ...(progress.decision ? { decision: { reason: progress.decision.reason, ...(progress.decision.question ? { question: progress.decision.question } : {}), sinceMs: progress.decision.since, deadlineMs: progress.decision.deadline } } : {}),
       attempts: attempt ? 1 : 0, dependencies: taskDependencyIds(definition),
       ...(attempt?.handoffStart ? { handoffs: projectTaskHandoffs(snapshot, definition.id, [attempt.handoffStart]) } : {}), evaluation: { verdict: progress.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : verdict(progress.phase, attempt, progress.decision?.reason), observedAtMs: null, ...(progress.notAcceptedReason ? { reason: progress.notAcceptedReason } : {}) },
       lastAttempt: attempt ? Object.freeze({ ...(attempt.dispatch?.terminal?.container ? { container: attempt.dispatch.terminal.container } : {}), attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,

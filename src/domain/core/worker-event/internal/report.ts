@@ -5,6 +5,9 @@ import registry from './report-limits.json' with { type: 'json' };
 export const workerReportLimits = Object.freeze(registry.limits);
 export type WorkerReportLimits = typeof workerReportLimits;
 const limits = workerReportLimits;
+/** A stopped worker requests a new attempt with human input; this never accepts work. */
+export const workerNeedsInputSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('needs-input'),
+  question: z.string().trim().min(1).max(limits.handoffOpenQuestionChars) }).strict().readonly();
 export const workerHandoffNoteSchema = z.object({ toTask: z.string().min(1).max(limits.handoffTaskIdChars).optional(),
   summary: z.string().max(limits.handoffSummaryChars),
   artifacts: z.array(z.object({ name: z.string().min(1).max(limits.handoffArtifactNameChars), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).max(limits.handoffArtifacts),
@@ -18,6 +21,7 @@ export const workerFinalReportSchema = z.object({ schemaVersion: z.literal(1), s
   checks: z.array(z.object({ command: z.string().max(limits.checkCommandChars), outcome: z.enum(['passed', 'failed', 'not-run', 'unknown']) }).strict()).max(limits.checks),
   openIssues: z.array(z.string().max(limits.openIssueChars)).max(limits.openIssues),
   handoff: workerHandoffNoteSchema.optional(), sharedNotes: z.array(z.string().max(limits.sharedNoteChars)).max(limits.sharedNotes).optional(),
+  exit: workerNeedsInputSchema.optional(),
 }).strict().refine(value => new TextEncoder().encode(JSON.stringify(value)).byteLength <= limits.reportBytes);
 export type WorkerFinalReport = z.infer<typeof workerFinalReportSchema>;
 export const workerFinalReportResultSchema = z.discriminatedUnion('status', [

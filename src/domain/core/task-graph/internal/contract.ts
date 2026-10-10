@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { criterionDefinitionSchema } from './criteria.js';
 import { workInputSchema } from './work-input.js';
+import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
+import { workerNeedsInputSchema, workerReportLimits } from '#domain/core/worker-event/index.js';
 
 // Wire invariants, not configurable scheduling policy. Kind definitions live in registries.
 // v4 adds explicit accepted-patch dependency edges. Read migration accepts v2/v3 unchanged: their string edges keep fixed-base semantics.
@@ -40,13 +42,17 @@ export const taskProgressSchema = z.object({
   taskId: identity,
   phase: z.enum(['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling', 'skipped', 'awaiting-decision']),
   skippedReason: z.enum(['dependency-failed', 'dependency-cancelled']).optional(),
-  decision: z.object({ reason: z.enum(['evaluation-unknown', 'evaluation-not-ready']), since: counterSchema, deadline: counterSchema, evaluationId: identity.optional(),
+  decision: z.object({ reason: z.enum(['evaluation-unknown', 'evaluation-not-ready', 'needs-input']), since: counterSchema, deadline: counterSchema, evaluationId: identity.optional(),
+    question: workerNeedsInputSchema.unwrap().shape.question.optional(),
     evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(3).readonly().optional() }).strict().readonly().optional(),
   notAcceptedReason: z.literal('no-change-produced').optional(),
   acceptedEvidence: z.literal('model-unverified').optional(),
+  inputAnswer: z.object({ schemaVersion: z.literal(1), source: attemptIdentitySchema, question: workerNeedsInputSchema.unwrap().shape.question,
+    answer: z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars) }).strict().readonly().optional(),
   unresolvedEffects: z.boolean(),
   eligibility: taskEligibilitySchema,
 }).strict().superRefine((state, context) => {
+  if (state.decision && ((state.decision.reason === 'needs-input') !== (state.decision.question !== undefined))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_PROGRESS_STATE_INCONSISTENT' });
   if ((state.notAcceptedReason !== undefined && state.phase !== 'failed') || (state.phase === 'skipped') !== (state.skippedReason !== undefined) || (state.phase === 'awaiting-decision') !== (state.decision !== undefined) || (state.acceptedEvidence !== undefined && state.phase !== 'accepted') || (state.decision && state.decision.deadline <= state.decision.since)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_PROGRESS_STATE_INCONSISTENT' });
   if (['accepted', 'skipped', 'awaiting-decision'].includes(state.phase) && state.unresolvedEffects) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_ACCEPTED_WITH_UNRESOLVED_EFFECT' });

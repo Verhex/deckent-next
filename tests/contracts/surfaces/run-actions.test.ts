@@ -45,3 +45,24 @@ it.each(['close', 'resume'] as const)('forwards the same typed %s command and pr
   expect(received).toEqual({ schemaVersion: 1, commandId: 'decision', scopeId: 's', runId: 'r', action, expectedRevision: 3 });
   expect(JSON.parse(text).lifecycle.run.state).toEqual(run.state);
 });
+
+it('passes a hold reason and a resume answer through the shared lifecycle contract', async () => {
+  const received: unknown[] = [];
+  const context = { stdout: { write() {} }, async applyRunLifecycle(_root: string, command: unknown) {
+    received.push(command); return { schemaVersion: 1 as const, layout: response.layout, lifecycle: { schemaVersion: 1 as const, commandId: 'command', run: {} as never } };
+  } };
+  const base = ['--scope', 's', '--id', 'r', '--command-id', 'command', '--expected-revision', '3', '--json'];
+  expect(await main(['run', 'hold', ...base, '--reason', 'Release window'], context)).toBe(0);
+  expect(await main(['run', 'resume', ...base, '--task', 't', '--answer', 'EU'], context)).toBe(0);
+  expect(received).toEqual([
+    { schemaVersion: 1, action: 'hold', holdReason: 'Release window', commandId: 'command', scopeId: 's', runId: 'r', expectedRevision: 3 },
+    { schemaVersion: 1, action: 'answer', taskId: 't', answer: 'EU', commandId: 'command', scopeId: 's', runId: 'r', expectedRevision: 3 },
+  ]);
+});
+
+it.each([['hold'], ['hold', '--reason', ' '], ['resume', '--task', 't'], ['resume', '--answer', 'EU']])('rejects incomplete intervention flags %j before invoking the application', async flags => {
+  let calls = 0;
+  expect(await main(['run', flags[0]!, '--scope', 's', '--id', 'r', '--command-id', 'command', '--expected-revision', '3', ...flags.slice(1)],
+    { stderr: { write() {} }, async applyRunLifecycle() { calls++; return {} as never; } })).toBe(2);
+  expect(calls).toBe(0);
+});
