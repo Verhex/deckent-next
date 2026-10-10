@@ -65,6 +65,11 @@ Engine consumes public platform/domain/capabilities contracts; adapters implemen
 only layer that wires adapters to applications and surfaces. Cross-unit dependencies and cycles are declared and
 gated in `arch.json`; package imports use public `index.ts` barrels and `internal/` remains package-private.
 
+The effect engine owns sandbox write-set application and result description through classification, decision, parent-creation and effect
+ports; host-shell retains native listing, filesystem scanning and directory custody. The workspaces engine owns file ranking and index-cache
+freshness through an explicit walk and clock; workspace-read retains descriptor access and the runtime wrapper's defaults. Existing adapter
+exports remain aliases of these implementations, preserving caller contracts, approval order, audit ownership and result text.
+
 Current compiled entries include the CLI and MCP composition binaries; the CLI starts the local runtime service. SDK, CLI and
 MCP share the implemented inspection, activation, installation and runtime-control contracts; capability-specific
 linked execution evidence defines where parity is complete. New package names have no compatibility import aliases.

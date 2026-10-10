@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRuntimeWorkspaceFileHost } from '#adapters/index.js';
+import { createWorkspaceFileIndexCache } from '#engine/core/workspaces/index.js';
 
 import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 
@@ -14,6 +15,37 @@ async function project() {
   return root;
 }
 const until = async (check: () => Promise<boolean>) => { for (let attempt = 0; attempt < 200; attempt++) { if (await check()) return; await new Promise(done => setTimeout(done, 10)); } throw new Error('TIMEOUT'); };
+
+describe('workspace file index failure and scope boundaries', () => {
+  it('retries a failed initial walk and shares the next pending walk', async () => {
+    const failure = new Error('unreadable workspace');
+    let calls = 0;
+    const fresh = { paths: ['one.ts'], truncated: false, incomplete: false };
+    const host = createWorkspaceFileIndexCache(async () => {
+      if (++calls === 1) throw failure;
+      return fresh;
+    }, 100, () => 0, 1_000);
+    await expect(host.index('/project', [])).rejects.toBe(failure);
+    const retry = host.index('/project', []);
+    expect(host.index('/project', [])).toBe(retry);
+    expect(await retry).toBe(fresh);
+    expect(calls).toBe(2);
+  });
+
+  it('keeps indexes for different roots and deny lists separate', async () => {
+    const walked: string[] = [];
+    const host = createWorkspaceFileIndexCache(async (root, deny) => {
+      const path = `${root}:${deny.join(',')}`;
+      walked.push(path);
+      return { paths: [path], truncated: false, incomplete: false };
+    }, 100, () => 0, 1_000);
+    expect((await host.index('/a', ['private'])).paths).toEqual(['/a:private']);
+    expect((await host.index('/a', [])).paths).toEqual(['/a:']);
+    expect((await host.index('/b', ['private'])).paths).toEqual(['/b:private']);
+    expect((await host.index('/a', ['private'])).paths).toEqual(['/a:private']);
+    expect(walked).toEqual(['/a:private', '/a:', '/b:private']);
+  });
+});
 
 // TERM-UX-1 a: past its quiet time the list still answers at once; a background walk refreshes it; only a very old list is awaited.
 describe.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE)('runtime workspace file host (stale while revalidate; requires Linux /proc/self/fd custody)', () => {

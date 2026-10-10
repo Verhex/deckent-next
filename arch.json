@@ -547,7 +547,8 @@
         "src/engine/core/backup",
         "src/composition/core/secrets",
         "src/platform/core/i18n",
-        "src/adapters/core/installation-files"
+        "src/adapters/core/installation-files",
+        "src/engine/core/workspaces"
       ],
       "plan": "EXECUTION"
     },
@@ -1520,7 +1521,8 @@
         "src/adapters/core/mcp-import",
         "src/composition/core/approvals",
         "src/composition/core/config",
-        "src/adapters/core/provider-connect"
+        "src/adapters/core/provider-connect",
+        "src/engine/core/workspaces"
       ],
       "plan": "SURFACES"
     },
@@ -1813,7 +1815,8 @@
         "src/adapters/core/host-shell",
         "src/adapters/core/mcp-client",
         "src/platform/core/host",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/engine/core/effect"
       ],
       "plan": "SURFACES"
     },
@@ -1830,7 +1833,8 @@
     "src/adapters/core/workspace-read": {
       "dependencies": [
         "src/domain/core/agent-tool",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/engine/core/workspaces"
       ],
       "plan": "SURFACES"
     },
