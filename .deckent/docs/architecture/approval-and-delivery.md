@@ -619,8 +619,13 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   canonical, owned, not group/other-writable directory, with the shared local invocation (no network/hooks/fsmonitor/system+global
   config; now owned by `git-workspace`, re-exported by `git-patch`).
 - **Named baseRef.** Run base = `baseRef` tip (not checkout HEAD); delivery `update-ref` verifies `baseRef`; the integration observation
-  compares the `baseRef` tip and does not read the target checkout's index or files. A moved base branch is the typed
-  `PATCH_BASE_ADVANCED` (observation and delivery) instead of `PATCH_CONFLICT`; recovery = a new Run on the current base. K4 = A: for a
+  compares the `baseRef` tip and does not read the target checkout's index or files. DOGFOOD-PARALLEL-DELIVERY (2026-10-10): the same
+  approved immutable patch may be prepared again on a descendant tip when every touched before-mode/blob identity is unchanged; candidate
+  manifest / delivery plan v2 record the original `baseCommit` and the `effectiveBaseCommit` (v1 evidence stays readable; earlier v1-only
+  binaries cannot read v2), and adoption CAS and the delivery commit parent use the effective base. Prepared/verified candidates stay pinned
+  (another tip movement needs a fresh candidate, reverified). Overlap, rewritten history, a stale prepared candidate or a publication race is
+  the typed `PATCH_BASE_ADVANCED` (observation and delivery) instead of `PATCH_CONFLICT`, with no new delivery-reference effect; recovery =
+  a new Run on the current base. No new transition/effect flow, policy bypass or approval relaxation; ledger unchanged. K4 = A: for a
   self/dogfood target `baseRef` is the adoption target branch and the target checkout HEAD is detached; the fenced adoption advances the
   base and the next Run starts from the adopted commit (proven).
 - **Policy.** Vocabulary (schema 1, additive) `work-target {use, adopt}`, resource id = target id. `use` at Run admission and reservation
