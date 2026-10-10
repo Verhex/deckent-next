@@ -855,6 +855,7 @@
     },
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/engine/core/monitor",
         "src/domain/core/agent-turn",
         "src/platform/core/output",
@@ -966,6 +967,8 @@
     },
     "src/surfaces/core/terminal-ledger": {
       "dependencies": [
+        "src/platform/core/redaction",
+        "src/platform/core/output",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/approval-presentation",
         "src/domain/core/inference-serving",
@@ -1454,6 +1457,7 @@
     },
     "src/composition/core/agent-turn": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/adapters/core/approval-store",
         "src/adapters/core/local-keyring",
         "src/engine/core/approval",
@@ -2110,6 +2114,7 @@
     },
     "src/engine/core/audit": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/domain/core/audit",
         "src/domain/core/command",
         "src/platform/core/integrity"

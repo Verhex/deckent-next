@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
-import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, approvedWriteEntryAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
+import { EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
+import { AuditApplication, recordAuditSummary, PolicyAuthorizationError, agentCallAuditEvent, approvedWriteEntryAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding, type SessionStanding, type ShellPermissionTier,
   trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
-import { getConfigKnownSecrets, type TrustedClock } from '#platform/index.js';
+import { getConfigKnownSecrets, redactForRecord, type TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -81,10 +81,10 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     return 'read';
   };
   const withAudit = <T>(work: (audit: AuditApplication) => T) => withAgentAudit(context, work);
-  const callSummary = (tool: AgentToolSpec, args: Record<string, unknown>) => tool.toolClass === 'edit' ? { kind: 'edit' as const, path: edits(tool.name)?.target(tool.name, args) ?? '' }
-    : mcps(tool) ? { kind: 'mcp' as const, tool: (mcp?.display(tool.name) ?? tool.name).slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: agentToolArgumentsDigest(tool.name, args) }
-    : fetches(tool) ? { kind: 'fetch' as const, host: hostOf(args).slice(0, 253), argsDigest: agentToolArgumentsDigest(tool.name, args) }
-    : { kind: 'shell' as const, head: String(args['command'] ?? '').slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: agentToolArgumentsDigest(tool.name, args) };
+  const callSummary = (tool: AgentToolSpec, args: Record<string, unknown>) => recordAuditSummary(tool.toolClass === 'edit' ? { kind: 'edit' as const, path: edits(tool.name)?.target(tool.name, args) ?? '' }
+    : mcps(tool) ? { kind: 'mcp' as const, tool: (mcp?.display(tool.name) ?? tool.name), argsDigest: agentToolArgumentsDigest(tool.name, args) }
+    : fetches(tool) ? { kind: 'fetch' as const, host: hostOf(args), argsDigest: agentToolArgumentsDigest(tool.name, args) }
+    : { kind: 'shell' as const, head: String(args['command'] ?? ''), argsDigest: agentToolArgumentsDigest(tool.name, args) }, knownSecrets);
   const standingEvent = (phase: 'remembered' | 'used', tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, cell: Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
     revision: string, standing: Parameters<typeof standingApprovalAuditEvent>[0]['standing'], approvalId: string | null, summary = callSummary(tool, args)) => standingApprovalAuditEvent({ phase, scopeId, turnId, execution, callId,
     principal: context.principal, revision, atMs: clock.sample().wallMs, standing, cell, approvalId, tool, argsDigest: agentToolArgumentsDigest(tool.name, args), summary });
@@ -105,7 +105,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const audited = fresh.relaxation !== null || fresh.fullAccess !== undefined || fresh.standing !== undefined;
       if (audited) {
         const event = fresh.standing ? standingEvent('used', tool, { path: rel }, execution, callId, cell as Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
-          fresh.revision, fresh.standing, null, { kind: 'edit', path: rel }) : agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: rel },
+          fresh.revision, fresh.standing, null, { kind: 'edit', path: redactForRecord(rel, knownSecrets).slice(0, 4096) }) : agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: redactForRecord(rel, knownSecrets).slice(0, 4096) },
           eventId: permissionModeEventId(scopeId, turnId, execution, sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`), 'sandbox-write'),
           call: { turnId, round: execution.round, index: execution.index, callId } }, fresh);
         try { await withAudit(audit => audit.record(event)); } catch { return { ok: false, reason: 'audit-unavailable' }; }
@@ -133,7 +133,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       if (first.ok || (first.reason !== 'approval-required' && first.reason !== 'write-floor')) return first;
       const again = () => decide(tool, cell, undefined, { path: rel }, undefined, WORKSPACE_FILE_WRITE_OPERATION.operation), fresh = await again();
       if (!fresh || fresh.decision === 'deny') return { ok: false, reason: 'denied-by-policy' };
-      const event = approvedWriteEntryAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: rel },
+      const event = approvedWriteEntryAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: redactForRecord(rel, knownSecrets).slice(0, 4096) },
         eventId: permissionModeEventId(scopeId, turnId, execution, sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`), 'sandbox-write-approved'),
         call: { turnId, round: execution.round, index: execution.index, callId } }, fresh.revision, approvalId, cell);
       try { await withAudit(audit => audit.record(event)); } catch { return { ok: false, reason: 'audit-unavailable' }; }
@@ -249,7 +249,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
         // FA-TRACKED-WARN: what a full-access shell call did to tracked files is sealed after its effect (false: not recorded; the call's line says so).
         fullAccess && tool.toolClass === 'shell' ? change => withAudit(audit => audit.record(trackedFilesAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool,
           summary: callSummary(tool, args), eventId: permissionModeEventId(scopeId, turnId, execution, agentToolArgumentsDigest(tool.name, args), 'tracked-files-changed'),
-          call: { turnId, round: execution.round, index: execution.index, callId } }, fresh.revision, change))).then(() => true, () => false) : undefined);
+          call: { turnId, round: execution.round, index: execution.index, callId } }, fresh.revision, { deleted: { ...change.deleted, paths: change.deleted.paths.map(path => redactForRecord(path, knownSecrets).slice(0, 4096)) },
+            overwritten: { ...change.overwritten, paths: change.overwritten.paths.map(path => redactForRecord(path, knownSecrets).slice(0, 4096)) } }))).then(() => true, () => false) : undefined);
       } finally { await close(); }
     },
   };

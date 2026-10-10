@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { snapshotKnownSecrets } from '#platform/index.js';
 import { fitStatusRow, renderAssistantStream, renderCompleteReply, startAssistantStream, streamStepEntries, worklineStatusSegments,
   type AssistantStreamState, type AssistantUnit, type TurnDelta } from '#surfaces/core/terminal/index.js';
 
@@ -111,5 +112,43 @@ describe('width-aware status row', () => {
   it('keeps the state visible on a tiny terminal', () => {
     expect(text(12)).toContain('⠋');
     expect(text(12).length).toBeLessThanOrEqual(12);
+  });
+});
+
+// W12: assertions inspect each emitted step, including dynamic previews, before the complete value exists.
+describe('record redaction before stream segmentation and preview cuts', () => {
+  const value = 'w12-Fictitious.Q7x8Y9z0', multiline = 'W12-first-line\nsecond-line-012345';
+  const known = snapshotKnownSecrets([{ name: 'W12', value }, { name: 'LINES', value: multiline }]);
+  const noFragments = (text: string, source: string) => {
+    for (const line of source.split('\n')) for (let at = 0; at + 5 <= line.length; at++) expect(text).not.toContain(line.slice(at, at + 5));
+  };
+  it.each([value, multiline, value.slice(0, 10)+'\n'+value.slice(10)])('protects live and Static answer units at every delta boundary: %s', source => {
+    let state = startAssistantStream(0, known);
+    const units: AssistantUnit[] = [];
+    for (const char of `visible ${source} after\n`) {
+      const step = renderAssistantStream(state, { kind: 'text', text: char }, 1); state = step.state; units.push(...step.staticUnits);
+      noFragments(JSON.stringify({ units, tail: step.liveTail }), source);
+    }
+    const done = renderAssistantStream(state, { kind: 'done', finish: 'stop' }, 2); units.push(...done.staticUnits);
+    noFragments(JSON.stringify(units), source); expect(JSON.stringify(units)).toContain(source === multiline ? '‹secret:LINES›' : '‹secret:W12›');
+  });
+  it('protects reasoning and tool output before the bounded tail loses credential context, and resets for another call', () => {
+    let state = startAssistantStream(0, known);
+    for (const char of value) {
+      const step = renderAssistantStream(state, { kind: 'reasoning', text: char }, 1); state = step.state;
+      noFragments(step.reasoningPreview.join('\n'), value);
+    }
+    state = renderAssistantStream(state, { kind: 'tool', phase: 'started', callId: 'c1', name: 'run_shell', target: null, status: null, ms: null }, 2).state;
+    for (const delta of [{ kind: 'output', callId: 'c1', stream: 'stdout', text: value.slice(0, 10) },
+      { kind: 'output', callId: 'c1', stream: 'stderr', text: 'plain diagnostic\n' }, { kind: 'output', callId: 'c1', stream: 'stdout', text: value.slice(10)+' ' }] as const) {
+      const next = renderAssistantStream(state, delta, 3); state = next.state; noFragments(next.activeTool?.output ?? '', value);
+    }
+    for (const text of [...value, ' ', 'sk-'+ 'q'.repeat(5000), ' tail']) {
+      const step = renderAssistantStream(state, { kind: 'output', callId: 'c1', stream: 'stdout', text }, 3); state = step.state;
+      noFragments(step.activeTool?.output ?? '', value); expect(step.activeTool?.output ?? '').not.toContain('qqqqq');
+    }
+    state = renderAssistantStream(state, { kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: null, status: 'ok', ms: 1 }, 4).state;
+    state = renderAssistantStream(state, { kind: 'tool', phase: 'started', callId: 'c2', name: 'run_shell', target: null, status: null, ms: null }, 5).state;
+    expect(renderAssistantStream(state, { kind: 'output', callId: 'c2', stream: 'stdout', text: 'plain output' }, 6).activeTool?.output).toBe('plain output');
   });
 });

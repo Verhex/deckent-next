@@ -289,7 +289,7 @@ export function WorklineApp(props: WorklineProps) {
       if (signal.aborted) return;
       if (props.streamTurn) {
         // Completed units enter scrollback; the open tail names what the active turn waits for.
-        const opened = openAssistantStream(startedAtMs);
+        const opened = openAssistantStream(startedAtMs, props.knownSecrets);
         let state = opened.state, answer = '';
         setLive({ step: opened, lead: true }); setTurnRunning(true);
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];

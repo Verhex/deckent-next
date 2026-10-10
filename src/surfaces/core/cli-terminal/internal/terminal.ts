@@ -235,7 +235,7 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
           const stop = new AbortController(), signal = context.signal ? AbortSignal.any([context.signal, stop.signal]) : stop.signal;
           try {
-            const turn = await streamLineTurn(stream(messages, signal), { out: context.stdout ?? process.stdout, err: context.stderr ?? process.stderr, cancel: () => stop.abort(), project,
+            const turn = await streamLineTurn(stream(messages, signal), { out: context.stdout ?? process.stdout, err: context.stderr ?? process.stderr, cancel: () => stop.abort(), ...(known ? { knownSecrets: known } : {}), project,
               toolLine: call => t('terminal.line.tool', { name: call.name, target: call.target ?? '-', status: call.status ?? '-', ms: call.ms ?? 0 }, locale),
               approvalLine: summary => t('terminal.line.approvalRefused', { summary }, locale) });
             // Only a finished turn continues the conversation; a cancelled or failed one leaves the question without an answer.
@@ -287,7 +287,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (parsed.action === 'snapshot') {
     const profile = readInferenceServingProfile(config);
     if (!profile) { emit(t('inference.notConfigured', {}, locale), { ...sinks, level: 'error' }); throw ErrorRegistry.createError('CLI_USAGE'); }
-    const snapshot = buildWorklineBridgeSnapshot({ profile, plan: buildInferenceServingPlan(profile), tty: { columns: tty.columns, rows: tty.rows }, ledgerTail: [] });
+    const snapshot = buildWorklineBridgeSnapshot({ profile, plan: buildInferenceServingPlan(profile), tty: { columns: tty.columns, rows: tty.rows }, ledgerTail: [], knownSecrets: getConfigKnownSecrets(config) });
     emit(snapshot, { ...sinks, json: true, render: value => formatValue(value) });
     return;
   }
