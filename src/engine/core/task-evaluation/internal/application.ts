@@ -113,7 +113,15 @@ export class TaskEvaluationApplication {
     if (!attempt || !dispatch?.terminal || !dispatch.output) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
     const task = run.graph.tasks.find(value => value.id === identity.taskId);
     if (!task) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
-    if (task.workInput && !dispatch.patch && this.preparePatch && run.revision === command.expectedRevision && !run.cancelRequested
+    // A typed input request is consumed only from complete, exact-attempt retained output after a clean host exit.
+    const manifestEvaluation = { schemaVersion: 1, evaluationId: command.commandId, identity, graphRevision: run.graph.revision,
+      attemptRevision: attempt.revision, criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown', evidenceIds: ['dispatch-output'] })) };
+    await verifyDispatchEvaluationEvidence(manifestEvaluation, dispatch.request, [{ evidenceId: 'dispatch-output', receipt: dispatch.output }],
+      { async readDispatch() { return dispatch; } }, this.artifacts, this.limits);
+    const retained = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);
+    const finalReport = readWorkerFinalReport(retained.stdout);
+    const workerExit = dispatch.terminal.exitCode === 0 && dispatch.terminal.interrupted !== true && finalReport.status === 'reported' ? finalReport.report.exit : undefined;
+    if (!workerExit && task.workInput && !dispatch.patch && this.preparePatch && run.revision === command.expectedRevision && !run.cancelRequested
       && !attempt.cancelRequested && dispatch.terminal.interrupted !== true) {
       try { await this.preparePatch(identity); }
       catch (error) {
@@ -130,6 +138,7 @@ export class TaskEvaluationApplication {
       graphRevision: run.graph.revision, attemptRevision: attempt.revision,
       criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown', evidenceIds: [evidenceId] })),
       ...(model ? { model } : {}), ...recovery,
+      ...(workerExit ? { workerExit } : {}),
     });
     proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, proposed, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
     await verifyDispatchEvaluationEvidence(proposed, dispatch.request, [{ evidenceId, receipt: dispatch.output }],
@@ -138,14 +147,14 @@ export class TaskEvaluationApplication {
     for (const item of proposed.criteria) {
       const criterion = run.graph.criterionDefinitions.find(value => value.id === item.criterionId)!;
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;
-      criteria.push({ ...item, verdict: await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal) });
+      criteria.push({ ...item, verdict: workerExit ? 'unknown' : await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal) });
     }
     const output = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);
     const handoff = evaluateHandoff(output);
     const report = readWorkerFinalReport(output.stdout);
     const notes = report.status === 'reported' ? report.report.sharedNotes : undefined;
     const sharedNotes = notes?.length ? { count: notes.length, digest: createHash('sha256').update(JSON.stringify(notes)).digest('hex') } : undefined;
-    const workspaceChange = await readWorkspaceChange(task.workInput, identity, dispatch, this.artifacts, this.limits.maxTotalBytes);
+    const workspaceChange = workerExit ? undefined : await readWorkspaceChange(task.workInput, identity, dispatch, this.artifacts, this.limits.maxTotalBytes);
     const evaluation = taskEvaluationSchema.parse({ ...proposed, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}), ...(workspaceChange ? { workspaceChange } : {}) });
     const restriction = await this.unknownPolicy?.decide(evaluation, principal);
     if (restriction !== undefined && restriction !== 'wait' && restriction !== 'fail') throw new TaskEvaluationError('TASK_EVALUATION_INVALID');

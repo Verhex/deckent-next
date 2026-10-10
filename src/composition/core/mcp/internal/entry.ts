@@ -15,7 +15,7 @@ import { listConfiguredSecretNames } from '#composition/core/secrets/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { describeMcpInference } from './inference-query.js';
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
-import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
+import { applyConfiguredRunLifecycle, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
 import { recordConfiguredMcpIngress } from './ingress.js';
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
 /** Every handler, including direct configured writes, runs as the distinct MCP actor. */
@@ -30,6 +30,7 @@ export async function main(root = process.cwd()) {
   const operationCatalog = await describeConfiguredOperationTools(root);
   return serveStdio(() => createMcpServer(mcpApplications({ ...runtime, operationCatalog, inspectDeclaredModels: () => inspectDeclaredModels(root),
     recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
+    applyRunControl: command => applyConfiguredRunLifecycle(root, command),
     inspectDecision: query => inspectConfiguredDecision(root, query),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
     inspectToolchainCurrency: () => inspectConfiguredToolchainCurrency(root),

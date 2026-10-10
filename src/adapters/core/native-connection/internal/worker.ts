@@ -126,18 +126,21 @@ export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boole
     openIssues: texts(l.openIssues, l.openIssueChars), handoff: reportObject({ toTask: reportText(l.handoffTaskIdChars), summary: reportText(l.handoffSummaryChars),
       artifacts: { type: 'array', maxItems: l.handoffArtifacts, items: reportObject({ name: reportText(l.handoffArtifactNameChars), digest: { type: 'string', pattern: '^[a-f0-9]{64}$' } }) },
       openQuestions: texts(l.handoffOpenQuestions, l.handoffOpenQuestionChars) }, ['summary', 'artifacts', 'openQuestions']), sharedNotes: texts(l.sharedNotes, l.sharedNoteChars),
+    exit: reportObject({ schemaVersion: { type: 'integer', const: 1 }, kind: { type: 'string', const: 'needs-input' },
+      question: { ...reportText(l.handoffOpenQuestionChars), minLength: 1 } }),
   }, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues']);
   if (strictSchema) {
     // OpenAI strict schemas require all properties. Null is transport-only and becomes absence before sealing.
     const handoff = schema.properties.handoff as ReturnType<typeof reportObject>;
     handoff.required = Object.keys(handoff.properties); handoff.properties.toTask = { type: ['string', 'null'], maxLength: l.handoffTaskIdChars };
     schema.properties.handoff = { anyOf: [handoff, { type: 'null' }] }; schema.required = Object.keys(schema.properties);
+    schema.properties.exit = { anyOf: [schema.properties.exit, { type: 'null' }] };
   }
   return schema;
 }
 interface HandoffNote { toTask?: string; summary: string; artifacts: { name: string; digest: string }[]; openQuestions: string[] }
 interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown' }[]; openIssues: string[];
-  handoff?: HandoffNote; sharedNotes?: string[] }
+  handoff?: HandoffNote; sharedNotes?: string[]; exit?: { schemaVersion: 1; kind: 'needs-input'; question: string } }
 type FinalReportResult = { status: 'reported'; report: FinalReport } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' };
 export function validateFinalReport(value: unknown, secrets: readonly string[], l: ReportLimits): FinalReportResult {
   if (Buffer.byteLength(JSON.stringify(value) ?? '') > l.reportBytes) return { status: 'unavailable', reason: 'oversized' };
@@ -149,9 +152,12 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
     && (!Object.hasOwn(v, 'toTask') || (text(v.toTask, l.handoffTaskIdChars) && v.toTask.length > 0)) && text(v.summary, l.handoffSummaryChars)
     && texts(v.openQuestions, l.handoffOpenQuestions, l.handoffOpenQuestionChars) && Array.isArray(v.artifacts) && v.artifacts.length <= l.handoffArtifacts
     && v.artifacts.every(a => object(a, ['name', 'digest']) && text(a.name, l.handoffArtifactNameChars) && a.name.length > 0 && typeof a.digest === 'string' && /^[a-f0-9]{64}$/.test(a.digest));
-  if (!object(value, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues'], ['handoff', 'sharedNotes']) || value.schemaVersion !== 1
+  const needsInput = (v: unknown) => object(v, ['schemaVersion', 'kind', 'question']) && v.schemaVersion === 1 && v.kind === 'needs-input'
+    && text(v.question, l.handoffOpenQuestionChars) && v.question.trim().length > 0;
+  if (!object(value, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues'], ['handoff', 'sharedNotes', 'exit']) || value.schemaVersion !== 1
     || !text(value.summary, l.summaryChars) || !texts(value.changedFiles, l.changedFiles, l.changedFileChars) || !texts(value.openIssues, l.openIssues, l.openIssueChars)
     || (Object.hasOwn(value, 'handoff') && !handoff(value.handoff)) || (Object.hasOwn(value, 'sharedNotes') && !texts(value.sharedNotes, l.sharedNotes, l.sharedNoteChars))
+    || (Object.hasOwn(value, 'exit') && !needsInput(value.exit))
     || !Array.isArray(value.checks) || value.checks.length > l.checks || !value.checks.every(c => object(c, ['command', 'outcome'])
       && text(c.command, l.checkCommandChars) && typeof c.outcome === 'string' && ['passed', 'failed', 'not-run', 'unknown'].includes(c.outcome))) return { status: 'unavailable', reason: 'invalid' };
   const input = value as unknown as FinalReport, red = (text: string, max: number) => redactText(text, secrets, max);
@@ -160,7 +166,8 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
     ...(input.handoff ? { handoff: { ...(input.handoff.toTask === undefined ? {} : { toTask: red(input.handoff.toTask, l.handoffTaskIdChars) }),
       summary: red(input.handoff.summary, l.handoffSummaryChars), artifacts: input.handoff.artifacts.map(a => ({ name: red(a.name, l.handoffArtifactNameChars), digest: red(a.digest, a.digest.length) })),
       openQuestions: input.handoff.openQuestions.map(x => red(x, l.handoffOpenQuestionChars)) } } : {}),
-    ...(input.sharedNotes ? { sharedNotes: input.sharedNotes.map(x => red(x, l.sharedNoteChars)) } : {}) };
+    ...(input.sharedNotes ? { sharedNotes: input.sharedNotes.map(x => red(x, l.sharedNoteChars)) } : {}),
+    ...(input.exit ? { exit: { schemaVersion: 1, kind: 'needs-input', question: red(input.exit.question.trim(), l.handoffOpenQuestionChars) } } : {}) };
   if (report.handoff && !handoff(report.handoff)) return { status: 'unavailable', reason: 'invalid' };
   return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
 }
@@ -178,6 +185,7 @@ function finalReportCollector(provider: string, secrets: readonly string[], limi
         try {
           const value = JSON.parse(String(item.text)) as Record<string, unknown>;
           if (value && typeof value === 'object' && !Array.isArray(value)) {
+            if (value.exit === null) delete value.exit;
             if (value.handoff === null) delete value.handoff;
             else if (value.handoff && typeof value.handoff === 'object' && !Array.isArray(value.handoff) && (value.handoff as Record<string, unknown>).toTask === null) delete (value.handoff as Record<string, unknown>).toTask;
           }

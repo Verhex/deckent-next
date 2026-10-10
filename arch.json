@@ -597,7 +597,8 @@
         "src/domain/core/attempt",
         "src/domain/core/primitives",
         "src/domain/core/task-graph",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event"
       ],
       "plan": "CONTRACT"
     },
@@ -614,7 +615,9 @@
     "src/domain/core/task-graph": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/attempt",
+        "src/domain/core/worker-event"
       ],
       "plan": "CONTRACT"
     },

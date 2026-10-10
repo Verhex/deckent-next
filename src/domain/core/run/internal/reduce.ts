@@ -20,6 +20,8 @@ export function reserveRunTasks(input: unknown, expectedRevision: number, identi
   const ready = new Set(inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, progress: run.progress, now }).filter(task => task.disposition === 'ready').map(task => task.taskId));
   const selected = new Set<string>(); const attempts = new Set(run.bindings.map(binding => binding.identity.attemptId));
   for (const id of identities) {
+    const answer = run.progress.find(task => task.taskId === id.taskId)?.inputAnswer;
+    if (answer && (id.generation !== answer.source.generation + 1 || id.attemptId === answer.source.attemptId)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     if (id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId || id.layoutRevision !== run.identity.layoutRevision || attempts.has(id.attemptId) || selected.has(id.taskId) || run.bindings.some(binding => binding.identity.taskId === id.taskId)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     if (!ready.has(id.taskId)) throw new RunError('RUN_TASK_NOT_READY');
     selected.add(id.taskId); attempts.add(id.attemptId);

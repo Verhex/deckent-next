@@ -10,7 +10,7 @@ export function readRunBoundDispatch(db: DatabaseSync, identityInput: unknown) {
   let run;
   try { run = runSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
   if (run.revision !== row.revision || run.identity.scopeId !== identity.scopeId || run.identity.runId !== identity.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
-  if (!run.bindings.some(binding => sameAttemptIdentity(binding.identity, identity))) throw new RunStoreError('RUN_STORE_CONFLICT');
+  if (![...run.bindings, ...run.previousBindings ?? []].some(binding => sameAttemptIdentity(binding.identity, identity))) throw new RunStoreError('RUN_STORE_CONFLICT');
   const recordRow = db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
   if (!recordRow) return Object.freeze({ run, dispatch: null });
   let record;

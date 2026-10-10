@@ -85,7 +85,7 @@ export class RunReservationApplication {
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
       if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,
-        attemptId: identitySchema.parse(this.runtime.attemptId()), generation: 1 }));
+        attemptId: identitySchema.parse(this.runtime.attemptId()), generation: (run.progress.find(task => task.taskId === taskId)?.inputAnswer?.source.generation ?? 0) + 1 }));
       await this.authorization.authorize('reserve', command, principal);
       await this.poolAuthorization.authorize(policy.poolId, command.scopeId, principal);
       return this.project(await this.store.reserveRunTasks({ commandId: command.commandId, actor,

@@ -57,7 +57,7 @@ export interface MonitorAttempt {
 }
 export interface MonitorTask {
   readonly waiting?: import('#engine/core/runs/index.js').PoolWait;
-  readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready'; readonly sinceMs: number; readonly deadlineMs: number };
+  readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready' | 'needs-input'; readonly question?: string; readonly sinceMs: number; readonly deadlineMs: number };
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
