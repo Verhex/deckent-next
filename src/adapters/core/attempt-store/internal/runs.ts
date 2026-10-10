@@ -141,7 +141,7 @@ export class SqliteRunJournal {
       delete (data as Partial<RunLifecycleWrite>).timeoutMs; return JSON.stringify(data);
     };
     if ((['accept', 'reject', 'answer'].includes(parsed.action) && parsed.actor.assurance !== 'os-user')
-      || (['accept', 'reject', 'answer', 'hold'].includes(parsed.action) && !audit)) {
+      || (['accept', 'reject', 'answer', 'hold', 'park-progression'].includes(parsed.action) && !audit)) {
       throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     }
     if (parsed.action === 'expire') {

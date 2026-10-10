@@ -11,7 +11,7 @@ import { attemptIdentitySchema, modelConnectCommandSchema, modelReferenceSchema,
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, queryErrorClientParams, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, type RuntimeOperationQuery,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
@@ -280,6 +280,11 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       if (error instanceof DeckentError && error.code === 'MODEL_INVOCATION_RESULT_LIMIT') return invocationLimit(error.code);
       if (tool.boundedDelivery && error instanceof DeckentError && error.code === 'RUNTIME_SERVICE_RESPONSE_LIMIT') return failure('MCP_RESPONSE_LIMIT');
       if (tool.name === 'audit_provider_spending' && error instanceof DeckentError && error.code === 'PROVIDER_SPEND_RESULT_LIMIT') return failure(error.code);
+      if (error instanceof DeckentError && error.code === 'QUERY_UNEXPECTED_FAILURE') {
+        const params = queryErrorClientParams(error);
+        const result = completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code: error.code, ...(params ? { params } : {}) }) }] });
+        return toolResultFits(context.mcpReq.id, result, limits.responseMaxBytes) ? result : failure('MCP_RESPONSE_LIMIT');
+      }
       return failure(error instanceof DeckentError ? error.code : error instanceof z.ZodError ? 'MCP_INPUT_INVALID' : 'MCP_TOOL_FAILED');
     }
     finally { active--; }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
-import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
+import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -44,5 +44,5 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       evaluationRecorded: (identity, revision) => withRunStore(query, store => store.hasTaskEvaluation(identity, revision)),
     }, initial.config.service.maxConcurrentExecutions, { commandId: randomUUID }, maxReservations);
     const result = await turn.advance(query, signal); return waitedForSlotMs > 0 ? Object.freeze({ ...result, waitedForSlotMs }) : result;
-  } catch (error) { throw queryFailure(error); }
+  } catch (error) { throw error instanceof RunProgressionFailure ? new RunProgressionFailure(queryFailure(error.cause), error.revision) : queryFailure(error); }
 }

@@ -345,5 +345,19 @@
   "error.HANDOFF_ARTIFACT_MISMATCH": "Handoff artifact does not match the recorded output.",
   "error.HANDOFF_PATCH_UNAPPLICABLE": "The accepted predecessor patch cannot be applied to the Run base; the worker did not start.",
   "error.HANDOFF_INVALID": "The structured handoff note is invalid.",
-  "error.HANDOFF_LIMIT_EXCEEDED": "Handoff notes exceed the configured limits."
+  "error.HANDOFF_LIMIT_EXCEEDED": "Handoff notes exceed the configured limits.",
+  "error.SUPERVISOR_REQUEST_INVALID": "The supervisor request or read-only input is invalid; the worker was not started.",
+  "error.SUPERVISOR_WORKSPACE_INVALID": "The supervisor workspace is invalid.",
+  "error.SUPERVISOR_IDENTITY_CONFLICT": "Supervisor identity or realized mounts conflict with the admitted request.",
+  "error.SUPERVISOR_PROFILE_INVALID": "The retained supervisor profile is invalid.",
+  "error.SUPERVISOR_PROFILE_ORIGIN_MISMATCH": "The supervisor daemon does not match the retained profile.",
+  "error.SUPERVISOR_OPTIONS_INVALID": "Supervisor settings reject the prepared task inputs; inspect the pinned execution profile.",
+  "error.SUPERVISOR_CANCELLED": "Supervisor execution was cancelled.",
+  "error.SUPERVISOR_CONTROL_FAILED": "Supervisor control is unavailable; inspect the daemon and execution custody.",
+  "error.SUPERVISOR_NOT_TERMINAL": "The supervisor has no terminal evidence; execution custody is retained.",
+  "error.SUPERVISOR_RELEASE_UNCONFIRMED": "Supervisor release is unconfirmed; reconciliation is required.",
+  "error.QUERY_UNEXPECTED_FAILURE": "Unexpected operation failure ({errorClass}); diagnostic: {diagnosticId}",
+  "error.RUN_PROGRESSION_PARKED": "Run progression is parked after the configured failure limit. Inspect its failure code, correct the cause, then explicitly resume before its deadline. Live execution custody is retained.",
+  "error.RUN_PROGRESSION_PARK_UNAVAILABLE": "Run progression stopped, but durable parking is unavailable. Restore cancel policy or storage access and restart the runtime; no new dispatch will be attempted by this driver.",
+  "cli.run.lifecycle.failure": "Progression failure: {code}. Correct the cause and explicitly resume before the deadline; live custody is retained."
 }

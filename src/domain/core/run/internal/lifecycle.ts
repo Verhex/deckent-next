@@ -28,7 +28,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
   const readiness = inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now, progress: tasks });
   let state: RunSnapshot['state'];
   if (tasks.every(task => task.phase === 'accepted')) state = { kind: 'terminal', outcome: 'completed', reason: 'completed' };
-  else if (!run.cancelRequested && run.state.kind === 'parked' && run.state.reason === 'operator-hold') state = run.state;
+  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed'].includes(run.state.reason)) state = run.state;
   else if (!run.cancelRequested && tasks.some(task => task.decision?.reason === 'needs-input')) {
     const decision = tasks.find(task => task.decision?.reason === 'needs-input')!.decision!;
     state = { kind: 'parked', reason: 'needs-input', since: decision.since, deadline: decision.deadline };
@@ -51,11 +51,11 @@ export function advanceRunLifecycle(input: unknown, expectedRevision: number, no
   if (run.state.kind === 'terminal') return run;
   const expired = run.progress.some(task => task.decision && task.decision.deadline <= now);
   const progress = run.progress.map(task => {
-    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
+    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
     if (!task.decision || (task.decision.deadline > now && !(run.state.kind === 'parked' && run.state.deadline <= now))) return task;
     return { ...task, decision: undefined, phase: 'failed' as const };
   });
-  const dueHold = run.state.kind === 'parked' && run.state.reason === 'operator-hold' && run.state.deadline <= now;
+  const dueHold = run.state.kind === 'parked' && ['operator-hold', 'progression-failed'].includes(run.state.reason) && run.state.deadline <= now;
   const live = progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase));
   let next = reconcileRunLifecycle({ ...run, progress, ...(dueHold && !live ? { state: { kind: 'running' } } : {}) }, now, timeoutMs);
   if ((run.state.kind === 'parked' && run.state.deadline <= now) || (expired && next.state.kind === 'parked')) {
@@ -80,7 +80,7 @@ export function closeParkedRun(input: unknown, expectedRevision: number, now: nu
 export function resumeParkedRun(input: unknown, expectedRevision: number, now: number, timeoutMs: number): RunSnapshot {
   const run = checkedRun(input, expectedRevision);
   if (run.state.kind !== 'parked') throw new RunError('RUN_NOT_PARKED');
-  if (run.state.reason === 'operator-hold' && run.state.deadline > now) {
+  if (['operator-hold', 'progression-failed'].includes(run.state.reason) && run.state.deadline > now) {
     return reconcileRunLifecycle({ ...run, revision: run.revision + 1, state: { kind: 'running' } }, now, timeoutMs);
   }
   // Dependency/decision barriers survive resume; neither reset deadlines nor revive never-run work.
@@ -125,4 +125,13 @@ export function answerTaskInput(input: unknown, expectedRevision: number, taskId
     previousBindings: [...run.previousBindings ?? [], binding],
     bindings: run.bindings.filter(value => value !== binding), progress: run.progress.map(value => value === task ? { ...value,
       phase: 'pending', decision: undefined, eligibility: { kind: 'immediate' }, inputAnswer: { schemaVersion: 1, source: binding.identity, question: task.decision!.question!, answer } } : value) }, now, timeoutMs);
+}
+
+/** A runtime failure stops new progression, never fabricates an exit or settles live custody. */
+export function parkRunProgression(input: unknown, expectedRevision: number, failureCode: string, now: number, timeoutMs: number): RunSnapshot {
+  const run = checkedRun(input, expectedRevision);
+  if (run.cancelRequested || run.state.kind === 'terminal') throw new RunError('RUN_TERMINAL');
+  if (run.state.kind === 'parked') throw new RunError('RUN_PARKED');
+  return runSnapshotSchema.parse({ ...run, revision: run.revision + 1,
+    state: { kind: 'parked', reason: 'progression-failed', failureCode, since: now, deadline: deadlineAt(now, timeoutMs) } });
 }

@@ -1,8 +1,8 @@
 import { OpenRouterChatError, OpenRouterPricingError } from '#adapters/index.js';
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
-import { DispatchError, ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
-import { ErrorRegistry, ManagedFileError } from '#platform/index.js';
+import { SupervisorError, DispatchError, ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
+import { ErrorRegistry, ManagedFileError, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
@@ -10,7 +10,7 @@ it('preserves registered errors and redacts unknown native/storage details throu
   const known = ErrorRegistry.createError('POLICY_DENIED'); expect(queryFailure(known)).toBe(known);
   expect(queryFailure(new PolicyAuthorizationError('POLICY_DENIED')).code).toBe('POLICY_DENIED');
   const raw = new Error('SQL /private/customer/ledger secret=credential');
-  const safe = queryFailure(raw); expect(safe.code).toBe('INVENTORY_UNAVAILABLE'); expect(String(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
+  const safe = queryFailure(raw); expect(safe.code).toBe('QUERY_UNEXPECTED_FAILURE'); expect(String(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
   expect(queryFailure(new RunStoreError('RUN_STORE_CORRUPT')).code).toBe('RUN_STORE_CORRUPT');
 });
 it('preserves the registered unsupported execution-host failure with localized guidance', () => {
@@ -103,7 +103,29 @@ it.each(['DISPATCH_ARTIFACT_REQUIRED', 'DISPATCH_CONFLICT', 'DISPATCH_NOT_ADMITT
     expect(String(safe)).not.toContain('/private'); expect(String(safe)).not.toContain('secret');
   });
 
-it('keeps unrelated error classes as INVENTORY_UNAVAILABLE (no over-generalisation of dispatch codes)', () => {
-  const plain = new Error('DISPATCH_CONFLICT'); expect(queryFailure(plain).code).toBe('INVENTORY_UNAVAILABLE');
-  const spoof = Object.assign(new Error('x'), { code: 'DISPATCH_CONFLICT' }); expect(queryFailure(spoof).code).toBe('INVENTORY_UNAVAILABLE');
+it('keeps unrelated error classes as QUERY_UNEXPECTED_FAILURE (no over-generalisation of dispatch codes)', () => {
+  const plain = new Error('DISPATCH_CONFLICT'); expect(queryFailure(plain).code).toBe('QUERY_UNEXPECTED_FAILURE');
+  const spoof = Object.assign(new Error('x'), { code: 'DISPATCH_CONFLICT' }); expect(queryFailure(spoof).code).toBe('QUERY_UNEXPECTED_FAILURE');
+});
+
+
+it.each(['SUPERVISOR_OPTIONS_INVALID', 'SUPERVISOR_REQUEST_INVALID', 'SUPERVISOR_WORKSPACE_INVALID',
+  'SUPERVISOR_CONTROL_FAILED', 'SUPERVISOR_IDENTITY_CONFLICT', 'SUPERVISOR_CANCELLED', 'SUPERVISOR_NOT_TERMINAL',
+  'SUPERVISOR_PROFILE_INVALID', 'SUPERVISOR_PROFILE_ORIGIN_MISMATCH', 'SUPERVISOR_RELEASE_UNCONFIRMED'] as const)(
+  'preserves supervisor failure %s through the shared mapper', code => {
+    const error = new SupervisorError(code); error.message += ' /private/customer token=credential';
+    const safe = queryFailure(error); expect(safe.code).toBe(code);
+    expect(safe.localize?.('en').message).not.toBe(safe.localize?.('tr').message);
+    expect(JSON.stringify(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
+  });
+it('keeps unknown messages and causes in a bounded server record, with only class and correlation on the client', () => {
+  const error = new Error('adapter broke at /private/workspace secret=credential\n\x1b[31m', { cause: new Error('socket failed C:\\private\\worker') });
+  const safe = queryFailure(error);
+  expect(safe.code).toBe('QUERY_UNEXPECTED_FAILURE'); expect(safe.params).toEqual({ errorClass: 'Error', diagnosticId: expect.any(String) });
+  const record = takeQueryErrorRecord(safe, snapshotKnownSecrets([{ name: 'QUERY_FIXTURE', value: 'credential' }]));
+  expect(record).toContain('adapter broke'); expect(record).toContain('socket failed');
+  expect(record).not.toContain('credential'); expect(record).not.toContain(String.fromCharCode(27)); expect(record!.length).toBeLessThanOrEqual(2048);
+  expect(JSON.stringify(safe)).not.toMatch(/credential|private|\\u001b/);
+  expect(safe).not.toHaveProperty('cause');
+  expect(String(queryFailure(new Error('x'.repeat(10000)))).length).toBeLessThan(2200);
 });

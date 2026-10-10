@@ -10,7 +10,8 @@ export const runBindingSchema = z.object({ identity: attemptIdentitySchema, obse
 }).strict().readonly();
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
-  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold']),
+  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed']),
+    failureCode: identitySchema.optional(),
     note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), since: counterSchema, deadline: counterSchema }).strict(),
   z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
 ]).readonly();
@@ -31,7 +32,8 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
     if (!selected || selected.evaluator.id !== criterion.evaluator.id || selected.evaluator.version !== criterion.evaluator.version) invalid();
   }
   if (run.state.kind === 'parked' && (run.state.deadline <= run.state.since || (run.state.reason === 'operator-hold') !== (run.state.note !== undefined)
-    || (!['operator-hold', 'needs-input'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
+    || (run.state.reason === 'progression-failed') !== (run.state.failureCode !== undefined)
+    || (!['operator-hold', 'needs-input', 'progression-failed'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
   if (run.state.kind === 'terminal' && (run.progress.some(task => task.unresolvedEffects || ['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision'].includes(task.phase)) || (run.state.outcome === 'completed' && run.progress.some(task => task.phase !== 'accepted')) || (run.state.outcome === 'incomplete' && (!run.progress.some(task => task.phase === 'accepted') || run.progress.every(task => task.phase === 'accepted'))) || (['failed', 'cancelled'].includes(run.state.outcome) && run.progress.some(task => task.phase === 'accepted')))) invalid();
   const tasks = new Set(run.graph.tasks.map(task => task.id)); const bound = new Set<string>(); const attempts = new Set<string>();
   for (const binding of run.previousBindings ?? []) {

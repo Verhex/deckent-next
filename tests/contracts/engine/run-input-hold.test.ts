@@ -1,17 +1,17 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
-import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { AuditApplication, RunLifecycleApplication, RunReservationApplication, TaskEvaluationApplication, RunProgressionTurn,
+import { DockerSupervisor, validateDockerTaskProfile, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { DispatchApplication, resolveExecutionRegistry, AuditApplication, RunLifecycleApplication, RunReservationApplication, TaskEvaluationApplication, RunProgressionTurn,
   RunPolicyAuthorization, DispatchPolicyAuthorization, prepareTaskStart, projectRunView, type RunLifecycleCommand } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { policySchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
-import { fixtureExecution } from '../support/execution-registry.js';
-import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+import { fixtureExecution, fixtureDockerRegistry } from '../support/execution-registry.js';
+import { custodyOrDockerProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
 afterEach(async () => { stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -21,13 +21,14 @@ const graph = { schemaVersion: 2, revision: 1, tasks: ['task', 'other'].map(id =
   criterionDefinitions: [{ id: 'ok', version: 1, description: 'ok', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1, summary: 'Input required', changedFiles: [], checks: [], openIssues: [],
   exit: { schemaVersion: 1, kind: 'needs-input', question: 'Which region should I use?' } } };
-async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-input-hold-')); roots.push(root);
+async function fixture(docker = false) {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-input-hold-'))); roots.push(root);
+  const artifactRoot = join(root, 'artifacts'); await mkdir(artifactRoot);
   const path = join(root, 'ledger.db'); let now = 10, allowed = true, principal = human, nextId = 0;
   const capacity = { executionSlots: 2, inFlightSlots: 2 };
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: () => now, timeoutMs: 1000 }, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: () => now, timeoutMs: 1000 }, 'allow', custodyOrDockerProfiles); stores.push(store);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity });
-  await store.createRun({ commandId: 'create', actor, identity: { runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, execution: fixtureExecution(graph), now,
+  await store.createRun({ commandId: 'create', actor, identity: { runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, execution: docker ? resolveExecutionRegistry(graph, { ...fixtureDockerRegistry(['fixture']), evaluators: [{ id: 'test', version: 1, implementation: { id: 'test-evaluator', version: 1 } }] }, { profile: validateDockerTaskProfile, criterion() {} }) : fixtureExecution(graph), now,
     policy: { schemaVersion: 2, poolId: 'pool', capacity, ordering: ['task', 'other'] } });
   const policy = { async load() { return policySchema.parse({ schemaVersion: 1, revision: 'policy', restrictions: [], grants: allowed ? [
     { id: 'run', effect: 'allow', actions: ['inspect', 'cancel', 'reserve'], scopes: ['s'], principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'run', ids: ['r'] } },
@@ -48,7 +49,7 @@ async function fixture() {
       if (!bytes || receipt.scopeId !== scopeId || bytes.byteLength !== receipt.byteLength || createHash('sha256').update(bytes).digest('hex') !== receipt.digest) throw new Error('ARTIFACT_INVALID');
       return bytes;
     },
-    async prepareReadOnlyFile(scopeId: string, receipt: ArtifactReceipt) { return { path: '/fixture/readonly', bytes: await this.read(scopeId, receipt) }; },
+    async prepareReadOnlyFile(scopeId: string, receipt: ArtifactReceipt) { const path = join(artifactRoot, receipt.digest), bytes = await this.read(scopeId, receipt); await writeFile(path, bytes); return { path, bytes }; },
   };
   const evaluator = { evaluate: vi.fn(async () => 'pass' as 'pass' | 'fail' | 'unknown') };
   const evaluation = new TaskEvaluationApplication(store, verifier, authorization, evaluator, artifacts, { maxEvidenceItems: 2, maxTotalBytes: 8192 },
@@ -64,13 +65,13 @@ async function fixture() {
   };
   const exit = async (identity: AttemptIdentity, stdout = JSON.stringify(report), exitCode = 0, completeness = 'complete') => {
     const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: '/fixture/workspace', argv: ['fixture-command'] } };
-    await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
+    await store.claimDispatch(docker ? { ...claim, profile: await simulatedDocker(root).supervisor.captureProfile() } : dispatchAdmission(claim)); await grantTestLaunch(store, claim);
     const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness, stdout, stderr: '' })));
     await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: identity.attemptId, exitCode, interrupted: false });
     return { schemaVersion: 1, commandId: `evaluate-${identity.attemptId}`, identity, expectedRevision: (await read()).revision };
   };
   const auditCount = () => { const db = new DatabaseSync(path, { readOnly: true }); try { return Number(db.prepare('SELECT COUNT(*) AS n FROM audit_events').get()!.n); } finally { db.close(); } };
-  return { store, path, read, command, reserve, exit, evaluation, evaluator, lifecycle, reservation, artifacts, verifier, attemptPolicy, auditCount,
+  return { root, store, path, read, command, reserve, exit, evaluation, evaluator, lifecycle, reservation, artifacts, verifier, attemptPolicy, auditCount,
     time(value: number) { now = value; }, deny() { allowed = false; }, allow() { allowed = true; }, agent() { principal = { ...human, assurance: 'workload-verified' }; } };
 }
 
@@ -202,3 +203,113 @@ it('cancellation of an input wait cannot be undone by answering or resume', asyn
   await expect(f.lifecycle.execute(await f.command('answer', { taskId: 'task', answer: 'EU' }))).rejects.toMatchObject({ code: 'RUN_DECISION_NOT_READY' });
   expect((await f.read()).cancelRequested).toBe(true); expect((await f.read()).progress[0]!.phase).toBe('cancelled');
 });
+
+
+function simulatedDocker(workspaceRoot: string, handoffInputs: readonly { target: string; path: string; receipt: ArtifactReceipt }[] = [],
+  mutate: (mounts: object[]) => object[] = mounts => mounts) {
+  let state = 'missing', label = '', mounts: object[] = [];
+  const calls: string[][] = [];
+  const runner = async ({ args }: { args: readonly string[] }) => {
+    const command = [...args], at = command[0] === '--host' ? 2 : 0, verb = command[at]; calls.push(command);
+    if (verb === 'context') return { stdout: JSON.stringify({ Host: 'unix:///fixture/docker.sock' }), stderr: '' };
+    if (verb === 'info') return { stdout: 'fixture-daemon', stderr: '' };
+    if (verb === 'inspect') {
+      if (state === 'missing') throw { stderr: 'No such object: ' + command[at + 1] };
+      return { stdout: JSON.stringify([{ Id: 'c'.repeat(64), Image: 'sha256:' + 'a'.repeat(64), Config: { Labels: { 'deckent.request': label } },
+        Mounts: mounts, State: { Status: state, ExitCode: 0 } }]), stderr: '' };
+    }
+    if (verb === 'create') {
+      label = command[command.indexOf('--label') + 1]!.slice('deckent.request='.length); state = 'created';
+      mounts = mutate(command.flatMap((arg, index) => {
+        if (arg !== '--mount') return [];
+        const fields = Object.fromEntries(command[index + 1]!.split(',').map(part => part.split('=')));
+        return [{ Type: fields['type'], Source: fields['src'], Destination: fields['dst'], RW: !command[index + 1]!.includes(',readonly') }];
+      })); return { stdout: 'c'.repeat(64), stderr: '' };
+    }
+    if (verb === 'start') { state = 'exited'; return { stdout: 'answer consumed', stderr: '' }; }
+    throw new Error('Unexpected controlled Docker command');
+  };
+  const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot, imageId: 'sha256:' + 'a'.repeat(64), uid: 1000, gid: 1000,
+    cpus: 1, memoryBytes: 268435456, pids: 64, tmpBytes: 16777216, logMaxSizeKiB: 64, logMaxFiles: 2,
+    deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536, handoffInputs }, runner);
+  return { supervisor, calls };
+}
+
+it('needs-input → audited answer → generation 2 dispatches with the exact read-only answer mount and reaches acceptance (controlled Docker daemon)', async context => {
+  if (process.platform === 'win32') {
+    expect(() => simulatedDocker('C:\\fixture')).toThrow('SUPERVISOR_OPTIONS_INVALID');
+    context.skip('SUPERVISOR_OPTIONS_INVALID: POSIX Docker executable/path fixture; native Windows Docker not exercised');
+  }
+  const f = await fixture(true), first = await f.reserve('task'); await f.evaluation.execute(await f.exit(first));
+  await f.lifecycle.execute(await f.command('answer', { taskId: 'task', answer: 'Use EU' }));
+  const workspaces = join(f.root, 'workspaces'); await mkdir(workspaces);
+  const dispatched: AttemptIdentity[] = [], creates: string[][] = [];
+  let commandId = 0;
+  const turn = new RunProgressionTurn({ read: f.read,
+    async reserve(command) { await f.reservation.reserve(command); return 'reserved'; },
+    async execute(identity) {
+      const start = await prepareTaskStart(identity, f.store, f.artifacts, f.verifier, f.attemptPolicy, { artifacts: { maxInputs: 4, maxBytes: 8192 } });
+      const workspace = join(workspaces, identity.attemptId); await mkdir(workspace);
+      const daemon = simulatedDocker(workspaces, start.handoffInputs);
+      const outcome = await new DispatchApplication(f.store, daemon.supervisor, f.verifier, f.attemptPolicy, 'worker', f.artifacts)
+        .execute({ protocolVersion: 1, identity, workspace, argv: ['fixture-command'] });
+      expect(outcome.kind).toBe('terminal'); dispatched.push(identity); creates.push(...daemon.calls.filter(args => args.includes('create')));
+    },
+    async evaluate(command) { await f.evaluation.execute(command); return 'recorded'; }, evaluationRecorded: (identity, revision) => f.store.hasTaskEvaluation(identity, revision),
+  }, 2, { commandId: () => 'eval-' + ++commandId });
+  const result = await turn.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal);
+  const next = dispatched.find(value => value.taskId === 'task')!; expect(next.generation).toBe(2); expect(next.attemptId).not.toBe(first.attemptId);
+  expect(creates.find(args => args.some(arg => arg.includes('dst=/deckent/inputs/_needs-input.json,readonly')))).toBeDefined();
+  expect(result.run.tasks.find(task => task.id === 'task')!.phase).toBe('accepted');
+  expect(await f.store.loadBoundDispatch(first)).toMatchObject({ terminal: { exitCode: 0 } });
+  expect(await f.store.loadBoundDispatch(next)).toMatchObject({ launch: 'granted', terminal: { exitCode: 0 }, output: { scopeId: 's' } });
+});
+
+it('parks progression under fresh cancel policy/CAS/audit and preserves active custody across expiry and explicit resume', async () => {
+  const f = await fixture(), identity = await f.reserve('task'), before = await f.read();
+  const park = { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'park', expectedRevision: before.revision, failureCode: 'SUPERVISOR_CONTROL_FAILED' };
+  f.deny(); await expect(f.lifecycle.parkProgression(park)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(await f.read()).toEqual(before); expect(f.auditCount()).toBe(0);
+  f.allow(); const parked = await f.lifecycle.parkProgression(park);
+  expect(parked.snapshot.state).toEqual({ kind: 'parked', reason: 'progression-failed', failureCode: park.failureCode, since: 10, deadline: 1010 });
+  expect(await f.lifecycle.parkProgression(park)).toEqual(parked); expect(f.auditCount()).toBe(1);
+  expect((await f.store.listRunProgression({ actor, after: null, limit: 8 })).items).toEqual([]);
+  await expect(f.store.commitRunLifecycle({ ...park, commandId: 'missing-audit', expectedRevision: parked.snapshot.revision,
+    action: 'park-progression', actor: { ...actor, assurance: 'os-user' }, now: 10, timeoutMs: 1000 })).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
+  const restarted = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: () => 10, timeoutMs: 1000 }, 'forbid', custodyOrDockerProfiles);
+  try { expect((await restarted.listRunProgression({ actor, after: null, limit: 8 })).items).toEqual([]); expect((await restarted.loadRun('s', 'r'))!.state).toEqual(parked.snapshot.state); } finally { restarted.close(); }
+  await f.lifecycle.execute(await f.command('resume'));
+  expect((await f.read()).progress[0]!.phase).toBe('active'); expect((await f.read()).bindings[0]!.identity).toEqual(identity);
+  const fresh = await f.read();
+  await expect(f.lifecycle.parkProgression({ ...park, commandId: 'stale', expectedRevision: before.revision })).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+  await f.lifecycle.parkProgression({ ...park, commandId: 'park-again', expectedRevision: fresh.revision });
+  f.time(1010); await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
+  expect((await f.read()).state.kind).toBe('parked'); expect((await f.read()).progress[0]!.phase).toBe('active');
+  expect((await f.read()).bindings[0]!.identity).toEqual(identity);
+});
+
+it('progression park audit failure rolls back and cannot consume a command or alter custody', async () => {
+  const f = await fixture(); await f.reserve('task'); const before = await f.read();
+  await expect(f.store.commitRunLifecycle({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'park-audit-failed', expectedRevision: before.revision,
+    action: 'park-progression', failureCode: 'SUPERVISOR_CONTROL_FAILED', actor: { ...actor, assurance: 'os-user' }, now: 10, timeoutMs: 1000 }, () => { throw new Error('AUDIT_UNAVAILABLE'); })).rejects.toThrow('AUDIT_UNAVAILABLE');
+  expect(await f.read()).toEqual(before); expect(await f.store.loadRunReceipt('s', 'park-audit-failed')).toBeNull();
+});
+
+
+it.for(['writable-realized', 'foreign-scope', 'duplicate-target', 'arbitrary-target'] as const)(
+  'the answer mount refuses %s before worker start (controlled daemon)', async (kind, context) => {
+    if (process.platform === 'win32') {
+      expect(() => simulatedDocker('C:\\fixture')).toThrow('SUPERVISOR_OPTIONS_INVALID');
+      context.skip('SUPERVISOR_OPTIONS_INVALID: POSIX Docker fixture unavailable');
+    }
+    const f = await fixture(), root = join(f.root, 'workspaces'), workspace = join(root, 'attempt'); await mkdir(workspace, { recursive: true });
+    const receipt = await f.artifacts.put('s', Buffer.from('answer')), path = (await f.artifacts.prepareReadOnlyFile('s', receipt)).path;
+    const input = { receipt: kind === 'foreign-scope' ? { ...receipt, scopeId: 'other' } : receipt, path,
+      target: kind === 'arbitrary-target' ? '/deckent/inputs/_needs-input.json/../escape' : '/deckent/inputs/_needs-input.json' };
+    if (kind === 'arbitrary-target') { expect(() => simulatedDocker(root, [input])).toThrow('SUPERVISOR_OPTIONS_INVALID'); return; }
+    const daemon = simulatedDocker(root, kind === 'duplicate-target' ? [input, input] : [input], mounts => kind === 'writable-realized'
+      ? mounts.map(mount => ({ ...mount, ...((mount as { Destination: string }).Destination === input.target ? { RW: true } : {}) })) : mounts);
+    await expect(daemon.supervisor.execute({ protocolVersion: 1, identity: { runId: 'r', taskId: 'task', attemptId: 'next', scopeId: 's', layoutRevision: 'l', generation: 2 },
+      workspace, argv: ['fixture-command'] })).rejects.toMatchObject({ code: kind === 'writable-realized' ? 'SUPERVISOR_IDENTITY_CONFLICT' : 'SUPERVISOR_REQUEST_INVALID' });
+    expect(daemon.calls.some(args => args.includes('start'))).toBe(false);
+  });

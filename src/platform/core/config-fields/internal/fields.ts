@@ -99,6 +99,7 @@ export const CONFIG_FIELDS = Object.freeze({
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
     failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),
+    maxConsecutiveFailures: z.number().int().positive().safe().default(3),
     pageSize: z.number().int().positive().max(2147483646).default(64),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellationRuntime: field('config.field.cancellationRuntime', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ scopeIds: z.array(z.string().min(1)).min(1),
