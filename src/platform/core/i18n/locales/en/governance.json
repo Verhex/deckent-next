@@ -901,5 +901,10 @@
   "terminal.spend.reason.overrun": "Charge exceeded reservation",
   "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model switch refused. {reason}",
   "error.MODEL_INVOCATION_REASONING_UNSUPPORTED": "The selected model cannot turn reasoning off.",
-  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "No OpenRouter endpoint satisfies the no-training and zero-retention data policy. No request or spending reservation was created. Check OpenRouter Privacy settings: https://openrouter.ai/settings/privacy; choose a model with compliant endpoints."
+  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "No OpenRouter endpoint satisfies the no-training and zero-retention data policy. No request or spending reservation was created. Check OpenRouter Privacy settings: https://openrouter.ai/settings/privacy; choose a model with compliant endpoints.",
+  "error.SECRET_HELPER_INVALID": "The registered secret helper definition is invalid. Install a trusted helper with an absolute executable and working directory, bounded limits and an authorization port.",
+  "error.SECRET_HELPER_DENIED": "Policy did not authorize this secret-helper lookup. No helper was started.",
+  "error.SECRET_HELPER_TIMEOUT": "The secret-helper lookup exceeded its time limit. No credential was returned.",
+  "error.SECRET_HELPER_OUTPUT_LIMIT": "The secret helper exceeded its combined output limit. Its output was discarded.",
+  "error.SECRET_HELPER_FAILED": "The secret helper could not start or exited unsuccessfully. Its output was discarded."
 }

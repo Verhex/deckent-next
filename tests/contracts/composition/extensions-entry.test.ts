@@ -15,7 +15,7 @@ const memoryBackend = (id: string) => ({ id, create: () => {
 } });
 
 it('exports exactly the declared extension surface; the SDK entry exports none of its registrations', () => {
-  expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_STORE_ID_PATTERN',
+  expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_STORE_ID_PATTERN', 'createSecretHelperFactory',
     'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerSecretStoreBackend', 'runCli', 'runMcp']);
   expect(['registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
 });
