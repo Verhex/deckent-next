@@ -63,7 +63,7 @@ function secrets(names: string[] = []) {
 
 it.each(['en', 'tr'] as const)('a multi-workspace key result gives the selection step in %s without printing its key', async locale => {
   const { root, options } = await project({}), store = secrets();
-  const host = { ...connectHost('ok'), probe: async () => ({ outcome: 'ok', httpStatus: 200, key: 'unverified' as const, workspaceRequired: true as const }) };
+  const host = { ...connectHost('ok'), probe: async () => ({ outcome: 'ok', httpStatus: 400, key: 'unverified' as const, workspaceRequired: true as const }) };
   const result = await providerPanelPort(root, 'scope', { ...store.host, providerConnect: host }, options, locale, errorText)
     .connect({ kind: 'anthropic-api', endpoint: null, key: CANARY });
   expect(result.stored).toBe(true); expect(result.lines.at(-1)!.text).toContain('/model');

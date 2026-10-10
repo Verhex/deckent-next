@@ -43,7 +43,8 @@ const kindSchema = z.object({
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
     dialect: openAiChatDialectSchema.optional(),
     rejectionCodes: z.record(z.string(), z.enum(['spend-limit', 'rate-limit'])).optional(),
-    workspaceList: z.object({ path: z.string().startsWith('/'), pageSize: positiveLimit(), maxPages: positiveLimit(), maxResponseBytes: positiveLimit() }).strict().optional(),
+    workspaceList: z.object({ path: z.string().startsWith('/'), pageSize: positiveLimit(), maxPages: positiveLimit(), maxResponseBytes: positiveLimit(),
+      requiredError: z.object({ type: z.string().min(1), messagePrefix: z.string().min(1) }).strict() }).strict().optional(),
     /** Per-model wire selection; endpoints and effort choices are sourced registry data, never model-name branches. */
     protocolRoutes: z.array(z.object({ modelId: z.string().min(1), path: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
       dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),

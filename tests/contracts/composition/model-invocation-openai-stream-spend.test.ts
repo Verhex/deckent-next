@@ -12,6 +12,7 @@ import { ModelActivationApplication, ModelBindingApplication, modelInvocationTar
   modelInvocationProfileDigest, providerSpendEvidenceDigest } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
+import { registerProviderSpendNoChargeCertification } from '../../../src/extensions.js';
 
 // Astra 2462 R1 through the governed invocation path (policy, activation, budget reservation, receipt, SQLite spend ledger) over a real
 // https OpenAI-compatible server with a non-zero operator-static v2 tariff: only the final event's own usage settles money. An interim usage
@@ -19,17 +20,20 @@ import { createLocalTls } from '../../fixtures/local-tls.js';
 // a contradiction after the final usage withdraws it, so a bounded (retention-capped) refusal also holds instead of settling.
 // CORE-BUDGET-HOLD certified release (lead 2026-10-10, E2 1b): a request to the exact certified vendor URL is routed, in this test process only,
 // to the local TLS server (certificate names the vendor host, SNI kept); every other host passes through untouched, so no network call is made.
-const route = vi.hoisted(() => ({ host: 'api.openai.com', port: 0 }));
+const route = vi.hoisted(() => ({ hosts: ['api.openai.com', 'llm.acme.example'], port: 0 }));
 vi.mock('node:https', async importOriginal => {
   const actual = await importOriginal<typeof import('node:https')>();
   const request = ((url: URL, options: import('node:https').RequestOptions, callback: (response: import('node:http').IncomingMessage) => void) => {
-    if (!(url instanceof URL) || url.hostname !== route.host) return actual.request(url, options, callback);
+    if (!(url instanceof URL) || !route.hosts.includes(url.hostname)) return actual.request(url, options, callback);
     if (!route.port) throw new Error('vendor host is not routed in this test');
     return actual.request({ ...options, protocol: 'https:', hostname: '127.0.0.1', port: route.port, path: `${url.pathname}${url.search}`,
-      servername: route.host, headers: { ...options.headers, host: route.host } }, callback);
+      servername: url.hostname, headers: { ...options.headers, host: url.hostname } }, callback);
   }) as typeof actual.request;
   return { ...actual, request, default: { ...actual, request } };
 });
+// Law 10: a separately distributed package certifies its own vendor endpoint through `deckent/extensions` before the composition root seals.
+registerProviderSpendNoChargeCertification({ vendor: 'acme.llm', endpoints: ['https://llm.acme.example/v1/chat/completions'], statuses: [400, 422],
+  source: 'https://acme.example/docs/errors' });
 const roots: string[] = [], servers: Server[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
 const MODEL = 'operator-chat';
@@ -50,7 +54,7 @@ async function fixture(reply: Reply, listen = true, vendorEndpoint?: string) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-openai-stream-spend-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(data), mkdir(home)]);
-  const { key, caPem } = await createLocalTls(root, vendorEndpoint ? { dnsNames: [route.host] } : {});
+  const { key, caPem } = await createLocalTls(root, vendorEndpoint ? { dnsNames: route.hosts } : {});
   const server = createServer({ key, cert: caPem }, (request, response) => { request.resume(); request.on('end', () => reply(response)); });
   if (listen) { servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); }); }
   const address = server.address(); if (listen && (!address || typeof address === 'string')) throw new Error('FIXTURE');
@@ -164,6 +168,16 @@ it.each([400, 422, 429])('HTTP %s from the certified vendor endpoint releases no
   expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'http-status', httpStatus: status } });
   expect(inspection!.spending!.disposition.state).toBe('released-no-charge');
   expect(integrity.reservedMinorUnits).toBe(0); expect(integrity.settledMinorUnits).toBe(0);
+});
+
+it.each([[400, 'released-no-charge'], [422, 'released-no-charge'], [429, 'held']] as const)('an extension-certified endpoint answers HTTP %s -> %s (only its own statuses)', async (status, state) => {
+  const f = await fixture(response => { response.writeHead(status, { 'content-type': 'application/json' }); response.end('{"error":{"message":"invalid_request_error"}}'); },
+    true, 'https://llm.acme.example/v1/chat/completions');
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'http-status', httpStatus: status } });
+  expect(inspection!.spending!.disposition.state).toBe(state);
+  expect(integrity.reservedMinorUnits).toBe(state === 'held' ? inspection!.spending!.descriptor.quote.maxChargeMinorUnits : 0);
 });
 
 it.each([500, 503])('HTTP %s from the certified vendor endpoint is not certified by status and stays held', async status => {

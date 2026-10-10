@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError } from '#adapters/index.js';
+import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CONNECT_REGISTRY } from '#adapters/index.js';
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
-import { ProviderSpendError, providerSpendLocalZeroTariff, PROVIDER_SPEND_DEFAULT_CURRENCY, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
+import { ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
@@ -32,7 +32,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
   // Lead 2026-10-10 (E2 1a): every operator tariff passes currency validation; the literal-loopback exemption waives money only, never validation.
   const exempt = async (scopeId: string, quote: { currency: string }) => { const budget = await budgetFor(scopeId).catch((error: unknown) => {
     if (error instanceof ProviderSpendError && error.code === 'PROVIDER_SPEND_UNAVAILABLE') return null; throw error; });
-    if (quote.currency !== (budget?.currency ?? PROVIDER_SPEND_DEFAULT_CURRENCY)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT'); return null; };
+    if (quote.currency !== (budget?.currency ?? PROVIDER_CONNECT_REGISTRY.profileDefaults.currency)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT'); return null; };
   let selected: { profile: ModelInvocationProfile; priced: OpenRouterPricedNative | ReturnType<typeof createOpenRouterOpenAiPricedNative>; cell: { observation?: OpenRouterMetadataObservation } } | undefined;
   let anthropic: { profile: ModelInvocationProfile; priced: AnthropicMessagesPricedNative } | undefined;
   let openai: ReturnType<typeof createOpenAiChatPricedNative> | undefined;

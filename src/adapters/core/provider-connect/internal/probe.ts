@@ -97,10 +97,11 @@ export async function probeProviderConnection(input: ProviderProbeInput, options
   if (status === 400 && kind.connect?.workspaceList && key !== null && prefix) {
     let error: { type?: unknown; message?: unknown } | undefined;
     try { error = (JSON.parse(prefix) as { error?: typeof error }).error; } catch { /* Unknown error remains refused. */ }
-    if (error?.type === 'invalid_request_error' && typeof error.message === 'string'
-      && error.message.startsWith('anthropic-workspace-id is required when authenticating with an identity-linked API key')) {
+    const required = kind.connect.workspaceList.requiredError; // the vendor's exact error shape is registry data, not code
+    if (error?.type === required.type && typeof error.message === 'string' && error.message.startsWith(required.messagePrefix)) {
       try { const choices = await listKindProviderWorkspaces(kind, base, key, { ...options, signal });
-        if (choices.length) return { outcome: 'ok', httpStatus: 200, key: 'unverified', workspaceRequired: true };
+        // The real status stays visible (HTTP 400); identity is established by the organization list, the workspace is chosen in /model.
+        if (choices.length) return { outcome: 'ok', httpStatus: status, key: 'unverified', workspaceRequired: true };
       } catch { options.signal?.throwIfAborted(); }
     }
   }

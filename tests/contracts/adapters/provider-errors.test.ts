@@ -90,7 +90,7 @@ it('allows storing a multi-workspace key only after its documented missing-heade
     return urls.length === 1 ? new Response(JSON.stringify({ error: { type: 'invalid_request_error', message: 'anthropic-workspace-id is required when authenticating with an identity-linked API key; send the id of the workspace this request acts in.' } }), { status: 400 })
       : new Response(JSON.stringify({ data: [{ id: 'wrkspc_First', name: 'Team', archived_at: null }], has_more: false, last_id: 'wrkspc_First' }));
   } });
-  expect(probe).toEqual({ outcome: 'ok', httpStatus: 200, key: 'unverified', workspaceRequired: true }); expect(urls).toHaveLength(2);
+  expect(probe).toEqual({ outcome: 'ok', httpStatus: 400, key: 'unverified', workspaceRequired: true }); expect(urls).toHaveLength(2);
   expect(urls[1]).toContain('/v1/organizations/workspaces');
 });
 

@@ -9,7 +9,7 @@
     { "id": "anthropic-api", "labelKey": "tui.provider.kind.anthropicApi", "available": true, "endpoint": { "default": "https://api.anthropic.com", "editable": false },
       "probe": { "path": "/v1/models?limit=1", "auth": { "type": "header", "name": "x-api-key" }, "headers": { "anthropic-version": "2023-06-01" }, "listsModels": true },
       "key": { "required": true, "secretName": "DECKENT_ANTHROPIC_KEY" },
-      "connect": { "adapter": "anthropic-messages-http", "chatPath": "/v1/messages", "tokenCountPath": "/v1/messages/count_tokens", "seed": "anthropic-api", "workspaceList": { "path": "/v1/organizations/workspaces", "pageSize": 100, "maxPages": 10, "maxResponseBytes": 262144 }, "cacheDefault": "5m" } },
+      "connect": { "adapter": "anthropic-messages-http", "chatPath": "/v1/messages", "tokenCountPath": "/v1/messages/count_tokens", "seed": "anthropic-api", "workspaceList": { "path": "/v1/organizations/workspaces", "pageSize": 100, "maxPages": 10, "maxResponseBytes": 262144, "requiredError": { "type": "invalid_request_error", "messagePrefix": "anthropic-workspace-id is required when authenticating with an identity-linked API key" } }, "cacheDefault": "5m" } },
     { "id": "openai-api", "labelKey": "tui.provider.kind.openaiApi", "available": true, "endpoint": { "default": "https://api.openai.com/v1", "editable": false },
       "probe": { "path": "/v1/models", "auth": { "type": "bearer" }, "headers": {}, "listsModels": true },
       "key": { "required": true, "secretName": "DECKENT_OPENAI_KEY" },

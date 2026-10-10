@@ -5,9 +5,9 @@ import { assessModelInvocationProfileDeliveries } from './profile-delivery.js';
 
 export type ModelInvocabilityReasonKind = 'stale-activation' | 'not-carried' | 'binding' | 'profile' | 'delivery-unfit'
   | 'no-credential' | 'tariff' | 'budget' | 'policy' | 'protocol' | 'unavailable';
-/** `reservation`: PROVIDER-ERRORS N01 — the refused call's own required reservation (USD minor units); never account totals. */
+/** `reservation`: PROVIDER-ERRORS N01 — the refused call's own required reservation in its budget's minor units and currency; never account totals. */
 export interface ModelInvocabilityReason { readonly kind: ModelInvocabilityReasonKind; readonly code: string; readonly activationRevision?: number;
-  readonly reservation?: Readonly<{ requestedMinorUnits: number; currency: 'USD' }> }
+  readonly reservation?: Readonly<{ requestedMinorUnits: number; currency: string }> }
 export type ModelInvocability = Readonly<{ invocable: true; reason: null }> | Readonly<{ invocable: false; reason: ModelInvocabilityReason }>;
 export interface InvocableModel {
   readonly reference: ModelReference; readonly label: string; readonly nativeId: string;
@@ -47,8 +47,9 @@ export function modelInvocabilityRefusal(error: unknown): ModelInvocability {
   // A raw ProviderSpendError carries `amounts`; a query-mapped refusal carries the same two public fields as `params` (never account totals here).
   const typed = error as { params?: { requested?: unknown; currency?: unknown }; amounts?: { requested?: unknown; currency?: unknown } } | null;
   const params = typed?.params ?? typed?.amounts, requested = params?.requested;
-  if (code === 'PROVIDER_SPEND_EXHAUSTED' && typeof requested === 'number' && Number.isSafeInteger(requested) && requested >= 0 && params?.currency === 'USD')
-    return { invocable: false, reason: { kind, code, reservation: { requestedMinorUnits: requested, currency: 'USD' } } };
+  const currency = params?.currency;
+  if (code === 'PROVIDER_SPEND_EXHAUSTED' && typeof requested === 'number' && Number.isSafeInteger(requested) && requested >= 0 && typeof currency === 'string' && /^[A-Z]{3}$/u.test(currency))
+    return { invocable: false, reason: { kind, code, reservation: { requestedMinorUnits: requested, currency } } };
   return { invocable: false, reason: { kind, code } };
 }
 /** The sole read model owner. Sequential checks bound resource use; one failed reference cannot mark another ready. */

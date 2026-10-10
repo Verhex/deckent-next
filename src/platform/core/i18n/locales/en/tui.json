@@ -995,7 +995,7 @@
   "tui.provider.badRequestUnknown": "{provider} rejected the request (HTTP 400); the provider message is unavailable.",
   "tui.provider.badRequestMigration": "Open /model and choose “Switch to the current protocol”. The call is recorded and is not retried.",
   "tui.provider.badRequestProfile": "Check the model profile and request settings in /model. The call is recorded and is not retried.",
-  "tui.model.reason.reservation": "Required reservation: {amount} USD. It exceeds the available scope budget.",
+  "tui.model.reason.reservation": "Required reservation: {amount} {currency}. It exceeds the available scope budget.",
   "tui.model.budgetAlternative": "Choose {model} ({provider}); its readiness check fits the current budget. Rechecked when selected.",
   "tui.model.budgetNoAlternative": "No ready alternative fits the budget. Connect a cheaper model in /provider, or review the scope budget in this window.",
   "tui.workspace.entry": "Select provider workspace",

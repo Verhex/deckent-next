@@ -406,6 +406,7 @@
     },
     "src/composition/core/root": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/adapters/core/contract",
         "src/platform/core/config",
         "src/engine/core/approval"
@@ -1526,6 +1527,7 @@
     },
     "src/composition/core/model-invocation": {
       "dependencies": [
+        "src/adapters/core/provider-connect",
         "src/adapters/core/local-keyring",
         "src/adapters/core/contract",
         "src/adapters/core/local-runtime-socket",
@@ -1571,6 +1573,8 @@
     },
     "src/engine/core/provider-spend": {
       "dependencies": [
+        "src/domain/core/adapter-registry",
+        "src/platform/core/validate",
         "src/domain/core/primitives",
         "src/domain/core/provider-spend",
         "src/domain/core/model-invocation",
