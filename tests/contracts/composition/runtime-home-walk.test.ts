@@ -8,12 +8,13 @@ import { measureTestShellHost } from '../../fixtures/shell-host.js';
 const measured = await measureTestShellHost();
 if (measured.bubblewrap.status !== 'available') console.info('verify-not-run: HOME approval/runtime execution', JSON.stringify(measured));
 afterEach(async () => { vi.unstubAllEnvs(); await closeModeRuntimes(); });
-const grants = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
+// Batch F: the shell rule is not mode-eligible, so full access still shows the approval card and the command runs only after it is approved.
+const grants = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval'), rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
   rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set'])];
 
 describe.skipIf(measured.bubblewrap.status !== 'available')('HOME protection through the real approval/runtime surface', () => {
   it('approves the credential command unchanged, then proves large-HOME execution and credential isolation', async () => {
-    const f = await modeRuntime({ grants, mode: 'full-auto', shell: { realm: 'require-sandbox' } });
+    const f = await modeRuntime({ grants, mode: 'full-auto', shell: { schemaVersion: 1, realm: 'require-sandbox' } });
     const home = f.env.HOME; vi.stubEnv('HOME', home);
     const secret = 'SYNTHETIC-APPROVED-HOME-SECRET'; await writeFile(join(home, '.npmrc'), secret);
     for (let repo = 0; repo < 5; repo++) {
@@ -29,7 +30,7 @@ describe.skipIf(measured.bubblewrap.status !== 'available')('HOME protection thr
   });
 
   it('approves the same command but refuses before execution when HOME cannot be determined', async () => {
-    const f = await modeRuntime({ grants, mode: 'full-auto', shell: { realm: 'require-sandbox' } });
+    const f = await modeRuntime({ grants, mode: 'full-auto', shell: { schemaVersion: 1, realm: 'require-sandbox' } });
     const fake = join(f.env.HOME, 'not-a-directory'); await writeFile(fake, 'ordinary'); vi.stubEnv('HOME', fake);
     const out = await f.call('run_shell', { command: 'cat "$HOME/.npmrc"; echo unsafe > marker' }, 'allow', { fullAccess: true });
     expect(out.card).toBe(true); expect(out.status).toBe('error'); expect(out.text).toContain('SHELL_HOME_CREDENTIALS_UNDETERMINED');

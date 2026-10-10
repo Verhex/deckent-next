@@ -139,7 +139,8 @@ describe('A1 complete-field decision projection and private custody', () => {
     expect(ledgerEntrySummary(entry)).toBe('SAFE-TITLE');
     const snapshot = buildWorklineBridgeSnapshot({ profile: { id: 'fx', model: { modelId: 'fx-model' } } as never,
       plan: { openaiBaseUrl: 'http://localhost:1' } as never, tty: { columns: 80, rows: 24 }, ledgerTail: [entry], observedAtMs: 1 });
-    expect(snapshot.ledgerTail[0]).toBe(entry); expect(JSON.stringify(snapshot)).not.toContain(SECRET);
+    // REDACTOR-REMAINING (batch F): the bridge snapshot masks cloned notice display values, so a safe entry arrives as an equal copy.
+    expect(snapshot.ledgerTail[0]).toStrictEqual(entry); expect(JSON.stringify(snapshot)).not.toContain(SECRET);
     const saved: unknown[] = [], model: unknown[] = [];
     const view = mount({ knownSecrets: known, ledger: ledger([approval('fixture', SECRET)]),
       sessions: { async save(value) { saved.push(value); }, async list() { return []; }, async load() { return null; } },

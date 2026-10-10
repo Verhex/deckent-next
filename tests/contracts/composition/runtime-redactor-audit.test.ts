@@ -3,13 +3,17 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { agentToolArgumentsDigest } from '#engine/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // Security verification: approve this original destructive card, then assert both the effect and its masked audit. No safe-command swap.
 afterEach(closeModeRuntimes);
-it.skipIf(process.platform !== 'linux')('W12 masks the original shell command before the audit head cut after approval, without substituting its effect', async () => {
+// W3-SANDBOX floor: full access runs only in the real open sandbox (a host realm refuses with SHELL_SANDBOX_UNAVAILABLE before execution).
+const measured = await measureTestShellHost();
+if (measured.bubblewrap.status !== 'available') console.info('verify-not-run: W12 audit head through full access', JSON.stringify(measured));
+it.skipIf(process.platform !== 'linux' || measured.bubblewrap.status !== 'available')('W12 masks the original shell command before the audit head cut after approval, without substituting its effect', async () => {
   const grants = [rule('shell-tools', 'agent-tool', ['run_shell'], 'require-approval'), rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
     rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set'])];
-  const f = await modeRuntime({ shell: { schemaVersion: 1, realm: 'host' }, grants, mode: null });
+  const f = await modeRuntime({ shell: { schemaVersion: 1, realm: 'require-sandbox' }, grants, mode: null });
   const canary = 'sk-w12FictitiousCanaryQ7x8Y9z0';
   // The canary straddles the old 200-character cut; a post-cut redaction would leak its prefix.
   const command = `printf '%s' '${'x'.repeat(174)} ${canary}'; rm src/a.ts`, args = { command };
