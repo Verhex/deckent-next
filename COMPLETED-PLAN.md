@@ -1,10 +1,10 @@
 # Deckent Next — tamamlanan plan
 
-## alpha.24 — aday (Unreleased, `wave/batch-e`, inmedi)
+## alpha.24 — Unreleased (`wave/batch-e`, main'de: PR #67, merge `3e47aeab`)
 
 - **Aday içerik (batch E, lead bütçe bölünmesi 2026-10-10):** MCP-TURN-TRUST-CARD-I18N dilim 1 (dogfood benimsemesi `8208517a` → `0606d74c`: `describeMcpTrustCard` EN/TR katalogdan, EN baytları korunur; ilk dogfood işi, Codex worker, 2026-10-10), FLAKY-CLOCK-FIX, MAIN-RED-FIX, CONNECT-LOCALITY, SWITCH-TOOLING. Kalan hatlar batch E2'de (PLAN NEXT-PACKAGE-2026-10-10).
 - **Yazar kanıtı (bu host, bağımsız değil):** FLAKY-CLOCK 30× yük altında 30/30 (240 test); SWITCH-TOOLING host testleri 30/30; MAIN-RED-FIX 14/18 yeşil, 3'ü yalnız küçük HOME ile, 1 kırmızı (PLAN MAIN-RED-FIX). Sürümler değişmedi (protokol 26, ledger 50, policy v9).
-- **Durum:** inmedi; bağımsız toplu inceleme ve iniş bekliyor. Entegrasyon kanıtı `proof/BATCH-E-2026-10-10/WORKER.md`. İniş anında bu giriş kesinleşir (PR, merge SHA, canlı geçiş).
+- **Durum:** main'e indi: PR #67, merge `3e47aeab` (2026-10-10), sürüm girdisi `9eb0f213`, `package.json` 1.0.0-alpha.24. Canlı/N1 geçişi: stage 2026-10-10 09:40Z başladı (`proof/ALPHA24-SWITCH-2026-10-10/`), sonuç kanıtta yok, doğrulanamadı. Astra toplu inceleme kanıtı yok, doğrulanamadı. Entegrasyon kanıtı `proof/BATCH-E-2026-10-10/WORKER.md`.
 
 ## alpha.23 — 2026-10-09 (PR #65)
 
