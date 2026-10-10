@@ -320,6 +320,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/composition/core/monitor",
         "src/adapters/core/local-principal",
         "src/composition/core/scoped-request",
         "src/composition/core/runs",
@@ -1159,6 +1160,7 @@
     },
     "src/surfaces/core/mcp": {
       "dependencies": [
+        "src/engine/core/monitor",
         "src/platform/core/validate",
         "src/domain/core/attempt",
         "src/domain/core/model-activation",

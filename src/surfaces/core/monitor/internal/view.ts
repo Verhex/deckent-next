@@ -373,7 +373,7 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
       : `${first.taskId}: ${first.lastAttempt?.firstFailure ?? t('monitor.detail.firstFailureMissingShort', {}, locale)}`}` : '—';
   };
   return [
-    { kind: 'line', line: [span(globalSummary({ schemaVersion: 1, observedAt: now, installs, control: 'observe-only' }, locale), 'strong')] },
+    { kind: 'line', line: [span(globalSummary({ installs }, locale), 'strong')] },
     ...installs.filter(install => install.status !== 'available' || w.warnings(install).length).map((install): MonitorBlock => {
       const problems = w.warnings(install).map(entry => entry.text).join('; ') || '—';
       return { kind: 'line', line: [span(`${marks.warn} ${install.status === 'available' ? t('monitor.summary.installWarnings', { install: install.id, problems }, locale)

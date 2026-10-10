@@ -30,7 +30,7 @@ export const globalRunCell = (run: MonitorRun, locale: Locale): MonitorSpan => {
   return span(value.state === 'held' ? t('monitor.global.heldBy', { state: globalStateLabel(value.state, locale), waitingOn: waitLabel(value.waitingOn, locale) }, locale)
     : globalStateLabel(value.state, locale), ROLES[value.state]);
 };
-export function globalSummary(snapshot: MonitorSnapshot, locale: Locale): string {
+export function globalSummary(snapshot: Pick<MonitorSnapshot, 'installs'>, locale: Locale): string {
   const counts: Record<HumanStateCode, number> = { queued: 0, running: 0, checking: 0, held: 0, done: 0, stopped: 0 };
   for (const install of snapshot.installs) for (const run of install.runs) counts[projectHumanState({ kind: 'run', value: run }).state]++;
   return t('monitor.global.counts', counts, locale);

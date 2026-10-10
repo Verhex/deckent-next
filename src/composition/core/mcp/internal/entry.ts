@@ -18,6 +18,7 @@ import { describeConfiguredOperationTools } from '#composition/core/operations/i
 import { applyConfiguredRunLifecycle, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
 import { recordConfiguredMcpIngress } from './ingress.js';
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
+import { inspectMonitor } from '#composition/core/monitor/index.js';
 /** Every handler, including direct configured writes, runs as the distinct MCP actor. */
 export const mcpApplications = <T extends object>(applications: T): T => Object.fromEntries(Object.entries(applications).map(([name, value]) =>
   [name, typeof value === 'function' ? (...args: unknown[]) => withMcpPrincipal(() => Reflect.apply(value, applications, args)) : value])) as T;
@@ -32,6 +33,7 @@ export async function main(root = process.cwd()) {
     recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
     applyRunControl: command => applyConfiguredRunLifecycle(root, command),
     inspectDecision: query => inspectConfiguredDecision(root, query),
+    inspectMonitor: query => inspectMonitor(root, {}, query),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
     inspectToolchainCurrency: () => inspectConfiguredToolchainCurrency(root),
     updateToolchains: input => updateConfiguredToolchains(root, input),

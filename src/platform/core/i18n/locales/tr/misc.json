@@ -568,6 +568,7 @@
   "mcp.tool.inferencePlan": "Yapılandırılmış çıkarım servis planını oku. Kapasite tahminidir; çalışan sunucu veya Run kabulü değildir.",
   "mcp.tool.inferenceBudget": "Yapılandırılmış çıkarım profili için boş bütçe token tahminini oku. Kapasite ayırmaz.",
   "mcp.tool.inspectInventory": "Yetkili kapsamda kayıtlı yürütme Attempt’lerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
+  "mcp.tool.inspectMonitor": "Salt okunur monitor görüntüsünü oku. install, toplama başlamadan current veya yapılandırılmış tek bir Next kaynağını seçer; seçilmeyen kaynaklar açılmaz. sourcesRead, erişilemeyen veya reddedilenler dahil toplama denenen kaynakları listeler. Seçilen her kurulumun kapsam ve çıktı politika denetimleri korunur.",
   "mcp.tool.inspectToolchainCurrency": "Kabul edilmiş worker CLI sürümlerini yayımlanan dağıtımlarla karşılaştır (policy izin verirse paket başına tek sınırlı registry okuması). Yalnız raporlar; güncellemez, yeniden derlemez, etkinleştirmez.",
   "mcp.tool.updateToolchains": "Kabul edilen toolchain'ler eskiyse sonraki worker imaj sürümünü planla (policy veya apply ile derle); plan/receipt/öneri artefaktı yazar, kurulu config'e yazmaz.",
   "mcp.tool.policyVocabulary": "Yerleşik politika kaynak ve işlem kimliklerini listele. Bu bilgi yetki vermez.",

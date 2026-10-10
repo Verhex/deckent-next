@@ -14,6 +14,7 @@ import { createElement } from 'react';
 import { render } from 'ink';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { createConfiguredRuntimeClient, inspectConfiguredWorkers, inspectConfiguredRun, inspectMonitor } from '#composition/index.js';
+import { mcpApplications } from '#composition/core/mcp/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
@@ -116,8 +117,18 @@ describe('inspectMonitor composition', () => {
   it('reports a fully denied install as denied instead of failing', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s'], ['other-scope']);
-    const snapshot = await inspectMonitor(current.dir, current.options);
+    const snapshot = await inspectMonitor(current.dir, current.options, { schemaVersion: 1, install: 'current' });
+    expect(snapshot.sourcesRead).toEqual(['current']);
     expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], approvals: [], pools: [], scopeIds: [] });
+    expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
+  });
+  it('selected MCP monitor keeps its distinct actor and cannot use a terminal-owner scope grant', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-mcp-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s']);
+    const applications = mcpApplications({ inspectMonitor: () => inspectMonitor(current.dir, current.options, { schemaVersion: 1, install: 'current' }) });
+    const snapshot = await applications.inspectMonitor();
+    expect(snapshot.sourcesRead).toEqual(['current']);
+    expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], workers: [], approvals: [], pools: [], scopeIds: [] });
     expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
   });
   it('opt-in open filter: finished dispatches come from the ledger only (no Docker/sidecar/authorization reads); the default listing is unchanged', async () => {
