@@ -29,6 +29,17 @@ describe.skipIf(measured.bubblewrap.status !== 'available')('HOME protection thr
     expect(await readFile(join(f.project, 'marker'), 'utf8')).toBe('executed\n');
   });
 
+  it('with a mode-eligible rule, full access runs the same command without a card and still hides HOME credentials', async () => {
+    const eligible = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), ...grants.slice(1)];
+    const f = await modeRuntime({ grants: eligible, mode: 'full-auto', shell: { schemaVersion: 1, realm: 'require-sandbox' } });
+    const home = f.env.HOME; vi.stubEnv('HOME', home);
+    const secret = 'SYNTHETIC-FULL-ACCESS-HOME-SECRET'; await writeFile(join(home, '.npmrc'), secret);
+    const out = await f.call('run_shell', { command: 'cat "$HOME/.npmrc"; printf changed >> "$HOME/.npmrc"; echo executed > marker' }, 'allow', { fullAccess: true });
+    expect(out.card).toBe(false); expect(out.status, out.text).toBe('ok'); expect(out.text).toContain('sandbox: bubblewrap');
+    expect(out.text).not.toContain(secret); expect(await readFile(join(home, '.npmrc'), 'utf8')).toBe(secret);
+    expect(await readFile(join(f.project, 'marker'), 'utf8')).toBe('executed\n');
+  });
+
   it('approves the same command but refuses before execution when HOME cannot be determined', async () => {
     const f = await modeRuntime({ grants, mode: 'full-auto', shell: { schemaVersion: 1, realm: 'require-sandbox' } });
     const fake = join(f.env.HOME, 'not-a-directory'); await writeFile(fake, 'ordinary'); vi.stubEnv('HOME', fake);
