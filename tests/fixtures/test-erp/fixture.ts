@@ -29,6 +29,9 @@ export async function testErpFixture() {
         responseMaxBytes: config.http.responseMaxBytes, idempotencyLookup: true } }] } }));
     registerProviderConfig();
     const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
+    // A v2 policy requires a trusted bindings document even when its grants name principals directly.
+    await writeFile(productResourcePath(opened.layout, 'bindings'), JSON.stringify({ schemaVersion: 2, revision: config.policy.revision,
+      modes: [], bindings: [] }), { mode: 0o600 });
     const policy = async (fourEyes = false) => {
       await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 2, revision: config.policy.revision,
         roles: [], restrictions: [], grants: [
