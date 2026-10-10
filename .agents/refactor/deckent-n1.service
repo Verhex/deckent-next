@@ -1,0 +1,17 @@
+# Host-only template. Replace all @...@ placeholders with absolute paths before installation.
+[Unit]
+Description=Deckent N1 development runtime
+
+[Service]
+Type=simple
+WorkingDirectory=@PROJECT@
+Environment=DECKENT_NEXT_INSTALL_ROOT=@INSTALL_ROOT@
+ExecStart=@NODE@ @LAUNCHER@ cli runtime serve --json
+UMask=0022
+Restart=on-failure
+RestartSec=5s
+KillMode=control-group
+TimeoutStopSec=90s
+
+[Install]
+WantedBy=default.target
