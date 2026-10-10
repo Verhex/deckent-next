@@ -29,7 +29,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.22`** (2026-10-09 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.23`** (2026-10-09 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
@@ -336,7 +336,7 @@ web paneli. Docker işçisi host çekirdeğini paylaşır; sanal makine değildi
 
 ```mermaid
 flowchart LR
-  L["Yayımlandı · alpha.22<br/>terminal pencereleri · onay penceresi · slash komut pencereleri<br/>/config · /mode · /mcp · /provider · /model<br/>kolay MCP (HTTP, içe aktarma, güven) · şifreli anahtar deposu<br/>harcama kesinleştirme ve bütçeler · OpenRouter modelleri · istem önbelleği"] --> P["Sürüyor<br/>maliyet korumaları · sağlayıcı başına harcama sınırı<br/>önbellek kırılma noktaları ve sıkıştırma tetikleyicileri"]
+  L["Yayımlandı · alpha.23<br/>terminal pencereleri · onay penceresi · slash komut pencereleri<br/>/config · /mode · /mcp · /provider · /model<br/>kolay MCP (HTTP, içe aktarma, güven) · şifreli anahtar deposu<br/>harcama kesinleştirme ve bütçeler · OpenRouter modelleri · istem önbelleği"] --> P["Sürüyor<br/>maliyet korumaları · sağlayıcı başına harcama sınırı<br/>önbellek kırılma noktaları ve sıkıştırma tetikleyicileri"]
   P --> N["Sırada<br/>abonelikler · işçi kimlik bilgisi kipleri<br/>sistem istemi ve ayarlar<br/>proje talimat dosyası"]
   N --> F["Planlı<br/>Firecracker mikro VM sandbox'ı<br/>HTTP API · web paneli · masaüstü"]
 ```

@@ -29,7 +29,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.22`** (released 2026-10-09). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.23`** (released 2026-10-09). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -335,7 +335,7 @@ a remote HTTP API, Desktop and Dashboard. A Docker worker shares the host kernel
 
 ```mermaid
 flowchart LR
-  L["Released · alpha.22<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets · OpenRouter models · prompt cache"] --> P["In progress<br/>cost guards · per-provider spend limits<br/>cache breakpoints and compaction triggers"]
+  L["Released · alpha.23<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets · OpenRouter models · prompt cache"] --> P["In progress<br/>cost guards · per-provider spend limits<br/>cache breakpoints and compaction triggers"]
   P --> N["Next<br/>subscriptions · worker credential modes<br/>system prompt and settings<br/>project instruction file"]
   N --> F["Planned<br/>Firecracker microVM sandbox<br/>HTTP API · Dashboard · Desktop"]
 ```
