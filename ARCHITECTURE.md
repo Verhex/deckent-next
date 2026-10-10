@@ -409,6 +409,22 @@ refresh, usage and dogfood closure remain open.
 - Product-state operations (Run, Attempt, Approval, reservations, receipts) are typed domain operations.
   LLMs neither generate their queries nor choose transactions, credentials, database routing or retry policy.
 - Keep execution state, memory records, vector search, audit/events and artifact storage as separate ports.
+- **AUDIT-CHECKPOINT (W12 author candidate, 2026-10-10):** `AuditApplication` seals a typed `audit-checkpoint` event per scope
+  after `audit_checkpoints.everyRecords` ordinary events (registry default 1,000). Checkpoints carry the interval's first/last sequence,
+  count, digest, cadence and previous checkpoint digest; they inherit the producing event's principal/policy context. The SQLite append
+  transaction persists the event and its checkpoint together, including when called inside another ledger transaction. Idempotent replay
+  creates no checkpoint; restart reads the durable head. Audit event v1 gains an additive subject; ledger v50 and runtime protocol stay unchanged.
+  Older binaries refuse the new subject with `AUDIT_INTEGRITY`; do not downgrade a ledger containing checkpoints to a build unaware of this kind.
+  All configured ledger audit producers pass the selected cadence; portable backup receipts remain separate one-record streams.
+  `deckent audit verify --scope <id> [--anchor-sequence <n> --anchor-digest <sha256>] [--json]` uses one read-only SQLite snapshot after existing
+  scope read admission and opens the existing key with creation disabled. It verifies event seals, sequence/interval continuity and checkpoint
+  links, reports a due/missing checkpoint, and exports the latest sealed record and anchor for external retention. `maxRecords`/`pageSize`
+  bound work; exhaustion is `AUDIT_LIMIT`, never complete verification. Earlier uncheckpointed history beyond the selected cadence is
+  reported as missing coverage; this candidate does not silently erase that finding. Cadence changes should occur at checkpoint boundaries.
+  Without a retained external anchor, wholesale suffix deletion (including all evidence of later checkpoints) remains unknowable; the
+  uncheckpointed tail remains outside that external mark. HMAC verification requires trusted custody of the existing key: this is no public-key
+  verification, SIEM delivery/receipt, key rotation, keyring or MEMORY conflict-journal implementation. Independent/live acceptance remains open.
+
   An index may be rebuilt from canonical records; it is not an independent approval or Run-state authority.
 - **Artifact yayını (ARTIFACT-RACE, PR #7):** içerik-adresli dosya `link` ile yerine koymadan yayımlanır; `EEXIST` mevcut digest inode’unu korur ve kazanan içerik doğrulanır. Read/put, yalnız aynı dizindeki `.staging.` önekli regular adın aynı `dev`/`ino` olduğunu denetleyip linki kaldırabilir; ardından sıkı `nlink=1`, uid, mode 0600, no-follow, uzunluk/digest kontrolleri sürer. Yayıncının link→unlink arasında ölümü sonraki read/put ile uzlaştırılır. **Read fiziksel olarak salt okunur değildir:** staging temizliği yan etkidir; read cleanup için dizin fsync garantisi yoktur, gerçek read-only filesystem’de ret yayılır. Önek sahiplik kanıtı değildir; yönetilen dizin/aynı uid trusted-host sınırı sürer, saldırgan aynı uid izolasyonu veya tarama kapasitesi iddia edilmez.
 - Resolve installed storage modules from schema-validated effective config and a capability registry once per
