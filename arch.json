@@ -1440,6 +1440,7 @@
     },
     "src/adapters/core/provider-openai-chat": {
       "dependencies": [
+        "src/platform/core/validate",
         "src/adapters/core/provider-http-json",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
@@ -1575,6 +1576,7 @@
     },
     "src/adapters/core/provider-connect": {
       "dependencies": [
+        "src/platform/core/validate",
         "src/domain/core/model-invocation",
         "src/engine/core/agent-turn",
         "src/domain/core/provider-catalog",

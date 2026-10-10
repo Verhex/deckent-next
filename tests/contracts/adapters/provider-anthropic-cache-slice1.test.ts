@@ -63,6 +63,25 @@ const profileWrites = (writes: readonly { keyPath: string; value: unknown }[]) =
   .map(write => (write.value as { profiles: { adapter: { definition: Record<string, unknown> }; version: number }[] }).profiles);
 
 describe('models.connect writes the cache default only for a new profile', () => {
+  it('keeps each authored layer context window and copies it from the sibling when a profile is missing', async () => {
+    const first = connectHarness({}); await first.app.connect(connectCommand);
+    const written = (first.state.project['provider_invocation_profiles'] as { profiles: Record<string, unknown>[] }).profiles[0]!;
+    const globalProfile = { ...written, contextWindowTokens: 800_000 }, projectProfile = { ...written, contextWindowTokens: 600_000 };
+    const foreignScope = { ...written, scopeId: 'another', contextWindowTokens: 400_000 };
+    for (const profiles of [[projectProfile, foreignScope], [foreignScope]]) {
+      const run = connectHarness({ ...first.state.project, provider_invocation_profiles: { schemaVersion: 1, profiles } },
+        { provider_invocation_profiles: { schemaVersion: 1, profiles: [globalProfile] } });
+      await run.app.connect({ ...connectCommand, commandId: `context-layers-${profiles.length}` });
+      expect(run.state.global['provider_invocation_profiles']).toEqual({ schemaVersion: 1, profiles: [globalProfile] });
+      const result = (run.state.project['provider_invocation_profiles'] as { profiles: Record<string, unknown>[] }).profiles;
+      expect(result.find(profile => profile['scopeId'] === 'scope')!['contextWindowTokens']).toBe(profiles.length === 2 ? 600_000 : 800_000);
+      expect(result.find(profile => profile['scopeId'] === 'another')).toEqual(foreignScope);
+      run.writes.length = 0;
+      expect((await run.app.connect({ ...connectCommand, commandId: `context-repeat-${profiles.length}` })).steps.profile).toBe('present');
+      expect(profileWrites(run.writes)).toEqual([]);
+    }
+  });
+
   it('both layers author profiles and only the user layer has this one (no cache field): the project copy is written equal to it, without a cache field', async () => {
     const first = connectHarness({});
     await first.app.connect(connectCommand);
