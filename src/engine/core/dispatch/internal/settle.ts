@@ -6,6 +6,9 @@ import { DispatchError, type DispatchClaim, type DispatchTerminal } from './port
  */
 export function projectDispatchTerminal(current: AttemptSnapshot, claim: DispatchClaim, terminal: DispatchTerminal): AttemptSnapshot {
   if (!sameAttemptIdentity(current.identity, claim.request.identity)) throw new DispatchError('DISPATCH_CONFLICT');
+  // A late exit proves process termination, not the disposition of a lost worker's effects.
+  // Keep the durable unknown for Run projection/reconciliation; the journal retains the exit separately.
+  if (current.lastObservation?.result.kind === 'unknown') return current;
   try { return applyAttemptObservation(current, { protocolVersion: 1, identity: current.identity,
     sequence: (current.lastObservation?.sequence ?? 0) + 1, eventId: 'dispatch-terminal',
     result: { kind: 'exited', exitCode: terminal.exitCode, ...(terminal.signal === undefined ? {} : { signal: terminal.signal }) } }, current.revision); } catch (error) {

@@ -3,3 +3,5 @@ export type { AttemptIdentity, AttemptObservation, AttemptSnapshot, AttemptPhase
 export { createAttempt, attemptPhase, requestAttemptCancellation, applyAttemptObservation } from './internal/reduce.js';
 export { processExitCauseShape, processExitCauseSchema, isValidExitCause } from './internal/contract.js';
 export type { ProcessExitCause } from './internal/contract.js';
+export { decideDispatchLoss } from './internal/dispatch-loss.js';
+export type { WorkerIncarnation, DispatchLossRecord, DispatchFence, DispatchTerminationProof, LostDispatchAction, DispatchLossDecision } from './internal/dispatch-loss.js';
