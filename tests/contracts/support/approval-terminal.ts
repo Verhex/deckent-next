@@ -42,7 +42,7 @@ async function driveTerminal(argv: string[], env: NodeJS.ProcessEnv, mode = 'tty
   if (result.status !== 0) throw new Error(result.output);
   const line = result.output.split(/\r?\n/u).find(value => value.startsWith('{"response":'));
   if (!line) throw new Error(result.output);
-  return JSON.parse(line) as { response: { ok: boolean; result?: unknown; error?: { code: string } }; events: unknown[]; decisions: unknown[] };
+  return JSON.parse(line) as { response: { ok: boolean; result?: unknown; error?: { code: string; params?: Record<string, unknown> } }; events: unknown[]; decisions: unknown[] };
 }
 export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cwd?: string, mode = 'tty') {
   const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(argv), mode, cwd ?? ''],
@@ -50,7 +50,7 @@ export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cw
   const result = JSON.parse(stdout) as { status: number; output: string };
   return result;
 }
-export async function terminalApplication<T = unknown>(f: { project: string; env: NodeJS.ProcessEnv }, operation: 'policy-upgrade' | 'mcp-capability' | 'decide', scopeId: string, input: unknown): Promise<T> {
+export async function terminalApplication<T = unknown>(f: { project: string; env: NodeJS.ProcessEnv }, operation: 'policy-upgrade' | 'mcp-capability' | 'decide' | 'project-init', scopeId: string, input: unknown): Promise<T> {
   const argv = [process.execPath, resolve('tests/fixtures/approval-terminal-application.mjs'), f.project, JSON.stringify({ operation, scopeId, input })];
   const value = await driveTerminal(argv, f.env);
   if (!value.response.ok) throw ErrorRegistry.createError(value.response.error!.code);

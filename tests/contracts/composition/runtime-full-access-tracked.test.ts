@@ -13,7 +13,8 @@ import { trackedChangesOfToolResult } from '#surfaces/core/terminal-kit/index.js
 // are unchanged. Trigger: the live agent ran `rm CHANGELOG.md` in full access (2026-09-30T12:27Z) and nobody noticed.
 afterEach(closeModeRuntimes);
 const bwrapReady = (await measureTestShellHost()).bubblewrap.status === 'available';
-const HOST = { shell: { schemaVersion: 1, realm: 'host' } };
+// W3-SANDBOX: the admitted full-access shell realm is the open sandbox; host execution is refused.
+const SANDBOX = { shell: { schemaVersion: 1, realm: 'require-sandbox' } };
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);
 const TOOLS = [rule('read', 'agent-tool', ['read_file', 'list_dir', 'glob', 'grep'], 'allow'),
   rule('edit-tools', 'agent-tool', ['edit_file', 'write_file'], 'require-approval', true), rule('file-write', 'operation', ['workspace.file.write'], 'allow'),
@@ -22,7 +23,7 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user
 const fa = { fullAccess: true } as const;
 type Runtime = Awaited<ReturnType<typeof modeRuntime>>;
 async function tracked(input: { shell?: Record<string, unknown>; mode?: Parameters<typeof modeRuntime>[0]['mode'] } = {}) {
-  const f = await modeRuntime({ ...(input.shell ? { shell: input.shell } : HOST), grants: [...TOOLS, FULL_ACCESS], mode: input.mode ?? null });
+  const f = await modeRuntime({ ...(input.shell ? { shell: input.shell } : SANDBOX), grants: [...TOOLS, FULL_ACCESS], mode: input.mode ?? null });
   await writeFile(join(f.project, '.gitignore'), '.deckent/\n');
   await writeFile(join(f.project, 'CHANGELOG.md'), '# Changelog\n');
   git(f.project, 'init', '-q'); git(f.project, 'add', '-A'); git(f.project, 'commit', '-qm', 'base');
@@ -50,7 +51,7 @@ describe.skipIf(process.platform !== 'linux')('full access: tracked-file warning
     expect(streamed(call)).toContain(`${line}\n`);
     expect(finished(call)).toMatchObject({ kind: 'tool.finished', status: 'ok' });
     v18Only(call);
-    expect(call.text.startsWith('[deckent] run_shell: tracked: deleted=1 overwritten=0; exit 0 after ')).toBe(true);
+    expect(call.text.startsWith('[deckent] run_shell: tracked: deleted=1 overwritten=0; sandbox: bubblewrap; exit 0 after ')).toBe(true);
     expect(card(call)).toEqual({ deleted: 1, overwritten: 0 });
     const [event, ...more] = trackedEvents(f);
     expect(more).toEqual([]);
@@ -79,7 +80,7 @@ describe.skipIf(process.platform !== 'linux')('full access: tracked-file warning
   }, 60_000);
 
   it('is a no-op for a project outside git', async () => {
-    const f = await modeRuntime({ ...HOST, grants: [...TOOLS, FULL_ACCESS], mode: null });
+    const f = await modeRuntime({ ...SANDBOX, grants: [...TOOLS, FULL_ACCESS], mode: null });
     const call = await f.call('run_shell', { command: 'rm src/a.ts' }, 'deny', fa);
     expect(call).toMatchObject({ card: false, status: 'ok' });
     expect(call.text).not.toContain('tracked files');
@@ -111,7 +112,7 @@ describe.skipIf(process.platform !== 'linux')('full access: tracked-file warning
   }, 60_000);
 
   it('measures a call that timed out after deleting (the stopped-run path)', async () => {
-    const f = await tracked({ shell: { schemaVersion: 1, realm: 'host', timeoutMs: 1_000 } });
+    const f = await tracked({ shell: { schemaVersion: 1, realm: 'require-sandbox', timeoutMs: 1_000 } });
     const call = await f.call('run_shell', { command: 'rm CHANGELOG.md && sleep 20' }, 'deny', fa);
     expect(call.status).toBe('error');
     expect(call.text).toContain('[deckent] tracked files changed: deleted 1 (CHANGELOG.md), overwritten 0');

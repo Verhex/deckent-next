@@ -6,14 +6,15 @@ import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agen
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // MODES-3 (owner 2026-09-29) on the real runtime service: a turn launched in full access (`chatTurn.fullAccess`) runs everything without a
-// card — host shell, the destructive table, the write floor, `.git` — only on the company grant `permission-mode`/`set` `full-access`, with a
+// card — open sandbox shell, the destructive table, the write floor, `.git` — only on the company grant `permission-mode`/`set` `full-access`, with a
 // sealed `full-access-turn` event before the turn and a `full-access-call` event before every effect. Deny rules hold in every mode; a
 // company require-approval that is not mode-eligible still asks; the hard floor (product state, credentials, the configuration write) stays
 // closed in every mode. Real policy/bindings files, real host shell and — where available — real bubblewrap.
 afterEach(closeModeRuntimes);
 const measured = await measureTestShellHost();
 const bwrapReady = measured.bubblewrap.status === 'available';
-const HOST = { shell: { schemaVersion: 1, realm: 'host' } };
+// W3-SANDBOX: full access requires the real open sandbox; host and host fallback refuse before execution.
+const SANDBOX = { shell: { schemaVersion: 1, realm: 'require-sandbox' } };
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);
 const TOOLS = [rule('read', 'agent-tool', ['read_file', 'list_dir', 'glob', 'grep'], 'allow'),
   rule('edit-tools', 'agent-tool', ['edit_file', 'write_file'], 'require-approval', true), rule('file-write', 'operation', ['workspace.file.write'], 'allow'),
@@ -23,16 +24,23 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user
 const subjects = (f: Awaited<ReturnType<typeof modeRuntime>>) => f.audit().map(record => record.event.subject);
 
 describe.skipIf(process.platform !== 'linux')('full access through the runtime service (MODES-3)', () => {
+  it('refuses explicit host full access before running the unchanged destructive command', async () => {
+    const f = await modeRuntime({ shell: { schemaVersion: 1, realm: 'host' }, grants: [...TOOLS, FULL_ACCESS], mode: null });
+    const result = await f.call('run_shell', { command: 'rm -rf src' }, 'allow', { fullAccess: true });
+    expect(result).toMatchObject({ card: false, status: 'error', text: expect.stringContaining('SHELL_SANDBOX_UNAVAILABLE') });
+    expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
+    expect(subjects(f).filter(event => event['kind'] === 'full-access-call')).toEqual([]);
+  });
   it('refuses a full-access turn without the company grant before anything runs, and records the refusal', async () => {
-    const f = await modeRuntime({ ...HOST, grants: TOOLS, mode: { mode: 'full-access' } });
+    const f = await modeRuntime({ ...SANDBOX, grants: TOOLS, mode: { mode: 'full-access' } });
     await expect(f.call('run_shell', { command: 'rm src/a.ts' }, 'deny', { fullAccess: true })).rejects.toMatchObject({ code: 'PERMISSION_MODE_DENIED', params: { mode: 'full-access' } });
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
     expect(subjects(f)).toEqual([expect.objectContaining({ kind: 'full-access-turn', decision: { effect: 'deny', ruleId: null } })]);
     expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
   }, 60_000);
 
-  it('runs the destructive table, the write floor and .git without a card on the host, auditing the turn and every effect call first', async () => {
-    const f = await modeRuntime({ ...HOST, grants: [...TOOLS, FULL_ACCESS], mode: null, dataRoot: DATA });
+  it('runs the destructive table, the write floor and .git without a card in the open sandbox, auditing the turn and every effect call first', async () => {
+    const f = await modeRuntime({ ...SANDBOX, grants: [...TOOLS, FULL_ACCESS], mode: null, dataRoot: DATA });
     git(f.project, 'init', '-q');
     const fa = { fullAccess: true } as const;
     expect(await f.call('run_shell', { command: 'rm -rf src' }, 'deny', fa)).toMatchObject({ card: false, status: 'ok' });
@@ -58,7 +66,7 @@ describe.skipIf(process.platform !== 'linux')('full access through the runtime s
   }, 120_000);
 
   it('keeps the hard floor closed in every mode: product state, credentials and the configuration write (card), never a silent run', async () => {
-    const f = await modeRuntime({ ...HOST, grants: [...TOOLS, FULL_ACCESS], mode: null, dataRoot: DATA });
+    const f = await modeRuntime({ ...SANDBOX, grants: [...TOOLS, FULL_ACCESS], mode: null, dataRoot: DATA });
     await writeFile(join(f.project, '.env'), 'TOKEN=secret-value\n');
     const config = await readFile(join(f.project, '.deckent/config.json'), 'utf8');
     const modes: readonly [string, Mode | null, boolean][] = [['standart', null, false], ['full-auto', 'full-auto', false], ['full-access', null, true]];
@@ -84,7 +92,7 @@ describe.skipIf(process.platform !== 'linux')('full access through the runtime s
   it('never lowers a deny, and a company require-approval that is not mode-eligible still asks in full access (the Enterprise lever)', async () => {
     const denied = [rule('edit-tools', 'agent-tool', ['edit_file', 'write_file'], 'deny'), rule('file-write', 'operation', ['workspace.file.write'], 'allow'),
       rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval'), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS];
-    const f = await modeRuntime({ ...HOST, grants: denied, mode: { mode: 'full-access' } });
+    const f = await modeRuntime({ ...SANDBOX, grants: denied, mode: { mode: 'full-access' } });
     expect(await f.call('write_file', { path: 'src/b.ts', content: 'x' }, 'allow', { fullAccess: true })).toMatchObject({ card: false, status: 'denied' });
     expect(await f.call('run_shell', { command: 'touch made.txt' }, 'deny', { fullAccess: true })).toMatchObject({ card: true, status: 'denied' });
     await expect(access(join(f.project, 'src/b.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -93,7 +101,7 @@ describe.skipIf(process.platform !== 'linux')('full access through the runtime s
   }, 60_000);
 
   it('runs nothing when the full-access call cannot be audited, and refuses the turn when its admission cannot be recorded', async () => {
-    const f = await modeRuntime({ ...HOST, grants: [...TOOLS, FULL_ACCESS], mode: null });
+    const f = await modeRuntime({ ...SANDBOX, grants: [...TOOLS, FULL_ACCESS], mode: null });
     f.exec("CREATE TRIGGER audit_refuses BEFORE INSERT ON audit_events WHEN NEW.kind = 'full-access-call' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
     const refused = await f.call('run_shell', { command: 'rm src/a.ts' }, 'deny', { fullAccess: true });
     expect(refused).toMatchObject({ card: false, status: 'error' });

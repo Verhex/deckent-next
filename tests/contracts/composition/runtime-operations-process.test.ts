@@ -1,5 +1,4 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { DatabaseSync } from 'node:sqlite';
@@ -11,6 +10,8 @@ import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { conditionalRecordServer } from '../support/conditional-record-server.js';
+import { terminalProgram } from '../support/approval-terminal.js';
+import { mcpPrincipalRef } from '#domain/index.js';
 
 // C12 G4 acceptance on the shipped processes: compiled `runtime serve` + compiled MCP stdio. execute_operation (loopback HTTP target)
 // answers approval-pending without an effect; the CLI decides it over its live runtime connection; the same
@@ -18,7 +19,6 @@ import { conditionalRecordServer } from '../support/conditional-record-server.js
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']> };
 const children = new Set<Child>(), cleanup: (() => Promise<void>)[] = [];
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
-const execFileAsync = promisify(execFile);
 const mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 afterEach(async () => {
   for (const child of children) if (child.exitCode === null) child.kill('SIGKILL');
@@ -43,6 +43,7 @@ function ready(child: Child): Promise<void> {
 }
 const ref = (id: string) => ({ id, version: 1 });
 const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+const mcpPrincipals = principals.map(mcpPrincipalRef);
 
 it.skipIf(process.platform !== 'linux')('compiled MCP execute_operation: pending, decided over the live runtime connection, the same command settles once (C12 G4)', async () => {
   const records = await conditionalRecordServer(); cleanup.push(records.close);
@@ -64,7 +65,13 @@ it.skipIf(process.platform !== 'linux')('compiled MCP execute_operation: pending
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'ops-process', restrictions: [], grants: [
     { id: 'operations', effect: 'allow', actions: ['execute', 'inspect'], scopes: ['s'], principals, resource: { kind: 'operation', ids: 'all' } },
     { id: 'approvals', effect: 'allow', actions: 'all', scopes: ['s'], principals, resource: { kind: 'approval', ids: 'all' } },
-    { id: 'gate', effect: 'require-approval', actions: ['execute'], scopes: ['s'], principals, resource: { kind: 'operation', ids: ['post-order'] } }] }), { mode: 0o600 });
+    { id: 'gate', effect: 'require-approval', actions: ['execute'], scopes: ['s'], principals, resource: { kind: 'operation', ids: ['post-order'] } },
+    { id: 'mcp-operation', effect: 'allow', actions: ['execute', 'inspect'], scopes: ['s'], principals: mcpPrincipals,
+      resource: { kind: 'operation', ids: ['post-order'] } },
+    { id: 'mcp-approvals', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: mcpPrincipals,
+      resource: { kind: 'approval', ids: 'all' } },
+    { id: 'mcp-gate', effect: 'require-approval', actions: ['execute'], scopes: ['s'], principals: mcpPrincipals,
+      resource: { kind: 'operation', ids: ['post-order'] } }] }), { mode: 0o600 });
   const ledger = opened.path; opened.store.close(); clearConfigCache(); records.records.set('PO-1', 1);
 
   const service = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] }) as Child;
@@ -97,7 +104,9 @@ it.skipIf(process.platform !== 'linux')('compiled MCP execute_operation: pending
     const decision = { schemaVersion: 1, scopeId: 's', approvalId: pending.approval!.approvalId, commandId: 'cli-allow', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' };
     await expect(call('decide_approval', { ...decision, commandId: 'mcp-allow' })).rejects.toThrow(/MCP_TOOL_UNKNOWN/u);
     const commandPath = join(root, 'decision.json'); await writeFile(commandPath, JSON.stringify(decision));
-    const decided = JSON.parse((await bounded(execFileAsync(process.execPath, [cli, 'approval', 'decide', '--input', commandPath, '--json'], { cwd: project, env }), 'CLI_DECIDE_TIMEOUT')).stdout);
+    const decisionProcess = await bounded(terminalProgram([process.execPath, cli, 'approval', 'decide', '--input', commandPath, '--json'], env, project), 'CLI_DECIDE_TIMEOUT');
+    expect(decisionProcess.status, decisionProcess.output).toBe(0);
+    const decided = JSON.parse(decisionProcess.output.trim());
     expect(decided).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-cli', assurance: 'peer-session' } });
     const settled = await call('execute_operation', command);
     expect(settled).toMatchObject({ schemaVersion: 1, status: 'settled', commandId: 'mcp-gated', sequence: 1, version: '"v2"' });
