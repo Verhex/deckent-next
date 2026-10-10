@@ -141,7 +141,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await f.policy(['read-output']);
     await expect(prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
-  it('rejects staged, untracked, unsafe and changed-HEAD source states and checks scope', async () => {
+  it('rejects staged, untracked and unsafe source states, checks scope, and permits an unchanged forward base', async () => {
     const f = await fixture(); await f.run(); await f.prepare(); await writeFile(join(f.project, 'note.txt'), 'before\n');
     const check = () => checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
     const initial = await check();
@@ -153,7 +153,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await expect(check()).rejects.toMatchObject({ code: 'PATCH_UNSAFE' }); await rm(join(f.project, 'added.txt'));
     expect(await check()).toEqual(initial);
     await expect(checkConfiguredWorkspaceIntegration(f.project, { ...f.identity, scopeId: 'other' }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    await f.git('commit', '--allow-empty', '-m', 'advance'); await expect(check()).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    await f.git('commit', '--allow-empty', '-m', 'advance'); expect((await check()).observation.head).toBe(await f.git('rev-parse', 'HEAD'));
   });
   it('serializes separate CLI writers and holds a durable incomplete intent without adopting its directory', async () => {
     const f = await fixture(); await f.run(); await f.prepare(); await writeFile(join(f.project, 'note.txt'), 'before\n');
@@ -333,7 +333,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const spy = vi.spyOn(GitIntegrationDelivery.prototype, 'publish').mockImplementationOnce(async function(plan) {
       await f.git('commit', '--allow-empty', '-m', 'owner wins'); await publish.call(this, plan);
     });
-    try { await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' }); }
+    try { await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' }); }
     finally { spy.mockRestore(); }
     expect(await f.git('for-each-ref', '--format=%(refname)', 'refs/deckent/deliveries')).toBe('');
     expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('before\n');

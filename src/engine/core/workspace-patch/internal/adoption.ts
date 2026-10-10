@@ -91,12 +91,13 @@ export class WorkspaceAdoptionApplication {
       record => JSON.stringify(record.intent.command.identity) === JSON.stringify(command.identity));
     const run = await this.accepted(command);
     const plan: IntegrationDeliveryPlan = delivery.intent.plan;
+    const baseCommit = plan.schemaVersion === 2 ? plan.effectiveBaseCommit : plan.baseCommit;
     const verification = await verifyAdoption(this.store, this.verification, verified.principal, { scopeId: command.identity.scopeId,
       commit: plan.commit, ...(command.verificationRunId === undefined ? {} : { runId: command.verificationRunId }),
       ...(command.verificationKind === undefined ? {} : { kind: command.verificationKind }) });
-    await this.ready(command.targetRef, plan.baseCommit, 'ADOPTION_BASE_CHANGED');
+    await this.ready(command.targetRef, baseCommit, 'ADOPTION_BASE_CHANGED');
     const intent = integrationAdoptionIntentSchema.parse({ schemaVersion: 2, kind: 'adopt', command, targetRef: command.targetRef,
-      fromCommit: plan.baseCommit, toCommit: plan.commit, deliveryRef: plan.ref, basis: 'task-acceptance',
+      fromCommit: baseCommit, toCommit: plan.commit, deliveryRef: plan.ref, basis: 'task-acceptance',
       acceptance: { runRevision: run.revision }, verification, actor: verified.session.principalRef });
     return this.apply(await this.store.claimAdoption(intent), settle);
   }

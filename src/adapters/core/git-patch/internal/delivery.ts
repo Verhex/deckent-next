@@ -17,16 +17,17 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
     const directory = await mkdtemp(join(this.options.workspaceRoot, '.delivery-index-'));
     const index = join(directory, 'index');
     const identity = patchDigest(JSON.stringify(command));
+    const baseCommit = manifest.schemaVersion === 2 ? manifest.effectiveBaseCommit : patch.baseCommit;
     try {
-      await this.git(['read-tree', patch.baseCommit], '', index, deadline);
+      await this.git(['read-tree', baseCommit], '', index, deadline);
       for (const change of patch.changes) {
         const oid = change.after ? await this.git(['hash-object', '-w', '--stdin'], change.after.text, index, deadline) : '0'.repeat(patch.baseCommit.length);
         if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid)) throw new WorkspacePatchError('PATCH_CORRUPT');
         await this.git(['update-index', '-z', '--index-info'], `${change.after?.mode ?? '0'} ${oid}\t${change.path}\0`, index, deadline);
       }
       const tree = await this.git(['write-tree'], '', index, deadline);
-      const commit = await this.git(['commit-tree', tree, '-p', patch.baseCommit], `${format.messagePrefix}${identity}\n`, index, deadline);
-      return { schemaVersion: 1, baseCommit: patch.baseCommit, commit,
+      const commit = await this.git(['commit-tree', tree, '-p', baseCommit], `${format.messagePrefix}${identity}\n`, index, deadline);
+      return { schemaVersion: 2, baseCommit: patch.baseCommit, effectiveBaseCommit: baseCommit, commit,
         ref: `refs/deckent/deliveries/${patchDigest(JSON.stringify({ scopeId: command.identity.scopeId, commandId: command.commandId }))}`,
         snapshotDigest: manifest.snapshotDigest };
     } finally { await rm(directory, { recursive: true, force: true }); }
@@ -38,17 +39,17 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
     if (refs !== `${plan.ref} ${plan.commit}`) throw new WorkspacePatchError('PATCH_CONFLICT');
     return true;
   }
-  /** The base precondition names the work target's base branch when one is configured, else the source checkout's HEAD. A moved base
-   * branch is the typed PATCH_BASE_ADVANCED (deliver again from a new Run on the current base); a moved HEAD stays PATCH_CONFLICT. */
+  /** Publish only against the candidate's pinned effective parent; a later base move requires a fresh candidate. */
   async publish(plan: IntegrationDeliveryPlan) {
     if (await this.delivered(plan)) return;
     const base = this.options.baseRef ?? 'HEAD';
-    try { await this.git(['update-ref', '--stdin'], `start\nverify ${base} ${plan.baseCommit}\ncreate ${plan.ref} ${plan.commit}\nprepare\ncommit\n`); }
+    const baseCommit = plan.schemaVersion === 2 ? plan.effectiveBaseCommit : plan.baseCommit;
+    try { await this.git(['update-ref', '--stdin'], `start\nverify ${base} ${baseCommit}\ncreate ${plan.ref} ${plan.commit}\nprepare\ncommit\n`); }
     catch (error) {
       // A concurrent identical command may have won. Exact ref/commit custody is the only recovery evidence.
       if (await this.delivered(plan)) return;
-      if (await this.git(['rev-parse', '--verify', `${base}^{commit}`]) !== plan.baseCommit) {
-        throw new WorkspacePatchError(this.options.baseRef ? 'PATCH_BASE_ADVANCED' : 'PATCH_CONFLICT');
+      if (await this.git(['rev-parse', '--verify', `${base}^{commit}`]) !== baseCommit) {
+        throw new WorkspacePatchError('PATCH_BASE_ADVANCED');
       }
       throw error;
     }

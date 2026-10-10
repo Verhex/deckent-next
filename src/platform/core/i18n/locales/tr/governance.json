@@ -755,7 +755,7 @@
   "error.WORK_TARGET_SHARES_PROJECT_REPOSITORY": "Yapılandırılmış çalışma hedefi Git deposunu çalışan projeyle paylaşıyor (onun worktree'lerinden biri); Deckent çalışan kaynağını asla hedeflemez. Bağımsız bir klon kullanın.",
   "error.WORK_TARGET_ALTERNATES": "Yapılandırılmış çalışma hedefi nesnelerini başka bir depodan ödünç alıyor (objects/info/alternates). --shared veya --reference kullanılmadan alınmış bağımsız bir klon kullanın.",
   "error.WORK_TARGET_BASE_MISSING": "Yapılandırılmış çalışma hedefinin taban dalı bir commit göstermiyor. Dalı oluşturun ya da baseRef değerini düzeltin.",
-  "error.PATCH_BASE_ADVANCED": "Çalışma hedefinin taban dalı bu teslimin tabanından ileri gitti. Güncel taban üzerinde yeni bir Run başlatın; rebase veya merge denenmez.",
+  "error.PATCH_BASE_ADVANCED": "Teslim tabanı değişti. Yamayı güncel tabanda kontrol edip yeni bir aday hazırlayın; dokunduğu yollar değiştiyse yeni bir yama üretin. Merge denenmez.",
   "error.PATCH_SCOPE_VIOLATION": "Çalışma hedefi görev kapsamını zorluyor: {count} değişen yol görevin bildirdiği kapsamın dışında ({paths}; gösterilmeyen {omitted} yol daha). Bu adım hiçbir şey yazmadı. Gerekli yolları bildiren bir iş girdisiyle yeni bir Run başlatın.",
   "error.PATCH_SCOPE_UNDECLARED": "Çalışma hedefi görev kapsamını zorluyor, ancak bu görev kapsam bildirmiyor (iş girdisi yok). Bu adım hiçbir şey yazmadı. Yollarını bildiren bir iş girdisiyle yeni bir Run başlatın.",
   "error.MONITOR_UNAVAILABLE": "İzleyici burada Deckent durumunu okuyamıyor: bu sürümde izleme veri kaynağı bağlı değil.",
