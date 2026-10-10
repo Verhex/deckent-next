@@ -12,8 +12,10 @@ export const integrationDeliveryCommandSchema = z.object({ schemaVersion: z.lite
   identity: attemptIdentitySchema, integrationCommandId: identitySchema }).strict().readonly();
 export type IntegrationDeliveryCommand = z.infer<typeof integrationDeliveryCommandSchema>;
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
-export const integrationDeliveryPlanSchema = z.object({ schemaVersion: z.literal(1), baseCommit: oid, commit: oid,
-  ref: z.string().regex(/^refs\/deckent\/deliveries\/[a-f0-9]{64}$/), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
+const planFields = { baseCommit: oid, commit: oid,
+  ref: z.string().regex(/^refs\/deckent\/deliveries\/[a-f0-9]{64}$/), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/) };
+export const integrationDeliveryPlanSchema = z.discriminatedUnion('schemaVersion', [z.object({ schemaVersion: z.literal(1), ...planFields }).strict(),
+  z.object({ schemaVersion: z.literal(2), ...planFields, effectiveBaseCommit: oid }).strict()]).readonly();
 export type IntegrationDeliveryPlan = z.infer<typeof integrationDeliveryPlanSchema>;
 export const integrationDeliveryIntentSchema = z.object({ schemaVersion: z.literal(1), command: integrationDeliveryCommandSchema,
   manifest: artifactReceiptSchema, patch: artifactReceiptSchema, plan: integrationDeliveryPlanSchema,
@@ -36,6 +38,11 @@ export class WorkspaceDeliveryApplication {
     private readonly candidate: IntegrationTarget, private readonly target: IntegrationDeliveryTarget,
     private readonly store: IntegrationDeliveryStore, private readonly sessions: SessionVerifier & SessionAuthority,
     private readonly authorization: DispatchIdentityAuthorization, private readonly clock: TrustedClock) {}
+  private async assertObservation(manifest: IntegrationManifest, patch: WorkspacePatch) {
+    const observed = await this.candidate.observe(patch);
+    if (observed.head !== (manifest.schemaVersion === 2 ? manifest.effectiveBaseCommit : patch.baseCommit)) throw new WorkspacePatchError('PATCH_BASE_ADVANCED');
+    if (observed.digest !== manifest.observation) throw new WorkspacePatchError('PATCH_CONFLICT');
+  }
   async deliver(input: unknown, credential?: unknown) {
     const command = integrationDeliveryCommandSchema.parse(input);
     const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.identity.scopeId);
@@ -58,13 +65,13 @@ export class WorkspaceDeliveryApplication {
     this.patches.assertScope(preview.scope); // K6 enforce: refused before the delivery intent or any Git reference is written
     await this.candidate.verify(inspected.manifest, preview.patch);
     if (JSON.stringify(inspected.manifest.patch) !== JSON.stringify(preview.receipt)) throw new WorkspacePatchError('PATCH_CORRUPT');
-    if ((await this.candidate.observe(preview.patch)).digest !== inspected.manifest.observation) throw new WorkspacePatchError('PATCH_CONFLICT');
+    await this.assertObservation(inspected.manifest, preview.patch);
     const plan = integrationDeliveryPlanSchema.parse(await this.target.plan(command, inspected.manifest, preview.patch));
     const intent = integrationDeliveryIntentSchema.parse({ schemaVersion: 1, command, manifest: inspected.receipt, patch: preview.receipt, plan, actor });
     const claimed = await this.store.claimDelivery(intent);
     if (claimed.delivered) return result(claimed);
     await this.candidate.verify(inspected.manifest, preview.patch);
-    if ((await this.candidate.observe(preview.patch)).digest !== inspected.manifest.observation) throw new WorkspacePatchError('PATCH_CONFLICT');
+    await this.assertObservation(inspected.manifest, preview.patch);
     await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock);
     await this.target.publish(plan);
     return result(await this.store.finishDelivery(intent));

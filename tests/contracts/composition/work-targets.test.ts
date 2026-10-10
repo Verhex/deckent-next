@@ -318,14 +318,20 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     } finally { await service.stop(); await service.done; }
   }, 120_000);
 
-  it('turns a moved base branch into PATCH_BASE_ADVANCED (not PATCH_CONFLICT) and refuses a target made unsafe after admission', async () => {
+  it('delivers on an unchanged forward base and refuses a target made unsafe after admission', async () => {
     const f = await fixture();
     const liveBefore = await repositoryDigest(f.project);
     const run = await executed(f, 'r1');
     const moved = await git(f.target, 'commit-tree', `${f.base}^{tree}`, '-p', f.base, '-m', 'owner advances the base');
     await git(f.target, 'update-ref', BASE, moved);
+    // An already verified candidate stays pinned. Prepare a fresh candidate of the identical approved patch on the new tip.
     await expect(run.deliver()).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
-    expect(await git(f.target, 'for-each-ref', '--format=%(refname)', 'refs/deckent/deliveries/')).toBe('');
+    const checked = await checkConfiguredWorkspaceIntegration(f.project, run.identity, f.options);
+    await prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'candidate-r1-advanced', identity: run.identity, proposal: checked.proposal }, f.options);
+    const delivered = await deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'delivery-r1-advanced', identity: run.identity,
+      integrationCommandId: 'candidate-r1-advanced' }, f.options);
+    expect(delivered.plan).toMatchObject({ schemaVersion: 2, baseCommit: f.base, effectiveBaseCommit: moved });
+    expect(await git(f.target, 'rev-parse', delivered.plan.commit + '^')).toBe(moved);
     // Each acquisition re-applies the typed refusals: borrowed objects appear after admission and reservation.
     await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'create-r2', graph }, f.options);
     const identity = (await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'reserve-r2', expectedRevision: 0 }, f.options)).reservation.identities[0]!;
