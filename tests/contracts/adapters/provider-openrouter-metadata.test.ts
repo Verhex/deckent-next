@@ -115,8 +115,11 @@ it('serves repeated tariff acquisition from the freshness window without a netwo
   let gets = 0;
   const endpoint = await fixture((_req, res) => { gets++; res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(metadata())); });
   const cache = createOpenRouterTariffCache(fetchOpenRouterTariff); let clock = 100;
+  expect(cache.peek(options(endpoint), clock)).toBeNull(); expect(gets).toBe(0); expect(cache.size()).toBe(0);
   const first = await cache.get(options(endpoint), () => clock);
-  expect(gets).toBe(1);
+  expect(cache.peek(options(endpoint), clock)).toBe(first);
+  expect(cache.peek(options(endpoint), 1100)).toBeNull(); expect(cache.peek(options(endpoint), 5)).toBeNull();
+  expect(cache.size()).toBe(1); expect(gets).toBe(1);
   for (let i = 0; i < 25; i++) expect(await cache.get(options(endpoint), () => clock + i)).toBe(first);
   expect(gets).toBe(1);
   // Concurrent misses of one key share one request.

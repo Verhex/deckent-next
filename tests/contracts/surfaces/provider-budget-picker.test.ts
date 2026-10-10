@@ -6,7 +6,8 @@ import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { ProviderSpendError } from '#engine/index.js';
+import { ModelInvocableNowApplication, ProviderSpendError } from '#engine/index.js';
+import type { ModelReference } from '#domain/index.js';
 
 registerProviderConfig();
 it.each(['en', 'tr'] as const)('shows reservation USD and a ready alternative in %s without exposing private account totals', async locale => {
@@ -21,12 +22,16 @@ it.each(['en', 'tr'] as const)('shows reservation USD and a ready alternative in
   const refusal = queryFailure(new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED', { requested: 102451, currency: 'USD', settled: 'private', held: 12345, limit: 99999 }));
   expect(refusal.params).toMatchObject({ requested: 102451, currency: 'USD' });
   expect(refusal.params).not.toHaveProperty('held'); expect(refusal.params).not.toHaveProperty('settled'); expect(refusal.params).not.toHaveProperty('limit');
+  // MODEL-STATE-PARITY: the panel reads the shared invocable-now reader; the same typed refusal reaches it through the engine read owner.
+  const targets = declared.catalog.providers.flatMap(provider => provider.models.map(model => ({ reference: { providerId: provider.id, providerVersion: provider.version,
+    modelId: model.id, modelVersion: model.version }, label: model.id, nativeId: model.nativeId, catalogRevision: 'catalog-1', bindingDigest: 'd'.repeat(64) })));
+  const invocable = (inspect: (reference: ModelReference) => Promise<void>) => async () => new ModelInvocableNowApplication(inspect).read('scope', targets);
   const source = modelPanelSource(f.project, 'scope', { inspectDeclaredModels: async () => declared as never,
-    inspectModelReadiness: async (_root, _scope, reference) => { if (reference.modelId !== 'cheap') throw refusal; } }, { env: f.env, heal: false }, locale);
+    inspectInvocableModels: invocable(async reference => { if (reference.modelId !== 'cheap') throw refusal; }) }, { env: f.env, heal: false }, locale);
   const view = await source.inspect(), blocked = view.choices.find(row => row.reference.modelId !== 'cheap')!;
   expect(blocked.blocked).toContain(locale === 'en' ? '1,024.51 USD' : '1.024,51 USD');
   expect(blocked.command).toContain('cheap'); expect(view.choices.find(row => row.reference.modelId === 'cheap')!.blocked).toBeNull();
   const unavailable = await modelPanelSource(f.project, 'scope', { inspectDeclaredModels: async () => declared as never,
-    inspectModelReadiness: async () => { throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE'); } }, { env: f.env, heal: false }, locale).inspect();
+    inspectInvocableModels: invocable(async () => { throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE'); }) }, { env: f.env, heal: false }, locale).inspect();
   expect(unavailable.choices.every(row => row.blocked !== null)).toBe(true);
 });

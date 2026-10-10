@@ -303,12 +303,25 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     expect(tr).toContain('3. proje — /home/owner/projects/deckent-next/.deckent/config.json — belirlediği bölümler: layout, terminal, inspection');
     expect(tr).toContain('coding görevi → coding-default@3 profili (docker)');
     expect(tr).toContain('legacy-shell@1 (host) — hiçbir görev türü kullanmıyor');
-    expect(tr).toContain('✓ subscription / model-alpha-2'); expect(tr).toContain('○ subscription / model-alpha-1 (etkin değil)');
+    const unavailable = t('model.invocable.unavailable', { code: 'MODEL_INVOCATION_UNAVAILABLE' }, 'tr');
+    expect(tr).toContain(`○ subscription / model-alpha-2 (${unavailable})`);
+    expect(tr).toContain(`○ subscription / model-alpha-1 (${unavailable})`);
     expect(tr).toContain('Politika: 12 izin (operation 5, effect 4, secret 3) · 2 görev ayrılığı kuralı');
     expect(tr).toContain('İzin kipleri: owner@local: standart, ci@local: full-auto');
     expect(tr).toContain('Bellek: yok — MEMORY kartı bekleniyor');
     expect(tr).toContain('Bu kurulum için harita okunmadı.');
     expect(tr).not.toMatch(/[{}]"/);
+  });
+  it('uses the shared availability for model marks and counts, preserves exact versions, and refuses legacy active flags', () => {
+    const install = fullSnapshot.installs[0]!;
+    const models = [{ channelId: 'provider', modelId: 'ready', active: false, scopeId: 'scope',
+      reference: { providerId: 'provider', providerVersion: 2, modelId: 'ready', modelVersion: 3 }, availability: { invocable: true as const, reason: null } },
+      { channelId: 'provider', modelId: 'stale', active: true, availability: { invocable: false as const, reason: { kind: 'stale-activation' as const, code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT' } } },
+      { channelId: 'provider', modelId: 'legacy', active: true }];
+    const text = surface.renderMonitorText({ ...fullSnapshot, installs: [{ ...install, map: { ...install.map!, models } }] }, { locale: 'en', width: 200, ascii: false });
+    expect(text).toContain('✓ provider@2 / ready@3 · scope (Invocable now (connection not probed).)');
+    expect(text).toContain('○ provider / stale'); expect(text).toContain('○ provider / legacy');
+    expect(text).toContain(t('monitor.map.models', { count: 3, active: 1 }, 'en'));
   });
   it('lists Runs newest first with a duration column, unknown admission last; workers newest first with the attempt model', () => {
     const text = surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 200, ascii: false });

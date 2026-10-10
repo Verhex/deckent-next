@@ -39,3 +39,5 @@ export type { ModelSwitchPorts, ModelSwitchPreview } from './internal/model-swit
 export { checkModelInvocationCapacity } from './internal/spending.js';
 export { openInvocationWorkspaceSelection } from './internal/workspace-selection.js';
 export type { InvocationWorkspace, WorkspaceSelectionContext, WorkspaceSelectionPorts } from './internal/workspace-selection.js';
+export { ModelInvocableNowApplication, modelInvocabilityRefusal } from './internal/invocable-now.js';
+export type { InvocableModel, InvocableModels, ModelInvocability, ModelInvocabilityReason, ModelInvocabilityReasonKind, ModelInvocableNowChecks } from './internal/invocable-now.js';

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { IDENTITY_MAX_LENGTH } from '#domain/core/primitives/index.js';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationRequestEvidence, type ModelInvocationClaim, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
-import { ModelInvocationControllers, ModelInvocationApplication, ModelInvocationInspectionApplication, ModelInvocationPurgeApplication, modelInvocationProfileDigest,
+import { ModelInvocationControllers, ModelInvocationApplication, ModelInvocableNowApplication, ModelInvocationInspectionApplication, ModelInvocationPurgeApplication, modelInvocationProfileDigest,
   createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
   createModelInvocationPreventedRecord, createModelInvocationUnknownRecord, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
   type ModelInvocationPurgeAdmission, type ModelInvocationPurgeResult, type ModelInvocationRecord,
@@ -36,14 +36,14 @@ function inspectionReader(f: ReturnType<typeof fixture>) { return { async loadIn
   return f.stored ? { record: f.stored, control: { schemaVersion: 1 as const, claim: f.stored.receipt.claim, reference,
     send: { state: 'permitted' as const, ownerId: 'runtime-owner', permittedAtMs: 10 }, cancellation: null }, spending: null } : null;
 }, close() { f.store.close(); } }; }
-function fixture(options: { deltas?: readonly string[]; liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
+function fixture(options: { staleActivation?: boolean; spendingDrift?: boolean; deltas?: readonly string[]; liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
   substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint;
   permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner' } = {}) {
   const controllers = new ModelInvocationControllers(2), registrations: ModelInvocationClaim[] = [];
   let stored: ModelInvocationRecord | null = null, policy = 0, selectedProfile: ModelInvocationProfile = { ...profile, limits: { ...profile.limits, responseMaxBytes: options.responseLimit ?? profile.limits.responseMaxBytes } }, invocationSequence = 0;
   if (options.profilePadding) selectedProfile = { ...selectedProfile, adapter: { ...selectedProfile.adapter,
     definition: { padding: Array.from({ length: options.profilePadding }, () => null) } } };
-  let waitingLoads = 0, releaseLoads: (() => void) | undefined;
+  let waitingLoads = 0, quoteCount = 0, releaseLoads: (() => void) | undefined;
   const loadBarrier = new Promise<void>(resolve => { releaseLoads = resolve; });
   const calls = { claims: 0, permissions: 0, sends: 0, bindings: 0, profiles: 0, activations: 0, closes: 0 };
   const store: ModelInvocationStore = {
@@ -86,7 +86,7 @@ function fixture(options: { deltas?: readonly string[]; liveControllers?: boolea
     { async authorize() { policy++; if (options.denySecond && policy === 2) throw new Error('DENIED'); return authorization; } },
     { async inspect() { calls.bindings++; return { schemaVersion: 1 as const, reference, status: 'declared' as const,
       catalogRevision: 'catalog', definition, binding, availability: 'not-observed' as const }; } },
-    async () => ({ async loadRecord() { calls.activations++; return activation; }, close() {} }),
+    async () => ({ async loadRecord() { calls.activations++; return options.staleActivation ? { ...activation, catalogRevision: 'old-catalog' } : activation; }, close() {} }),
     { async resolve() { calls.profiles++; return selectedProfile; } }, { resolve() { return {
       ...(options.responseBound === undefined ? {} : { responseBytesUpperBound: () => options.responseBound! }),
       async prepare() { options.prepare?.(); if (options.changeProfile) selectedProfile = { ...profile, version: 2 }; return Object.freeze({ body: 'prepared' }); },
@@ -96,7 +96,7 @@ function fixture(options: { deltas?: readonly string[]; liveControllers?: boolea
         return options.nativeResult ?? { schemaVersion: 1 as const, native: { id: 'response' }, usage: null }; },
     }; } }, async () => store, { invocationId: () => `invocation-${++invocationSequence}`, ownerId: () => 'runtime-owner', now: () => 10,
       ...(options.liveControllers ? { register(claim: ModelInvocationClaim, owner: string) { registrations.push(claim); return controllers.register(claim, owner); } } : {}) },
-    { async authorize(input) { return { budget: { schemaVersion: 1 as const, scopeId: input.command.scopeId, budgetId: 'test-budget', revision: 1,
+    { async authorize(input) { quoteCount++; return { budget: { schemaVersion: 1 as const, scopeId: input.command.scopeId, budgetId: 'test-budget', revision: options.spendingDrift && quoteCount > 1 ? 2 : 1,
       currency: 'USD', limitMinorUnits: 100_000 }, quote: { schemaVersion: 1 as const, scopeId: input.command.scopeId,
       requestDigest: input.requestDigest, profileDigest: input.profileDigest, pricing: { id: 'test-pricing', version: 1,
         digest: '291f395a66cb728f57612b09b06f9512815b982e9a5d65e3fafec28256ff0aa9', definition: { schemaVersion: 1, kind: 'synthetic-price' } }, meter: { id: 'test-meter', version: 1, evidenceDigest: '446658cc1c39184b672f423a7f970bffab0e8f38e851c5b5dacd3f38eb85051f', evidence: { schemaVersion: 1, kind: 'synthetic-meter' } }, currency: 'USD', maxChargeMinorUnits: 1 } }; } });
@@ -104,6 +104,20 @@ function fixture(options: { deltas?: readonly string[]; liveControllers?: boolea
 }
 
 describe('model invocation streamed deltas', () => {
+  it('invocable-now refuses stale activation, unfit delivery, credential revocation and budget drift without claim, send or repair', async () => {
+    for (const gate of ['stale', 'delivery', 'credential', 'budget'] as const) {
+      let credentials = true, preparations = 0;
+      const f = fixture({ staleActivation: gate === 'stale', spendingDrift: gate === 'budget', prepare() { preparations++; if (gate === 'credential') credentials = false; } });
+      const reading = await new ModelInvocableNowApplication(async () => {
+        await f.app.preview(command, undefined, undefined, { surfaces: gate === 'delivery' ? [['runtime-service', { maxResultBytes: 1 }]] : [],
+          credentialPresent: async () => credentials });
+      }).read('scope', [{ reference, label: 'model', nativeId: 'native', catalogRevision: 'catalog', bindingDigest: binding.digest }]);
+      expect(reading.models[0]!.availability).toMatchObject({ invocable: false, reason: { kind: gate === 'stale' ? 'stale-activation' : gate === 'delivery' ? 'delivery-unfit' : gate === 'credential' ? 'no-credential' : 'budget' } });
+      expect(f.calls).toMatchObject({ claims: 0, permissions: 0, sends: 0, closes: 0 });
+      expect(preparations).toBe(gate === 'stale' || gate === 'delivery' ? 0 : 1);
+      expect(f.stored).toBeNull();
+    }
+  });
   it('passes streamed deltas only to a fresh send; a replayed command presents none and never sends again', async () => {
     const f = fixture({ deltas: ['Mer', 'haba'] }), seen: string[] = [], replaySeen: string[] = [];
     const first = await f.app.invoke(command, undefined, undefined, undefined, delta => seen.push(delta.text));

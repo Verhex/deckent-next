@@ -1147,7 +1147,8 @@
         "src/surfaces/core/terminal-picker",
         "src/domain/core/model-activation",
         "src/engine/core/project-instructions",
-        "src/surfaces/core/project-instructions"
+        "src/surfaces/core/project-instructions",
+        "src/surfaces/core/model-invocability"
       ],
       "plan": "SURFACES"
     },
@@ -1547,7 +1548,8 @@
         "src/engine/core/runtime",
         "src/adapters/core/mcp-transport",
         "src/adapters/core/provider-anthropic-messages",
-        "src/adapters/core/provider-decision-http"
+        "src/adapters/core/provider-decision-http",
+        "src/adapters/core/workspace-read"
       ],
       "plan": "PROVIDERS"
     },
@@ -2311,7 +2313,8 @@
         "src/engine/core/approval",
         "src/composition/core/toolchains",
         "src/engine/core/config",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/model-invocation"
       ],
       "plan": "MONITOR"
     },
@@ -2332,7 +2335,8 @@
         "src/surfaces/core/config",
         "src/engine/core/config",
         "src/engine/core/runs",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/model-invocability"
       ],
       "plan": "MONITOR"
     },
@@ -2386,7 +2390,6 @@
         "src/platform/core/i18n",
         "src/platform/core/clock",
         "src/composition/core/policy",
-        "src/composition/core/model-activation",
         "src/engine/core/identity-profile",
         "src/engine/core/policy",
         "src/domain/core/policy",
@@ -2396,7 +2399,9 @@
         "src/platform/core/managed-files",
         "src/domain/core/provider-catalog",
         "src/adapters/core/contract",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/composition/core/model-invocation",
+        "src/surfaces/core/model-invocability"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2676,6 +2681,13 @@
         "src/platform/core/managed-files"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/surfaces/core/model-invocability": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

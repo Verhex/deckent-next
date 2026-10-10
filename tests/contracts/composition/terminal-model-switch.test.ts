@@ -7,6 +7,7 @@ import type { ModelReference } from '#domain/index.js';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry } from '#adapters/index.js';
 import { connectConfiguredModel, inspectConfiguredModelReadiness, planConfiguredProfileCache, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { describeTerminalChat } from '#composition/core/terminal-chat/index.js';
@@ -82,7 +83,7 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     const ready = await inspectConfiguredModelReadiness(f.project, 'scope', reference, options) as { command: { nativeRequest: { max_completion_tokens: number } } };
     expect(ready.command.nativeRequest.max_completion_tokens).toBe(64);
     const host = { inspectDeclaredModels, inspectModelBinding, inspectModelActivation: inspectConfiguredModelActivation, describeTerminalChatPlan: describeTerminalChat,
-      inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
+      inspectInvocableModels: inspectConfiguredInvocableModels, inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
       listSecretNames: async () => ({ schemaVersion: 1 as const, backend: 'fixture', names: ['DECKENT_ANTHROPIC_KEY'] }) };
     const source = modelPanelSource(f.project, 'scope', host, options, 'tr');
     // The composed stream binds its real command to the workline context (as session-approval-terminal); the fixture names that scope.
@@ -150,7 +151,8 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     unsupported.profiles.find((p: { reference: ModelReference }) => p.reference.providerId === local.providerId).adapter = { id: 'fixture-unsupported', version: 1, definition: {} };
     expect((await app.submit('set', { keyPath: 'provider_invocation_profiles', value: unsupported, layer: 'project', scopeId: 'scope', principal,
       commandId: 'unsupported-adapter' })).status).toBe('applied');
-    await openGroup(LOCAL); await until(() => frame().includes('desteklenen protokol'), 'refusal and next step'); await press(ENTER, ESC, ESC);
+    // MODEL-STATE-PARITY: the shared invocable-now words name the typed refusal (an unsupported adapter reads MODEL_INVOCATION_UNAVAILABLE).
+    await openGroup(LOCAL); await until(() => frame().includes('Modelin hazır olduğu doğrulanamıyor (MODEL_INVOCATION_UNAVAILABLE)') && frame().includes('[engellendi]'), 'typed refusal'); await press(ENTER, ESC, ESC);
     await press('still Claude', ENTER); await until(() => requests.length === 5, 'refused switch preserves pin');
     expect(f.state.requests).toHaveLength(1);
   }, 60_000);

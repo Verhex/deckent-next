@@ -19,6 +19,7 @@ import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInv
   type ModelInvocationRecord, type ModelInvocationStore } from './port.js';
 import type { ProviderSpendMeasurement } from '#engine/core/provider-spend/index.js';
 import { observeModelInvocationSpending, observeModelInvocationPartialSpending } from './measurement.js';
+import { assertModelInvocableNow, refuseInactiveModel, type ModelInvocableNowChecks } from './invocable-now.js';
 import type { ModelInvocationPurgeResult, ModelInvocationPurgeStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
@@ -126,13 +127,14 @@ export class ModelInvocationApplication {
     private readonly refreshActivation?: (command: ModelActivationCommand) => Promise<unknown>) {}
 
   /** Binding, activation and profile of a command as `invoke` admits them, and the native port that serves the profile. */
-  private async admittedTarget(command: ReturnType<typeof parseModelInvocationCommand>, preview = false) {
+  private async admittedTarget(command: ReturnType<typeof parseModelInvocationCommand>, preview: boolean | 'invocable-now' = false, preparedNative?: ModelInvocationNativePort) {
     const binding = await this.bindings.inspect(command.reference);
     if (binding.status !== 'declared' || binding.catalogRevision !== command.catalogRevision
       || binding.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationError('MODEL_INVOCATION_BINDING_CONFLICT');
     const activationReader = await this.openActivationReader(); let activation;
     try { activation = await activationReader.loadRecord(command.scopeId, command.reference); }
     finally { activationReader.close(); }
+    if (preview === 'invocable-now' && (!activation || activation.state !== 'active')) refuseInactiveModel(activation);
     if (!activation || activation.state !== 'active' || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
     if (!preview && activation.catalogRevision !== command.catalogRevision) {
       if (!this.refreshActivation) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
@@ -148,18 +150,19 @@ export class ModelInvocationApplication {
       || profile.bindingDigest !== command.expectedBinding.digest
       || !binding.definition.model.protocols.some(protocol => protocol.family === profile.protocol.family
         && protocol.version === profile.protocol.version)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
-    const native = this.natives.resolve(profile);
+    const native = preparedNative ?? this.natives.resolve(profile);
     if (!native) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     return { binding, activation, profile, native };
   }
 
   /** Non-sending readiness check using the invocation's own policy, profile, adapter and quote. A stale catalog revision is reported only
    * for an already-active identical binding: the caller must use governed activate before pinning; invoke never accepts that stale record. */
-  async preview(input: unknown, credential?: unknown, signal?: AbortSignal) {
+  async preview(input: unknown, credential?: unknown, signal?: AbortSignal, checks?: ModelInvocableNowChecks) {
     const command = parseModelInvocationCommand(input);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke', { scopeId: command.scopeId, reference: command.reference }, principal));
-    const { binding, profile, native } = await this.admittedTarget(command, true);
+    const { binding, activation, profile, native } = await this.admittedTarget(command, checks ? 'invocable-now' : true);
+    if (checks) await assertModelInvocableNow(activation, profile, binding.definition, binding.catalogRevision, checks);
     await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
     const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
     const spending = await authorizeModelInvocationSpending(this.spending, { command, requestDigest: modelInvocationRequestDigest(command), profile,
@@ -167,8 +170,15 @@ export class ModelInvocationApplication {
     await this.spending?.checkCapacity?.(spending);
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke', { scopeId: command.scopeId, reference: command.reference }, principal));
-    const fresh = await this.admittedTarget(command, true);
+    const fresh = await this.admittedTarget(command, checks ? 'invocable-now' : true, native);
     if (!isDeepStrictEqual(fresh.profile, profile)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
+    if (checks) await assertModelInvocableNow(fresh.activation, fresh.profile, fresh.binding.definition, fresh.binding.catalogRevision, checks);
+    if (checks) {
+      const currentSpending = await authorizeModelInvocationSpending(this.spending, { command, requestDigest: modelInvocationRequestDigest(command), profile: fresh.profile,
+        profileDigest: modelInvocationProfileDigest(fresh.profile), definition: fresh.binding.definition, prepared }, signal);
+      if (!isDeepStrictEqual(currentSpending, spending)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+      await this.spending?.checkCapacity?.(currentSpending);
+    }
     return Object.freeze({ activation: fresh.activation, refreshRequired: fresh.activation.catalogRevision !== binding.catalogRevision });
   }
 

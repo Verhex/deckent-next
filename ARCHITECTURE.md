@@ -656,9 +656,17 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   and daltonized themes. Truecolor and ANSI256 meet 4.5:1 on the declared reference backgrounds; ANSI16 uses host blue/magenta and cannot
   attest a custom host palette. NO_COLOR keeps both names without styles; a narrow status drops the identity pair together. Styling consumes
   only already projected text, preserving whole-label secret masking. Proof and platform/live limits: `proof/ORPRIVACY-STATUS-2026-10-09/`.
-- **`/model` (MODEL-SWITCH):** lists the declared catalog models by exact reference (provider id@version / model id@version) with the first
-  missing precondition as a locked row's reason (invocation profile in the scope, its `credentialRef` in the secret store, chat activation, with
-  the exact `deckent models activate` command); discovered models are never added or activated. A pick pins the model for this session: the
+- **W11 MODEL-STATE-PARITY (owner card 2026-10-10, author candidate):** `ModelInvocableNowApplication` owns one v1 scoped, exact-reference read
+  model for monitor, `/config` model choices, `/model` and `/provider`. It reuses invocation preview's principal/policy, binding, activation,
+  profile/native preparation, verified quote and read-only account capacity; delivery uses the existing activation assessment. Stale catalog
+  activation, not-carried/inactive, binding/profile drift, delivery, credential, tariff, budget, policy and protocol refusals have typed EN/TR reasons.
+  Inspection never repairs activation, creates cache-salt keys, fetches metadata, sends a model request or claims/reserves spending. Missing or expired
+  cached tariff evidence refuses; governed preparation/invocation retains metadata acquisition. A zero tariff still needs valid budget authority and
+  capacity. Monitor `active` now means scoped invocability, with the scope/reason included; the raw ledger reader provides metadata only. Config rows
+  remain visible with blocked reasons; ready rows can be selected. Future prompts, concurrent changes and remote availability remain invocation gates.
+  Local proof: `proof/MODEL-STATE-PARITY-2026-10-10/`; independent review, integration and live acceptance remain separate.
+- **`/model` (MODEL-SWITCH):** lists the declared catalog models by exact reference (provider id@version / model id@version) from the shared
+  invocation read model, with the exact `deckent models activate` command for inactive or stale rows; discovered models are never added or activated. A pick pins the model for this session: the
   next and later turns carry it as `chatTurn.reference` (protocol v23, lifecycle [23, 22]); the service uses exactly it for binding, profile,
   prompt, digest and rounds, or refuses typed — the configured `terminal.chat.reference` never answers in its place (S19). "Also make default"
   writes `terminal.defaultModel` (T4-B below). Rows show human words; the exact

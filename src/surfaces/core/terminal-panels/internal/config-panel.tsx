@@ -25,7 +25,7 @@ export function configPanelTree(view: ConfigPanelView, labels: ConfigPanelLabels
   for (const field of view.fields) {
     const section = sectionOf(field.key, labels.general), list = sections.get(section) ?? [];
     const blocked = LAYERS.every(layer => field.locks[layer].blocked) ? field.locks.project.blocked : null;
-    const values: PickerNode[] = [...(field.records ? [{ id: RECORDS, label: labels.records.edit }] : []),...field.choices.map(choice => ({ id: choice.id, label: choice.label === field.value ? `${choice.label} · ${labels.current}` : choice.label, ...(choice.detail ? { detail: choice.detail.length > 28 ? choice.detail.slice(0, 25) + '…' : choice.detail, keywords: [choice.detail] } : {}) })),
+    const values: PickerNode[] = [...(field.records ? [{ id: RECORDS, label: labels.records.edit }] : []),...field.choices.map(choice => ({ ...(choice.blocked ? { blocked: { reason: choice.blocked } } : {}), id: choice.id, label: choice.label === field.value ? `${choice.label} · ${labels.current}` : choice.label, ...(choice.detail ? { detail: choice.detail.length > 28 ? choice.detail.slice(0, 25) + '…' : choice.detail, keywords: [choice.detail] } : {}) })),
       ...(field.free && configEntryAllowed(field.key, field.sensitive) ? [{ id: FREE, label: labels.freeEntry }] : []),
       ...(field.stepper ? [{ id: STEPPER, label: labels.stepper }] : []), ...(field.generated ? [{ id: REGENERATE, label: labels.regenerate }] : []), ...(field.unsettable && !field.records ? [{ id: UNSET, label: labels.unset }] : [])];
     list.push({ id: field.key, label: section === labels.general ? field.key : field.key.slice(section.length + 1),
@@ -95,7 +95,7 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
     if (value === FREE && configEntryAllowed(target.key, target.sensitive)) { setStep({ kind: 'entry', field: target, layer }); return; }
     if (value === UNSET) { void write({ action: 'unset', keyPath: target.key, layer }, at); return; }
     const choice = target.choices.find(item => item.id === value);
-    if (choice) void write({ action: 'set', keyPath: target.key, value: choice.value, layer }, at);
+    if (choice && !choice.blocked) void write({ action: 'set', keyPath: target.key, value: choice.value, layer }, at);
   };
   const cancelStep = () => { setState(backToKeys(state)); setGeneration(value => value + 1); setStep({ kind: 'pick' }); };
   if (step.kind === 'records' && port.records) return <ConfigRecordWindow port={port.records} keyPath={step.field.key} title={step.field.description} layer={step.layer} labels={labels}
