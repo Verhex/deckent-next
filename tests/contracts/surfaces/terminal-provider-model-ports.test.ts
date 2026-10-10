@@ -8,6 +8,8 @@ import { providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-panels/index.js';
+import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
+import type { ModelInvocability, InvocableModels } from '#engine/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 // T4-A ports over the host's handlers (no runtime, no network): `/provider` runs the free check and sends the key only to the secret store
@@ -252,9 +254,15 @@ describe('/model source', () => {
   const catalog = { schemaVersion: 1, revision: 'catalog-1', providers: [{ id: 'local-openai', version: 1, models: ['chat', 'coder', 'fast', 'keyless'].map(id => ({ id, version: 1,
     nativeId: `native-${id}`, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] })) }] };
   const ref = (modelId: string) => ({ ...reference, modelId });
+  const reading = (state: (id: string) => ModelInvocability): InvocableModels => ({ schemaVersion: 1, scopeId: 'scope', models: catalog.providers.flatMap(provider => provider.models.map(model => ({
+    reference: ref(model.id), label: model.id, nativeId: model.nativeId, catalogRevision: 'catalog-1', bindingDigest: 'd'.repeat(64), availability: state(model.id),
+  }))) });
+
   it('ready only when a profile, its key and an active activation exist; otherwise the first missing step with the exact command; never a fallback', async () => {
     const { root, options } = await project({ provider_invocation_profiles: { schemaVersion: 1, profiles: [profile(ref('chat'), 'DECKENT_LOCAL_ENDPOINT_KEY'),
       profile(ref('coder'), 'DECKENT_LOCAL_ENDPOINT_KEY'), profile(ref('keyless'), 'DECKENT_MISSING_KEY')] } });
+    const states = reading(id => id === 'chat' ? { invocable: true, reason: null } : { invocable: false, reason: { kind: id === 'coder' ? 'not-carried' : id === 'fast' ? 'profile' : 'no-credential', code: 'MODEL_INVOCATION_UNAVAILABLE', ...(id === 'coder' ? { activationRevision: 3 } : {}) } });
+    let inspected = 0;
     const active = new Set(['chat']);
     const host: Parameters<typeof modelPanelSource>[2] = {
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
@@ -263,16 +271,14 @@ describe('/model source', () => {
       inspectModelBinding: async (_root, query) => ({ schemaVersion: 1, reference: query, availability: 'not-observed', status: 'declared', catalogRevision: 'catalog-1',
         definition: {}, binding: { encodingVersion: 1, algorithm: 'sha256', digest: 'd'.repeat(64) } }) as never,
       describeTerminalChatPlan: async () => ({ schemaVersion: 1, status: 'ready', reference: ref('chat'), catalogRevision: 'catalog-1', maxCompletionTokens: 1, historyMessages: 1 }),
+      inspectInvocableModels: async () => { inspected++; return states; },
       listSecretNames: async () => ({ schemaVersion: 1, backend: 'core.secret-store.file@1', names: ['DECKENT_LOCAL_ENDPOINT_KEY'] }),
     };
     const view = await modelPanelSource(root, 'scope', host, options, 'en').inspect();
-    expect(view.choices.map(choice => [choice.reference.modelId, choice.configured, choice.blocked])).toEqual([
-      ['chat', true, null],
-      ['coder', false, 'Not activated in this scope.'],
-      ['fast', false, 'Not connected in this scope: no invocation profile names this model. In /provider choose its provider, then "Connect a model".'],
-      ['keyless', false, 'Its key DECKENT_MISSING_KEY is not in the secret store. Connect the provider with /provider.']]);
-    // Human words in the row; the exact reference and the fixing command only as dimmed lines of the focused row.
-    expect(view.choices.map(choice => choice.detail)).toEqual(['ready (connection not probed)', 'cannot be chosen now', 'cannot be chosen now', 'cannot be chosen now']);
+    expect(inspected).toBe(1);
+    expect(view.choices.map(choice => [choice.reference.modelId, choice.configured, choice.blocked])).toEqual(states.models.map(entry => [entry.reference.modelId,
+      entry.reference.modelId === 'chat', entry.availability.invocable ? null : modelInvocabilityText(entry.availability, 'en')]));
+    expect(view.choices.map(choice => choice.detail)).toEqual(states.models.map(entry => modelInvocabilityText(entry.availability, 'en')));
     expect(view.choices[0]!.exact).toBe('local-openai@1/chat@1 · native native-chat');
     expect(view.choices[1]!.command).toBe('deckent models activate --scope scope --provider local-openai --provider-version 1 --model coder --model-version 1 --command-id <new id> '
       + `--expected-revision 3 --binding-digest ${'d'.repeat(64)} --catalog-revision catalog-1`);
@@ -336,12 +342,13 @@ describe('/model source', () => {
     const view = await modelPanelSource(root, 'scope', {
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
       inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1, catalogRevision: 'catalog-1', binding: { digest: 'd'.repeat(64) } } }) as never,
+      inspectInvocableModels: async () => reading(() => ({ invocable: false, reason: { kind: 'budget', code: 'PROVIDER_SPEND_UNAVAILABLE' } })),
     }, options, 'en').inspect();
-    expect(view.choices.every(choice => choice.blocked === 'No spending budget for this scope (PROVIDER_SPEND_UNAVAILABLE): Create budget first.')).toBe(true);
+    expect(view.choices.every(choice => choice.blocked === modelInvocabilityText({ invocable: false, reason: { kind: 'budget', code: 'PROVIDER_SPEND_UNAVAILABLE' } }, 'en'))).toBe(true);
     // Stage 1: the next step is the window's own "Create budget" row, or the governed CLI command (never hand-written JSON).
     expect(view.notes[0]).toContain('No spending budget is set for scope scope'); expect(view.notes[0]).toContain('Create budget');
     expect(view.notes[0]).toContain('deckent models create-budget --scope scope --usd <amount>');
-    const provider = await providerPanelPort(root, 'scope', { ...secrets([]).host, providerConnect: connectHost('ok') }, options, 'en', errorText).inspect();
+    const provider = await providerPanelPort(root, 'scope', { ...secrets([]).host, providerConnect: connectHost('ok'), inspectInvocableModels: async () => reading(() => ({ invocable: false, reason: { kind: 'budget', code: 'PROVIDER_SPEND_UNAVAILABLE' } })) }, options, 'en', errorText).inspect();
     expect(provider.notes).toContain(view.notes[0]);
     // A ledger account (governed create) counts as the scope's budget: the rows unlock and the note is gone.
     const inspectProviderSpendAccount = async (_root: string, query: unknown) => { expect(query).toEqual({ schemaVersion: 1, scopeId: 'scope', current: true });
@@ -349,10 +356,15 @@ describe('/model source', () => {
     const opened = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
       inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1, catalogRevision: 'catalog-1', binding: { digest: 'd'.repeat(64) } } }) as never,
       inspectModelBinding: async () => ({ status: 'declared', catalogRevision: 'catalog-1', binding: { digest: 'd'.repeat(64) } }) as never,
-      inspectProviderSpendAccount }, options, 'en').inspect();
+      inspectProviderSpendAccount, inspectInvocableModels: async () => reading(id => id === 'chat' ? { invocable: true, reason: null } : { invocable: false, reason: { kind: 'profile', code: 'MODEL_INVOCATION_PROFILE_CONFLICT' } }) }, options, 'en').inspect();
     // The connected model is ready; the others keep their own (non-budget) reasons.
     expect(opened.choices.find(choice => choice.reference.modelId === 'chat')!.blocked).toBeNull();
     expect(opened.choices.some(choice => choice.blocked?.includes('PROVIDER_SPEND_UNAVAILABLE'))).toBe(false); expect(opened.notes.join('\n')).not.toContain('No spending budget');
+  });
+  it('missing shared inspection locks every declared model even when legacy hosts claim it is active', async () => {
+    const { root, options } = await project({});
+    const view = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', catalog }) }, options, 'en').inspect();
+    expect(view.choices).toHaveLength(4); expect(view.choices.every(choice => choice.blocked?.includes('MODEL_INVOCATION_UNAVAILABLE'))).toBe(true);
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});

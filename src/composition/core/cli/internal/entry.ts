@@ -32,7 +32,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
-import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand } from '#composition/core/model-invocation/index.js';
+import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
 export async function main(argv: readonly string[] = process.argv.slice(2), serviceEntry?: string) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
@@ -113,7 +113,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation, applyModelCatalog: applyConfiguredModelCatalog, inspectModelCatalog: inspectConfiguredModelCatalog,
     // T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state.
     planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
-    inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
+    inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels,
     planProfileProtocol: planConfiguredProfileProtocol,
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),

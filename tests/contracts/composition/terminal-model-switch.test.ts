@@ -7,6 +7,7 @@ import type { ModelReference } from '#domain/index.js';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry } from '#adapters/index.js';
 import { connectConfiguredModel, inspectConfiguredModelReadiness, planConfiguredProfileCache, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { describeTerminalChat } from '#composition/core/terminal-chat/index.js';
@@ -82,7 +83,7 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     const ready = await inspectConfiguredModelReadiness(f.project, 'scope', reference, options) as { command: { nativeRequest: { max_completion_tokens: number } } };
     expect(ready.command.nativeRequest.max_completion_tokens).toBe(64);
     const host = { inspectDeclaredModels, inspectModelBinding, inspectModelActivation: inspectConfiguredModelActivation, describeTerminalChatPlan: describeTerminalChat,
-      inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
+      inspectInvocableModels: inspectConfiguredInvocableModels, inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
       listSecretNames: async () => ({ schemaVersion: 1 as const, backend: 'fixture', names: ['DECKENT_ANTHROPIC_KEY'] }) };
     const source = modelPanelSource(f.project, 'scope', host, options, 'tr');
     // The composed stream binds its real command to the workline context (as session-approval-terminal); the fixture names that scope.

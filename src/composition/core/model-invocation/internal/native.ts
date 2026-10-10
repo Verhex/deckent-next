@@ -15,7 +15,7 @@ type InvocationNativeContext = Awaited<ReturnType<typeof loadInvocationContext>>
 /** VLLM-CACHE-SALT: the installation's own salt secret (created on first use in an older installation), never the integrity key. */
 const installationCacheSalt = (context: InvocationNativeContext, scopeId: string) => localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, true);
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
-export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock) {
+export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false) {
   const now = () => clock.sample().wallMs;
   // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
   const budgetFor = async (scopeId: string) => {
@@ -52,7 +52,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
           selected = { profile, priced, cell }; return priced.native;
         }
         openai = createOpenAiChatPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options),
-          cacheSalt: scopeId => installationCacheSalt(context, scopeId) }); return openai.native;
+          cacheSalt: scopeId => readOnly ? localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, false) : installationCacheSalt(context, scopeId) }); return openai.native;
       }
       if (profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENROUTER_CHAT_HTTP_ADAPTER_VERSION) return null;
       const definition = parseOpenRouterChatDefinition(profile.adapter.definition); const cell: { observation?: OpenRouterMetadataObservation } = {};
@@ -71,8 +71,11 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       // Reject absent/revoked scope authority before the metadata network effect.
       providerSpendingBudgetFor(await invocationEffectAuthority(context, input.profile)(signal), input.profile.scopeId);
       const definition = metadataTariff ? { ...metadataTariff, transport: openaiDefinition! } : parseOpenRouterChatDefinition(input.profile.adapter.definition);
-      current.cell.observation = await tariffCache.get({ endpoint: definition.metadataEndpoint, modelId: input.definition.model.nativeId, endpointTag: definition.endpointTag,
-        ...definition.metadataLimits, ...(definition.transport.tls ? { caPem: definition.transport.tls.caPem } : {}) }, now, signal);
+      const acquisition = { endpoint: definition.metadataEndpoint, modelId: input.definition.model.nativeId, endpointTag: definition.endpointTag,
+        ...definition.metadataLimits, ...(definition.transport.tls ? { caPem: definition.transport.tls.caPem } : {}) };
+      const observation = readOnly ? tariffCache.peek(acquisition, now()) : await tariffCache.get(acquisition, now, signal);
+      if (!observation) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+      current.cell.observation = observation;
     },
   });
   const spending: ModelInvocationSpendingAuthority = Object.freeze({

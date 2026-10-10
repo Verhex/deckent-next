@@ -38,7 +38,7 @@ export type ConfigPanelLayer = 'project' | 'global';
 export type ConfigPanelField = Readonly<{
   key: string; section: string; description: string; value: string; source: string; apply: string; expected: string;
   /** Values the schema enumerates (enum, boolean, constants); empty when the source is unavailable or the document needs a record editor. */
-  choices: readonly Readonly<{ id: string; label: string; value: unknown; detail?: string }>[];
+  choices: readonly Readonly<{ id: string; label: string; value: unknown; detail?: string; blocked?: string }>[];
   /** A typed entry is offered (validated by the key's schema before anything is sent). */
   free: boolean;
   records?: boolean;
@@ -203,7 +203,8 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
   pendingNote?: string;
   /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
   legacy?: true }>;
-export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[] }>;
+export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[];
+  invocableModels?: readonly import('#engine/index.js').InvocableModel[] }>;
 export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
 export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[] }>;

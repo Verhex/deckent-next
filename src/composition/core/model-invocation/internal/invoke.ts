@@ -31,9 +31,9 @@ export async function measurePeerConfiguredModel(projectRoot: string, input: Mod
     return await application(context, options).measure(command, undefined, signal);
   } catch (error) { throw queryFailure(error); }
 }
-function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost) {
+export function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost, readOnly = false) {
   // One trusted clock for pricing and durable invocation records (I40).
-  const clock = new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock);
+  const clock = new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly);
   const verifier = { async verify() { return context.principal; } }, bindings = new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } });
   return new ModelInvocationApplication(verifier, new ModelInvocationPolicyAuthorization(context.policy), bindings,
     async () => openSqliteModelActivationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),

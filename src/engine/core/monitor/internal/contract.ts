@@ -131,7 +131,10 @@ export interface MonitorMap {
   readonly config: readonly { readonly layer: 'default' | 'global' | 'project' | 'environment'; readonly path: string | null; readonly sections: readonly string[] }[];
   readonly registry: { readonly profiles: readonly { readonly id: string; readonly version: number; readonly adapter: string }[];
     readonly kinds: readonly { readonly kind: string; readonly profile: string }[] };
-  readonly models: readonly { readonly channelId: string; readonly modelId: string; readonly active: boolean; readonly vendorId?: string | null; readonly billing?: 'subscription' | 'per-token' | 'self-hosted' | null }[];
+  readonly models: readonly { readonly channelId: string; readonly modelId: string; readonly active: boolean; readonly scopeId?: string;
+    readonly reference?: import('#domain/index.js').ModelReference;
+    readonly availability?: import('#engine/core/model-invocation/index.js').ModelInvocability;
+    readonly vendorId?: string | null; readonly billing?: 'subscription' | 'per-token' | 'self-hosted' | null }[];
   readonly policy: { readonly grants: number; readonly byResourceKind: Readonly<Record<string, number>>; readonly separationOfDuties: number;
     readonly permissionModes: readonly { readonly principal: string; readonly mode: string }[] } | null;
   /** Next has no memory subsystem yet: always `{ available: false }` until the MEMORY card lands — shown honestly, never invented. */

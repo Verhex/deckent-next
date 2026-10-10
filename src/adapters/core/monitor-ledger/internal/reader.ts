@@ -125,19 +125,16 @@ function deliveryStates(db: DatabaseSync, version: number) {
   for (const [key, state] of states) states.set(key, Object.freeze({ ...state, receipts: Object.freeze(histories.get(key)!) }));
   return states;
 }
-/** Installation map: a model is active only when both channel and model are active in the same scope. v2 metadata stays unknown. */
+/** Catalog metadata only. Composition supplies scoped invocation readiness; this adapter never guesses it from activation tables. */
 function catalog(db: DatabaseSync, version: number): MonitorMap | null {
   if (version < CATALOG_VERSION) return null;
-  const models = db.prepare(`SELECT m.channel_id,m.model_id,m.record,c.record AS channel_record,
-    EXISTS(SELECT 1 FROM model_catalog_activations a JOIN model_catalog_activations ca
-      ON ca.scope_id=a.scope_id AND ca.channel_id=a.channel_id AND ca.model_id='' AND ca.state='active'
-      WHERE a.channel_id=m.channel_id AND a.model_id=m.model_id AND a.state='active') AS active
+  const models = db.prepare(`SELECT m.channel_id,m.model_id,m.record,c.record AS channel_record
     FROM model_catalog_models m JOIN model_catalog_channels c ON c.channel_id=m.channel_id ORDER BY m.channel_id,m.model_id`).all();
   return Object.freeze({ config: [], registry: { profiles: [], kinds: [] }, policy: null, memory: { available: false },
     models: Object.freeze(models.map(row => {
       const { model } = parseModelCatalogModelRecord(JSON.parse(String(row.record)));
       const { channel } = parseModelCatalogChannelRecord(JSON.parse(String(row.channel_record)));
-      return Object.freeze({ channelId: String(row.channel_id), modelId: String(row.model_id), active: row.active === 1,
+      return Object.freeze({ channelId: String(row.channel_id), modelId: String(row.model_id), active: false,
         vendorId: 'vendorId' in model ? model.vendorId : null, billing: 'billing' in channel ? channel.billing : null });
     })) });
 }

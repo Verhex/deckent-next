@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnEvent, ModelInvocationProfile, ModelReference } from '#domain/index.js';
 import { openSqliteModelActivationStore, openSqliteModelActivationReader, openSqliteModelInvocationStore, openSqliteProviderSpendAccountReader, registerProviderConfig } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, ModelInvocationApplication, ProviderSpendError, checkModelInvocationCapacity,
+import { ModelActivationApplication, ModelBindingApplication, ModelInvocationApplication, ModelInvocableNowApplication, ProviderSpendError, checkModelInvocationCapacity,
   inspectModelSwitch, prepareModelSwitch, OPERATOR_TARIFF_PRICING_ID, providerSpendEvidenceDigest, runAgentTurn, type ModelSwitchPorts } from '#engine/index.js';
 import { modelPanelSource } from '#surfaces/core/cli-terminal/index.js';
+import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
@@ -79,6 +80,12 @@ async function fixture(locale: 'en' | 'tr' = 'tr') {
     inspectModelBinding: (_root, reference) => bindings.inspect(reference),
     inspectModelActivation: async (_root, input) => { const reader = await openSqliteModelActivationReader(path, { busyTimeoutMs: sqlite.busyTimeoutMs });
       try { return { schemaVersion: 1, activation: await reader.loadRecord(input.scopeId, input.reference) }; } finally { reader.close(); } },
+    inspectInvocableModels: async () => new ModelInvocableNowApplication(async reference => {
+      await inspectModelSwitch('scope', reference, { ...ports, preview: command => app.preview(command, undefined, undefined, { surfaces: [], credentialPresent: async () => true }) });
+    }).read('scope', await Promise.all(refs.map(async reference => { const binding = await bindings.inspect(reference);
+      if (binding.status !== 'declared') throw new Error('fixture binding');
+      return { reference, label: reference.modelId, nativeId: binding.definition.model.nativeId, catalogRevision: binding.catalogRevision, bindingDigest: binding.binding.digest };
+    }))),
     inspectModelReadiness: (_root, scope, reference) => inspectModelSwitch(scope, reference, ports),
     prepareModelSwitch: (_root, scope, reference, _options, reasoning) => { preparations.push(reference.providerId); return prepareModelSwitch(scope, reference, ports, reasoning); },
   }, options, locale);
@@ -119,7 +126,7 @@ async function fixture(locale: 'en' | 'tr' = 'tr') {
 }
 
 describe('W6: in-process terminal model switch with governed owners', () => {
-  it('one confirmation switches the next turn; cache-only profile migration stays valid; catalog drift refreshes before pin', async () => {
+  it('one confirmation switches the next turn; cache-only profile migration stays valid; catalog drift locks the row until governed preparation refreshes it', async () => {
     const f = await fixture(); await f.turn(); expect(f.sends[0]!.provider).toBe('local'); expect(f.view.stdout.frame).toContain('1,05 M');
     await f.choose(1, false); expect(f.sends).toHaveLength(1); await f.press(ENTER);
     await until(() => f.view.stdout.frame.includes('READY') && !f.view.stdout.frame.includes(t('tui.model.title', { scope: 'scope' }, 'tr')), 'one confirmation'); expect(f.preparations, f.view.stdout.text).toEqual(['claude']); await f.turn(); expect(f.sends[1]!.provider, JSON.stringify(f.turnReferences)).toBe('claude'); expect(f.view.stdout.frame).toContain('1 M');
@@ -130,6 +137,10 @@ describe('W6: in-process terminal model switch with governed owners', () => {
     const stale = await inspectModelSwitch('scope', refs[1]!, f.ports);
     await expect(f.app.invoke({ ...stale.command, commandId: 'stale-direct-turn' })).rejects.toMatchObject({ code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT' });
     expect(f.sends).toHaveLength(3);
+    expect((await f.source.inspect()).choices.find(choice => choice.group === 'claude')!.blocked).toBe(modelInvocabilityText({ invocable: false, reason: { kind: 'stale-activation', code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT' } }, 'tr'));
+    expect(await f.activation()).toEqual(before);
+    await prepareModelSwitch('scope', refs[1]!, f.ports);
+    await prepareModelSwitch('scope', refs[0]!, f.ports);
     await f.choose(1); await f.turn();
     expect(await f.activation()).toMatchObject({ revision: before.revision + 1, catalogRevision: 'catalog-2', binding: before.binding });
     expect(f.sends[3]).toMatchObject({ provider: 'claude', cache: true, version: 2, activation: before.revision + 1 });
@@ -140,7 +151,7 @@ describe('W6: in-process terminal model switch with governed owners', () => {
     if (kind === 'protocol') { const profile = f.profiles.get('local')!; f.profiles.set('local', { ...profile, adapter: { ...profile.adapter, id: 'unsupported' } }); }
     else if (kind === 'price') f.unprice(); else f.exhaust();
     const local = (await f.source.inspect()).choices.find(choice => choice.group === 'local')!;
-    expect(local.blocked).toContain(t(kind === 'protocol' ? 'tui.model.reason.protocol' : kind === 'price' ? 'tui.model.reason.price' : 'tui.model.reason.budget', { code: kind === 'budget' ? 'PROVIDER_SPEND_EXHAUSTED' : 'MODEL_INVOCATION_UNAVAILABLE' }, locale));
+    expect(local.blocked).toBe(modelInvocabilityText({ invocable: false, reason: { kind: kind === 'protocol' ? 'unavailable' : kind === 'price' ? 'tariff' : 'budget', code: kind === 'budget' ? 'PROVIDER_SPEND_EXHAUSTED' : kind === 'price' ? 'PROVIDER_SPEND_TARIFF_UNVERIFIED' : 'MODEL_INVOCATION_UNAVAILABLE' } }, locale));
     await f.press('/model', ENTER); await until(() => f.view.stdout.frame.includes('local'), 'blocked provider'); await f.press('local', ENTER, ENTER);
     expect(f.sends).toHaveLength(0); await f.press(ESC, ESC); await f.turn(); expect(f.sends[0]!.provider).toBe('claude');
   });
@@ -177,12 +188,13 @@ describe('W6: in-process terminal model switch with governed owners', () => {
     expect(await f.source.reasoningOffSupported!(refs[0]!)).toBe(true); expect(await f.source.reasoningOffSupported!(refs[1]!)).toBe(false);
     await f.press('/reasoning off', ENTER); await until(() => f.view.stdout.text.includes('OFF'), 'reasoning off');
     await f.turn(); expect(f.sends[0]).toMatchObject({ provider: 'local', reasoning: { enable_thinking: false } });
-    const before = await f.activation(); f.revise(); await f.choose(1, false); await f.press(ENTER);
+    const before = await f.activation(); await f.choose(1, false); f.revise(); await f.press(ENTER);
     await until(() => f.view.stdout.text.includes(t('tui.model.reason.reasoningOff', {}, locale)), 'localized refusal');
     expect(await f.activation()).toEqual(before); expect(f.sends).toHaveLength(1);
     await f.press(ESC, ESC);
     // The refused switch must leave both the original pin and its reasoning preference in force.
     // Refresh only the serving model through the existing governed switch, then run the next turn.
+    await prepareModelSwitch('scope', refs[0]!, f.ports, 'off');
     await f.choose(0); await f.turn(); expect(f.sends[1]).toMatchObject({ provider: 'local', reasoning: { enable_thinking: false } });
   });
 

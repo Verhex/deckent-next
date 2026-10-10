@@ -3,7 +3,8 @@ import { userInfo } from 'node:os';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
+import { modelInvocabilityText } from '#surfaces/index.js';
 import { IdentityProfileRegistry, installationOwnScopes, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { executionRegistrySchema, policySchema } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
@@ -57,11 +58,10 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     }
     if (!scopeId) return [];
     if (source === 'models') {
-      const catalog = await inspectConfiguredModelCatalog(root, { schemaVersion: 1, scopeId }, options);
-      return catalog.channels.flatMap(channel => channel.access === 'allowed' && channel.activation?.state === 'active' ? channel.models.filter(model => model.activation?.state === 'active').map(model => ({
-        id: JSON.stringify([channel.channelId, model.modelId]), label: 'displayName' in model.model ? String(model.model.displayName) : model.modelId, detail: `${channel.channelId} · ${model.modelId}`,
-        value: { providerId: channel.channelId, providerVersion: channel.providerVersion, modelId: model.model.id, modelVersion: model.model.version },
-      })) : []);
+      const reading = await inspectConfiguredInvocableModels(root, scopeId, options);
+      return reading.models.map(model => ({ id: JSON.stringify(model.reference), label: model.label, value: model.reference,
+        detail: `${model.reference.providerId} · ${modelInvocabilityText(model.availability, config.language)}`,
+        ...(!model.availability.invocable ? { blocked: modelInvocabilityText(model.availability, config.language) } : {}) }));
     }
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
     if (source === 'companies') return values([context.config.company.id]); // Policy/membership pins this installation to one company; no foreign enumeration.

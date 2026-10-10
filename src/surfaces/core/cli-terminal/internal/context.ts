@@ -77,6 +77,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   /** CACHE-SLICE1: the scope's existing profiles offered the 5-minute prompt cache, and the per-layer profile documents that switch it on (read only). */
   planProfileCache?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileCachePlan>;
   inspectModelReadiness?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<unknown>;
+  inspectInvocableModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').InvocableModels>;
   prepareModelSwitch?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<void>;
   planProfileProtocol?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileProtocolPlan>;
   listSecretNames?: TerminalSecretNamesHandler;

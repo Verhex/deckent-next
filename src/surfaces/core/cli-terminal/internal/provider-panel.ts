@@ -4,7 +4,7 @@ import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#d
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
-import { scopeBudgeted } from './model-panel.js';
+import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 
 /** The words of a kind: its catalog key comes with the adapter's data (an unknown key from newer data keeps the kind's id). */
 function kindLabel(kind: ProviderConnectKindView | undefined, id: string, locale: Locale): string {
@@ -54,7 +54,7 @@ function custodyText(backend: string, locale: Locale): string {
   return t('tui.panel.provider.transparency', { backend }, locale);
 }
 
-type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount'>;
+type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels'>;
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 /** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service. */
@@ -104,8 +104,7 @@ function discoveryPort(root: string, scopeId: string, connect: NonNullable<Host[
 }
 export function providerPanelPort(root: string, scopeId: string, host: Host & { providerConnect: NonNullable<Host['providerConnect']> }, options: ConfigLoadOptions, locale: Locale,
   errorText: (error: unknown) => string): ProviderPanelPort {
-  const connect = host.providerConnect;
-  let backend = '-';
+  const connect = host.providerConnect; let backend = '-';
   const kindOf = (id: string): ProviderConnectKindView | undefined => connect.kinds.find(kind => kind.id === id);
   const refs = async () => credentialRefs(await loadConfig(root, options) as Record<string, unknown>, scopeId);
   return {
@@ -173,10 +172,10 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           legacy: true });
       }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
-      // (a): a connected model cannot answer without this scope's budget; the window says so before anything is connected.
-      try { if (!await scopeBudgeted(await loadConfig(root, options) as Record<string, unknown>, scopeId, { root, options, inspect: host.inspectProviderSpendAccount })) notes.push(t('tui.budget.missing', { scope: scopeId }, locale)); }
-      catch { /* the profiles note above already names an unreadable configuration */ }
-      return { title: t('tui.panel.provider.title', {}, locale), kinds, notes };
+      const reading = await host.inspectInvocableModels?.(root, scopeId, options);
+      if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
+      for (const model of reading?.models ?? []) notes.push(`${model.reference.providerId} / ${model.label}: ${modelInvocabilityText(model.availability, locale)}`);
+      return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
     },
     endpoint(kind, text) {
       const checked = connect.endpoint(text);

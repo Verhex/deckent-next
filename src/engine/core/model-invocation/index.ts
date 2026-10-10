@@ -37,3 +37,5 @@ export type { ModelInvocationCancellationRecoveryStatus, ModelInvocationCancella
 export { inspectModelSwitch, prepareModelSwitch } from './internal/model-switch.js';
 export type { ModelSwitchPorts, ModelSwitchPreview } from './internal/model-switch.js';
 export { checkModelInvocationCapacity } from './internal/spending.js';
+export { ModelInvocableNowApplication, modelInvocabilityRefusal } from './internal/invocable-now.js';
+export type { InvocableModel, InvocableModels, ModelInvocability, ModelInvocabilityReason, ModelInvocabilityReasonKind, ModelInvocableNowChecks } from './internal/invocable-now.js';
