@@ -177,9 +177,11 @@ it('rejects tampered nested tariff data even when its outer quote and row checks
 
 });
 
-it.each(['missing-price', 'missing-request-price', 'fake-observation', 'currency'] as const)('rejects %s before claim, reservation, or POST', async kind => {
-  const pricing: Record<string, unknown> = kind === 'missing-price' ? { prompt: '0.000001', completion: '0.000002' } : prices();
-  if (kind === 'missing-request-price') delete pricing.request;
+// v2 includes omitted optional SKUs in the base token bounds; missing required prompt/completion prices still close admission.
+it.each(['missing-prompt-price', 'missing-completion-price', 'fake-observation', 'currency'] as const)('rejects %s before claim, reservation, or POST', async kind => {
+  const pricing: Record<string, unknown> = prices();
+  if (kind === 'missing-prompt-price') delete pricing.prompt;
+  if (kind === 'missing-completion-price') delete pricing.completion;
   const f = await fixture(pricing);
   try {
     if (kind === 'fake-observation') f.setObservation({ ...f.observation, receivedBytes: f.observation.receivedBytes + 1 });
@@ -201,6 +203,24 @@ it('rejects an observation change between the two quote checks before durable ef
     });
     await expect(app.invoke(f.command('changed'))).rejects.toThrow(); expect(calls).toBe(1);
     expect(f.posts).toBe(0); expect(f.counts()).toEqual({ invocations: 0, reservations: 0 });
+  } finally { await f.close(); }
+});
+
+it.each(['missing-price', 'missing-request-price'] as const)('bounds %s optional SKUs through v2 base-token inclusion and a zero request-price ceiling', async kind => {
+  const pricing: Record<string, unknown> = kind === 'missing-price' ? { prompt: '0.000001', completion: '0.000002' } : prices();
+  if (kind === 'missing-request-price') delete pricing.request;
+  const f = await fixture(pricing);
+  try {
+    const result = await f.application().invoke(f.command(kind));
+    expect(result.receipt.outcome?.state).toBe('responded');
+    expect(f.posts).toBe(1); expect(f.counts()).toEqual({ invocations: 1, reservations: 1 });
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    try {
+      const record = parseProviderSpendReservation(JSON.parse(String(db.prepare('SELECT record FROM model_invocation_spend_reservations').get()!.record)));
+      expect(record.descriptor.quote).toMatchObject({ currency: 'USD', maxChargeMinorUnits: 2,
+        meter: { evidence: { unpricedDimensions: [], reservation: { maxPromptTokens: 1000, maxCompletionTokens: 8, maxChargeMinorUnits: 2 } } } });
+      expect(record.disposition).toMatchObject({ state: 'held', reason: 'missing-usage' });
+    } finally { db.close(); }
   } finally { await f.close(); }
 });
 

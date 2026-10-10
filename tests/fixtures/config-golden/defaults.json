@@ -128,6 +128,13 @@
   "terminal": {
     "autostartService": true,
     "banner": "full",
+    "chat": {
+      "compactionThresholdTokens": 100000,
+      "historyMessages": 40,
+      "maxCompletionTokens": 16384,
+      "readResultMaxBytes": 65536,
+      "schemaVersion": 1
+    },
     "clearOnStart": true,
     "persistHistory": true,
     "serviceStartTimeoutMs": 20000,
