@@ -1157,7 +1157,7 @@
         "src/domain/core/model-activation",
         "src/engine/core/project-instructions",
         "src/surfaces/core/project-instructions",
-        "src/surfaces/core/model-invocability"
+        "src/engine/core/model-invocation"
       ],
       "plan": "SURFACES"
     },
@@ -1446,7 +1446,8 @@
         "src/domain/core/provider-spend",
         "src/engine/core/provider-spend",
         "src/domain/core/agent-tool",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/i18n"
       ],
       "plan": "PROVIDERS"
     },
@@ -2355,7 +2356,7 @@
         "src/engine/core/config",
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
-        "src/surfaces/core/model-invocability"
+        "src/engine/core/model-invocation"
       ],
       "plan": "MONITOR"
     },
@@ -2420,7 +2421,7 @@
         "src/adapters/core/contract",
         "src/platform/core/errors",
         "src/composition/core/model-invocation",
-        "src/surfaces/core/model-invocability"
+        "src/engine/core/model-invocation"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2712,7 +2713,6 @@
     },
     "src/surfaces/core/model-invocability": {
       "dependencies": [
-        "src/platform/core/i18n",
         "src/engine/core/model-invocation"
       ],
       "plan": "SURFACES"

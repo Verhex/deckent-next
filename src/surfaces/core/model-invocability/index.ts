@@ -1,1 +1,1 @@
-export { modelInvocabilityText } from './internal/words.js';
+export { modelInvocabilityText } from '#engine/index.js';
