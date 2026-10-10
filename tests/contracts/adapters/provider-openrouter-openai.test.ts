@@ -30,6 +30,8 @@ async function fixture(answer: string, streamed: boolean, status = 200, requestM
   const model = retained?.document.data.id ?? 'vendor/model', tag = retained?.tag ?? 'provider/region', metadataPath = `/api/v1/models/${model}/endpoints`;
   const metadata = retained?.document ?? { data: { id: model, endpoints: [{ model_id: model, tag, provider_name: 'Vendor', context_length: 100,
     max_prompt_tokens: 100, max_completion_tokens: 10, status: 0, supported_parameters: ['max_tokens', 'tools', 'tool_choice'],
+    // W9-PROVIDER-ERRORS: tool_choice needs the endpoint's explicit supports_tool_choice (unknown refuses; provider-openrouter-pricing).
+    supports_tool_choice: { auto: true, none: true, required: true },
     pricing: { prompt: '0.01', completion: '0.02', request: '0', input_cache_read: '0', input_cache_write: '0', internal_reasoning: '0' } }] } };
   const server = createServer({ ca: caPem, cert: caPem, key }, (req, res) => {
     if (req.url === '/api/v1/endpoints/zdr') { res.writeHead(200, { 'content-type': 'application/json' });
