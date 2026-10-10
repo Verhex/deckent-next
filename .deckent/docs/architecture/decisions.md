@@ -427,3 +427,11 @@ explicit group namespace custody: group members may alter/remove entries. Other 
 (publication, policy, artifacts, gateway, worker workspace) retain their own stricter invariants.
 The proven installation target is an owned 0775 project with private child/data directories, not
 blanket group-writable product state. No ownership repair or host chmod is performed.
+
+### M5 owner decisions — 2026-10-10
+
+Source: `proof/M5-PROGRAM-2026-10-10/PROGRAM.md` §5 (R5, audit PASS AUDIT-4), Jev case files under `proof/M5-PROGRAM-2026-10-10/jev/`.
+Owner decisions: K1 a, M5 runs parallel with the terminal, share taken from measured capacity (`parallel_measured_share`, Jev a72d272b). K2 a, D1 and D2 start in parallel; D3-D8 follow dependency order (`d1_d2_parallel`, Jev c95d8a72). K5 a, every profile/skill promotion is approved by the owner with an eval report (`owner_approves_each`, Jev f270109c). K6 a, a verifier from a different provider is a separate card and advisory by default; it is not inside the LLMAUDITOR deferral (`separate_card_advisory_default`, Jev 0be3466e; the program recommendation was b, the owner chose a). K10 b, a lost attempt slot is released by dispatch fence plus termination proof; without proof a typed manual decision applies (`dispatch_fence_with_termination_proof`, Jev a6f7bec9).
+Lead + Jev: K8, first a core test fixture `test.erp` (mock on `http-conditional-effect`, purchase-approval catalog, no SAP code in Core), then a signed Enterprise overlay package (`core_fixture_first_then_overlay`, Jev 93c08b15, choice 0.99, sufficiency 0.80). Test-only fixture; no ERP access is claimed.
+Unchanged existing decisions: K3 deferred debt acceptance; K4 AUTORETRY `operator_only_default`; K7 N1 self-promotion not now (D8 deferred until D2 and D3 evidence); K9 memory deferrals (MEM-5, PROJINSTR, DECKENT-MD-WORKERS).
+Scope: planning and card decisions only; no code, ledger or live change is authorized by this entry. Measured performance and durations remain hypotheses.
