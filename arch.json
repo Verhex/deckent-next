@@ -2789,6 +2789,7 @@
       ".github/ISSUE_TEMPLATE/bug_report.md",
       ".github/ISSUE_TEMPLATE/feature_request.md",
       ".agents/refactor/qwen-decision.README.md",
+      ".agents/refactor/dogfood-runbook.md",
       "ARCHITECTURE.md",
       "PLAN.md",
       "COMPLETED-PLAN.md",
