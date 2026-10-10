@@ -15,7 +15,7 @@ function withStanding<T>(root: string, scopeId: string, options: ConfigLoadOptio
 }
 /** The local OS person's governed `policy.administer@1` chain (read: a policy source only; write: the administration, and the approval decided as that person). */
 export async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
-  use: (deps: PersistentStandingDependencies, person: Person) => Promise<T>): Promise<T> {
+  use: (deps: PersistentStandingDependencies & { readonly effects?: import('#engine/index.js').EffectStore }, person: Person) => Promise<T>): Promise<T> {
   try {
     const { config, layout, principal, path } = await loadConfiguredScopeContext(root, scopeId, options, access);
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
@@ -36,7 +36,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
         { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize)
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
       };
-      return await use({ administration, approve, policy: source }, principal);
+      return await use({ administration, approve, policy: source, effects }, principal);
     } finally { journal.close(); effects.close(); auditStore.close(); }
   } catch (error) { throw queryFailure(error); }
 }

@@ -3,11 +3,13 @@ import type { IdentityProfileListing, IdentityProfilePreview } from '#engine/ind
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import { readJsonInput, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { renderIdentityPreview, renderIdentityProfiles } from './render.js';
-export interface IdentityCommandContext extends CliBaseContext {
+import { identityDistributionCommand, type IdentityDistributionContext } from './distribution.js';
+export interface IdentityCommandContext extends CliBaseContext, IdentityDistributionContext {
   listIdentityProfiles?: (packages: readonly unknown[]) => IdentityProfileListing;
   previewIdentityProfile?: (root: string, input: unknown, packages: readonly unknown[], options: ConfigLoadOptions) => Promise<IdentityProfilePreview>;
 }
 export async function identityCommand(argv: readonly string[], context: IdentityCommandContext) {
+  if (argv[1] === 'choices' || argv[1] === 'distribute') return identityDistributionCommand(argv, context);
   const env = context.env ?? process.env, values = new Map<string, string>(); let json = false;
   const usage = () => ErrorRegistry.createError('CLI_USAGE', { params: { usage: t('identity.help', {}, resolveLocale(undefined, env)) } });
   const action = argv[1]; if (action !== 'profiles' && action !== 'preview') throw usage();

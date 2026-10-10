@@ -2538,7 +2538,8 @@
     "src/domain/core/identity-profile": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/domain/core/effect"
       ],
       "plan": "CONTRACT"
     },
@@ -2547,7 +2548,10 @@
         "src/domain/core/identity-profile",
         "src/domain/core/principal",
         "src/domain/core/policy",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/engine/core/approval"
       ],
       "plan": "INSTALLATION"
     },
@@ -2563,7 +2567,12 @@
         "src/composition/core/policy",
         "src/composition/core/scoped-request",
         "src/composition/core/query-errors",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/adapters/core/attempt-store",
+        "src/platform/core/managed-files",
+        "src/platform/core/integrity",
+        "src/platform/core/i18n",
+        "src/composition/core/approvals"
       ],
       "plan": "INSTALLATION"
     },

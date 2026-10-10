@@ -1,14 +1,14 @@
 import { isMcpPrincipal } from '#domain/core/principal/index.js';
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policySchema, principalGrants, resolvePolicyBindings, type Policy,
+import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policyRoleSchema, policySchema, principalGrants, resolvePolicyBindings, type Policy,
   type PolicyBinding, type PolicyFile, type PolicyGrant } from './schema.js';
 
 /**
  * Governed policy administration (POLICY-ADMIN P1, lead decision A1 `policy.administer@1`). Pure: a typed, bounded change set over the
  * company policy (v2 grants) and the role bindings, the documents it produces, and the delegation bound — a principal grants,
- * delegates or revokes only what its own effective authority holds. Roles, restrictions, separation of duties and the persons'
- * permission modes are not change kinds here (modes stay with the permission-mode application; the rest is a later slice).
+ * delegates or revokes only what its own effective authority holds. Input v2 additionally creates immutable profile roles;
+ * restrictions, separation of duties and permission modes retain their own contracts.
  */
 export const POLICY_CHANGE_MAX = 32;
 /** Largest number of (action × id × scope) cells one change may make the bound evaluate; an `'all'` dimension counts once. */
@@ -25,7 +25,14 @@ const changeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('binding.replace'), binding: policyBindingSchema }).strict(),
 ]);
 /** `policy.administer@1` input v1: 1–32 changes applied in order to one snapshot. */
-export const policyChangeSchema = z.object({ schemaVersion: z.literal(1), changes: z.array(changeSchema).min(1).max(POLICY_CHANGE_MAX).readonly() }).strict().readonly();
+const legacyPolicyChangeSchema = z.object({ schemaVersion: z.literal(1), changes: z.array(changeSchema).min(1).max(POLICY_CHANGE_MAX).readonly() }).strict().readonly();
+/** I2 input v2 adds immutable roles. Old v1 commands remain unchanged; older writers reject v2. */
+const profilePolicyChangeSchema = z.object({ schemaVersion: z.literal(2),
+  changes: z.array(z.union([changeSchema, z.object({ kind: z.literal('role.add'), role: policyRoleSchema }).strict()])).min(1).max(POLICY_CHANGE_MAX).readonly(),
+  profile: z.object({ id: identitySchema, version: z.number().int().positive().safe(), digest: z.string().regex(/^[a-f0-9]{64}$/),
+    registryDigest: z.string().regex(/^[a-f0-9]{64}$/), previewDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly(),
+}).strict().readonly();
+export const policyChangeSchema = z.union([legacyPolicyChangeSchema, profilePolicyChangeSchema]);
 export type PolicyChange = z.infer<typeof policyChangeSchema>;
 
 export class PolicyChangeError extends Error {
@@ -45,8 +52,8 @@ export interface PolicyChangePlan {
   /** The next policy.json body without its revision (the writer chains it), or null when the policy file does not change. */
   readonly policy: Body<RolePolicyFile> | null;
   readonly bindings: Body<BindingsFile> | null;
-  /** I8: a change that removes or replaces anything writes bindings first; a pure addition writes policy first. Both intermediate
-   * states were verified to be valid snapshots before any write. */
+  /** I8: revocations write bindings first. I2 may publish new, unbound roles first before binding removals/additions;
+   * both intermediate snapshots must be valid. New roles mixed with grant revocations are refused. */
   readonly order: 'policy-first' | 'bindings-first';
   readonly touched: readonly DelegatedRule[];
   readonly counts: { readonly grantsAdded: number; readonly grantsRemoved: number; readonly bindingsAdded: number; readonly bindingsRemoved: number };
@@ -64,7 +71,7 @@ const rule = (grant: PolicyGrant): DelegatedRule => Object.freeze({ id: grant.id
 /**
  * Applies a change set to one snapshot (policy v2 + its bindings): the next bodies, the write order, and every rule the change touches
  * — added, removed, and both sides of a replacement; a binding touches each permission of each role it names, at its scopes.
- * Typed refusals: an input that is not a v1 change set, an id that is missing or taken, an unknown role, or a result or intermediate
+ * Typed refusals: an input that is not a versioned change set, an id that is missing or taken, an unknown role, or a result or intermediate
  * state that is not a valid snapshot → `POLICY_CHANGE_INVALID`; a v1 policy (no bindings) → `POLICY_ADMINISTER_UNSUPPORTED`.
  */
 export function planPolicyChange(policyInput: unknown, bindingsInput: unknown, changeInput: unknown): PolicyChangePlan {
@@ -84,9 +91,13 @@ export function planPolicyChange(policyInput: unknown, bindingsInput: unknown, c
   const touched: DelegatedRule[] = [];
   const counts = { grantsAdded: 0, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 };
   let removal = false;
+  let rolesAdded = 0;
   const at = <T extends { readonly id: string }>(list: readonly T[], id: string) => { const index = list.findIndex(value => value.id === id); return index < 0 ? invalid() : index; };
   for (const item of change.data.changes) {
-    if (item.kind === 'grant.add') {
+    if (item.kind === 'role.add') {
+      if (roles.has(item.role.id)) invalid();
+      roles.set(item.role.id, item.role); rolesAdded++;
+    } else if (item.kind === 'grant.add') {
       if (grants.some(value => value.id === item.grant.id)) invalid();
       grants.push(item.grant); touched.push(rule(item.grant)); counts.grantsAdded++;
     } else if (item.kind === 'grant.remove' || item.kind === 'grant.replace') {
@@ -105,10 +116,15 @@ export function planPolicyChange(policyInput: unknown, bindingsInput: unknown, c
     }
   }
   const policyBody = omit(policy, ['revision']) as Body<RolePolicyFile>, bindingsBody = omit(bindings, ['revision']) as Body<BindingsFile>;
-  const nextPolicy = counts.grantsAdded + counts.grantsRemoved > 0 ? Object.freeze({ ...policyBody, grants: Object.freeze(grants) }) : null;
+  const nextPolicy = counts.grantsAdded + counts.grantsRemoved + rolesAdded > 0 ? Object.freeze({ ...policyBody, roles: Object.freeze([...roles.values()]), grants: Object.freeze(grants) }) : null;
   const nextBindings = counts.bindingsAdded + counts.bindingsRemoved > 0 ? Object.freeze({ ...bindingsBody, bindings: Object.freeze(entries) }) : null;
-  const order = removal ? 'bindings-first' as const : 'policy-first' as const;
+  // New, unbound roles can be published first before removing/replacing bindings. Grant revocations retain I8's order.
+  if (rolesAdded && counts.grantsRemoved) invalid();
+  const order = removal && !rolesAdded ? 'bindings-first' as const : 'policy-first' as const;
   validSnapshot(planned(nextPolicy ?? policyBody), planned(nextBindings ?? bindingsBody));
+  // A profile cannot remove the last installation-wide owner root. Existing roles stay immutable.
+  const owner = (binding: PolicyBinding) => binding.roles.includes(INSTALLATION_OWNER_ROLE_ID) && binding.scopes === 'all';
+  if (change.data.schemaVersion === 2 && bindings.bindings.some(owner) && !entries.some(owner)) invalid();
   if (nextPolicy && nextBindings) validSnapshot(planned(order === 'policy-first' ? nextPolicy : policyBody), planned(order === 'policy-first' ? bindingsBody : nextBindings));
   return Object.freeze({ policy: nextPolicy, bindings: nextBindings, order, touched: Object.freeze(touched), counts: Object.freeze(counts) });
 }

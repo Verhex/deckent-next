@@ -799,10 +799,10 @@
   "identity.profile.team": "Ekip",
   "identity.profile.enterprise": "Kurumsal",
   "identity.profile.custom": "Özel",
-  "identity.summary": "Kimlik profilleri ve taslak önizlemeleri",
+  "identity.summary": "Kimlik profilleri, taslak önizleme ve yönetilen dağıtım",
   "identity.profilesSummary": "Kimlik profili şablonlarını listele",
   "identity.previewSummary": "Yetki vermeden taslak önizle",
-  "identity.help": "Kullanım: deckent identity profiles [--registry <dosya>] [--json] [--lang en|tr]\n          deckent identity preview [--profile <namespace:id>] --scope <id>\n            [--profile-version <n>] [--input <dosya|->] [--registry <dosya>]\n            [--json] [--lang en|tr]\nGirdi: members, organization, assignments, removeBindingIds; isteğe bağlı\nprojectScopeIds ve includeFutureProjects. Registry: özel paket dizisi.\nYalnız önizleme; yetki, dağıtım, kimlik doğrulama veya model çağrısı yok.\n--profile verilmezse kurulum identity.profile seçimi kullanılır.",
+  "identity.help": "Kullanım: deckent identity profiles [--registry <dosya>] [--json] [--lang en|tr]\n          deckent identity preview [--profile <namespace:id>] --scope <id>\n            [--profile-version <n>] [--input <dosya|->] [--registry <dosya>]\n            [--json] [--lang en|tr]\nGirdi: members, organization, assignments, removeBindingIds; isteğe bağlı\nprojectScopeIds ve includeFutureProjects. Registry: özel paket dizisi.\nYalnız önizleme; yetki, dağıtım, kimlik doğrulama veya model çağrısı yok.\n--profile verilmezse kurulum identity.profile seçimi kullanılır.\nKullanım: deckent identity choices --scope <id>\n          deckent identity distribute --input <seçim-dosyası|-> [--json]\n          deckent identity distribute --apply --input <komut-dosyası|->\n            --expect <önizleme-özeti> [--json]\n          deckent identity distribute --scope <id> [--apply]\nSeçim: schemaVersion=1, profile, scopeId, assignments\n(principalId, roleId, scopeIds), removeBindingIds. Katalogdan seçilir.\nEtkileşimli giriş numaralı seçim ve açık onay kullanır.\nUygulama admin, doğrulanmış terminal ve mevcut kimlik gerektirir.\nTam tekrar için önizlemenin submission zarfını saklayın; önizleme\nyetki vermez. Mevcut ikinci kişi kuralları uygulanmaya devam eder.",
   "identity.list": "Kimlik profilleri · kayıt sürümü {version} · {digest}",
   "identity.profileLine": "{label} · {id}@{version} · içerik özeti {digest}",
   "identity.preview": "Taslak {profile}@{version} · sabit proje kapsamları: {scopes}",
@@ -906,5 +906,14 @@
   "error.SECRET_HELPER_DENIED": "Politika bu sır yardımcısı okumasına izin vermedi. Yardımcı başlatılmadı.",
   "error.SECRET_HELPER_TIMEOUT": "Sır yardımcısı okuması zaman sınırını aştı. Anahtar döndürülmedi.",
   "error.SECRET_HELPER_OUTPUT_LIMIT": "Sır yardımcısı toplam çıktı sınırını aştı. Çıktısı atıldı.",
-  "error.SECRET_HELPER_FAILED": "Sır yardımcısı başlatılamadı veya başarısız sonlandı. Çıktısı atıldı."
+  "error.SECRET_HELPER_FAILED": "Sır yardımcısı başlatılamadı veya başarısız sonlandı. Çıktısı atıldı.",
+  "identity.choicesSummary": "Doğrulanmış kimlik dağıtım seçimlerini listele",
+  "identity.distributeSummary": "Seçilen kimlik profili bağlarını önizle veya uygula",
+  "identity.distributionHelp": "Kullanım: deckent identity choices --scope <id>\n          deckent identity distribute --input <seçim-dosyası|-> [--json]\n          deckent identity distribute --apply --input <komut-dosyası|->\n            --expect <önizleme-özeti> [--json]\n          deckent identity distribute --scope <id> [--apply]\nSeçim: schemaVersion=1, profile, scopeId, assignments\n(principalId, roleId, scopeIds), removeBindingIds. Katalogdan seçilir.\nEtkileşimli giriş numaralı seçim ve açık onay kullanır.\nUygulama admin, doğrulanmış terminal ve mevcut kimlik gerektirir.\nTam tekrar için önizlemenin submission zarfını saklayın; önizleme\nyetki vermez. Mevcut ikinci kişi kuralları uygulanmaya devam eder.",
+  "identity.distributionExpect": "Dağıtım önizlemesi özeti: {digest}",
+  "identity.distributionResult": "Kimlik dağıtımı: {status}",
+  "identity.selectNumber": "Numara seçin: ",
+  "identity.approveDistribution": "Onayla ve dağıt",
+  "identity.cancelDistribution": "İptal",
+  "identity.distributionReason": "Kimlik profili dağıtımı incelendi"
 }
