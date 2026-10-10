@@ -1,4 +1,5 @@
 import { verifiedOpenAiCompatibleTariff } from './pricing-catalog.js';
+import { isLiteralLoopbackHostname } from '#platform/index.js';
 import { openAiChatPromptUpperBound } from './invocation.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -60,7 +61,7 @@ export function openAiCompatibleTariffRates(tariff: ReturnType<typeof parseOpenA
       .reduce((a, b) => compareProviderSpendExactMinorUnits(a, b) >= 0 ? a : b);
     return { input: maximum('input'), cachedInput: maximum('cachedInput'), cacheWrite: maximum('cacheWrite'), output: maximum('output') };
   }
-  const url = new URL(endpoint), loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname);
+  const loopback = isLiteralLoopbackHostname(new URL(endpoint).hostname);
   if (!loopback && tariff.version !== 2) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
   return { input: providerSpendExactFromNumericSource(`${tariff.inputMinorUnitsPerMillionTokens}e-2`, 1),
     cachedInput: providerSpendExactFromNumericSource(`${tariff.cachedInputMinorUnitsPerMillionTokens ?? tariff.inputMinorUnitsPerMillionTokens}e-2`, 1),

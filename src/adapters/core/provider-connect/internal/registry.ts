@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isLiteralLoopbackHostname } from '#platform/index.js';
 import asset from './registry.json' with { type: 'json' };
 import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/index.js';
 
@@ -7,7 +8,6 @@ import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/ind
  * a key (a model list or the key's own record — never a billed call), how the key is sent, and the secret-store name it is kept under. Vendor
  * endpoints are versioned data here, not code (ARCHITECTURE literal rule); a kind with `available: false` is listed with its reason only.
  */
-const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 /** The invocation adapters a connection can be bound to (adapter ids, not vendors): Anthropic Messages and OpenAI chat completions. */
 export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http'] as const;
 const SECRET_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/u;
@@ -109,7 +109,7 @@ export function providerConnectSecretName(kind: ProviderConnectKind, endpoint: s
 
 export type ProviderEndpointRefusal = 'url-invalid' | 'url-credentials' | 'url-query' | 'url-insecure-remote' | 'url-scheme-refused';
 /**
- * The endpoint rule of a typed base URL (the same rule as MCP HTTP entries): https anywhere, plain http only to this machine (a local server);
+ * The endpoint rule of a typed base URL: https anywhere, plain http only to literal 127.0.0.1 / [::1];
  * no credentials, query or fragment in the URL (the key travels only in its header). Returns the canonical base without a trailing slash.
  */
 export function providerEndpoint(text: string): Readonly<{ ok: true; base: string }> | Readonly<{ ok: false; reason: ProviderEndpointRefusal }> {
@@ -117,7 +117,7 @@ export function providerEndpoint(text: string): Readonly<{ ok: true; base: strin
   try { parsed = new URL(text.trim()); } catch { return { ok: false, reason: 'url-invalid' }; }
   if (parsed.username || parsed.password) return { ok: false, reason: 'url-credentials' };
   if (parsed.search || parsed.hash || text.includes('?') || text.includes('#')) return { ok: false, reason: 'url-query' };
-  if (parsed.protocol === 'http:' && !LOOPBACK.has(parsed.hostname)) return { ok: false, reason: 'url-insecure-remote' };
+  if (parsed.protocol === 'http:' && !isLiteralLoopbackHostname(parsed.hostname)) return { ok: false, reason: 'url-insecure-remote' };
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return { ok: false, reason: 'url-scheme-refused' };
   const path = parsed.pathname.replace(/\/+$/u, '');
   // An OpenAI-compatible base is often given with its `/v1`; the probe path already carries it.

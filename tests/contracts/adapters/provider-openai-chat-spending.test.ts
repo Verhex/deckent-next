@@ -20,6 +20,16 @@ function fixture(endpoint: string, tariff: unknown, model = 'chat-latest') {
   return { profile, definition, request, command, requestDigest: modelInvocationRequestDigest(command), profileDigest: modelInvocationProfileDigest(profile), prepared: {} };
 }
 const free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+it.each(['localhost', '192.168.1.5', '172.28.64.1'])('refuses a legacy zero tariff at %s; an explicit remote tariff still quotes', host => {
+  // HTTPS reaches the pricing gate; the definition parser already refuses cleartext remote addresses.
+  const endpoint = `https://${host}:8000/chat`;
+  expect(() => quoteOpenAiChatOperatorTariff(fixture(endpoint, free))).toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+  expect(quoteOpenAiChatOperatorTariff(fixture(endpoint, { ...free, version: 2, cachedInputMinorUnitsPerMillionTokens: 0,
+    outputMinorUnitsPerMillionTokens: 1000 })).maxChargeMinorUnits).toBeGreaterThan(0);
+});
+it.each(['127.0.0.1', '[::1]'])('keeps a legacy zero tariff at literal loopback %s', host => {
+  expect(quoteOpenAiChatOperatorTariff(fixture(`http://${host}:8000/chat`, free)).maxChargeMinorUnits).toBe(0);
+});
 it('quotes the effective terminal output cap sent on the wire, retaining explicit larger requests', async () => {
   const tariff = { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: 0,
     cachedInputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 1000 };

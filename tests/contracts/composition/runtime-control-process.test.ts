@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { mcpPrincipalRef } from '#domain/index.js';
 
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']> };
 const children = new Set<Child>(), roots: string[] = [];
@@ -71,10 +72,12 @@ async function projectFixture() {
   const env = { ...process.env, HOME: home };
   const opened = await openConfiguredAttemptStore(project, { env });
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+  const mcpPrincipals = principals.map(mcpPrincipalRef);
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'process-policy', restrictions: [], grants: [{
     id: 'shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['service-scope'], principals,
     resource: { kind: 'service', ids: ['runtime'] },
-  }] }), { mode: 0o600 });
+  }, { id: 'mcp-shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['service-scope'], principals: mcpPrincipals,
+    resource: { kind: 'service', ids: ['runtime'] } }] }), { mode: 0o600 });
   const ledgerPath = opened.path; opened.store.close(); clearConfigCache();
   return { project, env, ledgerPath };
 }

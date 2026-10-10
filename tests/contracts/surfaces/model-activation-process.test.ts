@@ -11,6 +11,7 @@ import { modelActivationTargetId, type ModelActivationInspection, type ModelActi
   type ModelBindingInspection } from '#engine/index.js';
 import { openSqliteModelActivationStore } from '#adapters/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { mcpPrincipalRef } from '#domain/index.js';
 
 const execute = promisify(execFile), roots: string[] = [];
 const sdk = resolve('dist/index.js'), cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
@@ -36,7 +37,7 @@ async function callSdk<T>(project: string, env: Record<string, string>, operatio
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
   return JSON.parse(output.stdout) as { ok: true; value: T } | { ok: false; code: string };
 }
-async function callMcp(project: string, env: Record<string, string>, name: string, args: Record<string, unknown>) {
+async function callMcp(project: string, env: Record<string, string>, name: string, args: Record<string, unknown>, expectedError?: string) {
   const transport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', project], env, stderr: 'pipe' });
   const diagnostics: Buffer[] = []; transport.stderr?.on('data', chunk => diagnostics.push(Buffer.from(chunk)));
   const client = new Client({ name: 'model-activation-process', version: '1' });
@@ -48,7 +49,11 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
       : { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     const result = await bounded(client.callTool({ name, arguments: args }),
       `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
-    expect(result.isError, JSON.stringify(result.content)).not.toBe(true); return result.structuredContent;
+    if (expectedError) {
+      expect(result.isError).toBe(true);
+      expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: expectedError });
+    } else expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+    return result.structuredContent;
   } finally {
     const failures: unknown[] = [];
     try { await bounded(client.close(), `MCP_CLIENT_CLOSE_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`); }
@@ -95,6 +100,12 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite } }), { mode: 0o600 }); clearConfigCache();
   const deactivate = { schemaVersion: 1, action: 'deactivate', commandId: 'deactivate-a', scopeId: 'scope-a', reference,
     expectedRevision: 1, expectedBinding: observed.binding };
+  // Owner authority is not MCP authority: the same command must fail without a named /mcp rule, with no ledger mutation.
+  const beforeMcpGrant = createHash('sha256').update(await readFile(ledger)).digest('hex');
+  await callMcp(project, env, 'admit_model_activation', deactivate, 'POLICY_DENIED');
+  expect(createHash('sha256').update(await readFile(ledger)).digest('hex')).toBe(beforeMcpGrant);
+  const mcpGrant = { ...grant, id: 'model-mcp', principals: principals.map(mcpPrincipalRef) };
+  await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-mcp', restrictions: [], grants: [grant, mcpGrant] }), { mode: 0o600 });
   const mcpResult = await callMcp(project, env, 'admit_model_activation', deactivate);
   expect(mcpResult).toMatchObject({ replayed: false, receipt: { record: { state: 'inactive', revision: 2 } } });
   const inactiveResult = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });

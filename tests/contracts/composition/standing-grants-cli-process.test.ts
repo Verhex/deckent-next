@@ -9,6 +9,7 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { clearConfigCache } from '#platform/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID } from '#domain/index.js';
 import { cliChildEnv } from '../support/child-env.js';
+import { terminalProgram } from '../support/approval-terminal.js';
 
 // PERSISTENT-APPROVALS G6 on the shipped CLI (built binary, real config, ledger, policy files): `policy grants --mine` shows only the caller's own
 // standing grants; `policy revoke <id> --yes` removes one through `policy.administer@1` — audited, archived, the other person's grant untouched.
@@ -53,8 +54,13 @@ describe.skipIf(process.platform === 'win32')('deckent policy grants / revoke (G
     expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants).toHaveLength(2);
     // Someone else's grant is not the caller's to revoke.
     expect((await cli(f, ['policy', 'revoke', 'standing-theirs', '--scope', 'proj', '--yes'])).value).toEqual({ revoked: false, grant: null });
-    const revoked = await cli(f, ['policy', 'revoke', 'standing-mine', '--scope', 'proj', '--yes']);
-    expect(revoked.value).toMatchObject({ revoked: true, grant: { id: 'standing-mine' } });
+    // --yes confirms the choice; it does not replace the terminal required to decide the governed approval.
+    const refused = await cli(f, ['policy', 'revoke', 'standing-mine', '--scope', 'proj', '--yes']);
+    expect(refused).toMatchObject({ exit: 1, stderr: expect.stringContaining('APPROVAL_INTERACTIVE_REQUIRED') });
+    expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')).grants).toHaveLength(2);
+    const revoked = await terminalProgram([process.execPath, binary, 'policy', 'revoke', 'standing-mine', '--scope', 'proj', '--yes', '--json'], f.env, f.project);
+    expect(revoked.status, revoked.output).toBe(0);
+    expect(JSON.parse(revoked.output.trim())).toMatchObject({ revoked: true, grant: { id: 'standing-mine' } });
     const after = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8'));
     expect(after.grants.map((grant: { id: string }) => grant.id)).toEqual(['standing-theirs']);
     expect((await cli(f, ['policy', 'grants', '--mine', '--scope', 'proj'])).value).toEqual([]);

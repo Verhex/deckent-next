@@ -295,7 +295,8 @@ describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
         for (const fullAccessTurn of [false, true]) {
           for (const writeSets of [false, true]) {
             const writeSet = authority === 'full-auto' && writeSets && tier !== 'narrow-mutating' && !fullAccessTurn;
-            const expected = authority === 'owner-approved' ? { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false }
+            // W3-SANDBOX: a card in a normal turn retains the realm's write set; full-access keeps authority files floored.
+            const expected = authority === 'owner-approved' ? { writeFloorReadOnly: fullAccessTurn, projectReadOnly: false, writeSet: writeSets && !fullAccessTurn }
               : authority === 'full-access' ? { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false }
                 : writeSet ? { writeFloorReadOnly: true, projectReadOnly: false, writeSet: true }
                   : { writeFloorReadOnly: true, projectReadOnly: fullAccessTurn || tier !== 'narrow-mutating', writeSet: false };

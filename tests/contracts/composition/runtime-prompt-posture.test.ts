@@ -39,7 +39,7 @@ describe.skipIf(process.platform !== 'linux')('the shell posture in the system p
     expect(prompt).not.toContain('Network access: none'); expect(prompt).not.toContain('do not try to reach the network');
     expect(shellLine(prompt)).toContain('in an open bubblewrap sandbox (full access): shell commands have network access');
     expect(shellLine(prompt)).toMatch(/your real home directory \(HOME\) is visible and writable, and the project and its \.git are writable/u);
-    expect(shellLine(prompt)).toMatch(/Deckent's own state, policy and credential files stay sealed[^\n]*Its configuration file is read-only unless the owner approves the call/u);
+    expect(shellLine(prompt)).toMatch(/Deckent's own state, policy and credential files stay sealed[^\n]*Its configuration file is read-only in every call/u);
     expect(prompt).toContain('- Network: fetch_url is not offered (this installation configures no fetching); shell commands do have network access in this turn');
   }, 60_000);
 
@@ -49,14 +49,14 @@ describe.skipIf(process.platform !== 'linux')('the shell posture in the system p
     expect(prompt).toContain(NO_NETWORK); expect(prompt).not.toContain('have network access');
   }, 60_000);
 
-  it('full access where only Landlock is usable: require-sandbox keeps the closed Landlock view (no network); prefer-sandbox runs on the host (network)', async () => {
-    const closed = await systemPrompt({ realm: 'require-sandbox', fullAccess: true, sandboxes: landlockOnly });
-    expect(shellLine(closed)).toContain('in a closed landlock sandbox: shell commands have no network access');
-    expect(closed).toContain(NO_NETWORK); expect(closed).not.toContain('open bubblewrap');
-    const host = await systemPrompt({ realm: 'prefer-sandbox', fullAccess: true, sandboxes: landlockOnly });
-    expect(host).not.toContain('Network access: none');
-    expect(shellLine(host)).toContain('directly on the user\'s machine, not in a sandbox: files, processes and the network are reachable');
-    expect(host).not.toContain('Network access: none'); expect(host).not.toContain('do not try to reach the network');
+  it('full access where only Landlock is usable: required, preferred and explicit host realms all refuse shell calls without an open sandbox', async () => {
+    for (const realm of ['require-sandbox', 'prefer-sandbox', 'host'] as const) {
+      const prompt = await systemPrompt({ realm, fullAccess: true, sandboxes: landlockOnly });
+      expect(shellLine(prompt)).toContain('It cannot run commands here');
+      expect(prompt).toContain(NO_NETWORK);
+      expect(prompt).not.toContain('have network access');
+      expect(prompt).not.toContain('in a closed landlock sandbox');
+    }
   }, 60_000);
 
   it('a closed Landlock turn says no network; the explicit host realm says the network is reachable; a required sandbox with none usable refuses every call', async () => {

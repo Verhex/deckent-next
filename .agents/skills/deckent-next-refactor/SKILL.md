@@ -26,7 +26,7 @@ conflict or a proposed architecture, contract or authority amendment to the owne
 `ARCHITECTURE.md` owns contracts, `PLAN.md` owns durable workstreams and remaining scope,
 core-memory owns lasting principles and lessons, the host process board owns who holds what and what
 comes next, and external proof holds acceptance/incident evidence. `follow-up-works/current-flow.md`
-is only a pointer to these sources (owner 2026-10-03). Consult `COMPLETED-PLAN.md` only when
+is short-term task memory; finished items are deleted there (owner 2026-10-10). Consult `COMPLETED-PLAN.md` only when
 completed-work evidence is needed. These sources distinguish accepted targets, implemented mechanisms,
 historical proof and current verification.
 
@@ -115,7 +115,7 @@ historical proof and current verification.
    them when accepted scope/decisions change and before delivery/handoff. Put contracts in ARCHITECTURE,
    durable remaining work in PLAN, completed work in COMPLETED-PLAN when needed, lasting decisions/lessons
    in core-memory, who-holds-what/next step on the process board and proof/open limits in the external proof
-   folder; current-flow stays a pointer. Update CHANGELOG when release
+   folder; current-flow is short-term task memory only. Update CHANGELOG when release
    behavior warrants it. Leave unaffected documents and other contributors' progress intact.
    After authorized core-memory edits run `node scripts/lint-core-memory.mjs --write`.
 7. **Deliver a bounded result.** Report changed paths and exact revision/diff identity, commands/results,

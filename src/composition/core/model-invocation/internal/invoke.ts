@@ -3,12 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, ModelActivationApplication, ModelActivationPolicyAuthorization, assessModelInvocationProfileDeliveries, type ModelInvocationControllers, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, openSqliteModelActivationStore, type LocalPeerIdentity } from '#adapters/index.js';
-import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 import { createConfiguredModelInvocationNative } from './native.js';
 import { modelSpendRefusal } from './spend-refusal.js';
-export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers }
+export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers; readonly clock?: TrustedClock }
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) { return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, delivery); }
 export async function previewConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}) { try { return await application(await loadInvocationContext(projectRoot, input.scopeId, options, 'read'), options).preview(input); } catch (error) { throw queryFailure(error); } }
@@ -33,7 +33,7 @@ export async function measurePeerConfiguredModel(projectRoot: string, input: Mod
 }
 function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost) {
   // One trusted clock for pricing and durable invocation records (I40).
-  const clock = new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock);
+  const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock);
   const verifier = { async verify() { return context.principal; } }, bindings = new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } });
   return new ModelInvocationApplication(verifier, new ModelInvocationPolicyAuthorization(context.policy), bindings,
     async () => openSqliteModelActivationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),

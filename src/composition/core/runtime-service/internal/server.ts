@@ -8,7 +8,7 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, resolveLocale, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, resolveLocale, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
@@ -127,7 +127,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   }, options) : null;
   const instanceId = randomUUID();
   // The send owner names this instance and the custody it holds: only a later start holding that custody proves its open calls ended.
-  const modelHost = { ownerId: runtimeServiceModelOwnerId(guard.custodyId, instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
+  const modelHost = { ownerId: runtimeServiceModelOwnerId(guard.custodyId, instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions),
+    ...(ports.modelInvocationClock ? { clock: ports.modelInvocationClock } : {}) };
   // Service stop cancels running turns (they close as cancelled, not interrupted).
   const turnStop = new AbortController();
   const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity, ports.fetchTransport, ports.shellSandboxes, config.mcp.maxServers);
@@ -278,6 +279,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
 /** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport,
  * `shellSandboxes` to the shipped sandbox providers (S9 bubblewrap). */
 export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory; readonly toolchainRefresh?: ToolchainRefreshDependencies;
+  /** One trusted clock for model tariff freshness, quote/send validation and durable invocation times (default: SystemTrustedClock). */
+  readonly modelInvocationClock?: TrustedClock;
   /** Clock and wait of the idle stop (default: monotonic clock and timer). */
   readonly idleClock?: Pick<RuntimeServiceIdleOptions, 'now' | 'wait'> }
 export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,

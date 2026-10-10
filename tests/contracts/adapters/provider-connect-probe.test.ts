@@ -14,6 +14,19 @@ function fakeFetch(status: number, body = '', seen: { url: string; headers: Reco
 }
 
 describe('provider connection check', () => {
+  it.each(['localhost', '192.168.1.5', '172.28.64.1'])('refuses HTTP to %s before any request; HTTPS still validates', async host => {
+    expect(providerEndpoint(`http://${host}:8000/v1`)).toEqual({ ok: false, reason: 'url-insecure-remote' });
+    expect(providerEndpoint(`https://${host}:8000/v1`)).toEqual({ ok: true, base: `https://${host}:8000` });
+    const seen: { url: string; headers: Record<string, string>; redirect: string }[] = [];
+    await expect(probeProviderConnection({ kind: 'local-openai', endpoint: `http://${host}:8000/v1`, key: null },
+      { fetch: fakeFetch(200, '{}', seen) })).rejects.toMatchObject({ code: 'PROVIDER_ENDPOINT_INVALID' });
+    expect(seen).toEqual([]);
+  });
+
+  it.each(['127.0.0.1', '[::1]'])('accepts plain HTTP only at literal loopback %s', host => {
+    expect(providerEndpoint(`http://${host}:8000/v1`)).toEqual({ ok: true, base: `http://${host}:8000` });
+  });
+
   it('lists the vendor rows, the generic and local rows and ChatGPT login as not available yet, each with its own store name (T4-B, Jev da5312fb)', () => {
     expect(PROVIDER_CONNECT_KINDS.map(kind => [kind.id, kind.available])).toEqual([['anthropic-api', true], ['openai-api', true], ['deepseek-api', true], ['zai-api', true],
       ['zai-cn-api', true], ['openrouter', true], ['openai-compatible', true], ['local-openai', true], ['chatgpt-login', false]]);
