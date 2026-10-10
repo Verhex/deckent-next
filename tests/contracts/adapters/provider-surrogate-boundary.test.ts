@@ -131,4 +131,5 @@ it('converts a lone surrogate through the Anthropic wire mapper into well-formed
   expect(wire).toContain('"path":"a\uFFFD"');
 });
 
-const WELL_FORMED_BODY = `{"model":"vendor/model","messages":[{"role":"user","content":"native text ${EMOJI}"}],"max_completion_tokens":2,"stream":false,"provider":{"only":["provider/region"],"allow_fallbacks":false,"require_parameters":true,"max_price":{"prompt":"10000","completion":"20000","request":"0"},"order":["provider/region"]}}`;
+// OpenRouter v2 explicitly closes media and server plugins; retain a literal whole-body oracle, independent of the producer.
+const WELL_FORMED_BODY = `{"model":"vendor/model","messages":[{"role":"user","content":"native text ${EMOJI}"}],"max_completion_tokens":2,"stream":false,"modalities":["text"],"plugins":[{"id":"web","enabled":false},{"id":"file-parser","enabled":false},{"id":"response-healing","enabled":false},{"id":"context-compression","enabled":false},{"id":"auto-router","enabled":false},{"id":"auto-beta-router","enabled":false},{"id":"pareto-router","enabled":false},{"id":"fusion","enabled":false}],"provider":{"only":["provider/region"],"allow_fallbacks":false,"require_parameters":true,"max_price":{"prompt":"10000","completion":"20000","request":"0"},"order":["provider/region"]}}`;

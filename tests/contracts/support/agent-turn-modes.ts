@@ -11,7 +11,7 @@ import { openSqliteModelActivationStore, type ShellSandboxFactory } from '#adapt
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
-import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
 /**
@@ -118,7 +118,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     const turnId = `turn-${++turns}`;
     const answer = await terminalRequest({ project, data, env }, 'chatTurn', { schemaVersion: 1, scopeId: 'scope', turnId,
       messages: [{ role: 'user', content: 'go' }], ...(options.fullAccess ? { fullAccess: true as const } : {}) }, decision);
-    if (!answer.response.ok) throw new Error(JSON.stringify(answer.response));
+    if (!answer.response.ok) throw ErrorRegistry.createError(answer.response.error!.code, answer.response.error!.params);
     const events = answer.events as AgentTurnStreamEvent[];
     const finished = events.find(event => event.kind === 'tool.finished');
     const text = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';

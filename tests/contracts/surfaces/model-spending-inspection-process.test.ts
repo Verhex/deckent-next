@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, expect, it } from 'vitest';
-import { encodeModelBindingDefinition } from '#domain/index.js';
+import { encodeModelBindingDefinition, mcpPrincipalRef } from '#domain/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationProfileDigest, modelInvocationRequestDigest,
   modelInvocationResponseContentDescriptor, modelInvocationTargetId, parseProviderSpendReportedMeasurement,
@@ -153,6 +153,15 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   const reportedCliJson = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', reportedInput, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout) as ModelInvocationInspection;
   expect(reportedCliJson).toEqual(reportedSdk.value);
+  const mcpDenied = await inspectMcp(project, env, releasedQuery);
+  expect(mcpDenied.isError).toBe(true);
+  expect(JSON.parse((mcpDenied.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'POLICY_DENIED' });
+  expect(ledgerSnapshot(ledger)).toBe(before);
+  await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'inspect-mcp', restrictions: [], grants:
+    [{ id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
+      principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } },
+    { id: 'mcp-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
+      principals: [mcpPrincipalRef(identity)], resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } }] }), { mode: 0o600 });
   const mcpResult = await inspectMcp(project, env, releasedQuery);
   expect(mcpResult.isError).not.toBe(true); expect(mcpResult.structuredContent).toEqual(releasedSdk.value);
   const reportedMcpResult = await inspectMcp(project, env, reportedQuery);

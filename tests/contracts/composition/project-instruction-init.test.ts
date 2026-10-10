@@ -8,6 +8,7 @@ import { configuredProjectInstructions } from '#composition/core/project-instruc
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { projectSkeleton } from '#surfaces/core/project-instructions/index.js';
+import { terminalApplication } from '../support/approval-terminal.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -23,8 +24,9 @@ async function fixture() {
 describe.skipIf(process.platform !== 'linux')('init through the existing scoped file effect and approval broker', () => {
   it('applies the generated skeleton and selected bridges without overwriting and records settled effects/approvals', async () => {
     const f = await fixture(); await writeFile(join(f.root, 'CLAUDE.md'), 'preserve these bytes');
-    const preview = await f.port.preview(['claude-code'], projectSkeleton('en'));
-    expect(await f.port.initialize(preview)).toEqual([{ path: 'DECKENT.md', status: 'settled' }, { path: 'CLAUDE.md', status: 'settled' }]);
+    // W3-AUTHORITY: confirmation and its governed approval execute in a real terminal; preview is issued in that same process.
+    expect(await terminalApplication({ project: f.root, env: f.options.env }, 'project-init', 'installation',
+      { bridges: ['claude-code'], locale: 'en' })).toEqual([{ path: 'DECKENT.md', status: 'settled' }, { path: 'CLAUDE.md', status: 'settled' }]);
     expect(await readFile(join(f.root, 'CLAUDE.md'), 'utf8')).toBe('preserve these bytes\n@DECKENT.md\n');
     expect(await readFile(join(f.root, 'DECKENT.md'), 'utf8')).toContain('# project');
     const db = new DatabaseSync(f.ledger, { readOnly: true });
@@ -33,6 +35,14 @@ describe.skipIf(process.platform !== 'linux')('init through the existing scoped 
       expect(effects.filter(row => row['state'] === 'settled')).toHaveLength(2);
       expect(db.prepare('SELECT COUNT(*) AS n FROM approvals').get()?.['n']).toBe(2);
     } finally { db.close(); }
+  });
+  it('refuses noninteractive initialization before publishing a file and retains its pending approval', async () => {
+    const f = await fixture(), preview = await f.port.preview([], projectSkeleton('en'));
+    await expect(f.port.initialize(preview)).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
+    await expect(readFile(join(f.root, 'DECKENT.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const db = new DatabaseSync(f.ledger, { readOnly: true });
+    try { expect(db.prepare("SELECT json_extract(snapshot,'$.status') AS status FROM approvals").all()).toEqual([{ status: 'pending' }]); }
+    finally { db.close(); }
   });
   it('refuses a raced preview before touching any proposed file', async () => {
     const f = await fixture(), preview = await f.port.preview(['agents-md'], projectSkeleton('en'));

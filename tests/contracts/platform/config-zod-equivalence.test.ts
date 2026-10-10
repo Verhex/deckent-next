@@ -50,7 +50,8 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(outcome).toEqual({ provider_catalog: false, provider_invocation_profiles: false, provider_spending: false, provider_spend_audit: false,
       inference_serving: false, terminal: true, operations: true, secrets: false, decision: false, identity: false });
     const defaults = createDefaultConfig();
-    expect(defaults['terminal']).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true });
+    expect(defaults['terminal']).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
+      chat: { schemaVersion: 1, maxCompletionTokens: 16384, historyMessages: 40, readResultMaxBytes: 65536, compactionThresholdTokens: 100000 } });
     expect(defaults['operations']).toEqual({ catalog: [], targets: [] });
     // SECRET-K1: `secrets` stays absent from the defaults, so a healed or default-filled project file never carries a backend selection.
     // AOF-DECISION-PORT: no universal decision threshold is synthesized; a missing `decision` section means unavailable.
@@ -126,8 +127,9 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(first.layout.resources).not.toBe(second.layout.resources);
   });
 
-  it('terminal: optional sub-objects stay absent; their readers fill documented defaults', () => {
-    expect(terminalConfigSchema.parse({})).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true });
+  it('terminal: chat has registered defaults; other optional sub-objects stay absent and their readers fill documented defaults', () => {
+    expect(terminalConfigSchema.parse({})).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
+      chat: { schemaVersion: 1, maxCompletionTokens: 16384, historyMessages: 40, readResultMaxBytes: 65536, compactionThresholdTokens: 100000 } });
     expect(terminalConfigSchema.parse({ shell: { schemaVersion: 1 } }).shell).toEqual({ schemaVersion: 1, timeoutMs: 300_000, realm: 'prefer-sandbox', environment: [] });
     expect(readTerminalShellConfig({})).toEqual({ realm: 'prefer-sandbox', timeoutMs: 300_000, environment: [] });
     expect(readTerminalScratchConfig({})).toEqual({ writeMaxBytes: 1_048_576, sessionMaxBytes: 67_108_864, installationMaxBytes: 536_870_912, retentionDays: 7, sweepIntervalMs: 3_600_000 });

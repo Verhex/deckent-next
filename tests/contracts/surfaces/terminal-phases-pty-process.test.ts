@@ -12,6 +12,7 @@ import { ModelActivationApplication, modelInvocationTargetId } from '#engine/ind
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 
 // TL-A (D1 + D5 + D6) at the real boundary: the compiled CLI in a real pseudo-terminal against a real runtime service process
 // (protocol v15, unchanged). A turn that compacts shows "summarizing" with a live counter; Esc names the stopped part; a summary
@@ -228,17 +229,20 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
     expect(f.calls.thinking).toEqual([null, null, null, null, null, null, { enable_thinking: false }]);
   }, 180_000);
 
-  it('refuses a thinking-off turn by name for a model without the switch, and answers again after /reasoning on (v16)', async () => {
+  it('refuses an unsupported thinking-off turn before sending, hides that choice in the real picker and continues with thinking on', async () => {
     const f = await phasesProject(false);
     await startRuntime(f.projectRoot, f.env);
+    // The current picker filters unavailable capabilities. Keep the typed service refusal, independently of that UI prevention.
+    await expect(createConfiguredRuntimeClient(f.projectRoot, { env: f.env }).chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'unsupported-off',
+      messages: [{ role: 'user', content: 'q2' }], reasoning: 'off' }, () => undefined)).rejects.toMatchObject({ code: 'AGENT_TURN_REASONING_UNSUPPORTED' });
+    expect(f.calls.rounds).toEqual([]);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning\r'], ['Model thinking off', '\u001b[B\r'], ['reasoning off', 'q2\r'],
-      // The refusal is a catalog string with its code; the picker's first row turns thinking on again.
-      ['(code: AGENT_TURN_REASONING_UNSUPPORTED)', '/reasoning\r'], ['Model thinking off', '\r'], ['reasoning on', 'q3\r'],
+      ['Deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning\r'], ['Model thinking on', '\r'], ['reasoning on', 'q3\r'],
       ['ANSWER-3', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
+    expect(run.output).not.toContain('Model thinking off');
     // The refused turn never reached the model; the others ran as today (no switch sent).
     expect(f.calls.rounds).toEqual(['q1', 'q3']);
     expect(f.calls.thinking).toEqual([null, null]);
