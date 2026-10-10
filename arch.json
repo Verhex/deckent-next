@@ -1274,7 +1274,13 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/provider-catalog",
         "src/platform/core/config",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/domain/core/model-invocation",
+        "src/engine/core/policy",
+        "src/adapters/core/provider-connect",
+        "src/composition/core/config",
+        "src/composition/core/scoped-request",
+        "src/engine/core/model-invocation"
       ],
       "plan": "PROVIDERS"
     },
@@ -1420,7 +1426,8 @@
         "src/engine/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/provider-spend",
-        "src/domain/core/agent-tool"
+        "src/domain/core/agent-tool",
+        "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
     },
@@ -1500,7 +1507,8 @@
         "src/composition/core/root",
         "src/adapters/core/mcp-import",
         "src/composition/core/approvals",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/adapters/core/provider-connect"
       ],
       "plan": "SURFACES"
     },

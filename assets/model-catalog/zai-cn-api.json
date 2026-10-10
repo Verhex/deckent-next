@@ -131,7 +131,7 @@
               "text"
             ]
           },
-          "contextWindow": null,
+          "contextWindow": 200000,
           "maxOutputTokens": 131072,
           "reasoning": {
             "supportedEfforts": [],

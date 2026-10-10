@@ -63,6 +63,23 @@ async function run(endpoint: string, request: Record<string, unknown> = streamed
   return { result, deltas, prepared };
 }
 
+it.each([undefined, 'wrkspc_Selected'])('carries selected workspace %s on both token count and message requests', async workspaceId => {
+  const seen: Array<{ path: string; workspace: string | string[] | undefined }> = [];
+  const endpoint = await fixture((req, res) => {
+    seen.push({ path: req.url!, workspace: req.headers['anthropic-workspace-id'] });
+    if (req.url?.endsWith('/count_tokens')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ input_tokens: 25 })); }
+    else { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(textStream()); }
+  });
+  const priced = createAnthropicMessagesPricedNative({ resolveCredential: credential });
+  const token = await priced.native.prepare(profile(endpoint, { tokenCountEndpoint: `${endpoint}/count_tokens`, ...(workspaceId ? { workspaceId } : {}) }), binding(), streamed());
+  expect(await priced.native.send(token)).not.toHaveProperty('kind');
+  expect(seen).toEqual([{ path: '/v1/messages/count_tokens', workspace: workspaceId }, { path: '/v1/messages', workspace: workspaceId }]);
+});
+
+it('refuses a workspace header injection at profile parsing', () => {
+  expect(() => parseAnthropicMessagesDefinition(profile('https://api.anthropic.com/v1/messages', { workspaceId: 'wrkspc_First\r\nforeign: value' }).adapter.definition)).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
+});
+
 it('maps the neutral request onto the Messages wire: system lifted, tool calls and folded results, thinking control, cache', () => {
   const definition = parseAnthropicMessagesDefinition(profile('https://api.anthropic.com/v1/messages').adapter.definition);
   const body = anthropicMessagesBody({ model: MODEL, max_completion_tokens: 64, messages: [

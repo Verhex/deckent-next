@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "url": "https://api-docs.deepseek.com/api/create-chat-completion/",
+    "observedOn": "2026-10-09"
+  },
+  "toolChoices": {
+    "deepseek": [
+      "auto",
+      "none"
+    ]
+  }
+}

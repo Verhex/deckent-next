@@ -59,6 +59,16 @@ function secrets(names: string[] = []) {
   } satisfies Pick<TerminalLaunchContext, 'listSecretNames' | 'setSecret' | 'deleteSecret'> };
 }
 
+it.each(['en', 'tr'] as const)('a multi-workspace key result gives the selection step in %s without printing its key', async locale => {
+  const { root, options } = await project({}), store = secrets();
+  const host = { ...connectHost('ok'), probe: async () => ({ outcome: 'ok', httpStatus: 200, key: 'unverified' as const, workspaceRequired: true as const }) };
+  const result = await providerPanelPort(root, 'scope', { ...store.host, providerConnect: host }, options, locale, errorText)
+    .connect({ kind: 'anthropic-api', endpoint: null, key: CANARY });
+  expect(result.stored).toBe(true); expect(result.lines.at(-1)!.text).toContain('/model');
+  expect(result.lines.at(-1)!.text).toContain(locale === 'en' ? 'Select provider workspace' : 'Sağlayıcı workspace seç');
+  expect(JSON.stringify(result)).not.toContain(CANARY);
+});
+
 describe('/provider port', () => {
   it('a passing check stores the key under its name through the store handler; rows name the outcome, the key name and the next step, never the key', async () => {
     const { root, options } = await project({ provider_invocation_profiles: { schemaVersion: 1, profiles: [] } });

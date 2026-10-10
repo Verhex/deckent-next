@@ -54,8 +54,11 @@ describe.skipIf(process.platform !== 'linux')('well-formed model text through th
     f.state.script = [{ status: 400 }];
     const result = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-rejected', messages: [{ role: 'user', content: 'hi' }] }, () => undefined);
     expect(result.finish).toBe('error');
-    // W9-PROVIDERS maps HTTP 400 through the bounded diagnostic catalog; an unrecognized provider body remains unavailable.
-    expect(result.note).toContain('OpenAI rejected the request (HTTP 400); the provider message is unavailable.');
+    // W9-PROVIDERS maps HTTP 400 through the bounded diagnostic catalog; PROVIDER-ERRORS names the provider neutrally (not the OpenAI protocol)
+    // and an unrecognized provider body remains unavailable.
+    expect(result.note).toContain('The provider rejected the request (HTTP 400); the provider message is unavailable.');
+    expect(result.note).not.toContain('OpenAI');
+    expect(result.note).not.toContain('Switch to the current protocol');
     expect(result.note).not.toContain('TextEncodeInput');
   }, 30_000);
 });
