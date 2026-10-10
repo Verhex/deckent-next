@@ -1,5 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import type { ModelInvocability } from '#engine/index.js';
+import type { ModelInvocability } from './invocable-now.js';
 /** Shared words for every model-state surface. No readiness decisions live in renderers. */
 export function modelInvocabilityText(state: ModelInvocability, locale: Locale): string {
   if (state.invocable) return t('model.invocable.ready', {}, locale);

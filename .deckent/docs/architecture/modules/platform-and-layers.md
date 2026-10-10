@@ -33,6 +33,12 @@ Only CLI (including its `terminal` line/rich views) and MCP surfaces are shipped
 servers and, since T3 (2026-10-07), Streamable HTTP servers (https; plain http only on loopback); Desktop/HTTP API surfaces, MCP OAuth and IFS
 connectors remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
 
+**SDK-IMPORT-FIX (source candidate).** Model invocability decisions and their shared TR/EN text formatter
+belong to `engine/core/model-invocation`. Composition's config choices import the formatter from engine;
+`surfaces/core/model-invocability` re-exports it for existing callers. The SDK's runtime graph must reach
+no surfaces module (including lazy imports), Ink or React; surface contract types remain type-only imports.
+The compiled graph is checked by `tests/contracts/composition/sdk-import-graph.test.ts`.
+
 **Startup cost (STARTUP-COST, seventh batch).** A process entry's static import graph is paid on every run. Heavy packages (`ink`,
 `react`, `@modelcontextprotocol/server|client`) load only on the entry path that uses them and through dynamic `import()`: the terminal UI
 loads with `deckent terminal` / the arg-less TTY opening (`workSurfaceLabels`/`runtimeBuildSkew` live in the `work-labels` unit since TUI1; the
