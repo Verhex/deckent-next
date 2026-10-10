@@ -1,4 +1,6 @@
 import type { FileHandle } from 'node:fs/promises';
+import { createWorkspaceFileIndexCache, type RuntimeWorkspaceFileHost, type WorkspaceFileIndex } from '#engine/index.js';
+export { rankWorkspacePaths, workspacePathRank, type RuntimeWorkspaceFileHost, type WorkspaceFileIndex } from '#engine/index.js';
 import { sliceUtf8 } from './bounded.js';
 import { createWorkspaceScope, walkWorkspaceFiles, type WorkspacePathError, type WorkspaceScope } from './scope.js';
 
@@ -7,13 +9,6 @@ import { createWorkspaceScope, walkWorkspaceFiles, type WorkspacePathError, type
  * directories, no symlink followed), a fuzzy ranking, and one file's content as a bounded UTF-8 prefix through `scope.open`
  * (no-follow per component, regular single-link files only). Nothing here decides authority; the service authorizes the caller.
  */
-export interface WorkspaceFileIndex {
-  readonly paths: readonly string[];
-  /** The walk stopped at the path bound. */
-  readonly truncated: boolean;
-  /** Some directories could not be covered (depth, unreadable, changed, special files). */
-  readonly incomplete: boolean;
-}
 export const WORKSPACE_INDEX_MAX_FILES = 50_000;
 
 export async function indexWorkspaceFiles(scope: WorkspaceScope, maxFiles = WORKSPACE_INDEX_MAX_FILES, signal?: AbortSignal): Promise<WorkspaceFileIndex> {
@@ -25,37 +20,6 @@ export async function indexWorkspaceFiles(scope: WorkspaceScope, maxFiles = WORK
   }, signal);
   return Object.freeze({ paths: Object.freeze(paths), truncated,
     incomplete: incomplete.depthLimited + incomplete.unreadable + incomplete.changed + incomplete.special > 0 });
-}
-
-function subsequence(query: string, text: string): boolean {
-  let at = 0;
-  for (const char of query) { at = text.indexOf(char, at); if (at < 0) return false; at += char.length; }
-  return true;
-}
-/**
- * Rank of one path for a query (lower is better; null: no match). Case-insensitive. A file-name match beats a path match; within
- * each, exact (with or without extension) > prefix > substring > subsequence. A query with `/` is matched against the path (segments), never the name alone.
- */
-export function workspacePathRank(path: string, query: string): number | null {
-  const q = query.toLowerCase(), lower = path.toLowerCase(), name = lower.slice(lower.lastIndexOf('/') + 1);
-  if (!q.includes('/')) {
-    // The name without its extension counts as exact too: `compose` finds `compose.ts` first.
-    if (name === q || name.slice(0, name.lastIndexOf('.') > 0 ? name.lastIndexOf('.') : name.length) === q) return 0;
-    if (name.startsWith(q)) return 1;
-    if (name.includes(q)) return 2;
-  }
-  if (lower.startsWith(q) || lower.includes(`/${q}`)) return 3;
-  if (lower.includes(q)) return 4;
-  if (!q.includes('/') && subsequence(q, name)) return 5;
-  return subsequence(q, lower) ? 6 : null;
-}
-/** Best `limit` matches: rank, then fewer segments, then shorter path, then name order. An empty query lists shallow files first. */
-export function rankWorkspacePaths(paths: readonly string[], query: string, limit: number): string[] {
-  const depth = (path: string) => path.split('/').length;
-  return paths.flatMap(path => { const rank = query ? workspacePathRank(path, query) : 0; return rank === null ? [] : [{ path, rank }]; })
-    .sort((left, right) => left.rank - right.rank || depth(left.path) - depth(right.path) || left.path.length - right.path.length
-      || (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
-    .slice(0, limit).map(entry => entry.path);
 }
 
 export type WorkspaceAttachmentRead =
@@ -103,35 +67,7 @@ export async function readWorkspaceAttachment(scope: WorkspaceScope, requested: 
   return { status: 'attached', path: target.rel, content: read.text, bytes, totalBytes: read.total, truncated: read.cut };
 }
 
-export interface RuntimeWorkspaceFileHost {
-  /**
-   * The project's file list under `deny`. A first walk is awaited; afterwards the last list answers at once (TERM-UX-1 a): once it is older
-   * than `ttlMs` one background walk refreshes it (single flight), so no keystroke waits for a walk again. A list older than `maxStaleMs` is
-   * not served: the caller waits for a fresh walk. Ranking runs on the list per query.
-   */
-  index(projectRoot: string, deny: readonly string[]): Promise<WorkspaceFileIndex>;
-}
 export function createRuntimeWorkspaceFileHost(ttlMs = 10_000, now: () => number = Date.now, maxStaleMs = 3_600_000): RuntimeWorkspaceFileHost {
-  interface Entry { readonly at: number; readonly index: Promise<WorkspaceFileIndex>; refreshing: boolean }
-  const cached = new Map<string, Entry>();
   const walk = (projectRoot: string, deny: readonly string[]) => createWorkspaceScope(projectRoot, deny).then(scope => indexWorkspaceFiles(scope));
-  return Object.freeze({
-    index(projectRoot: string, deny: readonly string[]) {
-      const key = [projectRoot, ...deny].join('\0'), hit = cached.get(key), at = now();
-      if (hit && at - hit.at < ttlMs) return hit.index;
-      if (hit && at - hit.at < maxStaleMs) {
-        if (!hit.refreshing) {
-          hit.refreshing = true;
-          // A failed refresh keeps the older list and is retried by a later query.
-          walk(projectRoot, deny).then(fresh => { cached.set(key, { at: now(), index: Promise.resolve(fresh), refreshing: false }); }, () => { hit.refreshing = false; });
-        }
-        return hit.index;
-      }
-      const index = walk(projectRoot, deny);
-      cached.set(key, { at, index, refreshing: false });
-      // A failed walk is not cached: the next query walks again.
-      index.catch(() => { if (cached.get(key)?.index === index) cached.delete(key); });
-      return index;
-    },
-  });
+  return createWorkspaceFileIndexCache(walk, ttlMs, now, maxStaleMs);
 }
