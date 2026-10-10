@@ -28,8 +28,8 @@ const localRegistry = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTR
       dialect: { tokenLimitField: 'max_tokens', streamUsage: 'include', toolChoice: ['auto', 'none', 'required'] } } }] });
 type Config = Record<string, unknown> & { service: Record<string, unknown>; provider_catalog: { providers: { id: string }[] } & Record<string, unknown>;
   provider_invocation_profiles: { profiles: (Record<string, unknown> & { reference: unknown; adapter: { definition: { endpoint: string } } })[] } };
-async function harness(extra: Record<string, unknown>[] = []) {
-  const f = await runtime({ extraGrants: grants(extra) });
+async function harness(extra: Record<string, unknown>[] = [], noServer = false) {
+  const f = await runtime({ extraGrants: grants(extra), noServer });
   const path = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8')) as Config;
   const base = String(config['provider_invocation_profiles'].profiles[0].adapter.definition.endpoint).replace(/\/v1\/chat\/completions$/u, '');
   // The product's default service frame (1 MiB): activation checks that a connected profile's worst-case answer fits it (the harness keeps 64 KiB).
@@ -83,6 +83,28 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect(await allText(f.project)).not.toContain(CANARY);
     expect(await allText(f.data)).not.toContain(CANARY);
     expect(f.state.raw.join('')).not.toContain(CANARY);
+  }, 60_000);
+
+  it('reconnecting an exact reference keeps its context window; seeded reconnects keep an authored value and fill an absent one', async () => {
+    const f = await harness([], true);
+    const reference = { providerId: 'anthropic-api', providerVersion: 1, modelId: 'claude-opus-5-5', modelVersion: 1 };
+    const command = { schemaVersion: 1, commandId: 'context-seed', scopeId: 'scope', connection: 'anthropic-api', endpoint: null,
+      model: { nativeId: reference.modelId } };
+    expect(await connectConfiguredModel(f.project, command, f.options)).toMatchObject({ status: 'connected' });
+    const find = (config: Config) => config.provider_invocation_profiles.profiles.find(profile => JSON.stringify(profile.reference) === JSON.stringify(reference))!;
+    expect(find(await f.config())['contextWindowTokens']).toBe(1_000_000);
+    const reconnect = { ...command, commandId: 'context-reference', model: { reference } };
+    expect(await connectConfiguredModel(f.project, reconnect, f.options)).toMatchObject({ status: 'connected' });
+    expect(find(await f.config())['contextWindowTokens']).toBe(1_000_000);
+    const custom = await f.config(); find(custom)['contextWindowTokens'] = 800_000;
+    await writeFile(f.path, JSON.stringify(custom)); clearConfigCache();
+    expect(await connectConfiguredModel(f.project, { ...command, commandId: 'context-authored' }, f.options)).toMatchObject({ status: 'connected' });
+    expect(find(await f.config())['contextWindowTokens']).toBe(800_000);
+    const absent = await f.config(); delete find(absent)['contextWindowTokens'];
+    await writeFile(f.path, JSON.stringify(absent)); clearConfigCache();
+    expect(await connectConfiguredModel(f.project, { ...command, commandId: 'context-fill' }, f.options)).toMatchObject({ status: 'connected', steps: { profile: 'written' } });
+    expect(find(await f.config())['contextWindowTokens']).toBe(1_000_000);
+    expect(await connectConfiguredModel(f.project, { ...command, commandId: 'context-idempotent' }, f.options)).toMatchObject({ steps: { profile: 'present' } });
   }, 60_000);
 
   it('a model that cannot be carried to the new catalog revision does not stop the connection: the result and the audit name it', async () => {

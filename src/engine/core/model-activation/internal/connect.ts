@@ -147,10 +147,10 @@ export class ModelConnectApplication {
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 3. The scope's invocation profile: endpoint preset, the key NAME, tariff, limits, binding digest.
     const profileId = [command.connection, target.reference.providerId, target.reference.modelId, String(target.reference.modelVersion)].join('.');
-    const build = (version: number, responseMaxBytes: number, shaped: typeof adapter = adapter) => ({ schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
+    const build = (version: number, responseMaxBytes: number, shaped: typeof adapter, contextWindow: unknown) => ({ schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
       bindingDigest: binding.binding.digest, protocol: shaped.protocol, adapter: shaped.adapter, allocation: { id: profileId, maxCalls: null, maxInFlight: ports.defaults.maxInFlight },
       limits: { requestMaxBytes: ports.defaults.requestMaxBytes, responseMaxBytes, timeoutMs: ports.defaults.timeoutMs },
-      ...(target.contextWindow ? { contextWindowTokens: target.contextWindow } : {}) });
+      ...(contextWindow === null || contextWindow === undefined ? {} : { contextWindowTokens: contextWindow }) });
     const authored = { global: layers.global['provider_invocation_profiles'] !== undefined, project: layers.project['provider_invocation_profiles'] !== undefined };
     const targets: ModelConnectLayer[] = authored.global && authored.project ? ['global', 'project'] : authored.global ? ['global'] : ['project'];
     const mine = (item: Record<string, unknown>) => item['scopeId'] === scopeId && (item['id'] === profileId || isDeepStrictEqual(item['reference'], target.reference));
@@ -161,12 +161,14 @@ export class ModelConnectApplication {
       // An existing profile keeps what the person chose in its definition (CACHE-SLICE1: no silent cache migration on a re-run). A layer without
       // its own copy takes the other authored layer's (the user layer first), so a project copy stays equal to the user-layer profile.
       const known = existing ?? targets.map(item => layerProfiles(item).find(mine)).find(Boolean);
+      // Reconnecting an exact reference has no seed metadata: keep the authored window, falling back to the seed for a missing value.
+      const contextWindow = known?.['contextWindowTokens'] ?? target.contextWindow;
       const previous = (known?.['adapter'] as { definition?: unknown } | undefined)?.definition;
       const shaped = known ? ports.adapter(kind.id, { ...adapterInput, existing: previous && typeof previous === 'object' ? previous as JsonObject : {} }) : adapter;
       // Sized on the profile as this layer writes it (its kept definition, its next version), with the registry's headroom left over.
-      const responseMaxBytes = this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped), binding, ports.defaults.deliveryHeadroomBytes));
-      if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped))) continue;
-      const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles: [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped)] },
+      const responseMaxBytes = this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped, contextWindow), binding, ports.defaults.deliveryHeadroomBytes));
+      if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped, contextWindow))) continue;
+      const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles: [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped, contextWindow)] },
         layer, step(command.commandId, 'profile', layer));
       if (stopped) return stopped;
       steps.profile = 'written';
