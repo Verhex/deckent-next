@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "markClasses": ["Bidi_Control", "Default_Ignorable_Code_Point"],
+  "keptCodePoints": [8205, 65038, 65039],
+  "markRanges": [[65024, 65037], [917760, 917999]],
+  "schemaTextFields": ["description", "title", "$comment"]
+}

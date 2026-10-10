@@ -1,10 +1,10 @@
 import { MODEL_INGRESS_FIELD_TEXT_ENCODING, MODEL_INGRESS_MODEL_TEXT_ENCODING, modelIngressTextDigest } from './model-ingress-field-framing.js';
+import policy from './model-ingress-policy.json' with { type: 'json' };
 
-const BIDI_CONTROL = /^\p{Bidi_Control}$/u;
-const DEFAULT_IGNORABLE = /^\p{Default_Ignorable_Code_Point}$/u;
+const MARK_CLASSES = policy.markClasses.map(name => new RegExp(`^\\p{${name}}$`, 'u'));
 /** ZWJ and VS15/16 stay in the text. Orphan ZWJ and an unpaired selector are a disclosed limit: the legitimacy grammar is not closed.
  * ZWNJ, LRM and RLM are marked, never removed from the raw field and never treated as a natural-language allow. */
-const KEPT = new Set<number>([0x200d, 0xfe0e, 0xfe0f]);
+const KEPT = new Set<number>(policy.keptCodePoints);
 
 export type ModelIngressDisposition = 'unchanged' | 'note' | 'quarantine';
 export type ModelIngressProjection = {
@@ -21,8 +21,8 @@ export type ModelIngressProjection = {
 function marked(char: string): boolean {
   const codePoint = char.codePointAt(0)!;
   if (KEPT.has(codePoint)) return false;
-  if (BIDI_CONTROL.test(char) || DEFAULT_IGNORABLE.test(char)) return true;
-  return (codePoint >= 0xfe00 && codePoint <= 0xfe0d) || (codePoint >= 0xe0100 && codePoint <= 0xe01ef);
+  if (MARK_CLASSES.some(markClass => markClass.test(char))) return true;
+  return policy.markRanges.some(([start, end]) => codePoint >= start! && codePoint <= end!);
 }
 
 function hex(codePoint: number): string {
@@ -88,4 +88,3 @@ export function projectModelIngressField(text: string): ModelIngressProjection {
   return Object.freeze({ modelText, withheld, fieldDigest: field.sha256, projectedDigest: projected.sha256, decodedDigest,
     codePoints, decoded, disposition: decoded.length > 0 ? 'quarantine' : 'note' });
 }
-

@@ -3,6 +3,7 @@ import { AGENT_COMPACTION_HIGH_WATER, renderAgentCompaction, type AgentCompactio
 import { createAgentContextCarry } from './carry.js';
 import { agentSpendFailureNote, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
+import { checkModelIngressArguments, projectModelIngressSchema } from './model-ingress-json.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { LOCALES, t, type Locale } from '#platform/index.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolDiagnostic, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
@@ -167,10 +168,12 @@ function canonical(value: unknown): string {
 export const agentToolArgumentsDigest = (name: string, args: Record<string, unknown>) => createHash('sha256').update(`agent-tool-args:1\0${name}\0${canonical(args)}`).digest('hex');
 
 /** Arguments against the tool's declared JSON schema subset: an object, required keys present, declared primitive types. */
-function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Record<string, unknown> } | { ok: false; detail: string } {
+async function checkArguments(tool: AgentToolSpec, raw: string, ports: AgentTurnPorts): Promise<{ ok: true; args: Record<string, unknown> } | { ok: false; detail: string }> {
   let parsed: unknown;
   try { parsed = JSON.parse(raw === '' ? '{}' : raw); } catch { return { ok: false, detail: 'arguments are not valid JSON' }; }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, detail: 'arguments must be a JSON object' };
+  const ingress = await checkModelIngressArguments(parsed, ports.recordIngress?.bind(ports));
+  if (!ingress.ok) return { ok: false, detail: ingress.text };
   const args = parsed as Record<string, unknown>, properties = tool.inputSchema.properties as Record<string, { type?: unknown }>;
   for (const key of tool.inputSchema.required ?? []) if (args[key] === undefined) return { ok: false, detail: `missing required argument "${key}"` };
   for (const [key, value] of Object.entries(args)) {
@@ -230,6 +233,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   }
   // The carry is built from the projected request, so a hidden payload never enters the carried context.
   const carry = createAgentContextCarry(messages);
+  const tools: AgentToolSpec[] = [];
+  for (const tool of input.tools) tools.push({ ...tool, description: await presentModelIngress(tool.description, null, input, ports, 0),
+    inputSchema: await projectModelIngressSchema(tool.inputSchema, ports.recordIngress?.bind(ports)) });
   const compactionGuard = createAgentCompactionGuard();
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
   // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
@@ -270,7 +276,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     let measured: Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null = null;
     const measure = async () => {
       if (!ports.measure) return;
-      try { measured = await ports.measure({ round: rounds, messages, tools: input.tools }, signal); } catch { measured = null; }
+      try { measured = await ports.measure({ round: rounds, messages, tools }, signal); } catch { measured = null; }
       if (measured && !signal.aborted) emit({ kind: 'context', round: rounds, ...measured });
     };
     await measure();
@@ -322,7 +328,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     }
     let outcome: AgentRoundOutcome;
     let streamed = '';
-    try { outcome = await ports.invokeRound({ round: rounds, messages, tools: input.tools }, delta => { if (delta.kind === 'text') streamed += delta.text; emit(delta); }, signal); }
+    try { outcome = await ports.invokeRound({ round: rounds, messages, tools }, delta => { if (delta.kind === 'text') streamed += delta.text; emit(delta); }, signal); }
     catch { outcome = { status: 'failed', state: signal.aborted ? 'cancelled' : 'unavailable' }; }
     if (outcome.status === 'failed') {
       if (signal.aborted || outcome.state === 'cancelled') {
@@ -366,7 +372,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.
       if (truncated) { cut++; emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('invalid-arguments', agentTurnTruncatedCallResult(call.name, limitTokens)); continue; }
       if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('error', `[deckent] ${call.name}: error=unknown-tool`); continue; }
-      const checked = checkArguments(tool, call.argumentsJson);
+      const checked = await checkArguments(tool, call.argumentsJson, ports);
       targetOf = checked.ok ? ports.describe(tool, checked.args) : null;
       emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
       if (!checked.ok) { await result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); continue; }

@@ -16,6 +16,7 @@ import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '
 import { describeMcpInference } from './inference-query.js';
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
 import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
+import { recordConfiguredMcpIngress } from './ingress.js';
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
 /** Every handler, including direct configured writes, runs as the distinct MCP actor. */
 export const mcpApplications = <T extends object>(applications: T): T => Object.fromEntries(Object.entries(applications).map(([name, value]) =>
@@ -28,6 +29,7 @@ export async function main(root = process.cwd()) {
   // Catalog operations run on the service (runtime client handlers); their tool hints come from this installation's reachable catalog.
   const operationCatalog = await describeConfiguredOperationTools(root);
   return serveStdio(() => createMcpServer(mcpApplications({ ...runtime, operationCatalog, inspectDeclaredModels: () => inspectDeclaredModels(root),
+    recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
     inspectDecision: query => inspectConfiguredDecision(root, query),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
     inspectToolchainCurrency: () => inspectConfiguredToolchainCurrency(root),

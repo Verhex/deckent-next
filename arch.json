@@ -338,7 +338,13 @@
         "src/composition/core/decision",
         "src/composition/core/root",
         "src/composition/core/model-connect",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/engine/core/agent-turn",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/domain/core/audit",
+        "src/platform/core/clock"
       ],
       "plan": "SURFACES"
     },
@@ -1168,7 +1174,9 @@
         "src/platform/core/i18n",
         "src/engine/core/toolchain-currency",
         "src/domain/core/effect",
-        "src/engine/core/decision"
+        "src/engine/core/decision",
+        "src/engine/core/agent-turn",
+        "src/domain/core/audit"
       ],
       "plan": "SURFACES"
     },
