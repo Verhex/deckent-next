@@ -104,6 +104,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'runRuntime.maxReservationsPerTurn': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
   'runRuntime.pollIntervalMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'runRuntime.failureBackoffMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
+  'runRuntime.maxConsecutiveFailures': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 3, 5, 10] },
   'runRuntime.pageSize': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
   'cancellationRuntime.scopeIds': { kind: 'reference', source: 'scopes', multiple: true },
   'cancellationRuntime.pollIntervalMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },

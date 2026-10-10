@@ -3,6 +3,12 @@ import { runSnapshotSchema, type AttemptIdentity, type RunSnapshot } from '#doma
 import { runQuerySchema, projectRunView, RunStoreError, type RunQuery, type RunReservationCommand } from '#engine/core/runs/index.js';
 import type { TaskEvaluationCommand } from '#engine/core/task-evaluation/index.js';
 
+export class RunProgressionFailure extends Error {
+  constructor(cause: unknown, readonly revision: number | null) {
+    super(cause instanceof Error ? cause.message : 'RUN_PROGRESSION_FAILED', { cause }); this.name = 'RunProgressionFailure';
+  }
+}
+
 /** Trusted, freshly authorized application operations. This port grants no execution permission. */
 export interface RunProgressionOperations {
   advanceLifecycle?(query: RunQuery): Promise<void>;
@@ -37,11 +43,11 @@ export class RunProgressionTurn {
     if (run.identity.scopeId !== query.scopeId || run.identity.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     return run;
   }
-  private async evaluateReady(query: RunQuery, signal: AbortSignal) {
-    const initial = await this.read(query);
+  private async evaluateReady(query: RunQuery, signal: AbortSignal, read: (query: RunQuery) => Promise<RunSnapshot>) {
+    const initial = await read(query);
     for (const binding of initial.bindings) {
       if (signal.aborted) return;
-      const latest = await this.read(query);
+      const latest = await read(query);
       if (latest.cancelRequested) return;
       const progress = latest.progress.find(task => task.taskId === binding.identity.taskId);
       const current = latest.bindings.find(value => value.identity.attemptId === binding.identity.attemptId);
@@ -52,7 +58,8 @@ export class RunProgressionTurn {
     }
   }
   async advance(input: unknown, signal: AbortSignal) {
-    const query = runQuerySchema.parse(input);
+    const query = runQuerySchema.parse(input); let revision: number | null = null;
+    const read = async (request: RunQuery) => { const run = await this.read(request); revision = run.revision; return run; };
     await this.operations.advanceLifecycle?.(query);
     const started = new Set<string>();
     type Completion = { attemptId: string; ok: true } | { attemptId: string; ok: false; error: unknown };
@@ -81,13 +88,13 @@ export class RunProgressionTurn {
     try {
       while (!signal.aborted) {
         throwIfFailed();
-        let run = await this.read(query);
+        let run = await read(query);
         throwIfFailed();
         if (run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !['operator-hold', 'needs-input'].includes(run.state.reason))) break;
         // One serial acceptance pass per completion; concurrently finishing workers may change revision.
         // A typed changed outcome is deferred, never retried in a tight loop.
-        await this.evaluateReady(query, signal);
-        run = await this.read(query);
+        await this.evaluateReady(query, signal, read);
+        run = await read(query);
         throwIfFailed();
         if (signal.aborted || run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !['operator-hold', 'needs-input'].includes(run.state.reason))) break;
         startReserved(run);
@@ -96,7 +103,7 @@ export class RunProgressionTurn {
           && running.size < this.concurrency && run.progress.some(task => task.phase === 'pending')) {
           reservations++;
           await this.operations.reserve({ ...query, commandId: this.runtime.commandId(), expectedRevision: run.revision });
-          run = await this.read(query);
+          run = await read(query);
           if (!run.cancelRequested) startReserved(run);
         }
         if (!running.size) break;
@@ -105,9 +112,10 @@ export class RunProgressionTurn {
         if (!completed.ok) throw completed.error;
         // Re-enter immediately: acceptance releases capacity before unrelated workers finish.
       }
-    } finally { await Promise.allSettled(running.values()); }
+    } catch (error) { throw new RunProgressionFailure(error, revision); }
+    finally { await Promise.allSettled(running.values()); }
     throwIfFailed();
-    const final = await this.read(query);
+    const final = await read(query);
     return Object.freeze({ run: projectRunView(final), stopped: signal.aborted || final.cancelRequested, attempted });
   }
 }

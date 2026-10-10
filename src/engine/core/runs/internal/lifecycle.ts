@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
-import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, holdRun, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
+import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
   counterSchema, identitySchema, runSnapshotSchema, type AttemptIdentity, type VerifiedPrincipal, type TaskProgress, type RunSnapshot } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
@@ -23,10 +23,11 @@ export const runLifecycleCommandSchema = z.discriminatedUnion('action', [
   base.extend({ action: z.literal('answer'), taskId: identitySchema, answer }).strict(),
   base.extend({ action: z.enum(['accept', 'reject']), taskId: identitySchema }).strict(),
 ]);
+export const runProgressionParkCommandSchema = base.extend({ failureCode: identitySchema }).strict();
 export type RunLifecycleCommand = z.infer<typeof runLifecycleCommandSchema>;
 /** Trusted, freshly authenticated application-to-ledger transition. */
-export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'resume', 'hold', 'answer', 'expire', 'park-task', 'accept', 'reject']),
-  holdReason: holdReason.optional(), answer: answer.optional(),
+export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'resume', 'hold', 'answer', 'expire', 'park-task', 'park-progression', 'accept', 'reject']),
+  holdReason: holdReason.optional(), answer: answer.optional(), failureCode: identitySchema.optional(),
   taskId: identitySchema.optional(), reason: z.enum(['evaluation-unknown', 'evaluation-not-ready']).optional(),
   actor: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema,
     assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }).strict(),
@@ -34,6 +35,7 @@ export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'r
 }).strict().superRefine((value, context) => {
   if ((['accept', 'reject', 'answer', 'park-task'].includes(value.action) !== (value.taskId !== undefined))
     || ((value.action === 'hold') !== (value.holdReason !== undefined)) || ((value.action === 'answer') !== (value.answer !== undefined))
+    || ((value.action === 'park-progression') !== (value.failureCode !== undefined))
     || ((value.action === 'park-task') !== (value.reason !== undefined))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_INVALID' });
 });
 export type RunLifecycleWrite = z.infer<typeof runLifecycleWriteSchema>;
@@ -51,6 +53,10 @@ export function proposeRunLifecycleWrite(current: RunSnapshot, write: RunLifecyc
   const { action, expectedRevision, now, timeoutMs } = write;
   if (action === 'resume' && ((write.actor.assurance !== 'os-user' && (current.state.kind !== 'parked' || current.state.reason !== 'operator-hold'))
     || (current.state.kind === 'parked' && current.state.reason === 'operator-hold' && !audited))) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+  if (action === 'park-progression') {
+    if (!audited) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+    return parkRunProgression(current, expectedRevision, write.failureCode!, now, timeoutMs);
+  }
   if (action === 'hold') return holdRun(current, expectedRevision, write.holdReason!, now, timeoutMs);
   if (action === 'answer') return answerTaskInput(current, expectedRevision, write.taskId!, write.answer!, now, timeoutMs);
   if (action === 'close') return closeParkedRun(current, expectedRevision, now, timeoutMs);
@@ -88,6 +94,18 @@ export class RunLifecycleApplication {
     await this.runAuthorization.authorize('cancel', query, principal);
     return this.store.commitRunLifecycle({ ...query, commandId: randomUUID(), expectedRevision: run.revision, action: 'expire', actor,
       now, timeoutMs: this.timeoutMs });
+  }
+  async parkProgression(input: unknown, credential?: unknown) {
+    const command = runProgressionParkCommandSchema.parse(input), principal = await authenticate(this.verifier, credential, command.scopeId);
+    await this.runAuthorization.authorize('cancel', command, principal);
+    const now = counterSchema.parse(this.now());
+    return this.store.commitRunLifecycle({ ...command, action: 'park-progression', actor: { id: principal.id, issuer: principal.issuer,
+      subject: principal.subject, assurance: principal.assurance }, now, timeoutMs: this.timeoutMs }, (store, snapshot) => {
+      this.recorder(store).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
+        principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: this.policyRevision, atMs: now,
+        subject: { kind: 'run-lifecycle', action: 'park-progression', runId: command.runId, commandId: command.commandId,
+          taskId: null, revision: snapshot.revision, evidence: null } });
+    });
   }
   async execute(input: unknown, credential?: unknown) {
     const command = runLifecycleCommandSchema.parse(input);

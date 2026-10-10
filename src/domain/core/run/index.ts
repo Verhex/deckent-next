@@ -14,4 +14,4 @@ export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycl
 
 export { workClassRegistrySchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError } from './internal/work-class.js';
 export type { WorkClassRegistry } from './internal/work-class.js';
-export { holdRun, answerTaskInput } from './internal/lifecycle.js';
+export { holdRun, answerTaskInput, parkRunProgression } from './internal/lifecycle.js';

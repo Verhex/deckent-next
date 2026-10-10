@@ -42,4 +42,4 @@ export type { WorkerEffortCompiler } from './internal/worker-effort.js';
 export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from './internal/brief.js';
 export type { TaskBrief, ResultBrief } from './internal/brief.js';
 export { recordAttemptClosure, classifyLaunchRefusal } from './internal/closure.js';
-export { runControlCommandSchema, proposeRunLifecycleWrite } from './internal/lifecycle.js';
+export { runControlCommandSchema, runProgressionParkCommandSchema, proposeRunLifecycleWrite } from './internal/lifecycle.js';

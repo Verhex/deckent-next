@@ -10,8 +10,8 @@ import { LocalRuntimeSocketError } from '#adapters/index.js';
 import { RunError, TaskEvaluationError, TaskGraphError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';
-import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } from '#platform/index.js';
-import { HandoffError, RunLifecycleError, reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
+import { DeckentError, ErrorRegistry, queryErrorDiagnostic, ManagedFileError, BootstrapStateError } from '#platform/index.js';
+import { HandoffError, SupervisorError, RunProgressionFailure, RunLifecycleError, reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
 const GRAPH_INPUT_CODES: ReadonlySet<string> = new Set(['TASK_GRAPH_INVALID', 'TASK_DUPLICATE', 'TASK_DEPENDENCY_DUPLICATE', 'TASK_DEPENDENCY_MISSING',
   'TASK_GRAPH_CYCLE', 'TASK_ACCEPTANCE_DUPLICATE', 'TASK_CRITERION_DEFINITION_MISSING', 'TASK_CRITERION_DEFINITION_UNUSED', 'TASK_CRITERION_DEFINITION_DUPLICATE']);
 /** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
@@ -19,6 +19,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
     || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
+  if (error instanceof RunProgressionFailure) return queryFailure(error.cause);
   if (error instanceof DeckentError) return error;
   if (error instanceof HandoffError) return ErrorRegistry.createError(error.code);
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
@@ -50,8 +51,6 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   }
   if (error instanceof RuntimeServiceLifecycleError && error.retryAfterMs !== undefined) return ErrorRegistry.createError(error.code, { params: { retryAfterMs: error.retryAfterMs } });
   if (error instanceof ScopeRegistrationError) return ErrorRegistry.createError(error.code, { params: { scopeIds: error.scopeIds.join(',') } });
-  // A structurally invalid submitted graph (cycle, missing/duplicate task or dependency, criterion mismatch) is the caller's input,
-  // not an unavailable inventory; progress/revision codes stay internal (they describe stored state, never caller input).
   if (error instanceof TaskGraphError && GRAPH_INPUT_CODES.has(error.code)) return ErrorRegistry.createError('TASK_GRAPH_INVALID', {
     params: { reason: error.code, path: ['graph', ...(error.issues[0]?.path ?? [])].join('.') } });
   if (error instanceof LocalRuntimeSocketError && error.path) return ErrorRegistry.createError(error.code, { params: { path: error.path } });
@@ -60,7 +59,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) {
     return ErrorRegistry.createError(error.code, { params: reservationDiagnosticParams(error.diagnostic) });
   }
-  if (error instanceof RunError || error instanceof RunLifecycleError || error instanceof ServiceShutdownError || error instanceof ReconciliationRecoveryError || error instanceof ReconciliationRuntimeLoopError || error instanceof CancellationRuntimeLoopError || error instanceof LocalRuntimeSocketError || error instanceof RuntimeServiceProtocolError || error instanceof RuntimeServiceLifecycleError || error instanceof RunWorkspaceCustodyError || error instanceof WorkspaceError || error instanceof CancellationDeliveryError || error instanceof TaskEvaluationError || error instanceof TaskEvidenceError || error instanceof EvaluationEvidenceError || error instanceof ExecutionRegistryError || error instanceof AuthenticationError || error instanceof AttemptStoreError || error instanceof DispatchError || error instanceof RunStoreError ||
-    error instanceof ManagedFileError || error instanceof PolicyAuthorizationError || error instanceof WorkTargetError) return ErrorRegistry.createError(ErrorRegistry.has(error.code) ? error.code : 'INVENTORY_UNAVAILABLE');
-  return ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  if (error instanceof SupervisorError || error instanceof RunError || error instanceof RunLifecycleError || error instanceof ServiceShutdownError || error instanceof ReconciliationRecoveryError || error instanceof ReconciliationRuntimeLoopError || error instanceof CancellationRuntimeLoopError || error instanceof LocalRuntimeSocketError || error instanceof RuntimeServiceProtocolError || error instanceof RuntimeServiceLifecycleError || error instanceof RunWorkspaceCustodyError || error instanceof WorkspaceError || error instanceof CancellationDeliveryError || error instanceof TaskEvaluationError || error instanceof TaskEvidenceError || error instanceof EvaluationEvidenceError || error instanceof ExecutionRegistryError || error instanceof AuthenticationError || error instanceof AttemptStoreError || error instanceof DispatchError || error instanceof RunStoreError ||
+    error instanceof ManagedFileError || error instanceof PolicyAuthorizationError || error instanceof WorkTargetError) return ErrorRegistry.createError(error.code);
+  return ErrorRegistry.createError('QUERY_UNEXPECTED_FAILURE', { params: { detail: queryErrorDiagnostic(error) } });
 }

@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readLocalOsIdentity } from '#adapters/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { ErrorRegistry, clearConfigCache, productResourcePath } from '#platform/index.js';
 import { startConfiguredRuntimeService, createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
@@ -23,7 +23,7 @@ function bounded<T>(promise: Promise<T>) {
     promise.then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
   });
 }
-async function fixture(maxConcurrentExecutions: number) {
+async function fixture(maxConcurrentExecutions: number, parkAuthority = false) {
   const project = await mkdtemp(join(tmpdir(), 'deckent-run-concurrent-service-')); roots.push(project);
   await mkdir(join(project, '.deckent'), { mode: 0o700 });
   const home = join(project, 'home');
@@ -31,13 +31,13 @@ async function fixture(maxConcurrentExecutions: number) {
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(project, 'data') },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
     cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
-    runRuntime: { pollIntervalMs: 10, failureBackoffMs: 100, pageSize: 8, maxConcurrentRuns: 2, maxReservationsPerTurn: 1 },
+    runRuntime: { pollIntervalMs: 10, failureBackoffMs: 100, pageSize: 8, maxConcurrentRuns: 2, maxReservationsPerTurn: 1, maxConsecutiveFailures: 2 },
     service: { identity: { scopeId: 's', serviceId: 'runtime' }, maxConcurrentRequests: 4, maxConcurrentExecutions, shutdownGraceMs: 2000 },
   }));
   const opened = await openConfiguredAttemptStore(project, { env }), actor = readLocalOsIdentity();
   const principals = [{ issuer: actor.issuer, subject: actor.subject }];
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'concurrent-test', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['inspect', 'reserve'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
+    { id: 'run', effect: 'allow', actions: ['inspect', 'reserve', ...parkAuthority ? ['cancel'] : []], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
     { id: 'stop', effect: 'allow', actions: ['shutdown'], scopes: ['s'], principals, resource: { kind: 'service', ids: ['runtime'] } },
   ] }), { mode: 0o600 });
@@ -48,7 +48,7 @@ async function fixture(maxConcurrentExecutions: number) {
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
   for (const runId of ['a', 'b']) await opened.store.createRun({ commandId: `create-${runId}`, actor: { id: actor.id, issuer: actor.issuer, subject: actor.subject }, identity: { scopeId: 's', runId, layoutRevision: opened.layout.revision },
     graph, execution: fixtureExecution(graph), now: 0, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
-  const layout = opened.layout; opened.store.close(); return { project, env, layout };
+  const layout = opened.layout; opened.store.close(); return { project, env, layout, actor };
 }
 
 it('[requires built Linux peer_credentials.node] governed service shutdown drains both concurrent Run turns before releasing custody (controlled execution port)', async context => {
@@ -151,3 +151,36 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
     expect(observed.get(starts[1]!)!.attempted).toBe(1);
   } finally { controller.abort(); gates.forEach(gate => gate.resolve()); await work; await lifecycle.stop(2000); }
 }, 10000);
+
+
+it.for([true, false])('configured progression persists a typed park when cancel authority=%s; denied parking stops dispatch with attention', async (parkAuthority, context) => {
+  if (process.platform === 'win32') {
+    await expect(fixture(2, parkAuthority)).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
+    context.skip('MANAGED_FILE_UNSUPPORTED: configured ledger uses POSIX custody');
+  }
+  const f = await fixture(2, parkAuthority), controller = new AbortController(), reports: string[] = [], starts: string[] = [];
+  vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_root, identity) => {
+    starts.push(identity.runId); if (identity.runId === 'a') throw ErrorRegistry.createError('SUPERVISOR_CONTROL_FAILED');
+    return undefined as unknown as Awaited<ReturnType<typeof execution.executeConfiguredTask>>;
+  });
+  const attention = deferred();
+  const loop = await prepareConfiguredRunRuntime(f.project, { onError(_query, error) {
+    reports.push(error.code);
+    if (error.code === (parkAuthority ? 'RUN_PROGRESSION_PARKED' : 'RUN_PROGRESSION_PARK_UNAVAILABLE')) attention.resolve();
+  } }, work => work(), { env: f.env });
+  const work = loop.run(controller.signal);
+  try {
+    await bounded(attention.promise);
+    await new Promise(resolve => setTimeout(resolve, 140)); // more than one backoff: no third failing dispatch
+    expect(starts.filter(runId => runId === 'a')).toHaveLength(2); expect(starts).toContain('b');
+    expect(reports.filter(code => code === 'SUPERVISOR_CONTROL_FAILED')).toHaveLength(2);
+    const opened = await openConfiguredAttemptStore(f.project, { env: f.env });
+    try {
+      const run = (await opened.store.loadRun('s', 'a'))!;
+      expect(run.progress[0]!.phase).toBe('active'); expect(run.bindings).toHaveLength(1);
+      expect(run.state).toEqual(parkAuthority ? { kind: 'parked', reason: 'progression-failed', failureCode: 'SUPERVISOR_CONTROL_FAILED', since: expect.any(Number), deadline: expect.any(Number) } : { kind: 'running' });
+      if (parkAuthority) expect((await opened.store.listRunProgression({ actor: { id: f.actor.id, issuer: f.actor.issuer, subject: f.actor.subject }, after: null, limit: 8 })).items).not.toContainEqual({ scopeId: 's', runId: 'a' });
+      else expect(reports).toContain('POLICY_DENIED');
+    } finally { opened.store.close(); }
+  } finally { controller.abort(); await work; }
+});

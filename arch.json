@@ -360,6 +360,8 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
+        "src/engine/core/supervisor",
+        "src/engine/core/run-progression",
         "src/domain/core/audit",
         "src/engine/core/agent-turn",
         "src/adapters/core/attempt-store",
@@ -1658,6 +1660,8 @@
     },
     "src/engine/core/run-progression": {
       "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/config-fields",
         "src/domain/core/attempt",
         "src/domain/core/run",
         "src/engine/core/runs",

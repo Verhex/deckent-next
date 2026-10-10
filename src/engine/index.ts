@@ -47,7 +47,7 @@ export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';
 export * from '#engine/core/inference-serving/index.js';
 
-export { RunLifecycleRuntimeLoop, RunProgressionTurn, reservationRefusalOutcome } from '#engine/core/run-progression/index.js';
+export { RunLifecycleRuntimeLoop, RunProgressionTurn, RunProgressionFailure, reservationRefusalOutcome } from '#engine/core/run-progression/index.js';
 export type { RunProgressionOperations, RunProgressionRuntime } from '#engine/core/run-progression/index.js';
 export { progressionQuerySchema, progressionCursorSchema } from '#engine/core/run-progression/index.js';
 export type { ProgressionQuery, ProgressionCursor, RunProgressionJournal } from '#engine/core/run-progression/index.js';
