@@ -4,7 +4,9 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, sandboxHardFloored, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
-import { DECKENT_DIR } from '#platform/index.js';
+import { DECKENT_DIR, resolveLocale, t } from '#platform/index.js';
+import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
+export { BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, ancestorPins, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
@@ -12,7 +14,7 @@ import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
 export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.open
   ? `Runs in an open bubblewrap sandbox (full access): network on, HOME visible, Deckent state and credentials hidden/read-only; ${describeShellWritePosture(view)}; `
-    + 'the rest of the machine is reachable as your user, and every process it starts ends with the call.'
+    + `${t('shell.homeSubtreesMayBeHidden')}; the rest of the machine is reachable as your user, and every process it starts ends with the call.`
   : `Runs in a bubblewrap sandbox: ${describeShellWritePosture(view)}, the scratch area is writable, `
   + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
 /** A long-lived server's line on its MCP cards (MCP-CLIENT, C5): the write part from the view its launch enforces, the rest as that view
@@ -39,10 +41,6 @@ export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
 export const BUBBLEWRAP_GIT_WALK_MAX_ENTRIES = 200_000;
 export const BUBBLEWRAP_MASK_MAX = 4_096;
 const MAX_DEPTH = 32;
-/** OPEN-SANDBOX: the HOME walk for credential-pattern files — HOME's entries to this depth (`~/a/b/c`), over this many entries the call is
- * refused (never run with HOME half-masked beyond what the bound says). Measured on the owner's HOME: 3.9 k entries at depth 3. */
-export const BUBBLEWRAP_HOME_WALK_MAX_DEPTH = 3;
-export const BUBBLEWRAP_HOME_WALK_MAX_ENTRIES = 20_000;
 /** PATH entries under these prefixes are never bound: drives and mounts (WSL `/mnt/c`), sockets, devices, kernel views. */
 const NEVER_BOUND_PREFIXES = ['/mnt', '/media', '/run', '/dev', '/proc', '/sys', '/var'];
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
@@ -116,36 +114,6 @@ async function sealedRoots(project: string, roots: readonly string[], home: stri
   const outer = [...new Set(real)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));
   return { ok: true, sealed: outer.filter(root => under(root, project)), hidden: outer.filter(root => !under(root, project)) };
 }
-/**
- * OPEN-SANDBOX: masks the Core floor's credential-pattern files in HOME (`~/.npmrc`, `~/.ssh/id_*`, `**\/*.pem`, `**\/.credentials.json`, …)
- * over a bounded walk: HOME's entries to depth 3, generated/vendored trees (`BASELINE_IGNORED_DIRS`) and the skipped paths (the project,
- * which its own walk covers, and the state roots, sealed whole) not entered, symbolic links neither followed nor masked (as in the project),
- * an unreadable directory skipped (the command, the same user, cannot read it either). Over the entry bound the call is refused.
- */
-async function maskHomeCredentials(home: string, denied: (rel: string) => boolean, skip: readonly string[], maskedDirectories: string[], maskedFiles: string[]): Promise<string | null> {
-  let entries = 0;
-  const walk = async (dir: string, rel: string, depth: number): Promise<string | null> => {
-    let names;
-    try { names = await readdir(dir, { withFileTypes: true }); } catch { return null; }
-    for (const entry of names) {
-      if (++entries > BUBBLEWRAP_HOME_WALK_MAX_ENTRIES) return `HOME credential walk over its bound (${BUBBLEWRAP_HOME_WALK_MAX_ENTRIES} entries)`;
-      const path = join(dir, entry.name), entryRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
-      if (skip.some(root => under(path, root))) continue;
-      if (entry.isSymbolicLink()) {
-        if (denied(entryRel)) return `credential path is a symbolic link (${entryRel}); open view refused`;
-        continue;
-      }
-      if (entry.isSocket()) { maskedFiles.push(path); continue; }
-      if (denied(entryRel)) { if (entry.isDirectory()) maskedDirectories.push(path); else maskedFiles.push(path); continue; }
-      if (!entry.isDirectory() || BASELINE_IGNORED_DIRS.has(entry.name) || depth + 1 >= BUBBLEWRAP_HOME_WALK_MAX_DEPTH) continue;
-      const refused = await walk(path, entryRel, depth + 1);
-      if (refused) return refused;
-    }
-    return null;
-  };
-  return walk(home, '', 0);
-}
-
 /** Runtime IPC is never a full-access grant: hide daemon/user-runtime directories and configured sockets. */
 async function maskHostSockets(environment: Readonly<Record<string, string | undefined>>, project: string,
   directories: string[], files: string[]): Promise<string | null> {
@@ -231,7 +199,7 @@ async function holdsProductStateOnly(input: { readonly dir: string; readonly rel
  */
 export async function resolveBubblewrapView(layout: ShellSandboxLayout, environment: Readonly<Record<string, string | undefined>>,
   options: Pick<BubblewrapOptions, 'maxEntries' | 'fsOps'> = {}, write: { readonly floorReadOnly?: boolean; readonly projectReadOnly?: boolean;
-    readonly writeSet?: { readonly upper: string; readonly work: string }; readonly open?: boolean } = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
+    readonly writeSet?: { readonly upper: string; readonly work: string }; readonly open?: boolean } = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string; readonly code?: typeof HOME_CREDENTIAL_REFUSAL }> {
   // SHELL-OVERLAY: the overlay's directories must be real, private, outside the project and not holding it (undefined overlay behavior).
   let overlay: { readonly upper: string; readonly work: string } | null = null;
   if (write.writeSet) {
@@ -390,9 +358,12 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     }
     // OPEN-SANDBOX: HOME is the host's; the Core floor's credential patterns are masked in it (bounded walk), the state roots skipped. The
     // walk starts at HOME's real path, so every mask (and each ancestor pinned for it, R7) is canonical.
-    const realHome = openView && homeDir ? await realpath(homeDir).catch(() => homeDir) : null;
-    const refusedHome = realHome && layout.hardFloor ? await maskHomeCredentials(realHome, layout.hardFloor.homeDenied, [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles) : null;
-    if (refusedHome) return { ok: false, reason: refusedHome };
+    const realHome = openView && homeDir ? await realpath(homeDir).catch(() => null) : null;
+    if (openView && !realHome) return { ok: false, code: HOME_CREDENTIAL_REFUSAL,
+      reason: t('shell.homeCredentialsRefused', { detail: 'HOME is missing or cannot be resolved', entries: BUBBLEWRAP_HOME_WALK_MAX_ENTRIES }, resolveLocale(undefined, environment)) };
+    const refusedHome = realHome && layout.hardFloor ? await maskHomeCredentials(realHome, layout.hardFloor.homeDenied,
+      [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles, BUBBLEWRAP_MASK_MAX, environment) : null;
+    if (refusedHome) return { ok: false, code: HOME_CREDENTIAL_REFUSAL, reason: refusedHome };
     const over = overMasks(); if (over) return { ok: false, reason: over };
     if (openView) {
       const view: BubblewrapView = Object.freeze({ projectRoot: root, open: { sealed: seal.sealed, hidden: seal.hidden }, scratchDir, home: homeDir, systemPaths: [], toolchainPaths: [],
@@ -425,7 +396,7 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
         { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true, ...(request.writeSet ? { writeSet: request.writeSet } : {}),
           ...(request.open ? { open: true } : {}) });
     if (!view.ok) {
-      return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
+      return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${'code' in view && view.code ? `${view.code}: ` : ''}${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
     }
     const prefix = bubblewrapArguments(view.view);

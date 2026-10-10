@@ -494,5 +494,7 @@
   "cli.backup.trigger.before-upgrade": "yükseltmeden önce",
   "cli.backup.created": "Yedek oluşturuldu",
   "cli.backup.verified": "Yedek doğrulandı",
-  "cli.backup.restored": "Yedek geri yüklendi"
+  "cli.backup.restored": "Yedek geri yüklendi",
+  "shell.homeCredentialsRefused": "HOME kimlik dosyalarının korunması belirlenemedi ({detail}; tarama sınırı: {entries} girdi). Daha dar bir proje kullanın veya HOME/kimlik yollarını düzeltip yeniden deneyin; kabuk çalıştırılmadan reddedildi.",
+  "shell.homeSubtreesMayBeHidden": "kimlik taraması sınırında incelenemeyen büyük HOME alt dizinleri gizlenir"
 }
