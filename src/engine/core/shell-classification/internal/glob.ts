@@ -63,4 +63,3 @@ export function globSegmentRegExp(segment: string): RegExp | null {
   const leadingDotAllowed = segment.startsWith('.');
   return new RegExp(`^${leadingDotAllowed ? '' : '(?!\\.)'}${out}$`, 'u');
 }
-
