@@ -901,5 +901,10 @@
   "terminal.spend.reason.overrun": "Ücret rezervasyonu aştı",
   "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model değiştirilemedi. {reason}",
   "error.MODEL_INVOCATION_REASONING_UNSUPPORTED": "Seçilen modelde düşünme kapatılamaz.",
-  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "OpenRouter’da eğitim ve veri saklama yasağına uygun uç nokta yok. İstek gönderilmedi, harcama rezervasyonu oluşturulmadı. OpenRouter Gizlilik ayarlarını kontrol edin: https://openrouter.ai/settings/privacy; uygun uç noktası olan bir model seçin."
+  "error.OPENROUTER_PRIVACY_UNAVAILABLE": "OpenRouter’da eğitim ve veri saklama yasağına uygun uç nokta yok. İstek gönderilmedi, harcama rezervasyonu oluşturulmadı. OpenRouter Gizlilik ayarlarını kontrol edin: https://openrouter.ai/settings/privacy; uygun uç noktası olan bir model seçin.",
+  "error.SECRET_HELPER_INVALID": "Kayıtlı sır yardımcısı tanımı geçersiz. Mutlak komut ve çalışma dizini, sınırlı kaynaklar ve yetkilendirme portu olan güvenilen bir yardımcı kurun.",
+  "error.SECRET_HELPER_DENIED": "Politika bu sır yardımcısı okumasına izin vermedi. Yardımcı başlatılmadı.",
+  "error.SECRET_HELPER_TIMEOUT": "Sır yardımcısı okuması zaman sınırını aştı. Anahtar döndürülmedi.",
+  "error.SECRET_HELPER_OUTPUT_LIMIT": "Sır yardımcısı toplam çıktı sınırını aştı. Çıktısı atıldı.",
+  "error.SECRET_HELPER_FAILED": "Sır yardımcısı başlatılamadı veya başarısız sonlandı. Çıktısı atıldı."
 }

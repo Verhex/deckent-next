@@ -2779,6 +2779,7 @@
       "docs/glossary.md",
       "docs/glossary.tr.md",
       "docs/architecture-overview.md",
+      "docs/secret-helpers.md",
       "docs/architecture-overview.tr.md",
       "CODE_OF_CONDUCT.md",
       "SECURITY.md",
@@ -2880,6 +2881,12 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/engine/core/secret-store/internal/helper.ts",
+        "symbol": "definition/timeoutMs",
+        "values": [2147483647],
+        "reason": "Node setTimeout signed 32-bit delay ceiling: larger values clamp to 1 ms. Protocol validation rejects overflow rather than changing the registered deadline; not a mutable helper timeout default. SECRET-HELPER v1, official Node timers documentation, 2026-10-10."
+      },
       {
         "file": "src/platform/core/clock/internal/clock.ts",
         "symbol": "MAX_WALL_SKEW_MS",
