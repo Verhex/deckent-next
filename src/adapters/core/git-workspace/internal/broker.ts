@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
@@ -166,6 +166,14 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       if (commit !== target.request.baseCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
       await this.git(target.directory, ['clone', '--local', '--no-hardlinks', '--dissociate', '--no-checkout', `--template=${join(target.directory, format.hooks)}`, '--', o.sourceRoot, target.workspace]);
       await this.git(target.directory, ['-C', target.workspace, 'checkout', '--detach', target.request.baseCommit]);
+      // Git's directory modes inherit the process umask; secure only this fresh clone before publishing its lease.
+      const gitDirectory = await this.git(target.directory, ['-C', target.workspace, 'rev-parse', '--absolute-git-dir']);
+      for (const path of [target.workspace, gitDirectory]) {
+        const stat = await lstat(path);
+        if (!stat.isDirectory() || stat.isSymbolicLink() || await realpath(path) !== resolve(path) ||
+          (process.getuid && stat.uid !== process.getuid())) throw new WorkspaceError('WORKSPACE_UNSAFE');
+        await chmod(path, stat.mode & ~0o022);
+      }
       await this.git(target.directory, ['-C', target.workspace, 'remote', 'remove', 'origin']);
       const checked = await this.git(target.directory, ['-C', target.workspace, 'rev-parse', 'HEAD']);
       if (checked !== target.request.baseCommit) throw new WorkspaceError('WORKSPACE_GIT_FAILED');

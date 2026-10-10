@@ -19,12 +19,12 @@ export class GitIntegrationTarget implements IntegrationTarget {
   }
   private broker(command: IntegrationIntent['command']) { return new GitWorkspaceBroker({ ...this.options, workspaceRoot: this.location(command) }); }
   private budget() { return new SnapshotBudget(this.limits, Date.now() + this.options.timeoutMs); }
-  private async expected(command: IntegrationIntent['command'], patch: WorkspacePatch) {
+  private async expected(command: IntegrationIntent['command'], patch: WorkspacePatch, baseCommit: string) {
     await this.directory(join(this.options.workspaceRoot, 'integrations')); await this.directory(this.location(command));
     const lease = await this.broker(command).openRecorded(command.identity);
-    if (!lease || lease.baseCommit !== patch.baseCommit || lease.sourceBase.sourceFingerprint !== patch.source.sourceFingerprint) throw new WorkspacePatchError('PATCH_CONFLICT');
+    if (!lease || lease.baseCommit !== baseCommit || lease.sourceBase.sourceFingerprint !== patch.source.sourceFingerprint) throw new WorkspacePatchError('PATCH_CONFLICT');
     // Base identity only: every `before` must be exactly the base object (mode and blob id); no base content is read.
-    const listing = await listBase(lease, this.options, this.budget()); const algorithm = hashAlgorithmOf(patch.baseCommit);
+    const listing = await listBase(lease, this.options, this.budget()); const algorithm = hashAlgorithmOf(baseCommit);
     for (const change of patch.changes) {
       const entry = listing.get(change.path) ?? null;
       if ((entry === null) !== (change.before === null)) throw new WorkspacePatchError('PATCH_CORRUPT');
@@ -40,14 +40,15 @@ export class GitIntegrationTarget implements IntegrationTarget {
     }
   }
   async prepare(intent: IntegrationIntent, patch: WorkspacePatch): Promise<IntegrationManifest> {
-    if ((await this.observe(patch)).digest !== intent.observation) throw new WorkspacePatchError('PATCH_CONFLICT');
+    const observation = await this.observe(patch);
+    if (observation.digest !== intent.observation) throw new WorkspacePatchError('PATCH_CONFLICT');
     await this.directory(this.options.workspaceRoot);
     const parent = join(this.options.workspaceRoot, 'integrations');
     await mkdir(parent, { recursive: true, mode: 0o700 }); await this.directory(parent);
     // Exclusive directory is a second fence against unknown filesystem residue.
     await mkdir(this.location(intent.command), { mode: 0o700 });
-    const lease = await this.broker(intent.command).allocate({ schemaVersion: 1, identity: intent.command.identity, baseCommit: patch.baseCommit });
-    const { listing, algorithm } = await this.expected(intent.command, patch);
+    const lease = await this.broker(intent.command).allocate({ schemaVersion: 1, identity: intent.command.identity, baseCommit: observation.head });
+    const { listing, algorithm } = await this.expected(intent.command, patch, observation.head);
     const kept = new Set(patch.changes.map(change => change.path));
     const initial = await readWorkspace(lease.workspace, this.budget(), { listing, algorithm, keep: kept });
     if (diffAgainstBase(listing, initial, algorithm).length) throw new WorkspacePatchError('PATCH_CONFLICT');
@@ -58,11 +59,12 @@ export class GitIntegrationTarget implements IntegrationTarget {
     const snapshot: Snapshot = new Map(initial);
     for (const change of patch.changes) { if (change.after) snapshot.set(change.path, change.after); else snapshot.delete(change.path); }
     await applyWorkspacePatchChanges(lease.workspace, patch.changes);
-    return { schemaVersion: 1, kind: 'integration-candidate', command: intent.command, patch: intent.patch,
+    return { schemaVersion: 2, kind: 'integration-candidate', baseCommit: patch.baseCommit, effectiveBaseCommit: observation.head, command: intent.command, patch: intent.patch,
       observation: intent.observation, workspace: lease.workspace, snapshotDigest: snapshotDigest(snapshot), application: 'candidate-only' };
   }
   async verify(manifest: IntegrationManifest, patch: WorkspacePatch) {
-    const { lease, listing, algorithm } = await this.expected(manifest.command, patch);
+    if (manifest.schemaVersion === 2 && manifest.baseCommit !== patch.baseCommit) throw new WorkspacePatchError('PATCH_CORRUPT');
+    const { lease, listing, algorithm } = await this.expected(manifest.command, patch, manifest.schemaVersion === 2 ? manifest.effectiveBaseCommit : patch.baseCommit);
     if (lease.workspace !== manifest.workspace) throw new WorkspacePatchError('PATCH_CORRUPT');
     for (let pass = 0; pass < 2; pass++) {
       const current = await readWorkspace(lease.workspace, this.budget(), { listing, algorithm, keep: new Set(patch.changes.map(change => change.path)) });

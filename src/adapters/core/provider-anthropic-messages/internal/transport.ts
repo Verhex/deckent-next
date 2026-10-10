@@ -13,19 +13,19 @@ import { anthropicMessagesBody } from './messages.js';
 import { parseAnthropicMessageResponse } from './response.js';
 import { createAnthropicMessagesStream } from './stream.js';
 import { quoteAnthropicPublishedTariff } from './tariff.js';
-
 export interface AnthropicMessagesNativeOptions {
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
 }
 export type PreparedAnthropicRequest = Readonly<{ definition: AnthropicMessagesDefinition; limits: OpenAiChatHttpLimits; request: OpenAiChatTextRequest;
   body: string; wire: Record<string, unknown>; scopeId: string; prefixDigest: string; countedTokens?: number | null }>;
 const VERSION_HEADERS = Object.freeze({ 'anthropic-version': ANTHROPIC_MESSAGES_PROTOCOL_VERSION });
+const workspaceHeaders = (definition: AnthropicMessagesDefinition) => ({ ...VERSION_HEADERS,
+  ...(definition.workspaceId ? { 'anthropic-workspace-id': definition.workspaceId } : {}) });
 const adapter = Object.freeze({ id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION });
 const countSchema = z.object({ input_tokens: z.number().int().nonnegative().safe() }).passthrough();
 const COUNT_RESPONSE_MAX_BYTES = 64 * 1024;
 /** Deadline of a counter (same shape as the OpenAI one): 2 s plus 250 ms per KiB of request, at most 30 s. */
 const countTimeoutMs = (bodyBytes: number) => Math.min(30_000, 2_000 + Math.ceil(bodyBytes / 1024) * 250);
-
 async function countPrepared(prepared: PreparedAnthropicRequest, options: AnthropicMessagesNativeOptions, signal?: AbortSignal) {
   const endpoint = prepared.definition.tokenCountEndpoint;
   if (!endpoint) return null;
@@ -34,7 +34,7 @@ async function countPrepared(prepared: PreparedAnthropicRequest, options: Anthro
   try {
     const result = await sendNativeJsonHttp({ definition: { endpoint, authentication: prepared.definition.authentication, ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) },
       limits: { requestMaxBytes: prepared.limits.requestMaxBytes, responseMaxBytes: COUNT_RESPONSE_MAX_BYTES, timeoutMs: countTimeoutMs(Buffer.byteLength(body, 'utf8')) },
-      body, adapter, headers: VERSION_HEADERS },
+      body, adapter, headers: workspaceHeaders(prepared.definition) },
     { ...(options.resolveCredential ? { resolveCredential: options.resolveCredential } : {}), parseResponse: raw => {
       let value: unknown;
       try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)); } catch { return { reason: 'invalid-response' }; }
@@ -46,12 +46,11 @@ async function countPrepared(prepared: PreparedAnthropicRequest, options: Anthro
     return Object.freeze({ promptTokens: (result.native as { count: number }).count, windowTokens: null });
   } catch { return null; }
 }
-
 async function sendPrepared(prepared: PreparedAnthropicRequest, options: AnthropicMessagesNativeOptions, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink, onFinalUsage?: (usage: AnthropicUsage) => void, onFinalUsageWithdrawn?: () => void) {
   try {
     const definition = { endpoint: prepared.definition.endpoint, authentication: prepared.definition.authentication,
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) };
-    return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body, adapter, headers: VERSION_HEADERS },
+    return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body, adapter, headers: workspaceHeaders(prepared.definition) },
       prepared.request.stream === true
         ? { ...options, stream: createAnthropicMessagesStream(prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }, onFinalUsage, onFinalUsageWithdrawn), ...(onDelta ? { onDelta } : {}) }
         : { ...options, parseResponse: body => parseAnthropicMessageResponse(body, prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }) }, signal);
@@ -60,13 +59,11 @@ async function sendPrepared(prepared: PreparedAnthropicRequest, options: Anthrop
     throw new OpenAiChatHttpError(error.code.replace('NATIVE_JSON_HTTP_', 'OPENAI_CHAT_') as OpenAiChatHttpErrorCode, error.status);
   }
 }
-
 export interface AnthropicMessagesPricedNative {
   readonly native: ModelInvocationNativePort;
   /** Pure quote of the exact prepared request this instance issued. Budget authority stays in composition/engine. */
   quote(input: ModelInvocationSpendingInput): ProviderSpendQuote;
 }
-
 /** The native port and its quote resolver share one registry of prepared tokens, so a quote is always of the request that is sent. */
 export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNativeOptions = {}): AnthropicMessagesPricedNative {
   const responses = new WeakMap<object, string>();

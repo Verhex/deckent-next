@@ -4,8 +4,9 @@
 // installation's configuration selects targets and backends, and policy decides every operation. The SDK entry (`deckent`) exports no
 // registration function of these registries (lint-arch G-i). Inventory: tests/contracts/composition/extensions-entry.test.ts.
 export { registerOperationAdapterModule, registerSecretStoreBackend } from '#adapters/index.js';
+export { createSecretHelperFactory, type SecretHelperOptions } from '#adapters/index.js';
 export { CORE_API_VERSION, RegistryError } from '#domain/index.js';
-export { registerMcpCapabilityGroup } from '#engine/index.js';
+export { registerMcpCapabilityGroup, registerProviderSpendNoChargeCertification } from '#engine/index.js';
 export type { McpCapabilityGroup } from '#domain/index.js';
 export type { AdapterModuleManifest, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 export { EffectTargetError, SECRET_STORE_ID_PATTERN } from '#engine/index.js';

@@ -298,17 +298,39 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     expect(surface.describeDiagnostic('brand-new-code:x', 'en')).toEqual({ code: 'brand-new-code', note: false, text: 'brand-new-code:x' });
   });
   it('shows the Map tab in sentences (layers, registry, models, policy, honest memory) and says when no map was read', () => {
-    const tr = surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 160, ascii: false });
+    // Wide enough that the shared model words (with their next step) stay on one line for the containment checks below.
+    const tr = surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 240, ascii: false });
     expect(tr).toContain('Yapılandırma katmanları (sonraki katman öncekileri ezer):');
     expect(tr).toContain('3. proje — /home/owner/projects/deckent-next/.deckent/config.json — belirlediği bölümler: layout, terminal, inspection');
     expect(tr).toContain('coding görevi → coding-default@3 profili (docker)');
     expect(tr).toContain('legacy-shell@1 (host) — hiçbir görev türü kullanmıyor');
-    expect(tr).toContain('✓ subscription / model-alpha-2'); expect(tr).toContain('○ subscription / model-alpha-1 (etkin değil)');
+    const unavailable = `${t('model.invocable.unavailable', { code: 'MODEL_INVOCATION_UNAVAILABLE' }, 'tr')} ${t('model.invocable.unavailableNext', {}, 'tr')}`;
+    expect(tr).toContain(`○ subscription / model-alpha-2 (${unavailable})`);
+    expect(tr).toContain(`○ subscription / model-alpha-1 (${unavailable})`);
+    // A subscription channel (no invocation profile, no readiness reading) says plainly that the provider offers no readiness check.
+    const subscribed = { ...fullSnapshot, installs: fullSnapshot.installs.map((install, index) => index === 0 && 'map' in install && install.map
+      ? { ...install, map: { ...install.map, models: [{ channelId: 'codex-cli-subscription', modelId: 'gpt-6.1-sol', active: false, vendorId: 'openai', billing: 'subscription' }] } }
+      : install) } as typeof fullSnapshot;
+    for (const locale of ['en', 'tr'] as const) {
+      const text = surface.renderMonitorText(subscribed, { locale, width: 200, ascii: false });
+      expect(text).toContain(`○ codex-cli-subscription / gpt-6.1-sol · openai · subscription (${t('model.invocable.subscription', {}, locale)})`);
+    }
     expect(tr).toContain('Politika: 12 izin (operation 5, effect 4, secret 3) · 2 görev ayrılığı kuralı');
     expect(tr).toContain('İzin kipleri: owner@local: standart, ci@local: full-auto');
     expect(tr).toContain('Bellek: yok — MEMORY kartı bekleniyor');
     expect(tr).toContain('Bu kurulum için harita okunmadı.');
     expect(tr).not.toMatch(/[{}]"/);
+  });
+  it('uses the shared availability for model marks and counts, preserves exact versions, and refuses legacy active flags', () => {
+    const install = fullSnapshot.installs[0]!;
+    const models = [{ channelId: 'provider', modelId: 'ready', active: false, scopeId: 'scope',
+      reference: { providerId: 'provider', providerVersion: 2, modelId: 'ready', modelVersion: 3 }, availability: { invocable: true as const, reason: null } },
+      { channelId: 'provider', modelId: 'stale', active: true, availability: { invocable: false as const, reason: { kind: 'stale-activation' as const, code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT' } } },
+      { channelId: 'provider', modelId: 'legacy', active: true }];
+    const text = surface.renderMonitorText({ ...fullSnapshot, installs: [{ ...install, map: { ...install.map!, models } }] }, { locale: 'en', width: 200, ascii: false });
+    expect(text).toContain('✓ provider@2 / ready@3 · scope (Invocable now (connection not probed).)');
+    expect(text).toContain('○ provider / stale'); expect(text).toContain('○ provider / legacy');
+    expect(text).toContain(t('monitor.map.models', { count: 3, active: 1 }, 'en'));
   });
   it('lists Runs newest first with a duration column, unknown admission last; workers newest first with the attempt model', () => {
     const text = surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 200, ascii: false });

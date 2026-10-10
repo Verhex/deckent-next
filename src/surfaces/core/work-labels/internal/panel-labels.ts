@@ -57,6 +57,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       hints: t('policy.mcp.hints', {}, locale), empty: t('policy.mcp.empty', {}, locale) },
     cache: { entry: t('tui.panel.cache.entry', {}, locale), title: t('tui.panel.cache.title', {}, locale), confirm: t('tui.panel.cache.confirm', {}, locale),
       cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },
+    workspace: { entry: t('tui.workspace.entry', {}, locale), title: t('tui.workspace.title', {}, locale), confirm: t('tui.workspace.confirm', {}, locale), empty: t('tui.workspace.empty', {}, locale), note: t('tui.workspace.note', {}, locale), hints: t('tui.workspace.hints', {}, locale) },
     protocol: { entry: t('tui.panel.protocol.entry', {}, locale), title: t('tui.panel.protocol.title', {}, locale), confirm: t('tui.panel.protocol.confirm', {}, locale),
       cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },
   };

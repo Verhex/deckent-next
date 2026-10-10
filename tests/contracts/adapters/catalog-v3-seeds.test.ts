@@ -65,7 +65,8 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
         await expect(admitWorkerModels(task(), 'other', reader, Date.parse('2026-10-02'))).rejects.toMatchObject({ code: 'WORKER_CHANNEL_NOT_ACTIVE' });
       } finally { reader.close(); }
       const map = (await readMonitorLedger(path, { busyTimeoutMs: 1000, maxRuns: 10 })).map;
-      expect(map!.models.find(m => m.modelId === modelId)).toMatchObject({ vendorId: 'openai', billing: 'subscription', active: true });
+      // MODEL-STATE-PARITY: the ledger adapter carries catalog metadata only; composition supplies scoped invocation readiness (never guessed here).
+      expect(map!.models.find(m => m.modelId === modelId)).toMatchObject({ vendorId: 'openai', billing: 'subscription', active: false });
       expect(map!.models.find(m => m.modelId === 'gpt-5.6-terra')!.active).toBe(false);
     } finally { store.close(); }
   });

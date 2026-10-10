@@ -78,3 +78,10 @@ export function subtractProviderSpendExactMinorUnits(leftInput: unknown, rightIn
   const scale = Math.max(left.scale, right.scale);
   return fixed(normalize(left.coefficient * 10n ** BigInt(scale - left.scale) - right.coefficient * 10n ** BigInt(scale - right.scale), scale));
 }
+
+/** Registry safety margin, without binary floating-point rounding. */
+export function providerSpendExactWithSafetyMargin(input: string, percent: number): string {
+  if (!Number.isSafeInteger(percent) || percent < 0) invalid();
+  const value = parseFixed(input);
+  return fixed(normalize(value.coefficient * (100n + BigInt(percent)), value.scale + 2));
+}

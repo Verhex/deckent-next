@@ -9,6 +9,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
+import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED']); const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (DENIED.has(queryFailure(error).code)) return false; throw error; });
 async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions) { try {
       const c = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read'), auth = contextDispatchAuthorization(c, c.document);
@@ -35,11 +36,25 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
       const captured = await prepareMonitorInstall(installed, options.env, identity => granted(async () => {
         const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c).authorizeIdentity('read-output', identity, c.principal); }));
       const reading = captured.reading; const ceiling = installed.max_workers === 'auto' ? Infinity : installed.max_workers;
+      const modelScopes = [...new Set([...reading.scopeIds, ...(installed.service.identity?.scopeId ? [installed.service.identity.scopeId] : []),
+        ...((installed['terminal'] as { scopeId?: string } | undefined)?.scopeId ? [(installed['terminal'] as { scopeId: string }).scopeId] : [])])];
+      const models: import('#engine/index.js').MonitorMap['models'][number][] = [];
+      const modelDiagnostics: string[] = [];
+      for (const scopeId of modelScopes) {
+        try {
+          const state = await inspectConfiguredInvocableModels(target.path, scopeId, options);
+          for (const model of state.models) models.push({ ...reading.map?.models.find(row => row.channelId === model.reference.providerId && row.modelId === model.reference.modelId),
+            channelId: model.reference.providerId, modelId: model.reference.modelId, reference: model.reference,
+            scopeId, active: model.availability.invocable, availability: model.availability });
+        } catch (error) { modelDiagnostics.push(`model-state-unavailable:${queryFailure(error).code}`); }
+      }
       const effective = { ...reading, pools: reading.pools.map(pool => ({ ...pool,
-        capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })) };
+        capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })),
+        ...(reading.map ? { map: { ...reading.map, models } } : {}), diagnostics: [...reading.diagnostics, ...modelDiagnostics] };
       captures.set(target.path, { ...captured, reading: effective }); return effective; },
     readShown: async (target, identities) => { const captured = captures.get(target.path)!, hydrated = await captured.readShown(identities);
-      return { ...hydrated, pools: captured.reading.pools }; },
+      return { ...hydrated, pools: captured.reading.pools, map: captured.reading.map,
+        diagnostics: [...new Set([...hydrated.diagnostics, ...captured.reading.diagnostics])] }; },
     async observeScope(target, scopeId) {
       const workers: WorkerObservation[] = []; let page: WorkerObservationSource | undefined; let after: string | null = null;
       try {

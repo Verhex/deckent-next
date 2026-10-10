@@ -45,14 +45,21 @@ export function extractFirstFailure(stdout: string, stderr: string): string | nu
 const FAILED_TEST_PREFIX = 'verify-failed-test: ';
 export interface MonitorFailedTests { readonly count: number; readonly names: readonly string[]; readonly truncated: boolean }
 /**
- * M3: the failed tests of a failed verification attempt. Pure and display-only: it reads the reporter's structured failure lines from the
- * recorded stdout (untrusted process text, same escape stripping and redaction as the first failure), counts every one and keeps the first
- * `limit` names (`file > test`, bounded). Null when the output carries none. `complete` false (a partial recorded output) marks the list truncated.
+ * M3: the failed tests of a failed verification attempt. Pure and display-only: it reads structured failure lines and TAP failures without
+ * SKIP/TODO directives from recorded stdout (untrusted process text, same escape stripping and redaction as the first failure), counts every
+ * one in output order and keeps the first `limit` names (`file > test` or `tap > name`, bounded), without de-duplication. Null when none;
+ * `complete` false (a partial recorded output) marks the list truncated.
  */
 export function extractFailedTests(stdout: string, limit: number, complete = true): MonitorFailedTests | null {
   let count = 0; const names: string[] = [];
   for (const line of stdout.split('\n')) {
-    if (!line.startsWith(FAILED_TEST_PREFIX)) continue;
+    if (!line.startsWith(FAILED_TEST_PREFIX)) {
+      const tap = /^\s*not ok \d+ - (.+)$/.exec(terminalSafeText(line));
+      if (!tap || /(?:^|\s)#\s*(?:SKIP|TODO)\b/i.test(tap[1]!)) continue;
+      count++; if (names.length >= limit) continue;
+      names.push(bound(`tap > ${clean(tap[1]!)}`));
+      continue;
+    }
     let value: unknown; try { value = JSON.parse(line.slice(FAILED_TEST_PREFIX.length)); } catch { continue; }
     if (!value || typeof value !== 'object') continue;
     const entry = value as { file?: unknown; test?: unknown; reason?: unknown; state?: unknown };

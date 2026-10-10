@@ -679,5 +679,6 @@
   "config.records.field.resource": "Yerleşim kaynağı",
   "config.records.budgetNote": "Bunlar yapılandırılmış bütçelerdir. Mevcut harcama hesabı önceliklidir; etkin sınırını /model → Bütçeyi değiştir ile değiştirin.",
   "config.records.targetNote": "Bu hedefi kaldırmak alt katmanı ya da proje deposunu geri getirir. Yalnız bir Git iş hedefi desteklenir.",
-  "error.CONFIG_RECORD_INVALID": "Seçilen ayar kaydı veya dosya geçersiz. Hiçbir şey yazılmadı."
+  "error.CONFIG_RECORD_INVALID": "Seçilen ayar kaydı veya dosya geçersiz. Hiçbir şey yazılmadı.",
+  "mcp.tool.controlRun": "Mevcut Run cancel/reserve policy yetkisiyle yeni denemeleri neden belirterek beklet veya operatör tutmasındaki Run’ı sürdür. Çalışan işçilerin custody kaydı korunur. MCP insan cevabı veya kabul kararı veremez. Sabit commandId ve geçerli expectedRevision gönder; belirsiz yanıtta aynı komutu kullan."
 }

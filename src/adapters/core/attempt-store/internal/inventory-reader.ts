@@ -10,13 +10,14 @@ import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryS
 import { SqliteDispatchJournal } from './dispatch.js';
 import { SqliteWorkerEventLogs } from './worker-events.js';
 import { SqliteRunProgression } from './progression.js';
-
+import { SqliteEffectJournal } from './effect.js';
 export type SqliteInventoryOptions = Pick<SqliteLedgerOptions, 'busyTimeoutMs'>;
 /** Existing ledger only: no creation, migrations, journal-mode changes or write methods.
  * WAL readers may use SQLite shared-memory bookkeeping. Path custody belongs to composition.
  */
 export class SqliteInventoryReader implements DispatchInventoryStore {
   private readonly db: DatabaseSync;
+  async loadEffect(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffect(scopeId, commandId); }
   constructor(path: string, options: SqliteInventoryOptions) {
     const parsed = sqliteLedgerOptionsSchema.unwrap().pick({ busyTimeoutMs: true }).strict().safeParse(options);
     if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
@@ -83,7 +84,6 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   }
   close(): void { this.db.close(); }
 }
-
 function readFailure(error: unknown): unknown {
   const mapped = sqliteFailure(error);
   if (mapped !== error || error instanceof AttemptStoreError) return mapped;

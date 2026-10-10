@@ -108,7 +108,9 @@ describe('the model cannot reach a config write', () => {
       'src/surfaces/core/cli-terminal/internal/cache-panel.ts', // CACHE-SLICE1 (34270fae): the terminal cache-choice window writes profiles through the same writer
       'src/surfaces/core/cli-terminal/internal/model-panel.ts',
       'src/surfaces/core/cli-terminal/internal/protocol-panel.ts', // OPENAI-RESPONSES: the terminal /model protocol-migration window writes profiles through the same governed writer (as cache-panel)
-      'src/surfaces/core/cli-terminal/internal/terminal.ts', 'src/surfaces/core/config/internal/command.ts', 'src/surfaces/core/config/internal/panel.ts',
+      'src/surfaces/core/cli-terminal/internal/terminal.ts',
+      'src/surfaces/core/cli-terminal/internal/workspace-panel.ts', // W9-PROVIDER-ERRORS N13: the terminal /model workspace window writes the selected workspace through the same governed writer
+      'src/surfaces/core/config/internal/command.ts', 'src/surfaces/core/config/internal/panel.ts',
       'src/surfaces/core/config/internal/records.ts', 'src/surfaces/core/monitor/internal/command.ts']); // records.ts: the /config window's selection-only record editors (8ce20e6f)
     for (const path of writers) expect(path).not.toMatch(/agent-turn|agent-tool|\/mcp\//);
     // The governed models.connect route is not reachable from the agent loop either: no agent unit names it.

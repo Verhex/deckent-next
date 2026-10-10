@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
 import asset from './registry.json' with { type: 'json' };
 import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/index.js';
-
 /**
  * The connection kinds the terminal `/provider` window offers (T4 PROVIDER-CONNECT): where each kind is reached, which free request proves
  * a key (a model list or the key's own record — never a billed call), how the key is sent, and the secret-store name it is kept under. Vendor
@@ -43,6 +42,9 @@ const kindSchema = z.object({
     priceRequired: z.boolean().default(false),
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
     dialect: openAiChatDialectSchema.optional(),
+    rejectionCodes: z.record(z.string(), z.enum(['spend-limit', 'rate-limit'])).optional(),
+    workspaceList: z.object({ path: z.string().startsWith('/'), pageSize: positiveLimit(), maxPages: positiveLimit(), maxResponseBytes: positiveLimit(),
+      requiredError: z.object({ type: z.string().min(1), messagePrefix: z.string().min(1) }).strict() }).strict().optional(),
     /** Per-model wire selection; endpoints and effort choices are sourced registry data, never model-name branches. */
     protocolRoutes: z.array(z.object({ modelId: z.string().min(1), path: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
       dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
@@ -70,7 +72,6 @@ const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.st
   profileDefaults: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, timeoutMs: positive, maxInFlight: positive,
     maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u), deliveryHeadroomBytes: positive }).strict(),
   kinds: z.array(kindSchema).min(1).readonly() }).strict().readonly();
-
 export type ProviderConnectKind = z.infer<typeof kindSchema>;
 export type ProviderConnectRegistry = z.infer<typeof registrySchema>;
 export const PROVIDER_CONNECT_REGISTRY_VERSION = 2;
@@ -84,11 +85,9 @@ export const PROVIDER_CONNECT_LEGACY_KEYS = registry.legacyKeys;
 export const PROVIDER_CONNECT_REGISTRY: ProviderConnectRegistry = registry;
 /** A registry document parsed by the same schema (test and Enterprise overlays use it; a malformed one throws). */
 export function parseProviderConnectRegistry(input: unknown): ProviderConnectRegistry { return registrySchema.parse(input); }
-
 export function providerConnectKind(id: string): ProviderConnectKind | null {
   return PROVIDER_CONNECT_KINDS.find(kind => kind.id === id) ?? null;
 }
-
 /**
  * The secret-store name of one connection's key (Jev da5312fb): a vendor row's own fixed name, or for the generic row the prefix plus the chosen
  * endpoint's host (and a non-default port), upper-cased with every other character as `_` — e.g. `https://llm.example.com:8443/v1` →
@@ -106,7 +105,6 @@ export function providerConnectSecretName(kind: ProviderConnectKind, endpoint: s
   const name = `${derive.prefix}${host}`.slice(0, 128).replace(/_+$/u, '');
   return SECRET_NAME.test(name) && name.length > derive.prefix.length ? name : null;
 }
-
 export type ProviderEndpointRefusal = 'url-invalid' | 'url-credentials' | 'url-query' | 'url-insecure-remote' | 'url-scheme-refused';
 /**
  * The endpoint rule of a typed base URL: https anywhere, plain http only to literal 127.0.0.1 / [::1];

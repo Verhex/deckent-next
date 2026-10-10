@@ -9,10 +9,13 @@ export const integrationCommandSchema = z.object({ schemaVersion: z.literal(1), 
   identity: attemptIdentitySchema, replacesCommandId: identitySchema.optional(), proposal: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{20}$/) }).strict().readonly();
 export type IntegrationCommand = z.infer<typeof integrationCommandSchema>;
 export interface IntegrationObservation { readonly digest: string; readonly source: string; readonly head: string }
-export const integrationManifestSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('integration-candidate'),
+const manifestFields = { kind: z.literal('integration-candidate'),
   command: integrationCommandSchema, patch: artifactReceiptSchema, observation: z.string().regex(/^[a-f0-9]{64}$/),
   workspace: z.string().min(1), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  application: z.literal('candidate-only') }).strict().readonly();
+  application: z.literal('candidate-only') };
+const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+export const integrationManifestSchema = z.discriminatedUnion('schemaVersion', [z.object({ schemaVersion: z.literal(1), ...manifestFields }).strict(),
+  z.object({ schemaVersion: z.literal(2), ...manifestFields, baseCommit: oid, effectiveBaseCommit: oid }).strict()]).readonly();
 export type IntegrationManifest = z.infer<typeof integrationManifestSchema>;
 export const integrationIntentSchema = z.object({ schemaVersion: z.literal(1), command: integrationCommandSchema,
   patch: artifactReceiptSchema, observation: z.string().regex(/^[a-f0-9]{64}$/),

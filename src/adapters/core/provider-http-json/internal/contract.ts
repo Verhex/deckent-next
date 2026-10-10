@@ -21,7 +21,7 @@ export type NativeJsonHttpLimits = Readonly<{ requestMaxBytes: number; responseM
 
 const positive = z.number().int().positive().safe();
 const credentialReference = z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/);
-const certificate = z.string().min(1).max(65_536).refine(value => {
+export const nativeJsonHttpCertificateSchema = z.string().min(1).max(65_536).refine(value => {
   if ((value.match(/-----BEGIN CERTIFICATE-----/g) ?? []).length !== 1
     || (value.match(/-----END CERTIFICATE-----/g) ?? []).length !== 1 || value.includes('PRIVATE KEY')) return false;
   try {
@@ -40,7 +40,7 @@ const definitionSchema = z.object({ endpoint: z.string().min(1),
   authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
     z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict(),
     z.object({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: credentialReference }).strict()]),
-  tls: z.object({ caPem: certificate }).strict().optional() }).strict();
+  tls: z.object({ caPem: nativeJsonHttpCertificateSchema }).strict().optional() }).strict();
 const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: positive,
   timeoutMs: positive.max(2_147_483_647) }).strict();
 export const nativeJsonHttpAdapterSchema = z.object({ id: identitySchema, version: counterSchema.positive() }).strict();

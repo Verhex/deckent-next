@@ -83,16 +83,16 @@ export class RunProgressionTurn {
         throwIfFailed();
         let run = await this.read(query);
         throwIfFailed();
-        if (run.cancelRequested || run.state.kind !== 'running') break;
+        if (run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !['operator-hold', 'needs-input'].includes(run.state.reason))) break;
         // One serial acceptance pass per completion; concurrently finishing workers may change revision.
         // A typed changed outcome is deferred, never retried in a tight loop.
         await this.evaluateReady(query, signal);
         run = await this.read(query);
         throwIfFailed();
-        if (signal.aborted || run.cancelRequested || run.state.kind !== 'running') break;
+        if (signal.aborted || run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !['operator-hold', 'needs-input'].includes(run.state.reason))) break;
         startReserved(run);
         // Cooperative yield: stop taking new reservations, but drain existing custody before returning.
-        if ((this.maxReservations === undefined || reservations < this.maxReservations)
+        if (run.state.kind === 'running' && (this.maxReservations === undefined || reservations < this.maxReservations)
           && running.size < this.concurrency && run.progress.some(task => task.phase === 'pending')) {
           reservations++;
           await this.operations.reserve({ ...query, commandId: this.runtime.commandId(), expectedRevision: run.revision });

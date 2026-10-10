@@ -7,3 +7,4 @@ export { loadPeerInvocationContext } from './internal/context.js';
 export { recoverConfiguredModelCancellations, releaseSettledModelSlots } from './internal/recover-cancellation.js';
 export { assessConfiguredModelInvocationDelivery, configuredModelInvocationDeliverySurfaces } from './internal/delivery-audit.js';
 export type { ModelInvocationDeliveryFinding, ModelInvocationDeliverySurface } from './internal/delivery-audit.js';
+export { inspectConfiguredInvocableModels } from './internal/invocable-now.js';

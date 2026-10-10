@@ -5,7 +5,7 @@ import { t, type Locale } from '#platform/index.js';
 import type { ConfigFieldView } from '#engine/index.js';
 import { configValueWord } from './render.js';
 
-export type ConfigValueChoice = Readonly<{ id: string; label: string; value: unknown; detail?: string }>;
+export type ConfigValueChoice = Readonly<{ id: string; label: string; value: unknown; detail?: string; blocked?: string }>;
 /** Read-only, principal-scoped reference discovery. Implementations belong to trusted composition. */
 export interface ConfigChoiceSourcePort {
   list(source: ConfigChoiceSource, keyPath: string, context?: Readonly<{ path: string }>): Promise<readonly ConfigValueChoice[]>;

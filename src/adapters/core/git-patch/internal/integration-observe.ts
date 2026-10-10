@@ -7,6 +7,7 @@ import { fingerprintGitSource, type GitWorkspaceOptions } from '#adapters/core/g
 import { patchFile, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
 import { gitFailure, SnapshotBudget } from './snapshot.js';
 import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
+import { assertIntegrationBase } from './integration-base.js';
 const exec = promisify(execFile);
 function missing(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'; }
 /** Read only the affected paths: unrelated source WIP and node_modules are not scanned. */
@@ -46,23 +47,25 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
   const git = async (args: string[]) => {
     budget.time();
     try { return (await exec(options.gitExecutable, localGitArgs(source, args),
-      { env: GIT_LOCAL_ENV, timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer: options.outputBytes, encoding: 'utf8' })).stdout; }
-    catch (error) { throw gitFailure(error); }
+      { env: { ...GIT_LOCAL_ENV, GIT_GRAFT_FILE: '/dev/null' }, timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer: options.outputBytes, encoding: 'utf8' })).stdout; }
+    catch (error) {
+      if (args[0] === 'merge-base' && (error as { code?: unknown }).code === 1) throw new WorkspacePatchError('PATCH_BASE_ADVANCED');
+      throw gitFailure(error);
+    }
   };
   const repository = (await git(['rev-parse', '--show-toplevel'])).trim();
   if (options.baseRef !== undefined) {
-    // Work target (WORK-TARGETS): the precondition is the named base branch, never the target checkout. Nothing is applied to that
-    // checkout (ref-only delivery), the candidate is a fresh clone of the base and every `before` is checked against the base listing,
-    // so its index and files are not read; a moved base branch is the typed PATCH_BASE_ADVANCED before any other comparison.
+    // Ref-only delivery checks the named branch and its touched tree identities, never the detached checkout or index.
     const tip = (await git(['rev-parse', '--verify', `${options.baseRef}^{commit}`])).trim();
     if (source !== repository || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
       throw new WorkspacePatchError('PATCH_CONFLICT');
-    if (tip !== patch.baseCommit) throw new WorkspacePatchError('PATCH_BASE_ADVANCED');
+    await assertIntegrationBase(git, patch, tip, budget);
     return Object.freeze({ source, head: tip, digest: patchDigest(JSON.stringify({ source, baseRef: options.baseRef, head: tip })) });
   }
   const head = (await git(['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
-  if (source !== repository || head !== patch.baseCommit || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
+  if (source !== repository || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
     throw new WorkspacePatchError('PATCH_CONFLICT');
+  await assertIntegrationBase(git, patch, head, budget);
   const index = new Map<string, string>();
   for (const entry of (await git(['ls-files', '--stage', '-z'])).split('\0').filter(Boolean)) {
     budget.time();

@@ -50,6 +50,7 @@ export const CLI_CATALOG = [
     action('inspect', 'work', 'cli.help.action.run.inspect', 'cli.help.run'),
     action('cancel', 'work', 'cli.help.action.run.cancel', 'cli.help.run'),
     action('close', 'work', 'cli.help.action.close', 'cli.help.run'),
+    action('hold', 'work', 'cli.help.action.run.hold', 'cli.help.run'),
     action('resume', 'work', 'cli.help.action.run.resume', 'cli.help.run'),
   ] },
   { name: 'task', group: 'work', summary: 'cli.help.summary.task', detail: 'cli.help.task', children: [
@@ -112,6 +113,8 @@ export const CLI_CATALOG = [
   { name: 'identity', group: 'setup', summary: 'identity.summary', detail: 'identity.help', children: [
     action('profiles', 'setup', 'identity.profilesSummary', 'identity.help'),
     action('preview', 'setup', 'identity.previewSummary', 'identity.help'),
+    action('choices', 'setup', 'identity.choicesSummary', 'identity.distributionHelp'),
+    action('distribute', 'setup', 'identity.distributeSummary', 'identity.distributionHelp'),
   ] },
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', children: [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', 'independent'),

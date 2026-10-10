@@ -5,4 +5,6 @@ export { PROVIDER_PROBE_OUTCOMES, ProviderProbeError, probeProviderConnection, p
 export { ProviderConnectError, connectionAdapter, providerConnectFamily, providerConnectModelPriced, readProviderConnectSeed, type ConnectionAdapter } from './internal/profile.js';
 export { providerProfileCacheOffer, type ProviderProfileCacheOffer } from './internal/cache.js';
 export { providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from './internal/protocol.js';
+export { providerRequestDiagnosis } from './internal/diagnosis.js';
+export { listProviderWorkspaces, providerProfileWorkspaceOffer, type ProviderWorkspace } from './internal/workspaces.js';
 export { discoverProviderModels, discoveredProviderCatalog, providerDiscoveryChannel, ProviderModelListError } from './internal/discovery.js';

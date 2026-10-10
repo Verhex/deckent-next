@@ -1,6 +1,8 @@
 export { AGENT_TURN_MECHANICAL_COMPACTION_NOTE, AGENT_TURN_NO_PROGRESS_NOTE, agentTurnNoProgressNote, agentTurnTruncatedCallResult, agentTurnTruncatedCallsNote, runAgentTurn,
   agentToolArgumentsDigest } from './internal/loop.js';
 export { projectModelIngressField } from './internal/model-ingress-project.js';
+export { checkModelIngressArguments, projectModelIngressSchema } from './internal/model-ingress-json.js';
+export type { ModelIngressRecorder, ModelIngressArgumentsResult } from './internal/model-ingress-json.js';
 export { agentTurnApproverNote, type AgentToolOwnerAnswer } from './internal/approver-note.js';
 export type { ModelIngressDisposition, ModelIngressProjection } from './internal/model-ingress-project.js';
 export type { AgentRoundOutcome, AgentTurnPorts, AgentTurnInput, AgentTurnResult } from './internal/loop.js';

@@ -13,9 +13,14 @@ export function createOpenRouterTariffCache(acquire: OpenRouterTariffAcquire) {
   const entries = new Map<string, OpenRouterMetadataObservation>(), inflight = new Map<string, Promise<OpenRouterMetadataObservation>>();
   const fresh = (observation: OpenRouterMetadataObservation, nowMs: number) =>
     Number.isSafeInteger(nowMs) && nowMs >= observation.observedAtMs && nowMs < observation.tariff.selection.expiresAtMs;
+  const keyOf = (options: OpenRouterMetadataFetchOptions) => JSON.stringify([options.endpoint, options.modelId, options.endpointTag, options.maxAgeMs, options.maxResponseBytes, options.timeoutMs, options.caPem ?? null]);
   return Object.freeze({
+    /** Observation only: a miss never fetches, joins an in-flight effect or mutates the cache. */
+    peek(options: OpenRouterMetadataFetchOptions, nowMs: number): OpenRouterMetadataObservation | null {
+      const hit = entries.get(keyOf(options)); return hit && fresh(hit, nowMs) ? hit : null;
+    },
     async get(options: OpenRouterMetadataFetchOptions, now: () => number, signal?: AbortSignal): Promise<OpenRouterMetadataObservation> {
-      const key = JSON.stringify([options.endpoint, options.modelId, options.endpointTag, options.maxAgeMs, options.maxResponseBytes, options.timeoutMs, options.caPem ?? null]);
+      const key = keyOf(options);
       const hit = entries.get(key);
       if (hit && fresh(hit, now())) return hit;
       entries.delete(key);

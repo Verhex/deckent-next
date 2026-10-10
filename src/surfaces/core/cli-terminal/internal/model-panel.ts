@@ -1,16 +1,17 @@
-import { loadConfig, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import { providerDisplayName } from './provider-label.js';
+import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 
 // The config surface reaches the terminal renderer; load it only when a default-model write happens (startup graph stays light).
 const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/core/config/index.js').terminalConfigWrite>) =>
   (await import('#surfaces/core/config/index.js')).terminalConfigWrite(...args);
 
 type Host = Pick<TerminalLaunchContext, 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
-  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
+  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
 /** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
 function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
   switch (source) {
@@ -20,27 +21,13 @@ function winnerNote(source: string | null | undefined, model: string, locale: Lo
     default: return null;
   }
 }
-type Profile = Readonly<{ reference: ModelReference; credentialRef: string | null }>;
-
 const sameReference = (left: ModelReference, right: ModelReference) => left.providerId === right.providerId && left.providerVersion === right.providerVersion
   && left.modelId === right.modelId && left.modelVersion === right.modelVersion;
-function profilesOf(config: Record<string, unknown>, scopeId: string): readonly Profile[] {
-  const profiles = (config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [];
-  return profiles.flatMap(raw => {
-    const value = raw as { scopeId?: unknown; reference?: ModelReference; adapter?: { definition?: { authentication?: { credentialRef?: unknown } } } };
-    const ref = value.adapter?.definition?.authentication?.credentialRef;
-    return value.scopeId === scopeId && value.reference ? [{ reference: value.reference, credentialRef: typeof ref === 'string' ? ref : null }] : [];
-  });
-}
-/** Whether this scope has a provider spending budget (the typed refusal without one: PROVIDER_SPEND_UNAVAILABLE): one declared in configuration,
- * or (stage 1) the scope's ledger account a governed create or an earlier call opened, read through the service. An unreadable account counts as none. */
-export async function scopeBudgeted(config: Record<string, unknown>, scopeId: string, read: { root: string; options: ConfigLoadOptions;
-  inspect?: TerminalLaunchContext['inspectProviderSpendAccount'] }): Promise<boolean> {
-  if (((config['provider_spending'] as { budgets?: readonly { scopeId?: unknown }[] } | undefined)?.budgets ?? []).some(budget => budget.scopeId === scopeId)) return true;
-  return read.inspect ? (await read.inspect(read.root, { schemaVersion: 1, scopeId, current: true }, read.options).catch(() => null))?.checkpoint != null : false;
-}
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 function readinessReason(error: unknown, locale: Locale): string {
+  const params = (error as { params?: { requested?: unknown; currency?: unknown } })?.params;
+  if (errorCode(error) === 'PROVIDER_SPEND_EXHAUSTED' && typeof params?.requested === 'number' && Number.isSafeInteger(params.requested)
+    && params.requested >= 0 && typeof params.currency === 'string' && /^[A-Z]{3}$/u.test(params.currency)) return t('tui.model.reason.reservation', { amount: (params.requested / 100).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 }), currency: params.currency }, locale);
   const code = errorCode(error);
   if (code === 'MODEL_INVOCATION_REASONING_UNSUPPORTED') return t('tui.model.reason.reasoningOff', {}, locale);
   if (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN' || code === 'PROVIDER_SPEND_UNAVAILABLE')
@@ -51,13 +38,7 @@ function readinessReason(error: unknown, locale: Locale): string {
   return t('tui.model.reason.notRunnable', { code }, locale);
 }
 
-/**
- * The terminal `/model` window's source (T4 MODEL-SWITCH). It lists the models the provider catalog declares (exact references only) with what
- * stands between each and this scope's next turn, in the order the service checks them: an invocation profile in this scope (the connection),
- * the key that profile names in the secret store, and the model's activation. A model that fails one is listed with that reason and the exact
- * governed command, never pickable. Discovered models are never added or activated from here: the catalog changes only on its governed path.
- * Nothing here is a reachability probe; "ready" means every recorded precondition holds. The window names the setting that chose the model in effect.
- */
+/** The /model window renders the shared scoped invocation read model; picking still rechecks through governed preparation. */
 export function modelPanelSource(root: string, scopeId: string, host: Host, options: ConfigLoadOptions, locale: Locale): ModelPanelSource {
   const defaultBlocked = () => host.configApplication && host.resolveConfigPrincipal ? null : t('tui.model.defaultReadOnly', {}, locale);
   return {
@@ -79,12 +60,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       if (!declared || declared.status !== 'declared' || declared.catalog.providers.every(provider => provider.models.length === 0)) {
         return { title, choices: [], notes: [t('tui.model.noneDeclared', {}, locale)], defaultBlocked: defaultBlocked() };
       }
-      const config = await loadConfig(root, options) as Record<string, unknown>, profiles = profilesOf(config, scopeId);
-      // (a) owner 2026-10-08: every model call reserves against this scope's budget; without one each turn is refused PROVIDER_SPEND_UNAVAILABLE.
-      const budgeted = await scopeBudgeted(config, scopeId, { root, options, inspect: host.inspectProviderSpendAccount });
-      if (!budgeted) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
-      let names: readonly string[] | null = null;
-      if (host.listSecretNames) { try { names = (await host.listSecretNames(root, options)).names; } catch { names = null; } }
+      const reading = await host.inspectInvocableModels?.(root, scopeId, options);
+      if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
       const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options).catch(() => null) : null;
       // Display names from the ledger catalog when it knows the model (best effort; the exact reference is always shown).
       const display = new Map<string, string>();
@@ -99,36 +76,31 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
           }
         } catch { /* names only; the reference stays the text */ }
       }
+      const reservationBlocked = new Set<string>();
       const choices = await Promise.all(declared.catalog.providers.flatMap(provider => provider.models.map(async (model): Promise<ModelPanelChoice> => {
         const reference: ModelReference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
-        const profile = profiles.find(item => sameReference(item.reference, reference));
-        let blocked: string | null = null, command: string | null = null;
-        if (!budgeted) blocked = t('tui.model.reason.noBudget', {}, locale);
-        else if (!profile) blocked = t('tui.model.reason.noProfile', {}, locale);
-        else if (profile.credentialRef && names !== null && !names.includes(profile.credentialRef)) blocked = t('tui.model.reason.keyMissing', { name: profile.credentialRef }, locale);
-        else if (host.inspectModelActivation) {
-          try {
-            const activation = (await host.inspectModelActivation(root, { schemaVersion: 1, scopeId, reference }, options)).activation;
-            const binding = host.inspectModelBinding ? await host.inspectModelBinding(root, reference, options).catch(() => null) : null;
-            if (activation?.state !== 'active' || (!binding && !host.inspectModelReadiness)
-              || (binding && (binding.status !== 'declared' || activation.binding.digest !== binding.binding.digest
-                || (activation.catalogRevision !== binding.catalogRevision && !host.prepareModelSwitch)))) {
-              blocked = t('tui.model.reason.inactive', {}, locale);
-              command = t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
-                revision: activation?.revision ?? 0, digest: binding?.binding?.digest ?? '<digest>', catalog: binding?.catalogRevision ?? '<revision>' }, locale);
-            }
-          } catch (error) { blocked = t('tui.model.reason.activationUnread', { code: errorCode(error) }, locale); }
-        }
-        if (!blocked && host.inspectModelReadiness) {
-          try { await host.inspectModelReadiness(root, scopeId, reference, options); }
-          catch (error) { blocked = readinessReason(error, locale); }
-        }
-        return { reference, label: display.get(exact) ?? model.id, detail: blocked ? t('tui.model.state.blocked', {}, locale) : t('tui.model.state.ready', {}, locale),
+        const entry = reading?.models.find(entry => sameReference(entry.reference, reference));
+        const state = entry?.availability
+          ?? { invocable: false as const, reason: { kind: 'unavailable' as const, code: 'MODEL_INVOCATION_UNAVAILABLE' } };
+        const blocked = state.invocable ? null : modelInvocabilityText(state, locale);
+        if (!state.invocable && state.reason.code === 'PROVIDER_SPEND_EXHAUSTED') reservationBlocked.add(exact);
+        const command = entry && !state.invocable && (state.reason.kind === 'not-carried' || state.reason.kind === 'stale-activation')
+          ? t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
+            revision: state.reason.activationRevision ?? 0, digest: entry.bindingDigest, catalog: entry.catalogRevision }, locale) : null;
+        return { reference, label: display.get(exact) ?? model.id, detail: modelInvocabilityText(state, locale),
           providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
       })));
+      // A viable alternative passed all the same readiness checks in this snapshot; no price or cap guess.
+      const alternative = reading ? choices.find(choice => choice.blocked === null) : undefined;
+      for (const choice of choices) {
+        if (reservationBlocked.has(`${choice.reference.providerId}@${choice.reference.providerVersion}/${choice.reference.modelId}@${choice.reference.modelVersion}`)) {
+          (choice as { command: string | null }).command = alternative ? t('tui.model.budgetAlternative', { model: alternative.label, provider: alternative.providerLabel ?? alternative.group }, locale)
+            : t('tui.model.budgetNoAlternative', {}, locale);
+        }
+      }
       const inEffect = plan?.reference ? choices.find(choice => sameReference(choice.reference, plan.reference!)) : undefined;
       const note = winnerNote(plan?.source, inEffect?.label ?? plan?.reference?.modelId ?? '-', locale);
       return { title, choices, notes: [...notes, ...(note ? [note] : [])], defaultBlocked: defaultBlocked() };

@@ -51,6 +51,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
     ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
       ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice, sessionModel.current?.reasoning?.()) } : {}),
       ...(model.budget ? { budget: model.budget } : {}), ...(model.cache ? { cache: model.cache } : {}),
+      ...(model.protocol ? { protocol: model.protocol } : {}), ...(model.workspace ? { workspace: model.workspace } : {}),
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
       ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice, fresh?: boolean) => sessionModel.current?.pin(choice, fresh) } } : {}) };

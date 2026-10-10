@@ -338,7 +338,13 @@
         "src/composition/core/decision",
         "src/composition/core/root",
         "src/composition/core/model-connect",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/engine/core/agent-turn",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/domain/core/audit",
+        "src/platform/core/clock"
       ],
       "plan": "SURFACES"
     },
@@ -400,6 +406,7 @@
     },
     "src/composition/core/root": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/adapters/core/contract",
         "src/platform/core/config",
         "src/engine/core/approval"
@@ -591,7 +598,8 @@
         "src/domain/core/attempt",
         "src/domain/core/primitives",
         "src/domain/core/task-graph",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event"
       ],
       "plan": "CONTRACT"
     },
@@ -608,7 +616,9 @@
     "src/domain/core/task-graph": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/attempt",
+        "src/domain/core/worker-event"
       ],
       "plan": "CONTRACT"
     },
@@ -1141,7 +1151,8 @@
         "src/surfaces/core/terminal-picker",
         "src/domain/core/model-activation",
         "src/engine/core/project-instructions",
-        "src/surfaces/core/project-instructions"
+        "src/surfaces/core/project-instructions",
+        "src/surfaces/core/model-invocability"
       ],
       "plan": "SURFACES"
     },
@@ -1168,7 +1179,9 @@
         "src/platform/core/i18n",
         "src/engine/core/toolchain-currency",
         "src/domain/core/effect",
-        "src/engine/core/decision"
+        "src/engine/core/decision",
+        "src/engine/core/agent-turn",
+        "src/domain/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -1274,7 +1287,13 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/provider-catalog",
         "src/platform/core/config",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/domain/core/model-invocation",
+        "src/engine/core/policy",
+        "src/adapters/core/provider-connect",
+        "src/composition/core/config",
+        "src/composition/core/scoped-request",
+        "src/engine/core/model-invocation"
       ],
       "plan": "PROVIDERS"
     },
@@ -1420,7 +1439,8 @@
         "src/engine/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/provider-spend",
-        "src/domain/core/agent-tool"
+        "src/domain/core/agent-tool",
+        "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
     },
@@ -1500,12 +1520,14 @@
         "src/composition/core/root",
         "src/adapters/core/mcp-import",
         "src/composition/core/approvals",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/adapters/core/provider-connect"
       ],
       "plan": "SURFACES"
     },
     "src/composition/core/model-invocation": {
       "dependencies": [
+        "src/adapters/core/provider-connect",
         "src/adapters/core/local-keyring",
         "src/adapters/core/contract",
         "src/adapters/core/local-runtime-socket",
@@ -1531,7 +1553,8 @@
         "src/engine/core/runtime",
         "src/adapters/core/mcp-transport",
         "src/adapters/core/provider-anthropic-messages",
-        "src/adapters/core/provider-decision-http"
+        "src/adapters/core/provider-decision-http",
+        "src/adapters/core/workspace-read"
       ],
       "plan": "PROVIDERS"
     },
@@ -1550,6 +1573,8 @@
     },
     "src/engine/core/provider-spend": {
       "dependencies": [
+        "src/domain/core/adapter-registry",
+        "src/platform/core/validate",
         "src/domain/core/primitives",
         "src/domain/core/provider-spend",
         "src/domain/core/model-invocation",
@@ -2295,7 +2320,8 @@
         "src/engine/core/approval",
         "src/composition/core/toolchains",
         "src/engine/core/config",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/model-invocation"
       ],
       "plan": "MONITOR"
     },
@@ -2316,7 +2342,8 @@
         "src/surfaces/core/config",
         "src/engine/core/config",
         "src/engine/core/runs",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/model-invocability"
       ],
       "plan": "MONITOR"
     },
@@ -2370,7 +2397,6 @@
         "src/platform/core/i18n",
         "src/platform/core/clock",
         "src/composition/core/policy",
-        "src/composition/core/model-activation",
         "src/engine/core/identity-profile",
         "src/engine/core/policy",
         "src/domain/core/policy",
@@ -2380,7 +2406,9 @@
         "src/platform/core/managed-files",
         "src/domain/core/provider-catalog",
         "src/adapters/core/contract",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/composition/core/model-invocation",
+        "src/surfaces/core/model-invocability"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2517,7 +2545,8 @@
     "src/domain/core/identity-profile": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/domain/core/effect"
       ],
       "plan": "CONTRACT"
     },
@@ -2526,7 +2555,10 @@
         "src/domain/core/identity-profile",
         "src/domain/core/principal",
         "src/domain/core/policy",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/engine/core/approval"
       ],
       "plan": "INSTALLATION"
     },
@@ -2542,7 +2574,12 @@
         "src/composition/core/policy",
         "src/composition/core/scoped-request",
         "src/composition/core/query-errors",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/adapters/core/attempt-store",
+        "src/platform/core/managed-files",
+        "src/platform/core/integrity",
+        "src/platform/core/i18n",
+        "src/composition/core/approvals"
       ],
       "plan": "INSTALLATION"
     },
@@ -2660,6 +2697,13 @@
         "src/platform/core/managed-files"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/surfaces/core/model-invocability": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {
@@ -2782,6 +2826,7 @@
       "docs/glossary.md",
       "docs/glossary.tr.md",
       "docs/architecture-overview.md",
+      "docs/secret-helpers.md",
       "docs/architecture-overview.tr.md",
       "CODE_OF_CONDUCT.md",
       "SECURITY.md",
@@ -2884,6 +2929,12 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/engine/core/secret-store/internal/helper.ts",
+        "symbol": "definition/timeoutMs",
+        "values": [2147483647],
+        "reason": "Node setTimeout signed 32-bit delay ceiling: larger values clamp to 1 ms. Protocol validation rejects overflow rather than changing the registered deadline; not a mutable helper timeout default. SECRET-HELPER v1, official Node timers documentation, 2026-10-10."
+      },
       {
         "file": "src/platform/core/clock/internal/clock.ts",
         "symbol": "MAX_WALL_SKEW_MS",

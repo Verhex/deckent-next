@@ -38,7 +38,7 @@ export type ConfigPanelLayer = 'project' | 'global';
 export type ConfigPanelField = Readonly<{
   key: string; section: string; description: string; value: string; source: string; apply: string; expected: string;
   /** Values the schema enumerates (enum, boolean, constants); empty when the source is unavailable or the document needs a record editor. */
-  choices: readonly Readonly<{ id: string; label: string; value: unknown; detail?: string }>[];
+  choices: readonly Readonly<{ id: string; label: string; value: unknown; detail?: string; blocked?: string }>[];
   /** A typed entry is offered (validated by the key's schema before anything is sent). */
   free: boolean;
   records?: boolean;
@@ -144,6 +144,7 @@ export interface ModelPanelSource {
   readonly cache?: CachePanelPort;
   /** OpenAI wire protocol migration, with a mandatory preview and existing governed writer. */
   readonly protocol?: CachePanelPort;
+  readonly workspace?: WorkspacePanelPort;
   /** CACHE-SLICE1: the conversation's measured context when it is at or above the registry threshold (null: below it or not measured yet); a
    * model switch then asks "new context / continue" before it pins. */
   largeContext?(): number | null;
@@ -163,6 +164,11 @@ export interface ModelPanelPort extends ModelPanelSource {
 }
 /** CACHE-SLICE1: what the cache migration would change, in words (the host builds them from each profile's own tariff), or nothing to offer. */
 export type CachePanelView = Readonly<{ detail: string; lines: readonly PanelLine[] }>;
+export interface WorkspacePanelPort {
+  inspect(): Promise<readonly Readonly<{ id: string; label: string; detail: string }>[]>;
+  list(profileId: string): Promise<readonly Readonly<{ id: string; name: string }>[]>;
+  apply(profileId: string, workspaceId: string): Promise<ConfigPanelOutcome>;
+}
 export interface CachePanelPort {
   inspect(): Promise<CachePanelView | null>;
   /** The governed `/config` writes (policy, approval, audit), read fresh at the answer; the outcome's lines are the one summary. */
@@ -203,7 +209,8 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
   pendingNote?: string;
   /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
   legacy?: true }>;
-export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[] }>;
+export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[];
+  invocableModels?: readonly import('#engine/index.js').InvocableModel[] }>;
 export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
 export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[] }>;
@@ -284,6 +291,7 @@ export interface PanelLabels {
   readonly budget: BudgetPanelLabels;
   readonly cache: CachePanelLabels;
   readonly protocol?: CachePanelLabels;
+  readonly workspace?: Readonly<{ entry: string; title: string; confirm: string; empty: string; note: string; hints: string }>;
 }
 export interface PanelPorts {
   readonly policy?: PolicyPanelPort;

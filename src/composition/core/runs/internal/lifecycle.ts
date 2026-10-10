@@ -16,6 +16,7 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
       const integrity = maintain ? null : await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
       const policy = new DispatchPolicyAuthorization({ async load() { return document; } });
       const app = new RunLifecycleApplication({ loadRun: (scope, run) => store.loadRun(scope, run), hasTaskEvaluation: (identity, revision) => store.hasTaskEvaluation(identity, revision),
+        loadRunReceipt: (scope, commandId) => store.loadRunReceipt(scope, commandId),
         async commitRunLifecycle(write, audit) {
           const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
           try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }

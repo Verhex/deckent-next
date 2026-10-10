@@ -105,7 +105,7 @@ export function assertCompensation(original: EffectRecord, command: EffectComman
 /** Target kind of the installation's authority documents (policy.json + bindings.json as one record, id `installation`). */
 export const AUTHORITY_DOCUMENT_TARGET_KIND = 'authority-document';
 /**
- * `policy.administer@1` (POLICY-ADMIN P3, lead decision A1): the one Core operation that changes company policy grants and role
+ * `policy.administer@1` (POLICY-ADMIN P3, lead decision A1): the one Core operation that changes company policy grants, profile roles and role
  * bindings. Every change asks (`approval: 'required'`, owner M3: never silent in any mode), is conditional on the effective
  * `policy+bindings` revision the caller read, has no compensation (a revert is a new change) and runs only on the authority surface.
  */

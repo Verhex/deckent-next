@@ -41,7 +41,7 @@ export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; a
   /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
   priceRequired?: boolean }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
-export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified' }>;
+export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true }>;
 /** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */
 export interface ProviderConnectHost {
   readonly kinds: readonly ProviderConnectKindView[];
@@ -77,8 +77,14 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   /** CACHE-SLICE1: the scope's existing profiles offered the 5-minute prompt cache, and the per-layer profile documents that switch it on (read only). */
   planProfileCache?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileCachePlan>;
   inspectModelReadiness?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<unknown>;
+  inspectInvocableModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').InvocableModels>;
   prepareModelSwitch?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<void>;
   planProfileProtocol?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileProtocolPlan>;
+  openProviderWorkspaces?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{
+    profiles: readonly Readonly<{ id: string; reference: ModelReference; workspaceId: string | null }>[];
+    list(id: string): Promise<readonly Readonly<{ id: string; name: string }>[] >;
+    plan(id: string, workspaceId: string): Promise<{ shared: readonly ModelReference[]; writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[] }>;
+  }>;
   listSecretNames?: TerminalSecretNamesHandler;
   setSecret?: TerminalSecretSetHandler;
   deleteSecret?: TerminalSecretDeleteHandler;

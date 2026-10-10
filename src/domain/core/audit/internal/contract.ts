@@ -42,7 +42,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * 2026-10-07): the config-change approval this write consumed — present only then, so every other config write keeps its earlier shape. */
   z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),
     keyPath: identitySchema, commandId: identitySchema, beforeDigest: digest.nullable(), afterDigest: digest, approvalId: identitySchema.optional() }).strict(),
-  z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'accept', 'reject']),
+  z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'hold', 'answer', 'accept', 'reject']),
+    inputDigest: digest.optional(),
     runId: identitySchema, commandId: identitySchema, taskId: identitySchema.nullable(), revision: counterSchema,
     evidence: z.literal('model-unverified').nullable() }).strict(),
   z.object({kind:z.literal('decision-port'),action:z.enum(['ask','record','outcome']),phase:z.enum(['admitted','observed']),

@@ -189,10 +189,13 @@ Yürütme kaydı: 3 profil, 2 görev türü
   coding görevi → coding-default@3 profili (docker)
   review görevi → review profili (docker)
   legacy-shell@1 (host) — hiçbir görev türü kullanmıyor
-Model kataloğu: 3 model, 2 etkin
-  ✓ subscription / model-alpha-2
-  ○ subscription / model-alpha-1 (etkin değil)
-  ✓ local-vllm / qwen-local-v6
+Model kataloğu: 3 model, 0 şimdi çağrılabilir
+  ○ subscription / model-alpha-2 (Modelin hazır olduğu doğrulanamıyor (MODEL_INVOCATION_UNAVAILABLE). /model ile başka
+bir model seçin veya /provider ile desteklenen protokolü kullanarak yeniden bağlayın.)
+  ○ subscription / model-alpha-1 (Modelin hazır olduğu doğrulanamıyor (MODEL_INVOCATION_UNAVAILABLE). /model ile başka
+bir model seçin veya /provider ile desteklenen protokolü kullanarak yeniden bağlayın.)
+  ○ local-vllm / qwen-local-v6 (Modelin hazır olduğu doğrulanamıyor (MODEL_INVOCATION_UNAVAILABLE). /model ile başka bir
+model seçin veya /provider ile desteklenen protokolü kullanarak yeniden bağlayın.)
 Politika: 12 izin (operation 5, effect 4, secret 3) · 2 görev ayrılığı kuralı
   İzin kipleri: owner@local: standart, ci@local: full-auto
 Bellek: yok — MEMORY kartı bekleniyor

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { extractFirstFailure, summarizeMonitorEvent } from '#engine/index.js';
 import type { WorkerEvent } from '#domain/index.js';
+import { extractFailedTests } from '#engine/index.js';
 
 // MONITOR v1.1: the first failing line of a failed attempt's recorded output (real N1 dogfood shapes) and worker event summaries.
 describe('first failure extraction (pure)', () => {
@@ -32,6 +33,50 @@ describe('first failure extraction (pure)', () => {
     expect(extractFirstFailure('\n \n', '')).toBeNull();
     const long = extractFirstFailure('✗ [rule] ' + 'x'.repeat(400), '')!;
     expect(long).toHaveLength(200); expect(long.endsWith('…')).toBe(true);
+  });
+});
+
+describe('failed test extraction with TAP (pure)', () => {
+  it('counts top-level and indented TAP failures in output order', () => {
+    const stdout = ['TAP version 13', 'not ok 3 - host step', '    not ok 1 - native subtest', '1..3'].join('\n');
+    expect(extractFailedTests(stdout, 5)).toEqual({ count: 2, names: ['tap > host step', 'tap > native subtest'], truncated: false });
+  });
+  it('ignores SKIP and TODO directives, passing lines and non-TAP failures', () => {
+    const stdout = ['not ok 1 - skipped # SKIP unsupported host', '    not ok 2 - pending # TODO fix later',
+      'not ok 3 - skipped # SKIP', 'not ok 4 - pending # TODO', 'ok 5 - passing', '    ok 6 - child',
+      'not ok 7 - # SKIP no name', 'not ok 8 - # TODO',
+      '# not ok 7 - comment', 'not ok x - invalid number', 'not ok 8 - ', 'FAIL unrelated'].join('\n');
+    expect(extractFailedTests(stdout, 5)).toBeNull();
+    expect(extractFailedTests(`${stdout}\nnot ok 9 - TODO is part of the name`, 5))
+      .toEqual({ count: 1, names: ['tap > TODO is part of the name'], truncated: false });
+  });
+  it('keeps mixed structured and TAP ordering and counts without de-duplication', () => {
+    const stdout = ['verify-failed-test: {"file":"tap","test":"same"}', 'not ok 1 - same',
+      'verify-failed-test: {"file":"tests/a.test.ts","test":"structured"}', '    not ok 2 - child'].join('\n');
+    expect(extractFailedTests(stdout, 5)).toEqual({ count: 4,
+      names: ['tap > same', 'tap > same', 'tests/a.test.ts > structured', 'tap > child'], truncated: false });
+  });
+  it('counts TAP failures beyond the name limit and marks partial output truncated', () => {
+    const stdout = ['not ok 1 - first', '    not ok 2 - second', 'not ok 3 - third'].join('\n');
+    expect(extractFailedTests(stdout, 2)).toEqual({ count: 3, names: ['tap > first', 'tap > second'], truncated: true });
+    expect(extractFailedTests(stdout, 0)).toEqual({ count: 3, names: [], truncated: true });
+    expect(extractFailedTests(stdout, 3)).toEqual({ count: 3, names: ['tap > first', 'tap > second', 'tap > third'], truncated: false });
+    expect(extractFailedTests(stdout, 3, false)).toEqual({ count: 3, names: ['tap > first', 'tap > second', 'tap > third'], truncated: true });
+  });
+  it('cleans ANSI-coloured TAP failures and bounds their names using the existing helpers', () => {
+    const stdout = '\u001b[31m    not ok 1 - native  failure\u001b[39m\nnot ok 2 - ' + 'x'.repeat(400);
+    const found = extractFailedTests(stdout, 5)!;
+    expect(found).toEqual({ count: 2, names: ['tap > native failure', 'tap > ' + 'x'.repeat(193) + '…'], truncated: false });
+    expect(found.names[1]).toHaveLength(200);
+    expect(extractFailedTests('\u001b[31mnot ok 1 - ignored # TODO later\u001b[39m', 5)).toBeNull();
+  });
+  it('preserves structured parsing, cleaning and fallback names', () => {
+    const stdout = ['verify-failed-test: {"file":"a","test":"\\u001b[31mtest  name\\u001b[39m"}',
+      'verify-failed-test: {"file":"b","reason":"collection  error"}', 'verify-failed-test: {"state":"unhandled-error"}',
+      'verify-failed-test: {}', 'verify-failed-test: not json', 'verify-failed-test: "str"', 'verify-failed-test: null',
+      '  verify-failed-test: {"file":"ignored"}'].join('\n');
+    expect(extractFailedTests(stdout, 5)).toEqual({ count: 4,
+      names: ['a > test name', 'b (collection error)', '— (unhandled-error)', '—'], truncated: false });
   });
 });
 

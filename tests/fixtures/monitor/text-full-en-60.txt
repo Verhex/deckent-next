@@ -232,10 +232,19 @@ Execution registry: 3 profile(s), 2 task kind(s)
   task kind coding → profile coding-default@3 (docker)
   task kind review → profile review (docker)
   legacy-shell@1 (host) — no task kind uses it
-Model catalog: 3 model(s), 2 active
-  ✓ subscription / model-alpha-2
-  ○ subscription / model-alpha-1 (inactive)
-  ✓ local-vllm / qwen-local-v6
+Model catalog: 3 model(s), 0 invocable now
+  ○ subscription / model-alpha-2 (Model readiness cannot be
+verified (MODEL_INVOCATION_UNAVAILABLE). Choose another
+model in /model or reconnect it with a supported protocol in
+/provider.)
+  ○ subscription / model-alpha-1 (Model readiness cannot be
+verified (MODEL_INVOCATION_UNAVAILABLE). Choose another
+model in /model or reconnect it with a supported protocol in
+/provider.)
+  ○ local-vllm / qwen-local-v6 (Model readiness cannot be
+verified (MODEL_INVOCATION_UNAVAILABLE). Choose another
+model in /model or reconnect it with a supported protocol in
+/provider.)
 Policy: 12 grant(s) (operation 5, effect 4, secret 3) · 2
 separation-of-duties rule(s)
   Permission modes: owner@local: standart, ci@local:

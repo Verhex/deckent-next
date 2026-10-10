@@ -201,7 +201,8 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
         profile: task.profile ? `${task.profile.id}@${task.profile.version}` : '—' }, locale), taskFailed(task) ? 'error' : task.phase === 'accepted' ? 'success' : undefined)],
       ...globalStateLines(state, locale),
       ...(task.waiting ? [[span(t('monitor.detail.poolWait', { reason: blockerLabel(task.waiting.code, locale), pool: task.waiting.poolId, execution: task.waiting.occupancy.execution, inFlight: task.waiting.occupancy.inFlight, executionSlots: task.waiting.effectiveCapacity.executionSlots, inFlightSlots: task.waiting.effectiveCapacity.inFlightSlots }, locale), 'warning')]] : []),
-      ...(task.decision ? [[span(`    ${blockerLabel(task.decision.reason, locale)} ${sep} ${expiryText(now, task.decision.deadlineMs, locale)}`, 'warning')]] : []),
+      ...(task.decision ? [[span(`    ${blockerLabel(task.decision.reason === 'needs-input' ? 'awaiting-decision' : task.decision.reason, locale)} ${sep} ${expiryText(now, task.decision.deadlineMs, locale)}`, 'warning')]] : []),
+      ...(task.decision?.question ? [[span(t('cli.run.lifecycle.question', { question: task.decision.question }, locale), 'warning')]] : []),
       ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
@@ -390,7 +391,7 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
       rows: stuck.map(({ install, value: run }) => runRow(w, install, run, [
         span(run.runId), span(run.blocker!.taskId ?? '—', 'muted'), span(`${marks.states[run.state]} ${w.blockerText(run.blocker!)}`, blockerRole(run.blocker!)),
         span(w.age(run.blocker!.sinceMs)), span(run.scopeId, 'muted'), ...w.installCell(install)])) },
-    ...stuck.flatMap(({ value: run }) => run.blocker!.deadlineMs === undefined ? [] : [{ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} ${run.tasks.filter(task => task.decision).map(task => blockerLabel(task.decision!.reason, locale)).join(', ')} ${w.sep} ${expiryText(w.now, run.blocker!.deadlineMs, locale)}`, 'warning')] }]),
+    ...stuck.flatMap(({ value: run }) => run.blocker!.deadlineMs === undefined ? [] : [{ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} ${run.tasks.filter(task => task.decision).map(task => blockerLabel(task.decision!.reason === 'needs-input' ? 'awaiting-decision' : task.decision!.reason, locale)).join(', ')} ${w.sep} ${expiryText(w.now, run.blocker!.deadlineMs, locale)}`, 'warning')] }]),
     ...runs.filter(({ value: run }) => run.deliveryOutlook === 'patch-not-prepared').map(({ value: run }) => ({ kind: 'line' as const, line: [span(`${marks.warn} ${t('monitor.summary.patchNotPrepared', { run: run.runId }, locale)}`, 'warning')] })),
     ...runs.flatMap(({ value: run }) => run.tasks.filter(task => task.evaluation.reason).map(task => ({ kind: 'line' as const, line: [span(`${run.runId}/${task.taskId} ${w.sep} ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')] }))),
     ...(failed.length ? [blank, heading(t('monitor.summary.failed', { count: failed.length }, locale)), { kind: 'table' as const, empty: '',

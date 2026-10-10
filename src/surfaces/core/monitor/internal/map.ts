@@ -1,5 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import type { MonitorInstall, MonitorMap } from '#engine/index.js';
+import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { span, type MonitorBlock, type MonitorLine } from './layout.js';
 
 /**
@@ -28,9 +29,12 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
       ...map.registry.kinds.map(entry => line(`  ${t('monitor.map.kind', { kind: entry.kind, profile: entry.profile, adapter: profileOf(entry.profile)?.adapter ?? '—' }, locale)}`)),
       ...map.registry.profiles.filter(profile => !map.registry.kinds.some(entry => profileOf(entry.profile) === profile))
         .map(profile => line(`  ${t('monitor.map.unusedProfile', { profile: `${profile.id}@${profile.version}`, adapter: profile.adapter }, locale)}`, 'muted')),
-      line(t('monitor.map.models', { count: map.models.length, active: map.models.filter(model => model.active).length }, locale), 'accent'),
-      ...map.models.map(model => ({ kind: 'line' as const, line: [span(`  ${model.active ? marks.active : marks.off} `, model.active ? 'success' : 'muted'),
-        span(`${model.channelId} / ${model.modelId}${model.vendorId || model.billing ? ` · ${model.vendorId ?? '—'} · ${model.billing ?? '—'}` : ''}`), span(model.active ? '' : ` (${t('monitor.map.inactive', {}, locale)})`, 'muted')] satisfies MonitorLine })),
+      line(t('monitor.map.models', { count: map.models.length, active: map.models.filter(model => model.availability?.invocable).length }, locale), 'accent'),
+      ...map.models.map(model => ({ kind: 'line' as const, line: [span(`  ${model.availability?.invocable ? marks.active : marks.off} `, model.availability?.invocable ? 'success' : 'muted'),
+        span(`${model.channelId}${model.reference ? `@${model.reference.providerVersion}` : ''} / ${model.modelId}${model.reference ? `@${model.reference.modelVersion}` : ''}${model.scopeId ? ` · ${model.scopeId}` : ''}${model.vendorId || model.billing ? ` · ${model.vendorId ?? '—'} · ${model.billing ?? '—'}` : ''}`),
+        // A subscription channel offers no readiness check: say so plainly instead of a generic unverifiable state (lead 2026-10-10, E2 4).
+        span(` (${!model.availability && model.billing === 'subscription' ? t('model.invocable.subscription', {}, locale)
+          : modelInvocabilityText(model.availability ?? { invocable: false, reason: { kind: 'unavailable', code: 'MODEL_INVOCATION_UNAVAILABLE' } }, locale)})`, 'muted')] satisfies MonitorLine })),
       ...(map.models.length ? [] : [line(`  ${none}`, 'muted')]),
       line(policy ? t('monitor.map.policy', { grants: policy.grants, kinds: Object.entries(policy.byResourceKind).map(([kind, count]) => `${kind} ${count}`).join(', ') || none,
         sod: policy.separationOfDuties }, locale) : t('monitor.map.policyNone', {}, locale), 'accent'),

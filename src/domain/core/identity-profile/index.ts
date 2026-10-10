@@ -5,3 +5,5 @@ export { validateIdentityDraft, draftIdentityPolicy } from './internal/draft.js'
 export { identityPermissionDiff } from './internal/diff.js';
 export type { IdentityPermissionDifference, IdentityCellSelection } from './internal/diff.js';
 export { coreIdentityProfileData } from './internal/core-data.js';
+export { identityDistributionSelectionSchema, identityDistributionSubmissionSchema } from './internal/distribution.js';
+export type { IdentityDistributionSelection, IdentityDistributionSubmission } from './internal/distribution.js';

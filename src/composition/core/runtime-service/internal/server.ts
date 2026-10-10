@@ -74,7 +74,7 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
   } finally { store.close(); }
   // FIX-2143-SLOTS/INFLIGHT-FIX (Astra 2145 R1): settle this custody's abandoned calls and release settled slots; leave other open calls intact.
   const slots = await releaseSettledModelSlots(path, config.storage.sqlite, custodyId);
-  if (slots.released || slots.settled || slots.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
+  if (slots.released || slots.settled || slots.inconsistent.length || slots.spend.released || slots.spend.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
   // Previews kept for approvals that were pending when the service stopped (none survives a restart).
   await sweepFullPreviews(config.productLayout);
   // Their tool-call approvals can no longer permit anything: still-pending ones (a crash, or a close that failed) are closed now.
@@ -121,10 +121,10 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const swept = scratchRoot ? await sweepScratch(scratchRoot, scratchLimits, Date.now(), scratchActivity) : null;
   if (swept && (swept.removedSessions || swept.unreadable)) await observer.onScratchSwept?.(swept);
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
-  const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {
+  const preparedReconciliation = await prepareConfiguredReconciliationRuntime(projectRoot, {
     onPage: (command, result) => observer.onReconciliationPage?.(command, result),
     onError: (command, error) => observer.onReconciliationError?.(command, error),
-  }, options) : null;
+  }, options, scopes?.policyScopeIds ?? []);
   const instanceId = randomUUID();
   // The send owner names this instance and the custody it holds: only a later start holding that custody proves its open calls ended.
   const modelHost = { ownerId: runtimeServiceModelOwnerId(guard.custodyId, instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions),
@@ -258,7 +258,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     preparedRunRuntime.run(controller.signal),
     preparedRecovery.run(controller.signal),
     preparedModelCancellation.run(controller.signal),
-    ...(preparedReconciliation ? [preparedReconciliation.run(controller.signal)] : []),
+    preparedReconciliation.run(controller.signal),
   ];
   recovery = Promise.allSettled(hostedRecovery.map(work => work.catch(error => {
     controller.abort(); void stop().catch(() => undefined); throw error;
