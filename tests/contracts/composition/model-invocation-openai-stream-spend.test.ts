@@ -146,6 +146,10 @@ it.each([
     checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
 });
 
+});
+
+// CORE-BUDGET-HOLD certified release cases (own block: same POSIX-principal precondition).
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal; certified no-charge release', () => {
 it.each([400, 422, 429, 500, 503])('HTTP %s from an uncertified (local) endpoint stays held through the real TLS producer', async status => {
   // CORE-BUDGET-HOLD (owner, Jev 3f877ac4): money is released only with an exact vendor endpoint/status certificate (no-charge-policy.json).
   const f = await fixture(response => { response.writeHead(status, { 'content-type': 'application/json' }); response.end('{"error":{"message":"invalid_request_error"}}'); });
