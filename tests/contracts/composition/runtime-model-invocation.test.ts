@@ -10,14 +10,14 @@ import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { encodeServiceFrame, openSqliteModelActivationStore, requestLocalRuntime } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationRequestDigest, modelInvocationTargetId,
   runtimeServiceModelOwnerId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
-import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, prepareProductFile, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata, replyPricedProviderPrivacy } from '../../fixtures/priced-provider.js';
 
 const roots: string[] = [], httpServers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [],
@@ -485,27 +485,26 @@ it.skipIf(process.platform !== 'linux')('completes compiled terminal line-mode t
 }, 30_000);
 
 // WIRE10-DELAY (NOTE2422 / Astra 2423 P2-2): the tariff cache made the late second metadata answer unreachable in the wire10 test above (one
-// GET serves the window). It is reached here where the cache flow needs it: after the freshness window ends (fake Date only; sockets and
-// timers stay real), two concurrent invocations of one command miss together, share one late GET, and still make one effect and one charge.
-// Last in this file on purpose: the process wall floor (SystemTrustedClock) keeps the advanced wall time after the fake Date is removed.
+// GET serves the window). An isolated trusted clock advances exactly to expiry; sockets and timers stay real. Two concurrent invocations
+// of one command miss together, share one late GET, and still make one effect and one charge without advancing the process wall floor.
 it.skipIf(process.platform !== 'linux')('refreshes an expired tariff once for concurrent invocations: one late metadata GET, one effect, one charge', async () => {
   const f = await fixture(), observer = { async onPage() {}, async onError() {} };
-  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
-  try {
-    const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
-    const firstClient = createConfiguredRuntimeClient(f.project, { env: f.env }), secondClient = createConfiguredRuntimeClient(f.project, { env: f.env });
-    expect((await firstClient.invokeModel(f.command('warm'), { maxResultBytes: 60_000 })).replayed).toBe(false);
-    await firstClient.invokeModel(f.command('cached'), { maxResultBytes: 60_000 });
-    expect(f.metadataRequests).toBe(1); expect(f.requests).toBe(2); // inside the window: no metadata request
-    vi.setSystemTime(Date.now() + 61_000); // past maxAgeMs (60 s) of the cached observation
-    const late = f.command('after-expiry'), [first, second] = await Promise.all([
-      firstClient.invokeModel(late, { maxResultBytes: 60_000 }), secondClient.invokeModel(late, { maxResultBytes: 60_000 }),
-    ]);
-    expect([first.replayed, second.replayed].sort()).toEqual([false, true]); expect(first.receipt.claim).toEqual(second.receipt.claim);
-    expect(f.metadataRequests).toBe(2); // one refresh for both callers (the late branch), not one per caller
-    expect(f.requests).toBe(3); expect(f.count('after-expiry')).toBe(1); expect(f.reservations('after-expiry')).toBe(1);
-    const inspection = await firstClient.inspectModelInvocation({ schemaVersion: 2, scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
-      reference: f.reference }, { maxResultBytes: 60_000 });
-    expect(inspection.invocation).toEqual((first.replayed ? second : first).receipt); expect(inspection.spending).not.toBeNull();
-  } finally { vi.useRealTimers(); }
+  let nowMs = new SystemTrustedClock().sample().wallMs;
+  const clock = new SystemTrustedClock(() => nowMs);
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }, { modelInvocationClock: clock }); services.push(service);
+  const firstClient = createConfiguredRuntimeClient(f.project, { env: f.env }), secondClient = createConfiguredRuntimeClient(f.project, { env: f.env });
+  expect((await firstClient.invokeModel(f.command('warm'), { maxResultBytes: 60_000 })).replayed).toBe(false);
+  nowMs += 59_999; // one millisecond before the 60 s freshness window ends
+  await firstClient.invokeModel(f.command('cached'), { maxResultBytes: 60_000 });
+  expect(f.metadataRequests).toBe(1); expect(f.requests).toBe(2); // inside the window: no metadata request
+  nowMs += 1; // exactly at expiry: [observedAtMs, expiresAtMs) is no longer fresh
+  const late = f.command('after-expiry'), [first, second] = await Promise.all([
+    firstClient.invokeModel(late, { maxResultBytes: 60_000 }), secondClient.invokeModel(late, { maxResultBytes: 60_000 }),
+  ]);
+  expect([first.replayed, second.replayed].sort()).toEqual([false, true]); expect(first.receipt.claim).toEqual(second.receipt.claim);
+  expect(f.metadataRequests).toBe(2); // one refresh for both callers (the late branch), not one per caller
+  expect(f.requests).toBe(3); expect(f.count('after-expiry')).toBe(1); expect(f.reservations('after-expiry')).toBe(1);
+  const inspection = await firstClient.inspectModelInvocation({ schemaVersion: 2, scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
+    reference: f.reference }, { maxResultBytes: 60_000 });
+  expect(inspection.invocation).toEqual((first.replayed ? second : first).receipt); expect(inspection.spending).not.toBeNull();
 }, 20_000);
