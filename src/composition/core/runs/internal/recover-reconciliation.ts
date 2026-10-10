@@ -7,10 +7,15 @@ import { recoverConfiguredAttemptOutput } from './recover-output.js';
 
 /** One configured recovery page. Each inventory/effect call performs its own current authorization. */
 export async function recoverConfiguredReconciliation(projectRoot: string, input: ReconciliationRecoveryCommand,
-  options: ConfigLoadOptions = {}) {
+  options: ConfigLoadOptions = {}, serviceScopeIds?: readonly string[]) {
   try {
     const config = await loadConfig(projectRoot, { ...options, heal: false });
-    const runtime = config.reconciliationRuntime;
+    // Service-only fallback: scopes were registered under start custody. Public/manual callers
+    // still require explicit configuration; inventory and each attempt retain fresh policy checks.
+    const runtime = config.reconciliationRuntime ?? (serviceScopeIds ? {
+      scopeIds: [...serviceScopeIds], pageSize: Math.min(config.runRuntime.pageSize, config.inspection.maxPageSize),
+      maxConcurrentReconciliations: config.service.maxConcurrentExecutions,
+    } : null);
     if (!runtime) throw ErrorRegistry.createError('RECONCILIATION_NOT_CONFIGURED');
     if (runtime.pageSize > config.inspection.maxPageSize) throw ErrorRegistry.createError('RECONCILIATION_RECOVERY_INVALID');
     const application = new ReconciliationRecoveryApplication({

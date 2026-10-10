@@ -121,6 +121,16 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 
 ### Task-centered execution — owner checkpoint 2026-09-17
 
+- **RESTART-RECOVERY author candidate (W11, 2026-10-10):** runtime service start always prepares the existing bounded reconciliation loop.
+  Explicit `reconciliationRuntime` scopes and limits win; without that section, the service uses its installation-owned scopes
+  registered under start custody, `runRuntime` polling/backoff/page limits, `inspection.maxPageSize` and service execution concurrency.
+  It does not inherit cancellation scopes. Inventory and each attempt freshly authorize current policy and restore the recorded
+  supervisor profile. A supervisor-observed exit also invokes the same `DispatchApplication.reconcile` and atomic terminal writer.
+  Recovered output remains partial; process exit is not business acceptance. Missing/unavailable/running workers keep typed
+  `unresolved` recovery, dispatch custody and occupied slots: the persistent unknown hold and release decision remain with
+  MARK-LOST-ATOMIC / KARAR 12 in PLAN. No retry launch or automatic release. Author proof and unperformed real Docker/service,
+  native-platform, independent-review and live acceptance checks are in external `proof/RESTART-RECOVERY-2026-10-10/WORKER.md`.
+
 - Owner 2026-09-21: new Run admission atomically records automatic progression intent; no separate
   start command. The running common runtime discovers actor-matched intents, rechecks current
   operation policy and resumes eligible work. Migration never silently activates old admissions.

@@ -61,8 +61,15 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
       const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
         config.inspection.workers.maxFileBytes, async () => {
-          const record = await store.loadBoundDispatch(identity); if (!record) return null;
+          let record = await store.loadBoundDispatch(identity); if (!record) return null;
           const activity = await supervisor.inspectActivity(request).catch(() => ({ handle: null, state: 'unknown' as const }));
+          // Supervisor observation must also settle a missed exit while the execute controller is
+          // still waiting. Reconciliation reauthorizes and uses the same atomic terminal writer.
+          // Missing/unknown workers retain their fence and slots (MARK-LOST-ATOMIC / KARAR 12).
+          if (activity.state === 'exited' && record.launch === 'granted' && !record.terminal) {
+            const reconciled = await app.reconcile(request).catch(() => null);
+            if (reconciled) record = reconciled.record;
+          }
           return { schemaVersion: 1, identity, backend: 'docker', provider: profile.nativeSubscription?.provider ?? 'docker',
             workspace: lease.workspace, observedAt: Date.now(), process: activity.state, handle: activity.handle,
             terminal: record.terminal, outputRecorded: !!record.output };

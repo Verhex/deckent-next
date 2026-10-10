@@ -45,5 +45,6 @@ export async function registerConfiguredScopesAtStart(config: ResolvedConfig) {
   refuseIfForeign(readScopeCompanies(path, config.storage.sqlite.busyTimeoutMs, scopes));
   const registration = registerLedgerScopes(path, config.storage.sqlite, config.company.id, scopes);
   refuseIfForeign(registration.pins);
-  return registration;
+  // Keep policy-declared scopes separate from configured loop-only pins; registration grants no recovery authority.
+  return Object.freeze({ ...registration, policyScopeIds: installationOwnScopes(policy, []) });
 }
