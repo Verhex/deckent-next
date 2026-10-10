@@ -415,6 +415,16 @@ refresh, usage and dogfood closure remain open.
   configuration generation. JSON/YAML, if supported, are parsers into the same schema and precedence chain.
   IDENTITY.md is descriptive context, not connection, permission or infrastructure-selection authority.
   Config contains secret references, not credentials. Active operations retain their resolved binding/revision.
+- **SECRET-HELPER (author candidate, 2026-10-10):** `createSecretHelperFactory` on `deckent/extensions` registers a read-only/non-enumerable
+  SecretStore v1 backend before composition seals. Trusted distribution code pins non-secret absolute executable/cwd, argv and bounds;
+  `secrets.store` selects only its registered id. Every lookup requires the owning application's current typed authorization decision before
+  spawn; registration grants nothing and adds no policy default. stdin carries only `NAME\n`; single-line UTF-8 stdout supplies the value,
+  empty means absent, with no cache/fallback. Empty child env, no shell, combined stdout/stderr byte bound, authorization-inclusive deadline
+  and one factory-wide active lookup; POSIX process-group SIGKILL/pipe cleanup on completion or refusal, native Windows pre-spawn refusal.
+  Helper output/raw cause never enters adapter errors, logs/audit; existing config secret provenance and surface projection stay responsible
+  for authorized values. Health executes no helper and reports availability unproven. Existing switch refuses moving entries into a read-only
+  target and cannot prove external names for env references. Trusted install/code ownership, group-escape risk and v1 caller-cancellation limits
+  are explicit in [secret-helpers](docs/secret-helpers.md); external proof `SECRET-HELPER-2026-10-10` is author verification, not independent/live acceptance.
 - Each port selects its admitted adapter (SQLite, PostgreSQL, MongoDB or another implementation). Dialect and
   driver differences remain inside adapters; domain/engine contain no scattered `if dbstack` query branches.
   Package selection and capabilities are data; unsupported guarantees fail with a typed explanation.

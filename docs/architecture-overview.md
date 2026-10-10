@@ -128,6 +128,12 @@ Registration must happen before composition seals the registries; late registrat
 Configuration selects registered implementations and policy authorizes their use. Registering
 an adapter gives it no execution grant.
 
+A trusted distribution may register an optional [secret helper](secret-helpers.md) through
+the same SecretStore port. Its command and bounds are fixed at registration; config selects
+only its id. Each lookup needs an application authorization decision, with bounded time/output
+and sanitized errors. The helper is read-only, has no external-name enumeration and is not a
+sandbox. Existing store-migration restrictions and platform limits still apply.
+
 The extension model lets a separate package supply a target adapter through the existing effect
 contract, or a secret store through its port, without editing Core. It does not promise that
 every internal registry is public. Service and MCP extension startup wiring is not yet proven
