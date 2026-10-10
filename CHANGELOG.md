@@ -1,5 +1,10 @@
 # Changelog
 
+
+## Unreleased
+
+- Reserve API spending using the request tier, prompt band and effective output cap with a registry safety margin; recover certified historical no-charge and zero-tariff holds at service start with retained audits. Zero-tariff calls use no money reservation or budget capacity; bilingual usage labels distinguish active and held reservations.
+
 Human-curated. Every live release bumps the version (`1.0.0-alpha.N`, SemVer pre-release) and adds exactly one line: version, date, landed commit and the features it brings, keyed by PLAN.md card ids. Details live in PLAN/COMPLETED-PLAN, ARCHITECTURE and Git history. No product code writes this file.
 
 - **1.0.0-alpha.24** — Unreleased · (MCP-TURN-TRUST-CARD-I18N slice 1 + FLAKY-CLOCK-FIX + MAIN-RED-FIX + CONNECT-LOCALITY + SWITCH-TOOLING) · MCP trust card text from the EN/TR catalog (English bytes unchanged; first dogfood adoption); runtime model invocations take an injected trusted clock (deterministic tariff-expiry proof); the 18 red main test files re-aligned with the accepted sandbox/authority/terminal/OpenRouter contracts (tests only, negatives kept; 14 green on the author host, 3 blocked there by the open-sandbox HOME walk bound, 1 open); `models connect` reconnect keeps the authored or seeded context window; one literal-loopback rule (127.0.0.1, [::1]) for endpoint validation, connection pricing and zero-tariff quotes (localhost, LAN and WSL addresses are remote); host dev-release finds a prior runtime and keeps systemd ownership on N1 switches.

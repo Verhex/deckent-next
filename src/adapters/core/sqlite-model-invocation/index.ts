@@ -39,3 +39,7 @@ export async function openSqliteProviderSpendAuditStore(path: string, options: S
   return implementation.openSqliteProviderSpendAuditStore(path, options, migrationMode, profiles);
 }
 export { openSqliteProviderSpendManagementStore } from './internal/spend-management.js';
+export async function openSqliteProviderSpendRecoveryStore(path: string, options: SqliteLedgerOptions) {
+  const implementation = await import('./internal/spend-recovery.js');
+  return implementation.openSqliteProviderSpendRecoveryStore(path, options);
+}

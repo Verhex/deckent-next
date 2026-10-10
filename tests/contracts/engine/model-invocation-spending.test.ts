@@ -75,7 +75,8 @@ async function fixture(timeoutMs = 1000, contactProvider = true) {
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference, catalogRevision: 'catalog',
     expectedBinding: binding, nativeRequest: { model: 'owned-fixture', messages: [{ role: 'user', content: 'owned test' }], max_completion_tokens: 8 } });
   return { application, command, counts, events, path, deny: () => { allowed = false; },
-    changeProfile: () => { profile = { ...profile, version: 2 }; } };
+    changeProfile: () => { profile = { ...profile, version: 2 }; },
+    setEndpoint: (endpoint: string) => { profile = { ...profile, adapter: { ...profile.adapter, definition: { ...profile.adapter.definition, endpoint } } }; } };
 }
 function noEffects(f: Awaited<ReturnType<typeof fixture>>) {
   expect(f.events).not.toContain('claim'); expect(f.events).not.toContain('http'); expect(f.events).not.toContain('secret');
@@ -280,3 +281,37 @@ it('bounds acquisition by the profile timeout and redacts backend errors', async
     .rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE', message: 'MODEL_INVOCATION_UNAVAILABLE' });
   expect(f.events).not.toContain('prepare'); noEffects(f);
 });
+
+it('a certified zero tariff with no money budget creates no financial rows and still enforces invocation policy', async () => {
+  const f = await fixture(1000, false);
+  const authority: ModelInvocationSpendingAuthority = { async authorize(input) {
+    const base = testSpending(input), definition = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+    return { budget: null, quote: { ...base.quote, maxChargeMinorUnits: 0, pricing: { id: 'operator-static-tariff', version: 1, definition, digest: providerSpendEvidenceDigest(definition) } } };
+  } };
+  const result = await f.application(authority).invoke(f.command('zero'));
+  expect(result.receipt.outcome?.state).toBe('unknown'); // no listener: transport is uncertain, the literal zero tariff is not.
+  expect(f.counts()).toMatchObject({ model_invocations: 1, model_invocation_spend_reservations: 0, provider_spend_accounts: 0 });
+  expect((await f.application(authority).invoke(f.command('zero'))).replayed).toBe(true);
+  f.deny();
+  await expect(f.application(authority).invoke(f.command('denied-zero'))).rejects.toThrow('DENIED');
+  expect(f.counts().model_invocations).toBe(1);
+});
+
+it('refuses a zero numeric quote without a certified zero tariff when no budget is supplied', async () => {
+  const f = await fixture(1000, false);
+  await expect(f.application({ async authorize(input) { const value = testSpending(input); return { ...value, budget: null, quote: { ...value.quote, maxChargeMinorUnits: 0 } }; } })
+    .invoke(f.command('fake-free'))).rejects.toThrow('PROVIDER_SPEND_CONFLICT');
+  noEffects(f);
+});
+
+// SECURITY-FIX (commit review of 9c8392e3): a zero tariff declared for a non-loopback endpoint is a claim, not proof of a local model.
+it.each(['https://localhost:1234/chat', 'https://192.168.1.20:1234/chat', 'https://172.28.160.1:1234/chat', 'https://api.example.com/v1/chat/completions'])(
+  'refuses a budget-less zero tariff for the non-literal-loopback endpoint %s before any claim or send', async endpoint => {
+    const f = await fixture(1000, false); f.setEndpoint(endpoint);
+    const authority: ModelInvocationSpendingAuthority = { async authorize(input) {
+      const base = testSpending(input), definition = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+      return { budget: null, quote: { ...base.quote, maxChargeMinorUnits: 0, pricing: { id: 'operator-static-tariff', version: 1, definition, digest: providerSpendEvidenceDigest(definition) } } };
+    } };
+    await expect(f.application(authority).invoke(f.command('remote-zero'))).rejects.toThrow('PROVIDER_SPEND_CONFLICT');
+    noEffects(f);
+  });

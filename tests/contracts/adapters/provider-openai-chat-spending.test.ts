@@ -164,7 +164,7 @@ it.each([
     .toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: exact, frozen: false });
   const tariff = lookupOpenAiCompatibleTariff(endpoint, model)!;
   if (tariff.version !== 2) throw new Error('fixture');
-  expect(first.quote.meter.evidence).toMatchObject({ calculation: { usdPerMTok: tariff.processingTiers.find(t => t.serviceTier === 'priority')!.longContextUsdPerMTok } });
+  expect(first.quote.meter.evidence).toMatchObject({ calculation: { usdPerMTok: tariff.processingTiers.find(t => t.serviceTier === 'default')!.usdPerMTok } });
   for (serviceTier of ['flex', 'priority', 'fast']) {
     expect((await observe()).measurement).toMatchObject({ source: { serviceTier: serviceTier === 'fast' ? 'priority' : serviceTier } });
   }
@@ -257,4 +257,32 @@ it.each([
   const measured = priced.native.observePartialSpending!(prepared, result.evidence.body.digest);
   if (final) expect(measured).toMatchObject({ basis: 'measured-tariff', exactMinorUnits: '0.03' });
   else expect(measured).toBeNull();
+});
+
+// No provider call: selected tier/context and exact margin, using the installed tariff snapshot.
+it.each(['default', 'flex', 'priority', 'auto'] as const)('sizes only the selected/expected %s tier at both context bands', serviceTier => {
+  const endpoint = 'https://api.openai.com/v1/chat/completions', model = 'gpt-6-astra', tariff = lookupOpenAiCompatibleTariff(endpoint, model)!;
+  if (tariff.version !== 2) throw new Error('fixture');
+  const maximums: number[] = [];
+  for (const length of [28000, 272001]) {
+    const f = fixture(endpoint, tariff, model);
+    const request = { ...f.request, messages: [{ role: 'user' as const, content: 'a'.repeat(length) }], max_completion_tokens: 4096, service_tier: serviceTier };
+    const profile = { ...f.profile, adapter: { ...f.profile.adapter, definition: { ...f.profile.adapter.definition, maxOutputTokens: 4096 } },
+      limits: { ...f.profile.limits, requestMaxBytes: 400000 } };
+    const command = { ...f.command, nativeRequest: request };
+    const quote = quoteOpenAiChatOperatorTariff({ ...f, command, profile, requestDigest: modelInvocationRequestDigest(command), profileDigest: modelInvocationProfileDigest(profile) });
+    const selected = tariff.processingTiers.find(tier => tier.serviceTier === (serviceTier === 'auto' ? 'default' : serviceTier))!;
+    expect(quote.meter.evidence).toMatchObject({ calculation: { serviceTier: serviceTier === 'auto' ? 'default' : serviceTier, outputBound: 4096,
+      safetyMarginPercent: 10, usdPerMTok: length === 28000 ? selected.usdPerMTok : selected.longContextUsdPerMTok } });
+    maximums.push(quote.maxChargeMinorUnits);
+  }
+  expect(maximums[1]).toBeGreaterThan(maximums[0]!);
+  // ~28k prompt with a 4096 cap: Default reservation is ~0.54 USD, not the old 3.86 USD universal-tier bound.
+  if (serviceTier === 'default' || serviceTier === 'auto') expect(maximums[0]).toBe(54);
+});
+
+it('pins omitted tier to default on the real prepared OpenAI wire', async () => {
+  const endpoint = 'https://api.openai.com/v1/chat/completions', model = 'gpt-6-astra', f = fixture(endpoint, lookupOpenAiCompatibleTariff(endpoint, model), model);
+  const priced = createOpenAiChatPricedNative(), prepared = await priced.native.prepare(f.profile, f.definition, f.request);
+  expect(JSON.parse((prepared as { body: string }).body).service_tier).toBe('default');
 });

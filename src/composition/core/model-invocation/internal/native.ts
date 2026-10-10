@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError } from '#adapters/index.js';
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
-import { ProviderSpendError, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
+import { ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
@@ -79,15 +79,18 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     checkCapacity: (spending: Awaited<ReturnType<ModelInvocationSpendingAuthority['authorize']>>) => checkModelInvocationCapacity(async () => openSqliteProviderSpendAccountReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }), spending),
     async authorize(input: ModelInvocationSpendingInput) {
       if(input.profile.adapter.id===decisionHttpAdapter.id&&input.profile.adapter.version===decisionHttpAdapter.version){
-        const budget=await budgetFor(input.command.scopeId); return Object.freeze({budget,quote:quoteDecisionHttpOperatorTariff(input)});
+        const quote=quoteDecisionHttpOperatorTariff(input), budget=providerSpendLocalZeroTariff(input.profile,quote)?null:await budgetFor(input.command.scopeId); return Object.freeze({budget,quote});
       }
       if (isOpenAiChatHttpAdapter(input.profile.adapter)) {
         if (parseOpenAiChatHttpDefinition(input.profile.adapter.definition).tariff.kind === 'openrouter-endpoint') {
           if (!selected || !isDeepStrictEqual(input.profile, selected.profile)) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
           const budget = await budgetFor(input.command.scopeId); return Object.freeze({ budget, quote: selected.priced.quote(input) });
         }
-        // Operator-declared tariff: the same scope budget, reservation and ledger settlement as priced providers.
-        const budget = await budgetFor(input.command.scopeId); return Object.freeze({ budget, quote: (() => { if (!openai) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); return openai.quote(input); })() });
+        // Operator-declared tariff: the same scope budget, reservation and ledger settlement as priced providers;
+        // only a literal zero tariff on a literal loopback endpoint (PROVIDER-LOCALITY) skips the budget and reservation.
+        if (!openai) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+        const quote = openai.quote(input), budget = providerSpendLocalZeroTariff(input.profile, quote) ? null : await budgetFor(input.command.scopeId);
+        return Object.freeze({ budget, quote });
       }
       if (input.profile.adapter.id === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID && input.profile.adapter.version === ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) {
         // Published tariff from the profile: the same scope budget and reservation as priced providers (settlement limit: review.md, checkpoint A).

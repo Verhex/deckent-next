@@ -16,6 +16,7 @@ import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#pla
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+import * as http from '#adapters/core/provider-http-json/index.js';
 beforeEach(context => {
   if (process.platform === 'win32') context.skip('LOCAL_OS_PRINCIPAL_UNSUPPORTED: configured policy/integrity flows require a verified POSIX UID; Windows userInfo.uid is -1');
 });
@@ -26,15 +27,16 @@ const reference={providerId:'provider',providerVersion:1,modelId:'model',modelVe
 const catalog={schemaVersion:1,revision:'catalog',providers:[{id:'provider',version:1,models:[{id:'model',version:1,nativeId:'configured-model',protocols:[{...decisionHttpAdapter.protocol,capabilities:[]}]}]}]};
 const policy={schemaVersion:1,limits:{maxCaseBytes:16384,maxEvidence:8,maxOptions:8,maxChecks:8,maxTextBytes:1024},thresholds:{choice:.8,sufficiency:.7}};
 const inputCase={schemaVersion:1,objective:'Choose safe action',scope:'scope',revision:'r1',constraints:['No authority from advice'],unknowns:['Outcome not observed'],evidence:[{id:'e',source:'fixture',observedAt:'2026-10-01T00:00:00Z',observation:'Source inspected'}],options:[{id:'a',action:'Record advice',tradeoffs:['Gain provenance; loss overhead'],evidenceIds:['e']}],checks:[{id:'c',instructions:'Evidence adequate?',evidenceIds:['e']}],process:{stage:'implementation',currentState:'prepared',acceptedDecisions:['Port only'],nextStep:'Review',reopenReason:null}};
-async function fixture(selection={type:'choice',choice:'a',probabilities:{a:.9,none_of_the_above:.05,insufficient_information:.05},confidence:.85}){
+async function fixture(selection={type:'choice',choice:'a',probabilities:{a:.9,none_of_the_above:.05,insufficient_information:.05},confidence:.85},socketless=false,host='127.0.0.1',budget=!socketless){
  const root=await mkdtemp(join(tmpdir(),'deckent-decision-composition-'));roots.push(root);const project=join(root,'project'),data=join(root,'data'),home=join(root,'home');
  await Promise.all([mkdir(join(project,'.deckent'),{recursive:true,mode:0o700}),mkdir(data,{mode:0o700}),mkdir(home,{mode:0o700})]);
  let requests=0;const server=createServer((request,res)=>{requests++;request.resume();request.on('end',()=>res.end(JSON.stringify({model:'resolved-model',answers:{selection,sufficiency:{type:'noul',noul:.9},check_0:{type:'noul',noul:.8}},usage:{input_tokens:30,output_tokens:15}})));});servers.push(server);
- await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const address=server.address();if(!address||typeof address==='string')throw Error('fixture');
+ if(!socketless)await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const address=server.address();if(!socketless&&(!address||typeof address==='string'))throw Error('fixture');
+ if(socketless)vi.spyOn(http,'sendNativeJsonHttp').mockImplementation(async(_request,options)=>{requests++;const parsed=options.parseResponse!(Buffer.from(JSON.stringify({model:'resolved-model',answers:{selection,sufficiency:{type:'noul',noul:.9},check_0:{type:'noul',noul:.8}},usage:{input_tokens:30,output_tokens:15}})));if('reason' in parsed)throw Error('fixture parse');return parsed.response;});
  const definition={encodingVersion:1 as const,provider:{id:'provider',version:1},model:catalog.providers[0]!.models[0]!};
  const binding={encodingVersion:1 as const,algorithm:'sha256' as const,digest:createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex')};
- const profile={schemaVersion:1,id:'decision-profile',version:1,scopeId:'scope',reference,bindingDigest:binding.digest,protocol:decisionHttpAdapter.protocol,adapter:{id:decisionHttpAdapter.id,version:decisionHttpAdapter.version,definition:{endpoint:`http://127.0.0.1:${address.port}/`,authentication:{type:'none'},tariff:{kind:'operator-static',version:1,currency:'USD',inputMinorUnitsPerMillionTokens:0,outputMinorUnitsPerMillionTokens:0}}},allocation:{id:'allocation',maxCalls:4,maxInFlight:1},limits:{requestMaxBytes:16384,responseMaxBytes:16384,timeoutMs:5000}};
- await writeFile(join(project,'.deckent/config.json'),JSON.stringify({layout:{root:data},storage:{driver:'sqlite',sqlite},decision:policy,provider_catalog:catalog,provider_invocation_profiles:{schemaVersion:1,profiles:[profile]},provider_spending:fixtureBudget('scope')}),{mode:0o600});
+ const profile={schemaVersion:1,id:'decision-profile',version:1,scopeId:'scope',reference,bindingDigest:binding.digest,protocol:decisionHttpAdapter.protocol,adapter:{id:decisionHttpAdapter.id,version:decisionHttpAdapter.version,definition:{endpoint:`${host==='127.0.0.1'?'http':'https'}://${host}:${address&&typeof address!=='string'?address.port:1}/`,authentication:{type:'none'},tariff:{kind:'operator-static',version:1,currency:'USD',inputMinorUnitsPerMillionTokens:0,outputMinorUnitsPerMillionTokens:0}}},allocation:{id:'allocation',maxCalls:4,maxInFlight:1},limits:{requestMaxBytes:16384,responseMaxBytes:16384,timeoutMs:5000}};
+ await writeFile(join(project,'.deckent/config.json'),JSON.stringify({layout:{root:data},storage:{driver:'sqlite',sqlite},decision:policy,provider_catalog:catalog,provider_invocation_profiles:{schemaVersion:1,profiles:[profile]},...(budget?{provider_spending:fixtureBudget('scope')}:{})}),{mode:0o600});
  const ledger=await prepareProductFile(resolveProductLayout({projectRoot:project,root:data}),'ledger',['-wal','-shm','-journal']);
  const principal={...readLocalOsIdentity(),scopeIds:['scope']};const actor={id:principal.id,issuer:principal.issuer,subject:principal.subject,assurance:principal.assurance};const store=await openSqliteModelActivationStore(ledger,sqlite);
  await store.admit({command:{schemaVersion:1,action:'activate',commandId:'activate',scopeId:'scope',reference,expectedRevision:0,catalogRevision:'catalog',expectedBinding:binding},actor,authorization:{revision:'seed',ruleId:'seed'},admittedAtMs:1,definition});store.close();
@@ -42,6 +44,43 @@ async function fixture(selection={type:'choice',choice:'a',probabilities:{a:.9,n
  await setPolicy();const env={HOME:home,USERPROFILE:home,PATH:process.env.PATH??'/usr/bin:/bin'};const command={schemaVersion:1,commandId:'ask',scopeId:'scope',case:inputCase,invocation:{reference,catalogRevision:'catalog',expectedBinding:binding}};
  return {project,ledger,env,command,setPolicy,requests:()=>requests};
 }
+it('configured zero-tariff decision works without a money budget and replays without a financial hold',async()=>{
+ const f=await fixture(undefined,true),options={env:f.env};
+ expect((await askConfiguredDecision(f.project,f.command,options)).status).toBe('advised');
+ expect((await askConfiguredDecision(f.project,f.command,options)).replayed).toBe(true);expect(f.requests()).toBe(1);
+ const db=new DatabaseSync(f.ledger,{readOnly:true});try{
+  expect(db.prepare('SELECT count(*) AS n FROM model_invocation_spend_reservations').get()?.n).toBe(0);
+  expect(db.prepare('SELECT count(*) AS n FROM provider_spend_accounts').get()?.n).toBe(0);
+  // The exemption removes only money rows: the durable invocation record (claim + responded outcome) is kept.
+  expect(JSON.parse(String(db.prepare('SELECT record FROM model_invocations').get()?.record))).toMatchObject({ outcome:{ state:'responded' } });
+ }finally{db.close();}
+});
+// The read-only readiness preview now opens the scope money account (to see a freeze); a fresh ledger without any account stays ready.
+it('previews a 127.0.0.1 zero-tariff model without a money budget through the real composition, without a send',async()=>{
+ const f=await fixture(undefined,true),options={env:f.env};
+ const invocation={schemaVersion:1 as const,commandId:'preview',scopeId:'scope',...f.command.invocation,nativeRequest:{schemaVersion:1,case:inputCase}};
+ const { previewConfiguredModel } = await import('#composition/core/model-invocation/index.js');
+ await expect(previewConfiguredModel(f.project,invocation as never,options)).resolves.toMatchObject({refreshRequired:false});
+ expect(f.requests()).toBe(0);
+});
+// SECURITY-FIX (commit review of 9c8392e3): the operator-declared zero tariff exempts only a literal loopback endpoint.
+it.each(['localhost','192.168.1.20','172.28.160.1','decision.example.com'])('a zero-tariff decision endpoint at %s keeps the budget gate: no budget, no send; with a budget a zero reservation is settled',async host=>{
+ const refused=await fixture(undefined,true,host);
+ expect((await askConfiguredDecision(refused.project,refused.command,{env:refused.env})).status).toBe('unavailable');
+ expect(refused.requests()).toBe(0);
+ let db=new DatabaseSync(refused.ledger,{readOnly:true});try{
+  expect(db.prepare('SELECT count(*) AS n FROM model_invocations').get()?.n).toBe(0);
+  expect(db.prepare('SELECT count(*) AS n FROM model_invocation_spend_reservations').get()?.n).toBe(0);
+ }finally{db.close();}
+ vi.restoreAllMocks();
+ const budgeted=await fixture(undefined,true,host,true);
+ expect((await askConfiguredDecision(budgeted.project,budgeted.command,{env:budgeted.env})).status).toBe('advised');
+ expect(budgeted.requests()).toBe(1);
+ db=new DatabaseSync(budgeted.ledger,{readOnly:true});try{
+  expect(JSON.parse(String(db.prepare('SELECT record FROM model_invocation_spend_reservations').get()?.record))).toMatchObject({
+   descriptor:{quote:{maxChargeMinorUnits:0}},disposition:{state:'settled-local',amountMinorUnits:0}});
+ }finally{db.close();}
+});
 it('configured SDK → invocation → HTTP → sealed ledger → CLI and MCP inspection preserve advice and actor data',async()=>{
  const f=await fixture(),options={env:f.env};const prepared=await prepareConfiguredDecision(f.project,{schemaVersion:1,case:inputCase},options);expect(prepared.caseDigest).toMatch(/^[a-f0-9]{64}$/);
  const advice=await askConfiguredDecision(f.project,f.command,options);expect(advice.status).toBe('advised');expect(advice.advice).toMatchObject({choice:'a',checks:{c:.8},probabilities:{none_of_the_above:.05,insufficient_information:.05}});

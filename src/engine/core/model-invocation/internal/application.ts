@@ -231,7 +231,7 @@ export class ModelInvocationApplication {
       }
       const admission = parseModelInvocationAdmission({ command, requestDigest, actor, authorization,
         definition: currentBinding.definition, activation, profile: currentProfile, profileDigest: modelInvocationProfileDigest(currentProfile),
-        invocationId: identitySchema.parse(this.runtime.invocationId()), claimedAtMs: this.runtime.now(), spending });
+        invocationId: identitySchema.parse(this.runtime.invocationId()), claimedAtMs: this.runtime.now(), ...(spending.budget ? { spending: { budget: spending.budget, quote: spending.quote } } : {}) });
       const responseBound = delivery ? native.responseBytesUpperBound?.(prepared) : undefined;
       const prospectiveReceipt = createModelInvocationClaimReceipt(admission);
       assertInvocationEvidenceStorageFit(prospectiveReceipt);
@@ -284,7 +284,7 @@ export class ModelInvocationApplication {
         }
         try {
           const observedAtMs = this.runtime.now();
-          const measurement = 'kind' in response ? observeModelInvocationPartialSpending(native, prepared, response.evidence.body.digest, spending.quote) : observeModelInvocationSpending(native, prepared, response, spending.quote);
+          const measurement = !spending.budget ? null : 'kind' in response ? observeModelInvocationPartialSpending(native, prepared, response.evidence.body.digest, spending.quote) : observeModelInvocationSpending(native, prepared, response, spending.quote);
           const record = verifyModelInvocationRecord('kind' in response
             ? response.evidence.body.complete
               ? await store.recordRejected(claimReceipt.claim, response.evidence, observedAtMs)

@@ -1,3 +1,4 @@
+import { providerSpendHasZeroTariff } from './no-charge.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { counterSchema, identitySchema, immutableJsonObjectSchema, providerSpendBudgetSchema, providerSpendReservationDescriptorSchema,
@@ -27,10 +28,12 @@ const dispositionSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('settled-provider-reported'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
   z.object({ state: z.literal('held'), reason: holdReason, observedMinorUnits: amount.nullable(), evidenceDigest: digest }).strict(),
 ]).readonly();
-const reservationSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]), descriptor: providerSpendReservationDescriptorSchema,
+const reservationSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]), descriptor: providerSpendReservationDescriptorSchema,
   disposition: dispositionSchema, measurement: z.unknown().nullable(), reconciliation: z.object({
     commandId: identitySchema, budgetRevision: counterSchema.positive(), resolution: z.enum(['settle', 'release', 'write-off']), exactMinorUnits: z.string(),
     evidenceKind: z.enum(['provider-usage', 'console-figure', 'write-off']), evidenceDigest: digest, receiptDigest: digest,
+  }).strict().readonly().optional(), recovery: z.object({ schemaVersion: z.literal(1), recordedAtMs: counterSchema, previousSchemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]),
+    previousDisposition: dispositionSchema, previousDigest: digest, certificationDigest: digest, digest,
   }).strict().readonly().optional() }).strict().readonly();
 export type ProviderSpendAccount = z.infer<typeof accountSchema>;
 export type ProviderSpendReservation = Omit<z.infer<typeof reservationSchema>, 'measurement'> & {
@@ -73,7 +76,7 @@ function measurementMatches(value: ProviderSpendReservation, measurement: Provid
 export function parseProviderSpendReservation(input: unknown): ProviderSpendReservation {
   const raw = parse(reservationSchema, input), measurement = raw.measurement === null ? null : parseProviderSpendMeasurement(raw.measurement);
   const value = { ...raw, measurement } as ProviderSpendReservation, cap = value.descriptor.quote.maxChargeMinorUnits, state = value.disposition;
-  if ((state.state === 'released-no-charge' && value.schemaVersion !== 4)
+  if ((state.state === 'released-no-charge' && value.schemaVersion < 4)
     || (value.schemaVersion === 2 && (measurement?.basis === 'measured-tariff' || state.state === 'settled-measured-tariff'))
     || (state.state === 'settled-measured-tariff' && measurement?.basis !== 'measured-tariff')
     || (state.state === 'settled-provider-reported' && measurement?.basis !== 'provider-reported')
@@ -93,6 +96,15 @@ export function parseProviderSpendReservation(input: unknown): ProviderSpendRese
       || compareProviderSpendExactMinorUnits(value.reconciliation.exactMinorUnits, measurement!.exactMinorUnits) > 0))
     || canonicalProviderSpendExactMinorUnits(value.reconciliation.exactMinorUnits) !== value.reconciliation.exactMinorUnits
     || (value.reconciliation.resolution !== 'settle' && value.reconciliation.exactMinorUnits !== '0'))) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  if ((value.schemaVersion === 5) !== (value.recovery !== undefined)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  if (value.recovery) {
+    const { recovery, ...rest } = value, { digest: auditDigest, ...audit } = recovery;
+    const previous = parseProviderSpendReservation({ ...rest, schemaVersion: recovery.previousSchemaVersion, disposition: recovery.previousDisposition });
+    const previousDigest = createHash('sha256').update(`deckent.provider-spend-reservation.v${previous.schemaVersion}\n${JSON.stringify(previous)}`).digest('hex');
+    if (previous.disposition.state !== 'held' || previous.disposition.reason === 'overrun' || previous.reconciliation || value.reconciliation
+      || previousDigest !== recovery.previousDigest || providerSpendEvidenceDigest(audit) !== auditDigest
+      || (state.state !== 'released-no-charge' && !(state.state === 'settled-local' && state.amountMinorUnits === 0))) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  }
   return Object.freeze(value);
 }
 export function createProviderSpendAccount(input: unknown): ProviderSpendAccount {
@@ -119,7 +131,9 @@ export function reserveProviderSpend(accountInput: unknown, configuredBudgetInpu
 export function assertProviderSpendCapacity(accountInput: unknown, quoteInput: unknown): void {
   const account = parseProviderSpendAccount(accountInput), quote = parseProviderSpendQuote(quoteInput);
   if (account.budget.scopeId !== quote.scopeId || account.budget.currency !== quote.currency) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+  // An integrity freeze blocks every call first; only then may a literal zero quote skip the exhaustion arithmetic.
   if (account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN');
+  if (providerSpendHasZeroTariff(quote)) return;
   if (BigInt(account.reservedMinorUnits) + BigInt(quote.maxChargeMinorUnits) + BigInt(account.settledMinorUnits) > BigInt(account.budget.limitMinorUnits))
     throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED', { settled: account.settledExactMinorUnits, held: account.reservedMinorUnits,
       requested: quote.maxChargeMinorUnits, limit: account.budget.limitMinorUnits, currency: account.budget.currency });

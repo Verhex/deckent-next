@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -15,7 +16,7 @@ import { responsesFixture, responsesFinal, responsesCreated, responsesUsage, eve
 const roots: string[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function fixture(wire: string, status = 200) {
+async function fixture(wire: string, status = 200, zeroTariff = false) {
   let calls = 0;
   vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async (request, options) => {
     calls++;
@@ -35,10 +36,11 @@ async function fixture(wire: string, status = 200) {
   const catalog = { schemaVersion: 1 as const, revision: 'catalog', providers: [{ ...f.definition.provider, models: [f.definition.model] }] };
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const,
     digest: createHash('sha256').update(encodeModelBindingDefinition(f.definition as never)).digest('hex') };
-  const profile = { ...f.profile, bindingDigest: binding.digest, allocation: { ...f.profile.allocation, maxCalls: 3, maxInFlight: 2 } };
+  const profile = { ...f.profile, bindingDigest: binding.digest, allocation: { ...f.profile.allocation, maxCalls: 3, maxInFlight: 2 },
+    adapter: { ...f.profile.adapter, definition: { ...f.profile.adapter.definition, ...(zeroTariff ? { tariff: { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } } : {}) } } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
-    provider_spending: { schemaVersion: 1, budgets: [{ schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 }] } }), { mode: 0o600 });
+    ...(zeroTariff ? {} : { provider_spending: { schemaVersion: 1, budgets: [{ schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 }] } }) }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
   const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
   const activation = new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
@@ -84,6 +86,18 @@ describe.skipIf(process.platform === 'win32')('Responses through the existing go
     const maximum = inspection!.spending!.descriptor.quote.maxChargeMinorUnits;
     expect(maximum).toBeGreaterThan(0);
     expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0 });
+  });
+  it.each([200, 503])('configured local zero-tariff calls need no money budget, status=%s', async status => {
+    const f = await fixture(status === 200 ? event('response.completed', 1, { response: responsesFinal() }) : '{"error":"server failed"}', status, true);
+    const result = await invokeConfiguredModel(f.project, f.command as never, f.options);
+    expect(result.receipt.outcome?.state).toBe(status === 200 ? 'responded' : 'rejected');
+    const db = new DatabaseSync(f.ledger, { readOnly: true });
+    try {
+      expect(db.prepare('SELECT count(*) AS count FROM provider_spend_accounts').get()!.count).toBe(0);
+      expect(db.prepare('SELECT count(*) AS count FROM model_invocation_spend_reservations').get()!.count).toBe(0);
+    } finally { db.close(); }
+    expect((await invokeConfiguredModel(f.project, f.command as never, f.options)).replayed).toBe(true);
+    expect(f.calls()).toBe(1);
   });
   it('records HTTP400 without measured settlement or a second effect flow', async () => {
     const f = await fixture(JSON.stringify({ error: { type: 'invalid_request_error', message: 'Use /v1/responses' } }), 400);
