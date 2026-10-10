@@ -494,5 +494,7 @@
   "cli.backup.trigger.before-upgrade": "before upgrade",
   "cli.backup.created": "Backup created",
   "cli.backup.verified": "Backup verified",
-  "cli.backup.restored": "Backup restored"
+  "cli.backup.restored": "Backup restored",
+  "shell.homeCredentialsRefused": "HOME credential protection could not be determined ({detail}; scan bound: {entries} entries). Use a narrower project or repair HOME/credential paths, then retry; the shell was refused before execution.",
+  "shell.homeSubtreesMayBeHidden": "large HOME subtrees that cannot be inspected within the credential scan bound are hidden"
 }

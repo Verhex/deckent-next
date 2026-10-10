@@ -2182,7 +2182,8 @@
         "src/adapters/core/host-shell",
         "src/adapters/core/workspace-read",
         "src/domain/core/agent-tool",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },

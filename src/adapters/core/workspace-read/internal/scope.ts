@@ -23,6 +23,10 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
 /** The repository internals of the default deny (MODES-3): the only entries a full-access turn opens (commit, branch, push); credentials stay. */
 export const REPOSITORY_INTERNALS_DENY: readonly string[] = Object.freeze(['.git/**', '**/.git/**', '.git', '**/.git']);
 
+/** Exact known HOME locations, derived from the shared credential registry rather than a second protection policy. */
+export const HOME_CREDENTIAL_PATHS: readonly string[] = Object.freeze(CREDENTIAL_PATHS.map(pattern => pattern.replace(/^\*\*\//u, ''))
+  .filter(path => !path.includes('*') && !path.includes('?')));
+
 // The glob grammar (wildcards, literal head) is the platform's one definition (`#platform/core/common`): the matcher, the anchor derivation
 // and the product layout admission share it (Astra 2164/2166) — a bracketed path such as `.cache/deckent[1]/state/ledger.db*` keeps its brackets.
 export { createGlobMatcher, globLiteralHead } from '#platform/index.js';
