@@ -12,7 +12,7 @@ export { ErrorRegistry, ERROR_CODES } from '#platform/core/errors/index.js';
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';
 export type { ExitCode } from '#platform/core/errors/index.js';
 export { lintErrorRegistry, assertErrorRegistry } from '#platform/core/errors/index.js';
-export { redactSensitive, queryErrorDiagnostic } from '#platform/core/errors/index.js';
+export { redactSensitive, unexpectedQueryFailure, takeQueryErrorRecord, reportQueryError, queryErrorClientParams, sanitizeQueryFailure } from '#platform/core/errors/index.js';
 export { EMPTY_KNOWN_SECRETS, REDACTION_PATTERNS, snapshotKnownSecrets, redactForRecord, redactForDecision, hasSecret } from '#platform/core/redaction/index.js';
 export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionMatch, RedactionResult } from '#platform/core/redaction/index.js';
 export { getConfigKnownSecrets } from '#platform/core/config/index.js';

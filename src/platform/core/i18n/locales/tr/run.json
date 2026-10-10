@@ -356,7 +356,7 @@
   "error.SUPERVISOR_CONTROL_FAILED": "Supervisor kontrolü kullanılamıyor; daemon ve yürütme sorumluluğu kanıtını inceleyin.",
   "error.SUPERVISOR_NOT_TERMINAL": "Supervisor terminal sonuç kanıtına sahip değil; yürütme sorumluluğu korunuyor.",
   "error.SUPERVISOR_RELEASE_UNCONFIRMED": "Supervisor bırakma işlemi doğrulanmadı; uzlaştırma gerekiyor.",
-  "error.QUERY_UNEXPECTED_FAILURE": "Beklenmeyen işlem hatası: {detail}",
+  "error.QUERY_UNEXPECTED_FAILURE": "Beklenmeyen işlem hatası ({errorClass}); tanı: {diagnosticId}",
   "error.RUN_PROGRESSION_PARKED": "Run ilerlemesi yapılandırılmış hata sınırında park edildi. Hata kodunu inceleyin, nedeni düzeltin ve süre dolmadan açıkça devam ettirin. Canlı yürütme sorumluluğu korunuyor.",
   "error.RUN_PROGRESSION_PARK_UNAVAILABLE": "Run ilerlemesi durduruldu ancak kalıcı park yazılamıyor. İptal politikasını veya depolama erişimini düzeltip runtime hizmetini yeniden başlatın; bu yürütücü yeni dispatch denemeyecek.",
   "cli.run.lifecycle.failure": "İlerleme hatası: {code}. Nedeni düzeltip süre dolmadan açıkça devam ettirin; canlı yürütme sorumluluğu korunur."

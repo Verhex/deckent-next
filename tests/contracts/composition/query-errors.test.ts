@@ -2,7 +2,7 @@ import { OpenRouterChatError, OpenRouterPricingError } from '#adapters/index.js'
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
 import { SupervisorError, DispatchError, ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
-import { ErrorRegistry, ManagedFileError } from '#platform/index.js';
+import { ErrorRegistry, ManagedFileError, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
@@ -118,11 +118,13 @@ it.each(['SUPERVISOR_OPTIONS_INVALID', 'SUPERVISOR_REQUEST_INVALID', 'SUPERVISOR
     expect(safe.localize?.('en').message).not.toBe(safe.localize?.('tr').message);
     expect(JSON.stringify(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
   });
-it('retains bounded redacted unknown details and cause without raw paths, credentials or terminal controls', () => {
+it('keeps unknown messages and causes in a bounded server record, with only class and correlation on the client', () => {
   const error = new Error('adapter broke at /private/workspace secret=credential\n\x1b[31m', { cause: new Error('socket failed C:\\private\\worker') });
   const safe = queryFailure(error);
-  expect(safe.code).toBe('QUERY_UNEXPECTED_FAILURE'); expect(safe.params?.['detail']).toContain('adapter broke');
-  expect(safe.params?.['detail']).toContain('socket failed');
+  expect(safe.code).toBe('QUERY_UNEXPECTED_FAILURE'); expect(safe.params).toEqual({ errorClass: 'Error', diagnosticId: expect.any(String) });
+  const record = takeQueryErrorRecord(safe, snapshotKnownSecrets([{ name: 'QUERY_FIXTURE', value: 'credential' }]));
+  expect(record).toContain('adapter broke'); expect(record).toContain('socket failed');
+  expect(record).not.toContain('credential'); expect(record).not.toContain(String.fromCharCode(27)); expect(record!.length).toBeLessThanOrEqual(2048);
   expect(JSON.stringify(safe)).not.toMatch(/credential|private|\\u001b/);
   expect(safe).not.toHaveProperty('cause');
   expect(String(queryFailure(new Error('x'.repeat(10000)))).length).toBeLessThan(2200);

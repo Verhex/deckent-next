@@ -356,7 +356,7 @@
   "error.SUPERVISOR_CONTROL_FAILED": "Supervisor control is unavailable; inspect the daemon and execution custody.",
   "error.SUPERVISOR_NOT_TERMINAL": "The supervisor has no terminal evidence; execution custody is retained.",
   "error.SUPERVISOR_RELEASE_UNCONFIRMED": "Supervisor release is unconfirmed; reconciliation is required.",
-  "error.QUERY_UNEXPECTED_FAILURE": "Unexpected operation failure: {detail}",
+  "error.QUERY_UNEXPECTED_FAILURE": "Unexpected operation failure ({errorClass}); diagnostic: {diagnosticId}",
   "error.RUN_PROGRESSION_PARKED": "Run progression is parked after the configured failure limit. Inspect its failure code, correct the cause, then explicitly resume before its deadline. Live execution custody is retained.",
   "error.RUN_PROGRESSION_PARK_UNAVAILABLE": "Run progression stopped, but durable parking is unavailable. Restore cancel policy or storage access and restart the runtime; no new dispatch will be attempted by this driver.",
   "cli.run.lifecycle.failure": "Progression failure: {code}. Correct the cause and explicitly resume before the deadline; live custody is retained."
