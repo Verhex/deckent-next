@@ -13,13 +13,18 @@ afterEach(async () => { for (const server of servers.splice(0)) { server.closeAl
 describe('seedless provider model discovery', () => {
   it('preserves exact slash/case/tag IDs, deduplicates, and scopes declarations to the canonical address', async () => {
     const nativeId = 'Org/Model:Q4_K_M';
-    const ids = await discoverProviderModels(local, 'http://localhost:8000/v1/', null, { fetch: reply(body([nativeId, nativeId, 'other'])) });
+    const ids = await discoverProviderModels(local, 'http://127.0.0.1:8000/v1/', null, { fetch: reply(body([nativeId, nativeId, 'other'])) });
     expect(ids).toEqual([nativeId, 'other']);
-    const catalog = discoveredProviderCatalog(local, 'http://localhost:8000', nativeId);
+    const catalog = discoveredProviderCatalog(local, 'http://127.0.0.1:8000', nativeId);
     expect(catalog.providers[0]!.models[0]).toMatchObject({ nativeId, protocols: [{ capabilities: [] }], efforts: [], aliases: [] });
-    expect(providerDiscoveryChannel(local, 'http://localhost:8000/v1')).toBe(catalog.providers[0]!.id);
-    expect(providerDiscoveryChannel(local, 'http://localhost:8001')).not.toBe(catalog.providers[0]!.id);
-    expect(providerDiscoveryChannel(generic, 'http://localhost:8000')).not.toBe(catalog.providers[0]!.id);
+    expect(providerDiscoveryChannel(local, 'http://127.0.0.1:8000/v1')).toBe(catalog.providers[0]!.id);
+    expect(providerDiscoveryChannel(local, 'http://127.0.0.1:8001')).not.toBe(catalog.providers[0]!.id);
+    expect(providerDiscoveryChannel(generic, 'http://127.0.0.1:8000')).not.toBe(catalog.providers[0]!.id);
+    // CONNECT-LOCALITY: a 'localhost' name is not literal loopback; plain http to it is refused before any request.
+    let sent = 0;
+    await expect(discoverProviderModels(local, 'http://localhost:8000/v1/', null, { fetch: async () => { sent += 1; return new Response(body(['x'])); } }))
+      .rejects.toMatchObject({ code: 'PROVIDER_ENDPOINT_INVALID' });
+    expect(sent).toBe(0);
   });
 
   it('uses only GET and the chosen origin, with manual redirects; never sends a key to plain-http loopback', async () => {
@@ -48,19 +53,19 @@ describe('seedless provider model discovery', () => {
 
   it.each(['not JSON', '{"data":null}', '{"data":[{}]}', '{"data":[{"id":" trimmed "}]}', '{"data":[{"id":"-option"}]}',
     '{"data":[{"id":"line\\nfeed"}]}'])('refuses a malformed list or ID: %s', async text => {
-    await expect(discoverProviderModels(local, 'http://localhost', null, { fetch: reply(text) })).rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_INVALID' });
+    await expect(discoverProviderModels(local, 'http://127.0.0.1', null, { fetch: reply(text) })).rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_INVALID' });
   });
 
   it('refuses a credential echoed as a model ID and keeps an empty list empty', async () => {
     await expect(discoverProviderModels(generic, 'https://llm.example', key, { fetch: reply(body([`echo-${key}`])) }))
       .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_INVALID' });
-    expect(await discoverProviderModels(local, 'http://localhost', null, { fetch: reply(body([])) })).toEqual([]);
+    expect(await discoverProviderModels(local, 'http://127.0.0.1', null, { fetch: reply(body([])) })).toEqual([]);
   });
 
   it('refuses oversized bytes and entry counts without returning a partial list', async () => {
-    await expect(discoverProviderModels(local, 'http://localhost', null, { fetch: reply(' '.repeat(PROVIDER_CONNECT_LIMITS.modelListBytes + 1)) }))
+    await expect(discoverProviderModels(local, 'http://127.0.0.1', null, { fetch: reply(' '.repeat(PROVIDER_CONNECT_LIMITS.modelListBytes + 1)) }))
       .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_LIMIT' });
-    await expect(discoverProviderModels(local, 'http://localhost', null, { fetch: reply(body(Array.from({ length: PROVIDER_CONNECT_LIMITS.modelListCount + 1 }, (_, i) => `m${i}`))) }))
+    await expect(discoverProviderModels(local, 'http://127.0.0.1', null, { fetch: reply(body(Array.from({ length: PROVIDER_CONNECT_LIMITS.modelListCount + 1 }, (_, i) => `m${i}`))) }))
       .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_LIMIT' });
   });
 
@@ -68,7 +73,7 @@ describe('seedless provider model discovery', () => {
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('{"data":[')); },
       cancel() { cancelled = true; } });
-    await expect(discoverProviderModels(local, 'http://localhost', null, { timeoutMs: 30, fetch: async () => new Response(stream) }))
+    await expect(discoverProviderModels(local, 'http://127.0.0.1', null, { timeoutMs: 30, fetch: async () => new Response(stream) }))
       .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' });
     expect(cancelled).toBe(true);
   });
@@ -78,10 +83,10 @@ describe('seedless provider model discovery', () => {
     const stream = new ReadableStream<Uint8Array>({ start(streamController) {
       streamController.enqueue(new TextEncoder().encode('{"data":['));
     } });
-    const pending = discoverProviderModels(local, 'http://localhost', null, { signal: controller.signal, fetch: async () => new Response(stream) });
+    const pending = discoverProviderModels(local, 'http://127.0.0.1', null, { signal: controller.signal, fetch: async () => new Response(stream) });
     controller.abort(reason); await expect(pending).rejects.toBe(reason);
     let called = false;
-    await expect(discoverProviderModels(local, 'http://localhost', null, { signal: controller.signal, fetch: async () => {
+    await expect(discoverProviderModels(local, 'http://127.0.0.1', null, { signal: controller.signal, fetch: async () => {
       called = true; return new Response(body(['x']));
     } })).rejects.toBe(reason);
     expect(called).toBe(false);

@@ -118,7 +118,8 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     const turnId = `turn-${++turns}`;
     const answer = await terminalRequest({ project, data, env }, 'chatTurn', { schemaVersion: 1, scopeId: 'scope', turnId,
       messages: [{ role: 'user', content: 'go' }], ...(options.fullAccess ? { fullAccess: true as const } : {}) }, decision);
-    if (!answer.response.ok) throw ErrorRegistry.createError(answer.response.error!.code, answer.response.error!.params);
+    // The wire error keeps its typed code and params (createError takes the params inside its options object).
+    if (!answer.response.ok) throw ErrorRegistry.createError(answer.response.error!.code, answer.response.error!.params ? { params: answer.response.error!.params } : {});
     const events = answer.events as AgentTurnStreamEvent[];
     const finished = events.find(event => event.kind === 'tool.finished');
     const text = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';

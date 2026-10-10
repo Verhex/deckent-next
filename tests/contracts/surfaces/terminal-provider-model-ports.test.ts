@@ -128,7 +128,9 @@ describe('/provider addresses (owner 2026-10-08, D3: chosen from a list; a typed
     expect(kinds.find(kind => kind.id === 'local-openai')!.endpointChoices).toEqual([
       { id: 'configured', label: 'Bu kurulumun çıkarım sunucusu', url: 'http://127.0.0.1:8000' }, { id: 'ollama', label: 'Bu makinedeki Ollama', url: 'http://127.0.0.1:11434' }]);
     expect(kinds.find(kind => kind.id === 'anthropic-api')!.endpointChoices).toEqual([]);
-    expect(port.endpoint('local-openai', 'http://localhost:9000/v1/')).toEqual({ ok: true, base: 'http://localhost:9000', check: 'http://localhost:9000/v1/models' });
+    expect(port.endpoint('local-openai', 'http://127.0.0.1:9000/v1/')).toEqual({ ok: true, base: 'http://127.0.0.1:9000', check: 'http://127.0.0.1:9000/v1/models' });
+    // CONNECT-LOCALITY: only literal loopback is local; a 'localhost' name is refused like any other plain-http host.
+    expect(port.endpoint('local-openai', 'http://localhost:9000/v1/')).toEqual({ ok: false, reason: 'Düz http yalnız bu makinede kullanılabilir; https kullanın.' });
     expect(port.endpoint('local-openai', 'http://10.0.0.2:8000')).toEqual({ ok: false, reason: 'Düz http yalnız bu makinede kullanılabilir; https kullanın.' });
   });
 });
