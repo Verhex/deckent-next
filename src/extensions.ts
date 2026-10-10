@@ -1,7 +1,9 @@
 // `deckent/extensions` (ENTERPRISE-EXT-1, owner K7 = A): the one public entry through which an Enterprise, ERP or custom package layers on
 // Core without editing it. Registration is open until the composition root seals the registries at the first composed entry (any SDK call,
-// a CLI command, the runtime service); afterwards it is the typed `RegistryError('REGISTRY_SEALED')`. Registration grants nothing: the
-// installation's configuration selects targets and backends, and policy decides every operation. The SDK entry (`deckent`) exports no
+// a CLI command, the runtime service); afterwards it is the typed `RegistryError('REGISTRY_SEALED')`. Registration grants no authority: the
+// installation's configuration selects targets and backends, and policy decides every operation. One registration changes a money outcome:
+// a no-charge certification lets settlement and startup recovery release a hold after a documented admission rejection at its own exact
+// endpoints only (add-only; it can never widen an existing vendor's certification). The SDK entry (`deckent`) exports no
 // registration function of these registries (lint-arch G-i). Inventory: tests/contracts/composition/extensions-entry.test.ts.
 export { registerOperationAdapterModule, registerSecretStoreBackend } from '#adapters/index.js';
 export { createSecretHelperFactory, type SecretHelperOptions } from '#adapters/index.js';
