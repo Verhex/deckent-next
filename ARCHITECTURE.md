@@ -79,10 +79,12 @@ Backlog/reactive inputs are versioned Mission sources; periodic autonomous execu
 The Mission implementation and vocabulary gate update remain pending. This decision neither restores
 the mandatory legacy seven-level hierarchy nor decides additional Goal/Flow/Operation aggregates.
 
-## M5 design — owner 2026-10-11 (accepted target, implementation pending)
+## M5 design — owner 2026-10-11 (accepted target; alpha.29 candidate implements the binding slice)
 
-Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. Nothing below is implemented unless a later
-section says it landed; the code base is the alpha.28 M5 foundations (acceptance profiles, handoff proof, fence assessment).
+Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. Nothing below is implemented except the alpha.29
+candidate binding slice (not live): ledger v51 `acceptance_metrics` keyed `(scope_id, producer_command_id)`, written with the evaluation and its producer receipt in one
+transaction; domain `workerCustody` (absent = held) moved only by `releaseWorkerCustody` on fence plus termination proof; fence with reserved command ids
+(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled after Attempt start, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`).
 
 - **Roles are proposals on one ledger, not engines.** The Run ledger is the single source of truth; each transition keeps
   one owner (scheduler, evaluator, approval broker); roles write proposals, never state.
@@ -276,7 +278,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   `QUERY_UNEXPECTED_FAILURE` diagnostic custody (`src/platform/core/errors/internal/redact.ts`): the client (CLI, SDK, MCP) receives only the code,
   a safe class name from a closed list and a `diagnosticId` (UUID); the full diagnostic goes to the existing runtime-service record, scanned
   first with the real known-secret snapshot (`getConfigKnownSecrets`) and cut to the bound afterwards. There is no raw fallback; a config or
-  sink failure drops the detail. Unregistered coded errors become `INVENTORY_UNAVAILABLE` without detail.
+  sink failure drops the detail. From alpha.29 the client reply precedes the record write (stop waits for pending records). Unregistered coded errors become `INVENTORY_UNAVAILABLE` without detail.
   The docker supervisor allow-list accepts exactly one extra read-only handoff target, `/deckent/inputs/_needs-input.json`
   (`src/adapters/core/docker-supervisor/internal/options.ts`); arbitrary or duplicate targets stay refused.
   Version limit: an older binary cannot read the new park variant or audit action; rollback needs the pre-switch ledger backup.
@@ -698,11 +700,11 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 - **Batch G M5 foundations (source candidate, batch G, alpha.28; not live):** (1) WorkClass registry `schemaVersion` 1|2 in
   `src/domain/core/run/internal/work-class.ts`: v1 stays readable; v2 adds `acceptanceProfile`, closed criterion and evidence type enums,
   weighted rubric and score ceilings, and merges over Core add-only with a composite revision. The enums are deliberately closed in code;
-  whether an Enterprise or ERP adapter may extend them through the registry is decided in the M5 wiring wave. (2) DECKENT-METRICS v1
-  (`src/domain/core/run/internal/metrics.ts`) is a pure attributed result contract. No record or screen consumes either yet.
+  an Enterprise or ERP adapter extends them through registered `ext:` names (overlay `schemaVersion: 3`, unknown fail-closed; alpha.29). (2) DECKENT-METRICS v1
+  (`src/domain/core/run/internal/metrics.ts`) is a pure attributed result contract; alpha.29 persists it (v51 above). Rollback to alpha.28 needs the pre-switch ledger backup (typed `ATTEMPT_STORE_VERSION`).
   (3) The pure dispatch-fence decision (`assessLostDispatch` in `src/engine/core/dispatch/internal/loss.ts`, `decideDispatchLoss` in
-  `src/domain/core/attempt/internal/dispatch-loss.ts`) has no production caller. In production `finishDispatch`, a late exit keeps a durable unknown
-  Attempt observation (`src/engine/core/dispatch/internal/settle.ts`) and no success is invented; real slot release and a durable lock are open.
+  `src/domain/core/attempt/internal/dispatch-loss.ts`) gets production callers in alpha.29 (`fenceLostDispatch`, the fence reader; slot release only with exact
+  retained container incarnation plus exit/absence proof, else `hold-manual`). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
   (4) Test-ERP is a test fixture only (`tests/fixtures/test-erp`): no ERP-specific code exists in Core; it goes through the generic
   http-conditional adapter, the operation catalog and the approval path.
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and

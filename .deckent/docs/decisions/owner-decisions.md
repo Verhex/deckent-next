@@ -381,3 +381,10 @@ Kaynak: dış `proof/M5-BRAIN-DESIGN-2026-10-11/OWNER-DECISIONS.md`, `proof/M5-B
 - **DEC-5 etki ↔ görev kabulü (owner):** kriter parametresiyle; iş-nötr operasyon-kanıtı değerlendiricisi, göç yok (Jev 0,96/0,65 yeterlilik eşik altı → owner).
 - **DEC-1 kanıt türü (lead (Jev)):** çekirdek kapalı küme + kayıtlı `ext:` ad alanı, bilinmeyen tür fail-closed; D1 hattı A ile başladı, C ikinci turda (Jev 0,99/0,68).
 - **DEC-4 v1/v2 yazma politikası (lead (Jev)):** yeni config yazımı v2 kullanır, v1 yalnız okunur (düşük risk).
+
+## Owner kararları — 2026-10-11 (bağlama dalgası inişi)
+Kaynak: dış `proof/M5-BIND-2026-10-11/LEAD-DECISIONS.md` (tur 2 karar 9, ERP kanıtı tek kullanım), commit `aea01903`. Uygulama: alpha.29 adayı (`wave/m5-bind`).
+- **ERP kanıtı tek kullanımı: "aynı Run".** Kesinleşmiş bir işlem aynı Run'ın birden çok görevinin kabul kanıtı olabilir; başka bir Run'ın kullanması tipli retle (`OPERATION_EVIDENCE_OTHER_RUN`) reddedilir. Zaman (işlem görevin Attempt'i başladıktan sonra kesinleşmiş) ve yetki (Run kabul principal'ı ya da yürüten principal) kuralları aynen kalır; dört göz onayı ayrı makbuzda tutulur, karşılaştırmaya girmez.
+- **Paket bütçesi geçici yükseltme:** adapters 28000, composition 7200 (önceki 26300/6700). Bölünme kararı beta sonrasına bırakıldı (PLAN: PACKAGE-SPLIT).
+- **Sürüm sırası:** bağlama dalgası `1.0.0-alpha.29` olarak iner; küçük, yalnız sürüm ve doküman `1.0.0-beta.1` N1 devir ve test-ERP kanıtları canlıda gözlenince gelir. Bu, BETA-LAUNCH'taki "beta etiketi dalga inince" ifadesinin yerine geçer.
+- **Manuel slot bırakma:** beta'da yalnız kanıtla (fence + sonlanma kanıtı); kanıtsızda `hold-manual`, yeni komut yok (tur 2 karar 9).
