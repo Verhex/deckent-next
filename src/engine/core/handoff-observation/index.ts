@@ -3,3 +3,4 @@ export type { HandoffStartRecord, HandoffStartEvent } from './internal/receipt.j
 export { HandoffError, evaluateHandoff, verifyAcceptedHandoffSource } from './internal/validation.js';
 export { projectTaskHandoffs, handoffReceiptViewSchema } from './internal/projection.js';
 export type { HandoffReceiptView } from './internal/projection.js';
+export { bindPatchStartEvents } from './internal/receipt.js';

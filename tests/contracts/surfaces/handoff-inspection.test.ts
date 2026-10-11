@@ -30,6 +30,16 @@ it('run and task inspect JSON preserve distinct engine note and patch-start evid
     expect(h.out.join('')).not.toContain('snapshotDigest');
   }
 });
+it('run and task JSON preserve the verified starting tree pair and keep legacy evidence without G2', async () => {
+  const handoffs = [{ ...receipt, kind: 'handoff-received' }, { ...receipt, kind: 'workspace-started-from-patch',
+    digest: 'b'.repeat(64), bindingDigest: 'c'.repeat(64), snapshotDigest: 'd'.repeat(64) }];
+  for (const args of [['run', 'inspect', '--scope', 's', '--id', 'r'], ['task', 'inspect', '--scope', 's', '--run', 'r', '--task', 'dependent']]) {
+    const h = harness(handoffs); expect(await main([...args, '--json'], h.context)).toBe(0);
+    const value = JSON.parse(h.out.join(''));
+    expect(value.task?.handoffs ?? value.run.tasks[0].handoffs).toEqual(handoffs);
+    expect((value.task?.handoffs ?? value.run.tasks[0].handoffs)[0]).not.toHaveProperty('snapshotDigest');
+  }
+});
 it.each([['en', 'handoff received'], ['tr', 'devir alındı']])('monitor renders the same dependency receipt in %s', async (locale, label) => {
   const surface = await loadMonitorSurface(); const template = fullSnapshot.installs[0]!.runs[0]!;
   const run = { ...template, tasks: [{ ...template.tasks[0]!, handoffs: [receipt] }] };

@@ -54,7 +54,7 @@ async function fixture(context: TestContext) {
 }
 it('empty start list preserves fixed-base checkout byte-identically without a handoff sidecar', async () => {
   const f = await portableFixture();
-  expect(await applyAcceptedPredecessorPatches(f.lease, f.options, limits, [])).toEqual([]);
+  expect(await applyAcceptedPredecessorPatches(f.lease, f.options, limits, [])).toEqual({ receipts: [], bindingDigest: undefined, snapshotDigest: undefined });
   expect(await readFile(join(f.lease.workspace, 'tracked'), 'utf8')).toBe('base\n');
   expect(f.lease.baseCommit).toBe('b'.repeat(40));
   expect(await readdir(f.root)).toEqual(['checkout']);
@@ -62,7 +62,7 @@ it('empty start list preserves fixed-base checkout byte-identically without a ha
 it('applies accepted patch with a durable exact receipt, replays safely and keeps Run base unchanged', async context => {
   const f = await fixture(context);
   const receipt = await applyAcceptedPredecessorPatches(f.lease, f.options, limits, [f.start]);
-  expect(receipt).toEqual([{ sourceTaskId: 'a', sourceAttemptId: 'a1', digest: f.start.receipt.digest }]);
+  expect(receipt.receipts).toEqual([{ source: f.start.source, digest: f.start.receipt.digest }]);
   expect(await readFile(join(f.lease.workspace, 'tracked'), 'utf8')).toBe('accepted\n');
   expect((await f.broker.openRecorded(identity))?.baseCommit).toBe(f.lease.baseCommit);
   expect(await applyAcceptedPredecessorPatches(f.lease, f.options, limits, [f.start])).toEqual(receipt);
