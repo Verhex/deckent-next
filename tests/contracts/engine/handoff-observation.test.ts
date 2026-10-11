@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { createAttempt, createRun, type RunSnapshot } from '#domain/index.js';
 import { handoffEventCommandId, handoffReceiptViewSchema, handoffStartRecordSchema, projectTaskHandoffs,
   projectRunView, projectMonitorRun, readAttemptHandoffEvents, RunInspectionApplication, type HandoffStartRecord } from '#engine/index.js';
+import { bindPatchStartEvents } from '#engine/core/handoff-observation/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
 const identity = (taskId: string) => ({ scopeId: 's', runId: 'r', layoutRevision: 'l', taskId, attemptId: `attempt-${taskId}`, generation: 1 });
@@ -97,4 +98,60 @@ it('rejects malformed observation kinds and digests rather than accepting arbitr
   expect(handoffReceiptViewSchema.safeParse({ ...patch, kind: 'worker-reported-start' }).success).toBe(false);
   expect(handoffReceiptViewSchema.safeParse({ ...patch, digest: 'bad' }).success).toBe(false);
   expect(handoffReceiptViewSchema.safeParse({ ...patch, snapshotDigest: patch.digest }).success).toBe(false);
+});
+
+const pair = { bindingDigest: 'c'.repeat(64), snapshotDigest: 'd'.repeat(64) };
+
+it('carries the start-tree pair through Run, task and monitor projection without changing note evidence', () => {
+  const event = { ...patch, ...pair }, g2 = { ...record, events: [note, event] };
+  expect(projectTaskHandoffs(run, 'b', [g2])).toEqual([note, event]);
+  expect(projectRunView(run, [g2]).tasks[1]?.handoffs).toEqual([note, event]);
+  const attempt = { attemptId: 'attempt-b', generation: 1, observedKind: null, observedRevision: null, dispatch: null,
+    evaluationObserved: false, reservedAtMs: null, sealedAtMs: null, handoffStart: g2 };
+  expect(projectMonitorRun({ run: { snapshot: run, poolId: null, admitted: true, createdAtMs: null, attempts: [attempt] },
+    approvals: [], pool: null, workers: new Map(), observedAt: 10 }).tasks[1]?.handoffs).toEqual([note, event]);
+});
+
+it.each([
+  { ...patch, bindingDigest: pair.bindingDigest }, { ...patch, snapshotDigest: pair.snapshotDigest },
+  { ...note, ...pair }, { source: patch.source, digest: patch.digest, ...pair },
+  { ...patch, ...pair, bindingDigest: 'bad' }, { ...patch, ...pair, snapshotDigest: 'bad' },
+])('refuses partial, malformed or non-patch digest pairs %# in the public view', event => {
+  expect(handoffReceiptViewSchema.safeParse(event).success).toBe(false);
+});
+
+it.each([
+  [{ ...patch, ...pair }, { ...patch, ...pair, bindingDigest: 'e'.repeat(64) }],
+  [{ ...patch, ...pair }, { ...patch, ...pair, snapshotDigest: 'e'.repeat(64) }],
+  [{ ...patch, ...pair }, patch], [patch, { ...patch, ...pair }],
+  [{ ...note, ...pair }], [{ ...patch, bindingDigest: pair.bindingDigest }],
+])('refuses inconsistent or invalid receipt pairs %#', events => {
+  expect(handoffStartRecordSchema.safeParse({ ...record, events }).success).toBe(false);
+});
+
+it('maps reordered adapter receipts by complete source Attempt identity and retains note order', () => {
+  const second = { ...patch, source: identity('c'), digest: 'e'.repeat(64) };
+  const applied = { ...pair, receipts: [{ source: second.source, digest: second.digest }, { source: patch.source, digest: patch.digest }] };
+  expect(bindPatchStartEvents([patch, note, second], applied)).toEqual([{ ...patch, ...pair }, note, { ...second, ...pair }]);
+  expect(bindPatchStartEvents([], { receipts: [] })).toEqual([]);
+});
+
+it.each(['scopeId', 'runId', 'layoutRevision', 'taskId', 'attemptId', 'generation'] as const)(
+  'refuses an adapter receipt with substituted source %s', field => {
+    const changed = { ...patch.source, [field]: field === 'generation' ? 2 : 'foreign' };
+    expect(() => bindPatchStartEvents([patch], { ...pair, receipts: [{ source: changed, digest: patch.digest }] }))
+      .toThrowError('HANDOFF_PATCH_UNAPPLICABLE');
+  });
+
+it.each(['missing', 'extra', 'duplicate', 'digest', 'no-pair'] as const)('refuses %s adapter evidence before journal write', mode => {
+  const receipt = { source: patch.source, digest: patch.digest };
+  const receipts = mode === 'missing' ? [] : mode === 'extra' || mode === 'duplicate' ? [receipt, receipt]
+    : mode === 'digest' ? [{ ...receipt, digest: note.digest }] : [receipt];
+  expect(() => bindPatchStartEvents([patch], { ...(mode === 'no-pair' ? {} : pair), receipts })).toThrowError('HANDOFF_PATCH_UNAPPLICABLE');
+});
+it('refuses duplicate source identities even when receipt and event counts match', () => {
+  const second = { ...patch, source: identity('c'), digest: 'e'.repeat(64) };
+  const receipt = { source: patch.source, digest: patch.digest };
+  expect(() => bindPatchStartEvents([patch, second], { ...pair, receipts: [receipt, receipt] })).toThrowError('HANDOFF_PATCH_UNAPPLICABLE');
+  expect(() => bindPatchStartEvents([patch, patch], { ...pair, receipts: [receipt, receipt] })).toThrowError('HANDOFF_PATCH_UNAPPLICABLE');
 });

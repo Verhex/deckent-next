@@ -29,12 +29,12 @@ async function existing(path: string, maxBytes: number) {
  * Run custody and checkout HEAD remain the original base. Patch receipts are separately recorded on the attempt by the engine. */
 export async function applyAcceptedPredecessorPatches(lease: WorkspaceLease, options: GitWorkspaceOptions, limits: PatchLimits,
   starts: readonly AcceptedPredecessorPatch[]) {
-  if (!starts.length) return Object.freeze([]);
+  if (!starts.length) return Object.freeze({ receipts: Object.freeze([]), bindingDigest: undefined, snapshotDigest: undefined });
   try {
     const recorded = await new GitWorkspaceBroker(options).openRecorded(lease.identity);
     if (!recorded || recorded.workspace !== lease.workspace || recorded.baseCommit !== lease.baseCommit) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
-    const receipts = starts.map(start => ({ sourceTaskId: start.source.taskId, sourceAttemptId: start.source.attemptId, digest: start.receipt.digest }));
-    const bindingDigest = patchDigest(JSON.stringify({ identity: lease.identity, baseCommit: lease.baseCommit, receipts }));
+    const receipts = starts.map(start => ({ source: start.source, digest: start.receipt.digest }));
+    const bindingDigest = patchDigest(JSON.stringify({ identity: lease.identity, baseCommit: lease.baseCommit, receipts: receipts.map(({ source, digest }) => ({ sourceTaskId: source.taskId, sourceAttemptId: source.attemptId, digest })) }));
     const path = join(dirname(lease.workspace), 'handoff-start.json');
     const budget = () => new SnapshotBudget(limits, Date.now() + options.timeoutMs);
     const changes = starts.flatMap(start => {
@@ -52,7 +52,7 @@ export async function applyAcceptedPredecessorPatches(lease: WorkspaceLease, opt
     const current = await readWorkspace(lease.workspace, budget(), { listing, algorithm, keep: new Set(changes.map(change => change.path)) });
     if (prior) {
       if (prior.state !== 'ready' || prior.bindingDigest !== bindingDigest || prior.snapshotDigest !== snapshotDigest(current)) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
-      return Object.freeze(receipts);
+      return Object.freeze({ receipts: Object.freeze(receipts), bindingDigest, snapshotDigest: prior.snapshotDigest });
     }
     if (diffAgainstBase(listing, current, algorithm).length) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
     const expected: Snapshot = new Map(current);
@@ -70,7 +70,7 @@ export async function applyAcceptedPredecessorPatches(lease: WorkspaceLease, opt
     await durable(path + '.pending', { ...record, state: 'ready' }); await rename(path + '.pending', path);
     const directory = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     try { await directory.sync(); } finally { await directory.close(); }
-    return Object.freeze(receipts);
+    return Object.freeze({ receipts: Object.freeze(receipts), bindingDigest, snapshotDigest: record.snapshotDigest });
   } catch (error) {
     if (error instanceof HandoffError) throw error;
     throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');

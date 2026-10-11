@@ -93,7 +93,7 @@ async function fixture(context: TestContext, verdict: 'accepted' | 'failed' = 'a
     const handoff = await new TaskHandoffApplication(store, verifier, authorization, artifacts, { maxBytes: limits.maxBytes, maxSharedNotes: 10, promptBytes: 8192 }).resolve(target);
     const lease = await acquisition.acquire(target);
     const applied = await applyAcceptedPredecessorPatches(lease, options, limits, patches);
-    await recordAttemptHandoffStart(store, target, [...handoff.events, ...applied.map(value => ({ kind: 'workspace-started-from-patch' as const, source: patches[0]!.source, digest: value.digest }))]);
+    await recordAttemptHandoffStart(store, target, [...handoff.events, ...patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
     return launch(lease);
   };
   return { store, sourceRoot, acquisition, artifacts, prepared, options, base, resolve, tree, producer, result, evaluation, start, launch, observation };
@@ -110,11 +110,14 @@ it('producer → retained patch → evaluation → acceptance → dependent prov
   const lease = await f.acquisition.acquire(target), expected = await f.tree(f.producer);
   expect(snapshotDigest(await f.tree(lease))).not.toBe(snapshotDigest(expected)); // G1 alone cannot satisfy G2.
   const applied = await applyAcceptedPredecessorPatches(lease, f.options, limits, starts);
-  const events = [...handoff.events, ...applied.map(value => ({ kind: 'workspace-started-from-patch' as const, source: starts[0]!.source, digest: value.digest }))];
+  const events = [...handoff.events, ...applied.receipts.map(value => ({ kind: 'workspace-started-from-patch' as const, source: value.source, digest: value.digest, bindingDigest: applied.bindingDigest, snapshotDigest: applied.snapshotDigest }))];
   await recordAttemptHandoffStart(f.store, target, events);
   const retained = await readAttemptHandoffEvents(f.store, target);
   expect(retained).toEqual({ schemaVersion: 1, identity: target, events }); // G1 durable exact identity, output and patch digests.
   expect(retained!.events.map(event => event.kind)).toEqual(['handoff-received', 'workspace-started-from-patch']);
+  expect(retained!.events[1]!.snapshotDigest).toBe(snapshotDigest(expected));
+  expect(retained!.events[1]!.bindingDigest).toBe(applied.bindingDigest);
+  expect(retained!.events[0]).not.toHaveProperty('snapshotDigest');
   expect(projectRunView((await f.store.loadRun('s', 'r'))!, [retained!]).tasks[1]?.handoffs).toEqual(events);
   expect(await f.tree(lease)).toEqual(expected); // G2 includes all paths, additions/deletions, content and executable mode.
   expect(snapshotDigest(await f.tree(lease))).toBe(f.prepared.patch.snapshotDigest);
