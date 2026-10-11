@@ -84,7 +84,7 @@ the mandatory legacy seven-level hierarchy nor decides additional Goal/Flow/Oper
 Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. Nothing below is implemented except the alpha.29
 candidate binding slice (not live): ledger v51 `acceptance_metrics` keyed `(scope_id, producer_command_id)`, written with the evaluation and its producer receipt in one
 transaction; domain `workerCustody` (absent = held) moved only by `releaseWorkerCustody` on fence plus termination proof; fence with reserved command ids
-(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled after Attempt start, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); evaluation reply and Run inspection share one result brief and delivery outlook under per-Attempt `read-output` authority (replay pins the receipt snapshot).
+(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled after Attempt start, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); evaluation reply and Run inspection share result briefs and delivery outlook under Run `inspect` and per-Attempt `read-output` authority; inspect denial omits reply briefs (replay pins the receipt snapshot).
 
 - **Roles are proposals on one ledger, not engines.** The Run ledger is the single source of truth; each transition keeps
   one owner (scheduler, evaluator, approval broker); roles write proposals, never state.
