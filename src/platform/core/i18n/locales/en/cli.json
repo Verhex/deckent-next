@@ -1410,5 +1410,20 @@
   "terminal.slash.policy": "MCP permissions by selection",
   "cli.help.action.run.hold": "Hold new Run attempts with a reason",
   "cli.run.lifecycle.note": "  Hold: {note}",
-  "cli.run.lifecycle.question": "  Question: {question}"
+  "cli.run.lifecycle.question": "  Question: {question}",
+  "acceptance.summary": "Acceptance: class {workClass} · policy {policyRevision} · profile {profileVersion} · {outcome} · criteria {criteria} · ceiling {ceilings}",
+  "acceptance.unknown": "unknown",
+  "acceptance.outcome.accepted": "accepted",
+  "acceptance.outcome.failed": "failed",
+  "acceptance.outcome.awaiting-decision": "awaiting decision",
+  "acceptance.outcome.incomplete": "incomplete",
+  "acceptance.criterion.completion": "completion",
+  "acceptance.criterion.correctness": "correctness",
+  "acceptance.criterion.safety": "safety",
+  "acceptance.criterion.authorization": "authorization",
+  "acceptance.ceiling.missing-evidence": "missing evidence",
+  "acceptance.ceiling.unsettled-effect": "unsettled effect",
+  "acceptance.ceiling.missing-approval": "missing approval",
+  "cli.run.inspect.workspaceStartedFromPatch": "Workspace started from accepted patch of {source} (attempt {attempt}, patch digest {digest})",
+  "monitor.detail.workspaceStartedFromPatch": "started from accepted patch of {source} (attempt {attempt}, patch digest {digest})"
 }

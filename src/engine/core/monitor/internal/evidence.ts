@@ -43,6 +43,7 @@ export interface MonitorLedgerAttempt {
 export interface MonitorEvent { readonly atMs: number | null; readonly kind: string; readonly summary: string }
 export interface MonitorLedgerRun {
   readonly capacity?: { readonly executionSlots: number; readonly inFlightSlots: number };
+  readonly evaluations?: readonly Readonly<{ identity: { taskId: string } }>[];
   readonly snapshot: RunSnapshot; readonly poolId: string | null;
   /** Automatic progression intent (`run_execution_intents`, v25+); null when the ledger predates the table. */
   readonly admitted: boolean | null;

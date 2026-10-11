@@ -1,3 +1,4 @@
+import { renderAcceptanceLine } from './acceptance.js';
 import { t, type Locale } from '#platform/index.js';
 import { projectHumanState, resolveWorkerUsage, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
   type MonitorWorker } from '#engine/index.js';
@@ -206,7 +207,8 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
-      ...(task.handoffs ?? []).map(receipt => [span(`    ${t('monitor.detail.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)}`, 'success')]),
+      ...(task.acceptance ? [[span(renderAcceptanceLine(task.acceptance, locale), 'muted')]] : []),
+      ...(task.handoffs ?? []).map(receipt => [span(`    ${(receipt.kind === 'workspace-started-from-patch' ? t('monitor.detail.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('monitor.detail.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))}`, 'success')]),
       ...(task.evaluation.reason ? [[span(`    ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')]] : []),
       ...(task.dependencies.length ? [[span(`    ${t('monitor.detail.dependencies', { list: task.dependencies.join(', ') }, locale)}`, 'muted')]] : []),
     ]; }),

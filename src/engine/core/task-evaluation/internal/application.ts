@@ -38,7 +38,7 @@ type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'l
 export function describeTaskEvaluationReceipt(receipt: RunReceipt) {
   const evidence = (JSON.parse(receipt.command) as { evaluation?: TaskEvaluation }).evaluation;
   const model = evidence?.model;
-  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
+  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot, [], evidence ? [evidence] : []), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
 }
 /** Authenticated evaluation ingress. Wire input carries no verdict, evaluator, artifact, actor or paths.
  * Installed evaluator code consumes pinned definitions and verified terminal/output custody.

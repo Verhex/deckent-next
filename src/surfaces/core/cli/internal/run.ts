@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
-import { renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { renderAcceptanceLine, renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import type { RunCancellationDeliveryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type { RunCancellationDeliveryHandler, RunQueryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly Readonly<{ code: string; taskId: string; modelId: string; minCliVersion: string; cliVersion: string | null }>[] }>>;
@@ -146,9 +146,10 @@ export async function runCommand(argv: readonly string[], context: CommandContex
         ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
         ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
         ...(task.decision?.question ? [t('cli.run.lifecycle.question', { question: task.decision.question }, locale)] : []),
+        ...(task.acceptance ? [renderAcceptanceLine(task.acceptance, locale)] : []),
         t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale),
         ...(data.models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', { attempt: model.attemptId ?? '—', line: renderWorkerModelLine(model, locale) }, locale)),
-        ...(task.handoffs ?? []).map(receipt => t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)),
+        ...(task.handoffs ?? []).map(receipt => (receipt.kind === 'workspace-started-from-patch' ? t('cli.run.inspect.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))),
         ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : [])]),
       ...run.criteria.map(criterion => t('cli.run.inspect.criterion', { criterion: criterion.id, description: criterion.description, evaluator: criterion.evaluator.id, version: criterion.evaluator.version }, locale)),
     ].join('\n');
