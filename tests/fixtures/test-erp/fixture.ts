@@ -13,6 +13,7 @@ import { startInteractivePeer } from './terminal-peer.js';
 import { fixtureAvailability, FixtureUnavailableError } from './availability.js';
 import { runtimeBinaryAvailability, startFixtureRuntime } from './runtime.js';
 import { correlateEvidence } from './evidence.js';
+import { fixtureDockerRegistry } from '../../contracts/support/execution-registry.js';
 
 export { config };
 export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; platform?: NodeJS.Platform } = {}) {
@@ -34,7 +35,12 @@ export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; pl
     const descriptor = (operation: typeof config.operations.read, effectClass: 'read' | 'write', approval: 'policy' | 'required', compensation: typeof operation | null) => ({
       schemaVersion: 1, operation, targetKind: config.targetKind, effectClass, approval, precondition: effectClass === 'read' ? 'none' : 'record-version',
       compensation, inputMaxBytes: config.http.inputMaxBytes });
+    const registry = { ...fixtureDockerRegistry(['business']), evaluators: [{ id: 'operation-evidence', version: 1, implementation: { id: 'operation-evidence', version: 1 } }],
+      workClasses: { schemaVersion: 2, revision: 'test-process-policy', classes: [{ id: 'business', defaultEffort: 'high', acceptanceProfile: { schemaVersion: 1, version: 1,
+        criterionTypes: ['completion'], evidenceTypes: ['operation-settlement'], rubric: [{ criterionType: 'completion', evidenceTypes: ['operation-settlement'], weight: 1 }],
+        ceilingRules: [{ when: 'missing-evidence', maxScore: 0 }, { when: 'unsettled-effect', maxScore: 0 }], decisionThresholds: { rejectBelow: 0.4, acceptAt: 0.9 } } }], bindings: [{ kind: 'business', classId: 'business' }] } };
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') },
+      admission: { poolId: 'process-pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
       ...(surface === 'runtime' ? { service: config.runtimeService, runRuntime: config.runRuntime, cancellation: config.cancellation,
         cancellationRuntime: config.cancellationRuntime, toolchains: config.toolchains } : {}), operations: {
       catalog: [descriptor(config.operations.read, 'read', 'policy', null), descriptor(config.operations.approve, 'write', 'required', config.operations.undo),
@@ -42,7 +48,8 @@ export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; pl
       targets: [{ adapter: 'http-conditional', options: { kind: config.targetKind, baseUrl: server.baseUrl, timeoutMs: config.http.timeoutMs,
         responseMaxBytes: config.http.responseMaxBytes, idempotencyLookup: true } }] } }));
     registerProviderConfig();
-    const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
+    const opened = await openConfiguredAttemptStore(project, options);
+    await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'process-pool', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
     // A v2 policy requires a trusted bindings document even when its grants name principals directly.
     await writeFile(productResourcePath(opened.layout, 'bindings'), JSON.stringify({ schemaVersion: 2, revision: config.policy.revision,
       modes: [], bindings: [] }), { mode: 0o600 });
@@ -51,6 +58,8 @@ export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; pl
         roles: [], restrictions: [], grants: [
           { id: 'operations', effect: 'allow', actions: ['execute', 'compensate', 'inspect'], scopes: [config.scopeId],
             principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'operation', ids: 'all' } },
+          ...(['run', 'pool', 'attempt'] as const).map(kind => ({ id: `process-${kind}`, effect: 'allow', actions: 'all', scopes: [config.scopeId],
+            principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind, ids: 'all' } })),
           { id: 'approvals', effect: 'allow', actions: 'all', scopes: [config.scopeId],
             principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'approval', ids: 'all' } }],
         separationOfDuties: fourEyes ? [{ id: config.policy.fourEyesRuleId, rule: 'requester-cannot-approve', scopes: [config.scopeId] }] : [] }), { mode: 0o600 });
@@ -87,6 +96,7 @@ export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; pl
       const decision = await decide(pending.approval.approvalId, `allow-${input.commandId}`);
       return { pending, decision };
     };
+    const evaluations: unknown[] = [];
     const checkpoints: { label: string; record: EffectRecord | null }[] = [];
     const checkpoint = async (label: string, commandId: string) => { const { record } = await inspect(commandId); checkpoints.push({ label, record }); return record; };
     const close = async (name: string) => {
@@ -99,7 +109,7 @@ export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; pl
           const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
           const evidence = { schemaVersion: 1, name, surface, binary: runtime?.identity ?? null, record: server.current(), requests: server.requests,
             writes: server.writes, idempotency: [...server.idempotency], effects, approvals: approvalRecords, checkpoints, correlations,
-            evaluation: { status: 'verify-not-run', reason: 'D1-BIND-and-DEC-5-required' },
+            evaluation: evaluations.length ? { status: 'recorded', records: evaluations } : { status: 'not-requested' },
             digests: { effects: digest(effects), serverWrites: digest(server.writes), approvals: digest(approvalRecords) } };
           await mkdir(join(destination, 'evidence'), { recursive: true });
           await writeFile(join(destination, 'evidence', `${surface}-${name}.json`), JSON.stringify(evidence, null, 2) + '\n');
@@ -107,7 +117,7 @@ export async function testErpFixture(settings: { surface?: 'sdk' | 'runtime'; pl
         }
       } finally { for (const finish of cleanup.reverse()) await finish(); clearConfigCache(); }
     };
-    return { server, project, options, policy, command, execute, compensate, inspect, inspectApproval, decide, approve, checkpoint, close,
+    return { runtime, evaluations, server, project, options, policy, command, execute, compensate, inspect, inspectApproval, decide, approve, checkpoint, close,
       runtimeIdentity: runtime?.identity ?? null, restart: async () => { if (!runtime) throw new Error('runtime surface required'); await runtime.restart(); } };
   } catch (error) { for (const finish of cleanup.reverse()) await finish(); clearConfigCache(); throw error; }
 }

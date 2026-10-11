@@ -1,11 +1,11 @@
 import { expect, it, vi } from 'vitest';
-import { effectRecordSchema, type CriterionDefinition, type EffectRecord } from '#domain/index.js';
+import { effectRecordSchema, immutableJsonObjectSchema, type CriterionDefinition, type EffectRecord } from '#domain/index.js';
 import { OPERATION_EVIDENCE_EVALUATOR, PROCESS_EXIT_EVALUATOR, createInstalledTerminalEvaluator,
   evaluateOperationEvidence, validateInstalledCriterion, validateInstalledEvaluator, type OperationEvidenceReader } from '#capabilities/index.js';
 
 const identity = { scopeId: 'scope-a', runId: 'run-a', taskId: 'task-a', attemptId: 'attempt-a', layoutRevision: 'layout-a', generation: 1 };
-const criterion: CriterionDefinition = { id: 'completed', version: 1, description: 'Operation completed',
-  evaluator: { id: OPERATION_EVIDENCE_EVALUATOR.id, version: 1 }, parameters: { commandId: 'command-a' } };
+const criterion = { id: 'completed', version: 1, description: 'Operation completed',
+  evaluator: { id: OPERATION_EVIDENCE_EVALUATOR.id, version: 1 }, parameters: { commandId: 'command-a' } } satisfies CriterionDefinition;
 const record = (state: EffectRecord['state'] = 'settled'): EffectRecord => effectRecordSchema.parse({ sequence: 1, state,
   intent: { schemaVersion: 1, command: { schemaVersion: 1, commandId: 'command-a', scopeId: identity.scopeId,
     operation: { id: 'record.update', version: 1 }, target: { kind: 'record', id: 'item-a' }, idempotencyKey: 'key-a', input: {}, expectedVersion: '1' },
@@ -50,12 +50,12 @@ it('holds unavailable reads without retry or a pass from process exit', async ()
 it.each(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED'] as const)('fails a terminal refusal with %s', async refusal => {
   expect(await evaluate({ ...record('refused'), refusal })).toEqual({ verdict: 'fail', reason: refusal });
 });
-it('defensively holds an explicit held projection', async () => {
-  expect(await evaluate({ ...record('claimed'), state: 'held' })).toEqual({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_UNSETTLED' });
+it('holds a noncanonical held projection', async () => {
+  expect(await evaluate({ ...record('claimed'), state: 'held' })).toEqual({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_INVALID' });
 });
-it('defensively fails an explicit compensated projection without deleting original evidence', async () => {
+it('holds a noncanonical compensated projection without deleting original evidence', async () => {
   const input = { ...record('claimed'), state: 'compensated' }, before = JSON.stringify(input);
-  expect(await evaluate(input)).toEqual({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_COMPENSATED' });
+  expect(await evaluate(input)).toEqual({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_INVALID' });
   expect(JSON.stringify(input)).toBe(before);
 });
 it.each(['scopeId', 'commandId'] as const)('holds a read with mismatched %s', async field => {
@@ -83,7 +83,7 @@ it('rejects unsupported implementation identities and versions before a read', a
 });
 it.each([{}, { commandId: '' }, { commandId: 'command-a', scopeId: 'foreign' }, { commandId: 'command-a', extra: true }])('rejects invalid parameters before reading (%#)', async parameters => {
     const loadEffect = vi.fn(async () => record());
-    await expect(evaluateOperationEvidence({ loadEffect }, OPERATION_EVIDENCE_EVALUATOR, { ...criterion, parameters }, identity)).rejects.toThrow();
+    await expect(evaluateOperationEvidence({ loadEffect }, OPERATION_EVIDENCE_EVALUATOR, { ...criterion, parameters: immutableJsonObjectSchema.parse(parameters) }, identity)).rejects.toThrow();
     expect(loadEffect).not.toHaveBeenCalled();
   });
 it('rejects malformed Attempt context before reading', async () => {
@@ -91,11 +91,13 @@ it('rejects malformed Attempt context before reading', async () => {
   await expect(evaluateOperationEvidence({ loadEffect }, OPERATION_EVIDENCE_EVALUATOR, criterion, { ...identity, scopeId: '' })).rejects.toThrow();
   expect(loadEffect).not.toHaveBeenCalled();
 });
-it('keeps terminal-only operation evaluation unknown until D1 binds context and evidence', async () => {
+it('holds missing Attempt context and binds authenticated context to structured settlement evidence', async () => {
   const loadEffect = vi.fn(async () => record()), installed = createInstalledTerminalEvaluator({ loadEffect });
   expect(await installed.evaluate(OPERATION_EVIDENCE_EVALUATOR, criterion, { exitCode: 0 })).toBe('unknown');
   expect(await installed.evaluate(OPERATION_EVIDENCE_EVALUATOR, criterion, { exitCode: 1 })).toBe('unknown');
   expect(loadEffect).not.toHaveBeenCalled();
+  expect(await installed.evaluate(OPERATION_EVIDENCE_EVALUATOR, criterion, { exitCode: 0 }, { identity })).toEqual({ verdict: 'pass',
+    evidenceTypes: ['operation-settlement'], evidenceReferences: [{ id: 'command-a', digest: expect.stringMatching(/^[a-f0-9]{64}$/) }] });
   expect((await installed.evaluateOperation(OPERATION_EVIDENCE_EVALUATOR, criterion, identity)).verdict).toBe('pass');
 });
 it('preserves process-exit behavior and rejects unknown implementations at the installed boundary', async () => {
@@ -106,4 +108,35 @@ it('preserves process-exit behavior and rejects unknown implementations at the i
   await expect(installed.evaluate({ ...OPERATION_EVIDENCE_EVALUATOR, implementation: { id: 'unknown', version: 1 } }, criterion, { exitCode: 0 }))
     .rejects.toThrow('TASK_EVALUATOR_INVALID');
   expect(loadEffect).not.toHaveBeenCalled();
+});
+
+const compensable = () => effectRecordSchema.parse({ ...record(), intent: { ...record().intent,
+  descriptor: { ...record().intent.descriptor, compensation: { id: 'record.undo', version: 1 } } } });
+const compensation = (state: EffectRecord['state'] = 'settled') => effectRecordSchema.parse({ ...record(state), sequence: 2,
+  intent: { ...record(state).intent, command: { ...record(state).intent.command, commandId: 'undo-a', operation: { id: 'record.undo', version: 1 }, compensates: 'command-a' },
+    descriptor: { ...record(state).intent.descriptor, operation: { id: 'record.undo', version: 1 } } } });
+it('holds compensable effects when no trusted compensation reader is installed', async () => {
+  expect(await evaluate(compensable())).toEqual({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_UNAVAILABLE' });
+});
+it.each([['settled', 'fail', 'OPERATION_EVIDENCE_COMPENSATED'], ['unknown', 'unknown', 'OPERATION_COMPENSATION_UNSETTLED'],
+  ['claimed', 'unknown', 'OPERATION_COMPENSATION_UNSETTLED']] as const)('detects a canonical %s compensation of the original immutable effect', async (state, verdict, reason) => {
+  const original = compensable(), bytes = JSON.stringify(original), loadEffectCompensation = vi.fn(async () => compensation(state));
+  expect(await evaluateOperationEvidence({ async loadEffect() { return original; }, loadEffectCompensation }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity)).toEqual({ verdict, reason });
+  expect(loadEffectCompensation).toHaveBeenCalledExactlyOnceWith(identity.scopeId, 'command-a'); expect(JSON.stringify(original)).toBe(bytes);
+});
+it.each([null, compensation('refused')])('accepts the original only when compensation is absent or terminally refused (%#)', async value => {
+  const result = await evaluateOperationEvidence({ async loadEffect() { return compensable(); }, async loadEffectCompensation() { return value; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity);
+  expect(result.verdict).toBe('pass');
+});
+it.each(['scopeId', 'compensates', 'target', 'operation'] as const)('holds a compensation with mismatched %s', async field => {
+  const next = compensation(), command = { ...next.intent.command, [field]: field === 'target' ? { kind: 'record', id: 'foreign' } : field === 'operation' ? { id: 'foreign', version: 1 } : 'foreign' };
+  const result = await evaluateOperationEvidence({ async loadEffect() { return compensable(); }, async loadEffectCompensation() { return { ...next, intent: { ...next.intent, command } }; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity);
+  expect(result).toEqual({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_BINDING' });
+});
+it('holds malformed compensation and reader failure without any retry', async () => {
+  const loadEffectCompensation = vi.fn(async () => { throw new Error('unavailable'); });
+  const reader = { async loadEffect() { return compensable(); }, loadEffectCompensation };
+  expect(await evaluateOperationEvidence(reader, OPERATION_EVIDENCE_EVALUATOR, criterion, identity)).toEqual({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_UNAVAILABLE' });
+  expect(loadEffectCompensation).toHaveBeenCalledTimes(1);
+  expect(await evaluateOperationEvidence({ ...reader, async loadEffectCompensation() { return {}; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity)).toEqual({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_INVALID' });
 });
