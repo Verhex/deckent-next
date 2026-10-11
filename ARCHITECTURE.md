@@ -84,7 +84,7 @@ the mandatory legacy seven-level hierarchy nor decides additional Goal/Flow/Oper
 Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. Nothing below is implemented except the alpha.29
 candidate binding slice (not live): ledger v51 `acceptance_metrics` keyed `(scope_id, producer_command_id)`, written with the evaluation and its producer receipt in one
 transaction; domain `workerCustody` (absent = held) moved only by `releaseWorkerCustody` on fence plus termination proof; fence with reserved command ids
-(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled after Attempt start, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`).
+(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled after Attempt start, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); evaluation reply and Run inspection share one result brief and delivery outlook under per-Attempt `read-output` authority (replay pins the receipt snapshot).
 
 - **Roles are proposals on one ledger, not engines.** The Run ledger is the single source of truth; each transition keeps
   one owner (scheduler, evaluator, approval broker); roles write proposals, never state.
@@ -194,8 +194,6 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   invariants are explicit versioned code contracts. Unit cohesion matters beyond the accepted 2,000-line unit budget.
 
 ### Task-centered execution — owner checkpoint 2026-09-17
-
-- **M5-BIND r9 query parity (author candidate, 2026-10-11):** configured task evaluation and Run inspection share worker-report/result-brief observation and delivery outlook, under current per-attempt `read-output` authority. Both use the canonical Run projection with retained handoff and acceptance evidence; evaluation replay pins the receipt's snapshot/bindings rather than a later Run revision. Inspection's installation pool remains a current observation outside the evaluation receipt. Author proof: external `proof/M5-BIND-2026-10-11/r9-view/`; hosted, installed-binary and independent acceptance remain separate.
 
 - **RESTART-RECOVERY author candidate (W11, 2026-10-10):** runtime service start always prepares the existing bounded reconciliation loop.
   Explicit `reconciliationRuntime` scopes and limits win; without that section, the service uses its installation-owned scopes
