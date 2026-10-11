@@ -149,7 +149,8 @@ export class TaskEvaluationApplication {
     const criteria = [];
     const runPrincipal = proposed.criteria.some(item => run.execution.criteria.find(value => value.criterionId === item.criterionId)?.evaluator.implementation.id === 'operation-evidence')
       ? await this.store.loadRunEvaluationPrincipal?.(identity) : null;
-    const binding = operationEvidenceBinding(dispatch.grant, runPrincipal);
+    const binding = operationEvidenceBinding(dispatch.grant, runPrincipal,
+      runPrincipal ? await this.store.loadAcceptedOperationSettlements?.(run) : undefined);
     for (const item of proposed.criteria) {
       const criterion = run.graph.criterionDefinitions.find(value => value.id === item.criterionId)!;
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;

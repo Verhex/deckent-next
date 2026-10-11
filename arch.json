@@ -770,8 +770,7 @@
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
         "src/engine/core/handoff-observation",
-        "src/engine/core/workspace-patch",
-        "src/platform/core/clock"
+        "src/engine/core/workspace-patch"
       ],
       "plan": "CONTRACT"
     },

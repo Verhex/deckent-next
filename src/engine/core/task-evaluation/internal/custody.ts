@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { TaskEvaluationError, operationEvidenceBindingReason, type EffectRecord, type RunSnapshot, type TaskEvaluation } from '#domain/index.js';
+import { TaskEvaluationError, operationEvidenceBindingReason, type EffectRecord, type RunSnapshot, type TaskEvaluation, type OperationEvidenceBinding } from '#domain/index.js';
 import type { DispatchRecord } from '#engine/core/dispatch/index.js';
 import type { TaskEvaluationCommit } from './commit.js';
 import { criterionEvidenceDigest } from './recovery.js';
@@ -19,11 +19,11 @@ export function selectEvaluationEffectEvidence(run: RunSnapshot, row: TaskEvalua
 
 /** Pure decision over effect snapshots read under the acceptance transaction. */
 export function assertEvaluationEffectEvidence(row: TaskEvaluation['criteria'][number], reference: NonNullable<typeof row.effectEvidence>,
-  dispatch: DispatchRecord | null, principal: TaskEvaluationCommit['actor'] | null, record: EffectRecord | null, compensation: EffectRecord | null) {
+  dispatch: DispatchRecord | null, principal: TaskEvaluationCommit['actor'] | null, record: EffectRecord | null, compensation: EffectRecord | null, acceptedSettlements?: OperationEvidenceBinding['acceptedSettlements']) {
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   if (row.verdict === 'pass' && (!record || record.state !== 'settled' || compensation
     || !row.evidenceTypes?.includes('operation-settlement') || !row.evidenceReferences?.some(value => value.id === reference.commandId && value.digest === reference.digest)
-    || operationEvidenceBindingReason(operationEvidenceBinding(dispatch?.grant, principal), record.intent.actor, record.evidence?.observedAt))) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
+    || operationEvidenceBindingReason(operationEvidenceBinding(dispatch?.grant, principal, acceptedSettlements), record.intent.actor, record.evidence?.observedAt, { commandId: reference.commandId, digest: hash(record) }))) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
   if (JSON.stringify(reference) !== JSON.stringify({ commandId: reference.commandId, digest: record ? hash(record) : null,
     compensation: compensation ? { commandId: compensation.intent.command.commandId, digest: hash(compensation) } : null })) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
 }

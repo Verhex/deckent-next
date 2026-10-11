@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { encodeDeckentJson, type JsonValue, type RunSnapshot } from '#domain/index.js';
+import { encodeDeckentJson, type JsonValue, type RunSnapshot, type OperationEvidenceBinding } from '#domain/index.js';
 import { deriveAcceptanceMetric, selectRunAcceptanceEvaluations, RunStoreError } from '#engine/index.js';
 
 /** Caller owns the producer transaction; there is no independent metrics commit or public submission path. */
@@ -21,4 +21,18 @@ export function readRunAcceptanceEvaluations(db: DatabaseSync, snapshot: RunSnap
   const rows = db.prepare(`SELECT command_id,command FROM run_receipts WHERE scope_id=? AND CASE WHEN json_valid(command) THEN
     json_extract(command,'$.action')='apply-task-evaluation' AND json_extract(command,'$.evaluation.identity.runId')=? ELSE 0 END`).all(snapshot.identity.scopeId, snapshot.identity.runId);
   return selectRunAcceptanceEvaluations(snapshot, rows.map(row => ({ commandId: String(row.command_id), command: String(row.command) })));
+}
+
+/** Same-Run sharing requires a currently accepted Task and its exact immutable settlement digest, never mere prior use. */
+export function readAcceptedOperationSettlements(db: DatabaseSync, run: RunSnapshot): NonNullable<OperationEvidenceBinding['acceptedSettlements']> {
+  return Object.freeze(readRunAcceptanceEvaluations(db, run).flatMap(evaluation => {
+    if (run.progress.find(task => task.taskId === evaluation.identity.taskId)?.phase !== 'accepted') return [];
+    return evaluation.criteria.flatMap(row => {
+      const criterion = run.graph.criterionDefinitions.find(value => value.id === row.criterionId);
+      if (row.verdict !== 'pass' || !row.evidenceTypes?.includes('operation-settlement')
+        || run.execution.criteria.find(value => value.criterionId === row.criterionId)?.evaluator.implementation.id !== 'operation-evidence') return [];
+      return (row.evidenceReferences ?? []).filter(reference => reference.id === criterion?.parameters.commandId)
+        .map(reference => Object.freeze({ commandId: reference.id, digest: reference.digest }));
+    });
+  }));
 }

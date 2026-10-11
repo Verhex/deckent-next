@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { sameAttemptIdentity, TaskEvaluationError, operationEvidenceBindingSchema, attemptIdentitySchema,
   type AttemptIdentity, type TaskEvaluation, type RunSnapshot } from '#domain/index.js';
+import { readAcceptedOperationSettlements } from '#adapters/core/sqlite-ledger/index.js';
 import { workerEventLogSchema, bindUsedOperationEvidence, selectEvaluationEffectEvidence, assertEvaluationEffectEvidence, assertEvaluationDigestEvidence } from '#engine/index.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { SqliteEffectJournal } from './effect.js';
@@ -31,13 +32,14 @@ export function readEvaluationDigests(db: DatabaseSync, identity: AttemptIdentit
 export function assertEvaluationDigests(db: DatabaseSync, evaluation: TaskEvaluation) {
   const current = readEvaluationDigests(db, evaluation.identity), effects = new SqliteEffectJournal(db), { run, dispatch } = readRunBoundDispatch(db, evaluation.identity);
   const principal = readRunEvaluationPrincipal(db, evaluation.identity);
+  const acceptedSettlements = evaluation.criteria.some(row => row.verdict === 'pass' && row.effectEvidence) ? readAcceptedOperationSettlements(db, run) : [];
   for (const row of evaluation.criteria) {
     const reference = selectEvaluationEffectEvidence(run, row);
     if (!reference) continue;
     const record = effects.read(evaluation.identity.scopeId, reference.commandId);
     const compensation = record?.state === 'settled' && record.intent.descriptor.compensation
       ? effects.readCompensation(evaluation.identity.scopeId, reference.commandId) : null;
-    assertEvaluationEffectEvidence(row, reference, dispatch, principal, record, compensation);
+    assertEvaluationEffectEvidence(row, reference, dispatch, principal, record, compensation, acceptedSettlements);
   }
   assertEvaluationDigestEvidence(evaluation, current);
 }

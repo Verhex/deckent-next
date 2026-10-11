@@ -8,4 +8,4 @@ export { sqliteFailure, sqliteLedgerOptionsSchema, sqliteEngineMeetsFloor, asser
 export type { SqliteLedgerOptions } from './internal/options.js';
 export { upgradeExistingLedger, type LedgerUpgrade } from './internal/upgrade.js';
 
-export { recordAcceptanceMetric, readRunAcceptanceEvaluations } from './internal/acceptance-metrics.js';
+export { recordAcceptanceMetric, readRunAcceptanceEvaluations, readAcceptedOperationSettlements } from './internal/acceptance-metrics.js';

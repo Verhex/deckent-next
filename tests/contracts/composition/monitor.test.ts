@@ -316,7 +316,8 @@ describe('monitor human worker evidence', () => {
     const snapshot = await inspectMonitor(current.dir, current.options), install = snapshot.installs[0]!;
     const inspected = await inspectConfiguredRun(current.dir, { schemaVersion: 1, scopeId: 's', runId: 'r-human' }, current.options);
     expect(inspected.run!.tasks[0]!.taskBrief).toMatchObject({ schemaVersion: 1, task: input.task, scopePaths: ['src/**'], acceptance: input.acceptance, effort: 'high', contextRefs: [] });
-    expect(inspected.run!.tasks[0]!.resultBrief).toMatchObject({ schemaVersion: 1, claimLabel: 'CLAIM', evaluation: { verdict: 'rejected' }, openIssues: allowed ? [] : null });
+    if (allowed) expect(inspected.run!.tasks[0]!.resultBrief).toMatchObject({ schemaVersion: 1, claimLabel: 'CLAIM', evaluation: { verdict: 'rejected' }, openIssues: [] });
+    else expect(inspected.run!.tasks[0]).not.toHaveProperty('resultBrief');
     expect(install.workers.find(worker => worker.identity?.attemptId === identity.attemptId)!.human!.taskBrief).toEqual(inspected.run!.tasks[0]!.taskBrief);
     const config = await loadConfig(current.dir, { ...current.options, heal: false });
     for (const expected of [{ revision: inspected.run!.revision + 1, layoutRevision: inspected.run!.layoutRevision }, { revision: inspected.run!.revision, layoutRevision: 'foreign-layout' }]) {
