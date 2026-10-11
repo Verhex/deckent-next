@@ -54,8 +54,7 @@
 - DOGFOOD is APPROVED (owner 2026-10-09): open it at the first possible moment, then run 4–8 workers continuously; worker priority Codex → Cursor → Sonnet 5.5 → Haiku 5.5; at 92% of a 5h subscription window wait for the reset. Historical receipts do not prove Next completion.
 - After landing, the lead runs the N1 and live switches without waiting for the owner: verified backup first, then a health check, rollback if it fails. Product steps that need human presence stay with the owner (owner 2026-10-09).
 - Review channel (owner 2026-09-23): Opus implements, Astra reviews via `.agents/refactor/channel.mjs`; recipients consume handled entries.
-- Owner 2026-10-05: CI green first in one lane, then frozen current-closure landing; no new preparation/analysis lanes until both land.
-- Review once per batch before landing; do not review preparation, plans or documents separately. At most one correction round, then logged Jev selection >=0.85 with context sufficiency >=0.67 decides; below that ask owner (owner 2026-10-09; was 0.90/0.75).
-- Current-closure changes reopen only for real P0/P1. After these land, use 4–6 parallel product-author lanes, with no more review lanes than author lanes.
+- Review once per batch (a wave or the daily batch PR) before landing; the batch lands only after PASS (owner 2026-10-11); do not review preparation, plans, documents or single small items separately. At most one correction round, then logged Jev selection >=0.85 with context sufficiency >=0.67 decides; below that ask owner (owner 2026-10-09; was 0.90/0.75).
+- Host lane count comes from the outcome DAG, disjoint write ownership and measured capacity (law 5), not a fixed number; review lanes never exceed author lanes. Dogfood keeps its 4–8 continuous workers (owner 2026-10-09).
 - Owner 2026-10-05: Qwen development-host tool uses separate source/docs commits and a PR; Astra review is exempt for this host-tool delivery only. Model-quality/HF publication acceptance stays separate.
 - Never fabricate independent review or treat Jev/self-review as independent PASS.

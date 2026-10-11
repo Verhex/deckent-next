@@ -31,8 +31,8 @@ commit or push authority. Follow the assigned role, not a self-declared reviewer
    Implementer checks, a second self-review and Jev are not independent PASS.
 
 Tests, typechecks, lint and CI support these claims within their measured scope. Test green cannot
-replace a missing producer, real consumer or settlement link. Full verify is required before
-landing; hosted CI and live proof remain separately identified. Unavailable evidence is blocking
+replace a missing producer, real consumer or settlement link. Landing verification follows the
+current rule in `deckent-next-refactor`; local checks, hosted CI and live proof remain separately identified. Unavailable evidence is blocking
 when the accepted proof contract requires it, rather than by an invented legacy ritual.
 
 ## Assessment and delivery

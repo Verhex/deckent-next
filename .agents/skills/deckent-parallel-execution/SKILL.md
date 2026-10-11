@@ -44,5 +44,6 @@ continue unrelated admitted work. Report a lane hold/cancellation without preten
 state has transitioned. Do not clean runtime data, force-settle, change auth or restart services
 under a coordination instruction. Route recovery or terminal assessment to their admitted methods.
 Deliver lane inputs/outputs, exact integrated diff, join evidence, checks and failures, unresolved
-limits, document reconciliation and next action. Run full verify before landing; commit/push
-still require their current owner authority.
+limits, document reconciliation and next action. Landing verification follows `deckent-next-refactor`
+(targeted checks per slice; full local verify only for broad-feature batches on owner request; hosted
+full suite is a post-merge signal); commit and landing follow the current owner authority.

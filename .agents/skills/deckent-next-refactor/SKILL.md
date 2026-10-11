@@ -44,7 +44,7 @@ historical proof and current verification.
 - The board grants no authority, PASS or liveness: a timestamp is an age, not proof that a session is alive.
   Work lives in PLAN, decisions in ARCHITECTURE/core-memory, acceptance and incident evidence in external proof,
   which is kept until the batch lands on main and its review closes, then pruned (owner decision 3).
-- Review packages name the board and PLAN as the status source; current-flow carries no status (decision 4).
+- Review packages name the board and PLAN as the status source, not current-flow (decision 4).
 - HTML views are delivered over localhost or as a Claude Artifact only when the owner asks (decision 1).
 - Owner output: natural Turkish, result/impact → required evidence/open limit → decision if any → who holds it /
   next step; no empty-field ritual, details on demand, a material blocker is visible in the summary. After a material
@@ -122,7 +122,8 @@ historical proof and current verification.
    actual versus planned surfaces, preserved behavior/corrections/gaps, material ownership or contract
    impact, independent findings, open limits and the concrete next step. Explain user/team/Enterprise
    consequences when relevant. Keep implementation, verification, independent review, owner acceptance
-   and release separate. Commit only with owner authorization; publish/push needs its own authorization.
+   and release separate. Commit inside the assigned scope without asking; workers never push; landing
+   (merge/push) follows internal-contract (owner 2026-09-26, 2026-10-09).
 
 ## Owner-requested work ordering
 
@@ -148,8 +149,8 @@ Reconcile affected documents and retain proof outside Git/npm. A handoff is not 
 
 ## Independent review and channel
 
-The current owner arrangement is Opus implementing and Sol independently reviewing; the reviewer's
-model-independent channel address remains `astra`. Follow the role actually assigned in the session.
+The current owner arrangement is Opus implementing and the independent reviewer session on the
+model-independent channel address `astra` reviewing (its model is on the board review row). Follow the role actually assigned in the session.
 An implementation assignment does not authorize reviewing one's own work as an independent PASS.
 
 Channel commands from Next:
@@ -158,10 +159,10 @@ Channel commands from Next:
     node .agents/refactor/channel.mjs append FROM TO BODY_FILE
     node .agents/refactor/channel.mjs consume ACTOR SEQ
 
-At an admitted slice delivery, send `REQUEST_REVIEW` with exact candidate commit/diff scope,
+At a batch delivery (a wave or the daily batch PR; never single small items), send one `REQUEST_REVIEW` with exact candidate commit/diff scope,
 verification evidence and open decisions; its status source is the process board and PLAN. Answer a handled request with evidence-backed `REVIEW`
-(PASS/REVISE with scope and findings) or `ANALYSIS`. Apply blocking REVISE findings before landing
-unless the owner explicitly decides otherwise. Recipient-only consume follows handling; an unrelated
+(PASS/REVISE with scope and findings) or `ANALYSIS`. The batch lands only after PASS (owner 2026-10-11); apply blocking
+REVISE findings before landing unless the owner explicitly decides otherwise. Recipient-only consume follows handling; an unrelated
 or unreviewed request stays pending. A failed consume is not a completed receipt. No ACK chains.
 
 `.deckent/host/channel/communication.md` is ignored coordination data. Message bodies and hook/watcher
