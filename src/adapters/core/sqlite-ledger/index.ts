@@ -7,3 +7,5 @@ export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from
 export { sqliteFailure, sqliteLedgerOptionsSchema, sqliteEngineMeetsFloor, assertSqliteEngineSupported, SQLITE_ENGINE_FLOOR } from './internal/options.js';
 export type { SqliteLedgerOptions } from './internal/options.js';
 export { upgradeExistingLedger, type LedgerUpgrade } from './internal/upgrade.js';
+
+export { recordAcceptanceMetric } from './internal/acceptance-metrics.js';

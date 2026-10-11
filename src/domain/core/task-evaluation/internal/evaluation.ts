@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './acceptance.js';
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
@@ -6,6 +7,8 @@ import { runSnapshotSchema } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema } from '#domain/core/worker-event/index.js';
 const criterion = z.object({ criterionId: identitySchema, verdict: z.enum(['pass', 'fail', 'unknown']),
   evidenceIds: z.array(identitySchema).readonly(),
+  evidenceTypes: z.array(z.string().min(1).max(256)).max(256).refine(value => new Set(value).size === value.length).readonly().optional(),
+  evidenceReferences: z.array(z.object({ id: identitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).max(256).readonly().optional(),
 }).strict().superRefine((value, context) => {
   if ((value.verdict !== 'unknown' && value.evidenceIds.length === 0) || new Set(value.evidenceIds).size !== value.evidenceIds.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_EVALUATION_INVALID' });
@@ -25,7 +28,7 @@ export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend(
   Object.freeze({ ...model, evidenceCapability: model.evidenceCapability ?? readLegacyModelUsageEvidence(model.provider) }));
 export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
-  workerExit: workerNeedsInputSchema.optional(),
+  workerExit: workerNeedsInputSchema.optional(), acceptance: evaluationAcceptanceSchema.optional(),
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
   sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),
   handoff: z.discriminatedUnion('status', [z.object({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), z.object({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) }).strict()]).optional(),
@@ -44,7 +47,7 @@ export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fa
 }
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;
 export class TaskEvaluationError extends Error {
-  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA') {
+  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH') {
     super(code); this.name = 'TaskEvaluationError';
   }
 }
@@ -71,10 +74,11 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
     || task.acceptanceCriteria.some(id => !byId.has(id))) throw new TaskEvaluationError('TASK_EVALUATION_CRITERIA');
   const criteria = task.acceptanceCriteria.map(id => { const value = byId.get(id)!; return { ...value, evidenceIds: [...value.evidenceIds].sort() }; });
   const normalized = taskEvaluationSchema.parse({ ...evaluation, criteria });
+  const profileGate = inspectAcceptanceConclusion(run.data, normalized);
   const gate = taskModelConclusion(normalized.model);
   if (!task.workInput && normalized.workspaceChange) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
   const change = task.workInput ? normalized.workspaceChange ? normalized.workspaceChange.changedFiles > 0 || task.workInput.noChangeAllowed === true ? 'pass' : 'fail' : 'unknown' : 'pass';
-  const conclusion: 'pass' | 'fail' | 'unknown' = normalized.workerExit ? gate === 'fail' ? 'fail' : 'unknown' : gate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
-    : gate === 'unknown' || change === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
+  const conclusion: 'pass' | 'fail' | 'unknown' = normalized.workerExit ? gate === 'fail' ? 'fail' : 'unknown' : gate === 'fail' || profileGate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
+    : gate === 'unknown' || profileGate === 'unknown' || change === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
   return Object.freeze({ evaluation: normalized, conclusion });
 }

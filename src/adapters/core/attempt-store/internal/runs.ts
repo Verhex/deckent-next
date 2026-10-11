@@ -11,7 +11,7 @@ import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { assertEvaluationDigests, readEvaluationDigests } from './evaluation-evidence.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { recordAcceptanceMetric, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 // Shared reads have no writer timing dependency and expose no mutation path.
@@ -126,7 +126,8 @@ export class SqliteRunJournal {
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
       this.db.prepare('INSERT OR IGNORE INTO task_evaluation_observations(scope_id,run_id,attempt_id,attempt_revision) VALUES(?,?,?,?)')
         .run(scopeId, runId, attemptId, parsed.evaluation.attemptRevision);
-      return this.record({ commandId: parsed.commandId, command, snapshot: proposed.snapshot });
+      const receipt = this.record({ commandId: parsed.commandId, command, snapshot: proposed.snapshot });
+      recordAcceptanceMetric(this.db, parsed.commandId, proposed.snapshot); return receipt;
     });
   }
   /** Decision, CAS snapshot, replay receipt and the sealed audit event share one transaction. */
@@ -169,7 +170,8 @@ export class SqliteRunJournal {
         .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
       audit?.(new SqliteAuditStore(this.db), snapshot);
-      return this.record({ commandId, command, snapshot });
+      const receipt = this.record({ commandId, command, snapshot });
+      recordAcceptanceMetric(this.db, commandId, snapshot); return receipt;
     });
   }
   async cancelRun(input: RunCancellation): Promise<RunReceipt> {
