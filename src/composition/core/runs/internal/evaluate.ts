@@ -3,7 +3,7 @@ import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteAttemptStore, inventoryReadsPerCall } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
-import { authenticate, describeTaskEvaluationReceipt, readAttemptHandoffEvents, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, type TaskEvaluationCommand, type HandoffStartRecord } from '#engine/index.js';
+import { authenticate, describeTaskEvaluationReceipt, readAttemptHandoffEvents, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, RunPolicyAuthorization, type TaskEvaluationCommand, type HandoffStartRecord } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -32,7 +32,19 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
         if (handoff) handoffs.push(handoff);
       }
       const evaluation = describeTaskEvaluationReceipt(receipt, evaluations, handoffs);
-      const run = await observeConfiguredRunResults(config, options.env, evaluation.run, principal, policy, receipt.snapshot);
+      // Evaluating one Attempt does not confer Run inspection authority, including on replay.
+      let canInspect = true;
+      try {
+        await new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes))
+          .authorize('inspect', command.identity, principal);
+      } catch (error) {
+        if (!['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'APPROVAL_DENIED'].includes(queryFailure(error).code)) throw error;
+        canInspect = false;
+      }
+      const run = canInspect ? await observeConfiguredRunResults(config, options.env, evaluation.run, principal, policy, receipt.snapshot)
+        : Object.freeze({ ...evaluation.run, tasks: Object.freeze(evaluation.run.tasks.map(task => {
+          const { resultBrief, ...view } = task; void resultBrief; return Object.freeze(view);
+        })) });
       return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: Object.freeze({ ...evaluation, run }) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

@@ -23,10 +23,12 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
   const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
-  const policy = async (evaluate: boolean, readOutput = true, inspect = true) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: inspect ? ['create', 'inspect'] : ['create'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+  const policy = async (evaluate: boolean, readOutput: boolean | readonly string[] = true, inspect: boolean | 'require-approval' = true) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
+    { id: 'run', effect: 'allow', actions: inspect === true ? ['create', 'inspect'] : ['create'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+    ...(inspect === 'require-approval' ? [{ id: 'inspect-approval', effect: 'require-approval', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } }] : []),
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: readOutput ? ['evaluate', 'read-output'] : ['evaluate'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: twoTasks ? ['a', 'a2'] : ['a'] } }] : []),
+    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: readOutput === true ? ['evaluate', 'read-output'] : ['evaluate'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: twoTasks ? ['a', 'a2'] : ['a'] } }] : []),
+    ...(Array.isArray(readOutput) ? [{ id: 'selected-output', effect: 'allow', actions: ['read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: readOutput } }] : []),
   ] }), { mode: 0o600 });
   await policy(true);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] }],
@@ -50,7 +52,9 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
 
 describe.skipIf(process.platform === 'win32')('configured task evaluation', () => {
   it('returns both Tasks exactly as inspection including resultBrief, and replays the earlier revision', async () => {
-    const f = await fixture(0, [0], 'private output', true);
+    const report = (summary: string) => ({ schemaVersion: 1, kind: 'native-worker-report', status: 'reported',
+      report: { schemaVersion: 1, summary, changedFiles: [], checks: [], openIssues: [] } });
+    const f = await fixture(0, [0], JSON.stringify(report('private first task claim')), true);
     const first = await evaluateConfiguredTask(f.project, f.command, f.options);
     expect(first.evaluation.run.tasks).toEqual((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks);
     const identity = { ...f.command.identity, taskId: 't2', attemptId: 'a2' };
@@ -63,7 +67,7 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
       const claim = { owner: 'fixture-worker', request: { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['private-task-command'] } };
       await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });
-      const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'second output', stderr: '' })));
+      const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: JSON.stringify(report('private second task claim')), stderr: '' })));
       await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: 'fixture-second', exitCode: 0, interrupted: false });
     } finally { store.close(); }
     const secondCommand = { ...f.command, commandId: 'evaluation-second', identity, expectedRevision: first.evaluation.run.revision + 2 };
@@ -72,14 +76,25 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     expect(second.evaluation.run.tasks).toEqual(inspected.run!.tasks);
     const { pool, ...inspectedRun } = inspected.run!; void pool;
     expect(second.evaluation.run).toEqual(inspectedRun);
-    expect(second.evaluation.run.tasks.map(task => task.resultBrief)).toEqual(['a', 'a2'].map(attemptId => ({
-      schemaVersion: 1, attemptId, claimLabel: 'CLAIM', report: { schemaVersion: 1, kind: 'native-worker-report', status: 'unavailable', reason: 'missing' },
-      evaluation: { verdict: 'accepted' }, openIssues: null, runDelivery: null, deliveryOutlook: 'none',
+    expect(second.evaluation.run.tasks.map(task => task.resultBrief)).toEqual(['a', 'a2'].map((attemptId, index) => ({
+      schemaVersion: 1, attemptId, claimLabel: 'CLAIM', report: report(index ? 'private second task claim' : 'private first task claim'),
+      evaluation: { verdict: 'accepted' }, openIssues: [], runDelivery: null, deliveryOutlook: 'none',
     })));
     expect(second.evaluation.run.tasks.map(task => task.acceptance!.evaluationId)).toEqual(['evaluation', 'evaluation-second']);
     expect(await evaluateConfiguredTask(f.project, secondCommand, f.options)).toEqual(second);
     expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
     expect(first.evaluation.run.tasks[1]!.acceptance!.evaluationId).toBeNull();
+    await f.policy(true, ['a2']);
+    const restricted = await evaluateConfiguredTask(f.project, secondCommand, f.options);
+    expect(restricted.evaluation.run.tasks).toEqual((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks);
+    expect(restricted.evaluation.run.tasks[0]!.resultBrief).toMatchObject({ report: null, openIssues: null });
+    expect(restricted.evaluation.run.tasks[1]!.resultBrief!.report).toEqual(report('private second task claim'));
+    expect(JSON.stringify(restricted)).not.toContain('private first task claim');
+    await f.policy(true, true, false);
+    const hidden = await evaluateConfiguredTask(f.project, secondCommand, f.options);
+    for (const task of hidden.evaluation.run.tasks) expect(task).not.toHaveProperty('resultBrief');
+    expect(JSON.stringify(hidden)).not.toContain('private first task claim');
+    expect(JSON.stringify(hidden)).not.toContain('private second task claim');
   });
   it.each([[0, 'accepted', [0]], [7, 'failed', [0]], [7, 'accepted', [7]]] as const)(
     'derives exit %s from the pinned evaluator and projects %s for accepted codes %j', async (exitCode, phase, acceptedExitCodes) => {
@@ -106,14 +121,22 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
     await f.policy(false); await expect(evaluateConfiguredTask(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
-  it('keeps report observations behind current read-output authority on mutation and replay without requiring inspect authority', async () => {
+  it.each([false, 'require-approval'] as const)('omits report observations with Run inspect %s on mutation and replay, retaining the evaluate principal', async inspect => {
     const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1,
       summary: 'Private worker claim', changedFiles: [], checks: [], openIssues: ['Private open issue'] } };
     const f = await fixture(0, [0], JSON.stringify(report) + '\n');
-    await f.policy(true, true, false);
+    await f.policy(true, true, inspect);
     const first = await evaluateConfiguredTask(f.project, f.command, f.options);
-    expect(first.evaluation.run.tasks[0]!.resultBrief!.report).toEqual(report);
-    await expect(inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(first.evaluation.run.tasks[0]!.phase).toBe('accepted');
+    expect(first.evaluation.run.tasks[0]).not.toHaveProperty('resultBrief');
+    expect(JSON.stringify(first)).not.toContain('Private worker claim');
+    expect(JSON.stringify(first)).not.toContain('Private open issue');
+    await expect(inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).rejects.toMatchObject({ code: inspect === false ? 'POLICY_DENIED' : 'POLICY_APPROVAL_UNSUPPORTED' });
+    expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
+    await f.policy(true);
+    expect((await evaluateConfiguredTask(f.project, f.command, f.options)).evaluation.run.tasks[0]!.resultBrief!.report).toEqual(report);
+    await f.policy(true, true, inspect);
+    expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
     await f.policy(true, false);
     const replay = await evaluateConfiguredTask(f.project, f.command, f.options);
     expect(replay.evaluation.run.tasks[0]!.resultBrief).toMatchObject({ report: null, openIssues: null });
