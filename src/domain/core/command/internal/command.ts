@@ -1,8 +1,9 @@
+import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 
 export const commandEnvelopeSchema = z.object({
-  schemaVersion: z.literal(1), commandId: identitySchema, scopeId: identitySchema,
+  schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema,
   principalRef: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly(),
   sessionRef: identitySchema.optional(), expectedRevision: counterSchema.optional(),
   idempotencyKeyHash: z.string().regex(/^[a-f0-9]{64}$/),

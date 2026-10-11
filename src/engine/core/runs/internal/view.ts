@@ -16,6 +16,7 @@ export const runViewSchema = z.object({
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,
   tasks: z.array(z.object({
     taskBrief: taskBriefSchema.optional(), resultBrief: resultBriefSchema.optional(),
+    custodyDisposition: z.enum(['hold-manual', 'released']).optional(), workerCustody: taskProgressSchema.unwrap().innerType().shape.workerCustody,
     acceptance: acceptanceViewSchema.optional(),
     id: identitySchema, kind: identitySchema, dependencies: z.array(identitySchema).readonly(),
     acceptanceCriteria: z.array(identitySchema).readonly(), handoffs: z.array(handoffReceiptViewSchema).readonly().optional(),
@@ -47,6 +48,8 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
         const parsed = workerEffortSchema.safeParse(subscription && typeof subscription === 'object' && !Array.isArray(subscription) ? (subscription as Record<string, unknown>)['reasoningEffort'] : undefined);
         return parsed.success ? { reasoningEffort: parsed.data } : {};
       })(),
+      ...(progress.get(task.id)!.workerCustody ? { workerCustody: progress.get(task.id)!.workerCustody } : {}),
+      ...(progress.get(task.id)!.phase === 'reconciling' ? { custodyDisposition: progress.get(task.id)!.workerCustody?.state === 'released' ? 'released' as const : 'hold-manual' as const } : {}),
       phase: progress.get(task.id)!.phase,
       ...(projectTaskHandoffs(run, task.id, receipts).length ? { handoffs: projectTaskHandoffs(run, task.id, receipts) } : {}),
       ...(progress.get(task.id)!.notAcceptedReason ? { notAcceptedReason: progress.get(task.id)!.notAcceptedReason } : {}),

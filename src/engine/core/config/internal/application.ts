@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
 import { digestText, serializeJsonDocument, sha256 } from '#platform/index.js';
@@ -86,7 +87,7 @@ export class ConfigApplication {
     return { status: 'applied', result: await this.write(input, unset, approvals, subject), approvalId: admission.approved.approvalId };
   }
   private admitInput(input: ConfigWriteInput) {
-    identitySchema.parse(input.commandId); identitySchema.parse(input.scopeId); verifiedPrincipalSchema.parse(input.principal);
+    clientCommandIdSchema.parse(input.commandId); identitySchema.parse(input.scopeId); verifiedPrincipalSchema.parse(input.principal);
     if (input.layer !== undefined && input.layer !== 'project' && input.layer !== 'global') throw new ConfigApplicationError('CONFIG_LAYER_INVALID');
     if (input.expect !== undefined && input.expect !== null && !/^[a-f0-9]{64}$/.test(input.expect)) throw new ConfigApplicationError('CONFIG_DIGEST_INVALID');
     // Pure admission checks happen before authority/IO; never inspect or log secret values.

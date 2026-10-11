@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { modelInvocationResponseEvidenceSchema, modelInvocationResponseSummarySchema } from './response-evidence.js';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema,
@@ -29,7 +30,7 @@ const definitionSchema = z.unknown().transform((input, context): ModelBindingDef
   catch { context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_DEFINITION_INVALID' }); return z.NEVER; }
 });
 
-export const modelInvocationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const modelInvocationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   scopeId: identitySchema, reference: modelReferenceSchema, catalogRevision: identitySchema,
   expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).strict().readonly();
 export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(2), scopeId: identitySchema,
@@ -38,7 +39,7 @@ export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(2)
 export const modelInvocationCommandQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   commandId: identitySchema, reference: modelReferenceSchema }).strict().readonly();
 export type ModelInvocationCommandQuery = Readonly<z.infer<typeof modelInvocationCommandQuerySchema>>;
-export const modelInvocationPurgeCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const modelInvocationPurgeCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   scopeId: identitySchema, invocationId: identitySchema, reference: modelReferenceSchema,
   expectedContentDigest: digest }).strict().readonly();
 export const modelInvocationPurgeReceiptSchema = z.object({ schemaVersion: z.literal(1),

@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { identitySchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import type { TrustedClock } from '#platform/index.js';
@@ -19,12 +20,12 @@ export async function requireDelivered(store: Pick<IntegrationAdoptionStore, 'fi
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const adoptionTargetRefSchema = z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/);
 /** v2 (B06-2b): an adoption may name the verification Run of the delivered commit and the task kind it verifies — both or neither. */
-export const integrationAdoptionCommandSchema = z.object({ schemaVersion: z.literal(2), commandId: identitySchema,
+export const integrationAdoptionCommandSchema = z.object({ schemaVersion: z.literal(2), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, deliveryCommandId: identitySchema, targetRef: adoptionTargetRefSchema,
   verificationRunId: identitySchema.optional(), verificationKind: identitySchema.optional() }).strict()
   .refine(command => (command.verificationRunId === undefined) === (command.verificationKind === undefined), 'ADOPTION_VERIFICATION_INCOMPLETE').readonly();
 export type IntegrationAdoptionCommand = z.infer<typeof integrationAdoptionCommandSchema>;
-export const integrationRollbackCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const integrationRollbackCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, adoptionCommandId: identitySchema }).strict().readonly();
 export type IntegrationRollbackCommand = z.infer<typeof integrationRollbackCommandSchema>;
 const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict();

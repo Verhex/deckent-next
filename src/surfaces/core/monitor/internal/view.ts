@@ -207,6 +207,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
+      ...(task.custodyDisposition ? [[span(task.custodyDisposition === 'released' ? t('task.custody.released', {}, locale) : t('task.custody.hold-manual', {}, locale), 'warning')]] : []),
       ...(task.acceptance ? [[span(renderAcceptanceLine(task.acceptance, locale), 'muted')]] : []),
       ...(task.handoffs ?? []).map(receipt => [span(`    ${(receipt.kind === 'workspace-started-from-patch' ? t('monitor.detail.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('monitor.detail.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))}`, 'success')]),
       ...(task.evaluation.reason ? [[span(`    ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')]] : []),

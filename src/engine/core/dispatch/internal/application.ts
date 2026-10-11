@@ -40,6 +40,7 @@ export class DispatchApplication {
     if (grant.kind === 'prevented') return Object.freeze({ kind: 'prevented', record: grant.record });
     // A throw or unknown result deliberately leaves the durable claim unresolved. No retry launch.
     const result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal));
+    if (result.worker) await this.store.retainDispatchWorker?.(claim, result.worker);
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: grant.record });
     const output = await retainOutput(this.artifacts, request, result, await this.supervisor.collectOutputFiles?.(request) ?? []);
     await this.store.retainDispatchOutput(claim, output);
@@ -54,6 +55,7 @@ export class DispatchApplication {
     if (current.terminal) return Object.freeze({ kind: 'terminal', record: current });
     if (current.launch === 'pending') return Object.freeze({ kind: 'unresolved', record: current });
     const observed = sandboxObservationSchema.parse(await this.supervisor.observe(request));
+    if (observed.worker) await this.store.retainDispatchWorker?.({ request, owner: current.owner }, observed.worker);
     if (observed.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: current });
     // Terminal evidence is settled under existing custody, not a new launch grant. Daemon inspection
     // cannot reconstruct whether an earlier CLI was interrupted, so retain that fact as unknown.

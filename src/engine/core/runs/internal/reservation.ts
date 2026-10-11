@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { counterSchema, identitySchema, policyHasResourceRules, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -8,7 +9,7 @@ import { runExecutionPolicySchema, runReservationSchema, RunStoreError, type Run
 import { assertRunExecution } from './registry.js';
 import { projectRunView } from './view.js';
 
-export const runReservationCommandSchema = runQuerySchema.extend({ commandId: identitySchema, expectedRevision: counterSchema }).strict();
+export const runReservationCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, expectedRevision: counterSchema }).strict();
 export type RunReservationCommand = z.infer<typeof runReservationCommandSchema>;
 export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
   loadRunExecutionPolicy(scopeId: string, runId: string): Promise<z.infer<typeof runExecutionPolicySchema>>;

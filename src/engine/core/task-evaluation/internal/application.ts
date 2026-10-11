@@ -1,7 +1,8 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { readWorkspaceChange } from './workspace-change.js';
 import { createHash } from 'node:crypto';
-import { attemptIdentitySchema, counterSchema, identitySchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport,
+import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport,
   bindTaskAcceptance, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
   type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
@@ -17,7 +18,7 @@ import { evaluateHandoff } from '#engine/core/handoff-observation/index.js';
 import { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 import { evaluationRecovery } from './recovery.js';
 
-export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, expectedRevision: counterSchema }).strict();
 export type TaskEvaluationCommand = z.infer<typeof taskEvaluationCommandSchema>;
 export interface TaskEvaluationAuthorization {

@@ -1,10 +1,11 @@
+import { readDispatchFence } from './dispatch-fence.js';
 import { grantDispatchLaunch } from './launch.js';
 import { SqliteRunDispatch } from './run-dispatch.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity, type LostDispatchAction } from '#domain/index.js';
 import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  assertDispatchNotFenced, dispatchFenceReceiptId, projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+  projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 export class SqliteDispatchJournal {
@@ -19,9 +20,7 @@ export class SqliteDispatchJournal {
     return record;
   }
   private assertNotFenced(record: DispatchRecord, action: Exclude<LostDispatchAction, 'release-slot'>): void {
-    const identity = record.request.identity, commandId = dispatchFenceReceiptId(identity, record.owner);
-    const row = this.db.prepare('SELECT snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(identity.scopeId, commandId);
-    if (row) assertDispatchNotFenced(record, row.snapshot, action);
+    void action; if (readDispatchFence(this.db, record)) throw new DispatchError('DISPATCH_FENCED');
   }
   private transaction<T>(work: () => T): T {
     let active = false;
@@ -40,7 +39,7 @@ export class SqliteDispatchJournal {
         let record; let attempt;
         try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
         if (record.request.identity.scopeId !== query.scopeId || record.request.identity.attemptId !== row.attempt_id || !sameAttemptIdentity(record.request.identity, attempt.identity)) throw new DispatchError('DISPATCH_CORRUPT');
-        return Object.freeze({ identity: record.request.identity, owner: record.owner, launch: record.launch, terminal: record.terminal,
+        return Object.freeze({ ...(readDispatchFence(this.db, record) ? { fenced: true } : {}), identity: record.request.identity, owner: record.owner, launch: record.launch, terminal: record.terminal,
           cancellationRequested: attempt.cancelRequested, outputRecorded: !!record.output });
       });
       return Object.freeze({ entries: Object.freeze(entries), nextAfter: rows.length > query.limit ? entries.at(-1)!.identity.attemptId : null });
@@ -64,6 +63,17 @@ export class SqliteDispatchJournal {
         .run(next.revision, JSON.stringify(next), identity.scopeId, identity.attemptId, current.revision);
       if (updated.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
       this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), identity.scopeId, identity.attemptId);
+      return record;
+    });
+  }
+  async retainDispatchWorker(claim: DispatchClaim, worker: NonNullable<DispatchRecord['worker']>) {
+    return this.transaction(() => {
+      const existing = this.read(claim.request);
+      if (!existing || existing.owner !== claim.owner || existing.launch !== 'granted') throw new DispatchError('DISPATCH_CONFLICT');
+      if (readDispatchFence(this.db, existing)) throw new DispatchError('DISPATCH_FENCED');
+      if (existing.worker && JSON.stringify(existing.worker) !== JSON.stringify(worker)) throw new DispatchError('DISPATCH_CONFLICT');
+      const record = dispatchRecordSchema.parse({ ...existing, worker });
+      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
       return record;
     });
   }

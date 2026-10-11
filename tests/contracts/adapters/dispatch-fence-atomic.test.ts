@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { AuditApplication, LostDispatchApplication, encodeLostDispatchWrite, type LostDispatchWrite, type LostDispatchAudit } from '#engine/index.js';
+import { RunApplication, RunLifecycleApplication, AuditApplication, LostDispatchApplication, encodeLostDispatchWrite, type LostDispatchWrite, type LostDispatchAudit } from '#engine/index.js';
 import { verifyAuditRecord } from '#engine/core/audit/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyProfiles, custodyPrincipal, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
@@ -151,4 +151,30 @@ it('does not read custody after policy refusal or accept caller termination/manu
   await expect(application.fence(input)).rejects.toThrow('POLICY_DENIED'); expect(reads).toBe(0);
   await expect(application.fence({ ...input, proof: { pid: 1 }, action: 'release' })).rejects.toThrow();
   await unchanged(f);
+});
+
+it.each(['hold', 'close', 'resume', 'cancel'] as const)('refuses admitted public run %s under the fence namespace before any row write', async action => {
+  const f = await fixture();
+  // The test principal has the card's run-command authority; the assertion keeps the hostile command unchanged.
+  const verifier = { async verify() { return custodyPrincipal; } }, authorization = { async authorize() {} };
+  const command = { schemaVersion: 1, commandId: f.commandId, scopeId: 's', runId: 'run', expectedRevision: f.run.revision, action, ...(action === 'hold' ? { holdReason: 'operator hold' } : {}) };
+  const operation = action === 'cancel' ? new RunApplication(f.store, verifier, authorization).execute(command)
+    : new RunLifecycleApplication(f.store, verifier, authorization, { async authorize() {} }, target => new AuditApplication(target, integrity), () => 10, 1000, 'fixture-policy').execute(command);
+  await expect(operation).rejects.toMatchObject({ code: 'COMMAND_ID_RESERVED' });
+  await unchanged(f);
+});
+it.each(['run_receipts', 'attempt_receipts'])('reports a foreign %s fence row as conflict and never fences reader writes', async table => {
+  const f = await fixture(), raw = new DatabaseSync(f.path);
+  try { raw.prepare(`INSERT INTO ${table}(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)`).run('s', f.commandId,
+    JSON.stringify({ operation: 'client-hold', commandId: f.commandId }), JSON.stringify(table === 'run_receipts' ? f.run : f.attempt)); } finally { raw.close(); }
+  await expect(f.store.fenceLostDispatch(f.write, f.audit)).rejects.toMatchObject({ code: 'DISPATCH_FENCE_CONFLICT' });
+  await expect(f.store.finishDispatch(f.claim, { handle: 'worker', exitCode: 0, interrupted: null })).rejects.toMatchObject({ code: 'DISPATCH_FENCE_CONFLICT' });
+  expect(await f.store.loadRun('s', 'run')).toEqual(f.run); expect(await f.store.load('s', 'attempt')).toEqual(f.attempt);
+  expect((await f.store.readPoolHold('fixture-pool')).occupancy).toEqual({ execution: 1, inFlight: 1 });
+});
+it('detects a deleted audit on fence replay and every late writer', async () => {
+  const f = await fixture(); await f.store.fenceLostDispatch(f.write, f.audit);
+  const raw = new DatabaseSync(f.path); try { raw.exec('DROP TRIGGER audit_events_no_delete'); raw.prepare('DELETE FROM audit_events WHERE event_id=?').run(f.commandId); } finally { raw.close(); }
+  await expect(f.store.fenceLostDispatch(f.write, f.audit)).rejects.toMatchObject({ code: 'DISPATCH_CORRUPT' });
+  await expect(f.store.finishDispatch(f.claim, { handle: 'worker', exitCode: 0, interrupted: null })).rejects.toMatchObject({ code: 'DISPATCH_CORRUPT' });
 });

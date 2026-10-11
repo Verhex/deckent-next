@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { attemptIdentitySchema, identitySchema, attemptSnapshotSchema, sameAttemptIdentity, decideDispatchLoss, type AttemptIdentity, type AttemptSnapshot,
+import { SYSTEM_COMMAND_PREFIXES, attemptIdentitySchema, identitySchema, attemptSnapshotSchema, sameAttemptIdentity, decideDispatchLoss, type AttemptIdentity, type AttemptSnapshot,
   type DispatchFence, type DispatchTerminationProof, type WorkerIncarnation, type LostDispatchAction } from '#domain/index.js';
 import { dispatchRecordSchema, DispatchError, type DispatchRecord } from './port.js';
 
 /** Stable key for reusing the existing immutable Attempt receipt journal. No receipt is written here. */
 export function dispatchFenceReceiptId(identity: AttemptIdentity, owner: string): string {
   const token = { identity: attemptIdentitySchema.parse(identity), owner: identitySchema.parse(owner) };
-  return 'dispatch-fence-' + createHash('sha256').update(JSON.stringify(token)).digest('hex');
+  return SYSTEM_COMMAND_PREFIXES.fence + createHash('sha256').update(JSON.stringify(token)).digest('hex');
 }
 
 /** Bind the pure assessment to authoritative dispatch/Attempt data. Trusted custody supplies

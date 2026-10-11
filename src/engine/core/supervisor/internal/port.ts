@@ -8,6 +8,7 @@ export const sandboxRequestSchema = z.object({
   workspace: z.string().min(1), argv: z.array(z.string()).min(1).readonly(),
 }).strict().readonly();
 export type SandboxRequest = z.infer<typeof sandboxRequestSchema>;
+export const workerIncarnationSchema = z.object({ kind: z.literal('container'), id: z.string().regex(/^[a-f0-9]{64}$/), startedAt: z.string().min(1).max(40).refine(value => Number.isFinite(Date.parse(value)) && !value.startsWith('0001-')) }).strict().readonly();
 const supervisorResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
   z.object({ kind: z.literal('unknown'), reasonCode: identitySchema }).strict(),
@@ -16,19 +17,22 @@ const supervisorResultSchema = z.discriminatedUnion('kind', [
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
   }
 });
-export const sandboxObservationSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, container: containerEvidenceSchema.optional() }).strict().readonly();
+export const sandboxObservationSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, worker: workerIncarnationSchema.optional(), container: containerEvidenceSchema.optional() }).strict().readonly();
 export const sandboxOutputSchema = z.object({ stdout: z.string(), stderr: z.string(), completeness: z.literal('partial') }).strict().readonly();
-export const sandboxResultSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, container: containerEvidenceSchema.optional(),
+export const sandboxResultSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, worker: workerIncarnationSchema.optional(), container: containerEvidenceSchema.optional(),
   outputCompleteness: z.enum(['complete', 'partial', 'unavailable']), stdout: z.string(), stderr: z.string(), interrupted: z.boolean(),
 }).strict().readonly();
 export type SandboxResult = z.infer<typeof sandboxResultSchema>;
+export type SupervisorTermination = Readonly<{ worker: import('#domain/index.js').WorkerIncarnation } & ({ kind: 'worker-absent' } | { kind: 'supervisor-exit'; result: import('#domain/index.js').ProcessExitCause })>;
 export interface ExecutionSupervisor {
+  /** Exact retained incarnation lookup; missing names/PIDs cannot certify termination. */
+  observeTermination?(request: SandboxRequest, worker: import('#domain/index.js').WorkerIncarnation): Promise<SupervisorTermination | null>;
   /** Optional local data port; only stopped workers, never a launch or acceptance operation. */
   collectOutputFiles?(request: SandboxRequest): Promise<readonly CollectedOutputFile[]>;
-  cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>>;
+  cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>>;
   recoverOutput(request: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>>;
   /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
-  observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>>;
+  observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>>;
   execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult>;
   /** Release only after the application durably records terminal evidence. Absent = already released; a removal whose absence is not
    * observed afterwards is `SUPERVISOR_RELEASE_UNCONFIRMED` (retryable), never success. `removed`/`absent` tell an executed removal from
