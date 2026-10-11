@@ -75,8 +75,17 @@
     "registry": "dependencies.json"
   },
   "units": {
+    "src/adapters/core/service-shutdown-store": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/engine/core/runtime",
+        "src/adapters/core/sqlite-ledger"
+      ],
+      "plan": "STORE"
+    },
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/adapters/core/service-shutdown-store",
         "src/domain/core/task-evaluation",
         "src/adapters/core/audit-store",
         "src/engine/core/audit",

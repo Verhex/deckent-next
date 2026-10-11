@@ -14,7 +14,7 @@ import { settleAttemptCancellation } from './run-settlement.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import { SqliteCancellationRecoveryQuery } from './cancellation-recovery.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
-import { SqliteServiceShutdownJournal } from './service-shutdown.js';
+import { SqliteServiceShutdownJournal } from '#adapters/core/service-shutdown-store/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
 import { SqlitePoolCapacityJournal } from './pool-capacity.js';
