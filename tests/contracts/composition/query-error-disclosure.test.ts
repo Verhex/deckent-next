@@ -103,6 +103,7 @@ it('records a service request failure with fresh known secrets and returns only 
       const response = await handler({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'query-fix1', operation: 'inspectInventory', input: { schemaVersion: 1, scopeId: 's' }, ...(channel ? { channel } : {}) }, peer);
       expect(response).toMatchObject({ ok: false, error: { code: 'QUERY_UNEXPECTED_FAILURE', params: { errorClass: 'Error', diagnosticId: expect.stringMatching(uuid) } } });
       expect(JSON.stringify(response)).not.toMatch(/customer data|registered-customer/);
+      await vi.waitFor(() => expect(events).toHaveLength(channel === 'mcp' ? 2 : 1), { timeout: 3000 });
       expect(events.at(-1)).toMatchObject({ code: 'QUERY_UNEXPECTED_FAILURE', diagnosticId: expect.stringMatching(uuid) });
       expect(events.at(-1)!.detail).toContain('adapter customer data'); expect(events.at(-1)!.detail).toContain('‹secret:QUERY_FIXTURE›');
       expect(events.at(-1)!.detail).not.toContain(canary);
