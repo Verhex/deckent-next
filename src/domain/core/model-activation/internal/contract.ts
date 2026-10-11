@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { verifiedPrincipalSchema } from '#domain/core/principal/index.js';
@@ -13,7 +14,7 @@ export const modelActivationBindingSchema = z.object({ encodingVersion: z.litera
 export const modelActivationActorSchema = verifiedPrincipalSchema.unwrap()
   .pick({ id: true, issuer: true, subject: true, assurance: true }).strict().readonly();
 
-const baseCommand = z.object({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION), commandId: identitySchema,
+const baseCommand = z.object({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION), commandId: clientCommandIdSchema,
   scopeId: identitySchema, reference: modelReferenceSchema, expectedRevision: counterSchema,
   expectedBinding: modelActivationBindingSchema });
 export const modelActivationCommandSchema = z.discriminatedUnion('action', [

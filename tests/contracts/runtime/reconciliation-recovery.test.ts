@@ -120,3 +120,13 @@ it('does not invoke effects when inventory authorization is denied', async () =>
   }), { maxPageSize: 2, maxConcurrentReconciliations: 1 });
   await expect(recovery.recover(command)).rejects.toMatchObject({ code: 'POLICY_DENIED' }); expect(effects).toBe(0);
 });
+
+it('restart recovery revisits a fenced terminal even with retained output and never collects late output', async () => {
+  let reconciled = 0;
+  const recovery = app({ entries: [entry('fenced', { terminal, outputRecorded: true, fenced: true })], nextAfter: null }, {}, executor({
+    async reconcile() { reconciled++; return { status: 'unresolved', outputRecorded: true }; },
+    async recoverOutput() { throw new Error('fenced output must not be collected'); },
+  }));
+  expect((await recovery.recover(command)).outcomes).toEqual([{ identity: identity('fenced'), status: 'unresolved' }]);
+  expect(reconciled).toBe(1);
+});

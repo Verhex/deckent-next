@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { observeRunPool, type RunPoolEvidence } from './pool-observation.js';
 import { readAttemptHandoffEvents, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
@@ -9,7 +10,7 @@ import { describeRunWorkerModels, type WorkerEventArtifacts, type WorkerEventLog
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { RunStoreError, type RunStore } from './store.js';
 export const runQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema }).strict();
-export const runCommandSchema = runQuerySchema.extend({ commandId: identitySchema, action: z.literal('cancel'), expectedRevision: counterSchema }).strict();
+export const runCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, action: z.literal('cancel'), expectedRevision: counterSchema }).strict();
 export type RunQuery = z.infer<typeof runQuerySchema>;
 export type RunCommand = z.infer<typeof runCommandSchema>;
 export interface RunAuthorization { authorize(action: CorePolicyAction<'run'>, query: RunQuery, principal: VerifiedPrincipal): Promise<void> }

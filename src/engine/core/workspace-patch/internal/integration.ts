@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema, identitySchema } from '#domain/index.js';
 import { artifactReceiptSchema, type ArtifactStore } from '#capabilities/index.js';
@@ -5,7 +6,7 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { WorkspacePatchApplication } from './application.js';
 import { patchDigest, WorkspacePatchError, type WorkspacePatch } from './contract.js';
-export const integrationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const integrationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, replacesCommandId: identitySchema.optional(), proposal: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{20}$/) }).strict().readonly();
 export type IntegrationCommand = z.infer<typeof integrationCommandSchema>;
 export interface IntegrationObservation { readonly digest: string; readonly source: string; readonly head: string }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
+import { clientCommandIdSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 
 /**
@@ -14,7 +14,7 @@ import { exactModelIdSchema, modelReferenceSchema } from '#domain/core/provider-
 export const MODEL_CONNECT_OPERATION_ID = 'models.connect';
 export const MODEL_CONNECT_SCHEMA_VERSION = 1;
 /** Leaves room for the derived step ids (`<commandId>.profile.global` …) inside the identity bound. */
-const commandIdSchema = identitySchema.refine(value => value.length <= 192);
+const commandIdSchema = clientCommandIdSchema.refine(value => value.length <= 192);
 export const modelConnectCommandSchema = z.object({
   schemaVersion: z.literal(MODEL_CONNECT_SCHEMA_VERSION),
   commandId: commandIdSchema,

@@ -1,8 +1,8 @@
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { FileArtifactStore, openSqliteAttemptStore, recordedDockerSupervisor } from '#adapters/index.js';
-import { authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, type DispatchStore, type RunBoundDispatchStore, type DispatchAuthorization, type DispatchIdentityAuthorization } from '#engine/index.js';
+import { openLocalIntegrityAuthority, FileArtifactStore, openSqliteAttemptStore, recordedDockerSupervisor } from '#adapters/index.js';
+import { AuditApplication, LostDispatchApplication, dispatchFenceReceiptId, authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, type DispatchStore, type RunBoundDispatchStore, type DispatchAuthorization, type DispatchIdentityAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -12,7 +12,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function reconcileConfiguredAttempt(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
     const actor = await authenticate(verifier, undefined, identity.scopeId);
@@ -27,6 +27,17 @@ export async function reconcileConfiguredAttempt(projectRoot: string, input: Att
       const supervisor = recordedDockerSupervisor(recorded.profile);
       const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
       const app = new DispatchApplication(dispatchStore, supervisor, verifier, authorization, principal.id, artifacts);
+      const fence = await store.loadRunReceipt(identity.scopeId, dispatchFenceReceiptId(identity, recorded.owner));
+      if (fence) {
+        const run = (await store.loadRun(identity.scopeId, identity.runId))!, attempt = (await store.load(identity.scopeId, identity.attemptId))!;
+        const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
+        const recovery = new LostDispatchApplication(store, verifier, authorization, {
+          observe: record => supervisor.observe(record.request),
+          termination: record => supervisor.observeTermination?.(record.request, record.worker!) ?? Promise.resolve(null),
+        }, target => new AuditApplication(target, integrity), document.revision, Date.now);
+        const recovered = await recovery.recover({ schemaVersion: 1, identity, expectedRunRevision: run.revision, expectedAttemptRevision: attempt.revision });
+        return Object.freeze({ schemaVersion: 1 as const, layout, reconciliation: Object.freeze({ identity, status: 'unresolved' as const, terminal: recorded.terminal, outputRecorded: !!recorded.output, disposition: recovered.decision }) });
+      }
       const result = await app.reconcile(recorded.request);
       // Durable cancellation intent plus settled terminal evidence closes the bound task; no launch, retry or acceptance.
       const settlement = result.kind === 'unresolved' ? undefined : await store.settleCancelledAttempt(identity);

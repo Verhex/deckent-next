@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
@@ -15,7 +16,7 @@ export const approvalQuerySchema = z.object({ schemaVersion: z.literal(1), scope
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
 /** v19 (B1): `channel` is the surface the client declares (recorded, never authority); `decisionCapability` is the one-time capability an agent
  * turn sent on its own stream. There is no assurance field: a client cannot claim one (strict schema → `APPROVAL_INVALID`). */
-const onceApprovalCommandSchema = approvalQuerySchema.extend({ commandId: identitySchema, expectedRevision: counterSchema,
+const onceApprovalCommandSchema = approvalQuerySchema.extend({ commandId: clientCommandIdSchema, expectedRevision: counterSchema,
   decision: z.enum(['allow', 'deny']), reason: z.string().min(1).max(2048).refine(v => v.trim() === v), channel: identitySchema.optional(),
   decisionCapability: z.string().regex(DECISION_CAPABILITY_PATTERN).optional(),
   /** v21 APPROVER-NOTE: `reason` is the decider's own words (sealed; a tool-call turn gives it to the model as the approver's note). */

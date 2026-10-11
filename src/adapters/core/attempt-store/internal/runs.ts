@@ -1,10 +1,11 @@
+import { readDispatchFence } from './dispatch-fence.js';
 import { propagateRunCancellation } from './run-cancellation.js';
 import { settleRunCancellation } from './run-settlement.js';
 import { SqliteExecutionPools } from './pools.js';
 import type { RunAdmissionFilter } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { readWorkerModelPin, identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, reconcileRunLifecycle, observeRunAttempt, closesAttemptWithoutExit, RunError } from '#domain/index.js';
-import { encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
+import { releaseWorkerCustody, verifiedPrincipalSchema, readWorkerModelPin, identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, reconcileRunLifecycle, observeRunAttempt, closesAttemptWithoutExit, RunError } from '#domain/index.js';
+import { assertLostDispatchReleaseReplay, assertLostDispatchReleaseAudit, dispatchReleaseReceiptId, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
@@ -71,6 +72,8 @@ export class SqliteRunJournal {
     const { write, commandId, command } = encodeLostDispatchWrite(input), { scopeId, runId, attemptId } = write.identity;
     if (typeof audit !== 'function') throw new DispatchError('DISPATCH_NOT_ADMITTED');
     return this.transaction(() => {
+      const { dispatch: custody } = readRunBoundDispatch(this.db, write.identity);
+      if (custody) readDispatchFence(this.db, custody);
       const replay = this.receipt(scopeId, runId, commandId, command);
       const prior = this.db.prepare('SELECT command,snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
       if (replay) { assertLostDispatchReplay(prior, replay, write); return replay; }
@@ -89,6 +92,27 @@ export class SqliteRunJournal {
       const logged = this.db.prepare('SELECT record FROM audit_events WHERE scope_id=? AND event_id=?').get(scopeId, sealed.event.eventId);
       if (logged?.record !== JSON.stringify(sealed)) throw new DispatchError('DISPATCH_CORRUPT');
       this.db.prepare('INSERT INTO attempt_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)').run(scopeId, commandId, command, encoded);
+      return this.record({ commandId, command, snapshot });
+    });
+  }
+  async releaseLostDispatch(write: import('#engine/index.js').LostDispatchRelease, audit: LostDispatchAudit): Promise<RunReceipt> {
+    const actor = verifiedPrincipalSchema.parse(write.actor), { scopeId, runId } = write.identity;
+    if (!actor.scopeIds.includes(scopeId) || typeof audit !== 'function') throw new DispatchError('DISPATCH_NOT_ADMITTED');
+    const commandId = dispatchReleaseReceiptId(write.identity, write.owner);
+    const command = JSON.stringify({ operation: 'release-worker-custody', identity: write.identity, owner: write.owner, actor, proof: write.proof });
+    return this.transaction(() => {
+      const { run, dispatch } = readRunBoundDispatch(this.db, write.identity);
+      if (!dispatch || dispatch.owner !== write.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      const fence = readDispatchFence(this.db, dispatch);
+      if (!fence || write.proof.receiptId !== commandId) throw new DispatchError('DISPATCH_CONFLICT');
+      const replay = this.receipt(scopeId, runId, commandId, command);
+      if (replay) { assertLostDispatchReleaseReplay(replay, write, dispatch, { identity: write.identity, owner: write.owner, receiptId: fence.receiptId }, this.db.prepare('SELECT record FROM audit_events WHERE scope_id=? AND event_id=?').get(scopeId, commandId)?.record); return replay; }
+      const snapshot = releaseWorkerCustody(run, write.expectedRunRevision, { identity: write.identity, owner: write.owner, launch: dispatch.launch, lost: fence.snapshot.lastObservation?.result.kind === 'unknown', worker: dispatch.worker ?? null },
+        { identity: write.identity, owner: write.owner, receiptId: fence.receiptId }, write.proof);
+      const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?').run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, write.expectedRunRevision);
+      if (updated.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
+      const sealed = assertLostDispatchReleaseAudit(audit(new SqliteAuditStore(this.db), snapshot), snapshot, command, write);
+      if (this.db.prepare('SELECT record FROM audit_events WHERE scope_id=? AND event_id=?').get(scopeId, commandId)?.record !== JSON.stringify(sealed)) throw new DispatchError('DISPATCH_CORRUPT');
       return this.record({ commandId, command, snapshot });
     });
   }

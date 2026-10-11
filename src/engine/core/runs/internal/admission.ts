@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -6,7 +7,7 @@ import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type RunWorkspaceC
 import { runCreateSchema, RunStoreError, type RunStore, type RunCreate, type RunReceipt } from './store.js';
 import type { RunAuthorization } from './application.js';
 import { projectRunView } from './view.js';
-export const runAdmissionSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const runAdmissionSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   scopeId: identitySchema, runId: identitySchema, graph: taskGraphSchema, branch: branchInputSchema.optional() }).strict();
 export type RunAdmission = z.infer<typeof runAdmissionSchema>;
 /** Local SDK ingress for a Run pinned to a completed delivery of the same scope; the commit is resolved by trusted composition. */

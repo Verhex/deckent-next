@@ -922,5 +922,9 @@
   "identity.distributionReason": "Kimlik profili dağıtımı incelendi",
   "error.DISPATCH_FENCED": "Bu denemenin worker yazma yetkisi kapatıldı. Geç yazım reddedildi.",
   "error.WORK_CLASS_EVIDENCE_NOT_REGISTERED": "Kanıt türü iş sınıfı politikasında kayıtlı değil.",
-  "error.TASK_EVALUATION_PROFILE_MISMATCH": "Değerlendirme, dondurulmuş kabul profiliyle eşleşmiyor."
+  "error.TASK_EVALUATION_PROFILE_MISMATCH": "Değerlendirme, dondurulmuş kabul profiliyle eşleşmiyor.",
+  "error.COMMAND_ID_RESERVED": "Bu komut kimliği ayrılmış sistem ad alanına aittir. Başka bir kimlik seçin.",
+  "error.DISPATCH_FENCE_CONFLICT": "Dispatch fence kimliğinde yabancı bir makbuz var. Kaynak sorumluluğu tutuluyor; çakışan makbuzu uzlaştırın.",
+  "task.custody.hold-manual": "Worker kapasitesi tutuluyor: güvenilir sonlanma kanıtı gerekli.",
+  "task.custody.released": "Worker kapasitesi sonlanma kanıtıyla bırakıldı; görev kabulü ve etkiler hâlâ belirsiz."
 }

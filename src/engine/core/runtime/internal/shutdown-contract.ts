@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { counterSchema, identitySchema, verifiedPrincipalSchema } from '#domain/index.js';
 
@@ -21,7 +22,7 @@ export const serviceInstanceSchema = z.object(serviceInstanceShape).strict().rea
 
 export const shutdownCommandSchema = z.object({
   schemaVersion: z.literal(1),
-  commandId: identitySchema,
+  commandId: clientCommandIdSchema,
   serviceId: identitySchema,
   instanceId: identitySchema,
   reason: reasonSchema,

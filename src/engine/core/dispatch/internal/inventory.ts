@@ -13,6 +13,7 @@ export type DispatchInventoryQuery = z.infer<typeof dispatchInventoryQuerySchema
 export interface DispatchInventoryEntry {
   readonly identity: AttemptIdentity;
   readonly owner: string;
+  readonly fenced?: boolean;
   readonly launch: DispatchRecord['launch'];
   readonly terminal: DispatchTerminal | null;
   readonly cancellationRequested: boolean;

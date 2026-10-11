@@ -369,6 +369,7 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/engine/core/supervisor",
         "src/engine/core/run-progression",
         "src/domain/core/audit",

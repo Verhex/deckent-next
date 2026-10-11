@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema, attemptObservationSchema, createAttempt, applyAttemptObservation,
@@ -7,7 +8,7 @@ import { AttemptStoreError, type AttemptReceipt, type AttemptStore } from './por
 const id = identitySchema;
 export const ATTEMPT_COMMAND_SCHEMA_VERSION = 2;
 export const attemptCommandSchema = z.object({
-  schemaVersion: z.literal(ATTEMPT_COMMAND_SCHEMA_VERSION), commandId: id, scopeId: id,
+  schemaVersion: z.literal(ATTEMPT_COMMAND_SCHEMA_VERSION), commandId: clientCommandIdSchema, scopeId: id,
   action: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('create'), identity: attemptIdentitySchema }).strict(),
     z.object({ kind: z.literal('observe'), observation: attemptObservationSchema }).strict(),

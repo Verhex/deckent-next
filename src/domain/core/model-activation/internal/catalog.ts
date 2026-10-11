@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, catalogChannelSchema, catalogModelSchema, exactModelIdSchema,
@@ -25,7 +26,7 @@ const catalogDocumentSchema = z.unknown().transform((input, context): ProviderCa
     return z.NEVER;
   }
 });
-const base = { schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), commandId: identitySchema, scopeId: identitySchema };
+const base = { schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), commandId: clientCommandIdSchema, scopeId: identitySchema };
 export const modelCatalogTargetSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema.nullable() }).strict().readonly();
 /** Read query (WORKER-CURRENCY-2): the catalog as one scope sees it, optionally one channel. */
 export const modelCatalogQuerySchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,

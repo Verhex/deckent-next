@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 
@@ -33,7 +34,7 @@ export const effectTargetRefSchema = z.object({ kind: identitySchema, id: z.stri
   .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) }).strict().readonly();
 export type EffectTargetRef = z.infer<typeof effectTargetRefSchema>;
 export const effectCommandSchema = z.object({
-  schemaVersion: z.literal(1), commandId: identitySchema, scopeId: identitySchema, operation: operationRefSchema,
+  schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, operation: operationRefSchema,
   target: effectTargetRefSchema, idempotencyKey: identitySchema, input: z.unknown(),
   /** The record version the caller based its decision on; required when the catalog demands a record-version precondition. */
   expectedVersion: z.string().min(1).max(256).nullable(),

@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, decisionPolicySchema, decisionAdviceSchema, decisionRecordSchema,
   modelReferenceSchema, modelActivationBindingSchema, verifiedPrincipalSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS,
@@ -8,11 +9,11 @@ const ingress = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIM
 const target = {schemaVersion:z.literal(1),scopeId:identitySchema,decisionId:identitySchema};
 const digest=z.string().regex(/^[a-f0-9]{64}$/);
 export const decisionPrepareInputSchema=ingress.pipe(z.object({schemaVersion:z.literal(1),case:decisionCaseSchema}).strict());
-export const decisionAskCommandSchema=ingress.pipe(z.object({schemaVersion:z.literal(1),commandId:identitySchema,scopeId:identitySchema,case:decisionCaseSchema,
+export const decisionAskCommandSchema=ingress.pipe(z.object({schemaVersion:z.literal(1),commandId: clientCommandIdSchema,scopeId:identitySchema,case:decisionCaseSchema,
   invocation:z.object({reference:modelReferenceSchema,catalogRevision:identitySchema,expectedBinding:modelActivationBindingSchema}).strict()}).strict());
 export const decisionQuerySchema=ingress.pipe(z.object(target).strict());
-export const decisionRecordCommandSchema=ingress.pipe(z.object({...target,commandId:identitySchema,selectedOption:identitySchema,rationale:z.string().min(1)}).strict());
-export const decisionOutcomeCommandSchema=ingress.pipe(z.object({...target,commandId:identitySchema,
+export const decisionRecordCommandSchema=ingress.pipe(z.object({...target,commandId: clientCommandIdSchema,selectedOption:identitySchema,rationale:z.string().min(1)}).strict());
+export const decisionOutcomeCommandSchema=ingress.pipe(z.object({...target,commandId: clientCommandIdSchema,
   outcome:z.object({observedAt:z.string().datetime({offset:true}),observation:z.string().min(1)}).strict()}).strict());
 export type DecisionPrepareInput=z.infer<typeof decisionPrepareInputSchema>;
 export type DecisionAskCommand=z.infer<typeof decisionAskCommandSchema>;

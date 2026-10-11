@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
@@ -7,7 +8,7 @@ import type { AuditStore } from '#engine/core/audit/index.js';
 interface TaskDecisionAuthorization { authorize(identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void> }
 import { runQuerySchema, type RunQuery, type RunAuthorization } from './application.js';
 import { RunStoreError, type RunReceipt, type RunStore } from './store.js';
-const base = z.object({ schemaVersion: z.literal(1), commandId: identitySchema, scopeId: identitySchema, runId: identitySchema,
+const base = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, runId: identitySchema,
   expectedRevision: counterSchema });
 /** Human-only decisions. Timing, actor, evaluation and evidence never come from the caller. */
 const holdReason = z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars);

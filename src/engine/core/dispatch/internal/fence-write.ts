@@ -1,7 +1,8 @@
+import { SYSTEM_COMMAND_PREFIXES } from '#domain/index.js';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { attemptIdentitySchema, attemptSnapshotSchema, verifiedPrincipalSchema, counterSchema, identitySchema,
-  applyAttemptObservation, observeRunAttempt, sameAttemptIdentity, auditRecordSchema, type RunSnapshot, type AuditRecord, type AttemptSnapshot, type AttemptIdentity } from '#domain/index.js';
+  releaseWorkerCustody, applyAttemptObservation, observeRunAttempt, sameAttemptIdentity, auditRecordSchema, type RunSnapshot, type AuditRecord, type AttemptSnapshot, type AttemptIdentity } from '#domain/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
 import { DispatchError, dispatchRecordSchema, type DispatchRecord } from './port.js';
 import { dispatchFenceReceiptId } from './loss.js';
@@ -19,6 +20,7 @@ export interface LostDispatchReceipt {
 }
 export type LostDispatchAudit = (store: AuditStore, snapshot: RunSnapshot) => AuditRecord;
 export interface LostDispatchStore {
+  releaseLostDispatch?(write: LostDispatchRelease, audit: LostDispatchAudit): Promise<LostDispatchReceipt>;
   fenceLostDispatch(write: LostDispatchWrite, audit: LostDispatchAudit): Promise<LostDispatchReceipt>;
   loadRunReceipt(scopeId: string, commandId: string): Promise<LostDispatchReceipt | null>;
   receipt(scopeId: string, commandId: string): Promise<Readonly<{ snapshot: AttemptSnapshot }> | null>;
@@ -50,7 +52,7 @@ export function proposeLostDispatchFence(run: RunSnapshot, row: { revision?: unk
   return { attempt, snapshot: observeRunAttempt(run, run.revision, attempt) };
 }
 /** Audit records the reconciliation hold on this exact task, not an operator Run pause. */
-export function assertLostDispatchAudit(input: unknown, snapshot: RunSnapshot, command: string, write: LostDispatchWrite): AuditRecord {
+export function assertLostDispatchAudit(input: unknown, snapshot: Pick<RunSnapshot, 'revision'>, command: string, write: LostDispatchWrite): AuditRecord {
   const parsed = auditRecordSchema.safeParse(input);
   if (!parsed.success) throw new DispatchError('DISPATCH_CORRUPT');
   const { event } = parsed.data, subject = event.subject;
@@ -86,4 +88,31 @@ export function attemptDispatchWriteToken(encoded: unknown, identity: AttemptIde
   // Only the audited atomic writer may create the reserved fence receipt.
   if (commandId === fenceId) throw new DispatchError('DISPATCH_CONFLICT');
   return { record, fenceId };
+}
+
+/** Internal trusted observer write; never accepted from a public command. */
+export interface LostDispatchRelease {
+  readonly identity: AttemptIdentity; readonly owner: string; readonly expectedRunRevision: number;
+  readonly actor: import('#domain/index.js').VerifiedPrincipal; readonly now: number;
+  readonly proof: import('#domain/index.js').DispatchTerminationProof;
+}
+export function dispatchReleaseReceiptId(identity: AttemptIdentity, owner: string) {
+  return dispatchFenceReceiptId(identity, owner).replace(SYSTEM_COMMAND_PREFIXES.fence, SYSTEM_COMMAND_PREFIXES.release);
+}
+
+export function assertLostDispatchReleaseAudit(input: unknown, snapshot: RunSnapshot, command: string, write: LostDispatchRelease) {
+  const sealed = auditRecordSchema.safeParse(input);
+  if (!sealed.success) throw new DispatchError('DISPATCH_CORRUPT');
+  const event = sealed.data.event, subject = event.subject, commandId = dispatchReleaseReceiptId(write.identity, write.owner);
+  if (event.eventId !== commandId || event.scopeId !== write.identity.scopeId || event.atMs !== write.now || event.principal.issuer !== write.actor.issuer || event.principal.subject !== write.actor.subject
+    || subject.kind !== 'run-lifecycle' || subject.action !== 'release-worker-custody' || subject.runId !== write.identity.runId || subject.taskId !== write.identity.taskId || subject.revision !== snapshot.revision || subject.commandId !== commandId
+    || subject.inputDigest !== createHash('sha256').update(command).digest('hex')) throw new DispatchError('DISPATCH_CORRUPT');
+  return sealed.data;
+}
+
+export function assertLostDispatchReleaseReplay(receipt: LostDispatchReceipt, write: LostDispatchRelease, record: DispatchRecord, fence: import('#domain/index.js').DispatchFence, audit: unknown) {
+  let sealed; try { sealed = auditRecordSchema.parse(JSON.parse(String(audit))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
+  assertLostDispatchReleaseAudit(sealed, receipt.snapshot, receipt.command, { ...write, now: sealed.event.atMs });
+  const snapshot = releaseWorkerCustody(receipt.snapshot, receipt.snapshot.revision, { identity: write.identity, owner: write.owner, launch: record.launch, lost: true, worker: record.worker ?? null }, fence, write.proof);
+  if (snapshot.revision !== receipt.snapshot.revision) throw new DispatchError('DISPATCH_CORRUPT');
 }

@@ -13,7 +13,7 @@ it('projects explicit public registry bindings without storage bindings or priva
     registryRevision: 'fixture-registry', graphSummary: { schemaVersion: 1, shape: { tasks: 1, edges: 0, depth: 1 }, criticalPath: ['t'],
       counts: { pending: 1, running: 0, attention: 0, accepted: 0, failed: 0, stopped: 0, total: 1 } }, criteria: [{ id: 'private-criterion', version: 1, description: 'Private verification details',
       evaluator: { id: 'test-evaluator', version: 1 }, fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) }],
-    tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['private-criterion'],
+    tasks: [{ acceptance: { workClass: null, score: null, profileVersion: null, policyRevision: null, evaluationId: null, outcome: 'incomplete', criteria: [], ceilingReasons: [] }, id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['private-criterion'],
       profile: { id: 'fixture-profile', version: 1 }, phase: 'pending', unresolvedEffects: false,
       taskBrief: { schemaVersion: 1, task: null, scopePaths: null, acceptance: null, model: null, effort: null,
         profile: { id: 'fixture-profile', version: 1 }, contextRefs: [], criteria: [{ id: 'private-criterion',

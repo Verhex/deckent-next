@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { identitySchema, attemptIdentitySchema } from '#domain/index.js';
 import { artifactReceiptSchema } from '#capabilities/index.js';
@@ -8,7 +9,7 @@ import { WorkspacePatchApplication } from './application.js';
 import { WorkspaceIntegrationInspection } from './inspection.js';
 import { WorkspacePatchError, type WorkspacePatch } from './contract.js';
 import type { IntegrationManifest, IntegrationTarget } from './integration.js';
-export const integrationDeliveryCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const integrationDeliveryCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, integrationCommandId: identitySchema }).strict().readonly();
 export type IntegrationDeliveryCommand = z.infer<typeof integrationDeliveryCommandSchema>;
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);

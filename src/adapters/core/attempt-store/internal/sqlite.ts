@@ -1,3 +1,4 @@
+import { readDispatchFence } from './dispatch-fence.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteDeliveryJournal } from './delivery.js';
 import { SqliteAdoptionJournal } from './adoption.js';
@@ -27,7 +28,7 @@ import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, Cancellati
 import { openSqliteLedger, sqliteFailure, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
-import { AttemptStoreError, dispatchRecordSchema, attemptDispatchWriteToken, assertDispatchNotFenced, readSealedWorkerEvents, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
+import { AttemptStoreError, dispatchRecordSchema, DispatchError, attemptDispatchWriteToken,  readSealedWorkerEvents, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore, PoolCapacityStore {
@@ -82,6 +83,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async listRunLifecycleDue(query: ProgressionQuery & { readonly now: number }) { return new SqliteRunProgression(this.db).listRunLifecycleDue(query); }
   async hasTaskEvaluation(identity: unknown, revision: number) { return new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision); }
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunReceipt(scopeId, commandId); }
+  async retainDispatchWorker(...args: Parameters<SqliteDispatchJournal['retainDispatchWorker']>) { return new SqliteDispatchJournal(this.db).retainDispatchWorker(...args); }
+  async releaseLostDispatch(...args: Parameters<SqliteRunJournal['releaseLostDispatch']>) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).releaseLostDispatch(...args); }
   async fenceLostDispatch(...args: Parameters<import('#engine/index.js').LostDispatchStore['fenceLostDispatch']>) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).fenceLostDispatch(...args); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).cancelRun(input); }
   async commitRunLifecycle(input: import('#engine/index.js').RunLifecycleWrite,
@@ -165,8 +168,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
       const dispatch = this.db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
       if (dispatch) {
         const token = attemptDispatchWriteToken(dispatch.record, snapshot.identity, input.commandId);
-        const fence = this.db.prepare('SELECT snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(scopeId, token.fenceId);
-        if (fence && !cancellationActor) assertDispatchNotFenced(token.record, fence.snapshot, 'result');
+        const fence = readDispatchFence(this.db, token.record);
+        if (fence && !cancellationActor) throw new DispatchError('DISPATCH_FENCED');
       }
       const existing = this.readReceipt(scopeId, input.commandId);
       if (existing) {
