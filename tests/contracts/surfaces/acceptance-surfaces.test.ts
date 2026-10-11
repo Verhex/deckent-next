@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { expect, it } from 'vitest';
 import { applyTaskEvaluation, bindTaskAcceptance, deriveAcceptanceView } from '#domain/index.js';
-import { describeTaskEvaluationReceipt, projectRunView, projectMonitorRun } from '#engine/index.js';
+import { describeTaskEvaluationReceipt, dispatchRecordSchema, projectRunView, projectMonitorRun } from '#engine/index.js';
 import { main } from '#surfaces/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { renderAcceptanceLine } from '#surfaces/core/monitor/index.js';
@@ -59,13 +59,14 @@ it.each(['en', 'tr'] as const)('run and task inspection render acceptance from t
   }
 });
 
-it('source SDK, CLI JSON and MCP transport show identical frozen fields from a real reopened ledger, with the unbound receipt visible as unknown', async () => {
+it.each([true, false])('source SDK, CLI JSON, MCP and monitor read the same reopened canonical acceptance (receipt present: %s)', async present => {
   const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir, hostname, userInfo } = await import('node:os');
   const { join } = await import('node:path');
   const { DatabaseSync } = await import('node:sqlite');
   const { inspectRun } = await import('../../../src/index.js');
   const { openConfiguredAttemptStore } = await import('../../../src/composition/core/storage/index.js');
+  const { readMonitorLedger } = await import('#adapters/index.js');
   const { clearConfigCache } = await import('#platform/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-acceptance-surface-')), project = join(root, 'project'), data = join(root, 'data');
   const f = fixture(), query = { schemaVersion: 1 as const, scopeId: identity.scopeId, runId: identity.runId }, options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
@@ -73,20 +74,39 @@ it('source SDK, CLI JSON and MCP transport show identical frozen fields from a r
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
   let client: Client | undefined, server: ReturnType<typeof createMcpServer> | undefined;
   try {
-    const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
+    const opened = await openConfiguredAttemptStore(project, options);
     const db = new DatabaseSync(opened.path);
     try {
+      const source = evaluating(), snapshot = present ? source.run : f.snapshot;
+      const dispatch = dispatchRecordSchema.parse({ schemaVersion: 2, owner: 'worker-owner', launch: 'granted',
+        profile: { schemaVersion: 1, adapterId: 'test', adapterVersion: 1, parameters: {} },
+        request: { protocolVersion: 1, identity, workspace: project, argv: ['fixture-command'] },
+        grant: { generation: 1, grantedAt: 1, principal: { id: 'actor', issuer: 'test', subject: 'author' } },
+        terminal: { handle: 'handle', exitCode: 0, interrupted: false },
+        output: { schemaVersion: 1, scopeId: identity.scopeId, digest: 'a'.repeat(64), byteLength: 10 } });
       db.prepare('INSERT INTO execution_pools VALUES(?,?)').run('pool', JSON.stringify({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 2, inFlightSlots: 2 } }));
-      db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)').run(identity.scopeId, identity.runId, f.snapshot.revision, JSON.stringify(f.snapshot), JSON.stringify({ schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['task'] }));
-      db.prepare('INSERT INTO run_receipts VALUES(?,?,?,?)').run(identity.scopeId, 'evaluation', JSON.stringify({ action: 'apply-task-evaluation', evaluation: f.evaluation }), JSON.stringify(f.snapshot));
-    } finally { db.close(); }
+      db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)').run(identity.scopeId, identity.runId, snapshot.revision, JSON.stringify(snapshot), JSON.stringify({ schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['task'] }));
+      db.prepare('INSERT INTO attempts VALUES(?,?,?,?)').run(identity.scopeId, identity.attemptId, source.attempt.revision, JSON.stringify(source.attempt));
+      db.prepare('INSERT INTO dispatches VALUES(?,?,?)').run(identity.scopeId, identity.attemptId, JSON.stringify(dispatch));
+      if (present) {
+        const receipt = await opened.store.commitTaskEvaluation({ commandId: f.evaluation.evaluationId,
+          actor: { id: 'actor', issuer: 'test', subject: 'author' }, expectedRevision: source.run.revision,
+          evaluation: f.evaluation, dispatch, now: 100, timeoutMs: 1000 });
+        expect(receipt.snapshot).toEqual(f.snapshot);
+        // Observation reads the producer receipt; corrupt projection data cannot supply a second verdict.
+        db.prepare('UPDATE acceptance_metrics SET record=?').run('{"fixture":"not-an-authority"}');
+      }
+    } finally { db.close(); opened.store.close(); }
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'fixture-read', restrictions: [], grants: [
       { id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: [identity.scopeId], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids: [identity.runId] } },
     ] }), { mode: 0o600 });
     clearConfigCache();
     const sdk = await inspectRun(project, query, options), bytes = JSON.stringify(sdk.run!.tasks[0]!.acceptance);
-    // This negative evidence exposes the remaining reader wiring; it is not relabeled complete acceptance.
-    expect(sdk.run!.tasks[0]!.acceptance).toMatchObject({ workClass: 'business', outcome: 'accepted', score: null, evaluationId: null });
+    expect(sdk.run!.tasks[0]!.acceptance).toEqual(deriveAcceptanceView(f.snapshot, identity.taskId, present ? f.evaluation : undefined));
+    expect(sdk.run!.tasks[0]!.acceptance).toMatchObject({ workClass: 'business', outcome: 'accepted', score: present ? 1 : null, evaluationId: present ? f.evaluation.evaluationId : null });
+    const monitor = await readMonitorLedger(opened.path, { busyTimeoutMs: 1000, maxRuns: 10 });
+    expect(monitor.diagnostics).toEqual([]);
+    expect(JSON.stringify(projectMonitorRun({ run: monitor.runs[0]!, pool: monitor.pools[0]!, approvals: [], workers: new Map(), observedAt: 100 }).tasks[0]!.acceptance)).toBe(bytes);
     const out: string[] = [];
     expect(await main(['run', 'inspect', '--scope', identity.scopeId, '--id', identity.runId, '--json'], {
       root: project, env: options.env, stdout: { write(text: string) { out.push(text); } }, stderr: { write() {} }, async inspectRun() { return inspectRun(project, query, options); },
@@ -97,7 +117,7 @@ it('source SDK, CLI JSON and MCP transport show identical frozen fields from a r
     const returned = JSON.parse((result.content as { type: string; text?: string }[]).find(row => row.type === 'text')!.text!);
     expect(JSON.stringify(JSON.parse(out.join('')).run.tasks[0].acceptance)).toBe(bytes);
     expect(JSON.stringify(returned.run.tasks[0].acceptance)).toBe(bytes);
-    console.info('REOPENED_LEDGER_ACCEPTANCE_BYTES', JSON.stringify({ sdk: bytes, cli: JSON.stringify(JSON.parse(out.join('')).run.tasks[0].acceptance), mcp: JSON.stringify(returned.run.tasks[0].acceptance) }));
+    console.info('REOPENED_LEDGER_ACCEPTANCE_BYTES', JSON.stringify({ canonicalReceipt: present, sdk: bytes, cli: JSON.stringify(JSON.parse(out.join('')).run.tasks[0].acceptance), mcp: JSON.stringify(returned.run.tasks[0].acceptance), monitor: bytes }));
   } finally {
     if (client) await client.close(); if (server) await server.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
   }

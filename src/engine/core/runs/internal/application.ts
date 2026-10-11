@@ -3,7 +3,7 @@ import { readAttemptHandoffEvents, type HandoffStartRecord } from '#engine/core/
 import type { AttemptStore } from '#engine/core/attempts/index.js';
 import { projectRunView } from './view.js';
 import { z } from 'zod';
-import { identitySchema, counterSchema, runSnapshotSchema, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
+import { identitySchema, counterSchema, runSnapshotSchema, type RunSnapshot, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { describeRunWorkerModels, type WorkerEventArtifacts, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -19,7 +19,7 @@ export interface RunModelEvidence {
 }
 /** Shared authenticated ingress. Cancellation records intent; it never fabricates worker termination. */
 export class RunInspectionApplication {
-  constructor(private readonly readStore: Pick<RunStore, 'loadRun'> & Partial<Pick<AttemptStore, 'receipt'>> & { loadRunPoolEvidence?(scopeId: string, runId: string): Promise<RunPoolEvidence> }, protected readonly verifier: PrincipalVerifier,
+  constructor(private readonly readStore: Pick<RunStore, 'loadRun'> & Partial<Pick<AttemptStore, 'receipt'>> & { loadRunEvaluations?(snapshot: RunSnapshot): Promise<readonly Readonly<{ identity: { taskId: string } }>[]>; loadRunPoolEvidence?(scopeId: string, runId: string): Promise<RunPoolEvidence> }, protected readonly verifier: PrincipalVerifier,
     protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }) {}
   async inspect(input: unknown, credential?: unknown) { return (await this.load(input, credential)).run; }
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
@@ -46,7 +46,8 @@ export class RunInspectionApplication {
       if (receipt) receipts.push(receipt);
     }
     const pool = evidence ? observeRunPool(evidence, Date.now(), this.poolConfig?.admission, this.poolConfig?.ceiling) : undefined;
-    const view = { ...projectRunView(parsed, receipts), ...(pool ? { pool } : {}) };
+    const evaluations = await this.readStore.loadRunEvaluations?.(parsed) ?? [];
+    const view = { ...projectRunView(parsed, receipts, evaluations), ...(pool ? { pool } : {}) };
     if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     return { run: view, snapshot, principal };
   }

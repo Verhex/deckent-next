@@ -5,4 +5,4 @@ export type { TaskEvaluationCommit, TaskEvaluationStore } from './internal/commi
 export { TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from './internal/application.js';
 export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator, TaskCriterionResult, UnknownEvaluationPolicy } from './internal/application.js';
 
-export { deriveAcceptanceMetric } from './internal/metrics.js';
+export { deriveAcceptanceMetric, selectRunAcceptanceEvaluations } from './internal/metrics.js';

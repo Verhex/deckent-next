@@ -23,3 +23,5 @@ export type { FrozenWorkClassProfile, TaskAcceptanceReference } from './internal
 
 export { acceptanceViewSchema, deriveAcceptanceView, evaluationAcceptanceSchema } from './internal/acceptance-view.js';
 export type { AcceptanceView } from './internal/acceptance-view.js';
+
+export { releaseWorkerCustody } from './internal/worker-custody.js';

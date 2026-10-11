@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { encodeDeckentJson, type JsonValue, type RunSnapshot } from '#domain/index.js';
-import { deriveAcceptanceMetric, RunStoreError } from '#engine/index.js';
+import { deriveAcceptanceMetric, selectRunAcceptanceEvaluations, RunStoreError } from '#engine/index.js';
 
 /** Caller owns the producer transaction; there is no independent metrics commit or public submission path. */
 export function recordAcceptanceMetric(db: DatabaseSync, producerCommandId: string, snapshot: RunSnapshot): void {
@@ -14,4 +14,11 @@ export function recordAcceptanceMetric(db: DatabaseSync, producerCommandId: stri
   if (previous) { if (previous.record !== record) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return; }
   db.prepare('INSERT INTO acceptance_metrics(scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record) VALUES(?,?,?,?,?,?,?)')
     .run(id.scopeId, producerCommandId, id.runId, id.taskId, id.attemptId, metric.outcome.kind, record);
+}
+
+/** Read-only receipt metadata, pinned to an already authorized Run snapshot. */
+export function readRunAcceptanceEvaluations(db: DatabaseSync, snapshot: RunSnapshot) {
+  const rows = db.prepare(`SELECT command_id,command FROM run_receipts WHERE scope_id=? AND CASE WHEN json_valid(command) THEN
+    json_extract(command,'$.action')='apply-task-evaluation' AND json_extract(command,'$.evaluation.identity.runId')=? ELSE 0 END`).all(snapshot.identity.scopeId, snapshot.identity.runId);
+  return selectRunAcceptanceEvaluations(snapshot, rows.map(row => ({ commandId: String(row.command_id), command: String(row.command) })));
 }

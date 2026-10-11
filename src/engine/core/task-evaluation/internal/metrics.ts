@@ -1,4 +1,4 @@
-import { deriveDeckentMetrics, runSnapshotSchema, readWorkerModelPin, taskEvaluationSchema, type AttemptIdentity, type TaskEvaluation, type DeckentMetrics, type RunSnapshot } from '#domain/index.js';
+import { deriveDeckentMetrics, deriveAcceptanceView, sameAttemptIdentity, runSnapshotSchema, readWorkerModelPin, taskEvaluationSchema, type AttemptIdentity, type TaskEvaluation, type DeckentMetrics, type RunSnapshot } from '#domain/index.js';
 import { RunStoreError, runLifecycleWriteSchema } from '#engine/core/runs/index.js';
 import { taskEvaluationCommitSchema } from './commit.js';
 
@@ -36,4 +36,29 @@ export function deriveAcceptanceMetric(command: string, input: RunSnapshot): Dec
     profileVersion: evaluation?.acceptance?.profileVersion ?? reference?.profileVersion ?? null,
     skillSetDigest: null, model: pin ?? null, outcome, attemptSequence: identity.generation,
     evidenceReferences: [...references].map(([id, digest]) => ({ id, digest })) });
+}
+
+/** Select canonical receipt evaluations at or before the inspected Run revision; never sample a later transition. */
+export function selectRunAcceptanceEvaluations(snapshot: RunSnapshot, receipts: readonly Readonly<{ commandId: string; command: string }>[]): readonly TaskEvaluation[] {
+  const run = runSnapshotSchema.parse(snapshot);
+  const selected = new Map<string, { revision: number; evaluation: TaskEvaluation }>();
+  const seen = new Set<string>();
+  try {
+    for (const receipt of receipts) {
+      const { action, ...input } = JSON.parse(receipt.command);
+      if (action !== 'apply-task-evaluation') throw new RunStoreError('RUN_STORE_CORRUPT');
+      const commit = taskEvaluationCommitSchema.parse(input), evaluation = commit.evaluation;
+      if (receipt.commandId !== commit.commandId || !sameAttemptIdentity(commit.dispatch.request.identity, evaluation.identity)) throw new RunStoreError('RUN_STORE_CORRUPT');
+      if (commit.expectedRevision >= run.revision) continue;
+      const binding = run.bindings.find(row => sameAttemptIdentity(row.identity, evaluation.identity));
+      if (!binding || evaluation.graphRevision !== run.graph.revision || evaluation.attemptRevision !== binding.observedRevision) continue;
+      deriveAcceptanceView(run, binding.identity.taskId, evaluation);
+      const key = `${binding.identity.taskId}/${commit.expectedRevision}`;
+      if (seen.has(key)) throw new RunStoreError('RUN_STORE_CORRUPT');
+      seen.add(key);
+      const prior = selected.get(binding.identity.taskId);
+      if (!prior || prior.revision < commit.expectedRevision) selected.set(binding.identity.taskId, { revision: commit.expectedRevision, evaluation });
+    }
+  } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+  return Object.freeze(run.graph.tasks.flatMap(task => { const row = selected.get(task.id); return row ? [row.evaluation] : []; }));
 }
