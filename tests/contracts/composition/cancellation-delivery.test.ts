@@ -1,3 +1,4 @@
+import { mcpPrincipalRef } from '#domain/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { execFile } from 'node:child_process';
@@ -30,7 +31,8 @@ async function fixture(configured: boolean) {
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: randomUUID(), generation: 1, layoutRevision: layout.revision };
   await admitRunAttempts(store, [identity]);
   async function policy(run: boolean, attempt: boolean) {
-    const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+    const owner = { issuer: hostname(), subject: String(userInfo().uid) };
+    const principals = [owner, mcpPrincipalRef(owner)];
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [
       ...(run ? [{ id: 'run', effect: 'allow', actions: ['cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } }] : []),
       ...(attempt ? [{ id: 'attempt', effect: 'allow', actions: ['cancel'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: [identity.attemptId] } }] : []),

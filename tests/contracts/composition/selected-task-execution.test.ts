@@ -1,3 +1,4 @@
+import { mcpPrincipalRef } from '#domain/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -49,7 +50,8 @@ async function fixture(execute = true, twoTasks = false, withInputs = false, rea
     execution: { docker: { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 },
       git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
-  const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
+  const os = userInfo(); const owner = { issuer: hostname(), subject: String(os.uid) };
+  const principals = [owner, mcpPrincipalRef(owner)];
   const policy = async (allowExecute: boolean) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: allowExecute ? 'allow' : 'deny', restrictions: [], grants: [
     { id: 'create', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
