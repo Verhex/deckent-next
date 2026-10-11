@@ -9,8 +9,9 @@ import { renderAcceptanceLine } from '#surfaces/core/monitor/index.js';
 import { resolveProductPaths } from '#platform/index.js';
 import { evaluating, evidence, identity } from '../domain/acceptance-fixture.js';
 
-function fixture() {
-  const { run } = evaluating(), evaluation = bindTaskAcceptance(run, evidence());
+function fixture(refused = false) {
+  const { run } = evaluating(), original = evidence(refused ? 'fail' : 'pass');
+  const evaluation = bindTaskAcceptance(run, { ...original, criteria: original.criteria.map(row => refused ? { ...row, reason: 'EFFECT_REJECTED' as const } : row) });
   const accepted = applyTaskEvaluation(run, run.revision, evaluation, { now: 100, timeoutMs: 1000 });
   const receipt = { commandId: evaluation.evaluationId, command: JSON.stringify({ evaluation }), snapshot: accepted.snapshot };
   return { ...accepted, evaluation, view: describeTaskEvaluationReceipt(receipt).run };
@@ -59,7 +60,7 @@ it.each(['en', 'tr'] as const)('run and task inspection render acceptance from t
   }
 });
 
-it.each([true, false])('source SDK, CLI JSON, MCP and monitor read the same reopened canonical acceptance (receipt present: %s)', async present => {
+it.each([{ present: true, refused: false }, { present: false, refused: false }, { present: true, refused: true }])('source SDK, CLI JSON, MCP and monitor read the same reopened canonical acceptance ($present, refused $refused)', async ({ present, refused }) => {
   const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir, hostname, userInfo } = await import('node:os');
   const { join } = await import('node:path');
@@ -69,7 +70,7 @@ it.each([true, false])('source SDK, CLI JSON, MCP and monitor read the same reop
   const { readMonitorLedger } = await import('#adapters/index.js');
   const { clearConfigCache } = await import('#platform/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-acceptance-surface-')), project = join(root, 'project'), data = join(root, 'data');
-  const f = fixture(), query = { schemaVersion: 1 as const, scopeId: identity.scopeId, runId: identity.runId }, options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
+  const f = fixture(refused), query = { schemaVersion: 1 as const, scopeId: identity.scopeId, runId: identity.runId }, options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
   let client: Client | undefined, server: ReturnType<typeof createMcpServer> | undefined;
@@ -103,7 +104,8 @@ it.each([true, false])('source SDK, CLI JSON, MCP and monitor read the same reop
     clearConfigCache();
     const sdk = await inspectRun(project, query, options), bytes = JSON.stringify(sdk.run!.tasks[0]!.acceptance);
     expect(sdk.run!.tasks[0]!.acceptance).toEqual(deriveAcceptanceView(f.snapshot, identity.taskId, present ? f.evaluation : undefined));
-    expect(sdk.run!.tasks[0]!.acceptance).toMatchObject({ workClass: 'business', outcome: 'accepted', score: present ? 1 : null, evaluationId: present ? f.evaluation.evaluationId : null });
+    expect(sdk.run!.tasks[0]!.acceptance).toMatchObject({ workClass: 'business', outcome: refused ? 'failed' : 'accepted', score: present ? refused ? 0 : 1 : null, evaluationId: present ? f.evaluation.evaluationId : null });
+    if (refused) expect(sdk.run!.tasks[0]!.acceptance!.results![0]).toMatchObject({ verdict: 'fail', reason: 'EFFECT_REJECTED' });
     const monitor = await readMonitorLedger(opened.path, { busyTimeoutMs: 1000, maxRuns: 10 });
     expect(monitor.diagnostics).toEqual([]);
     expect(JSON.stringify(projectMonitorRun({ run: monitor.runs[0]!, pool: monitor.pools[0]!, approvals: [], workers: new Map(), observedAt: 100 }).tasks[0]!.acceptance)).toBe(bytes);

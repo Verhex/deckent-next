@@ -128,6 +128,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
    * (size + digest) and event schema; null without a sealed log, `WORKER_OBSERVATION_INVALID` for anything else. */
   async loadSealedWorkerEvents(identity: AttemptIdentity, artifacts: Pick<import('#capabilities/index.js').ArtifactStore, 'read'>) { return readSealedWorkerEvents(this, artifacts, identity); }
   async loadEffect(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffect(scopeId, commandId); }
+  async loadEffectCompensation(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffectCompensation(scopeId, commandId); }
   async claimEffect(intent: import('#domain/index.js').EffectIntent) { return new SqliteEffectJournal(this.db).claimEffect(intent); }
   async saveEffect(previous: import('#domain/index.js').EffectRecord, next: import('#domain/index.js').EffectRecord) { return new SqliteEffectJournal(this.db).saveEffect(previous, next); }
   close(): void { this.db.close(); }

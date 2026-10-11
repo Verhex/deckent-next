@@ -58,7 +58,8 @@ describe.each(['sdk', 'runtime'] as const)('one purchase-order Run through %s ad
     await expect(f.execute(approve)).rejects.toMatchObject({ code: 'EFFECT_PRECONDITION_CHANGED' });
     const failed = await run.evaluate(identity, 'refused-not-accepted');
     expect(failed.result.evaluation.run.tasks[1]!.phase).toBe('failed');
-    expect(failed.evaluation.criteria[0]).toMatchObject({ verdict: 'fail' });
+    expect(failed.evaluation.criteria[0]).toMatchObject({ verdict: 'fail', reason: 'EFFECT_PRECONDITION_CHANGED' });
+    expect((await run.inspect()).tasks[1]!.acceptance!.results![0]!.reason).toBe('EFFECT_PRECONDITION_CHANGED');
     expect(f.server.writes).toEqual([]);
   });
   it('retains unknown, reconciles the same effect, and re-evaluates the same Attempt without another write', async context => {
@@ -74,6 +75,8 @@ describe.each(['sdk', 'runtime'] as const)('one purchase-order Run through %s ad
     f.server.faults.lookupUnavailable = false; await f.execute(approve);
     const accepted = await run.evaluate(identity, 'reconciled-acceptance'); await run.assertSettlement(1, accepted);
     expect(accepted.evaluation.identity).toEqual(identity); expect(f.server.writes).toHaveLength(1);
+    expect(accepted.evaluation.returnEvidence.kind).toBe('criterion-evidence');
+    await expect(run.evaluate(identity, 'already-accepted')).rejects.toMatchObject({ code: 'TASK_EVALUATION_NOT_READY' });
     expect(held.receipt.snapshot.progress[1]!.decision!.deadline).toBe(deadline);
     expect(held.evaluation.criteria[0].verdict).toBe('unknown');
   });
@@ -85,7 +88,9 @@ describe.each(['sdk', 'runtime'] as const)('one purchase-order Run through %s ad
     expect(pending.approval.approvalId).not.toBe(original!.intent.approval!.approvalId);
     await f.compensate(undo); expect((await f.inspect(approve.commandId)).record).toEqual(original);
     const failed = await run.evaluate(identity, 'compensated-not-accepted');
-    expect(failed.result.evaluation.run.tasks[1]!.phase).toBe('failed'); expect(failed.evaluation.criteria[0].verdict).toBe('fail');
+    expect(failed.result.evaluation.run.tasks[1]!.phase).toBe('failed');
+    expect(failed.evaluation.criteria[0]).toMatchObject({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_COMPENSATED' });
+    expect((await run.inspect()).tasks[1]!.acceptance!.results![0]!.reason).toBe('OPERATION_EVIDENCE_COMPENSATED');
     expect(f.server.writes).toHaveLength(2); expect(f.server.current().status).toBe(config.initialStatus);
   });
   it('keeps the same canonical process result after runtime restart between accepted read and approval', async context => {
