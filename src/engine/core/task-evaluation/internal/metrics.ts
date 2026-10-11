@@ -34,7 +34,7 @@ export function deriveAcceptanceMetric(command: string, input: RunSnapshot): Dec
     workClass: evaluation?.acceptance?.workClass ?? reference?.workClass ?? null,
     policyRevision: evaluation?.acceptance?.policyRevision ?? reference?.policyRevision ?? null,
     profileVersion: evaluation?.acceptance?.profileVersion ?? reference?.profileVersion ?? null,
-    skillSetDigest: null, model: pin ?? null, outcome, attemptSequence: identity.generation,
+    skillSetDigest: null, model: pin ? { channelId: pin.channelId, modelId: pin.modelId } : null, outcome, attemptSequence: identity.generation,
     evidenceReferences: [...references].map(([id, digest]) => ({ id, digest })) });
 }
 

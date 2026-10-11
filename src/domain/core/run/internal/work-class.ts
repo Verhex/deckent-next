@@ -127,7 +127,8 @@ export function resolveTaskWorkClass(kind: string, requested?: string, configure
 export function selectWorkerEffort(input: Readonly<{ model: CatalogModel; capability: Readonly<{ mode: 'arguments' | 'model-id'; levels: readonly string[] }> | null;
   explicit?: ReasoningEffort | undefined; kind: string; workClass?: string | undefined; policy?: WorkClassRegistry | undefined }>): WorkerEffort {
   const { model, capability, explicit } = input;
-  const { policy, workClass } = resolveTaskWorkClass(input.kind, input.workClass, input.policy);
+  // An explicit supported effort does not consume the requested class; acceptance admission still validates it independently.
+  const { policy, workClass } = resolveTaskWorkClass(input.kind, explicit === undefined ? input.workClass : undefined, input.policy);
   const supported = capability === null ? [] : REASONING_EFFORTS.filter(level => model.efforts.includes(level) && capability.levels.includes(level)
     && (capability.mode !== 'model-id' || model.effortBinding?.level === level));
   if (explicit !== undefined && !supported.includes(explicit)) throw new WorkerEffortError();
