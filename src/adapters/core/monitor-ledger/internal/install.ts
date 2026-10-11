@@ -29,6 +29,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}) });
   const diagnostics = [...scan.reading.diagnostics];
   const artifacts = FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes);
+  const contentNamespace = JSON.stringify([productResourcePath(layout, 'artifacts'), config.artifacts.maxBytes]);
   const map = run ? scan.reading.map ?? null : await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics);
   const reading = Object.freeze({ ...scan.reading, map, diagnostics: Object.freeze([...diagnostics]) });
   return { reading, async readShown(identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading> {
@@ -40,7 +41,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
         const needsEnd = files.finished && !files.sealed && !!files.workspace;
         if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
-        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files) };
+        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files, contentNamespace) };
         if (files.failed) {
           const failure = await failureEvidence(artifacts, files);
           Object.assign(found, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });

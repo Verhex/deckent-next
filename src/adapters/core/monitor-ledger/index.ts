@@ -20,3 +20,4 @@ export async function prepareMonitorInstall(config: import('#platform/index.js')
 
 export { readMonitorRunResults } from './internal/run-brief.js';
 export { listSurfaceRunIds, followLedgerSurface, type RuntimeSurfaceEvent } from './internal/surface-follow.js';
+export { readMonitorWorkerContent } from './internal/worker-content.js';
