@@ -946,6 +946,7 @@
     },
     "src/surfaces/core/terminal-render": {
       "dependencies": [
+        "src/platform/core/clock",
         "src/surfaces/core/terminal-kit",
         "src/domain/core/policy",
         "src/platform/core/output",
