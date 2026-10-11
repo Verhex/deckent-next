@@ -21,7 +21,7 @@ export type { DeckentMetrics, DeckentMetricsMeasurements } from './internal/metr
 export { freezeTaskAcceptance, assertAcceptanceCriteria, frozenWorkClassProfileSchema, taskAcceptanceReferenceSchema, acceptanceCriterionSchema, AcceptanceProfileError } from './internal/acceptance.js';
 export type { FrozenWorkClassProfile, TaskAcceptanceReference } from './internal/acceptance.js';
 
-export { acceptanceViewSchema, deriveAcceptanceView, evaluationAcceptanceSchema } from './internal/acceptance-view.js';
+export { acceptanceViewSchema, deriveAcceptanceView, evaluationAcceptanceSchema, evaluationCriterionSchema } from './internal/acceptance-view.js';
 export type { AcceptanceView } from './internal/acceptance-view.js';
 
 export { releaseWorkerCustody } from './internal/worker-custody.js';

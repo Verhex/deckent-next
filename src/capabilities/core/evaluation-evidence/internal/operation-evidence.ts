@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { counterSchema, attemptIdentitySchema, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema,
-  type AttemptIdentity, type CriterionDefinition, type EvaluatorDefinition } from '#domain/index.js';
+  type AttemptIdentity, type CriterionDefinition, type EvaluatorDefinition, type TaskEvaluation } from '#domain/index.js';
 import { PROCESS_EXIT_EVALUATOR, processExitTerminalEvaluator, validateInstalledProcessExitEvaluator, validateProcessExitCriterion } from './process-exit.js';
 
 export const OPERATION_EVIDENCE_EVALUATOR = Object.freeze({ id: 'operation-evidence', version: 1,
@@ -24,8 +24,10 @@ const projectionSchema = z.object({ sequence: counterSchema.positive(), state: z
 }).refine(record => (record.state === 'settled') === (record.evidence !== null) && (record.state === 'refused') === (record.refusal !== null));
 export type OperationSettlementReference = Readonly<{ kind: 'operation-settlement'; scopeId: string; commandId: string;
   sequence: number; inputDigest: string; digest: string }>;
-export type OperationEvidenceResult = Readonly<{ verdict: 'pass'; evidence: OperationSettlementReference }>
-  | Readonly<{ verdict: 'unknown' | 'fail'; reason: string }>;
+type CriterionResult = TaskEvaluation['criteria'][number];
+export type OperationEvidenceResult = (Readonly<{ verdict: 'pass'; evidence: OperationSettlementReference }>
+  | Readonly<{ verdict: 'unknown' | 'fail'; reason: NonNullable<CriterionResult['reason']> }>)
+  & Readonly<{ effectEvidence?: NonNullable<CriterionResult['effectEvidence']> }>;
 
 /** Implementation identity selects installed code; registry aliases remain data and do not grant authority. */
 export function validateInstalledEvaluator(evaluator: EvaluatorDefinition): undefined {
@@ -53,38 +55,40 @@ export async function evaluateOperationEvidence(reader: OperationEvidenceReader,
   let input: unknown;
   try { input = await reader.loadEffect(context.scopeId, commandId); }
   catch { return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_UNAVAILABLE' }); }
-  if (input === null) return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_MISSING' });
+  if (input === null) return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_MISSING',
+    effectEvidence: Object.freeze({ commandId, digest: null, compensation: null }) });
   const parsed = projectionSchema.safeParse(input);
   if (!parsed.success) return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_INVALID' });
   const record = parsed.data;
   if (record.intent.command.scopeId !== context.scopeId || record.intent.command.commandId !== commandId) {
     return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_BINDING' });
   }
-  if (record.state === 'refused') return Object.freeze({ verdict: 'fail', reason: record.refusal! });
-  if (record.state !== 'settled') return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_UNSETTLED' });
+  const recordDigest = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const observed = { commandId, digest: recordDigest, compensation: null as NonNullable<CriterionResult['effectEvidence']>['compensation'] };
+  const result = (verdict: 'unknown' | 'fail', reason: NonNullable<CriterionResult['reason']>): OperationEvidenceResult =>
+    Object.freeze({ verdict, reason, effectEvidence: Object.freeze({ ...observed }) });
+  if (record.state === 'refused') return result('fail', record.refusal!);
+  if (record.state !== 'settled') return result('unknown', 'OPERATION_EVIDENCE_UNSETTLED');
   if (record.intent.descriptor.compensation) {
-    if (!reader.loadEffectCompensation) return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_UNAVAILABLE' });
+    if (!reader.loadEffectCompensation) return result('unknown', 'OPERATION_COMPENSATION_UNAVAILABLE');
     let compensation: unknown;
     try { compensation = await reader.loadEffectCompensation(context.scopeId, commandId); }
-    catch { return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_UNAVAILABLE' }); }
+    catch { return result('unknown', 'OPERATION_COMPENSATION_UNAVAILABLE'); }
     if (compensation !== null) {
       const found = projectionSchema.safeParse(compensation);
-      if (!found.success) return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_INVALID' });
+      if (!found.success) return result('unknown', 'OPERATION_COMPENSATION_INVALID');
       const command = found.data.intent.command, original = record.intent.command;
       if (command.scopeId !== context.scopeId || command.compensates !== commandId
         || JSON.stringify(command.target) !== JSON.stringify(original.target)
-        || JSON.stringify(command.operation) !== JSON.stringify(record.intent.descriptor.compensation)) {
-        return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_BINDING' });
-      }
-      if (found.data.sequence <= record.sequence) return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_BINDING' });
-      if (found.data.state === 'settled') return Object.freeze({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_COMPENSATED' });
-      if (found.data.state !== 'refused') return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_UNSETTLED' });
+        || JSON.stringify(command.operation) !== JSON.stringify(record.intent.descriptor.compensation)
+        || found.data.sequence <= record.sequence) return result('unknown', 'OPERATION_COMPENSATION_BINDING');
+      observed.compensation = Object.freeze({ commandId: command.commandId,
+        digest: createHash('sha256').update(JSON.stringify(compensation)).digest('hex') });
+      if (found.data.state === 'settled') return result('fail', 'OPERATION_EVIDENCE_COMPENSATED');
+      if (found.data.state !== 'refused') return result('unknown', 'OPERATION_COMPENSATION_UNSETTLED');
     }
   }
-  let recordDigest: string;
-  try { recordDigest = createHash('sha256').update(JSON.stringify(input)).digest('hex'); }
-  catch { return Object.freeze({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_INVALID' }); }
-  return Object.freeze({ verdict: 'pass', evidence: Object.freeze({ kind: 'operation-settlement', scopeId: context.scopeId, commandId,
+  return Object.freeze({ verdict: 'pass', effectEvidence: Object.freeze(observed), evidence: Object.freeze({ kind: 'operation-settlement', scopeId: context.scopeId, commandId,
     sequence: record.sequence, inputDigest: record.intent.inputDigest, digest: recordDigest }) });
 }
 /** Installed criteria consume authenticated Attempt context; the application remains the sole acceptance owner. */
@@ -97,7 +101,8 @@ export function createInstalledTerminalEvaluator(reader: OperationEvidenceReader
       if (!context) return 'unknown' as const;
       const result = await evaluateOperationEvidence(reader, evaluator, criterion, context.identity);
       return { verdict: result.verdict, evidenceTypes: result.verdict === 'pass' ? ['operation-settlement'] : [],
-        evidenceReferences: result.verdict === 'pass' ? [{ id: result.evidence.commandId, digest: result.evidence.digest }] : [] };
+        evidenceReferences: result.verdict === 'pass' ? [{ id: result.evidence.commandId, digest: result.evidence.digest }] : [],
+        ...(result.verdict === 'pass' ? {} : { reason: result.reason }), ...(result.effectEvidence ? { effectEvidence: result.effectEvidence } : {}) };
     },
     evaluateOperation(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, identity: AttemptIdentity) {
       return evaluateOperationEvidence(reader, evaluator, criterion, identity);

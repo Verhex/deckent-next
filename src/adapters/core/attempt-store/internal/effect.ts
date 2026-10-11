@@ -4,17 +4,29 @@ import { effectIntentSchema, effectRecordSchema, EffectError, type EffectIntent,
 /** Generic effect intents (ledger v34). Intent is durable before the effect; state moves only by compare-and-swap on the stored record. */
 export class SqliteEffectJournal {
   constructor(private readonly db: DatabaseSync) {}
-  private read(scopeId: string, commandId: string): EffectRecord | null {
-    const row = this.db.prepare('SELECT target_kind,target_id,state,idempotency_key_hash,record FROM effect_intents WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
+  read(scopeId: string, commandId: string): EffectRecord | null {
+    const row = this.db.prepare('SELECT target_kind,target_id,sequence,state,idempotency_key_hash,record FROM effect_intents WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     if (!row) return null;
     let record: EffectRecord;
     try { record = effectRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new EffectError('EFFECT_CORRUPT'); }
     const { command } = record.intent;
     if (command.scopeId !== scopeId || command.commandId !== commandId || command.target.kind !== row.target_kind || command.target.id !== row.target_id
-      || record.state !== row.state || record.intent.idempotencyKeyHash !== row.idempotency_key_hash) throw new EffectError('EFFECT_CORRUPT');
+      || record.sequence !== row.sequence || record.state !== row.state || record.intent.idempotencyKeyHash !== row.idempotency_key_hash) throw new EffectError('EFFECT_CORRUPT');
     return record;
   }
   async loadEffect(scopeId: string, commandId: string) { return this.read(scopeId, commandId); }
+  /** Settled compensation wins over later refusals; an open intent otherwise holds acceptance. One canonical result. */
+  readCompensation(scopeId: string, commandId: string): EffectRecord | null {
+    const original = this.read(scopeId, commandId);
+    if (!original) return null;
+    const target = original.intent.command.target;
+    // A damaged indexed record with a missing JSON relation must never count as absent compensation.
+    const damaged = this.db.prepare("SELECT command_id FROM effect_intents WHERE scope_id=? AND target_kind=? AND target_id=? AND sequence>? AND (json_valid(record)=0 OR json_extract(record,'$.intent.command.commandId') IS NOT command_id OR json_extract(record,'$.sequence') IS NOT sequence) LIMIT 1").get(scopeId, target.kind, target.id, original.sequence);
+    if (damaged) throw new EffectError('EFFECT_CORRUPT');
+    const row = this.db.prepare("SELECT command_id FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.command.compensates')=? AND state!='refused' ORDER BY CASE state WHEN 'settled' THEN 0 ELSE 1 END,sequence DESC LIMIT 1").get(scopeId, commandId);
+    return row ? this.read(scopeId, String(row.command_id)) : null;
+  }
+  async loadEffectCompensation(scopeId: string, commandId: string) { return this.readCompensation(scopeId, commandId); }
   async claimEffect(input: EffectIntent): Promise<EffectRecord> {
     const intent = effectIntentSchema.parse(input);
     const { scopeId, commandId, target } = intent.command;

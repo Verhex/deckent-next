@@ -3,17 +3,8 @@ import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './accep
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
-import { runSnapshotSchema } from '#domain/core/run/index.js';
+import { runSnapshotSchema, evaluationCriterionSchema } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema } from '#domain/core/worker-event/index.js';
-const criterion = z.object({ criterionId: identitySchema, verdict: z.enum(['pass', 'fail', 'unknown']),
-  evidenceIds: z.array(identitySchema).readonly(),
-  evidenceTypes: z.array(z.string().min(1).max(256)).max(256).refine(value => new Set(value).size === value.length).readonly().optional(),
-  evidenceReferences: z.array(z.object({ id: identitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).max(256).readonly().optional(),
-}).strict().superRefine((value, context) => {
-  if ((value.verdict !== 'unknown' && value.evidenceIds.length === 0) || new Set(value.evidenceIds).size !== value.evidenceIds.length) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_EVALUATION_INVALID' });
-  }
-}).readonly();
 const modelText = z.string().min(1).max(256);
 /**
  * Worker model evidence of a pinned native attempt (WORKER-CURRENCY-2, owner rule A 2026-09-30; Jev 933e43f2, 58ffe1c9). Recorded with the
@@ -32,11 +23,11 @@ export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), eval
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
   sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),
   handoff: z.discriminatedUnion('status', [z.object({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), z.object({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) }).strict()]).optional(),
-  criteria: z.array(criterion).min(1).readonly(),
+  criteria: z.array(evaluationCriterionSchema).min(1).readonly(),
   /** Host-verified retained patch, not the worker's changedFiles report. The frozen workInput owns no-change policy. */
   workspaceChange: z.object({ schemaVersion: z.literal(1), patchDigest: z.string().regex(/^[a-f0-9]{64}$/), changedFiles: counterSchema }).strict().readonly().optional(), model: taskEvaluationModelSchema.optional(),
-  evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(3).readonly().optional(),
-  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
+  evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional(),
+  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch', 'criterion-evidence']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
 /** Acceptance consequence: an undeclared model fails the attempt; an attempt with session-event model usage without a sealed
  * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified. */

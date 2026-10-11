@@ -1,8 +1,9 @@
 export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from './internal/evidence.js';
-export { proposeTaskEvaluationCommit } from './internal/transition.js';
+export { proposeTaskEvaluationCommit, assertTaskEvaluationReady } from './internal/transition.js';
 export { taskEvaluationCommitSchema, assertTaskEvaluationCustody } from './internal/commit.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from './internal/commit.js';
 export { TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from './internal/application.js';
 export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator, TaskCriterionResult, UnknownEvaluationPolicy } from './internal/application.js';
 
 export { deriveAcceptanceMetric, selectRunAcceptanceEvaluations } from './internal/metrics.js';
+export { criterionEvidenceDigest } from './internal/recovery.js';
