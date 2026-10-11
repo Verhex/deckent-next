@@ -38,7 +38,7 @@ export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fa
 }
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;
 export class TaskEvaluationError extends Error {
-  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'OPERATION_EVIDENCE_REUSED') {
+  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'OPERATION_EVIDENCE_OTHER_RUN') {
     super(code); this.name = 'TaskEvaluationError';
   }
 }

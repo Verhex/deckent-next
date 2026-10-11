@@ -11,15 +11,15 @@ export function readRunEvaluationPrincipal(db: DatabaseSync, identity: AttemptId
   const row = db.prepare('SELECT actor_id,issuer,subject FROM run_execution_intents WHERE scope_id=? AND run_id=?').get(identity.scopeId, identity.runId);
   return row ? operationEvidenceBindingSchema.parse({ startedAt: 0, principals: [{ id: row.actor_id, issuer: row.issuer, subject: row.subject }] }).principals[0]! : null;
 }
-/** Immutable accepted receipts preserve use across Run completion/restart. Called only in the acceptance write transaction. */
+/** Accepted receipts reserve evidence to one Run across restart; its Tasks may share it. Acceptance write transaction only. */
 export function bindOperationEvidenceUse(db: DatabaseSync, run: RunSnapshot, evaluation: TaskEvaluation): TaskEvaluation {
-  const { scopeId, runId, taskId } = evaluation.identity;
+  const { scopeId, runId } = evaluation.identity;
   return bindUsedOperationEvidence(run, evaluation, commandId => !!db.prepare(`SELECT 1 FROM run_receipts r, json_each(r.command,'$.evaluation.criteria') c
-      WHERE r.scope_id=? AND json_extract(r.command,'$.action')='apply-task-evaluation' AND (json_extract(r.command,'$.evaluation.identity.runId')!=? OR json_extract(r.command,'$.evaluation.identity.taskId')!=?)
+      WHERE r.scope_id=? AND json_extract(r.command,'$.action')='apply-task-evaluation' AND json_extract(r.command,'$.evaluation.identity.runId')!=?
       AND COALESCE(json_extract(c.value,'$.effectEvidence.commandId'),CASE WHEN EXISTS(SELECT 1 FROM json_each(c.value,'$.evidenceTypes') t WHERE t.value='operation-settlement') THEN json_extract(c.value,'$.evidenceReferences[0].id') END)=? AND json_extract(c.value,'$.verdict')='pass'
       AND EXISTS (SELECT 1 FROM run_receipts a, json_each(a.snapshot,'$.progress') p, json_each(a.snapshot,'$.bindings') b WHERE a.scope_id=r.scope_id AND json_extract(a.snapshot,'$.identity.runId')=json_extract(r.command,'$.evaluation.identity.runId')
         AND json_extract(p.value,'$.taskId')=json_extract(r.command,'$.evaluation.identity.taskId') AND json_extract(p.value,'$.phase')='accepted'
-        AND json_extract(b.value,'$.identity.attemptId')=json_extract(r.command,'$.evaluation.identity.attemptId')) LIMIT 1`).get(scopeId, runId, taskId, commandId));
+        AND json_extract(b.value,'$.identity.attemptId')=json_extract(r.command,'$.evaluation.identity.attemptId')) LIMIT 1`).get(scopeId, runId, commandId));
 }
 /** Ledger snapshot at park/commit: immutable output and host seal bound to this exact Attempt. */
 export function readEvaluationDigests(db: DatabaseSync, identity: AttemptIdentity) {

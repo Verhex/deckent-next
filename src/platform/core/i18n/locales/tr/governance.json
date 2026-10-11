@@ -930,5 +930,6 @@
   "error.OPERATION_EVIDENCE_CONTEXT": "Operasyon kanıtının kalıcı yürütme yetkisi veya başlangıç zamanı yok.",
   "error.OPERATION_EVIDENCE_EARLIER": "Operasyon bu deneme başlamadan kesinleşti; bu görevin kanıtı olamaz.",
   "error.OPERATION_EVIDENCE_PRINCIPAL": "Operasyonun yetki kimliği Run veya yürütücü kimliğiyle eşleşmiyor.",
-  "error.OPERATION_EVIDENCE_REUSED": "Bu operasyon başka bir görevin kabulüne kanıt oldu; tekrar kullanılamaz."
+  "error.OPERATION_EVIDENCE_REUSED": "Bu operasyon başka bir görevin kabulüne kanıt oldu; tekrar kullanılamaz.",
+  "error.OPERATION_EVIDENCE_OTHER_RUN": "Bu operasyon başka bir Run'ın kabulüne kanıt oldu; yalnız aynı Run'daki görevler bu kanıtı paylaşabilir."
 }

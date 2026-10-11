@@ -84,7 +84,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     const f = await fixture('settled', false, { effectActor: { ...actor, id: 'test-launcher' } });
     expect((await f.app().execute(f.command)).snapshot.progress[0]!.phase).toBe('accepted');
   });
-  it.each([false, true])('refuses reuse by a second Task with replay and reopen (legacy-shaped receipt %s)', async legacy => {
+  it.each([false, true])('shares evidence across Tasks of one Run and refuses another Run, with replay and reopen (legacy-shaped receipt %s)', async legacy => {
     const f = await fixture(); let first = await f.app().execute(f.command);
     if (legacy) {
       const payload = JSON.parse(first.command); delete payload.evaluation.criteria[0].effectEvidence;
@@ -100,13 +100,27 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     await f.store.retainDispatchOutput(claim, output); await f.store.finishDispatch(claim, { handle: 'fixture', exitCode: 0, interrupted: false });
     const command = { ...f.command, identity: next, commandId: 'evaluate-second', expectedRevision: 5 };
     const second = await f.app().execute(command);
-    expect(second.snapshot.progress[0]!.phase).toBe('accepted'); expect(second.snapshot.progress[1]!.phase).toBe('failed');
-    expect(describeTaskEvaluationReceipt(second).run.tasks[1]!.acceptance!.results![0]).toMatchObject({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_REUSED' });
+    expect(second.snapshot.progress.map(task => task.phase)).toEqual(['accepted', 'accepted']);
+    expect(describeTaskEvaluationReceipt(second).run.tasks[1]!.acceptance!.results![0]).toMatchObject({ verdict: 'pass', evidenceTypes: ['operation-settlement'] });
     const recorded = JSON.parse(second.command); delete recorded.action;
     expect(await f.store.commitTaskEvaluation(recorded)).toEqual(second);
     expect(await f.app().execute(command)).toEqual(second); expect(await f.app().execute(f.command)).toEqual(first);
     f.store.close(); stores.splice(stores.indexOf(f.store), 1); const reopened = await f.open();
     expect(await reopened.loadRunReceipt('s', 'evaluate-second')).toEqual(second);
+    const foreign = { ...identity, runId: 'other-run', attemptId: 'other-attempt' };
+    await reopened.createRun({ commandId: 'create-other', actor, identity: { scopeId: 's', runId: foreign.runId, layoutRevision: 'layout' }, now: 0,
+      graph: f.graph, execution: f.execution, policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['read', 'approve'] } });
+    await reopened.reserveRunTasks({ commandId: 'reserve-other', actor, scopeId: 's', runId: foreign.runId, expectedRevision: 0, now: 0, identities: [foreign] });
+    const foreignClaim = { ...claim, request: { ...claim.request, identity: foreign } };
+    await reopened.claimDispatch(dispatchAdmission(foreignClaim)); await grantTestLaunch(reopened, foreignClaim);
+    const foreignOutput = await f.artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity: foreign, completeness: 'complete', stdout: 'test-only dispatch output', stderr: '' })));
+    await reopened.retainDispatchOutput(foreignClaim, foreignOutput); await reopened.finishDispatch(foreignClaim, { handle: 'fixture', exitCode: 0, interrupted: false });
+    const foreignCommand = { ...f.command, identity: foreign, commandId: 'evaluate-other' };
+    const refused = await f.app(reopened).execute(foreignCommand);
+    expect(refused.snapshot.progress[0]!.phase).toBe('failed');
+    expect(describeTaskEvaluationReceipt(refused).run.tasks[0]!.acceptance!.results![0]).toMatchObject({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_OTHER_RUN' });
+    expect(await f.app(reopened).execute(foreignCommand)).toEqual(refused);
+    const reloaded = await f.open(); expect(await reloaded.loadRunReceipt('s', 'evaluate-other')).toEqual(refused);
   });
   it('counts an audited human acceptance and refuses a later human reuse before audit or mutation', async () => {
     const f = await fixture('settled', false, { capacity: 2, extraCriterion: true }), other = await f.open();
@@ -132,7 +146,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     });
     expect(accepted.snapshot.progress[0]!.phase).toBe('accepted');
     const audit = vi.fn();
-    await expect(other.commitRunLifecycle({ ...write, runId: next.runId, commandId: 'human-reuse' }, audit)).rejects.toMatchObject({ code: 'OPERATION_EVIDENCE_REUSED' });
+    await expect(other.commitRunLifecycle({ ...write, runId: next.runId, commandId: 'human-reuse' }, audit)).rejects.toMatchObject({ code: 'OPERATION_EVIDENCE_OTHER_RUN' });
     expect(audit).not.toHaveBeenCalled(); expect(await other.loadRunReceipt('s', 'human-reuse')).toBeNull();
     expect((await other.loadRun('s', next.runId))!.revision).toBe(3);
   });
@@ -158,7 +172,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     const receipts = await Promise.all([f.app().execute(f.command), f.app(other).execute({ ...f.command, identity: next, commandId: 'evaluate-other' })]);
     expect(receipts.map(row => row.snapshot.progress[0]!.phase).sort()).toEqual(['accepted', 'failed']);
     const refused = receipts.find(row => row.snapshot.progress[0]!.phase === 'failed')!;
-    expect(JSON.parse(refused.command).evaluation.criteria[0].reason).toBe('OPERATION_EVIDENCE_REUSED');
+    expect(JSON.parse(refused.command).evaluation.criteria[0].reason).toBe('OPERATION_EVIDENCE_OTHER_RUN');
     expect(describeTaskEvaluationReceipt(refused).run.tasks[0]!.acceptance!.score).toBe(0);
     const reopened = await f.open();
     for (const receipt of receipts) expect(await reopened.loadRunReceipt('s', receipt.commandId)).toEqual(receipt);

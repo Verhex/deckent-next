@@ -207,7 +207,7 @@ export class SqliteRunJournal {
       const binding = current.bindings.find(value => value.identity.taskId === parsed.taskId);
       if (parsed.action === 'accept' && binding) {
         const evaluation = readTaskHandoffEvaluation(this.db, binding.identity);
-        if (evaluation && bindOperationEvidenceUse(this.db, current, evaluation).criteria.some(row => row.reason === 'OPERATION_EVIDENCE_REUSED')) throw new TaskEvaluationError('OPERATION_EVIDENCE_REUSED');
+        if (evaluation && bindOperationEvidenceUse(this.db, current, evaluation).criteria.some(row => row.reason === 'OPERATION_EVIDENCE_OTHER_RUN')) throw new TaskEvaluationError('OPERATION_EVIDENCE_OTHER_RUN');
       }
       const evidence = parsed.action === 'park-task' && binding ? Object.values(readEvaluationDigests(this.db, binding.identity)).filter((value): value is string => value !== undefined) : undefined;
       const snapshot = proposeRunLifecycleWrite(current, parsed, !!audit, evidence);

@@ -930,5 +930,6 @@
   "error.OPERATION_EVIDENCE_CONTEXT": "The operation evidence has no durable execution authority or start time.",
   "error.OPERATION_EVIDENCE_EARLIER": "The operation settled before this attempt started and cannot prove its task.",
   "error.OPERATION_EVIDENCE_PRINCIPAL": "The operation principal does not match the Run or executing principal.",
-  "error.OPERATION_EVIDENCE_REUSED": "This operation already backed another task acceptance and cannot be reused."
+  "error.OPERATION_EVIDENCE_REUSED": "This operation already backed another task acceptance and cannot be reused.",
+  "error.OPERATION_EVIDENCE_OTHER_RUN": "This operation already backed acceptance in another Run; only tasks in the same Run may share it."
 }
