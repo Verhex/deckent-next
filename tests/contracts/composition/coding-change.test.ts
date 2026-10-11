@@ -2,9 +2,10 @@ import { mkdtemp, mkdir, rm, writeFile, stat } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, type TestContext } from 'vitest';
-import { FileArtifactStore, readMonitorLedger, openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
-import { patchDigest, patchExclusions, projectRunView, projectMonitorRun } from '#engine/index.js';
+import { FileArtifactStore, readMonitorLedger, openSqliteAttemptStore } from '#adapters/index.js';
+import { patchDigest, patchExclusions, projectMonitorRun } from '#engine/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
+import { inspectRun } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { main } from '#surfaces/index.js';
 import { inspectMonitor } from '../../../src/composition/core/monitor/index.js';
@@ -61,6 +62,8 @@ async function fixture(context: TestContext, files: number | null, noChangeAllow
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
   await writeFile(join(root, 'data/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'test', restrictions: [], grants: [
     { id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
+    // Run inspection authority: the evaluation reply then carries the same result briefs as `run inspect` (without it they are omitted).
+    { id: 'run', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output', 'recover-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } },
   ] }), { mode: 0o600 });
   return { project, options, identity, path: opened.path, layout: opened.layout, claim, artifacts, command: { schemaVersion: 1 as const, commandId: 'evaluation', identity, expectedRevision: 2 } };
@@ -92,11 +95,9 @@ it.for([[0, undefined, 'failed'], [1, undefined, 'accepted'], [0, true, 'accepte
       if (phase === 'failed') { expect(detail.split(reason)).toHaveLength(2); expect(detail).not.toContain(empty); }
       else { expect(detail).not.toContain(reason); if (files === 0) expect(detail).toContain(empty); }
     }
-    const reader = await openSqliteInventoryReader(f.path, { busyTimeoutMs: 20 });
-    try {
-      const snapshot = (await reader.loadRun('s', 'r'))!;
-      expect(projectRunView(snapshot, [], await reader.loadRunEvaluations(snapshot))).toEqual(first.evaluation.run);
-    } finally { reader.close(); }
+    // The evaluation reply's Tasks are the canonical Run inspection view: the same ledger projection plus the authorized result briefs.
+    const inspected = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!;
+    expect(first.evaluation.run.tasks).toEqual(inspected.tasks); expect(first.evaluation.run.tasks[0]!.resultBrief).toBeDefined();
   });
 
 it('missing coding patch is parked; a new retained patch returns once without extending the deadline', async context => {
