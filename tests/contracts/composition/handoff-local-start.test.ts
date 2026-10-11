@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { FileArtifactStore, GitWorkspaceBroker, GitRunWorkspaceProvider, GitWorkspacePatchSource, DockerSupervisor,
   openSqliteAttemptStore, readWorkspace, snapshotDigest, SnapshotBudget, applyAcceptedPredecessorPatches } from '#adapters/index.js';
 import { RunWorkspaceAcquisitionApplication, WorkspacePatchApplication, TaskEvaluationApplication, TaskPatchStartApplication,
-  TaskHandoffApplication, recordAttemptHandoffStart, readAttemptHandoffEvents,
+  TaskHandoffApplication, recordAttemptHandoffStart, readAttemptHandoffEvents, projectRunView,
   patchDigest, type WorkspaceLease } from '#engine/index.js';
 import { processExitTerminalEvaluator, type ArtifactStore } from '#capabilities/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
@@ -115,6 +115,7 @@ it('producer → retained patch → evaluation → acceptance → dependent prov
   const retained = await readAttemptHandoffEvents(f.store, target);
   expect(retained).toEqual({ schemaVersion: 1, identity: target, events }); // G1 durable exact identity, output and patch digests.
   expect(retained!.events.map(event => event.kind)).toEqual(['handoff-received', 'workspace-started-from-patch']);
+  expect(projectRunView((await f.store.loadRun('s', 'r'))!, [retained!]).tasks[1]?.handoffs).toEqual(events);
   expect(await f.tree(lease)).toEqual(expected); // G2 includes all paths, additions/deletions, content and executable mode.
   expect(snapshotDigest(await f.tree(lease))).toBe(f.prepared.patch.snapshotDigest);
   expect(await readFile(join(lease.workspace, 'tracked'), 'utf8')).toBe('accepted\n');

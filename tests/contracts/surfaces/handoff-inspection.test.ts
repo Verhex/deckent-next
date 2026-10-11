@@ -4,9 +4,9 @@ import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { emptySnapshot, fullSnapshot } from '../../fixtures/monitor/snapshots.js';
 const source = { scopeId: 's', runId: 'r', layoutRevision: 'l', taskId: 'predecessor', attemptId: 'source-attempt', generation: 1 };
 const receipt = { source, digest: 'a'.repeat(64) };
-function harness() {
+function harness(handoffs = [receipt]) {
   const out: string[] = [], err: string[] = [];
-  const task = { id: 'dependent', kind: 'coding', dependencies: ['predecessor'], acceptanceCriteria: ['ok'], profile: { id: 'p', version: 1 }, phase: 'active', unresolvedEffects: false, handoffs: [receipt] };
+  const task = { id: 'dependent', kind: 'coding', dependencies: ['predecessor'], acceptanceCriteria: ['ok'], profile: { id: 'p', version: 1 }, phase: 'active', unresolvedEffects: false, handoffs };
   const context = { env: { NO_COLOR: '1', TERM: 'dumb' }, stdout: { write(v: string) { out.push(v); } }, stderr: { write(v: string) { err.push(v); } },
     async inspectRun() { return { schemaVersion: 1, layout: {}, run: { schemaVersion: 3, runId: 'r', revision: 1, state: { kind: 'running' }, cancellationRequested: false, tasks: [task], criteria: [] } }; } };
   return { out, err, context: context as never };
@@ -20,6 +20,15 @@ it.each([['en', 'Handoff received'], ['tr', 'devir alındı']])('run and task in
 it('task inspect JSON retains source binding and note digest without a new operator operation', async () => {
   const h = harness(); expect(await main(['task', 'inspect', '--scope', 's', '--run', 'r', '--task', 'dependent', '--json'], h.context)).toBe(0);
   expect(JSON.parse(h.out.join('')).task.handoffs).toEqual([receipt]);
+});
+it('run and task inspect JSON preserve distinct engine note and patch-start evidence without fabricating G2', async () => {
+  const handoffs = [{ ...receipt, kind: 'handoff-received' }, { ...receipt, kind: 'workspace-started-from-patch', digest: 'b'.repeat(64) }];
+  for (const args of [['run', 'inspect', '--scope', 's', '--id', 'r'], ['task', 'inspect', '--scope', 's', '--run', 'r', '--task', 'dependent']]) {
+    const h = harness(handoffs); expect(await main([...args, '--json'], h.context)).toBe(0);
+    const value = JSON.parse(h.out.join(''));
+    expect(value.task?.handoffs ?? value.run.tasks[0].handoffs).toEqual(handoffs);
+    expect(h.out.join('')).not.toContain('snapshotDigest');
+  }
 });
 it.each([['en', 'handoff received'], ['tr', 'devir alındı']])('monitor renders the same dependency receipt in %s', async (locale, label) => {
   const surface = await loadMonitorSurface(); const template = fullSnapshot.installs[0]!.runs[0]!;
