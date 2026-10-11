@@ -3,6 +3,7 @@ import { TaskEvaluationError, operationEvidenceBindingReason, type EffectRecord,
 import type { DispatchRecord } from '#engine/core/dispatch/index.js';
 import type { TaskEvaluationCommit } from './commit.js';
 import { criterionEvidenceDigest } from './recovery.js';
+import { operationEvidenceBinding } from './operation-binding.js';
 
 /** Check the admitted evaluator before the ledger reads the cited effect. */
 export function selectEvaluationEffectEvidence(run: RunSnapshot, row: TaskEvaluation['criteria'][number]) {
@@ -22,8 +23,7 @@ export function assertEvaluationEffectEvidence(row: TaskEvaluation['criteria'][n
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   if (row.verdict === 'pass' && (!record || record.state !== 'settled' || compensation
     || !row.evidenceTypes?.includes('operation-settlement') || !row.evidenceReferences?.some(value => value.id === reference.commandId && value.digest === reference.digest)
-    || operationEvidenceBindingReason(dispatch?.grant ? { startedAt: dispatch.grant.grantedAt,
-      principals: [dispatch.grant.principal, ...(principal ? [principal] : [])] } : undefined, record.intent.actor, record.evidence?.observedAt))) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
+    || operationEvidenceBindingReason(operationEvidenceBinding(dispatch?.grant, principal), record.intent.actor, record.evidence?.observedAt))) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
   if (JSON.stringify(reference) !== JSON.stringify({ commandId: reference.commandId, digest: record ? hash(record) : null,
     compensation: compensation ? { commandId: compensation.intent.command.commandId, digest: hash(compensation) } : null })) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
 }
