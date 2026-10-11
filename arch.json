@@ -446,6 +446,8 @@
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/domain/core/run",
+        "src/engine/core/handoff-observation",
         "src/engine/core/audit",
         "src/adapters/core/native-coding",
         "src/adapters/core/sqlite-model-activation",

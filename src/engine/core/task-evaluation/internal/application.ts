@@ -14,7 +14,7 @@ import { projectAttemptWorkerModels, readSealedWorkerEvents, type WorkerEventLog
 import { taskEvaluationCommitSchema, type TaskEvaluationStore } from './commit.js';
 import { TaskEvidenceError, verifyDispatchEvaluationEvidence } from './evidence.js';
 import { proposeTaskEvaluationCommit, assertTaskEvaluationReady } from './transition.js';
-import { evaluateHandoff } from '#engine/core/handoff-observation/index.js';
+import { evaluateHandoff, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 import { evaluationRecovery } from './recovery.js';
 
@@ -36,10 +36,10 @@ type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'l
   & Pick<WorkerEventLogStore, 'loadWorkerEventLog'> & Partial<Pick<RunLifecycleStore, 'commitRunLifecycle'>>;
 
 /** Public result of an evaluation receipt: the Run view and, for a pinned worker attempt, the recorded model evidence (WORKER-CURRENCY-2). */
-export function describeTaskEvaluationReceipt(receipt: RunReceipt, evaluations?: readonly TaskEvaluation[]) {
+export function describeTaskEvaluationReceipt(receipt: RunReceipt, evaluations?: readonly TaskEvaluation[], handoffs: readonly HandoffStartRecord[] = []) {
   const evidence = (JSON.parse(receipt.command) as { evaluation?: TaskEvaluation }).evaluation;
   const model = evidence?.model;
-  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot, [], evaluations ?? (evidence ? [evidence] : [])), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
+  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot, handoffs, evaluations ?? (evidence ? [evidence] : [])), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
 }
 /** Authenticated evaluation ingress. Wire input carries no verdict, evaluator, artifact, actor or paths.
  * Installed evaluator code consumes pinned definitions and verified terminal/output custody.

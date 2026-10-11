@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createRun, inspectRun, inspectConfiguredWorkerTranscript } from '../../../src/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
-import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
+import { FileArtifactStore, openSqliteAttemptStore, readMonitorRunResults } from '#adapters/index.js';
+import { clearConfigCache, loadConfig, prepareProductDirectory } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
@@ -23,10 +23,10 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
   const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
-  const policy = async (evaluate: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['create', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+  const policy = async (evaluate: boolean, readOutput = true, inspect = true) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
+    { id: 'run', effect: 'allow', actions: inspect ? ['create', 'inspect'] : ['create'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: twoTasks ? ['a', 'a2'] : ['a'] } }] : []),
+    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: readOutput ? ['evaluate', 'read-output'] : ['evaluate'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: twoTasks ? ['a', 'a2'] : ['a'] } }] : []),
   ] }), { mode: 0o600 });
   await policy(true);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] }],
@@ -49,9 +49,10 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
 }
 
 describe.skipIf(process.platform === 'win32')('configured task evaluation', () => {
-  it('returns both Tasks canonical acceptance exactly as inspection, including replay of the earlier revision', async () => {
+  it('returns both Tasks exactly as inspection including resultBrief, and replays the earlier revision', async () => {
     const f = await fixture(0, [0], 'private output', true);
     const first = await evaluateConfiguredTask(f.project, f.command, f.options);
+    expect(first.evaluation.run.tasks).toEqual((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks);
     const identity = { ...f.command.identity, taskId: 't2', attemptId: 'a2' };
     const opened = await openConfiguredAttemptStore(f.project, f.options); opened.store.close();
     const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' },
@@ -68,7 +69,13 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     const secondCommand = { ...f.command, commandId: 'evaluation-second', identity, expectedRevision: first.evaluation.run.revision + 2 };
     const second = await evaluateConfiguredTask(f.project, secondCommand, f.options);
     const inspected = await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options);
-    expect(second.evaluation.run.tasks.map(task => task.acceptance)).toEqual(inspected.run!.tasks.map(task => task.acceptance));
+    expect(second.evaluation.run.tasks).toEqual(inspected.run!.tasks);
+    const { pool, ...inspectedRun } = inspected.run!; void pool;
+    expect(second.evaluation.run).toEqual(inspectedRun);
+    expect(second.evaluation.run.tasks.map(task => task.resultBrief)).toEqual(['a', 'a2'].map(attemptId => ({
+      schemaVersion: 1, attemptId, claimLabel: 'CLAIM', report: { schemaVersion: 1, kind: 'native-worker-report', status: 'unavailable', reason: 'missing' },
+      evaluation: { verdict: 'accepted' }, openIssues: null, runDelivery: null, deliveryOutlook: 'none',
+    })));
     expect(second.evaluation.run.tasks.map(task => task.acceptance!.evaluationId)).toEqual(['evaluation', 'evaluation-second']);
     expect(await evaluateConfiguredTask(f.project, secondCommand, f.options)).toEqual(second);
     expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
@@ -99,6 +106,36 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
     await f.policy(false); await expect(evaluateConfiguredTask(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
+  it('keeps report observations behind current read-output authority on mutation and replay without requiring inspect authority', async () => {
+    const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1,
+      summary: 'Private worker claim', changedFiles: [], checks: [], openIssues: ['Private open issue'] } };
+    const f = await fixture(0, [0], JSON.stringify(report) + '\n');
+    await f.policy(true, true, false);
+    const first = await evaluateConfiguredTask(f.project, f.command, f.options);
+    expect(first.evaluation.run.tasks[0]!.resultBrief!.report).toEqual(report);
+    await expect(inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await f.policy(true, false);
+    const replay = await evaluateConfiguredTask(f.project, f.command, f.options);
+    expect(replay.evaluation.run.tasks[0]!.resultBrief).toMatchObject({ report: null, openIssues: null });
+    expect(JSON.stringify(replay)).not.toContain('Private worker claim'); expect(JSON.stringify(replay)).not.toContain('Private open issue');
+    expect(replay.evaluation.run.tasks).toEqual((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks);
+    const denied = await fixture(0, [0], JSON.stringify(report) + '\n'); await denied.policy(true, false);
+    const evaluated = await evaluateConfiguredTask(denied.project, denied.command, denied.options);
+    expect(evaluated.evaluation.run.tasks[0]!.phase).toBe('accepted');
+    expect(evaluated.evaluation.run.tasks[0]!.resultBrief).toMatchObject({ report: null, openIssues: null });
+    expect(JSON.stringify(evaluated)).not.toContain('Private worker claim');
+  });
+  it('refuses a foreign retained scope and ignores a future snapshot before any output read', async () => {
+    const f = await fixture(0), result = await evaluateConfiguredTask(f.project, f.command, f.options);
+    const opened = await openConfiguredAttemptStore(f.project, f.options);
+    const snapshot = (await opened.store.loadRun('s', 'r'))!; opened.store.close();
+    const config = await loadConfig(f.project, { ...f.options, heal: false });
+    const readOutput = async () => { throw new Error('output read before snapshot validation'); };
+    await expect(readMonitorRunResults(config, f.options.env, { scopeId: 'foreign', runId: 'r' }, result.evaluation.run, readOutput, snapshot))
+      .rejects.toMatchObject({ code: 'ATTEMPT_STORE_OPTIONS' });
+    expect(await readMonitorRunResults(config, f.options.env, { scopeId: 's', runId: 'r' },
+      { revision: snapshot.revision + 1, layoutRevision: snapshot.identity.layoutRevision }, readOutput, { ...snapshot, revision: snapshot.revision + 1 })).toEqual(new Map());
+  });
 });
 
 
@@ -110,6 +147,8 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage: shows a
   expect(transcript).toMatchObject({ schemaVersion: 2, finalReport: report });
   const result = await evaluateConfiguredTask(f.project, f.command, f.options);
   expect(result.evaluation.run.tasks[0]!.phase).toBe('failed');
+  expect(result.evaluation.run.tasks[0]!.resultBrief).toMatchObject({ report, evaluation: { verdict: 'rejected' } });
+  expect(result.evaluation.run.tasks).toEqual((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks);
   await f.policy(false);
   await expect(inspectConfiguredWorkerTranscript(f.project, f.command.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });

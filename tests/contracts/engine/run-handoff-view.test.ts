@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { createAttempt, createRun, type RunSnapshot } from '#domain/index.js';
-import { handoffEventCommandId, projectRunView, projectMonitorRun, RunInspectionApplication, type RunPoolEvidence } from '#engine/index.js';
+import { describeTaskEvaluationReceipt, handoffEventCommandId, projectRunView, projectMonitorRun, RunInspectionApplication, type RunPoolEvidence } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const graph = { schemaVersion: 2, revision: 1, tasks: [
   { id: 'a', kind: 'coding', dependencies: [], acceptanceCriteria: ['ok'] },
@@ -15,6 +15,7 @@ const record = { schemaVersion: 1 as const, identity: identity('b'), events: [ev
 it('derives an exact accepted dependency receipt; existence of a dependency does not prove receipt', () => {
   expect(projectRunView(run).tasks[1]).not.toHaveProperty('handoffs');
   expect(projectRunView(run, [record]).tasks[1]?.handoffs).toEqual([event]);
+  expect(describeTaskEvaluationReceipt({ commandId: 'evaluate', command: '{}', snapshot: run }, [], [record]).run).toEqual(projectRunView(run, [record]));
 });
 it.each(['failed', 'skipped', 'awaiting-decision'])('never projects a handoff from a %s predecessor', phase => {
   const changed = { ...run, bindings: run.bindings.map(binding => phase === 'awaiting-decision' && binding.identity.taskId === 'a' ? { ...binding, observedKind: 'exited', observedRevision: 1 } : binding), progress: run.progress.map(task => task.taskId === 'a' ? { ...task, phase, ...(phase === 'skipped' ? { skippedReason: 'dependency-failed' } : {}),
