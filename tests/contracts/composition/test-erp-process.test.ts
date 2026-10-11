@@ -1,8 +1,32 @@
 import { afterEach, beforeAll, describe, expect, it, type TestContext } from 'vitest';
 import { config, testErpFixture } from '../../fixtures/test-erp/fixture.js';
-import { startProcess } from '../../fixtures/test-erp/process.js';
+import { processWorkerPrincipal, startProcess } from '../../fixtures/test-erp/process.js';
 import { checkFixtureAvailability, recordFixtureAvailability, FixtureUnavailableError, type FixtureAvailability } from '../../fixtures/test-erp/availability.js';
 import { runtimeBinaryAvailability } from '../../fixtures/test-erp/runtime.js';
+import { createAttempt, createRun, reserveRunTasks } from '#domain/index.js';
+import { decideDispatchLaunch } from '#engine/index.js';
+import { custodyPrincipal, custodyProfile } from '../support/custody.js';
+import { fixtureExecution } from '../support/execution-registry.js';
+
+it('binds the ERP fixture launcher to its company and refuses the unrelated helper scopes before launch', () => {
+  const identity = { scopeId: config.scopeId, runId: 'process', layoutRevision: 'layout', taskId: 'step', attemptId: 'attempt', generation: 1 };
+  const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: identity.taskId, kind: 'business', dependencies: [], acceptanceCriteria: ['settlement'] }],
+    criterionDefinitions: [{ id: 'settlement', version: 1, description: 'Verify operation settlement', evaluator: { id: 'operation-evidence', version: 1 }, parameters: {} }] };
+  const run = reserveRunTasks(createRun({ scopeId: identity.scopeId, runId: identity.runId, layoutRevision: identity.layoutRevision },
+    graph, 0, fixtureExecution(graph)), 0, [identity], 0);
+  const request = { protocolVersion: 1 as const, identity, workspace: '.', argv: ['operation-fixture'] };
+  const claim = { owner: 'test-worker', request };
+  const dispatch = { schemaVersion: 2 as const, owner: claim.owner, request, profile: custodyProfile, launch: 'pending' as const, terminal: null };
+  const state = { run, attempt: createAttempt(identity), dispatch }, timing = { now: 1, timeoutMs: 1000 };
+  expect(() => decideDispatchLaunch({ claim, principal: custodyPrincipal, now: 1 }, state, timing)).toThrow('DISPATCH_NOT_ADMITTED');
+  expect(processWorkerPrincipal.scopeIds).toEqual([config.scopeId]);
+  expect(decideDispatchLaunch({ claim, principal: processWorkerPrincipal, now: 1 }, state, timing).decision.kind).toBe('granted');
+  for (const scopeId of custodyPrincipal.scopeIds) {
+    expect(() => decideDispatchLaunch({ claim: { ...claim, request: { ...request, identity: { ...identity, scopeId } } },
+      principal: processWorkerPrincipal, now: 1 }, state, timing)).toThrow('DISPATCH_NOT_ADMITTED');
+  }
+  expect(dispatch.launch).toBe('pending');
+});
 
 type Fixture = Awaited<ReturnType<typeof testErpFixture>>;
 const opened: { name: string; fixture: Fixture }[] = [];

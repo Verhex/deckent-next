@@ -14,13 +14,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-metrics-transaction-')); roots.push(root);
   const path = join(root, 'ledger.db'), db = new DatabaseSync(path);
-  db.exec(`CREATE TABLE runs(scope_id TEXT,run_id TEXT,revision INTEGER,snapshot TEXT,policy TEXT);
-    CREATE TABLE run_receipts(scope_id TEXT,command_id TEXT,command TEXT,snapshot TEXT,PRIMARY KEY(scope_id,command_id));
-    CREATE TABLE attempts(scope_id TEXT,attempt_id TEXT,revision INTEGER,snapshot TEXT);
-    CREATE TABLE dispatches(scope_id TEXT,attempt_id TEXT,record TEXT);
-    CREATE TABLE worker_event_logs(scope_id TEXT,attempt_id TEXT,record TEXT);
-    CREATE TABLE task_evaluation_observations(scope_id TEXT,run_id TEXT,attempt_id TEXT,attempt_revision INTEGER);
-    PRAGMA user_version=50;`);
+  // Build the complete current schema through production migrations, including admission evidence.
   migrateLedger(db, 'allow');
   const { run, attempt } = evaluating();
   const dispatch = dispatchRecordSchema.parse({ schemaVersion: 2, owner: 'worker-owner', launch: 'granted',

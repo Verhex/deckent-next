@@ -6,10 +6,11 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { prepareProductDirectory } from '#platform/index.js';
 import { type AttemptIdentity, type EffectCommand } from '#domain/index.js';
-import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../../contracts/support/custody.js';
+import { custodyPrincipal, custodyProfiles, dispatchAdmission } from '../../contracts/support/custody.js';
 import { config, type testErpFixture } from './fixture.js';
 
 type Fixture = Awaited<ReturnType<typeof testErpFixture>>;
+export const processWorkerPrincipal = Object.freeze({ ...custodyPrincipal, scopeIds: Object.freeze([config.scopeId]) });
 /** Test-only worker custody producer. Real admission/evaluation/operation paths are used; no native worker is claimed. */
 export async function startProcess(f: Fixture, commands: readonly EffectCommand[]) {
   const runId = 'purchase-order-process';
@@ -36,7 +37,8 @@ export async function startProcess(f: Fixture, commands: readonly EffectCommand[
       await store.reserveRunTasks({ commandId: `reserve-${index}`, actor: { id: 'test-worker', issuer: 'test', subject: 'fixture' },
         scopeId: config.scopeId, runId, expectedRevision: run.revision, now: Date.now(), identities: [identity] });
       const claim = { owner: 'test-worker', request: { protocolVersion: 1 as const, identity, workspace: f.project, argv: ['operation-fixture'] } };
-      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, Date.now());
+      await store.claimDispatch(dispatchAdmission(claim));
+      await store.grantLaunch({ claim, principal: processWorkerPrincipal, now: Date.now() });
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });
       const output = await artifacts.put(config.scopeId, Buffer.from(JSON.stringify({ schemaVersion: 1, identity,
         completeness: 'complete', stdout: 'fixture worker completed; operation ledger is the acceptance evidence', stderr: '' })));
