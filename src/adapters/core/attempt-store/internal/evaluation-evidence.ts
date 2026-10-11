@@ -8,7 +8,7 @@ import { SqliteEffectJournal } from './effect.js';
 export function readRunEvaluationPrincipal(db: DatabaseSync, identity: AttemptIdentity) {
   attemptIdentitySchema.parse(identity);
   const row = db.prepare('SELECT actor_id,issuer,subject FROM run_execution_intents WHERE scope_id=? AND run_id=?').get(identity.scopeId, identity.runId);
-  return row ? operationEvidenceBindingSchema.parse({ startedAt: 0, principals: [{ id: row.actor_id, issuer: row.issuer, subject: row.subject }] }).principals[0]! : null;
+  return row ? operationEvidenceBindingSchema.parse({ notBefore: 0, principals: [{ id: row.actor_id, issuer: row.issuer, subject: row.subject }] }).principals[0]! : null;
 }
 /** Accepted receipts reserve evidence to one Run across restart; its Tasks may share it. Acceptance write transaction only. */
 export function bindOperationEvidenceUse(db: DatabaseSync, run: RunSnapshot, evaluation: TaskEvaluation): TaskEvaluation {

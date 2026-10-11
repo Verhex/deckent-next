@@ -69,29 +69,35 @@ export async function evaluateOperationEvidence(reader: OperationEvidenceReader,
   const observed = { commandId, digest: recordDigest, compensation: null as NonNullable<CriterionResult['effectEvidence']>['compensation'] };
   const result = (verdict: 'unknown' | 'fail', reason: NonNullable<CriterionResult['reason']>): OperationEvidenceResult =>
     Object.freeze({ verdict, reason, effectEvidence: Object.freeze({ ...observed }) });
-  const bindingReason = operationEvidenceBindingReason(binding, record.intent.actor, record.evidence?.observedAt);
-  if (bindingReason) return result(bindingReason === 'OPERATION_EVIDENCE_CONTEXT' ? 'unknown' : 'fail', bindingReason);
-  if (record.state === 'refused') return result('fail', record.refusal!);
-  if (record.state !== 'settled') return result('unknown', 'OPERATION_EVIDENCE_UNSETTLED');
-  if (record.intent.descriptor.compensation) {
+  // The acceptance transaction cites the compensation of every settled compensable record, so it is observed before any verdict.
+  const compensationOutcome = async (): Promise<OperationEvidenceResult | undefined> => {
+    if (record.state !== 'settled' || !record.intent.descriptor.compensation) return undefined;
     if (!reader.loadEffectCompensation) return result('unknown', 'OPERATION_COMPENSATION_UNAVAILABLE');
     let compensation: unknown;
     try { compensation = await reader.loadEffectCompensation(context.scopeId, commandId); }
     catch { return result('unknown', 'OPERATION_COMPENSATION_UNAVAILABLE'); }
-    if (compensation !== null) {
-      const found = projectionSchema.safeParse(compensation);
-      if (!found.success) return result('unknown', 'OPERATION_COMPENSATION_INVALID');
-      const command = found.data.intent.command, original = record.intent.command;
-      if (command.scopeId !== context.scopeId || command.compensates !== commandId
-        || JSON.stringify(command.target) !== JSON.stringify(original.target)
-        || JSON.stringify(command.operation) !== JSON.stringify(record.intent.descriptor.compensation)
-        || found.data.sequence <= record.sequence) return result('unknown', 'OPERATION_COMPENSATION_BINDING');
-      observed.compensation = Object.freeze({ commandId: command.commandId,
-        digest: createHash('sha256').update(JSON.stringify(compensation)).digest('hex') });
-      if (found.data.state === 'settled') return result('fail', 'OPERATION_EVIDENCE_COMPENSATED');
-      if (found.data.state !== 'refused') return result('unknown', 'OPERATION_COMPENSATION_UNSETTLED');
-    }
+    if (compensation === null) return undefined;
+    const found = projectionSchema.safeParse(compensation);
+    if (!found.success) return result('unknown', 'OPERATION_COMPENSATION_INVALID');
+    const command = found.data.intent.command, original = record.intent.command;
+    if (command.scopeId !== context.scopeId || command.compensates !== commandId
+      || JSON.stringify(command.target) !== JSON.stringify(original.target)
+      || JSON.stringify(command.operation) !== JSON.stringify(record.intent.descriptor.compensation)
+      || found.data.sequence <= record.sequence) return result('unknown', 'OPERATION_COMPENSATION_BINDING');
+    observed.compensation = Object.freeze({ commandId: command.commandId,
+      digest: createHash('sha256').update(JSON.stringify(compensation)).digest('hex') });
+    if (found.data.state === 'settled') return result('fail', 'OPERATION_EVIDENCE_COMPENSATED');
+    return found.data.state !== 'refused' ? result('unknown', 'OPERATION_COMPENSATION_UNSETTLED') : undefined;
+  };
+  const bindingReason = operationEvidenceBindingReason(binding, record.intent.actor, record.evidence?.observedAt);
+  if (bindingReason) {
+    await compensationOutcome(); // Observation only: the binding verdict keeps precedence.
+    return result(bindingReason === 'OPERATION_EVIDENCE_CONTEXT' ? 'unknown' : 'fail', bindingReason);
   }
+  if (record.state === 'refused') return result('fail', record.refusal!);
+  if (record.state !== 'settled') return result('unknown', 'OPERATION_EVIDENCE_UNSETTLED');
+  const compensated = await compensationOutcome();
+  if (compensated) return compensated;
   return Object.freeze({ verdict: 'pass', effectEvidence: Object.freeze(observed), evidence: Object.freeze({ kind: 'operation-settlement', scopeId: context.scopeId, commandId,
     sequence: record.sequence, inputDigest: record.intent.inputDigest, digest: recordDigest }) });
 }

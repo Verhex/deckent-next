@@ -5,7 +5,7 @@ import { OPERATION_EVIDENCE_EVALUATOR, PROCESS_EXIT_EVALUATOR, createInstalledTe
   evaluateOperationEvidence, validateInstalledCriterion, validateInstalledEvaluator, type OperationEvidenceReader } from '#capabilities/index.js';
 
 const identity = { scopeId: 'scope-a', runId: 'run-a', taskId: 'task-a', attemptId: 'attempt-a', layoutRevision: 'layout-a', generation: 1 };
-const binding = { startedAt: 1, principals: [{ id: 'actor-a', issuer: 'host-a', subject: 'user-a' }] };
+const binding = { notBefore: 1, principals: [{ id: 'actor-a', issuer: 'host-a', subject: 'user-a' }] };
 const criterion = { id: 'completed', version: 1, description: 'Operation completed',
   evaluator: { id: OPERATION_EVIDENCE_EVALUATOR.id, version: 1 }, parameters: { commandId: 'command-a' } } satisfies CriterionDefinition;
 const record = (state: EffectRecord['state'] = 'settled'): EffectRecord => effectRecordSchema.parse({ sequence: 1, state,
@@ -21,7 +21,7 @@ const observation = (original: unknown, undo: EffectRecord | null = null) => ({ 
   compensation: undo ? { commandId: undo.intent.command.commandId, digest: createHash('sha256').update(JSON.stringify(undo)).digest('hex') } : null });
 const evaluate = (value: unknown) => evaluateOperationEvidence({ async loadEffect() { return value; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity, binding);
 
-it('fails an earlier settlement and accepts the exact Attempt start boundary', async () => {
+it('fails a settlement before the binding boundary and accepts the exact boundary', async () => {
   const input = record();
   expect(await evaluate({ ...input, evidence: { ...input.evidence!, observedAt: 0 } }))
     .toMatchObject({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_EARLIER' });
@@ -155,6 +155,11 @@ it.each(['scopeId', 'compensates', 'target', 'operation'] as const)('holds a com
   const next = compensation(), command = { ...next.intent.command, [field]: field === 'target' ? { kind: 'record', id: 'foreign' } : field === 'operation' ? { id: 'foreign', version: 1 } : 'foreign' };
   const result = await evaluateOperationEvidence({ async loadEffect() { return compensable(); }, async loadEffectCompensation() { return { ...next, intent: { ...next.intent, command } }; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity, binding);
   expect(result).toEqual({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_BINDING', effectEvidence: observation(compensable()) });
+});
+it('observes a settled compensation before returning a binding failure, so the acceptance transaction sees the same evidence', async () => {
+  const original = { ...compensable(), evidence: { ...compensable().evidence!, observedAt: 0 } }, undo = compensation('settled');
+  expect(await evaluateOperationEvidence({ async loadEffect() { return original; }, async loadEffectCompensation() { return undo; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity, binding))
+    .toEqual({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_EARLIER', effectEvidence: observation(original, undo) });
 });
 it('holds malformed compensation and reader failure without any retry', async () => {
   const loadEffectCompensation = vi.fn(async () => { throw new Error('unavailable'); });

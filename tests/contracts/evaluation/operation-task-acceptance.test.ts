@@ -10,6 +10,7 @@ import { createInstalledTerminalEvaluator, OPERATION_EVIDENCE_EVALUATOR, validat
 import { TaskEvaluationApplication, RunInspectionApplication, resolveExecutionRegistry, describeTaskEvaluationReceipt, projectRunView, selectRunAcceptanceEvaluations } from '#engine/index.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import { overlay, profile } from '../domain/acceptance-fixture.js';
+import { MAX_WALL_SKEW_MS } from '#platform/index.js';
 
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -69,7 +70,8 @@ async function addCompensation(store: SqliteAttemptStore, state: EffectRecord['s
     : state === 'unknown' ? markEffectUnknown(claimed) : refuseEffect(claimed, 'EFFECT_REJECTED'));
 }
 describe.skipIf(process.platform === 'win32')('POSIX retained-output operation acceptance', () => {
-  it.each([['OPERATION_EVIDENCE_EARLIER', { startedAt: 2 }],
+  // The grant and the settlement are stamped by different processes; only a gap beyond the versioned wall skew is earlier.
+  it.each([['OPERATION_EVIDENCE_EARLIER', { startedAt: MAX_WALL_SKEW_MS + 2 }],
     ['OPERATION_EVIDENCE_PRINCIPAL', { effectActor: { ...actor, issuer: 'foreign' } }]] as const)(
     'retains %s on inspect after rejecting borrowed evidence and reopen', async (reason, binding) => {
       const f = await fixture('settled', false, binding), receipt = await f.app().execute(f.command);
@@ -80,6 +82,17 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
       expect(stored).toEqual(receipt);
       expect(projectRunView(stored.snapshot, [], selectRunAcceptanceEvaluations(stored.snapshot, [stored])).tasks[0]!.acceptance!.results![0]!.reason).toBe(reason);
     });
+  it('accepts a settlement stamped within the versioned wall skew before the grant (another process after a host clock step)', async () => {
+    const f = await fixture('settled', false, { startedAt: MAX_WALL_SKEW_MS + 1 });
+    expect((await f.app().execute(f.command)).snapshot.progress[0]!.phase).toBe('accepted');
+  });
+  it('records the typed binding failure of a compensated earlier settlement instead of refusing it as stale', async () => {
+    const f = await fixture('settled', true, { startedAt: MAX_WALL_SKEW_MS + 2 }), undo = await addCompensation(f.store, 'settled');
+    const receipt = await f.app().execute(f.command), evaluation = JSON.parse(receipt.command).evaluation;
+    expect(receipt.snapshot.progress[0]!.phase).toBe('failed');
+    expect(evaluation.criteria[0]).toMatchObject({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_EARLIER',
+      effectEvidence: { compensation: { commandId: 'undo', digest: createHash('sha256').update(JSON.stringify(undo)).digest('hex') } } });
+  });
   it('allows the durable executing principal as well as the Run author', async () => {
     const f = await fixture('settled', false, { effectActor: { ...actor, id: 'test-launcher' } });
     expect((await f.app().execute(f.command)).snapshot.progress[0]!.phase).toBe('accepted');
@@ -190,7 +203,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     const reopened = await f.open();
     for (const receipt of receipts) expect(await reopened.loadRunReceipt('s', receipt.commandId)).toEqual(receipt);
   });
-  it.each([{ startedAt: 2 }, { effectActor: { ...actor, subject: 'foreign' } }])(
+  it.each([{ startedAt: MAX_WALL_SKEW_MS + 2 }, { effectActor: { ...actor, subject: 'foreign' } }])(
     'rechecks temporal and authority binding against a forged passing commit (%#)', async binding => {
       const f = await fixture('settled', false, binding), commit = f.store.commitTaskEvaluation.bind(f.store);
       vi.spyOn(f.store, 'commitTaskEvaluation').mockImplementationOnce(async input => {

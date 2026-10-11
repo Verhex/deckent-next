@@ -17,6 +17,7 @@ import { proposeTaskEvaluationCommit, assertTaskEvaluationReady } from './transi
 import { evaluateHandoff, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 import { evaluationRecovery } from './recovery.js';
+import { operationEvidenceBinding } from './operation-binding.js';
 
 export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, expectedRevision: counterSchema }).strict();
@@ -148,7 +149,7 @@ export class TaskEvaluationApplication {
     const criteria = [];
     const runPrincipal = proposed.criteria.some(item => run.execution.criteria.find(value => value.criterionId === item.criterionId)?.evaluator.implementation.id === 'operation-evidence')
       ? await this.store.loadRunEvaluationPrincipal?.(identity) : null;
-    const binding = dispatch.grant ? { startedAt: dispatch.grant.grantedAt, principals: [dispatch.grant.principal, ...(runPrincipal ? [runPrincipal] : [])] } : undefined;
+    const binding = operationEvidenceBinding(dispatch.grant, runPrincipal);
     for (const item of proposed.criteria) {
       const criterion = run.graph.criterionDefinitions.find(value => value.id === item.criterionId)!;
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;

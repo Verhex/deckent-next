@@ -56,8 +56,13 @@ describe.skipIf(process.platform !== 'linux' || !nativePeerAvailable)('self-sour
       expect(result.text, command).toContain("\n[deckent] src/a.ts: protected path (Deckent's own source or the write floor). In this sandbox the shell sees it read-only");
       expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
     }
-    // Negative: an ordinary project write in the same turn shape gets no note.
-    const plain = await f.call('run_shell', { command: 'echo x > notes.txt' });
-    expect(plain.card).toBe(false); expect(plain.text).not.toContain('protected path');
+    // Negative: an ordinary project write in the same turn shape gets no protected-path note. `>` truncates, so since the destructive
+    // shell floor (78e0660d) it always asks; the answered call runs in the sandbox and its write set is decided by policy (this turn
+    // grants no file write), which the result names instead of the floor.
+    const plain = await f.call('run_shell', { command: 'echo x > notes.txt' }, 'allow');
+    expect(plain.card).toBe(true); expect(plain.text).not.toContain('protected path');
+    expect(plain.events.find(event => event.kind === 'approval.requested')).toMatchObject({ risk: 'shell-destructive' });
+    expect(plain.text).toContain('[deckent] write set: not applied: notes.txt (denied by policy).');
+    await expect(readFile(join(f.project, 'notes.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   }, 120_000);
 });
