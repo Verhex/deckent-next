@@ -2,9 +2,9 @@ import { grantDispatchLaunch } from './launch.js';
 import { SqliteRunDispatch } from './run-dispatch.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity, type LostDispatchAction } from '#domain/index.js';
 import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+  assertDispatchNotFenced, dispatchFenceReceiptId, projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 export class SqliteDispatchJournal {
@@ -17,6 +17,11 @@ export class SqliteDispatchJournal {
     try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
     if (!sameSandboxRequest(record.request, request)) throw new DispatchError('DISPATCH_CONFLICT');
     return record;
+  }
+  private assertNotFenced(record: DispatchRecord, action: Exclude<LostDispatchAction, 'release-slot'>): void {
+    const identity = record.request.identity, commandId = dispatchFenceReceiptId(identity, record.owner);
+    const row = this.db.prepare('SELECT snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(identity.scopeId, commandId);
+    if (row) assertDispatchNotFenced(record, row.snapshot, action);
   }
   private transaction<T>(work: () => T): T {
     let active = false;
@@ -68,6 +73,7 @@ export class SqliteDispatchJournal {
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      this.assertNotFenced(existing, 'output');
       if (existing.output) {
         if (existing.output.digest !== receipt.digest || existing.output.byteLength !== receipt.byteLength || existing.output.scopeId !== receipt.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
         return existing;
@@ -83,7 +89,9 @@ export class SqliteDispatchJournal {
     if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
     return this.transaction(() => {
       const existing = this.read(claim.request);
-      if (!existing?.terminal || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      this.assertNotFenced(existing, 'patch');
+      if (!existing.terminal) throw new DispatchError('DISPATCH_CONFLICT');
       if (existing.patch) {
         if (JSON.stringify(existing.patch) !== JSON.stringify(receipt)) throw new DispatchError('DISPATCH_CONFLICT');
         return existing;
@@ -123,6 +131,7 @@ export class SqliteDispatchJournal {
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      this.assertNotFenced(existing, 'finish-dispatch');
       if (existing.terminal) {
         const merged = mergeDispatchTerminal(existing.terminal, terminal);
         if (merged === existing.terminal) return existing;

@@ -2,7 +2,7 @@ export * from '#engine/core/attempts/index.js';
 export * from '#engine/core/supervisor/index.js';
 export * from '#engine/core/authentication/index.js';
 export * from '#engine/core/workspaces/index.js';
-export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, assertDispatchNotFenced, dispatchFenceReceiptId } from '#engine/core/dispatch/index.js';
+export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, assertDispatchNotFenced, dispatchFenceReceiptId, lostDispatchWriteSchema, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, attemptDispatchWriteToken, LostDispatchApplication, type LostDispatchWrite, type LostDispatchStore, type LostDispatchAudit, type LostDispatchReceipt, type LostDispatchObserver } from '#engine/core/dispatch/index.js';
 export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, LaunchDecision, DispatchTerminal, DispatchRecord, DispatchStore, RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 export { decideDispatchLaunch, validateLaunchRequest } from '#engine/core/dispatch/index.js';
 export type { DispatchLaunchState, DispatchLaunchTransition } from '#engine/core/dispatch/index.js';
