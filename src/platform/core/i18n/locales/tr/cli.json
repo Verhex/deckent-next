@@ -1183,6 +1183,7 @@
   "monitor.human.usageOutcomeRunning": "devam ediyor",
   "monitor.build.summary": "build kaydı var ({builtAt})",
   "cli.worker.effort.line": " · Muhakeme eforu: {level} ({source}; sınıf {workClass})",
+  "cli.worker.effort.policy_revision": " · İş sınıfı politika revizyonu: {revision}",
   "cli.worker.effort.source.explicit": "açık istek",
   "cli.worker.effort.source.policy-default": "politika varsayılanı",
   "cli.worker.effort.source.cli-default": "CLI varsayılanı",

@@ -1183,6 +1183,7 @@
   "monitor.human.usageOutcomeRunning": "in progress",
   "monitor.build.summary": "build recorded (built {builtAt})",
   "cli.worker.effort.line": " · Reasoning effort: {level} ({source}; class {workClass})",
+  "cli.worker.effort.policy_revision": " · Work class policy revision: {revision}",
   "cli.worker.effort.source.explicit": "explicit",
   "cli.worker.effort.source.policy-default": "policy default",
   "cli.worker.effort.source.cli-default": "CLI default",

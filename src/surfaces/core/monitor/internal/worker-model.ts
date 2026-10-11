@@ -21,5 +21,6 @@ export function renderWorkerModelLine(view: WorkerModelView, locale: Locale): st
     + (view.reasoningEffort ? t('cli.worker.effort.line', { level: view.reasoningEffort.level ?? effortStatuses(locale)[view.reasoningEffort.status],
       source: effortSources(locale)[view.reasoningEffort.source],
       workClass: view.reasoningEffort.workClass ?? none }, locale) : '')
+    + (view.reasoningEffort?.policyRevision ? t('cli.worker.effort.policy_revision', { revision: view.reasoningEffort.policyRevision }, locale) : '')
     + (view.unexpected.length ? t('cli.worker.model.unexpected', { models: view.unexpected.join(', ') }, locale) : '');
 }
