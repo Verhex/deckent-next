@@ -1,6 +1,7 @@
 /**
- * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v49: v50 only adds the
- * unreconciled-held-spend index, so dropping it is exact). `DOWNGRADE_TO_V48_LEDGER_SQL` also goes back to v48 (v49 adds measured-tariff spending and append-only management receipts). v47→v48 only
+ * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v50: v51 only adds the
+ * acceptance metrics table and index, so dropping them is exact). `DOWNGRADE_TO_V49_LEDGER_SQL` also removes the
+ * v50 unreconciled-held-spend index. `DOWNGRADE_TO_V48_LEDGER_SQL` also goes back to v48 (v49 adds measured-tariff spending and append-only management receipts). v47→v48 only
  * widened the approvals subject CHECK to `config-change`, so the rebuild back to three values is exact — a config-change row makes it fail, as it
  * must. `DOWNGRADE_TO_V46_LEDGER_SQL` also drops the v47 capacity override and receipt tables. V45 additionally drops the two v46 decision tables. `DOWNGRADE_TO_V44_LEDGER_SQL` also reverts
  * the v45 (A1/A3) Run snapshot v4 -> v3 change (exact for ledgers whose Runs were never parked/closed).
@@ -16,9 +17,11 @@
  * `DOWNGRADE_TO_V35_LEDGER_SQL` goes one step further and reverses the v36 allocation rebuild (max_calls NOT NULL again, the
  * checkpoint child rebuilt against it).
  */
-export const PREVIOUS_LEDGER_VERSION = 49;
-export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `DROP INDEX model_invocation_spend_unreconciled_holds; PRAGMA user_version=49;`;
-export const DOWNGRADE_TO_V48_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} DROP TRIGGER IF EXISTS provider_spend_management_no_update; DROP TRIGGER IF EXISTS provider_spend_management_no_delete; DROP TABLE provider_spend_management; PRAGMA user_version=48;`;
+export const PREVIOUS_LEDGER_VERSION = 50;
+export const DOWNGRADE_TO_V50_LEDGER_SQL = `DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; PRAGMA user_version=50;`;
+export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = DOWNGRADE_TO_V50_LEDGER_SQL;
+export const DOWNGRADE_TO_V49_LEDGER_SQL = `${DOWNGRADE_TO_V50_LEDGER_SQL} DROP INDEX model_invocation_spend_unreconciled_holds; PRAGMA user_version=49;`;
+export const DOWNGRADE_TO_V48_LEDGER_SQL = `${DOWNGRADE_TO_V49_LEDGER_SQL} DROP TRIGGER IF EXISTS provider_spend_management_no_update; DROP TRIGGER IF EXISTS provider_spend_management_no_delete; DROP TABLE provider_spend_management; PRAGMA user_version=48;`;
 export const DOWNGRADE_TO_V47_LEDGER_SQL = `${DOWNGRADE_TO_V48_LEDGER_SQL} CREATE TABLE approvals_v47(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call','operation')),
     run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY(scope_id,approval_id),CHECK((subject_kind='task')=(run_id IS NOT NULL AND task_id IS NOT NULL)));
