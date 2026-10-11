@@ -34,7 +34,7 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 50;
+export const CURRENT_LEDGER_VERSION = 51;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
@@ -54,6 +54,9 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  51: `CREATE TABLE acceptance_metrics(scope_id TEXT NOT NULL, producer_command_id TEXT NOT NULL, run_id TEXT NOT NULL,
+    task_id TEXT NOT NULL, attempt_id TEXT NOT NULL, outcome_kind TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(scope_id,producer_command_id));
+    CREATE INDEX acceptance_metrics_attempt ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind); PRAGMA user_version=51;`,
   50: `CREATE INDEX model_invocation_spend_unreconciled_holds ON model_invocation_spend_reservations(scope_id,invocation_id COLLATE BINARY)
     WHERE json_extract(record,'$.disposition.state')='held' AND json_extract(record,'$.reconciliation') IS NULL;
     PRAGMA user_version=50;`,
