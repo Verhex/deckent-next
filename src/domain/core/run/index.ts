@@ -12,8 +12,16 @@ export type { RunExecutionSnapshot } from './internal/registry.js';
 export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';
 
-export { workClassRegistrySchema, workClassAcceptanceProfileSchema, mergeWorkClassRegistries, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError } from './internal/work-class.js';
+export { workClassRegistrySchema, workClassAcceptanceProfileSchema, mergeWorkClassRegistries, resolveTaskWorkClass, evidenceExtensionSchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError } from './internal/work-class.js';
 export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy } from './internal/work-class.js';
 export { holdRun, answerTaskInput, parkRunProgression } from './internal/lifecycle.js';
 export { deckentMetricsSchema, deriveDeckentMetrics } from './internal/metrics.js';
 export type { DeckentMetrics, DeckentMetricsMeasurements } from './internal/metrics.js';
+
+export { freezeTaskAcceptance, assertAcceptanceCriteria, frozenWorkClassProfileSchema, taskAcceptanceReferenceSchema, acceptanceCriterionSchema, AcceptanceProfileError } from './internal/acceptance.js';
+export type { FrozenWorkClassProfile, TaskAcceptanceReference } from './internal/acceptance.js';
+
+export { acceptanceViewSchema, deriveAcceptanceView, evaluationAcceptanceSchema } from './internal/acceptance-view.js';
+export type { AcceptanceView } from './internal/acceptance-view.js';
+
+export { releaseWorkerCustody } from './internal/worker-custody.js';

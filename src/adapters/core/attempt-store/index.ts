@@ -28,7 +28,7 @@ export function inventoryReadsPerCall(path: () => Promise<string>, options: impo
     const reader = await openSqliteInventoryReader(await path(), options);
     try { return await use(reader); } finally { reader.close(); }
   };
-  return Object.freeze({ receipt: (scopeId: string, commandId: string) => read(reader => reader.receipt(scopeId, commandId)), loadRunPoolEvidence: (scopeId: string, runId: string) => read(reader => reader.loadRunPoolEvidence(scopeId, runId)), loadRun: (scopeId: string, runId: string) => read(reader => reader.loadRun(scopeId, runId)),
+  return Object.freeze({ loadRunEvaluations: (snapshot: import('#domain/index.js').RunSnapshot) => read(reader => reader.loadRunEvaluations(snapshot)), receipt: (scopeId: string, commandId: string) => read(reader => reader.receipt(scopeId, commandId)), loadRunPoolEvidence: (scopeId: string, runId: string) => read(reader => reader.loadRunPoolEvidence(scopeId, runId)), loadRun: (scopeId: string, runId: string) => read(reader => reader.loadRun(scopeId, runId)),
     loadWorkerEventLog: (scopeId: string, attemptId: string) => read(reader => reader.loadWorkerEventLog(scopeId, attemptId)) });
 }
 /** Service-start upgrade of an existing older ledger with a versioned backup; loads the native driver lazily. */

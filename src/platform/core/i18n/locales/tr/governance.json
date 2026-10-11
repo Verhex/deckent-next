@@ -919,5 +919,8 @@
   "identity.selectNumber": "Numara seçin: ",
   "identity.approveDistribution": "Onayla ve dağıt",
   "identity.cancelDistribution": "İptal",
-  "identity.distributionReason": "Kimlik profili dağıtımı incelendi"
+  "identity.distributionReason": "Kimlik profili dağıtımı incelendi",
+  "error.DISPATCH_FENCED": "Bu denemenin worker yazma yetkisi kapatıldı. Geç yazım reddedildi.",
+  "error.WORK_CLASS_EVIDENCE_NOT_REGISTERED": "Kanıt türü iş sınıfı politikasında kayıtlı değil.",
+  "error.TASK_EVALUATION_PROFILE_MISMATCH": "Değerlendirme, dondurulmuş kabul profiliyle eşleşmiyor."
 }

@@ -3,14 +3,15 @@ import { identitySchema } from '#domain/core/primitives/index.js';
 import { REASONING_EFFORTS, workerEffortSchema, type CatalogModel, type ReasoningEffort, type WorkerEffort } from '#domain/core/provider-catalog/index.js';
 import asset from '../../../../../assets/native-coding/work-classes.json' with { type: 'json' };
 /** Closed, business-neutral vocabulary: concrete evaluator/adapter semantics stay in their registries. */
-const criterionTypeSchema = z.enum(['completion', 'correctness', 'safety', 'authorization']);
-const evidenceTypeSchema = z.enum(['retained-artifact', 'verification-result', 'operation-settlement', 'observed-readback', 'approval-receipt']);
+export const criterionTypeSchema = z.enum(['completion', 'correctness', 'safety', 'authorization']);
+export const coreEvidenceTypeSchema = z.enum(['retained-artifact', 'verification-result', 'operation-settlement', 'observed-readback', 'approval-receipt']);
+export const evidenceTypeSchema = z.union([coreEvidenceTypeSchema, z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)]);
 const scoreSchema = z.number().finite().min(0).max(1);
 const unique = (values: readonly string[]) => new Set(values).size === values.length;
 export const workClassAcceptanceProfileSchema = z.object({ schemaVersion: z.literal(1), version: z.number().int().positive().safe(),
   criterionTypes: z.array(criterionTypeSchema).min(1).max(4).readonly(),
-  evidenceTypes: z.array(evidenceTypeSchema).min(1).max(5).readonly(),
-  rubric: z.array(z.object({ criterionType: criterionTypeSchema, evidenceTypes: z.array(evidenceTypeSchema).min(1).max(5).readonly(),
+  evidenceTypes: z.array(evidenceTypeSchema).min(1).max(256).readonly(),
+  rubric: z.array(z.object({ criterionType: criterionTypeSchema, evidenceTypes: z.array(evidenceTypeSchema).min(1).max(256).readonly(),
     weight: scoreSchema.refine(value => value > 0),
   }).strict().readonly()).min(1).max(4).readonly(),
   ceilingRules: z.array(z.object({ when: z.enum(['missing-evidence', 'unsettled-effect', 'missing-approval']),
@@ -38,10 +39,19 @@ const currentRegistrySchema = z.object({ schemaVersion: z.literal(2), revision: 
     override: z.object({ previousClassId: identitySchema }).strict().readonly().optional(),
   }).strict().readonly()).max(1024).readonly(),
 }).strict();
+export const evidenceExtensionSchema = z.object({ id: z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/),
+  version: z.number().int().positive().safe(), mapsTo: coreEvidenceTypeSchema,
+  label: z.object({ en: identitySchema, tr: identitySchema }).strict().readonly(),
+}).strict().readonly();
+const extendedRegistrySchema = currentRegistrySchema.extend({ schemaVersion: z.literal(3),
+  evidenceExtensions: z.array(evidenceExtensionSchema).max(256).readonly(),
+});
 /** V1 is an immutable historical complete policy. V2 may refer to Core parents/bindings; resolution validates the complete graph. */
-export const workClassRegistrySchema = z.discriminatedUnion('schemaVersion', [legacyRegistrySchema, currentRegistrySchema])
+export const workClassRegistrySchema = z.discriminatedUnion('schemaVersion', [legacyRegistrySchema, currentRegistrySchema, extendedRegistrySchema])
   .refine(value => unique(value.classes.map(row => row.id)) && unique(value.bindings.map(row => row.kind))
-    && (value.schemaVersion === 2 || value.bindings.every(row => value.classes.some(entry => entry.id === row.classId)))).readonly();
+    && (value.schemaVersion !== 1 || value.bindings.every(row => value.classes.some(entry => entry.id === row.classId)))
+    && (value.schemaVersion !== 3 || unique(value.evidenceExtensions.map(row => row.id)))
+    && (value.schemaVersion === 3 || value.schemaVersion === 1 || value.classes.every(row => row.acceptanceProfile.evidenceTypes.every(type => !type.startsWith('ext:'))))).readonly();
 export type WorkClassRegistry = z.infer<typeof workClassRegistrySchema>;
 export type WorkClassAcceptanceProfile = z.infer<typeof workClassAcceptanceProfileSchema>;
 /** Compatibility seed until the lead admits canonical business-neutral Core identities. */
@@ -53,18 +63,23 @@ export class WorkerEffortError extends Error {
 }
 export class WorkClassRegistryError extends Error {
   constructor(readonly code: 'WORK_CLASS_OVERRIDE_DENIED' | 'WORK_CLASS_PARENT_INVALID' | 'WORK_CLASS_REGISTRY_LIMIT'
-    | 'WORK_CLASS_REVISION_INVALID') { super(code); this.name = 'WorkClassRegistryError'; }
+    | 'WORK_CLASS_REVISION_INVALID' | 'WORK_CLASS_EVIDENCE_NOT_REGISTERED' | 'TASK_EVALUATION_PROFILE_MISMATCH') { super(code); this.name = 'WorkClassRegistryError'; }
 }
 export type WorkClassPolicy = Readonly<{ revision: string; classes: readonly WorkClassRegistry['classes'][number][];
-  bindings: readonly Readonly<{ kind: string; classId: string }>[] }>;
+  bindings: readonly Readonly<{ kind: string; classId: string }>[]; evidenceExtensions?: readonly z.infer<typeof evidenceExtensionSchema>[] }>;
 /** Caller order is explicit precedence; revisions are an unambiguous ordered tuple, bounded by the existing wire identifier budget.
  * Class definitions never override. A binding override is a compare-and-set against its prior class, not an implicit permission. */
 export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayInputs: readonly WorkClassRegistry[]): WorkClassPolicy {
   const core = workClassRegistrySchema.parse(coreInput), overlays = overlayInputs.map(input => workClassRegistrySchema.parse(input));
   if (overlays.length > 256) throw new WorkClassRegistryError('WORK_CLASS_REGISTRY_LIMIT');
+  const extensions = new Map((core.schemaVersion === 3 ? core.evidenceExtensions : []).map(row => [row.id, row]));
   const classes = new Map(core.classes.map(row => [row.id, row]));
   const bindings = new Map(core.bindings.map(row => [row.kind, row.classId]));
   for (const overlay of overlays) {
+    for (const row of overlay.schemaVersion === 3 ? overlay.evidenceExtensions : []) {
+      if (extensions.has(row.id)) throw new WorkClassRegistryError('WORK_CLASS_OVERRIDE_DENIED');
+      extensions.set(row.id, row);
+    }
     for (const row of overlay.classes) {
       if (classes.has(row.id)) throw new WorkClassRegistryError('WORK_CLASS_OVERRIDE_DENIED');
       classes.set(row.id, row);
@@ -79,9 +94,12 @@ export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayIn
       bindings.set(row.kind, row.classId);
     }
   }
-  if (classes.size > 256 || bindings.size > 1024) throw new WorkClassRegistryError('WORK_CLASS_REGISTRY_LIMIT');
+  if (classes.size > 256 || bindings.size > 1024 || extensions.size > 256) throw new WorkClassRegistryError('WORK_CLASS_REGISTRY_LIMIT');
   for (const classId of bindings.values()) if (!classes.has(classId)) throw new WorkerEffortError('WORK_CLASS_NOT_REGISTERED');
   for (const row of classes.values()) {
+    if ('acceptanceProfile' in row && row.acceptanceProfile.evidenceTypes.some(type => type.startsWith('ext:') && !extensions.has(type))) {
+      throw new WorkClassRegistryError('WORK_CLASS_EVIDENCE_NOT_REGISTERED');
+    }
     const seen = new Set([row.id]); let current = row;
     while ('parentClassId' in current && current.parentClassId !== undefined) {
       const parent = classes.get(current.parentClassId);
@@ -91,18 +109,25 @@ export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayIn
   }
   const revision = overlays.length === 0 ? core.revision : JSON.stringify([core.revision, ...overlays.map(row => row.revision)]);
   if (!identitySchema.safeParse(revision).success) throw new WorkClassRegistryError('WORK_CLASS_REVISION_INVALID');
-  return Object.freeze({ revision, classes: Object.freeze([...classes.values()]),
+  return Object.freeze({ revision, evidenceExtensions: Object.freeze([...extensions.values()]), classes: Object.freeze([...classes.values()]),
     bindings: Object.freeze([...bindings].map(([kind, classId]) => Object.freeze({ kind, classId }))) });
+}
+/** One effective policy/class owner shared by effort selection and acceptance admission. */
+export function resolveTaskWorkClass(kind: string, requested?: string, configured?: WorkClassRegistry) {
+  const policy: WorkClassPolicy = configured?.schemaVersion !== undefined && configured.schemaVersion !== 1
+    ? mergeWorkClassRegistries(CORE_WORK_CLASSES, [configured]) : configured ?? CORE_WORK_CLASSES;
+  const classId = requested ?? policy.bindings.find(row => row.kind === kind)?.classId;
+  const workClass = policy.classes.find(row => row.id === classId);
+  if (requested !== undefined && !workClass) throw new WorkerEffortError('WORK_CLASS_NOT_REGISTERED');
+  return { policy, workClass };
 }
 /** Pure deterministic selection, clamped down to the closest declared level, or the lowest non-Ultra level when all exceed the target.
  * Ultra requires an explicit request or an Ultra registry target; otherwise leave the CLI setting absent with a visible status.
  * No text inference, model switching or provider id branch; capability is supplied by the command registry. */
 export function selectWorkerEffort(input: Readonly<{ model: CatalogModel; capability: Readonly<{ mode: 'arguments' | 'model-id'; levels: readonly string[] }> | null;
   explicit?: ReasoningEffort | undefined; kind: string; workClass?: string | undefined; policy?: WorkClassRegistry | undefined }>): WorkerEffort {
-  const { model, capability, explicit } = input; const policy = input.policy?.schemaVersion === 2
-    ? mergeWorkClassRegistries(CORE_WORK_CLASSES, [input.policy]) : input.policy ?? CORE_WORK_CLASSES;
-  const classId = input.workClass ?? policy.bindings.find(row => row.kind === input.kind)?.classId;
-  const workClass = policy.classes.find(row => row.id === classId);
+  const { model, capability, explicit } = input;
+  const { policy, workClass } = resolveTaskWorkClass(input.kind, input.workClass, input.policy);
   const supported = capability === null ? [] : REASONING_EFFORTS.filter(level => model.efforts.includes(level) && capability.levels.includes(level)
     && (capability.mode !== 'model-id' || model.effortBinding?.level === level));
   if (explicit !== undefined && !supported.includes(explicit)) throw new WorkerEffortError();

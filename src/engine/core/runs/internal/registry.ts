@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput } from '#domain/index.js';
+import { freezeTaskAcceptance, assertAcceptanceCriteria, readWorkerModelPin, type FrozenWorkClassProfile, executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput } from '#domain/index.js';
 export interface ExecutionRegistryValidation {
   /** Installed adapter/evaluator selection; data cannot introduce executable code or grant policy. */
   profile(profile: ExecutionProfileDefinition): undefined;
@@ -22,7 +22,19 @@ export function assertRunExecution(graphInput: unknown, executionInput: unknown)
   const selectedTasks = new Set(execution.tasks.map(entry => entry.taskId));
   const selectedCriteria = new Set(execution.criteria.map(entry => entry.criterionId));
   if (selectedTasks.size !== execution.tasks.length || selectedCriteria.size !== execution.criteria.length) invalid();
-  for (const task of graph.tasks) if (!selectedTasks.has(task.id)) invalid();
+  const profiles = execution.workClassProfiles ?? [];
+  if (new Set(profiles.map(row => JSON.stringify([row.workClass, row.policyRevision, row.profileVersion]))).size !== profiles.length) invalid();
+  for (const task of graph.tasks) {
+    if (!selectedTasks.has(task.id)) invalid();
+    const entry = execution.tasks.find(row => row.taskId === task.id)!;
+    if (!entry.acceptance) continue;
+    const frozen = profiles.find(row => row.workClass === entry.acceptance!.workClass && row.policyRevision === entry.acceptance!.policyRevision && row.profileVersion === entry.acceptance!.profileVersion);
+    if (!frozen) invalid();
+    try { assertAcceptanceCriteria(entry.acceptance, frozen!, task, graph.criterionDefinitions); } catch { invalid(); }
+    const effort = readWorkerModelPin(entry.profile.parameters)?.reasoningEffort;
+    if (effort?.workClass && (effort.workClass !== entry.acceptance.workClass || effort.policyRevision !== entry.acceptance.policyRevision)) invalid();
+  }
+  if (profiles.some(row => !execution.tasks.some(task => task.acceptance?.workClass === row.workClass && task.acceptance.policyRevision === row.policyRevision && task.acceptance.profileVersion === row.profileVersion))) invalid();
   for (const criterion of graph.criterionDefinitions) {
     const selected = execution.criteria.find(entry => entry.criterionId === criterion.id);
     const fingerprint = createHash('sha256').update(encodeCriterionDefinition(criterion), 'utf8').digest('hex');
@@ -33,6 +45,7 @@ export function assertRunExecution(graphInput: unknown, executionInput: unknown)
 /** Resolve once at admission. Return copied immutable selected definitions, never live registry references. */
 export function resolveExecutionRegistry(graphInput: unknown, registryInput: unknown, validation: ExecutionRegistryValidation) {
   const graph = validateTaskGraph(graphInput); const registry = executionRegistrySchema.parse(registryInput);
+  const workClassProfiles: FrozenWorkClassProfile[] = [];
   const tasks = graph.tasks.map(task => {
     const kind = registry.kinds.find(entry => entry.kind === task.kind);
     if (!kind) throw new ExecutionRegistryError('TASK_KIND_NOT_REGISTERED');
@@ -45,7 +58,9 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
     if (profile.id !== selected.id || profile.version !== selected.version || (template && validation.isTemplate!(profile))
       || validation.profile(profile) !== undefined) throw new ExecutionRegistryError('EXECUTION_REGISTRY_VALIDATOR_INVALID');
     // EXEC-RELEASE C2 (owner B): the kind's explicit no-workspace-delivery declaration is frozen with the Run, only when present.
-    return Object.freeze({ taskId: task.id, profile, ...(kind.workspaceDelivery ? { workspaceDelivery: kind.workspaceDelivery } : {}) });
+    const acceptance = freezeTaskAcceptance(task, graph.criterionDefinitions, registry.workClasses);
+    if (acceptance && !workClassProfiles.some(row => row.workClass === acceptance.frozen.workClass && row.policyRevision === acceptance.frozen.policyRevision && row.profileVersion === acceptance.frozen.profileVersion)) workClassProfiles.push(acceptance.frozen);
+    return Object.freeze({ taskId: task.id, profile, ...(acceptance ? { acceptance: acceptance.reference } : {}), ...(kind.workspaceDelivery ? { workspaceDelivery: kind.workspaceDelivery } : {}) });
   });
   const criteria = graph.criterionDefinitions.map(criterion => {
     const evaluator = registry.evaluators.find(entry => entry.id === criterion.evaluator.id && entry.version === criterion.evaluator.version);
@@ -54,5 +69,5 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
     return Object.freeze({ criterionId: criterion.id, evaluator, fingerprint: createHash('sha256').update(encodeCriterionDefinition(criterion), 'utf8').digest('hex') });
   });
   return assertRunExecution(graph, { schemaVersion: 1 as const, registryRevision: registry.revision,
-    tasks: Object.freeze(tasks), criteria: Object.freeze(criteria) });
+    ...(workClassProfiles.length ? { workClassProfiles } : {}), tasks: Object.freeze(tasks), criteria: Object.freeze(criteria) });
 }

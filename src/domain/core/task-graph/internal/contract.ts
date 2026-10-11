@@ -49,6 +49,11 @@ export const taskProgressSchema = z.object({
   acceptedEvidence: z.literal('model-unverified').optional(),
   inputAnswer: z.object({ schemaVersion: z.literal(1), source: attemptIdentitySchema, question: workerNeedsInputSchema.unwrap().shape.question,
     answer: z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars) }).strict().readonly().optional(),
+  workerCustody: z.object({ schemaVersion: z.literal(1), state: z.enum(['held', 'released']),
+    basis: z.enum(['termination-proof', 'manual-decision']), fenceReceiptId: identity,
+    proofReceiptId: identity.optional(), decisionReceiptId: identity.optional(),
+  }).strict().refine(value => value.basis === 'termination-proof' ? value.proofReceiptId !== undefined && value.decisionReceiptId === undefined
+    : value.decisionReceiptId !== undefined && value.proofReceiptId === undefined).readonly().optional(),
   unresolvedEffects: z.boolean(),
   eligibility: taskEligibilitySchema,
 }).strict().superRefine((state, context) => {

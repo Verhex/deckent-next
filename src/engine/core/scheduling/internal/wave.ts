@@ -13,7 +13,7 @@ export class SchedulingError extends Error {
 }
 /** Deterministic planning only. A durable admission transaction must recheck this snapshot and
  * reserve capacity before dispatch; the plan itself is neither authorization nor a launch receipt.
- * Unknown effects retain capacity until reconciliation, even when a worker appears to have exited.
+ * Unknown effects retain capacity unless canonical custody is explicitly released with trusted termination evidence.
  */
 export function planSchedulingWave(graphInput: unknown, input: unknown) {
   const graph = validateTaskGraph(graphInput); const parsed = schedulingInputSchema.safeParse(input);
@@ -45,6 +45,7 @@ export function measureTaskOccupancy(input: unknown) {
   const progress = z.array(taskProgressSchema).parse(input);
   let execution = 0; let inFlight = 0;
   for (const task of progress) {
+    if (task.workerCustody?.state === 'released') continue;
     const uncertain = task.unresolvedEffects || task.phase === 'reconciling';
     if (task.phase === 'active' || uncertain) execution++;
     if (task.phase === 'active' || task.phase === 'evaluating' || uncertain) inFlight++;

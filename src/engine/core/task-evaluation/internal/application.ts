@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { readWorkspaceChange } from './workspace-change.js';
 import { createHash } from 'node:crypto';
 import { attemptIdentitySchema, counterSchema, identitySchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport,
-  taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
+  bindTaskAcceptance, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
   type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -26,8 +26,10 @@ export interface TaskEvaluationAuthorization {
 export interface UnknownEvaluationPolicy {
   decide(evaluation: TaskEvaluation, principal: VerifiedPrincipal): Promise<'wait' | 'fail'>;
 }
+export type TaskCriterionResult = 'pass' | 'fail' | 'unknown' | Readonly<{ verdict: 'pass' | 'fail' | 'unknown'; evidenceTypes: readonly string[]; evidenceReferences?: readonly Readonly<{ id: string; digest: string }>[] }>;
 export interface TaskTerminalEvaluator {
-  evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: DispatchTerminal): Promise<'pass' | 'fail' | 'unknown'>;
+  evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: DispatchTerminal,
+    context: Readonly<{ identity: AttemptIdentity }>): Promise<TaskCriterionResult>;
 }
 type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'load'> & Pick<RunStore, 'loadRun' | 'loadRunReceipt'>
   & Pick<WorkerEventLogStore, 'loadWorkerEventLog'> & Partial<Pick<RunLifecycleStore, 'commitRunLifecycle'>>;
@@ -36,7 +38,7 @@ type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'l
 export function describeTaskEvaluationReceipt(receipt: RunReceipt) {
   const evidence = (JSON.parse(receipt.command) as { evaluation?: TaskEvaluation }).evaluation;
   const model = evidence?.model;
-  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
+  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot, [], evidence ? [evidence] : []), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
 }
 /** Authenticated evaluation ingress. Wire input carries no verdict, evaluator, artifact, actor or paths.
  * Installed evaluator code consumes pinned definitions and verified terminal/output custody.
@@ -134,12 +136,12 @@ export class TaskEvaluationApplication {
     const evidenceId = 'dispatch-output';
     const model = await this.workerModel(run, identity);
     const recovery = await evaluationRecovery(this.store, run, identity, dispatch, model);
-    const proposed = taskEvaluationSchema.parse({ schemaVersion: 1, evaluationId: command.commandId, identity,
+    const proposed = taskEvaluationSchema.parse(bindTaskAcceptance(run, { schemaVersion: 1, evaluationId: command.commandId, identity,
       graphRevision: run.graph.revision, attemptRevision: attempt.revision,
       criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown', evidenceIds: [evidenceId] })),
       ...(model ? { model } : {}), ...recovery,
       ...(workerExit ? { workerExit } : {}),
-    });
+    }));
     proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, proposed, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
     await verifyDispatchEvaluationEvidence(proposed, dispatch.request, [{ evidenceId, receipt: dispatch.output }],
       { async readDispatch() { return dispatch; } }, this.artifacts, this.limits);
@@ -147,7 +149,8 @@ export class TaskEvaluationApplication {
     for (const item of proposed.criteria) {
       const criterion = run.graph.criterionDefinitions.find(value => value.id === item.criterionId)!;
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;
-      criteria.push({ ...item, verdict: workerExit ? 'unknown' : await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal) });
+      const result = workerExit ? 'unknown' : await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal, { identity });
+      criteria.push(typeof result === 'string' ? { ...item, verdict: result } : { ...item, ...result });
     }
     const output = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);
     const handoff = evaluateHandoff(output);
@@ -155,7 +158,7 @@ export class TaskEvaluationApplication {
     const notes = report.status === 'reported' ? report.report.sharedNotes : undefined;
     const sharedNotes = notes?.length ? { count: notes.length, digest: createHash('sha256').update(JSON.stringify(notes)).digest('hex') } : undefined;
     const workspaceChange = workerExit ? undefined : await readWorkspaceChange(task.workInput, identity, dispatch, this.artifacts, this.limits.maxTotalBytes);
-    const evaluation = taskEvaluationSchema.parse({ ...proposed, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}), ...(workspaceChange ? { workspaceChange } : {}) });
+    const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...proposed, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}), ...(workspaceChange ? { workspaceChange } : {}) }));
     const restriction = await this.unknownPolicy?.decide(evaluation, principal);
     if (restriction !== undefined && restriction !== 'wait' && restriction !== 'fail') throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
     await this.authorization.authorize(identity, principal);
