@@ -703,8 +703,8 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   an Enterprise or ERP adapter extends them through registered `ext:` names (overlay `schemaVersion: 3`, unknown fail-closed; alpha.29). (2) DECKENT-METRICS v1
   (`src/domain/core/run/internal/metrics.ts`) is a pure attributed result contract; alpha.29 persists it (v51 above). Rollback to alpha.28 needs the pre-switch ledger backup (typed `ATTEMPT_STORE_VERSION`).
   (3) The pure dispatch-fence decision (`assessLostDispatch` in `src/engine/core/dispatch/internal/loss.ts`, `decideDispatchLoss` in
-  `src/domain/core/attempt/internal/dispatch-loss.ts`) gets production callers in alpha.29 (`fenceLostDispatch`, the fence reader; slot release only with exact
-  retained container incarnation plus exit/absence proof, else `hold-manual`). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
+  `src/domain/core/attempt/internal/dispatch-loss.ts`) is wired in alpha.29 to the atomic writer `fenceLostDispatch` and the fence reader; configured reconcile recovers an existing fence (slot release only with exact
+  retained container incarnation plus exit/absence proof, else `hold-manual`), but no production path writes the first fence yet (automatic mark-lost is MARK-LOST-ATOMIC / KARAR 12, owner-deferred). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
   (4) Test-ERP is a test fixture only (`tests/fixtures/test-erp`): no ERP-specific code exists in Core; it goes through the generic
   http-conditional adapter, the operation catalog and the approval path.
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and
