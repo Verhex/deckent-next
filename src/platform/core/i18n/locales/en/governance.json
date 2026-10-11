@@ -926,5 +926,10 @@
   "error.COMMAND_ID_RESERVED": "This command identifier belongs to a reserved system namespace. Choose another identifier.",
   "error.DISPATCH_FENCE_CONFLICT": "A foreign receipt occupies the dispatch fence identifier. Custody remains held; reconcile the conflicting receipt.",
   "task.custody.hold-manual": "Worker capacity held: trusted termination evidence is required.",
-  "task.custody.released": "Worker capacity released with termination evidence; task acceptance and effects remain unresolved."
+  "task.custody.released": "Worker capacity released with termination evidence; task acceptance and effects remain unresolved.",
+  "error.OPERATION_EVIDENCE_CONTEXT": "The operation evidence has no durable execution authority or start time.",
+  "error.OPERATION_EVIDENCE_EARLIER": "The operation settled before this attempt started and cannot prove its task.",
+  "error.OPERATION_EVIDENCE_PRINCIPAL": "The operation principal does not match the Run or executing principal.",
+  "error.OPERATION_EVIDENCE_REUSED": "This operation already backed another task acceptance and cannot be reused.",
+  "error.OPERATION_EVIDENCE_OTHER_RUN": "This operation already backed acceptance in another Run; only tasks in the same Run may share it."
 }

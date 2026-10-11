@@ -4,7 +4,7 @@ import { readWorkspaceChange } from './workspace-change.js';
 import { createHash } from 'node:crypto';
 import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport,
   bindTaskAcceptance, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
-  type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal } from '#domain/index.js';
+  type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal, type OperationEvidenceBinding } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
@@ -30,7 +30,7 @@ export interface UnknownEvaluationPolicy {
 export type TaskCriterionResult = 'pass' | 'fail' | 'unknown' | Omit<TaskEvaluation['criteria'][number], 'criterionId' | 'evidenceIds'>;
 export interface TaskTerminalEvaluator {
   evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: DispatchTerminal,
-    context: Readonly<{ identity: AttemptIdentity }>): Promise<TaskCriterionResult>;
+    context: Readonly<{ identity: AttemptIdentity; binding?: OperationEvidenceBinding }>): Promise<TaskCriterionResult>;
 }
 type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'load'> & Pick<RunStore, 'loadRun' | 'loadRunReceipt'>
   & Pick<WorkerEventLogStore, 'loadWorkerEventLog'> & Partial<Pick<RunLifecycleStore, 'commitRunLifecycle'>>;
@@ -146,10 +146,14 @@ export class TaskEvaluationApplication {
     await verifyDispatchEvaluationEvidence(proposed, dispatch.request, [{ evidenceId, receipt: dispatch.output }],
       { async readDispatch() { return dispatch; } }, this.artifacts, this.limits);
     const criteria = [];
+    const runPrincipal = proposed.criteria.some(item => run.execution.criteria.find(value => value.criterionId === item.criterionId)?.evaluator.implementation.id === 'operation-evidence')
+      ? await this.store.loadRunEvaluationPrincipal?.(identity) : null;
+    const binding = dispatch.grant ? { startedAt: dispatch.grant.grantedAt, principals: [dispatch.grant.principal, ...(runPrincipal ? [runPrincipal] : [])] } : undefined;
     for (const item of proposed.criteria) {
       const criterion = run.graph.criterionDefinitions.find(value => value.id === item.criterionId)!;
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;
-      const result = workerExit ? 'unknown' : await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal, { identity });
+      const result = workerExit ? 'unknown' : await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal,
+        { identity, ...(selected.evaluator.implementation.id === 'operation-evidence' && binding ? { binding } : {}) });
       criteria.push(typeof result === 'string' ? { ...item, verdict: result } : { ...item, ...result });
     }
     const output = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);

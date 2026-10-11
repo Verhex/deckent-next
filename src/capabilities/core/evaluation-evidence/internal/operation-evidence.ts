@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, attemptIdentitySchema, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema,
+import { counterSchema, attemptIdentitySchema, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema, operationEvidenceBindingReason,
+  type OperationEvidenceBinding,
   type AttemptIdentity, type CriterionDefinition, type EvaluatorDefinition, type TaskEvaluation } from '#domain/index.js';
 import { PROCESS_EXIT_EVALUATOR, processExitTerminalEvaluator, validateInstalledProcessExitEvaluator, validateProcessExitCriterion } from './process-exit.js';
 
@@ -18,7 +19,8 @@ const operation = z.object({ id: identitySchema, version: counterSchema.positive
 const projectionSchema = z.object({ sequence: counterSchema.positive(), state: z.enum(['settled', 'claimed', 'unknown', 'refused']),
   intent: z.object({ command: z.object({ scopeId: identitySchema, commandId: identitySchema, operation,
     target: z.object({ kind: identitySchema, id: z.string().min(1).max(512) }), compensates: identitySchema.optional() }),
-    descriptor: z.object({ compensation: operation.nullable() }), inputDigest: z.string().regex(/^[a-f0-9]{64}$/) }),
+    descriptor: z.object({ compensation: operation.nullable() }), inputDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    actor: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict() }),
   evidence: z.object({ kind: z.enum(['idempotency-record', 'fence']), version: z.string().min(1).max(256).nullable(), observedAt: counterSchema }).strict().nullable(),
   refusal: z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED']).nullable(),
 }).refine(record => (record.state === 'settled') === (record.evidence !== null) && (record.state === 'refused') === (record.refusal !== null));
@@ -48,7 +50,7 @@ export function validateInstalledCriterion(evaluator: EvaluatorDefinition, crite
 /** Identity comes from authenticated Task evaluation, never criterion parameters. Missing/unavailable settlement holds acceptance.
  * A reference hashes the complete reader-validated record and is retained by the canonical evaluation writer. */
 export async function evaluateOperationEvidence(reader: OperationEvidenceReader, evaluator: EvaluatorDefinition,
-  criterion: CriterionDefinition, identity: AttemptIdentity): Promise<OperationEvidenceResult> {
+  criterion: CriterionDefinition, identity: AttemptIdentity, binding?: OperationEvidenceBinding): Promise<OperationEvidenceResult> {
   validateInstalledCriterion(evaluator, criterion);
   if (evaluator.implementation.id !== OPERATION_EVIDENCE_EVALUATOR.implementation.id) throw new Error('TASK_EVALUATOR_INVALID');
   const context = attemptIdentitySchema.parse(identity), { commandId } = parametersSchema.parse(criterion.parameters);
@@ -67,6 +69,8 @@ export async function evaluateOperationEvidence(reader: OperationEvidenceReader,
   const observed = { commandId, digest: recordDigest, compensation: null as NonNullable<CriterionResult['effectEvidence']>['compensation'] };
   const result = (verdict: 'unknown' | 'fail', reason: NonNullable<CriterionResult['reason']>): OperationEvidenceResult =>
     Object.freeze({ verdict, reason, effectEvidence: Object.freeze({ ...observed }) });
+  const bindingReason = operationEvidenceBindingReason(binding, record.intent.actor, record.evidence?.observedAt);
+  if (bindingReason) return result(bindingReason === 'OPERATION_EVIDENCE_CONTEXT' ? 'unknown' : 'fail', bindingReason);
   if (record.state === 'refused') return result('fail', record.refusal!);
   if (record.state !== 'settled') return result('unknown', 'OPERATION_EVIDENCE_UNSETTLED');
   if (record.intent.descriptor.compensation) {
@@ -95,17 +99,17 @@ export async function evaluateOperationEvidence(reader: OperationEvidenceReader,
 export function createInstalledTerminalEvaluator(reader: OperationEvidenceReader) {
   return Object.freeze({
     async evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: Readonly<{ exitCode: number | null; signal?: string | undefined }>,
-      context?: Readonly<{ identity: AttemptIdentity }>) {
+      context?: Readonly<{ identity: AttemptIdentity; binding?: OperationEvidenceBinding }>) {
       validateInstalledCriterion(evaluator, criterion);
       if (evaluator.implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id) return processExitTerminalEvaluator.evaluate(evaluator, criterion, terminal);
       if (!context) return 'unknown' as const;
-      const result = await evaluateOperationEvidence(reader, evaluator, criterion, context.identity);
+      const result = await evaluateOperationEvidence(reader, evaluator, criterion, context.identity, context.binding);
       return { verdict: result.verdict, evidenceTypes: result.verdict === 'pass' ? ['operation-settlement'] : [],
         evidenceReferences: result.verdict === 'pass' ? [{ id: result.evidence.commandId, digest: result.evidence.digest }] : [],
         ...(result.verdict === 'pass' ? {} : { reason: result.reason }), ...(result.effectEvidence ? { effectEvidence: result.effectEvidence } : {}) };
     },
-    evaluateOperation(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, identity: AttemptIdentity) {
-      return evaluateOperationEvidence(reader, evaluator, criterion, identity);
+    evaluateOperation(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, identity: AttemptIdentity, binding?: OperationEvidenceBinding) {
+      return evaluateOperationEvidence(reader, evaluator, criterion, identity, binding);
     },
   });
 }

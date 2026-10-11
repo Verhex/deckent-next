@@ -36,7 +36,7 @@ export async function startProcess(f: Fixture, commands: readonly EffectCommand[
       await store.reserveRunTasks({ commandId: `reserve-${index}`, actor: { id: 'test-worker', issuer: 'test', subject: 'fixture' },
         scopeId: config.scopeId, runId, expectedRevision: run.revision, now: Date.now(), identities: [identity] });
       const claim = { owner: 'test-worker', request: { protocolVersion: 1 as const, identity, workspace: f.project, argv: ['operation-fixture'] } };
-      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, Date.now());
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });
       const output = await artifacts.put(config.scopeId, Buffer.from(JSON.stringify({ schemaVersion: 1, identity,
         completeness: 'complete', stdout: 'fixture worker completed; operation ledger is the acceptance evidence', stderr: '' })));
