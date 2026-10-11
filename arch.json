@@ -656,10 +656,12 @@
       "dependencies": [
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
+        "src/domain/core/audit",
         "src/domain/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/domain/core/run",
+        "src/engine/core/audit",
         "src/engine/core/authentication",
         "src/engine/core/supervisor"
       ],

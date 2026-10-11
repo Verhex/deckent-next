@@ -4,7 +4,7 @@ import { SqliteExecutionPools } from './pools.js';
 import type { RunAdmissionFilter } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { readWorkerModelPin, identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, reconcileRunLifecycle, observeRunAttempt, closesAttemptWithoutExit, RunError } from '#domain/index.js';
-import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
+import { encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
@@ -67,6 +67,31 @@ export class SqliteRunJournal {
   async loadRunReceipt(scopeId: string, commandId: string) { return readRunReceipt(this.db, scopeId, commandId); }
   async createExecutionPool(input: ExecutionPool) { return this.transaction(() => new SqliteExecutionPools(this.db).create(input)); }
   async loadRun(scopeId: string, runId: string) { return readRunSnapshot(this.db, scopeId, runId); }
+  async fenceLostDispatch(input: LostDispatchWrite, audit: LostDispatchAudit): Promise<RunReceipt> {
+    const { write, commandId, command } = encodeLostDispatchWrite(input), { scopeId, runId, attemptId } = write.identity;
+    if (typeof audit !== 'function') throw new DispatchError('DISPATCH_NOT_ADMITTED');
+    return this.transaction(() => {
+      const replay = this.receipt(scopeId, runId, commandId, command);
+      const prior = this.db.prepare('SELECT command,snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
+      if (replay) { assertLostDispatchReplay(prior, replay, write); return replay; }
+      if (prior) throw new DispatchError('DISPATCH_CORRUPT');
+      const { run, dispatch } = readRunBoundDispatch(this.db, write.identity);
+      const row = this.db.prepare('SELECT revision,snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
+      const { attempt, snapshot } = proposeLostDispatchFence(run, row, dispatch, write);
+      const encoded = JSON.stringify(attempt);
+      const updated = this.db.prepare('UPDATE attempts SET revision=?,snapshot=? WHERE scope_id=? AND attempt_id=? AND revision=?')
+        .run(attempt.revision, encoded, scopeId, attemptId, write.expectedAttemptRevision);
+      if (updated.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
+      const projected = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
+        .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, write.expectedRunRevision);
+      if (projected.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
+      const sealed = assertLostDispatchAudit(audit(new SqliteAuditStore(this.db), snapshot), snapshot, command, write);
+      const logged = this.db.prepare('SELECT record FROM audit_events WHERE scope_id=? AND event_id=?').get(scopeId, sealed.event.eventId);
+      if (logged?.record !== JSON.stringify(sealed)) throw new DispatchError('DISPATCH_CORRUPT');
+      this.db.prepare('INSERT INTO attempt_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)').run(scopeId, commandId, command, encoded);
+      return this.record({ commandId, command, snapshot });
+    });
+  }
   async loadRunExecutionPolicy(scopeInput: string, runInput: string) {
     const scopeId = identitySchema.parse(scopeInput); const runId = identitySchema.parse(runInput);
     try {

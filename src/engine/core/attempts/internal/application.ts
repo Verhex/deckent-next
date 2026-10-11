@@ -32,7 +32,8 @@ export class AttemptApplication {
     const replay = await this.store.receipt(scopeId, commandId);
     if (replay) {
       if (replay.command !== canonical) throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
-      return replay;
+      return this.store.commit({ ...replay, expectedRevision: replay.snapshot.revision,
+        ...(action.kind === 'cancel' ? { cancellationActor: principal } : {}) });
     }
     if (action.kind === 'create') return this.store.commit({ commandId, command: canonical,
       expectedRevision: null, snapshot: createAttempt(action.identity) });

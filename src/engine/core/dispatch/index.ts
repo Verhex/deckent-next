@@ -10,3 +10,7 @@ export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryE
 export { parseRetainedOutputEnvelope, verifyRetainedOutputEnvelope, verifyRetainedFileReceipts } from './internal/output.js';
 export { assessLostDispatch, dispatchFenceReceiptId } from './internal/loss.js';
 export { assertDispatchNotFenced } from './internal/fence.js';
+export { lostDispatchWriteSchema, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, attemptDispatchWriteToken } from './internal/fence-write.js';
+export type { LostDispatchWrite, LostDispatchStore, LostDispatchAudit, LostDispatchReceipt } from './internal/fence-write.js';
+export { LostDispatchApplication } from './internal/fence-application.js';
+export type { LostDispatchObserver } from './internal/fence-application.js';
