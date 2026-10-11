@@ -1,7 +1,7 @@
 import { composeCore } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
 import { readLocalOsIdentity, resolveDockerTaskProfile, isNativeCodingTemplate, nativeCodingTemplateBase } from '#adapters/index.js';
-import { validateInstalledProcessExitEvaluator } from '#capabilities/index.js';
+import { validateInstalledEvaluator } from '#capabilities/index.js';
 import { InstallationPreviewApplication, InstallationProfileError, type InstallationPreviewChoices } from '#engine/index.js';
 import { immutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
 import { PROJECT_CONFIG_PATH, inspectProductLayout, resolveProductLayout } from '#platform/index.js';
@@ -33,7 +33,7 @@ export async function prepareSuppliedInstallation(projectRoot: string, supplied:
       const resolved = resolveDockerTaskProfile(isNativeCodingTemplate(profile) ? nativeCodingTemplateBase(profile) : profile); // K3 template image
       return { imageId: resolved.options.imageId };
     },
-    validateEvaluator: validateInstalledProcessExitEvaluator,
+    validateEvaluator: validateInstalledEvaluator,
   });
   return application.prepare(projectRoot, supplied, { principal: { issuer: identity.issuer, subject: identity.subject }, allowShutdown: choices.allowShutdown });
 }

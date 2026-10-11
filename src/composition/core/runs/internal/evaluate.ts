@@ -2,12 +2,12 @@ import { prepareConfiguredEvaluationPatch } from '#composition/core/workspace-pa
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
-import { processExitTerminalEvaluator } from '#capabilities/index.js';
+import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
 import { authenticate, describeTaskEvaluationReceipt, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, type TaskEvaluationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-/** Installed process-exit evaluator. The current registry cannot replace a Run's pinned definitions. */
+/** Installed implementation selection. The current registry cannot replace a Run's pinned definitions. */
 export async function evaluateConfiguredTask(projectRoot: string, input: TaskEvaluationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = taskEvaluationCommandSchema.parse(input);
@@ -20,7 +20,7 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
     try {
       const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       // One retained dispatch-output receipt is the supported producer contract, not a configurable task limit.
-      const application = new TaskEvaluationApplication(store, verifier, authorization, processExitTerminalEvaluator, artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes }, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, undefined, async identity => { await prepareConfiguredEvaluationPatch(projectRoot, identity, options); });
+      const application = new TaskEvaluationApplication(store, verifier, authorization, createInstalledTerminalEvaluator(store), artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes }, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, undefined, async identity => { await prepareConfiguredEvaluationPatch(projectRoot, identity, options); });
       return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: describeTaskEvaluationReceipt(await application.execute(command)) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
