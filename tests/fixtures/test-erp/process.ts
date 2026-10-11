@@ -50,10 +50,27 @@ export async function startProcess(f: Fixture, commands: readonly EffectCommand[
     const store = await open(); let expectedRevision: number;
     try { expectedRevision = (await store.loadRun(config.scopeId, runId))!.revision; } finally { store.close(); }
     const command = { schemaVersion: 1 as const, commandId, identity, expectedRevision };
-    const result = f.runtime ? await f.runtime.command<Awaited<ReturnType<typeof evaluateTask>>>(['task', 'evaluate', '--scope', identity.scopeId, '--run', identity.runId,
+    let result: Awaited<ReturnType<typeof evaluateTask>>;
+    try { result = f.runtime ? await f.runtime.command<Awaited<ReturnType<typeof evaluateTask>>>(['task', 'evaluate', '--scope', identity.scopeId, '--run', identity.runId,
       '--task', identity.taskId, '--attempt', identity.attemptId, '--layout-revision', identity.layoutRevision, '--generation', String(identity.generation),
       '--command-id', commandId, '--expected-revision', String(expectedRevision)])
-      : await evaluateTask(f.project, command, f.options);
+      : await evaluateTask(f.project, command, f.options); }
+    catch (error) {
+      try {
+        const reader = await open();
+        try {
+          f.evaluations.push({ command, failure: error && typeof error === 'object' && 'code' in error ? error.code : String(error),
+            snapshot: await reader.loadRun(config.scopeId, runId), dispatch: await reader.loadBoundDispatch(identity),
+            effects: await Promise.all(commands.map(async value => ({ commandId: value.commandId,
+              record: await reader.loadEffect(config.scopeId, value.commandId),
+              compensation: await reader.loadEffectCompensation(config.scopeId, value.commandId) }))), workerCustody: 'test-only' });
+        } finally { reader.close(); }
+      } catch (diagnostic) {
+        f.evaluations.push({ command, failure: String(error), diagnosticFailure: String(diagnostic), workerCustody: 'test-only' });
+      }
+      // Diagnostic collection must preserve the original product refusal and the test's assertion.
+      throw error;
+    }
     const reader = await open();
     try {
       const receipt = (await reader.loadRunReceipt(config.scopeId, commandId))!;
