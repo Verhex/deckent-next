@@ -168,6 +168,12 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
       transaction = true;
       const dispatch = this.db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
       if (dispatch) {
+        if (cancellationActor) {
+          let record;
+          try { record = dispatchRecordSchema.parse(JSON.parse(String(dispatch.record))); }
+          catch { throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT'); }
+          if (!sameAttemptIdentity(record.request.identity, snapshot.identity)) throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
+        }
         const token = attemptDispatchWriteToken(dispatch.record, snapshot.identity, input.commandId);
         const fence = readDispatchFence(this.db, token.record);
         if (fence && !cancellationActor) throw new DispatchError('DISPATCH_FENCED');

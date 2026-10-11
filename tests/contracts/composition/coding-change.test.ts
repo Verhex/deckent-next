@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile, stat } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, type TestContext } from 'vitest';
-import { FileArtifactStore, readMonitorLedger, openSqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, readMonitorLedger, openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
 import { patchDigest, patchExclusions, projectRunView, projectMonitorRun } from '#engine/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -92,8 +92,11 @@ it.for([[0, undefined, 'failed'], [1, undefined, 'accepted'], [0, true, 'accepte
       if (phase === 'failed') { expect(detail.split(reason)).toHaveLength(2); expect(detail).not.toContain(empty); }
       else { expect(detail).not.toContain(reason); if (files === 0) expect(detail).toContain(empty); }
     }
-    const reader = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid');
-    try { expect(projectRunView(await reader.loadRun('s', 'r'))).toEqual(first.evaluation.run); } finally { reader.close(); }
+    const reader = await openSqliteInventoryReader(f.path, { busyTimeoutMs: 20 });
+    try {
+      const snapshot = (await reader.loadRun('s', 'r'))!;
+      expect(projectRunView(snapshot, [], await reader.loadRunEvaluations(snapshot))).toEqual(first.evaluation.run);
+    } finally { reader.close(); }
   });
 
 it('missing coding patch is parked; a new retained patch returns once without extending the deadline', async context => {
