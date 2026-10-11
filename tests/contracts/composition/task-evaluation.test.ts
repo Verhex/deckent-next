@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRun, inspectConfiguredWorkerTranscript } from '../../../src/index.js';
+import { createRun, inspectRun, inspectConfiguredWorkerTranscript } from '../../../src/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
@@ -14,7 +14,7 @@ import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'private output') {
+async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'private output', twoTasks = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-configured-evaluation-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const configPath = join(project, '.deckent/config.json'); const registry = fixtureDockerRegistry(['purchase']);
@@ -26,11 +26,12 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
   const policy = async (evaluate: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
     { id: 'run', effect: 'allow', actions: ['create', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } }] : []),
+    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: twoTasks ? ['a', 'a2'] : ['a'] } }] : []),
   ] }), { mode: 0o600 });
   await policy(true);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept configured process exits', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes } }] };
+  if (twoTasks) graph.tasks.push({ id: 't2', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] });
   await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph }, options);
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: opened.layout.revision };
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
@@ -48,6 +49,31 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
 }
 
 describe.skipIf(process.platform === 'win32')('configured task evaluation', () => {
+  it('returns both Tasks canonical acceptance exactly as inspection, including replay of the earlier revision', async () => {
+    const f = await fixture(0, [0], 'private output', true);
+    const first = await evaluateConfiguredTask(f.project, f.command, f.options);
+    const identity = { ...f.command.identity, taskId: 't2', attemptId: 'a2' };
+    const opened = await openConfiguredAttemptStore(f.project, f.options); opened.store.close();
+    const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' },
+      { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
+    try {
+      await store.reserveRunTasks({ commandId: 'reserve-second', actor: { id: 'fixture', issuer: 'test', subject: 'service' },
+        scopeId: 's', runId: 'r', expectedRevision: first.evaluation.run.revision, now: 0, identities: [identity] });
+      const claim = { owner: 'fixture-worker', request: { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['private-task-command'] } };
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
+      const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });
+      const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'second output', stderr: '' })));
+      await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: 'fixture-second', exitCode: 0, interrupted: false });
+    } finally { store.close(); }
+    const secondCommand = { ...f.command, commandId: 'evaluation-second', identity, expectedRevision: first.evaluation.run.revision + 2 };
+    const second = await evaluateConfiguredTask(f.project, secondCommand, f.options);
+    const inspected = await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options);
+    expect(second.evaluation.run.tasks.map(task => task.acceptance)).toEqual(inspected.run!.tasks.map(task => task.acceptance));
+    expect(second.evaluation.run.tasks.map(task => task.acceptance!.evaluationId)).toEqual(['evaluation', 'evaluation-second']);
+    expect(await evaluateConfiguredTask(f.project, secondCommand, f.options)).toEqual(second);
+    expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
+    expect(first.evaluation.run.tasks[1]!.acceptance!.evaluationId).toBeNull();
+  });
   it.each([[0, 'accepted', [0]], [7, 'failed', [0]], [7, 'accepted', [7]]] as const)(
     'derives exit %s from the pinned evaluator and projects %s for accepted codes %j', async (exitCode, phase, acceptedExitCodes) => {
     const f = await fixture(exitCode, [...acceptedExitCodes]); const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.admission = null;

@@ -36,10 +36,10 @@ type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'l
   & Pick<WorkerEventLogStore, 'loadWorkerEventLog'> & Partial<Pick<RunLifecycleStore, 'commitRunLifecycle'>>;
 
 /** Public result of an evaluation receipt: the Run view and, for a pinned worker attempt, the recorded model evidence (WORKER-CURRENCY-2). */
-export function describeTaskEvaluationReceipt(receipt: RunReceipt) {
+export function describeTaskEvaluationReceipt(receipt: RunReceipt, evaluations?: readonly TaskEvaluation[]) {
   const evidence = (JSON.parse(receipt.command) as { evaluation?: TaskEvaluation }).evaluation;
   const model = evidence?.model;
-  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot, [], evidence ? [evidence] : []), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
+  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot, [], evaluations ?? (evidence ? [evidence] : [])), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
 }
 /** Authenticated evaluation ingress. Wire input carries no verdict, evaluator, artifact, actor or paths.
  * Installed evaluator code consumes pinned definitions and verified terminal/output custody.

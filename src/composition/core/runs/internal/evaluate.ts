@@ -1,7 +1,7 @@
 import { prepareConfiguredEvaluationPatch } from '#composition/core/workspace-patch/index.js';
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore, inventoryReadsPerCall } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
 import { authenticate, describeTaskEvaluationReceipt, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, type TaskEvaluationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -21,7 +21,10 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
       const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       // One retained dispatch-output receipt is the supported producer contract, not a configurable task limit.
       const application = new TaskEvaluationApplication(store, verifier, authorization, createInstalledTerminalEvaluator(store), artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes }, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, undefined, async identity => { await prepareConfiguredEvaluationPatch(projectRoot, identity, options); });
-      return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: describeTaskEvaluationReceipt(await application.execute(command)) });
+      const receipt = await application.execute(command);
+      // Use inspection's canonical receipt reader, pinned to this response's revision even on replay.
+      const evaluations = await inventoryReadsPerCall(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }).loadRunEvaluations(receipt.snapshot);
+      return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: describeTaskEvaluationReceipt(receipt, evaluations) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

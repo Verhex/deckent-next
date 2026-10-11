@@ -4,10 +4,10 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FileArtifactStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore, openSqliteInventoryReader, type SqliteAttemptStore } from '#adapters/index.js';
 import { effectRecordSchema, settleEffect, refuseEffect, markEffectUnknown, type EffectRecord } from '#domain/index.js';
 import { createInstalledTerminalEvaluator, OPERATION_EVIDENCE_EVALUATOR, validateInstalledCriterion } from '#capabilities/index.js';
-import { TaskEvaluationApplication, resolveExecutionRegistry, describeTaskEvaluationReceipt, projectRunView, selectRunAcceptanceEvaluations } from '#engine/index.js';
+import { TaskEvaluationApplication, RunInspectionApplication, resolveExecutionRegistry, describeTaskEvaluationReceipt, projectRunView, selectRunAcceptanceEvaluations } from '#engine/index.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import { overlay, profile } from '../domain/acceptance-fixture.js';
 
@@ -101,6 +101,19 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     const command = { ...f.command, identity: next, commandId: 'evaluate-second', expectedRevision: 5 };
     const second = await f.app().execute(command);
     expect(second.snapshot.progress.map(task => task.phase)).toEqual(['accepted', 'accepted']);
+    const reader = await openSqliteInventoryReader(f.path, { busyTimeoutMs: 1000 });
+    try {
+      const response = describeTaskEvaluationReceipt(second, await reader.loadRunEvaluations(second.snapshot));
+      const inspection = new RunInspectionApplication(reader, { async verify() { return principal; } }, { async authorize() {} });
+      const inspected = await inspection.inspect({ schemaVersion: 1, scopeId: 's', runId: 'run' });
+      expect(response.run.tasks).toEqual(inspected!.tasks);
+      expect(response.run.tasks.map(task => task.acceptance!.evaluationId)).toEqual(['evaluate', 'evaluate-second']);
+      expect(response.run.tasks.map(task => task.acceptance!.score)).toEqual([1, 1]);
+      expect(response.run.tasks[1]!.acceptance!.results![0]!.effectEvidence).toEqual(JSON.parse(second.command).evaluation.criteria[0].effectEvidence);
+      if (!legacy) expect(response.run.tasks[0]!.acceptance!.results![0]!.effectEvidence).toEqual(JSON.parse(first.command).evaluation.criteria[0].effectEvidence);
+      const replay = describeTaskEvaluationReceipt(first, await reader.loadRunEvaluations(first.snapshot));
+      expect(replay.run.tasks[1]!.acceptance!.evaluationId).toBeNull();
+    } finally { reader.close(); }
     expect(describeTaskEvaluationReceipt(second).run.tasks[1]!.acceptance!.results![0]).toMatchObject({ verdict: 'pass', evidenceTypes: ['operation-settlement'] });
     const recorded = JSON.parse(second.command); delete recorded.action;
     expect(await f.store.commitTaskEvaluation(recorded)).toEqual(second);
