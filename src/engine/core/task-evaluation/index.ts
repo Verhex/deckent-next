@@ -8,3 +8,4 @@ export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEv
 export { deriveAcceptanceMetric, selectRunAcceptanceEvaluations } from './internal/metrics.js';
 export { criterionEvidenceDigest } from './internal/recovery.js';
 export { bindUsedOperationEvidence } from './internal/operation-binding.js';
+export { selectEvaluationEffectEvidence, assertEvaluationEffectEvidence, assertEvaluationDigestEvidence } from './internal/custody.js';
