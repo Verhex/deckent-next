@@ -193,6 +193,8 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 
 ### Task-centered execution — owner checkpoint 2026-09-17
 
+- **M5-BIND r9 query parity (author candidate, 2026-10-11):** configured task evaluation and Run inspection share worker-report/result-brief observation and delivery outlook, under current per-attempt `read-output` authority. Both use the canonical Run projection with retained handoff and acceptance evidence; evaluation replay pins the receipt's snapshot/bindings rather than a later Run revision. Inspection's installation pool remains a current observation outside the evaluation receipt. Author proof: external `proof/M5-BIND-2026-10-11/r9-view/`; hosted, installed-binary and independent acceptance remain separate.
+
 - **RESTART-RECOVERY author candidate (W11, 2026-10-10):** runtime service start always prepares the existing bounded reconciliation loop.
   Explicit `reconciliationRuntime` scopes and limits win; without that section, the service uses its installation-owned scopes
   registered under start custody, `runRuntime` polling/backoff/page limits, `inspection.maxPageSize` and service execution concurrency.
