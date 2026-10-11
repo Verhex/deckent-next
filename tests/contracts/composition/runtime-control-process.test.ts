@@ -38,7 +38,8 @@ async function bounded<T>(promise: Promise<T>, label: string, milliseconds = 500
 }
 function waitForJson(child: Child, predicate: (value: Record<string, unknown>) => boolean): Promise<Record<string, unknown>> {
   return new Promise((resolveValue, reject) => {
-    let buffer = '';
+    let buffer = '', stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => { stderr = (stderr + String(chunk)).slice(-2048); });
     const data = (chunk: Buffer) => {
       buffer += String(chunk); const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
       for (const line of lines) try {
@@ -47,7 +48,7 @@ function waitForJson(child: Child, predicate: (value: Record<string, unknown>) =
       } catch { /* Process failure is reported with bounded exit evidence below. */ }
     };
     child.stdout.on('data', data); child.once('error', reject);
-    child.once('close', code => reject(new Error(`PROCESS_CLOSED_${code}`)));
+    child.once('close', code => reject(new Error(`PROCESS_CLOSED_${code}:${stderr.trim()}`)));
   });
 }
 async function runJson(args: readonly string[], fixture: Awaited<ReturnType<typeof projectFixture>>) {
@@ -116,7 +117,13 @@ it.skipIf(process.platform !== 'linux')('compiled MCP descriptor and shutdown to
     cwd: fixture.project, env: fixture.env, stderr: 'pipe' });
   const client = new Client({ name: 'runtime-control-process', version: '1' });
   try {
-    await bounded(client.connect(transport), 'MCP_CONNECT_TIMEOUT');
+    let startupError = '';
+    const started = performance.now();
+    transport.stderr?.on('data', (chunk: Buffer) => { startupError = (startupError + String(chunk)).slice(-2048); });
+    try { await bounded(client.connect(transport), 'MCP_CONNECT_TIMEOUT'); }
+    catch (error) { throw new Error(`MCP_CONNECT_FAILED:${JSON.stringify({ elapsedMs: Math.round(performance.now() - started), stderr: startupError })}`, { cause: error }); }
+    finally { if (process.env['DECKENT_TEST_STARTUP_COST'] === '1') console.error('STARTUP-COST', JSON.stringify({
+      phase: 'runtime-control-mcp-connect', elapsedMs: Math.round(performance.now() - started) })); }
     const described = await bounded(client.callTool({ name: 'runtime_service_descriptor', arguments: {} }), 'MCP_DESCRIPTOR_TIMEOUT');
     expect(described.isError).not.toBe(true);
     const descriptor = described.structuredContent as { instanceId: string; identity: { serviceId: string } };
