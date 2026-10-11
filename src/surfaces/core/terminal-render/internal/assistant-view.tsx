@@ -1,4 +1,5 @@
 import { Box, Text, useAnimation, useWindowSize } from 'ink';
+import { SystemTrustedClock, type TrustedClock } from '#platform/index.js';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import type { ToolResultSummary } from '#surfaces/core/terminal-kit/index.js';
 import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolUnit, TurnStage, WaitingView } from './assistant-stream.js';
@@ -63,6 +64,7 @@ export type AssistantRenderLabels = Readonly<{
 
 const INDENT = 2;
 const LIVE_TAIL_LINES = 8;
+const SYSTEM_CLOCK = new SystemTrustedClock();
 // Until the catalog carries `terminal.render.toolCleanup.*` the finished line falls back to short, language-neutral text
 // (TERM-INTERACTIVE's `@file` notice pattern); `labels.toolCleanup` takes over once the lead wires the real catalog keys.
 const NEUTRAL_TOOL_CLEANUP: NonNullable<AssistantRenderLabels['toolCleanup']> = { 'group-ended': 'cleanup: group-ended', unverified: 'cleanup: unverified' };
@@ -171,11 +173,11 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
 
 /** Dim single-line reasoning narration; it only exists while reasoning streams and collapses when the answer starts. Under it, the
  * last lines of the reasoning itself (TL-A D6), dim and already sanitized; empty when the owner turned the preview off. */
-export function ReasoningNarration({ narration, labels, preview = [] }: { readonly narration: Narration; readonly labels: AssistantRenderLabels;
-  readonly preview?: readonly string[] }) {
+export function ReasoningNarration({ narration, labels, clock, preview = [] }: { readonly narration: Narration; readonly labels: AssistantRenderLabels;
+  readonly clock: TrustedClock; readonly preview?: readonly string[] }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const { frame } = useAnimation({ interval: 120 });
-  const text = fillTemplate(labels.thinking, { tokens: tokenText(narration.tokens, narration.approximate), seconds: seconds(Date.now() - narration.startedAtMs, 0) });
+  const text = fillTemplate(labels.thinking, { tokens: tokenText(narration.tokens, narration.approximate), seconds: seconds(clock.sample().wallMs - narration.startedAtMs, 0) });
   return (
     <Box flexDirection="column" paddingLeft={INDENT}>
       <Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text>
@@ -185,18 +187,19 @@ export function ReasoningNarration({ narration, labels, preview = [] }: { readon
 }
 
 /** A silent wait with its live seconds (TL-A D1): the model preparing its answer, or the service summarizing older messages. */
-function WaitingLine({ waiting, labels }: { readonly waiting: WaitingView; readonly labels: AssistantRenderLabels }) {
+function WaitingLine({ waiting, labels, clock }: { readonly waiting: WaitingView; readonly labels: AssistantRenderLabels; readonly clock: TrustedClock }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const { frame } = useAnimation({ interval: 120 });
   // Whole seconds waited so far (as the status row counts), never rounded up.
-  const text = fillTemplate((labels.waiting ?? NEUTRAL_WAITING)[waiting.kind], { seconds: Math.floor(Math.max(0, Date.now() - waiting.sinceMs) / 1000) });
+  const text = fillTemplate((labels.waiting ?? NEUTRAL_WAITING)[waiting.kind], { seconds: Math.floor(Math.max(0, clock.sample().wallMs - waiting.sinceMs) / 1000) });
   return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text></Box>;
 }
 
 /** The small dynamic region of a streaming answer: narration plus the unfinished tail, bounded to its last lines. */
-export function AssistantLive({ tail, narration, labels, lead, activeTool = null, maxLines = LIVE_TAIL_LINES, waiting = null, reasoningPreview = [] }: {
+export function AssistantLive({ tail, narration, labels, lead, activeTool = null, maxLines = LIVE_TAIL_LINES, waiting = null, reasoningPreview = [], clock = SYSTEM_CLOCK }: {
   readonly tail: LiveTail; readonly narration: Narration | null; readonly labels: AssistantRenderLabels; readonly lead: boolean;
   readonly activeTool?: ActiveTool | null; readonly maxLines?: number;
+  readonly clock?: TrustedClock;
   /** TL-A: the silent wait to show, and the reasoning preview lines (empty when hidden). */
   readonly waiting?: WaitingView | null; readonly reasoningPreview?: readonly string[];
 }) {
@@ -207,13 +210,13 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
   const hidden = Math.max(0, lines.length - maxLines);
   return (
     <Box flexDirection="column">
-      {waiting && <WaitingLine waiting={waiting} labels={labels} />}
-      {narration && <ReasoningNarration narration={narration} labels={labels} preview={reasoningPreview} />}
+      {waiting && <WaitingLine waiting={waiting} labels={labels} clock={clock} />}
+      {narration && <ReasoningNarration narration={narration} labels={labels} clock={clock} preview={reasoningPreview} />}
       {lead && lines.length > 0 && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
       {hidden > 0 && <Box paddingLeft={INDENT}><Text {...palette.muted}>{glyphs.ellipsis} {fillTemplate(labels.moreAbove, { count: hidden })}</Text></Box>}
       {lines.length > 0 && <Box paddingLeft={INDENT}><RenderedLines lines={lines.slice(hidden)} /></Box>}
       <Box paddingLeft={INDENT}><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>
-      {activeTool && <ToolRunning tool={activeTool} labels={labels} />}
+      {activeTool && <ToolRunning tool={activeTool} labels={labels} clock={clock} />}
     </Box>
   );
 }
@@ -222,10 +225,10 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
 const TOOL_OUTPUT_LINES = 3;
 
 /** The one tool call running now, with a spinner, its live seconds and the last lines of its output. */
-function ToolRunning({ tool, labels }: { readonly tool: ActiveTool; readonly labels: AssistantRenderLabels }) {
+function ToolRunning({ tool, labels, clock }: { readonly tool: ActiveTool; readonly labels: AssistantRenderLabels; readonly clock: TrustedClock }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const { frame } = useAnimation({ interval: 120 });
-  const text = fillTemplate(labels.toolRunning, { tool: toolText(tool, labels), seconds: seconds(Date.now() - tool.startedAtMs) });
+  const text = fillTemplate(labels.toolRunning, { tool: toolText(tool, labels), seconds: seconds(clock.sample().wallMs - tool.startedAtMs) });
   const tail = tool.output.replace(/\n+$/u, '').split('\n').filter(line => line.length > 0).slice(-TOOL_OUTPUT_LINES);
   return (
     <Box flexDirection="column" paddingLeft={INDENT}>

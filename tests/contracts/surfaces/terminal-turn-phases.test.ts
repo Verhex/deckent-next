@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { Writable } from 'node:stream';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SystemTrustedClock, type TrustedClock } from '#platform/index.js';
 import { AssistantLive, fitStatusRow, footerText, openAssistantStream, reasoningPreviewLines, renderAssistantStream, worklineStatusSegments,
   type AssistantRenderLabels, type AssistantStreamStep, type FooterUnit } from '#surfaces/core/terminal-render/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette, type TurnDelta } from '#surfaces/core/terminal/index.js';
@@ -125,27 +126,31 @@ class Screen extends Writable {
 }
 const views: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const view of views.splice(0)) view.unmount(); });
-function live(step: AssistantStreamStep, showReasoning = true) {
+function live(step: AssistantStreamStep, clock: TrustedClock, showReasoning = true) {
   const stdout = new Screen();
   views.push(render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(AssistantLive, {
-    tail: step.liveTail, narration: step.narration, labels: WORKLINE_TEST_LABELS.render, lead: true, activeTool: step.activeTool, waiting: step.waiting,
+    tail: step.liveTail, narration: step.narration, labels: WORKLINE_TEST_LABELS.render, lead: true, activeTool: step.activeTool, waiting: step.waiting, clock,
     reasoningPreview: showReasoning ? step.reasoningPreview : [] }) }), { stdout: stdout as unknown as NodeJS.WriteStream, debug: true, patchConsole: false }));
   return stdout;
 }
 
 describe('live region (D1 + D6)', () => {
   it('draws the waiting line with its live seconds, and the reasoning preview under the narration unless it is hidden', async () => {
-    const now = Date.now();
-    const summarizing = live(play([[context(true), now - 2_300]], now - 3_000).at(-1)!);
+    const now = 1_700_000_000_000;
+    const clock = new SystemTrustedClock(() => now);
+    const summarizing = live(play([[context(true), now - 2_300]], now - 3_000).at(-1)!, clock);
     await settle(20);
     expect(summarizing.text).toMatch(/summarizing earlier messages · 2s/u);
-    const preparing = live(openAssistantStream(now - 4_200));
+    const preparing = live(openAssistantStream(now - 4_200), clock);
     await settle(20);
     expect(preparing.text).toMatch(/model is preparing a response · 4s/u);
+    const advanced = live(openAssistantStream(now - 4_200), new SystemTrustedClock(() => now + 1_000));
+    await settle(20);
+    expect(advanced.text).toMatch(/model is preparing a response · 5s/u);
     const thinking = play([[{ kind: 'reasoning', text: 'PLAN-A\nPLAN-B' }, now]], now).at(-1)!;
-    const shown = live(thinking); await settle(20);
+    const shown = live(thinking, clock); await settle(20);
     expect(shown.text).toContain('THINKING'); expect(shown.text).toContain('PLAN-A'); expect(shown.text).toContain('PLAN-B');
-    const hidden = live(thinking, false); await settle(20);
+    const hidden = live(thinking, clock, false); await settle(20);
     expect(hidden.text).toContain('THINKING'); expect(hidden.text).not.toContain('PLAN-');
   });
 });

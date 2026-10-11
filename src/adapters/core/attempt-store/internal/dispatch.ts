@@ -1,8 +1,9 @@
+import { readDispatchFence } from './dispatch-fence.js';
 import { grantDispatchLaunch } from './launch.js';
 import { SqliteRunDispatch } from './run-dispatch.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity, type LostDispatchAction } from '#domain/index.js';
 import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
   projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
@@ -17,6 +18,9 @@ export class SqliteDispatchJournal {
     try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
     if (!sameSandboxRequest(record.request, request)) throw new DispatchError('DISPATCH_CONFLICT');
     return record;
+  }
+  private assertNotFenced(record: DispatchRecord, action: Exclude<LostDispatchAction, 'release-slot'>): void {
+    void action; if (readDispatchFence(this.db, record)) throw new DispatchError('DISPATCH_FENCED');
   }
   private transaction<T>(work: () => T): T {
     let active = false;
@@ -35,7 +39,7 @@ export class SqliteDispatchJournal {
         let record; let attempt;
         try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
         if (record.request.identity.scopeId !== query.scopeId || record.request.identity.attemptId !== row.attempt_id || !sameAttemptIdentity(record.request.identity, attempt.identity)) throw new DispatchError('DISPATCH_CORRUPT');
-        return Object.freeze({ identity: record.request.identity, owner: record.owner, launch: record.launch, terminal: record.terminal,
+        return Object.freeze({ ...(readDispatchFence(this.db, record) ? { fenced: true } : {}), identity: record.request.identity, owner: record.owner, launch: record.launch, terminal: record.terminal,
           cancellationRequested: attempt.cancelRequested, outputRecorded: !!record.output });
       });
       return Object.freeze({ entries: Object.freeze(entries), nextAfter: rows.length > query.limit ? entries.at(-1)!.identity.attemptId : null });
@@ -62,12 +66,24 @@ export class SqliteDispatchJournal {
       return record;
     });
   }
+  async retainDispatchWorker(claim: DispatchClaim, worker: NonNullable<DispatchRecord['worker']>) {
+    return this.transaction(() => {
+      const existing = this.read(claim.request);
+      if (!existing || existing.owner !== claim.owner || existing.launch !== 'granted') throw new DispatchError('DISPATCH_CONFLICT');
+      if (readDispatchFence(this.db, existing)) throw new DispatchError('DISPATCH_FENCED');
+      if (existing.worker && JSON.stringify(existing.worker) !== JSON.stringify(worker)) throw new DispatchError('DISPATCH_CONFLICT');
+      const record = dispatchRecordSchema.parse({ ...existing, worker });
+      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
+      return record;
+    });
+  }
   async retainDispatchOutput(input: DispatchClaim, value: ArtifactReceipt) {
     const claim = dispatchClaimSchema.parse(input); const receipt = artifactReceiptSchema.parse(value);
     if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      this.assertNotFenced(existing, 'output');
       if (existing.output) {
         if (existing.output.digest !== receipt.digest || existing.output.byteLength !== receipt.byteLength || existing.output.scopeId !== receipt.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
         return existing;
@@ -83,7 +99,9 @@ export class SqliteDispatchJournal {
     if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
     return this.transaction(() => {
       const existing = this.read(claim.request);
-      if (!existing?.terminal || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      this.assertNotFenced(existing, 'patch');
+      if (!existing.terminal) throw new DispatchError('DISPATCH_CONFLICT');
       if (existing.patch) {
         if (JSON.stringify(existing.patch) !== JSON.stringify(receipt)) throw new DispatchError('DISPATCH_CONFLICT');
         return existing;
@@ -123,6 +141,7 @@ export class SqliteDispatchJournal {
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      this.assertNotFenced(existing, 'finish-dispatch');
       if (existing.terminal) {
         const merged = mergeDispatchTerminal(existing.terminal, terminal);
         if (merged === existing.terminal) return existing;

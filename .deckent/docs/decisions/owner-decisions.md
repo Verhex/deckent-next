@@ -360,3 +360,31 @@ Ayrıntı ilgili PLAN satırlarında (BETA-LAUNCH) ve CHANGELOG alpha.28 satır�
 - **BETA-LAUNCH:** Batch G 1.0.0-alpha.28 olarak iner; 1.0.0-beta.1 M5 bağlama dalgası (D1 kayıt/ekran bağlama, D2 N1 devir kanıtı, K10 gerçek kilit, ilk uçtan uca test-ERP süreci) inince verilir. Bu karar 2026-10-11 beta tarihinin yerine geçer. Tanıtım ve dış katkı tarihi beta inince yeniden sorulur.
 - **ASTRA-KAPSAMI:** alpha.25, alpha.26 ve alpha.27 için iniş sonrası inceleme; Batch G için inişten önce inceleme (inişi durdurmaz); eski iki istek iptal.
 - **N1-OTOMATİK-GEÇİŞ:** her canlı geçişten sonra lead N1'i otomatik geçirir ve sağlık kontrolü yapar; sağlık başarısız olursa N1 önceki sürüme sabitlenir.
+
+## Owner kararları — 2026-10-11 (M5 Brain/Auditor/Nervous tasarımı, K-F kayıt modeli, bağlama dalgası)
+Kaynak: dış `proof/M5-BRAIN-DESIGN-2026-10-11/OWNER-DECISIONS.md`, `proof/M5-BIND-2026-10-11/KF-OWNER-ANSWERS.md`, `LEAD-DECISIONS.md`. Hepsi kabul edilen hedef; uygulama bekliyor (PLAN: M5-D5/D6/D7, M5-RECORD, M5-AGENT-TYPES, M5-AGENT-DEF; ARCHITECTURE "M5 design").
+- **K-A Brain kapsamı:** düşük risk kalıcı kabul; Brain yalnız plan önerir, owner'ın kalıcı kabulüyle düşük riskli WorkClass önerileri deterministik kapıdan doğrudan geçer, diğerleri sorar; Brain yetki vermez (Jev 0,76/0,69).
+- **K-B Nervous kalıcı onaylı bakım:** tekrarsız küçük liste (Run duraklatma, sonlanma kanıtıyla ölü slot bırakma, servis bileşeni yeniden başlatma); yeni Attempt asla otomatik değil, K4 a (Jev 0,97/0,70).
+- **K-C Ölümsüz agent:** owner kendi tasarımını verdi ve ayrıca detaylandıracak: nöbetçi (event-action, 24 saat canlı, eşik kural + persona ile, LLM'siz algılama) ve rutin (zamanlanmış, deterministik "değişim yok") agent; tetiklemesiz yönetim. Detay gelene kadar kod yok (Jev 0,47/0,44 eşit).
+- **K-D Hafıza başlangıcı:** yeni dergi + legacy kayıtlar bir kez, yalnız aday ders olarak, incelemeyle (Jev 0,87/0,60).
+- **K-E Sağlayıcı uyum sırası:** önce dışa aktarma, sonra içe aktarma, Managed Agents en son; içe aktarma yetki vermez; Agent Builder hedeflenmez (Jev 0,64/0,63).
+- **K-F S1 deterministik:** aynı kayıtlı girdi aynı karar ve değiştirilemez dayanak; iki katmanlı kayıt (senkron ince karar defteri etkiden önce mühürlü + asenkron ayrıntılı iz deposu); iz yazımı işi durdurmaz, karar kaydı yazılamazsa etki yok; model kalitesi kritik yol dışında ölçülür.
+- **K-F S2 denetçi sorusu:** kapı yeniden yapılabilir (reperformance) ve model katkısı incelenebilir (inspection); model tek başına karar vermez; Core'da denetim paketi dışa aktarma.
+- **K-F S3 akıl yürütme:** görünür akıl yürütmenin tamamı iz deposunda; sır maskeleme, müşteri altyapısında, ayrı okuma izni, registry saklama, deckent-core-1 eğitimi ayrı izin (varsayılan hayır). "Araç sonuçları yalnız özet" kararı (Jev 9df04efb) değişti.
+- **K-F S4 bozulmuş mod:** kayıt yazılamazsa algılama sürer, kararlar ekleme-yalnız spool'a, düzeltici etki yok; dönüşte sırayla deftere ve kapıdan yeniden; spool da yazılamazsa agent durur ve boşluk işaretlenir; mühürsüz etki yok.
+- **K-F S5 "değişim yok":** aralık kaydı (başlangıç, son tur, sayı, zincir özeti) + hash zinciri; atlanan tur "tur atlandı" kaydı; "değişim yok" ile "kontrol yapılamadı" karışmaz.
+- **K-F S6 saklama:** üç katman (Core sürümlü varsayılan, yönetici ayarı, uyum profili sınırları); legal hold (A8) üstte; karar defteri otomatik silinmez; AI Act md.19 altı ay profili zorunlu değil; hukuki teyit gerekir.
+- **K-F S7 sağlayıcı kaydı:** hakikat Deckent defteri ve iz deposu; sağlayıcı kaydı yalnız bağımsız tanık (harcama uzlaştırması, "sağlayıcıda var bizde yok" alarmı); varsayılan iz gönderimi kapalı.
+- **K-F S8 önce ölçüm:** yön ölçümden bağımsız seçildi; ölçüm yalnız saklama varsayılanı, heartbeat aralığı, spool sınırı ve kritik yol p99 hedefini belirler; ölçülmemiş sayı varsayılan olmaz.
+- **K-F S9 iş sınıfı alanları:** risk sınıfı, kalıcı kabul uygunluğu, iz derinliği, akıl yürütme ve araç sonucu kaydı, hassas veri sınıfı, saklama profili, canlı değerlendirme örneklemesi, eğitim izni (varsayılan hayır); risk sınıfını yalnız yetkili yönetici/uyum profili belirler; sınıfsız iş orta risk, tam iz, kalıcı kabul yok.
+- **DEC-2 custody disposition (owner):** Run/Task kaydında sürümlü custody disposition; Attempt receipt fence yeniden kullanılır; tek D1 göç hattında; K10 S3 D1 indikten sonra (Jev 0,83/0,52 eşik altı → owner).
+- **DEC-5 etki ↔ görev kabulü (owner):** kriter parametresiyle; iş-nötr operasyon-kanıtı değerlendiricisi, göç yok (Jev 0,96/0,65 yeterlilik eşik altı → owner).
+- **DEC-1 kanıt türü (lead (Jev)):** çekirdek kapalı küme + kayıtlı `ext:` ad alanı, bilinmeyen tür fail-closed; D1 hattı A ile başladı, C ikinci turda (Jev 0,99/0,68).
+- **DEC-4 v1/v2 yazma politikası (lead (Jev)):** yeni config yazımı v2 kullanır, v1 yalnız okunur (düşük risk).
+
+## Owner kararları — 2026-10-11 (bağlama dalgası inişi)
+Kaynak: dış `proof/M5-BIND-2026-10-11/LEAD-DECISIONS.md` (tur 2 karar 9, ERP kanıtı tek kullanım), commit `aea01903`. Uygulama: alpha.29 adayı (`wave/m5-bind`).
+- **ERP kanıtı tek kullanımı: "aynı Run".** Kesinleşmiş bir işlem aynı Run'ın birden çok görevinin kabul kanıtı olabilir; başka bir Run'ın kullanması tipli retle (`OPERATION_EVIDENCE_OTHER_RUN`) reddedilir. Zaman (işlem görevin Attempt'i başladıktan sonra kesinleşmiş) ve yetki (Run kabul principal'ı ya da yürüten principal) kuralları aynen kalır; dört göz onayı ayrı makbuzda tutulur, karşılaştırmaya girmez.
+- **Paket bütçesi geçici yükseltme:** adapters 28000, composition 7200 (önceki 26300/6700). Bölünme kararı beta sonrasına bırakıldı (PLAN: PACKAGE-SPLIT).
+- **Sürüm sırası:** bağlama dalgası `1.0.0-alpha.29` olarak iner; küçük, yalnız sürüm ve doküman `1.0.0-beta.1` N1 devir ve test-ERP kanıtları canlıda gözlenince gelir. Bu, BETA-LAUNCH'taki "beta etiketi dalga inince" ifadesinin yerine geçer.
+- **Manuel slot bırakma:** beta'da yalnız kanıtla (fence + sonlanma kanıtı); kanıtsızda `hold-manual`, yeni komut yok (tur 2 karar 9).

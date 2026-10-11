@@ -1,11 +1,12 @@
+import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { identitySchema, immutableJsonObjectSchema } from '#domain/core/primitives/index.js';
+import { immutableJsonObjectSchema } from '#domain/core/primitives/index.js';
 import { providerSpendExactAccountQuerySchema } from './contract.js';
 
 const checkpointDigestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const providerSpendAuditCommandSchema = providerSpendExactAccountQuerySchema.unwrap().innerType().omit({ holds: true }).extend({ schemaVersion: z.literal(1),
-  commandId: identitySchema, expectedCheckpointDigest: checkpointDigestSchema,
+  commandId: clientCommandIdSchema, expectedCheckpointDigest: checkpointDigestSchema,
 }).strict().readonly();
 
 export const providerSpendAuditCommandInputSchema = immutableJsonObjectSchema.pipe(providerSpendAuditCommandSchema);

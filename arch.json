@@ -75,8 +75,17 @@
     "registry": "dependencies.json"
   },
   "units": {
+    "src/adapters/core/service-shutdown-store": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/engine/core/runtime",
+        "src/adapters/core/sqlite-ledger"
+      ],
+      "plan": "STORE"
+    },
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/adapters/core/service-shutdown-store",
         "src/domain/core/task-evaluation",
         "src/adapters/core/audit-store",
         "src/engine/core/audit",
@@ -360,6 +369,7 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/engine/core/supervisor",
         "src/engine/core/run-progression",
         "src/domain/core/audit",
@@ -436,6 +446,8 @@
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/domain/core/run",
+        "src/engine/core/handoff-observation",
         "src/engine/core/audit",
         "src/adapters/core/native-coding",
         "src/adapters/core/sqlite-model-activation",
@@ -647,10 +659,12 @@
       "dependencies": [
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
+        "src/domain/core/audit",
         "src/domain/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/domain/core/run",
+        "src/engine/core/audit",
         "src/engine/core/authentication",
         "src/engine/core/supervisor"
       ],
@@ -742,6 +756,7 @@
         "src/capabilities/core/artifacts",
         "src/capabilities/core/evaluation-evidence",
         "src/domain/core/attempt",
+        "src/domain/core/effect",
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/domain/core/run",
@@ -755,7 +770,8 @@
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
         "src/engine/core/handoff-observation",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/platform/core/clock"
       ],
       "plan": "CONTRACT"
     },
@@ -934,6 +950,7 @@
     },
     "src/surfaces/core/terminal-render": {
       "dependencies": [
+        "src/platform/core/clock",
         "src/surfaces/core/terminal-kit",
         "src/domain/core/policy",
         "src/platform/core/output",
@@ -2754,9 +2771,9 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 26300,
+      "adapters": 28000,
       "surfaces": 45000,
-      "composition": 6700
+      "composition": 7200
     },
     "totalSrcLines": 200000,
     "testCases": 8000,

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { createAttempt, createRun, type RunSnapshot } from '#domain/index.js';
-import { handoffEventCommandId, projectRunView, projectMonitorRun, RunInspectionApplication, type RunPoolEvidence } from '#engine/index.js';
+import { describeTaskEvaluationReceipt, handoffEventCommandId, projectRunView, projectMonitorRun, RunInspectionApplication, type RunPoolEvidence } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const graph = { schemaVersion: 2, revision: 1, tasks: [
   { id: 'a', kind: 'coding', dependencies: [], acceptanceCriteria: ['ok'] },
@@ -14,7 +14,8 @@ const event = { kind: 'handoff-received' as const, source: identity('a'), digest
 const record = { schemaVersion: 1 as const, identity: identity('b'), events: [event] };
 it('derives an exact accepted dependency receipt; existence of a dependency does not prove receipt', () => {
   expect(projectRunView(run).tasks[1]).not.toHaveProperty('handoffs');
-  expect(projectRunView(run, [record]).tasks[1]?.handoffs).toEqual([{ source: identity('a'), digest: event.digest }]);
+  expect(projectRunView(run, [record]).tasks[1]?.handoffs).toEqual([event]);
+  expect(describeTaskEvaluationReceipt({ commandId: 'evaluate', command: '{}', snapshot: run }, [], [record]).run).toEqual(projectRunView(run, [record]));
 });
 it.each(['failed', 'skipped', 'awaiting-decision'])('never projects a handoff from a %s predecessor', phase => {
   const changed = { ...run, bindings: run.bindings.map(binding => phase === 'awaiting-decision' && binding.identity.taskId === 'a' ? { ...binding, observedKind: 'exited', observedRevision: 1 } : binding), progress: run.progress.map(task => task.taskId === 'a' ? { ...task, phase, ...(phase === 'skipped' ? { skippedReason: 'dependency-failed' } : {}),
@@ -36,7 +37,7 @@ it('monitor shares the engine dependency receipt projection and withholds a wron
     evaluationObserved: false, reservedAtMs: null, sealedAtMs: null, handoffStart: record };
   const evidence = { run: { snapshot: run, poolId: null, admitted: true, createdAtMs: null, attempts: [attempt] },
     approvals: [], pool: null, workers: new Map(), observedAt: 10 };
-  expect(projectMonitorRun(evidence).tasks[1]?.handoffs).toEqual([{ source: identity('a'), digest: event.digest }]);
+  expect(projectMonitorRun(evidence).tasks[1]?.handoffs).toEqual([event]);
   expect(projectMonitorRun({ ...evidence, run: { ...evidence.run, attempts: [{ ...attempt,
     handoffStart: { ...record, events: [{ ...event, source: { ...event.source, attemptId: 'wrong' } }] } }] } }).tasks[1]?.handoffs).toEqual([]);
 });
@@ -60,7 +61,7 @@ it('authenticated inspection retains pool waits and drift alongside exact handof
   }, { async verify() { return { id: 'u', issuer: 'host', subject: '1', assurance: 'os-user', scopeIds: ['s'] }; } },
   { async authorize() {} }, undefined, { admission: { poolId: 'p', executionSlots: 8, inFlightSlots: 8 }, ceiling: 2 });
   const view = await app.inspect({ schemaVersion: 1, scopeId: 's', runId: 'r' });
-  expect(view?.tasks[1]?.handoffs).toEqual([{ source: identity('a'), digest: event.digest }]);
+  expect(view?.tasks[1]?.handoffs).toEqual([event]);
   expect(view?.tasks[0]).not.toHaveProperty('handoffs');
   expect(view?.pool?.drift.map(value => value.source)).toEqual(['run', 'admission']);
   expect(view?.pool?.waiting).toEqual([{ taskId: 'c', reason: { code: 'waiting-pool-slot', poolId: 'p', capacity,

@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
@@ -6,7 +7,7 @@ import { MODEL_INVOCATION_NATIVE_JSON_LIMITS, ModelInvocationError, modelInvocat
 
 const envelope = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 /** Target the caller-known original command, even before its generated invocation id has been delivered. */
-export const modelInvocationCancellationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+export const modelInvocationCancellationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   scopeId: identitySchema, targetCommandId: identitySchema, reference: modelReferenceSchema,
   expectedRequestDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
 export const modelInvocationCancellationCommandInputSchema = envelope.pipe(modelInvocationCancellationCommandSchema);

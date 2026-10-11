@@ -1,11 +1,11 @@
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView } from '#domain/index.js';
+import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type ResultBrief, type MonitorDeliveryState, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
-import { assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { readRunAcceptanceEvaluations, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
 const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, INTEGRATION_VERSION = 30, DELIVERY_VERSION = 32, ADOPTION_VERSION = 33, CATALOG_VERSION = 43;
@@ -31,9 +31,11 @@ const recordOnly = (error: unknown) => { if (error && typeof error === 'object' 
  */
 export function readMonitorLedger(path: string, input: MonitorLedgerOptions): MonitorLedgerReading { return scanMonitorLedger(path, input).reading; }
 /** The same read plus the recorded-file locations of every bound attempt (for first failure and recent events, read after the transaction). */
-export function scanMonitorLedger(path: string, input: MonitorLedgerOptions): { readonly reading: MonitorLedgerReading; readonly files: readonly MonitorAttemptFiles[] } {
+export function scanMonitorLedger(path: string, input: MonitorLedgerOptions, retained?: RunSnapshot): { readonly reading: MonitorLedgerReading; readonly files: readonly MonitorAttemptFiles[] } {
   const options = optionsSchema.safeParse(input);
   if (typeof path !== 'string' || !path || !options.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+  const pinned = retained ? runSnapshotSchema.parse(retained) : undefined;
+  if (pinned && (pinned.identity.scopeId !== options.data.run?.scopeId || pinned.identity.runId !== options.data.run.runId)) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
   assertSqliteEngineSupported(process.versions.sqlite);
   const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   let db: DatabaseSync;
@@ -45,12 +47,12 @@ export function scanMonitorLedger(path: string, input: MonitorLedgerOptions): { 
       return { reading: Object.freeze({ ledgerVersion: version, scopeIds: [], runs: [], approvals: [], pools: [], diagnostics: ['ledger-version-unsupported:' + version] }), files: [] };
     }
     const files: MonitorAttemptFiles[] = [];
-    return { reading: read(db, version, options.data.maxRuns, files, options.data.run), files };
+    return { reading: read(db, version, options.data.maxRuns, files, options.data.run, pinned), files };
   } catch (error) { throw sqliteFailure(error); }
   finally { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
 }
 
-function read(db: DatabaseSync, version: number, maxRuns: number, files: MonitorAttemptFiles[], selected?: { scopeId: string; runId: string }): MonitorLedgerReading {
+function read(db: DatabaseSync, version: number, maxRuns: number, files: MonitorAttemptFiles[], selected?: { scopeId: string; runId: string }, pinned?: RunSnapshot): MonitorLedgerReading {
   const diagnostics: string[] = version < CURRENT_LEDGER_VERSION ? ['info:ledger-version-older:' + version] : [];
   // One pass over run receipts (command text only; snapshots are not loaded): creation time per Run and reservation time per attempt.
   // MONITOR v1.1: the evaluation receipt also carries the worker model record (requested → init → usage → verdict) of pinned tasks.
@@ -79,16 +81,19 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
     try {
       const raw = json(row.snapshot) as Record<string, unknown>;
       // Read-only compatibility projection; ledger45 alone owns the durable migration.
-      const snapshot = runSnapshotSchema.parse(version < 45 && raw?.schemaVersion === 3 && !Object.hasOwn(raw, 'state')
+      const current = runSnapshotSchema.parse(version < 45 && raw?.schemaVersion === 3 && !Object.hasOwn(raw, 'state')
         ? { ...raw, schemaVersion: 4, state: { kind: 'running' } } : raw);
-      if (snapshot.identity.scopeId !== row.scope_id || snapshot.identity.runId !== row.run_id || snapshot.revision !== row.revision) throw new Error();
+      if (current.identity.scopeId !== row.scope_id || current.identity.runId !== row.run_id || current.revision !== row.revision) throw new Error();
+      // Evaluation replay selects its retained bindings and revision, never the current Run's later Tasks/acceptance.
+      if (pinned && (pinned.identity.layoutRevision !== current.identity.layoutRevision || pinned.revision > current.revision)) throw new Error();
+      const snapshot = pinned ?? current;
       const intent = version >= INTENT_LEDGER_VERSION ? db.prepare('SELECT admitted_at FROM run_execution_intents WHERE scope_id=? AND run_id=?').get(row.scope_id, row.run_id) : undefined;
       const found: MonitorAttemptFiles[] = [];
       const attempts = snapshot.bindings.map(binding => attempt(db, version, binding, reserved.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null,
         models.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null, snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found));
       const policy = row.policy ? runExecutionPolicySchema.safeParse(json(row.policy)) : null;
-      runs.push(Object.freeze({ snapshot, ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
-        createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts), delivery: deliveries.get(key) ?? null }));
+      runs.push(Object.freeze({ snapshot, evaluations: readRunAcceptanceEvaluations(db, snapshot), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
+        createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts), delivery: snapshot.revision === current.revision ? deliveries.get(key) ?? null : null }));
       files.push(...found);
     } catch (error) { recordOnly(error); diagnostics.push('run-corrupt:' + key); }
   }

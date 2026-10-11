@@ -4,8 +4,12 @@ import { runQuerySchema, projectRunView, RunStoreError, type RunQuery, type RunR
 import type { TaskEvaluationCommand } from '#engine/core/task-evaluation/index.js';
 
 export class RunProgressionFailure extends Error {
+  /** The typed code of the wrapped failure stays visible to callers that branch on `code`. */
+  declare readonly code?: string;
   constructor(cause: unknown, readonly revision: number | null) {
     super(cause instanceof Error ? cause.message : 'RUN_PROGRESSION_FAILED', { cause }); this.name = 'RunProgressionFailure';
+    const code = typeof cause === 'object' && cause !== null ? (cause as { code?: unknown }).code : undefined;
+    if (typeof code === 'string' && code.length > 0) this.code = code;
   }
 }
 

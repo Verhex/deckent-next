@@ -1,14 +1,14 @@
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema, processExitCauseShape, isValidExitCause, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
-import { sandboxRequestSchema, supervisorProfileSchema, containerEvidenceSchema } from '#engine/core/supervisor/index.js';
+import { workerIncarnationSchema, sandboxRequestSchema, supervisorProfileSchema, containerEvidenceSchema } from '#engine/core/supervisor/index.js';
 const claimObject = z.object({ request: sandboxRequestSchema, owner: identitySchema }).strict();
 export const dispatchClaimSchema = claimObject.readonly();
 export const dispatchTerminalSchema = z.object({ handle: identitySchema, ...processExitCauseShape, container: containerEvidenceSchema.optional(), interrupted: z.boolean().nullable() }).strict().refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID').readonly();
 const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
 export const dispatchAdmissionSchema = claimObject.extend({ profile: supervisorProfileSchema }).strict().readonly();
 export const dispatchRecordSchema = claimObject.extend({
-  schemaVersion: z.literal(2), profile: supervisorProfileSchema,
+  schemaVersion: z.literal(2), worker: workerIncarnationSchema.optional(), profile: supervisorProfileSchema,
   launch: z.enum(['pending', 'granted', 'prevented-before-launch']),
   grant: z.object({ generation: counterSchema.positive(), grantedAt: counterSchema, principal: actorSchema }).strict().readonly().optional(),
   prevention: z.object({ reason: z.literal('cancel-requested') }).strict().readonly().optional(),
@@ -19,7 +19,7 @@ export const dispatchRecordSchema = claimObject.extend({
   if (record.launch === 'granted') {
     if (!record.grant || record.grant.generation !== record.request.identity.generation || record.prevention) invalid();
   } else {
-    if (record.grant || record.terminal !== null || record.output !== undefined) invalid();
+    if (record.grant || record.terminal !== null || record.output !== undefined || record.worker !== undefined) invalid();
     if (record.launch === 'prevented-before-launch' ? !record.cancellation || !record.prevention : !!record.prevention) invalid();
   }
 }).readonly();
@@ -41,6 +41,7 @@ export type DispatchRecord = z.infer<typeof dispatchRecordSchema>;
 /** Trusted lookup after authorization; full identity must match the Run binding. */
 export interface RunBoundDispatchStore { loadBoundDispatch(identity: AttemptIdentity): Promise<DispatchRecord | null> }
 export interface DispatchStore {
+  retainDispatchWorker?(claim: DispatchClaim, worker: NonNullable<DispatchRecord['worker']>): Promise<DispatchRecord>;
   requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal): Promise<DispatchRecord>;
   retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt): Promise<DispatchRecord>;
   readDispatch(request: DispatchClaim['request']): Promise<DispatchRecord | null>;
@@ -49,5 +50,5 @@ export interface DispatchStore {
   finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal): Promise<DispatchRecord>;
 }
 export class DispatchError extends Error {
-  constructor(readonly code: 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
+  constructor(readonly code: 'DISPATCH_FENCE_CONFLICT' | 'DISPATCH_FENCED' | 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
 }

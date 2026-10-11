@@ -2,7 +2,7 @@ import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchem
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
+import { acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
@@ -16,6 +16,8 @@ export const runViewSchema = z.object({
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,
   tasks: z.array(z.object({
     taskBrief: taskBriefSchema.optional(), resultBrief: resultBriefSchema.optional(),
+    custodyDisposition: z.enum(['hold-manual', 'released']).optional(), workerCustody: taskProgressSchema.unwrap().innerType().shape.workerCustody,
+    acceptance: acceptanceViewSchema.optional(),
     id: identitySchema, kind: identitySchema, dependencies: z.array(identitySchema).readonly(),
     acceptanceCriteria: z.array(identitySchema).readonly(), handoffs: z.array(handoffReceiptViewSchema).readonly().optional(),
     inputs: taskDefinitionSchema.unwrap().shape.inputs,
@@ -29,7 +31,7 @@ export const runViewSchema = z.object({
   }).strict().readonly()).readonly(),
 }).strict().readonly();
 export type RunView = z.infer<typeof runViewSchema>;
-export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = []): RunView {
+export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = [], evaluations: readonly Readonly<{ identity: { taskId: string } }>[] = []): RunView {
   const parsed = runSnapshotSchema.safeParse(input);
   if (!parsed.success) throw new RunStoreError('RUN_STORE_CORRUPT');
   const run = parsed.data; const progress = new Map(run.progress.map(task => [task.taskId, task]));
@@ -37,7 +39,7 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
     layoutRevision: run.identity.layoutRevision, ...(run.branch ? { branch: { schemaVersion: run.branch.schemaVersion, request: run.branch.request, selectedTaskId: run.branch.selectedTaskId, notSelectedTaskId: run.branch.notSelectedTaskId } } : {}), registryRevision: run.execution.registryRevision,
     criteria: run.graph.criterionDefinitions.map(criterion => ({ id: criterion.id, version: criterion.version, description: criterion.description, evaluator: criterion.evaluator, fingerprint: run.execution.criteria.find(entry => entry.criterionId === criterion.id)!.fingerprint })),
     revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state, graphSummary: summarizeTaskGraph(run.graph, run.progress),
-    tasks: run.graph.tasks.map(task => ({ taskBrief: projectTaskBrief(run, task.id), resultBrief: projectResultBrief(run.bindings.find(binding => binding.identity.taskId === task.id)?.identity.attemptId ?? null,
+    tasks: run.graph.tasks.map(task => ({ acceptance: deriveAcceptanceView(run, task.id, evaluations.find(row => row.identity.taskId === task.id)), taskBrief: projectTaskBrief(run, task.id), resultBrief: projectResultBrief(run.bindings.find(binding => binding.identity.taskId === task.id)?.identity.attemptId ?? null,
       { verdict: progress.get(task.id)!.phase === 'accepted' ? progress.get(task.id)!.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : 'accepted' : null,
         ...(progress.get(task.id)!.notAcceptedReason ? { reason: progress.get(task.id)!.notAcceptedReason } : {}) }), id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
       profile: { id: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.id, version: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.version },
@@ -46,6 +48,8 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
         const parsed = workerEffortSchema.safeParse(subscription && typeof subscription === 'object' && !Array.isArray(subscription) ? (subscription as Record<string, unknown>)['reasoningEffort'] : undefined);
         return parsed.success ? { reasoningEffort: parsed.data } : {};
       })(),
+      ...(progress.get(task.id)!.workerCustody ? { workerCustody: progress.get(task.id)!.workerCustody } : {}),
+      ...(progress.get(task.id)!.phase === 'reconciling' ? { custodyDisposition: progress.get(task.id)!.workerCustody?.state === 'released' ? 'released' as const : 'hold-manual' as const } : {}),
       phase: progress.get(task.id)!.phase,
       ...(projectTaskHandoffs(run, task.id, receipts).length ? { handoffs: projectTaskHandoffs(run, task.id, receipts) } : {}),
       ...(progress.get(task.id)!.notAcceptedReason ? { notAcceptedReason: progress.get(task.id)!.notAcceptedReason } : {}),

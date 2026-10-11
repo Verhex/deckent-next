@@ -79,6 +79,80 @@ Backlog/reactive inputs are versioned Mission sources; periodic autonomous execu
 The Mission implementation and vocabulary gate update remain pending. This decision neither restores
 the mandatory legacy seven-level hierarchy nor decides additional Goal/Flow/Operation aggregates.
 
+## M5 design — owner 2026-10-11 (accepted target; alpha.29 candidate implements the binding slice)
+
+Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. Nothing below is implemented except the alpha.29
+candidate binding slice (not live): ledger v51 `acceptance_metrics` keyed `(scope_id, producer_command_id)`, written with the evaluation and its producer receipt in one
+transaction; domain `workerCustody` (absent = held) moved only by `releaseWorkerCustody` on fence plus termination proof; fence with reserved command ids
+(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled no earlier than the launch grant less `MAX_WALL_SKEW_MS`, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); evaluation reply and Run inspection share result briefs and delivery outlook under Run `inspect` and per-Attempt `read-output` authority; inspect denial omits reply briefs (replay pins the receipt snapshot).
+
+- **Roles are proposals on one ledger, not engines.** The Run ledger is the single source of truth; each transition keeps
+  one owner (scheduler, evaluator, approval broker); roles write proposals, never state.
+  - Brain proposes a versioned RunProposal (task graph, criterion, WorkClass, budget ceiling, permissions). K-A: with the
+    owner's standing admission, low-risk WorkClass proposals pass the deterministic gate directly; others ask.
+  - Auditor is a deterministic, LLM-free evaluator (`unknown` is never `pass`) plus an advisory independent verifier
+    (other provider/model, cannot approve its own work, result is a recorded recommendation).
+  - Nervous is proposals-only (one per situation, never watches its own events). K-B: a broker-effected no-retry standing
+    list: pause a Run, release a dead slot with termination evidence, restart a service component; a new Attempt is never
+    automatic (K4 a).
+- **Memory:** execution state (ledger), curated knowledge (scoped single-writer journal, FTS5 behind a search port) and
+  lessons (source → cause → correction → evidence; candidate → verified → active). Scope chain installation > company >
+  site/unit > project > session; a read failure holds, never an empty memory. K-D: fresh journal plus a one-time import of
+  legacy records as candidate lessons only, with review.
+- **"Deterministic" (S1):** same recorded input gives the same decision and every decision has an immutable basis; replay
+  (recovery, review, regression with recorded model decisions fed back and tools really run) builds on it. Model quality
+  is measured by scheduled live evaluation off the critical path.
+- **Two-layer record (S1):** a thin decision ledger (synchronous, sealed before the effect) and a detailed trace store
+  (asynchronous, content-addressed, tiered retention; expired detail is deleted, its digest stays). Invariants: if the
+  decision record cannot be written the effect is not applied; a trace write never blocks work and a gap becomes an explicit
+  "trace gap" record; no unsealed effect ever exists. The internal schema is canonical; OpenTelemetry GenAI is an export
+  projection only (Development status, version pinned). Traces feed golden cases, lessons, the D4 ledger and evaluator tuning
+  (consent and terms-of-use gates apply).
+- **Reperformance and inspection (S2):** the deterministic gate is reperformable (recorded input snapshot plus rule,
+  threshold and policy versions give the same result); the model contribution is inspectable (input digest, full prompt and
+  response in the trace store, rule/persona/threshold versions). A model never decides alone; the basis package carries
+  versions, input digest and authority (principal, scope, policy, approval receipt, four-eyes). Core gets an audit-package
+  export; Enterprise maps it to SIEM/audit tools.
+- **Reasoning capture (S3):** provider thought summary (raw thought for local models), tool calls and results, intermediate
+  messages and answer go to the trace store; secrets masked before writing; content stays in customer infrastructure;
+  reading needs a separate permission; retention from the registry; per-WorkClass switch-off; deckent-core-1 training use
+  needs a separate explicit permission (default no). Encrypted thought (`signature`, `encrypted_content`) only continues the
+  conversation. This reverses the digest-only tool-result decision (Jev 9df04efb).
+- **Degraded mode (S4):** if the ledger cannot be written, detection continues, decisions go to an append-only spool, no
+  corrective effect is applied, only a health warning goes out through Nervous (also spooled). On recovery the spool moves
+  to the ledger in order and pending decisions pass the gate again. A registry time/size limit gives a typed park; if the
+  spool fails the agent stops and the gap is marked. Brief bounded retry on a transient lock is not a job retry.
+- **Interval chains (S5):** "no change" rounds are interval records (start, last round, count, chain digest); each round
+  joins a hash chain; round detail stays briefly in the trace store. Open intervals are sealed at registry heartbeat
+  intervals and close on a result change, a rule/persona/threshold version change or a skipped round ("round skipped").
+  "No change" and "could not check" never mix.
+- **Retention (S6):** versioned Core default per record kind (registry data); customer administrator adjustment (versioned,
+  audited, authorised); compliance profiles set lower/upper bounds (typed refusal outside). Legal hold (A8) overrides all.
+  The decision ledger is not deleted automatically; detail expires in tiers with digests kept; the spool is deleted after
+  transfer. AI Act Art. 19 six-month and KVKK/GDPR upper-bound profiles are offered, not mandatory (legal confirmation needed).
+- **Provider witness (S7):** the Deckent ledger and trace store are the truth; provider records (OpenAI store/tracing,
+  Anthropic Managed Agents sessions) are only an independent witness for spend reconciliation and a "at provider, not at us"
+  alarm (Nervous proposes); never a decision basis; default export off; ZDR is marked "no witness".
+- **Measurement (S8):** retention defaults, heartbeat interval, spool limit and the critical-path p99 target come from
+  read-only dogfood/live measurement before defaults freeze; no unmeasured default and no "does not slow work" claim.
+- **WorkClass registry fields (S9)** extend the D1 acceptance profile: risk class (low/medium/high/critical + `ext:`),
+  standing-admission eligibility, trace depth (full/decisions/off), reasoning and tool-result capture, sensitive-data class,
+  retention profile, live-evaluation sampling, training-use permission (default no). Only an authorised administrator or
+  compliance profile sets risk class, never Brain, persona or agent. Unknown `ext:` takes the most restrictive behaviour; the
+  stricter wins on conflict; unclassified = medium risk, full trace, no standing admission. Heartbeat and round-detail
+  retention live in the agent definition.
+- **Agent types (K-C, target; the owner will detail further, no code before):** sentinel (event-action; checks a dedicated
+  state at periods; starts work past a threshold set by rule and persona; correction, analysis or notification; alive 24 h)
+  and routine (scheduled; deterministically reports "no change"). Detection is LLM-free over a change digest, the LLM runs
+  only past the threshold; both are manageable without a trigger. Persona never grants authority; thresholds and rules are
+  versioned registry data; every action passes principal, scope, policy and standing admission; Deckent supervises them.
+- **Canonical agent definition (K-E, target):** one versioned record (identity/persona, hashed instruction reference, exact
+  model binding, requested tools/MCP, skills, sub-agents with delegate and handoff as separate types, output schema, memory
+  scope, budget, lifecycle, provenance). Claude/Agent SDK, OpenAI Agents SDK, Claude Code and Codex forms are projections via
+  registry adapters; export first, then import, Managed Agents last. Import never grants authority (permission, sandbox and
+  tool fields are requests; unknown fields kept but never run; bypass/full-access never exported). No Agent Builder target
+  (closing 2026-11-30).
+
 ## Owner amendment — 2026-09-17 (accepted target, implementation pending)
 
 Authority: Alperen's live acceptance of the consolidated Fable/Astra review, with database, sandbox/worktree,
@@ -204,7 +278,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   `QUERY_UNEXPECTED_FAILURE` diagnostic custody (`src/platform/core/errors/internal/redact.ts`): the client (CLI, SDK, MCP) receives only the code,
   a safe class name from a closed list and a `diagnosticId` (UUID); the full diagnostic goes to the existing runtime-service record, scanned
   first with the real known-secret snapshot (`getConfigKnownSecrets`) and cut to the bound afterwards. There is no raw fallback; a config or
-  sink failure drops the detail. Unregistered coded errors become `INVENTORY_UNAVAILABLE` without detail.
+  sink failure drops the detail. From alpha.29 the client reply precedes the record write (stop waits for pending records). Unregistered coded errors become `INVENTORY_UNAVAILABLE` without detail.
   The docker supervisor allow-list accepts exactly one extra read-only handoff target, `/deckent/inputs/_needs-input.json`
   (`src/adapters/core/docker-supervisor/internal/options.ts`); arbitrary or duplicate targets stay refused.
   Version limit: an older binary cannot read the new park variant or audit action; rollback needs the pre-switch ledger backup.
@@ -513,6 +587,7 @@ refresh, usage and dogfood closure remain open.
   Those effects need idempotency, reconciliation or an explicitly supported compensation action.
 - bwrap: yalnız ürün durumu tutan dizin boş salt-okunur tmpfs olur (`BubblewrapView.emptiedDirectories`), içerik ve giriş adları görünmez; karma dizin giriş-başı maskede kalır, layout kökü hiç emptied olmaz; ayrıntı [shell-realms](.deckent/docs/architecture/modules/shell-realms.md).
 - W3-SANDBOX (owner 2026-10-09): sandbox hard floor is independent of call approval. Product authority/configuration stays read-only in both providers; Landlock seccomp also refuses chmod/chown families. Full-access shell requires an open sandbox and refuses host fallback/explicit host. The shared credential registry and host runtime/socket masks apply before execution; details and remaining mask bounds in [shell-realms](.deckent/docs/architecture/modules/shell-realms.md).
+- HOME-walk ancestor priority (source candidate, lands with the M5 binding wave, fix `446eb0f5`, host 23/23 with real bubblewrap): directories on the path from HOME to each skip root are listed before other directories so a crowded HOME cannot exhaust the 20000-entry budget and refuse the shell; the budget is not raised, oversized non-ancestor subtrees are still hidden whole and an unreadable ancestor still refuses.
 - Proof covers sibling/main-workspace access, symlink/path escape, shared metadata, secrets/network, concurrent
   landing, stale ownership, cancel/restart and partial effects on the supported platform/realm matrix.
 
@@ -625,11 +700,11 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 - **Batch G M5 foundations (source candidate, batch G, alpha.28; not live):** (1) WorkClass registry `schemaVersion` 1|2 in
   `src/domain/core/run/internal/work-class.ts`: v1 stays readable; v2 adds `acceptanceProfile`, closed criterion and evidence type enums,
   weighted rubric and score ceilings, and merges over Core add-only with a composite revision. The enums are deliberately closed in code;
-  whether an Enterprise or ERP adapter may extend them through the registry is decided in the M5 wiring wave. (2) DECKENT-METRICS v1
-  (`src/domain/core/run/internal/metrics.ts`) is a pure attributed result contract. No record or screen consumes either yet.
+  an Enterprise or ERP adapter extends them through registered `ext:` names (overlay `schemaVersion: 3`, unknown fail-closed; alpha.29). (2) DECKENT-METRICS v1
+  (`src/domain/core/run/internal/metrics.ts`) is a pure attributed result contract; alpha.29 persists it (v51 above). Rollback to alpha.28 needs the pre-switch ledger backup (typed `ATTEMPT_STORE_VERSION`).
   (3) The pure dispatch-fence decision (`assessLostDispatch` in `src/engine/core/dispatch/internal/loss.ts`, `decideDispatchLoss` in
-  `src/domain/core/attempt/internal/dispatch-loss.ts`) has no production caller. In production `finishDispatch`, a late exit keeps a durable unknown
-  Attempt observation (`src/engine/core/dispatch/internal/settle.ts`) and no success is invented; real slot release and a durable lock are open.
+  `src/domain/core/attempt/internal/dispatch-loss.ts`) is wired in alpha.29 to the atomic writer `fenceLostDispatch` and the fence reader; configured reconcile recovers an existing fence (slot release only with exact
+  retained container incarnation plus exit/absence proof, else `hold-manual`), but no production path writes the first fence yet (automatic mark-lost is MARK-LOST-ATOMIC / KARAR 12, owner-deferred). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
   (4) Test-ERP is a test fixture only (`tests/fixtures/test-erp`): no ERP-specific code exists in Core; it goes through the generic
   http-conditional adapter, the operation catalog and the approval path.
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and

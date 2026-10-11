@@ -2,7 +2,7 @@ import { collectDockerOutputFiles } from './output-files.js';
 import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { containerEvidenceSchema, SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
+import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
 import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
@@ -77,16 +77,18 @@ export class DockerSupervisor implements ExecutionSupervisor {
       const bounded = complete.success ? complete : containerEvidenceSchema.safeParse({ ...candidate, startedAt: null, finishedAt: null });
       if (bounded.success) container = bounded.data;
     }
-    return Object.freeze({ handle, result: Object.freeze(result), ...(container ? { container } : {}), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
+    const parsedWorker = workerIncarnationSchema.safeParse({ kind: 'container', id: inspection?.Id, startedAt: inspection?.State.StartedAt });
+    const worker = parsedWorker.success ? parsedWorker.data : undefined;
+    return Object.freeze({ handle, ...(worker ? { worker } : {}), result: Object.freeze(result), ...(container ? { container } : {}), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
   }
-  async cancel(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>> {
+  async cancel(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>> {
     const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
     if (existing && ['running', 'paused'].includes(existing.State.Status)) {
       try { await this.command(['kill', handle], this.options.controlTimeoutMs); } catch { /* Only subsequent observation proves termination. */ }
     }
     // Created/missing is unresolved: do not launch or delete evidence to manufacture a terminal state.
     const observed = this.result(handle, await this.inspect(handle, digest));
-    return Object.freeze({ handle: observed.handle, result: observed.result, ...(observed.container ? { container: observed.container } : {}) });
+    return Object.freeze({ handle: observed.handle, result: observed.result, ...(observed.worker ? { worker: observed.worker } : {}), ...(observed.container ? { container: observed.container } : {}) });
   }
   async collectOutputFiles(input: SandboxRequest) {
     if (!this.options.outputFiles) return [];
@@ -113,10 +115,18 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const state = !existing ? 'missing' as const : status === 'running' || status === 'paused' || status === 'created' || status === 'exited' ? status : 'unknown' as const;
     return Object.freeze({ handle, state });
   }
-  async observe(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>> {
+  async observe(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>> {
     const { digest, handle } = this.identity(input);
     const observed = this.result(handle, await this.inspect(handle, digest));
-    return Object.freeze({ handle: observed.handle, result: observed.result, ...(observed.container ? { container: observed.container } : {}) });
+    return Object.freeze({ handle: observed.handle, result: observed.result, ...(observed.worker ? { worker: observed.worker } : {}), ...(observed.container ? { container: observed.container } : {}) });
+  }
+  async observeTermination(input: SandboxRequest, worker: import('#domain/index.js').WorkerIncarnation) {
+    const expected = workerIncarnationSchema.parse(worker), { digest } = this.identity(input);
+    const inspection = await this.inspect(expected.id, digest);
+    if (!inspection) return { kind: 'worker-absent' as const, worker: expected };
+    const observed = this.result(expected.id, inspection);
+    if (!observed.worker || observed.worker.id !== expected.id || observed.worker.startedAt !== expected.startedAt) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
+    return observed.result.kind === 'exited' ? { kind: 'supervisor-exit' as const, worker: observed.worker, result: observed.result } : null;
   }
   async execute(input: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult> {
     const { request, digest, handle } = this.identity(input);

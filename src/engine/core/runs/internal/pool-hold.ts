@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
@@ -17,7 +18,7 @@ const reasonSchema = z.string().min(1).max(256).regex(/^[^\p{Cc}]+$/u);
 const actorSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
 const poolStateSchema = z.enum(['held', 'open']);
 /** `poolId` defaults to the installation's configured admission pool. `reason` is the operator's short note, kept in the hold record. */
-export const poolHoldCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema,
+export const poolHoldCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: clientCommandIdSchema,
   action: z.enum(['hold', 'resume']), poolId: identitySchema.optional(), reason: reasonSchema.optional() }).strict();
 export const poolHoldQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, poolId: identitySchema.optional() }).strict();
 /** The durable hold row: the last state change of one pool (no row = open, never held). */

@@ -35,7 +35,7 @@ function accepted(tasks: readonly { id: string; work: boolean }[]): RunSnapshot 
   const created = createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, plain, 0, fixtureExecution(plain));
   // Work input is attached after admission, like the existing H1 fixture (the registry would demand a work-input template at creation).
   const base = { ...created, graph: { ...created.graph, schemaVersion: 3 as const, tasks: created.graph.tasks.map(task => tasks.find(value => value.id === task.id)!.work ? { ...task, workInput: input } : task) } };
-  return { ...base, state: { kind: 'terminal', outcome: 'completed' }, bindings: tasks.map(task => ({ identity: identity(task.id), observedRevision: 3, observedKind: 'exited' as const })),
+  return { ...base, state: { kind: 'terminal', outcome: 'completed', reason: 'completed' }, bindings: tasks.map(task => ({ identity: identity(task.id), observedRevision: 3, observedKind: 'exited' as const })),
     progress: tasks.map(task => ({ taskId: task.id, phase: 'accepted' as const, unresolvedEffects: false, eligibility: { kind: 'immediate' as const } })) } as unknown as RunSnapshot;
 }
 const done = (taskId: string, over: Partial<MonitorLedgerAttempt> = {}, dispatch: Partial<NonNullable<MonitorLedgerAttempt['dispatch']>> = {}): MonitorLedgerAttempt => ({ attemptId: 'a-' + taskId, generation: 1, observedKind: 'exited',
@@ -57,7 +57,7 @@ describe('delivery outlook of an accepted Run (M2)', () => {
     expect(project(evidence(two, [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: false })])).deliveryOutlook).toBe('patch-not-prepared');
     expect(project(evidence(accepted([{ id: 'w', work: true }]), [done('w', {}, { patchRecorded: false })], { state: 'adopted', commit: null })).deliveryOutlook).toBeUndefined();
     expect(project(evidence(accepted([{ id: 'w', work: true }]), [done('w')])).deliveryOutlook).toBeUndefined();
-    const failed = { ...accepted([{ id: 'w', work: true }]), state: { kind: 'terminal', outcome: 'failed' }, progress: [{ taskId: 'w', phase: 'failed', unresolvedEffects: false, eligibility: { kind: 'immediate' } }] } as unknown as RunSnapshot;
+    const failed = { ...accepted([{ id: 'w', work: true }]), state: { kind: 'terminal', outcome: 'failed', reason: 'completed' }, progress: [{ taskId: 'w', phase: 'failed', unresolvedEffects: false, eligibility: { kind: 'immediate' } }] } as unknown as RunSnapshot;
     expect(project(evidence(failed, [done('w', {}, { patchRecorded: false })])).deliveryOutlook).toBeUndefined();
   });
   it('the shared result brief carries the outlook and failed tests and stays strict', () => {

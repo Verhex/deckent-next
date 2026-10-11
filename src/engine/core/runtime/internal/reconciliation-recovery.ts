@@ -5,7 +5,7 @@ import { dispatchTerminalSchema, type DispatchInventoryPage } from '#engine/core
 
 const inputSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, after: identitySchema.nullable() }).strict().readonly();
 const entrySchema = z.object({
-  identity: attemptIdentitySchema, owner: identitySchema, launch: z.enum(['pending', 'granted', 'prevented-before-launch']),
+  fenced: z.boolean().optional(), identity: attemptIdentitySchema, owner: identitySchema, launch: z.enum(['pending', 'granted', 'prevented-before-launch']),
   terminal: dispatchTerminalSchema.nullable(), cancellationRequested: z.boolean(), outputRecorded: z.boolean(),
 }).strict();
 const pageSchema = z.object({ entries: z.array(entrySchema), nextAfter: identitySchema.nullable() }).strict();
@@ -54,7 +54,7 @@ export class ReconciliationRecoveryApplication {
   private async recoverEntry(entry: z.infer<typeof entrySchema>): Promise<ReconciliationRecoveryOutcome> {
     const identity = entry.identity;
     if (entry.launch !== 'granted') return Object.freeze({ identity, status: 'skipped' });
-    if (entry.terminal === null) {
+    if (entry.fenced || entry.terminal === null) {
       const result = await this.executor.reconcile(identity);
       if (result.status !== 'terminal' || result.outputRecorded) return Object.freeze({ identity, status: result.status });
     } else if (entry.outputRecorded) return Object.freeze({ identity, status: 'skipped' });

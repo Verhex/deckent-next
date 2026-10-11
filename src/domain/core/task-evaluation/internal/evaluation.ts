@@ -1,16 +1,10 @@
 import { z } from 'zod';
+import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './acceptance.js';
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
-import { runSnapshotSchema } from '#domain/core/run/index.js';
+import { runSnapshotSchema, evaluationCriterionSchema } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema } from '#domain/core/worker-event/index.js';
-const criterion = z.object({ criterionId: identitySchema, verdict: z.enum(['pass', 'fail', 'unknown']),
-  evidenceIds: z.array(identitySchema).readonly(),
-}).strict().superRefine((value, context) => {
-  if ((value.verdict !== 'unknown' && value.evidenceIds.length === 0) || new Set(value.evidenceIds).size !== value.evidenceIds.length) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_EVALUATION_INVALID' });
-  }
-}).readonly();
 const modelText = z.string().min(1).max(256);
 /**
  * Worker model evidence of a pinned native attempt (WORKER-CURRENCY-2, owner rule A 2026-09-30; Jev 933e43f2, 58ffe1c9). Recorded with the
@@ -25,15 +19,15 @@ export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend(
   Object.freeze({ ...model, evidenceCapability: model.evidenceCapability ?? readLegacyModelUsageEvidence(model.provider) }));
 export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
-  workerExit: workerNeedsInputSchema.optional(),
+  workerExit: workerNeedsInputSchema.optional(), acceptance: evaluationAcceptanceSchema.optional(),
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
   sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),
   handoff: z.discriminatedUnion('status', [z.object({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), z.object({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) }).strict()]).optional(),
-  criteria: z.array(criterion).min(1).readonly(),
+  criteria: z.array(evaluationCriterionSchema).min(1).readonly(),
   /** Host-verified retained patch, not the worker's changedFiles report. The frozen workInput owns no-change policy. */
   workspaceChange: z.object({ schemaVersion: z.literal(1), patchDigest: z.string().regex(/^[a-f0-9]{64}$/), changedFiles: counterSchema }).strict().readonly().optional(), model: taskEvaluationModelSchema.optional(),
-  evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(3).readonly().optional(),
-  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
+  evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional(),
+  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch', 'criterion-evidence']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
 /** Acceptance consequence: an undeclared model fails the attempt; an attempt with session-event model usage without a sealed
  * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified. */
@@ -44,7 +38,7 @@ export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fa
 }
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;
 export class TaskEvaluationError extends Error {
-  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA') {
+  constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA' | 'TASK_EVALUATION_PROFILE_MISMATCH' | 'OPERATION_EVIDENCE_OTHER_RUN') {
     super(code); this.name = 'TaskEvaluationError';
   }
 }
@@ -71,10 +65,11 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
     || task.acceptanceCriteria.some(id => !byId.has(id))) throw new TaskEvaluationError('TASK_EVALUATION_CRITERIA');
   const criteria = task.acceptanceCriteria.map(id => { const value = byId.get(id)!; return { ...value, evidenceIds: [...value.evidenceIds].sort() }; });
   const normalized = taskEvaluationSchema.parse({ ...evaluation, criteria });
+  const profileGate = inspectAcceptanceConclusion(run.data, normalized);
   const gate = taskModelConclusion(normalized.model);
   if (!task.workInput && normalized.workspaceChange) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
   const change = task.workInput ? normalized.workspaceChange ? normalized.workspaceChange.changedFiles > 0 || task.workInput.noChangeAllowed === true ? 'pass' : 'fail' : 'unknown' : 'pass';
-  const conclusion: 'pass' | 'fail' | 'unknown' = normalized.workerExit ? gate === 'fail' ? 'fail' : 'unknown' : gate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
-    : gate === 'unknown' || change === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
+  const conclusion: 'pass' | 'fail' | 'unknown' = normalized.workerExit ? gate === 'fail' ? 'fail' : 'unknown' : gate === 'fail' || profileGate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
+    : gate === 'unknown' || profileGate === 'unknown' || change === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
   return Object.freeze({ evaluation: normalized, conclusion });
 }

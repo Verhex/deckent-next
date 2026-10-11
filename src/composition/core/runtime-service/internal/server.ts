@@ -149,7 +149,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     ...(build ? { build: { sourceTreeSha256: build.sourceTreeSha256, sourceCommit: build.sourceCommit } } : {}) });
   const shutdown = config.service.identity ? configuredServiceShutdown(config,
     serviceInstanceSchema.parse({ ...config.service.identity, instanceId })) : null;
-  const remoteShutdowns = new Map<string, Promise<void>>();
+  const remoteShutdowns = new Map<string, Promise<void>>(), reports = new Set<Promise<void>>();
   const controller = new AbortController();
   let recovery: Promise<void> = Promise.resolve();
   // WORKER-AUTO-REFRESH: the background refresh started below; a stop waits for it (its build is ended by the controller's signal) so no
@@ -201,7 +201,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {
-      const failure = queryFailure(error); await reportFailure(failure).catch(() => undefined);
+      const failure = queryFailure(error), report = reportFailure(failure).catch(() => undefined); reports.add(report); void report.then(() => reports.delete(report));
       const params = runtimeServiceErrorParams(failure.params);
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false,
         error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };
@@ -234,7 +234,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     });
     // Finalization shares the grace deadline. The guard remains until admitted work and recovery settle.
     void lifecycle.whenSettled().then(async () => {
-      await Promise.all(remoteShutdowns.values());
+      await Promise.all([...remoteShutdowns.values(), ...reports]);
       if (transportFailure) throw transportFailure;
       resolveDone();
     }).catch(error => rejectDone(queryFailure(error)));

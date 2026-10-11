@@ -44,11 +44,16 @@ export const taskProgressSchema = z.object({
   skippedReason: z.enum(['dependency-failed', 'dependency-cancelled']).optional(),
   decision: z.object({ reason: z.enum(['evaluation-unknown', 'evaluation-not-ready', 'needs-input']), since: counterSchema, deadline: counterSchema, evaluationId: identity.optional(),
     question: workerNeedsInputSchema.unwrap().shape.question.optional(),
-    evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(3).readonly().optional() }).strict().readonly().optional(),
+    evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional() }).strict().readonly().optional(),
   notAcceptedReason: z.literal('no-change-produced').optional(),
   acceptedEvidence: z.literal('model-unverified').optional(),
   inputAnswer: z.object({ schemaVersion: z.literal(1), source: attemptIdentitySchema, question: workerNeedsInputSchema.unwrap().shape.question,
     answer: z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars) }).strict().readonly().optional(),
+  workerCustody: z.object({ schemaVersion: z.literal(1), state: z.enum(['held', 'released']),
+    basis: z.enum(['termination-proof', 'manual-decision']), fenceReceiptId: identity,
+    proofReceiptId: identity.optional(), decisionReceiptId: identity.optional(),
+  }).strict().refine(value => value.basis === 'termination-proof' ? value.proofReceiptId !== undefined && value.decisionReceiptId === undefined
+    : value.decisionReceiptId !== undefined && value.proofReceiptId === undefined).readonly().optional(),
   unresolvedEffects: z.boolean(),
   eligibility: taskEligibilitySchema,
 }).strict().superRefine((state, context) => {

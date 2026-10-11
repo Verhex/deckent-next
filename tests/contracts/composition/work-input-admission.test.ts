@@ -95,6 +95,13 @@ async function terminal(f: Awaited<ReturnType<typeof seeded>>, runId: string, id
       await writer.commitTaskEvaluation({ commandId: `evaluate-${runId}`, actor: { id: 'fixture', issuer: 'test', subject: 'service' }, expectedRevision: current.revision,
         dispatch, evaluation: { schemaVersion: 1, evaluationId: `evaluate-${runId}`, identity, graphRevision: 1, attemptRevision: (await writer.load('s', identity.attemptId))!.revision,
           criteria: [{ criterionId: 'exit', verdict: 'unknown', evidenceIds: [] }], model } });
+      // Durable metrics carry the primary identity; the canonical native pin retains its auxiliary models.
+      const db = new DatabaseSync(f.path, { readOnly: true });
+      try {
+        const row = db.prepare('SELECT record FROM acceptance_metrics WHERE scope_id=? AND producer_command_id=?').get('s', `evaluate-${runId}`);
+        expect(JSON.parse(String(row?.record)).metric.model).toEqual({ channelId: pin.pin.channelId, modelId: pin.pin.modelId });
+        expect(readWorkerModelPin((await writer.loadRun('s', runId))!.execution.tasks[0]!.profile.parameters)!.pin).toEqual(pin.pin);
+      } finally { db.close(); }
       return model;
     } finally { writer.close(); }
   };
@@ -149,6 +156,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
       ['unknown', workInput('claude-sonnet-9-9'), 'coding', 'WORKER_MODEL_UNKNOWN'],
       ['inactive', workInput('claude-opus-5-5', {}, []), 'coding', 'WORKER_MODEL_NOT_ACTIVE'],
       ['effort', workInput(HAIKU, { effort: 'high' }, []), 'coding', 'WORKER_EFFORT_UNSUPPORTED'],
+      ['explicit-unknown-class', workInput('claude-sonnet-5-5', { effort: 'high', workClass: 'unknown' }), 'coding', 'WORK_CLASS_NOT_REGISTERED'],
       ['codex-turns', workInput('gpt-exact-1', { maxTurns: 5 }, []), 'codex-coding', 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'],
       ['turns-exceed', workInput('claude-sonnet-5-5', { maxTurns: 41 }), 'coding', 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE'],
       ['on-prepared', workInput(), 'hand', 'WORK_INPUT_TEMPLATE_REQUIRED'],

@@ -1,5 +1,5 @@
 import { DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
-import { DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
+import { CommandIdError, DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError, type ProviderSpendAccount } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
@@ -7,7 +7,7 @@ import { InstallationProfileError, InstallationEvidenceError, InstallationRecove
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
   InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
 import { LocalRuntimeSocketError } from '#adapters/index.js';
-import { RunError, TaskEvaluationError, TaskGraphError } from '#domain/index.js';
+import { RunError, TaskEvaluationError, TaskGraphError, WorkClassRegistryError, WorkerEffortError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';
 import { DeckentError, ErrorRegistry, unexpectedQueryFailure, sanitizeQueryFailure, ManagedFileError, BootstrapStateError } from '#platform/index.js';
@@ -18,7 +18,7 @@ const registeredFailure = (code: string, options?: Parameters<typeof ErrorRegist
   ? ErrorRegistry.createError(code, options) : ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
 /** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
 export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
-  if (error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
+  if (error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
     || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return registeredFailure(error.code);
   if (error instanceof WorkspacePatchError) return registeredFailure(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
   if (error instanceof RunProgressionFailure) return queryFailure(error.cause);
@@ -57,6 +57,6 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof DispatchInventoryError) return registeredFailure('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) return registeredFailure(error.code, { params: reservationDiagnosticParams(error.diagnostic) });
   if (error instanceof SupervisorError || error instanceof RunError || error instanceof RunLifecycleError || error instanceof ServiceShutdownError || error instanceof ReconciliationRecoveryError || error instanceof ReconciliationRuntimeLoopError || error instanceof CancellationRuntimeLoopError || error instanceof LocalRuntimeSocketError || error instanceof RuntimeServiceProtocolError || error instanceof RuntimeServiceLifecycleError || error instanceof RunWorkspaceCustodyError || error instanceof WorkspaceError || error instanceof CancellationDeliveryError || error instanceof TaskEvaluationError || error instanceof TaskEvidenceError || error instanceof EvaluationEvidenceError || error instanceof ExecutionRegistryError || error instanceof AuthenticationError || error instanceof AttemptStoreError || error instanceof DispatchError || error instanceof RunStoreError ||
-    error instanceof ManagedFileError || error instanceof PolicyAuthorizationError || error instanceof WorkTargetError) return registeredFailure(error.code);
+    error instanceof WorkClassRegistryError || error instanceof WorkerEffortError || error instanceof ManagedFileError || error instanceof PolicyAuthorizationError || error instanceof WorkTargetError) return registeredFailure(error.code);
   return unexpectedQueryFailure(error);
 }

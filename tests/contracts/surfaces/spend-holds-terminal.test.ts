@@ -145,7 +145,7 @@ it('pages only unreconciled holds using the partial index; v1 queries do not acq
 
 it('upgrades a v49 ledger without rewriting financial evidence and forbids an unadmitted v49 writer', async () => {
   const f = await fixture(), before = await f.snapshot(), db = new DatabaseSync(f.path);
-  db.exec('DROP INDEX model_invocation_spend_unreconciled_holds; PRAGMA user_version=49'); db.close();
+  db.exec('DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX model_invocation_spend_unreconciled_holds; PRAGMA user_version=49'); db.close();
   await expect(openSqliteModelInvocationStore(f.path, options, 'forbid')).rejects.toThrow('ATTEMPT_STORE_VERSION');
   await mkdir(join(f.root, 'backup'));
   await upgradeExistingProductLedger(f.path, options, join(f.root, 'backup'), new Date('2026-10-09T00:00:00Z')); expect(await f.snapshot()).toEqual(before); await integrity(f.path);

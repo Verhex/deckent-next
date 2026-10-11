@@ -1,3 +1,4 @@
+import { readDispatchFence } from './dispatch-fence.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteDeliveryJournal } from './delivery.js';
 import { SqliteAdoptionJournal } from './adoption.js';
@@ -9,12 +10,13 @@ import type { IntegrationIntent } from '#engine/index.js';
 import { SqliteRunProgression } from './progression.js';
 import type { ProgressionQuery } from '#engine/index.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
+import { readRunEvaluationPrincipal } from './evaluation-evidence.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
 import { settleAttemptCancellation } from './run-settlement.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import { SqliteCancellationRecoveryQuery } from './cancellation-recovery.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
-import { SqliteServiceShutdownJournal } from './service-shutdown.js';
+import { SqliteServiceShutdownJournal } from '#adapters/core/service-shutdown-store/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
 import { SqlitePoolCapacityJournal } from './pool-capacity.js';
@@ -27,8 +29,7 @@ import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, Cancellati
 import { openSqliteLedger, sqliteFailure, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
-import { AttemptStoreError, dispatchRecordSchema, readSealedWorkerEvents, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
-
+import { AttemptStoreError, dispatchRecordSchema, DispatchError, attemptDispatchWriteToken,  readSealedWorkerEvents, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore, PoolCapacityStore {
   private readonly db: DatabaseSync;
@@ -82,6 +83,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async listRunLifecycleDue(query: ProgressionQuery & { readonly now: number }) { return new SqliteRunProgression(this.db).listRunLifecycleDue(query); }
   async hasTaskEvaluation(identity: unknown, revision: number) { return new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision); }
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunReceipt(scopeId, commandId); }
+  async retainDispatchWorker(...args: Parameters<SqliteDispatchJournal['retainDispatchWorker']>) { return new SqliteDispatchJournal(this.db).retainDispatchWorker(...args); }
+  async releaseLostDispatch(...args: Parameters<SqliteRunJournal['releaseLostDispatch']>) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).releaseLostDispatch(...args); }
+  async fenceLostDispatch(...args: Parameters<import('#engine/index.js').LostDispatchStore['fenceLostDispatch']>) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).fenceLostDispatch(...args); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).cancelRun(input); }
   async commitRunLifecycle(input: import('#engine/index.js').RunLifecycleWrite,
     audit?: (store: import('#engine/index.js').AuditStore, snapshot: import('#domain/index.js').RunSnapshot) => void) {
@@ -96,6 +100,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   recordPoolHoldRefusal(audit: Parameters<PoolHoldStore['recordPoolHoldRefusal']>[0]) { return new SqlitePoolHoldJournal(this.db).recordPoolHoldRefusal(audit); }
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).projectRunAttempt(input); }
   async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).commitTaskEvaluation(input); }
+  async loadRunEvaluationPrincipal(identity: AttemptIdentity) { return readRunEvaluationPrincipal(this.db, identity); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRun(scopeId, runId); }
   async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunExecutionPolicy(scopeId, runId); }
   async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace); }
@@ -124,6 +129,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
    * (size + digest) and event schema; null without a sealed log, `WORKER_OBSERVATION_INVALID` for anything else. */
   async loadSealedWorkerEvents(identity: AttemptIdentity, artifacts: Pick<import('#capabilities/index.js').ArtifactStore, 'read'>) { return readSealedWorkerEvents(this, artifacts, identity); }
   async loadEffect(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffect(scopeId, commandId); }
+  async loadEffectCompensation(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffectCompensation(scopeId, commandId); }
   async claimEffect(intent: import('#domain/index.js').EffectIntent) { return new SqliteEffectJournal(this.db).claimEffect(intent); }
   async saveEffect(previous: import('#domain/index.js').EffectRecord, next: import('#domain/index.js').EffectRecord) { return new SqliteEffectJournal(this.db).saveEffect(previous, next); }
   close(): void { this.db.close(); }
@@ -151,16 +157,24 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
     return Object.freeze({ commandId, command: row.command, snapshot });
   }
   async commit(input: AttemptCommit): Promise<AttemptReceipt> {
-    const snapshot = attemptSnapshotSchema.parse(input.snapshot);
-    const { scopeId, attemptId } = snapshot.identity;
+    const snapshot = attemptSnapshotSchema.parse(input.snapshot), { scopeId, attemptId } = snapshot.identity;
     const cancellationActor = input.cancellationActor === undefined ? undefined : verifiedPrincipalSchema.parse(input.cancellationActor);
-    if (cancellationActor && (!cancellationActor.scopeIds.includes(scopeId) || !snapshot.cancelRequested || input.expectedRevision === null)) {
-      throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
-    }
+    if (cancellationActor && (!cancellationActor.scopeIds.includes(scopeId) || !snapshot.cancelRequested || input.expectedRevision === null)) throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
     let transaction = false;
     try {
-      this.db.exec('BEGIN IMMEDIATE');
-      transaction = true;
+      this.db.exec('BEGIN IMMEDIATE'); transaction = true;
+      const dispatch = this.db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
+      if (dispatch) {
+        if (cancellationActor) {
+          let record;
+          try { record = dispatchRecordSchema.parse(JSON.parse(String(dispatch.record))); }
+          catch { throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT'); }
+          if (!sameAttemptIdentity(record.request.identity, snapshot.identity)) throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
+        }
+        const token = attemptDispatchWriteToken(dispatch.record, snapshot.identity, input.commandId);
+        const fence = readDispatchFence(this.db, token.record);
+        if (fence && !cancellationActor) throw new DispatchError('DISPATCH_FENCED');
+      }
       const existing = this.readReceipt(scopeId, input.commandId);
       if (existing) {
         if (existing.command !== input.command) throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
@@ -172,9 +186,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
         if (!currentRow) throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
         const current = this.decode(currentRow.snapshot);
         if (!sameAttemptIdentity(current.identity, snapshot.identity) ||
-          (snapshot.revision === input.expectedRevision && JSON.stringify(current) !== encoded)) {
-          throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
-        }
+          (snapshot.revision === input.expectedRevision && JSON.stringify(current) !== encoded)) throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
       }
       if (input.expectedRevision === null) {
         if (snapshot.revision !== 0) throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
@@ -190,14 +202,11 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
       if (cancellationActor) {
         const dispatchRow = this.db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
         if (dispatchRow) {
-          let dispatch;
-          try { dispatch = dispatchRecordSchema.parse(JSON.parse(String(dispatchRow.record))); }
+          let dispatch; try { dispatch = dispatchRecordSchema.parse(JSON.parse(String(dispatchRow.record))); }
           catch { throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT'); }
           if (!sameAttemptIdentity(dispatch.request.identity, snapshot.identity)) throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
           const actor = { id: cancellationActor.id, issuer: cancellationActor.issuer, subject: cancellationActor.subject };
-          if (dispatch.cancellation && JSON.stringify(dispatch.cancellation) !== JSON.stringify(actor)) {
-            throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
-          }
+          if (dispatch.cancellation && JSON.stringify(dispatch.cancellation) !== JSON.stringify(actor)) throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
           const attributed = dispatchRecordSchema.parse({ ...dispatch, cancellation: actor });
           this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?')
             .run(JSON.stringify(attributed), scopeId, attemptId);
@@ -205,8 +214,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
       }
       this.db.prepare('INSERT INTO attempt_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)')
         .run(scopeId, input.commandId, input.command, encoded);
-      this.db.exec('COMMIT');
-      return Object.freeze({ commandId: input.commandId, command: input.command, snapshot });
+      this.db.exec('COMMIT'); return Object.freeze({ commandId: input.commandId, command: input.command, snapshot });
     } catch (error) {
       if (transaction) {
         try { this.db.exec('ROLLBACK'); }

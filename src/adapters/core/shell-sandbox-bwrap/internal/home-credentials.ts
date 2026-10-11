@@ -19,7 +19,7 @@ async function boundedNames(path: string, remaining: number): Promise<{ names: D
     }
   } catch { return { names, complete: false }; } finally { await dir?.close().catch(() => undefined); }
 }
-/** Known locations first; then the existing depth-3 credential floor. Never expose a partially inspected subtree. */
+/** Known locations first; then depth-3 credentials, prioritizing skip-root ancestors within the same budget. */
 export async function maskHomeCredentials(home: string, denied: (rel: string) => boolean, skip: readonly string[],
   directories: string[], files: string[], maxMasks: number, environment: Readonly<Record<string, string | undefined>>): Promise<string | null> {
   const refuse = (detail: string) => t('shell.homeCredentialsRefused', { detail, entries: BUBBLEWRAP_HOME_WALK_MAX_ENTRIES }, resolveLocale(undefined, environment));
@@ -65,7 +65,11 @@ export async function maskHomeCredentials(home: string, denied: (rel: string) =>
       if (entry.isSocket() || denied(rel)) {
         (entry.isDirectory() ? directories : files).push(path); const over = overMasks(); if (over) return over; continue;
       }
-      if (entry.isDirectory() && !BASELINE_IGNORED_DIRS.has(entry.name) && current.depth + 1 < BUBBLEWRAP_HOME_WALK_MAX_DEPTH) queue.push({ path, rel, depth: current.depth + 1 });
+      if (entry.isDirectory() && !BASELINE_IGNORED_DIRS.has(entry.name) && current.depth + 1 < BUBBLEWRAP_HOME_WALK_MAX_DEPTH) {
+        const next = { path, rel, depth: current.depth + 1 };
+        // Inspect entire ancestor chains before ordinary siblings can spend the shared budget. Entry checks above still apply.
+        if (skip.some(root => under(root, path))) queue.splice(index + 1, 0, next); else queue.push(next);
+      }
     }
   }
   return null;

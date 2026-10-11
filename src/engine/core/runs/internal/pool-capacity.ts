@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
@@ -9,7 +10,7 @@ import { poolHoldQuerySchema, poolOccupancySchema, type PoolHoldAuditRecorder, t
 
 // The pool's existing counter bound is Number.MAX_SAFE_INTEGER; no new product ceiling.
 export const poolCapacitySchema = z.object({ executionSlots: counterSchema.positive(), inFlightSlots: counterSchema.positive() }).strict().readonly();
-export const poolCapacityCommandSchema = poolHoldQuerySchema.extend({ commandId: identitySchema, capacity: poolCapacitySchema }).strict();
+export const poolCapacityCommandSchema = poolHoldQuerySchema.extend({ commandId: clientCommandIdSchema, capacity: poolCapacitySchema }).strict();
 export const poolCapacityReceiptSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema, poolId: identitySchema,
   actor: z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly(), atMs: counterSchema, changed: z.boolean(),
   previous: poolCapacitySchema.unwrap().extend({ executionSlots: counterSchema, inFlightSlots: counterSchema }).readonly(), next: poolCapacitySchema }).strict().readonly();

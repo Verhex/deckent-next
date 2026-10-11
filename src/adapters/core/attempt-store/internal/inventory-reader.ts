@@ -1,7 +1,7 @@
 import { readRunPoolEvidence } from './run-pool-observation.js';
 import { readIntegration } from './integration.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
-import { requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
+import { readRunAcceptanceEvaluations, requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
   assertSqliteEngineSupported, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { readRunReceipt, readRunSnapshot } from './runs.js';
 import { attemptSnapshotSchema, identitySchema } from '#domain/index.js';
@@ -62,6 +62,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     } catch (error) { throw readFailure(error); }
   }
   loadRunPoolEvidence(scopeId: string, runId: string) { return readRunPoolEvidence(this.db, scopeId, runId); }
+  async loadRunEvaluations(snapshot: import('#domain/index.js').RunSnapshot) { try { requireLedgerVersion(this.db, RUN_LEDGER_VERSION); return readRunAcceptanceEvaluations(this.db, snapshot); } catch (error) { throw readFailure(error); } }
   async loadRun(scopeId: string, runId: string) {
     const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
     try {

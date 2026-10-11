@@ -43,9 +43,12 @@ export interface ConfigLoadOptions {
   /** Astra 2471 R1: only the backup restore that completes an interrupted restore passes `admit`; every other reader refuses the hold. */
   readonly restoreHold?: RestoreHoldAdmission;
 }
-function cloneResolved(value: ResolvedConfig): ResolvedConfig {
-  const clone = structuredClone(value);
-  return { ...clone, productLayout: Object.freeze({ ...clone.productLayout, resources: Object.freeze(clone.productLayout.resources) }) };
+/** Resolved configs and effective validators are read-only; freeze once, including children of already-frozen layout objects. */
+function freezeResolved(value: unknown, seen = new WeakSet<object>()): void {
+  if (value === null || typeof value !== 'object' || seen.has(value)) return;
+  seen.add(value);
+  for (const child of Object.values(value)) freezeResolved(child, seen);
+  Object.freeze(value);
 }
 interface Cached { value: ResolvedConfig; warnings: ConfigWarning[] }
 const cache = new Map<string, Cached>();
@@ -91,10 +94,10 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const key = digestText(JSON.stringify([root, platform, [...new Set([...ENVIRONMENT_KEYS, ...CONFIG_ENVIRONMENT_KEYS])].map(name => [name, env[name]]), stamps, bootstrap?.generation ?? null, configRegistryGeneration(), options.globalOnly ?? false, options.heal ?? true]));
   const cached = options.force || envValue(env, 'DECKENT_CONFIG_RELOAD') === '1' ? undefined : cache.get(key);
   if (cached) {
-    for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(cached.value), env);
+    for (const section of configSections().values()) section.options.validateEffective?.(cached.value, env);
     cached.warnings.forEach(w => options.onWarning?.(w));
     if (bootstrap) await assertInstallationBootstrap(root, bootstrap, admission, hold);
-    return cloneResolved(cached.value); }
+    return cached.value; }
   const warnings: ConfigWarning[] = [];
   const global = await loadGlobalConfig({ env, platform, onWarning: w => warnings.push(w) }) ?? {};
   const project: unknown = options.globalOnly || projectPath === globalPath ? {} : await readProjectConfig(projectPath, {
@@ -131,13 +134,14 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   }
   const value: ResolvedConfig = { ...secrets.config, projectRoot: root, productLayout, secretPaths: secrets.secretPaths };
   bindConfigKnownSecrets(value, secrets.knownSecrets);
-  for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(value), env);
+  freezeResolved(value);
+  for (const section of configSections().values()) section.options.validateEffective?.(value, env);
   warnings.forEach(w => options.onWarning?.(w));
   const cacheable = secrets.references.length === 0 && (await Promise.all(paths.map(stamp))).every((s, i) => s === stamps[i]);
   if (bootstrap) await assertInstallationBootstrap(root, bootstrap, admission, hold);
   if (cacheable) {
     if (cache.size >= 128) cache.delete(cache.keys().next().value!);
-    cache.set(key, { value: structuredClone(value), warnings: structuredClone(warnings) });
+    cache.set(key, { value, warnings: structuredClone(warnings) });
   }
   return value;
 }

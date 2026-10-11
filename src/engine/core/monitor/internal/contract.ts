@@ -1,6 +1,6 @@
 import type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';
 import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
-import type { TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
+import type { AcceptanceView, TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 import { z } from 'zod';
@@ -61,8 +61,10 @@ export interface MonitorAttempt {
   readonly failedTests?: NonNullable<ResultBrief['failedTests']>;
 }
 export interface MonitorTask {
+  readonly acceptance?: AcceptanceView;
   readonly waiting?: import('#engine/core/runs/index.js').PoolWait;
   readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready' | 'needs-input'; readonly question?: string; readonly sinceMs: number; readonly deadlineMs: number };
+  readonly custodyDisposition?: 'hold-manual' | 'released';
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;

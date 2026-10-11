@@ -4,7 +4,7 @@ import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfac
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import { providerDisplayName } from './provider-label.js';
-import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
+import { modelInvocabilityText, reservationAmountText } from '#surfaces/core/model-invocability/index.js';
 
 // The config surface reaches the terminal renderer; load it only when a default-model write happens (startup graph stays light).
 const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/core/config/index.js').terminalConfigWrite>) =>
@@ -27,7 +27,7 @@ const errorCode = (error: unknown) => String((error as { code?: unknown })?.code
 function readinessReason(error: unknown, locale: Locale): string {
   const params = (error as { params?: { requested?: unknown; currency?: unknown } })?.params;
   if (errorCode(error) === 'PROVIDER_SPEND_EXHAUSTED' && typeof params?.requested === 'number' && Number.isSafeInteger(params.requested)
-    && params.requested >= 0 && typeof params.currency === 'string' && /^[A-Z]{3}$/u.test(params.currency)) return t('tui.model.reason.reservation', { amount: (params.requested / 100).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 }), currency: params.currency }, locale);
+    && params.requested >= 0 && typeof params.currency === 'string' && /^[A-Z]{3}$/u.test(params.currency)) return t('tui.model.reason.reservation', { amount: reservationAmountText(params.requested, params.currency, locale), currency: params.currency }, locale);
   const code = errorCode(error);
   if (code === 'MODEL_INVOCATION_REASONING_UNSUPPORTED') return t('tui.model.reason.reasoningOff', {}, locale);
   if (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN' || code === 'PROVIDER_SPEND_UNAVAILABLE')

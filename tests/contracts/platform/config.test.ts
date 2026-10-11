@@ -58,7 +58,7 @@ describe('config public contract', () => {
   });
   it('resolves cache against call-time env and file revisions and never returns a shared mutable object', async () => {
     const f = await fixture();
-    const one = await loadConfig(f.project, { env: f.env }); one.language = 'tr';
+    const one = await loadConfig(f.project, { env: f.env }); expect(() => { one.language = 'tr'; }).toThrow(TypeError);
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     await writeFile(f.projectPath, '{"language":"tr"}');
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('tr');

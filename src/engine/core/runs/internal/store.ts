@@ -1,3 +1,4 @@
+import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import type { ReservationDiagnostic } from '#engine/core/scheduling/index.js';
@@ -7,10 +8,10 @@ const capacity = z.object({ executionSlots: counterSchema, inFlightSlots: counte
 export const executionPoolSchema = z.object({ schemaVersion: z.literal(1), poolId: identitySchema, capacity }).strict().readonly();
 export type ExecutionPool = z.infer<typeof executionPoolSchema>;
 export const runExecutionPolicySchema = z.object({ schemaVersion: z.literal(2), poolId: identitySchema, capacity, ordering: z.array(identitySchema) }).strict();
-export const runCreateSchema = z.object({ commandId: identitySchema, actor, identity: runIdentitySchema, graph: taskGraphSchema, now: counterSchema,
+export const runCreateSchema = z.object({ commandId: clientCommandIdSchema, actor, identity: runIdentitySchema, graph: taskGraphSchema, now: counterSchema,
   policy: runExecutionPolicySchema, execution: runExecutionSnapshotSchema, branch: branchDecisionSchema.optional(),
 }).strict();
-export const runReservationSchema = z.object({ commandId: identitySchema, actor, scopeId: identitySchema, runId: identitySchema,
+export const runReservationSchema = z.object({ commandId: clientCommandIdSchema, actor, scopeId: identitySchema, runId: identitySchema,
   expectedRevision: counterSchema, now: counterSchema, identities: z.array(attemptIdentitySchema).min(1),
 }).strict();
 export const runProjectionSchema = runReservationSchema.omit({ now: true, identities: true }).extend({ attemptId: identitySchema });

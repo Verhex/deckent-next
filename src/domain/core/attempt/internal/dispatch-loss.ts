@@ -26,7 +26,7 @@ export type DispatchTerminationProof = Readonly<{
   receiptId: string;
   worker: WorkerIncarnation;
 } & ({ kind: 'supervisor-exit'; result: ProcessExitCause } | { kind: 'worker-absent' })>;
-export type LostDispatchAction = 'release-slot' | 'finish-dispatch' | 'result' | 'effect';
+export type LostDispatchAction = 'release-slot' | 'finish-dispatch' | 'result' | 'output' | 'patch' | 'effect';
 export type DispatchLossDecision = Readonly<
   { kind: 'release'; fenceReceiptId: string; terminationReceiptId: string } |
   { kind: 'hold-manual'; reason: 'not-lost' | 'not-granted' | 'fence-required' | 'fence-mismatch' | 'termination-required' | 'termination-mismatch' } |
