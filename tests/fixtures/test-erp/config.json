@@ -8,7 +8,67 @@
   "approvedStatus": "approved",
   "keyPrefix": "test-erp-key",
   "versionPrefix": "revision-",
-  "http": { "host": "127.0.0.1", "port": 0, "timeoutMs": 200, "responseMaxBytes": 65536, "inputMaxBytes": 4096 },
-  "operations": { "read": { "id": "test.erp.read", "version": 1 }, "approve": { "id": "test.erp.approve", "version": 1 }, "undo": { "id": "test.erp.undo", "version": 1 } },
-  "policy": { "revision": "test-erp-policy", "fourEyesRuleId": "test-erp-four-eyes" }
+  "http": {
+    "host": "127.0.0.1",
+    "port": 0,
+    "timeoutMs": 200,
+    "responseMaxBytes": 65536,
+    "inputMaxBytes": 4096
+  },
+  "operations": {
+    "read": {
+      "id": "test.erp.read",
+      "version": 1
+    },
+    "approve": {
+      "id": "test.erp.approve",
+      "version": 1
+    },
+    "undo": {
+      "id": "test.erp.undo",
+      "version": 1
+    }
+  },
+  "policy": {
+    "revision": "test-erp-policy",
+    "fourEyesRuleId": "test-erp-four-eyes"
+  },
+  "runtime": {
+    "commandTimeoutMs": 10000,
+    "stopTimeoutMs": 5000,
+    "outputMaxBytes": 1000000
+  },
+  "runtimeService": {
+    "inputMaxBytes": 65536,
+    "responseMaxBytes": 65536,
+    "maxConnections": 8,
+    "maxConcurrentRequests": 4,
+    "maxConcurrentExecutions": 1,
+    "headerTimeoutMs": 1000,
+    "responseTimeoutMs": 5000,
+    "shutdownGraceMs": 1000
+  },
+  "runRuntime": {
+    "pollIntervalMs": 2147483647
+  },
+  "cancellation": {
+    "maxConcurrentDeliveries": 1,
+    "recoveryPageSize": 1,
+    "maxAttempts": 1,
+    "retryDelayMs": 1,
+    "claimTtlMs": 10
+  },
+  "cancellationRuntime": {
+    "scopeIds": [
+      "test-erp-company"
+    ],
+    "pollIntervalMs": 1000,
+    "failureBackoffMs": 1000
+  },
+  "toolchains": {
+    "update": {
+      "atStartup": false,
+      "intervalMs": 0
+    }
+  }
 }

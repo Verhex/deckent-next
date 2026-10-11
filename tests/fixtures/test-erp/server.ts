@@ -1,9 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import config from './config.json' with { type: 'json' };
+import { FixtureUnavailableError, fixtureAvailability, loopbackAvailability } from './availability.js';
 
 /** Test data and HTTP protocol only. No adapter registration or alternate effect/approval owner. */
 export async function startTestErp() {
+  const availability = fixtureAvailability();
+  if (availability.status !== 'available') throw new FixtureUnavailableError(availability);
   let record = { version: config.initialVersion, status: config.initialStatus };
   const etag = (version: number) => `"${config.versionPrefix}${version}"`;
   const idempotency = new Map<string, string>();
@@ -56,7 +59,13 @@ export async function startTestErp() {
       send(res, 200, etag(record.version));
     })().catch(() => { if (!res.headersSent) send(res, 400); else res.destroy(); });
   });
-  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(config.http.port, config.http.host, resolve); });
+  try {
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(config.http.port, config.http.host, resolve); });
+  } catch (error) {
+    const denied = loopbackAvailability(error);
+    if (denied.status === 'verify-not-run') throw new FixtureUnavailableError(denied);
+    throw error;
+  }
   const baseUrl = `http://${config.http.host}:${(server.address() as AddressInfo).port}`;
   return { baseUrl, faults, writes, requests, etag, idempotency, current: () => ({ ...record }),
     close: () => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }) };
