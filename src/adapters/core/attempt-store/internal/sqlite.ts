@@ -11,6 +11,7 @@ import { SqliteRunProgression } from './progression.js';
 import type { ProgressionQuery } from '#engine/index.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { readRunEvaluationPrincipal } from './evaluation-evidence.js';
+import { readAcceptedOperationSettlements } from '#adapters/core/sqlite-ledger/index.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
 import { settleAttemptCancellation } from './run-settlement.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
@@ -100,6 +101,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   recordPoolHoldRefusal(audit: Parameters<PoolHoldStore['recordPoolHoldRefusal']>[0]) { return new SqlitePoolHoldJournal(this.db).recordPoolHoldRefusal(audit); }
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).projectRunAttempt(input); }
   async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).commitTaskEvaluation(input); }
+  async loadAcceptedOperationSettlements(run: import('#domain/index.js').RunSnapshot) { return readAcceptedOperationSettlements(this.db, run); }
   async loadRunEvaluationPrincipal(identity: AttemptIdentity) { return readRunEvaluationPrincipal(this.db, identity); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRun(scopeId, runId); }
   async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunExecutionPolicy(scopeId, runId); }

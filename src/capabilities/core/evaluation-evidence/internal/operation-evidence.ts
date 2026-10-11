@@ -89,10 +89,10 @@ export async function evaluateOperationEvidence(reader: OperationEvidenceReader,
     if (found.data.state === 'settled') return result('fail', 'OPERATION_EVIDENCE_COMPENSATED');
     return found.data.state !== 'refused' ? result('unknown', 'OPERATION_COMPENSATION_UNSETTLED') : undefined;
   };
-  const bindingReason = operationEvidenceBindingReason(binding, record.intent.actor, record.evidence?.observedAt);
+  const bindingReason = operationEvidenceBindingReason(binding, record.intent.actor, record.evidence?.observedAt, { commandId, digest: recordDigest });
   if (bindingReason) {
     await compensationOutcome(); // Observation only: the binding verdict keeps precedence.
-    return result(bindingReason === 'OPERATION_EVIDENCE_CONTEXT' ? 'unknown' : 'fail', bindingReason);
+    return result(['OPERATION_EVIDENCE_CONTEXT', 'OPERATION_EVIDENCE_EARLIER'].includes(bindingReason) ? 'unknown' : 'fail', bindingReason);
   }
   if (record.state === 'refused') return result('fail', record.refusal!);
   if (record.state !== 'settled') return result('unknown', 'OPERATION_EVIDENCE_UNSETTLED');

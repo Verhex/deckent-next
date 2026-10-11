@@ -14,6 +14,8 @@ export async function observeConfiguredRunResults(config: ResolvedConfig, env: E
       throw error;
     }
   }, retained);
-  return runViewSchema.parse({ ...run, tasks: run.tasks.map(task => ({ ...task,
-    ...(briefs.has(task.id) ? { resultBrief: briefs.get(task.id)! } : {}) })) });
+  return runViewSchema.parse({ ...run, tasks: run.tasks.map(task => {
+    const { resultBrief, ...view } = task; void resultBrief;
+    return { ...view, ...(briefs.has(task.id) ? { resultBrief: briefs.get(task.id)! } : {}) };
+  }) });
 }

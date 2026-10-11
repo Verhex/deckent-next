@@ -21,10 +21,10 @@ const observation = (original: unknown, undo: EffectRecord | null = null) => ({ 
   compensation: undo ? { commandId: undo.intent.command.commandId, digest: createHash('sha256').update(JSON.stringify(undo)).digest('hex') } : null });
 const evaluate = (value: unknown) => evaluateOperationEvidence({ async loadEffect() { return value; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity, binding);
 
-it('fails a settlement before the binding boundary and accepts the exact boundary', async () => {
+it('holds a settlement before the binding boundary and accepts the exact boundary', async () => {
   const input = record();
   expect(await evaluate({ ...input, evidence: { ...input.evidence!, observedAt: 0 } }))
-    .toMatchObject({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_EARLIER' });
+    .toMatchObject({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_EARLIER' });
   expect((await evaluate(input)).verdict).toBe('pass');
 });
 it.each(['id', 'issuer', 'subject'] as const)('fails a foreign operation principal %s', async field => {
@@ -159,7 +159,7 @@ it.each(['scopeId', 'compensates', 'target', 'operation'] as const)('holds a com
 it('observes a settled compensation before returning a binding failure, so the acceptance transaction sees the same evidence', async () => {
   const original = { ...compensable(), evidence: { ...compensable().evidence!, observedAt: 0 } }, undo = compensation('settled');
   expect(await evaluateOperationEvidence({ async loadEffect() { return original; }, async loadEffectCompensation() { return undo; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity, binding))
-    .toEqual({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_EARLIER', effectEvidence: observation(original, undo) });
+    .toEqual({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_EARLIER', effectEvidence: observation(original, undo) });
 });
 it('holds malformed compensation and reader failure without any retry', async () => {
   const loadEffectCompensation = vi.fn(async () => { throw new Error('unavailable'); });
@@ -167,4 +167,15 @@ it('holds malformed compensation and reader failure without any retry', async ()
   expect(await evaluateOperationEvidence(reader, OPERATION_EVIDENCE_EVALUATOR, criterion, identity, binding)).toEqual({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_UNAVAILABLE', effectEvidence: observation(compensable()) });
   expect(loadEffectCompensation).toHaveBeenCalledTimes(1);
   expect(await evaluateOperationEvidence({ ...reader, async loadEffectCompensation() { return {}; } }, OPERATION_EVIDENCE_EVALUATOR, criterion, identity, binding)).toEqual({ verdict: 'unknown', reason: 'OPERATION_COMPENSATION_INVALID', effectEvidence: observation(compensable()) });
+});
+
+it('shares an exact previously accepted settlement digest, never an unrelated command or changed digest', async () => {
+  const input = record(), digest = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const reader = { async loadEffect() { return input; } };
+  for (const reference of [{ commandId: 'command-a', digest }, { commandId: 'unrelated', digest }, { commandId: 'command-a', digest: 'f'.repeat(64) }]) {
+    const result = await evaluateOperationEvidence(reader, OPERATION_EVIDENCE_EVALUATOR, criterion, identity,
+      { ...binding, notBefore: 2, acceptedSettlements: [reference] });
+    expect(result.verdict).toBe(reference.commandId === 'command-a' && reference.digest === digest ? 'pass' : 'unknown');
+    if (result.verdict !== 'pass') expect(result.reason).toBe('OPERATION_EVIDENCE_EARLIER');
+  }
 });

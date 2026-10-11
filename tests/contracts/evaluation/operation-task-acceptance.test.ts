@@ -42,15 +42,21 @@ async function fixture(state: EffectRecord['state'] | 'missing' = 'settled', com
     policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['read', 'approve'] } });
   await store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: 's', runId: 'run', expectedRevision: 0, now: 0, identities: [identity] });
   const claim = { owner: 'fixture', request: { protocolVersion: 1 as const, identity, workspace: root, argv: ['test-only-worker'] } };
+  const retainEffect = async () => {
+    if (state !== 'missing') {
+      const claimed = await store.claimEffect({ ...intent(compensable), actor: binding.effectActor ?? actor });
+      if (state !== 'claimed') await store.saveEffect(claimed, state === 'settled' ? settleEffect(claimed, { kind: 'idempotency-record', version: '2', observedAt: binding.observedAt ?? 1 })
+        : state === 'unknown' ? markEffectUnknown(claimed) : refuseEffect(claimed, 'EFFECT_PRECONDITION_CHANGED'));
+    }
+  };
+  const beforeGrant = state === 'settled' && (binding.observedAt ?? 1) < (binding.startedAt ?? 1);
+  // Preserve causal ordering in the old-effect negative: persist E before writing the new launch grant.
+  if (beforeGrant) await retainEffect();
   await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, binding.startedAt ?? 1);
   await mkdir(join(root, 'artifacts')); const artifacts = new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 });
   const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'test-only dispatch output', stderr: '' })));
   await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: 'fixture', exitCode: 0, interrupted: false });
-  if (state !== 'missing') {
-    const claimed = await store.claimEffect({ ...intent(compensable), actor: binding.effectActor ?? actor });
-    if (state !== 'claimed') await store.saveEffect(claimed, state === 'settled' ? settleEffect(claimed, { kind: 'idempotency-record', version: '2', observedAt: binding.observedAt ?? 1 })
-      : state === 'unknown' ? markEffectUnknown(claimed) : refuseEffect(claimed, 'EFFECT_PRECONDITION_CHANGED'));
-  }
+  if (!beforeGrant) await retainEffect();
   let activeStore = store;
   const loadEffect = vi.fn((scope: string, command: string) => activeStore.loadEffect(scope, command));
   const app = (reader = store, denied = false, now = 100) => {
@@ -70,33 +76,48 @@ async function addCompensation(store: SqliteAttemptStore, state: EffectRecord['s
     : state === 'unknown' ? markEffectUnknown(claimed) : refuseEffect(claimed, 'EFFECT_REJECTED'));
 }
 describe.skipIf(process.platform === 'win32')('POSIX retained-output operation acceptance', () => {
-  // The grant and the settlement are stamped by different processes; only a gap beyond the versioned wall skew is earlier.
+  // A timestamp tolerance is not causal evidence; earlier settlement remains unknown.
   it.each([['OPERATION_EVIDENCE_EARLIER', { startedAt: MAX_WALL_SKEW_MS + 2 }],
     ['OPERATION_EVIDENCE_PRINCIPAL', { effectActor: { ...actor, issuer: 'foreign' } }]] as const)(
     'retains %s on inspect after rejecting borrowed evidence and reopen', async (reason, binding) => {
       const f = await fixture('settled', false, binding), receipt = await f.app().execute(f.command);
-      expect(receipt.snapshot.progress[0]!.phase).toBe('failed');
-      expect(describeTaskEvaluationReceipt(receipt).run.tasks[0]!.acceptance!.results![0]).toMatchObject({ verdict: 'fail', reason });
+      expect(receipt.snapshot.progress[0]!.phase).toBe(reason === 'OPERATION_EVIDENCE_EARLIER' ? 'awaiting-decision' : 'failed');
+      expect(describeTaskEvaluationReceipt(receipt).run.tasks[0]!.acceptance!.results![0]).toMatchObject({ verdict: reason === 'OPERATION_EVIDENCE_EARLIER' ? 'unknown' : 'fail', reason });
       f.store.close(); stores.splice(stores.indexOf(f.store), 1);
       const reopened = await f.open(), stored = (await reopened.loadRunReceipt('s', 'evaluate'))!;
       expect(stored).toEqual(receipt);
       expect(projectRunView(stored.snapshot, [], selectRunAcceptanceEvaluations(stored.snapshot, [stored])).tasks[0]!.acceptance!.results![0]!.reason).toBe(reason);
     });
-  it('accepts a settlement stamped within the versioned wall skew before the grant (another process after a host clock step)', async () => {
-    const f = await fixture('settled', false, { startedAt: MAX_WALL_SKEW_MS + 1 });
+  it.each([1, 4000, MAX_WALL_SKEW_MS])('holds an unused old effect %s ms before grant without a clock step, including replay/reopen', async gap => {
+    const f = await fixture('settled', false, { startedAt: gap + 1 });
+    const oldEffect = await f.store.loadEffect('s', 'operation');
+    expect(await f.store.loadAcceptedOperationSettlements((await f.store.loadRun('s', 'run'))!)).toEqual([]);
+    const receipt = await f.app().execute(f.command);
+    expect(receipt.snapshot.progress[0]!.phase).toBe('awaiting-decision');
+    expect(JSON.parse(receipt.command).evaluation.criteria[0]).toMatchObject({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_EARLIER' });
+    expect(await f.app().execute(f.command)).toEqual(receipt);
+    const reopened = await f.open();
+    expect(await f.app(reopened).execute(f.command)).toEqual(receipt);
+    expect(await reopened.loadEffect('s', 'operation')).toEqual(oldEffect);
+    expect(await reopened.loadAcceptedOperationSettlements(receipt.snapshot)).toEqual([]);
+  });
+  it('accepts settlement strictly after the grant', async () => {
+    const f = await fixture('settled', false, { startedAt: 1, observedAt: 2 });
     expect((await f.app().execute(f.command)).snapshot.progress[0]!.phase).toBe('accepted');
   });
   it('records the typed binding failure of a compensated earlier settlement instead of refusing it as stale', async () => {
     const f = await fixture('settled', true, { startedAt: MAX_WALL_SKEW_MS + 2 }), undo = await addCompensation(f.store, 'settled');
     const receipt = await f.app().execute(f.command), evaluation = JSON.parse(receipt.command).evaluation;
-    expect(receipt.snapshot.progress[0]!.phase).toBe('failed');
-    expect(evaluation.criteria[0]).toMatchObject({ verdict: 'fail', reason: 'OPERATION_EVIDENCE_EARLIER',
+    expect(receipt.snapshot.progress[0]!.phase).toBe('awaiting-decision');
+    expect(evaluation.criteria[0]).toMatchObject({ verdict: 'unknown', reason: 'OPERATION_EVIDENCE_EARLIER',
       effectEvidence: { compensation: { commandId: 'undo', digest: createHash('sha256').update(JSON.stringify(undo)).digest('hex') } } });
   });
   it('allows the durable executing principal as well as the Run author', async () => {
     const f = await fixture('settled', false, { effectActor: { ...actor, id: 'test-launcher' } });
     expect((await f.app().execute(f.command)).snapshot.progress[0]!.phase).toBe('accepted');
   });
+});
+describe.skipIf(process.platform === 'win32')('POSIX retained-output operation sharing and settlement', () => {
   it.each([false, true])('shares evidence across Tasks of one Run and refuses another Run, with replay and reopen (legacy-shaped receipt %s)', async legacy => {
     const f = await fixture(); let first = await f.app().execute(f.command);
     if (legacy) {
@@ -108,7 +129,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     const next = { ...identity, taskId: 'approve', attemptId: 'attempt-approve' };
     await f.store.reserveRunTasks({ commandId: 'reserve-second', actor, scopeId: 's', runId: 'run', expectedRevision: 3, now: 1, identities: [next] });
     const claim = { owner: 'fixture', request: { protocolVersion: 1 as const, identity: next, workspace: f.root, argv: ['test-only-worker'] } };
-    await f.store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(f.store, claim);
+    await f.store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(f.store, claim, 2);
     const output = await f.artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity: next, completeness: 'complete', stdout: 'test-only dispatch output', stderr: '' })));
     await f.store.retainDispatchOutput(claim, output); await f.store.finishDispatch(claim, { handle: 'fixture', exitCode: 0, interrupted: false });
     const command = { ...f.command, identity: next, commandId: 'evaluate-second', expectedRevision: 5 };
@@ -138,7 +159,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
       graph: f.graph, execution: f.execution, policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['read', 'approve'] } });
     await reopened.reserveRunTasks({ commandId: 'reserve-other', actor, scopeId: 's', runId: foreign.runId, expectedRevision: 0, now: 0, identities: [foreign] });
     const foreignClaim = { ...claim, request: { ...claim.request, identity: foreign } };
-    await reopened.claimDispatch(dispatchAdmission(foreignClaim)); await grantTestLaunch(reopened, foreignClaim);
+    await reopened.claimDispatch(dispatchAdmission(foreignClaim)); await grantTestLaunch(reopened, foreignClaim, 2);
     const foreignOutput = await f.artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity: foreign, completeness: 'complete', stdout: 'test-only dispatch output', stderr: '' })));
     await reopened.retainDispatchOutput(foreignClaim, foreignOutput); await reopened.finishDispatch(foreignClaim, { handle: 'fixture', exitCode: 0, interrupted: false });
     const foreignCommand = { ...f.command, identity: foreign, commandId: 'evaluate-other' };
@@ -161,6 +182,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     const first = await f.app().execute(f.command);
     const second = await f.app(other).execute({ ...f.command, identity: next, commandId: 'evaluate-other' });
     expect(first.snapshot.progress[0]!.phase).toBe('awaiting-decision'); expect(second.snapshot.progress[0]!.phase).toBe('awaiting-decision');
+    expect(await f.store.loadAcceptedOperationSettlements(first.snapshot)).toEqual([]);
     const { AuditApplication } = await import('#engine/index.js'), { createHmacIntegrity } = await import('#platform/index.js');
     const integrity = createHmacIntegrity('audit', new Uint8Array(32).fill(1));
     const write = { schemaVersion: 1 as const, scopeId: 's', runId: 'run', taskId: 'read', commandId: 'human-accept', action: 'accept' as const,
@@ -203,7 +225,7 @@ describe.skipIf(process.platform === 'win32')('POSIX retained-output operation a
     const reopened = await f.open();
     for (const receipt of receipts) expect(await reopened.loadRunReceipt('s', receipt.commandId)).toEqual(receipt);
   });
-  it.each([{ startedAt: MAX_WALL_SKEW_MS + 2 }, { effectActor: { ...actor, subject: 'foreign' } }])(
+  it.each([{ startedAt: 4001 }, { startedAt: MAX_WALL_SKEW_MS + 2 }, { effectActor: { ...actor, subject: 'foreign' } }])(
     'rechecks temporal and authority binding against a forged passing commit (%#)', async binding => {
       const f = await fixture('settled', false, binding), commit = f.store.commitTaskEvaluation.bind(f.store);
       vi.spyOn(f.store, 'commitTaskEvaluation').mockImplementationOnce(async input => {

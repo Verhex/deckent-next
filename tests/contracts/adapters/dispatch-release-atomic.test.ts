@@ -107,3 +107,24 @@ it.each(['runs', 'audit_events', 'run_receipts'])('rolls back the custody releas
   expect(await f.store.loadRun('s', 'run')).toEqual(run); expect((await f.store.readPoolHold('fixture-pool')).occupancy).toEqual({ execution: 1, inFlight: 1 });
   expect(await f.store.loadRunReceipt('s', dispatchReleaseReceiptId(f.write.identity, f.claim.owner))).toBeNull();
 });
+
+// The first recovery must create its own fence and use that committed revision for release.
+it.each([true, false])('first unfenced recover releases only with termination evidence %s', async terminated => {
+  const f = await fixture(); let observed = 0;
+  const app = new LostDispatchApplication(f.store, { async verify() { return custodyPrincipal; } }, { async authorizeIdentity() {} },
+    { async observe() { observed++; return { handle: 'worker', result: { kind: 'unknown', reasonCode: 'WORKER_LOST' } }; },
+      async termination() { return terminated ? { kind: 'worker-absent', worker: f.worker } : null; } },
+    target => new AuditApplication(target, integrity), 'fixture-policy', () => 20);
+  expect(await f.store.loadRunReceipt('s', f.commandId)).toBeNull();
+  const originalInput = await input(f), result = await app.recover(originalInput);
+  expect(observed).toBe(1);
+  expect(result.decision.kind).toBe(terminated ? 'release' : 'hold-manual');
+  const run = (await f.store.loadRun('s', 'run'))!;
+  expect(run.revision).toBe(f.run.revision + (terminated ? 2 : 1));
+  expect(run.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
+  expect((await f.store.readPoolHold('fixture-pool')).occupancy).toEqual(terminated ? { execution: 0, inFlight: 0 } : { execution: 1, inFlight: 1 });
+  expect(await app.recover(originalInput)).toEqual(result);
+  expect(observed).toBe(1);
+  const raw = new DatabaseSync(f.path);
+  try { expect(raw.prepare('SELECT count(*) AS n FROM audit_events').get()?.n).toBe(terminated ? 2 : 1); } finally { raw.close(); }
+});

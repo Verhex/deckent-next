@@ -62,7 +62,7 @@ async function fixture(context: TestContext, files: number | null, noChangeAllow
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
   await writeFile(join(root, 'data/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'test', restrictions: [], grants: [
     { id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
-    // Run inspection authority: the evaluation reply then carries the same result briefs as `run inspect` (without it they are omitted).
+    // Run inspection authority is required before evaluation returns the same authorized view as `run inspect`.
     { id: 'run', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output', 'recover-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } },
   ] }), { mode: 0o600 });

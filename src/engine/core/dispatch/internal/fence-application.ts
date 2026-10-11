@@ -72,7 +72,7 @@ export class LostDispatchApplication {
       if (!observed) return Object.freeze({ ...fenced, decision: { kind: 'hold-manual' as const, reason: 'termination-required' as const } });
       proof = { ...observed, identity, owner: record.owner, receiptId: commandId };
     }
-    const write = { identity, owner: record.owner, expectedRunRevision: command.expectedRunRevision, actor: principal, proof, now: this.now() };
+    const write = { identity, owner: record.owner, expectedRunRevision: fenced.receipt.snapshot.revision, actor: principal, proof, now: this.now() };
     const encoded = JSON.stringify({ operation: 'release-worker-custody', identity, owner: record.owner, actor: principal, proof });
     const receipt = await this.store.releaseLostDispatch(write, (store, snapshot) => this.recorder(store).record({
       schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: commandId, scopeId: identity.scopeId,
