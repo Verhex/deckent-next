@@ -50,7 +50,7 @@ describe('lost dispatch capacity assessment', () => {
     expect(decideDispatchLoss(record, fence, { ...proof, owner: 'other' }, 'release-slot')).toEqual(hold('termination-mismatch'));
     expect(decideDispatchLoss(record, fence, { ...proof, receiptId: '' }, 'release-slot')).toEqual(hold('termination-mismatch'));
   });
-  it.each(['finish-dispatch', 'result', 'effect'] as const)('rejects late %s even when termination is unavailable', action => {
+  it.each(['finish-dispatch', 'result', 'output', 'patch', 'effect'] as const)('rejects late %s even when termination is unavailable', action => {
     expect(decideDispatchLoss(record, fence, null, action)).toEqual({ kind: 'reject-late-write', code: 'DISPATCH_FENCED' });
   });
   it('does not release pending, prevented or non-lost dispatches', () => {

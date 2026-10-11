@@ -9,3 +9,4 @@ export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventory
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from './internal/inventory.js';
 export { parseRetainedOutputEnvelope, verifyRetainedOutputEnvelope, verifyRetainedFileReceipts } from './internal/output.js';
 export { assessLostDispatch, dispatchFenceReceiptId } from './internal/loss.js';
+export { assertDispatchNotFenced } from './internal/fence.js';

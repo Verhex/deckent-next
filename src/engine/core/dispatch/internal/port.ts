@@ -49,5 +49,5 @@ export interface DispatchStore {
   finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal): Promise<DispatchRecord>;
 }
 export class DispatchError extends Error {
-  constructor(readonly code: 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
+  constructor(readonly code: 'DISPATCH_FENCED' | 'DISPATCH_ARTIFACT_REQUIRED' | 'DISPATCH_CONFLICT' | 'DISPATCH_NOT_ADMITTED' | 'DISPATCH_CORRUPT' | 'DISPATCH_PROFILE_VALIDATION_REQUIRED') { super(code); this.name = 'DispatchError'; }
 }
