@@ -27,7 +27,7 @@ export { getPolicyVocabulary } from '#engine/core/policy/index.js';
 export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
 export { supervisorProfileSchema } from '#engine/core/supervisor/index.js';
 export type { SupervisorProfile, SupervisorProfileSource } from '#engine/core/supervisor/index.js';
-export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody, criterionEvidenceDigest } from '#engine/core/task-evaluation/index.js';
+export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody, criterionEvidenceDigest, bindUsedOperationEvidence } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from '#engine/core/task-evaluation/index.js';
 export { deriveAcceptanceMetric, selectRunAcceptanceEvaluations, TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator, UnknownEvaluationPolicy } from '#engine/core/task-evaluation/index.js';

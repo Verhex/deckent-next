@@ -23,6 +23,8 @@ export const taskEvaluationCommitSchema = z.object({
 export type TaskEvaluationCommit = z.infer<typeof taskEvaluationCommitSchema>;
 export interface TaskEvaluationStore {
   commitTaskEvaluation(input: TaskEvaluationCommit): Promise<RunReceipt>;
+  /** Immutable Run admission authority, never the evaluating caller or criterion parameters. */
+  loadRunEvaluationPrincipal?(identity: import('#domain/index.js').AttemptIdentity): Promise<TaskEvaluationCommit['actor'] | null>;
 }
 /** The application verified this exact custody snapshot; later changes require fresh evaluation. */
 export function assertTaskEvaluationCustody(verified: unknown, current: unknown): void {

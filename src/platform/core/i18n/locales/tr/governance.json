@@ -926,5 +926,9 @@
   "error.COMMAND_ID_RESERVED": "Bu komut kimliği ayrılmış sistem ad alanına aittir. Başka bir kimlik seçin.",
   "error.DISPATCH_FENCE_CONFLICT": "Dispatch fence kimliğinde yabancı bir makbuz var. Kaynak sorumluluğu tutuluyor; çakışan makbuzu uzlaştırın.",
   "task.custody.hold-manual": "Worker kapasitesi tutuluyor: güvenilir sonlanma kanıtı gerekli.",
-  "task.custody.released": "Worker kapasitesi sonlanma kanıtıyla bırakıldı; görev kabulü ve etkiler hâlâ belirsiz."
+  "task.custody.released": "Worker kapasitesi sonlanma kanıtıyla bırakıldı; görev kabulü ve etkiler hâlâ belirsiz.",
+  "error.OPERATION_EVIDENCE_CONTEXT": "Operasyon kanıtının kalıcı yürütme yetkisi veya başlangıç zamanı yok.",
+  "error.OPERATION_EVIDENCE_EARLIER": "Operasyon bu deneme başlamadan kesinleşti; bu görevin kanıtı olamaz.",
+  "error.OPERATION_EVIDENCE_PRINCIPAL": "Operasyonun yetki kimliği Run veya yürütücü kimliğiyle eşleşmiyor.",
+  "error.OPERATION_EVIDENCE_REUSED": "Bu operasyon başka bir görevin kabulüne kanıt oldu; tekrar kullanılamaz."
 }

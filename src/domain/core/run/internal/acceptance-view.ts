@@ -12,6 +12,7 @@ export const evaluationCriterionSchema = z.object({ criterionId: identitySchema,
   evidenceReferences: z.array(z.object({ id: identitySchema, digest }).strict().readonly()).max(256).readonly().optional(),
   reason: z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED', 'OPERATION_EVIDENCE_UNAVAILABLE', 'OPERATION_EVIDENCE_MISSING',
     'OPERATION_EVIDENCE_INVALID', 'OPERATION_EVIDENCE_BINDING', 'OPERATION_EVIDENCE_UNSETTLED', 'OPERATION_EVIDENCE_COMPENSATED',
+    'OPERATION_EVIDENCE_CONTEXT', 'OPERATION_EVIDENCE_EARLIER', 'OPERATION_EVIDENCE_PRINCIPAL', 'OPERATION_EVIDENCE_REUSED',
     'OPERATION_COMPENSATION_UNAVAILABLE', 'OPERATION_COMPENSATION_INVALID', 'OPERATION_COMPENSATION_BINDING', 'OPERATION_COMPENSATION_UNSETTLED']).optional(),
   /** State observation is not settlement proof: null digest records absence, and unknown still cannot pass. */
   effectEvidence: z.object({ commandId: identitySchema, digest: digest.nullable(),
