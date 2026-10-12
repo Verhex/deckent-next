@@ -926,7 +926,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 
 | Module note | Scope |
 |---|---|
-| [resource-quality](.deckent/docs/architecture/modules/resource-quality.md) | Supervisor resource observation, separate bounded asynchronous trace, cost/quality projections and advisory comparisons; inspect authority applies before aggregation. |
+| [resource-quality](.deckent/docs/architecture/modules/resource-quality.md) | Supervisor resource observation, separate bounded asynchronous trace, cost/quality projections and advisory comparisons; inspect authority applies before aggregation. Evaluation replay excludes read-time `pool`/`costReport`; observer reads/writes are cancellable and timers never keep shutdown alive. |
 | [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md) | Layer map (`src/platform … composition`), startup cost, compiled entries, CI preparation, hardcode ratchet (HARDCODE-P1-B). |
 | [config-and-cli-help](.deckent/docs/architecture/modules/config-and-cli-help.md) | Typed `ConfigApplication`, CONFIG-SURFACE write/overlay contract, CLI config view, CLI help catalog. |
 | [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md) | Operator terminal contract v1, turn phases, tool lines/read limits, `@` index, `/resume`, `/context`, TC-M harness. |

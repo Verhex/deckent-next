@@ -4,7 +4,10 @@ Owner-admitted CARD: KAYNAK-KALITE-UYGULAMA, 2026-10-12; alpha.31 author candida
 
 The dispatch owner starts observation only after its durable launch grant. A service collector
 caps concurrent reads, schedules one cancellable read per worker at a configured interval and
-queues asynchronous writes without awaiting them on the execution path. It cannot launch,
+queues asynchronous writes without awaiting them on the execution path. Read deadlines also
+bound non-cooperative readers without releasing their physical concurrency slot before settlement.
+Stopping observation aborts its read/write and drops its queued samples; trace-lock waiting obeys
+the same cancellation. Observation timers are unreferenced and cannot keep a stopped process alive. It cannot launch,
 cancel, settle, accept or change any work. Docker reads the pinned local Engine socket, validates
 the request label and full container id/start time before and after stats, and never attaches
 another incarnation. The optional cgroup-v2 peak requires that the local PID's cgroup contains
@@ -39,10 +42,13 @@ scoped snapshot. Denied evidence is absent from per-worker values and subtotals;
 an accepted denominator, or with withheld/missing CPU, is null. Replay/conflicting rows cannot
 double-count consumption. This view cannot write acceptance or settlement.
 
-Task evaluation uses the same authorized cost projection, pinned to its receipt's Run revision
-even on replay. `costReport.observedAtMs` is the current sampling instant, separate from the
-immutable evaluation/admission/cancellation receipt; independent reads may have different
-sampling instants. Supplemental cost-metric corruption produces `run-cost-unavailable` and
+Task evaluation returns its immutable receipt projection and the existing output-authorized
+result/delivery view; it never adds read-time `pool` or `costReport` observations. Under unchanged
+output authority and result evidence, the same evaluation command replays exactly, including its
+original Run revision. Inspect/evaluate equality excludes only `pool` and `costReport`; both remain
+inspection observations. `costReport.observedAtMs` is the inspection sampling instant, so separate
+inspections may differ. Run inspect and per-Attempt `read-output` authority still apply before
+any cost/resource aggregation. Supplemental cost-metric corruption produces `run-cost-unavailable` and
 withholds those metrics without hiding the canonical Run or its acceptance producer receipt.
 
 The pure `recommendCostProfile` engine compares registered profile identities per WorkClass and
