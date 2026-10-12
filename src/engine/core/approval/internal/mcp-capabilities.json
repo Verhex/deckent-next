@@ -26,6 +26,9 @@
             ],
             "inspect_run": [
               "inspect"
+            ],
+            "evaluate_task": [
+              "inspect"
             ]
           },
           "actions": [
@@ -453,6 +456,9 @@
               "reserve"
             ],
             "inspect_run": [
+              "inspect"
+            ],
+            "evaluate_task": [
               "inspect"
             ]
           },

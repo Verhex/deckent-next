@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { describe, afterEach, expect, it } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { TaskEvaluationApplication, RunLifecycleApplication, projectRunView, AuditApplication } from '#engine/index.js';
+import { mcpPrincipalRef } from '#domain/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { createHmacIntegrity, resolveProductPaths } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
@@ -35,6 +36,22 @@ async function fixture(output: 'complete' | 'partial' | 'malformed' | 'missing' 
   } };
   const app = new TaskEvaluationApplication(store, verifier, authorization, evaluator, artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 }, { now: () => 100, timeoutMs: 1000 });
   return { app, store, artifacts, state, authorization, evaluator, receipt, claim, path: join(root, 'ledger.db') };
+}
+
+async function assertMcpEvaluationReplay() {
+  const f = await fixture();
+  const mcpActor = { ...principal, id: `${principal.id}/mcp`, ...mcpPrincipalRef(principal) };
+  const mcp = new TaskEvaluationApplication(f.store, { async verify() { return mcpActor; } }, f.authorization,
+    f.evaluator, f.artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 }, { now: () => 100, timeoutMs: 1000 });
+  const first = await mcp.execute(command), before = await f.store.loadRun('s', 'r');
+  expect(JSON.parse(first.command).actor).toEqual({ id: mcpActor.id, issuer: mcpActor.issuer, subject: mcpActor.subject });
+  expect(await mcp.execute(command)).toEqual(first);
+  await expect(f.app.execute(command)).rejects.toThrow('RUN_COMMAND_CONFLICT');
+  await expect(mcp.execute({ ...command, expectedRevision: command.expectedRevision + 1 })).rejects.toThrow('RUN_COMMAND_CONFLICT');
+  await expect(mcp.execute({ ...command, identity: { ...identity, generation: 2 } })).rejects.toThrow('RUN_COMMAND_CONFLICT');
+  expect(f.state.evaluations).toBe(1);
+  expect(await f.store.loadRun('s', 'r')).toEqual(before);
+  expect(await f.store.loadRunReceipt('s', command.commandId)).toEqual(first);
 }
 
 describe.skipIf(process.platform === 'win32')('requires POSIX private FileArtifactStore; ARTIFACT_UNSUPPORTED', () => {
@@ -74,6 +91,8 @@ it('derives the pinned criterion, commits once, and replays without reevaluation
   f.state.allow = false;
   await expect(f.app.execute(command)).rejects.toThrow('POLICY_DENIED'); expect(f.state.evaluations).toBe(1);
 });
+
+it('binds evaluation replay to the MCP actor and exact command without a second evaluation or mutation', assertMcpEvaluationReplay);
 
 it('leaves the Run unchanged when authorization is revoked after evaluation', async () => {
   const f = await fixture(); const before = await f.store.loadRun('s', 'r');
