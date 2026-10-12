@@ -121,7 +121,11 @@
       "minPairs": 30
     },
     "retentionMs": 86400000,
+    "segmentMaxAgeMs": 60000,
+    "segmentMaxBytes": 65536,
+    "segmentMaxEntries": 64,
     "staleMs": 15000,
+    "syncIntervalMs": 15000,
     "timeoutMs": 1000
   },
   "runRuntime": {

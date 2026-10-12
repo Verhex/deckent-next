@@ -8,7 +8,7 @@ import { getConfigFieldDefault } from '#platform/index.js';
 const roots: string[] = [], identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
 afterEach(async () => { for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true }); });
 async function fixture(maxStoreEntries = 2) { const root = await mkdtemp(join(tmpdir(), 'resource-trace-')); roots.push(root); await chmod(root, 0o700);
-  const settings = { ...getConfigFieldDefault('resourceObservation'), maxStoreEntries }; return { root, settings, store: new FileResourceTraceStore(async () => root, settings, () => 1000) }; }
+  const settings = { ...getConfigFieldDefault('resourceObservation'), maxStoreEntries, segmentMaxEntries: 1 }; return { root, settings, store: new FileResourceTraceStore(async () => root, settings, () => 1000) }; }
 it.skipIf(process.platform !== 'linux')('bounds retention, serializes concurrent writers and deduplicates replay without crossing attempts', async () => {
   const { store } = await fixture(); const first = resourceGap(identity, 100, 'starting');
   await Promise.all([store.append(first), store.append(first)]);
