@@ -35,7 +35,8 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 52;
+export const CURRENT_LEDGER_VERSION = 53;
+export const RUN_PROPOSAL_LEDGER_VERSION = 53;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
@@ -55,6 +56,13 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  53: `CREATE TABLE run_proposals(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,proposal_id TEXT NOT NULL,run_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id),UNIQUE(scope_id,proposal_id));
+    CREATE TABLE run_proposal_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,command_id,revision));
+    CREATE TRIGGER run_proposal_receipts_no_update BEFORE UPDATE ON run_proposal_receipts BEGIN SELECT RAISE(ABORT,'RUN_PROPOSAL_APPEND_ONLY'); END;
+    CREATE TRIGGER run_proposal_receipts_no_delete BEFORE DELETE ON run_proposal_receipts BEGIN SELECT RAISE(ABORT,'RUN_PROPOSAL_APPEND_ONLY'); END;
+    PRAGMA user_version=53;`,
   51: `CREATE TABLE acceptance_metrics(scope_id TEXT NOT NULL, producer_command_id TEXT NOT NULL, run_id TEXT NOT NULL,
     task_id TEXT NOT NULL, attempt_id TEXT NOT NULL, outcome_kind TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(scope_id,producer_command_id));
     CREATE INDEX acceptance_metrics_attempt ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind); PRAGMA user_version=51;`,

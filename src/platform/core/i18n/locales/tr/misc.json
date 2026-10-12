@@ -681,5 +681,7 @@
   "config.records.budgetNote": "Bunlar yapılandırılmış bütçelerdir. Mevcut harcama hesabı önceliklidir; etkin sınırını /model → Bütçeyi değiştir ile değiştirin.",
   "config.records.targetNote": "Bu hedefi kaldırmak alt katmanı ya da proje deposunu geri getirir. Yalnız bir Git iş hedefi desteklenir.",
   "error.CONFIG_RECORD_INVALID": "Seçilen ayar kaydı veya dosya geçersiz. Hiçbir şey yazılmadı.",
-  "mcp.tool.controlRun": "Mevcut Run cancel/reserve policy yetkisiyle yeni denemeleri neden belirterek beklet veya operatör tutmasındaki Run’ı sürdür. Çalışan işçilerin custody kaydı korunur. MCP insan cevabı veya kabul kararı veremez. Sabit commandId ve geçerli expectedRevision gönder; belirsiz yanıtta aynı komutu kullan."
+  "mcp.tool.controlRun": "Mevcut Run cancel/reserve policy yetkisiyle yeni denemeleri neden belirterek beklet veya operatör tutmasındaki Run’ı sürdür. Çalışan işçilerin custody kaydı korunur. MCP insan cevabı veya kabul kararı veremez. Sabit commandId ve geçerli expectedRevision gönder; belirsiz yanıtta aynı komutu kullan.",
+  "mcp.tool.proposeRun": "Sürümlü RunProposal önerisini güncel policy, registry, scope bütçesi ve insan onayı kapılarından geçirir. Tekrar için aynı commandId ve girdi kullanılır. Beyan tavanı yalnız kabul anında kontrol edilir; yürütmede toplam Run harcaması sınırlanmaz. MCP onay kararı veremez. Kabul edilen Run otomatik ilerlemeyi ister; istemciyi kapatmak Run işlemini iptal etmez.",
+  "mcp.tool.inspectRunProposal": "Yetkili kalıcı öneri makbuzunu okur: kaydedildi, bekliyor, kabul edildi, ret veya park. Gözlem yürütme veya onay yetkisi vermez."
 }

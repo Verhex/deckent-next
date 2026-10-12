@@ -156,6 +156,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     inspectInventory: (_root, input) => runtime.inspectInventory(input), inspectRun: (_root, input) => runtime.inspectRun(input),
     deliverRunCancellation: (_root, input) => runtime.deliverRunCancellation(input),
     reserveRunTasks: (_root, input) => runtime.reserveRunTasks(input),
+    proposeRun: (_root, input) => runtime.proposeRun(input), inspectRunProposal: (_root, input) => runtime.inspectRunProposal(input),
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
   }); } finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }

@@ -108,7 +108,8 @@
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
         "src/platform/core/clock",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/adapters/core/run-proposal-store"
       ],
       "plan": "STORE"
     },
@@ -485,7 +486,10 @@
         "src/composition/core/workspace-patch",
         "src/adapters/core/monitor-ledger",
         "src/composition/core/toolchains",
-        "src/adapters/core/audit-store"
+        "src/adapters/core/audit-store",
+        "src/composition/core/provider-spend",
+        "src/composition/core/model-invocation",
+        "src/adapters/core/run-proposal-store"
       ],
       "plan": "EXECUTION"
     },
@@ -617,7 +621,8 @@
         "src/domain/core/task-graph",
         "src/domain/core/provider-catalog",
         "src/domain/core/worker-event",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/domain/core/provider-spend"
       ],
       "plan": "CONTRACT"
     },
@@ -714,7 +719,9 @@
         "src/platform/core/output",
         "src/engine/core/approval",
         "src/domain/core/command",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/engine/core/provider-spend",
+        "src/domain/core/model-invocation"
       ],
       "plan": "CONTRACT"
     },
@@ -1210,7 +1217,8 @@
         "src/domain/core/effect",
         "src/engine/core/decision",
         "src/engine/core/agent-turn",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/domain/core/run"
       ],
       "plan": "SURFACES"
     },
@@ -2742,6 +2750,17 @@
         "src/engine/core/model-invocation"
       ],
       "plan": "SURFACES"
+    },
+    "src/adapters/core/run-proposal-store": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/command",
+        "src/engine/core/runs",
+        "src/engine/core/provider-spend",
+        "src/platform/core/errors",
+        "src/domain/core/run"
+      ],
+      "plan": "STORE"
     }
   },
   "composition": {

@@ -18,6 +18,7 @@ export const taskInputNameSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 export const taskDefinitionSchema = z.object({
   id: identity,
   kind: identity,
+  workClass: identity.optional(),
   dependencies: z.array(taskDependencySchema).readonly(),
   acceptanceCriteria: z.array(identity).min(1).readonly(),
   inputs: z.array(z.object({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).strict().readonly()).readonly().optional(),

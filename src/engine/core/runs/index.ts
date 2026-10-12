@@ -44,3 +44,10 @@ export type { TaskBrief, ResultBrief } from './internal/brief.js';
 export { recordAttemptClosure, classifyLaunchRefusal } from './internal/closure.js';
 export { runControlCommandSchema, runProgressionParkCommandSchema, proposeRunLifecycleWrite } from './internal/lifecycle.js';
 export { RunCreationAuthority } from './internal/authority.js';
+
+export { RunProposalApplication, RunProposalInspectionApplication } from './internal/proposal-application.js';
+export type { RunProposalContext, RunProposalResult } from './internal/proposal-application.js';
+export { runProposalQuerySchema, runProposalRecordSchema, parseRunProposal, parseRunProposalRecord, runProposalDigest } from './internal/proposal-contract.js';
+export type { RunProposalQuery, RunProposalRecord, RunProposalStore } from './internal/proposal-contract.js';
+export { validateRunProposal, assertRunProposalSource } from './internal/proposal-validation.js';
+export type { BoundRunAdmission } from './internal/admission.js';

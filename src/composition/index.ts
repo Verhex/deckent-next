@@ -1,6 +1,6 @@
 export { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 export { applyConfiguredRunLifecycle, inspectConfiguredRun } from '#composition/core/runs/index.js';
-export { createConfiguredRun, createConfiguredDeliveryRun } from '#composition/core/runs/index.js';
+export { proposeConfiguredRun, inspectConfiguredRunProposal, createConfiguredRun, createConfiguredDeliveryRun } from '#composition/core/runs/index.js';
 export { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
 export { deliverConfiguredRunCancellation } from '#composition/core/runs/index.js';
 export { reconcileConfiguredAttempt } from '#composition/core/runs/index.js';
