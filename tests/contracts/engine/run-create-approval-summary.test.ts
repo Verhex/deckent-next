@@ -66,3 +66,15 @@ it.each(['en', 'tr'] as const)('subscription approval summary declares budget ex
   expect(text).toContain('owner-purchase'); expect(text).toContain('run-business');
   expect(text).not.toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
 });
+it('proposer-authored long titles cannot push declared permissions off the card; the authority notice stays', () => {
+  const graph = { ...command.graph, tasks: Array.from({ length: 40 }, (_, i) => ({ ...command.graph.tasks[0]!, id: `harmless-read-only-check-${i}-` + 'x'.repeat(400) })) };
+  const permissions = [{ kind: 'operation', action: 'execute', resourceId: 'erp-write-invoice' }, { kind: 'secret', action: 'switch', resourceId: 'live-key' },
+    { kind: 'config', action: 'write', resourceId: 'policy' }];
+  for (const locale of ['tr', 'en'] as const) {
+    const text = renderRunCreateApprovalSummary({ ...command, graph, proposal: { ...command.proposal!, requiredPermissions: permissions } }, { ...create, graph }, verdict, locale);
+    expect(text.length).toBeLessThanOrEqual(2048);
+    for (const row of ['operation / execute / erp-write-invoice', 'secret / switch / live-key', 'config / write / policy']) expect(text).toContain(row);
+    expect(text).toContain(locale === 'tr' ? 'yine politikayla yetkilendirilir' : 'still authorized by policy');
+    expect(text).toContain('200 USD'); expect(text).toContain('owner-purchase');
+  }
+});

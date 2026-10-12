@@ -25,7 +25,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     kind: field(permission.kind, limits.permissionKindChars, known), action: field(permission.action, limits.permissionActionChars, known), resource: field(permission.resourceId, limits.permissionResourceChars, known),
   }, locale));
   const ceiling = command.proposal?.budgetCeiling;
-  const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale),
+  const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale), t('approval.plan.authorityNotice', {}, locale),
     t('approval.plan.budget', { ceiling: ceiling ? `${ceiling.limitMinorUnits} ${field(ceiling.currency, limits.currencyChars, known)}` : unknown }, locale),
     command.proposal?.admission?.budgetSemantics === 'not-metered' ? t('proposal.budget.notMetered', {}, locale) : t('approval.plan.budgetNotice', {}, locale),
     t('approval.plan.decision', { decision: t('approval.plan.required', {}, locale),
@@ -36,9 +36,10 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     footer[0]!, ...permissionRows,
     ...(permissions && permissions.length > permissionRows.length ? [t('approval.plan.morePermissions', { count: permissions.length - permissionRows.length }, locale)] : []),
     ...footer.slice(1)].join('\n');
-  // Preserve the budget/decision and explicit omitted counts even with unusually long catalog text.
+  // Preserve the budget/decision and explicit omitted counts even with unusually long catalog text. Task titles are
+  // proposer-authored, so they are dropped before declared permissions: long titles cannot push permissions off the card.
   while (render().length > limits.summaryChars && (taskRows.length || permissionRows.length)) {
-    if (permissionRows.length) permissionRows.pop(); else taskRows.pop();
+    if (taskRows.length) taskRows.pop(); else permissionRows.pop();
   }
   return render();
 }

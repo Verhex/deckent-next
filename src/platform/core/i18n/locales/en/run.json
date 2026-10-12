@@ -399,6 +399,7 @@
   "approval.plan.task": "• {title} · kind: {kind} · work class: {workClass}",
   "approval.plan.permissions": "Declared permissions: {count}",
   "approval.plan.permission": "• Permission: {kind} / {action} / {resource}",
+  "approval.plan.authorityNotice": "Titles and declared permissions come from the proposal; each action is still authorized by policy when it runs.",
   "approval.plan.moreTasks": "… {count} more tasks not shown",
   "approval.plan.morePermissions": "… {count} more permissions not shown",
   "approval.plan.budget": "Declared budget ceiling (minor units): {ceiling}",

@@ -100,7 +100,7 @@ for (const route of ['cli-do-json', 'mcp-plan', 'mcp-propose'] as const) it.skip
   await until(() => view.stdout.frame.includes('Plan · tasks: 1'), 'fresh terminal approvals list'); frames(route + ' list', view.stdout.frame);
   expect(view.stdout.frame).toContain('purchase'); expect(view.stdout.frame).toContain('business');
   await settle(40); view.stdin.write('\r');
-  await until(() => view.stdout.frame.includes('Ceiling checked only at admission'), 'stored plan in approval window'); frames(route + ' card', view.stdout.frame);
+  await until(() => view.stdout.frame.includes('ceiling checked only at admission'), 'stored plan in approval window'); frames(route + ' card', view.stdout.frame);
   expect(view.stdout.frame).toContain('only at admission'); expect(view.stdout.frame).toContain('work-class registry');
   expect((await client.listTools()).tools.map(tool => tool.name)).not.toContain('decide_approval');
   expect(JSON.stringify(await client.callTool({ name: 'decide_approval', arguments: { decision: 'allow' } }))).toContain('MCP_TOOL_UNKNOWN');

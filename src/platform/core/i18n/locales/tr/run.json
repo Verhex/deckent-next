@@ -399,6 +399,7 @@
   "approval.plan.task": "• {title} · tür: {kind} · iş sınıfı: {workClass}",
   "approval.plan.permissions": "Beyan edilen izinler: {count}",
   "approval.plan.permission": "• İzin: {kind} / {action} / {resource}",
+  "approval.plan.authorityNotice": "Başlıklar ve beyan edilen izinler öneriden gelir; her eylem yürütülürken yine politikayla yetkilendirilir.",
   "approval.plan.moreTasks": "… {count} görev daha gösterilmiyor",
   "approval.plan.morePermissions": "… {count} izin daha gösterilmiyor",
   "approval.plan.budget": "Beyan edilen bütçe tavanı (alt para birimi): {ceiling}",
