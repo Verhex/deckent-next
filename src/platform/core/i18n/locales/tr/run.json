@@ -393,5 +393,18 @@
   "proposal.next.parked": "Değişen dayanağı veya süresi dolan onayı inceleyin; yeni commandId ile sınırlı bir öneri verin.",
   "error.RUN_PROPOSAL_GRAPH_INVALID": "Öneri grafı veya kabul kriterleri geçersiz: {reason}.",
   "error.RUN_PROPOSAL_BUDGET_SCOPE": "Bütçe hesabı farklı kapsama ait; kabul durduruldu.",
-  "error.RUN_PROPOSAL_BUDGET_CURRENCY": "Beyan tavanının para birimi etkin scope bütçesinden farklı."
+  "error.RUN_PROPOSAL_BUDGET_CURRENCY": "Beyan tavanının para birimi etkin scope bütçesinden farklı.",
+  "approval.plan.undeclared": "beyan edilmedi",
+  "approval.plan.tasks": "Plan · görevler: {count}",
+  "approval.plan.task": "• {title} · tür: {kind} · iş sınıfı: {workClass}",
+  "approval.plan.permissions": "Beyan edilen izinler: {count}",
+  "approval.plan.permission": "• İzin: {kind} / {action} / {resource}",
+  "approval.plan.moreTasks": "… {count} görev daha gösterilmiyor",
+  "approval.plan.morePermissions": "… {count} izin daha gösterilmiyor",
+  "approval.plan.budget": "Beyan edilen bütçe tavanı (alt para birimi): {ceiling}",
+  "approval.plan.required": "onay gerekli",
+  "approval.plan.registryGate": "iş sınıfı registry: düşük riskli kalıcı kabul yok",
+  "approval.plan.decision": "Karar: {decision} · kural: {rule} · neden: {reason}",
+  "approval.plan.run": "Oluşturulacak Run: {run}",
+  "approval.plan.budgetNotice": "Tavan yalnız kabul anında kontrol edilir; yürütmede toplam Run harcama sınırı uygulanmaz."
 }

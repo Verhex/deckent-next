@@ -393,5 +393,18 @@
   "proposal.next.parked": "Review changed authority or expired approval; submit a fresh bounded proposal with a new commandId.",
   "error.RUN_PROPOSAL_GRAPH_INVALID": "Proposal graph or acceptance criteria are invalid: {reason}.",
   "error.RUN_PROPOSAL_BUDGET_SCOPE": "The budget account belongs to another scope; admission stopped.",
-  "error.RUN_PROPOSAL_BUDGET_CURRENCY": "The declared ceiling currency differs from the active scope budget."
+  "error.RUN_PROPOSAL_BUDGET_CURRENCY": "The declared ceiling currency differs from the active scope budget.",
+  "approval.plan.undeclared": "not declared",
+  "approval.plan.tasks": "Plan · tasks: {count}",
+  "approval.plan.task": "• {title} · kind: {kind} · work class: {workClass}",
+  "approval.plan.permissions": "Declared permissions: {count}",
+  "approval.plan.permission": "• Permission: {kind} / {action} / {resource}",
+  "approval.plan.moreTasks": "… {count} more tasks not shown",
+  "approval.plan.morePermissions": "… {count} more permissions not shown",
+  "approval.plan.budget": "Declared budget ceiling (minor units): {ceiling}",
+  "approval.plan.required": "approval required",
+  "approval.plan.registryGate": "work-class registry: no low-risk standing admission",
+  "approval.plan.decision": "Decision: {decision} · rule: {rule} · reason: {reason}",
+  "approval.plan.run": "Run to create: {run}",
+  "approval.plan.budgetNotice": "Ceiling checked only at admission; no total Run spending limit is enforced during execution."
 }

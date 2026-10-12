@@ -493,7 +493,8 @@
         "src/composition/core/provider-spend",
         "src/composition/core/model-invocation",
         "src/adapters/core/run-proposal-store",
-        "src/adapters/core/provider-openai-chat"
+        "src/adapters/core/provider-openai-chat",
+        "src/platform/core/i18n"
       ],
       "plan": "EXECUTION"
     },
@@ -727,7 +728,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/model-invocation",
         "src/capabilities/core/run-planner",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/platform/core/i18n"
       ],
       "plan": "CONTRACT"
     },

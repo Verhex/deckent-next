@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, readMonitorLedger, type SqliteAttemptStore } from '#adapters/index.js';
-import { ApprovalApplication, approvalSubjectsHiddenFromProtocol, RunAdmissionApplication, type RunCreate } from '#engine/index.js';
+import { ApprovalApplication, approvalSubjectsHiddenFromProtocol, RunAdmissionApplication, sealApproval, type RunCreate } from '#engine/index.js';
 import { mcpPrincipalRef, type VerifiedPrincipal } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { fixtureRunAuthority } from '../support/run-authority.js';
@@ -90,14 +90,34 @@ it('opens one pending request, visible to shared approval inspection, with no Ru
   expect(await f.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: first.request.approvalId })).toEqual(first);
   expect(await f.approval().list({ schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 })).toEqual([first]);
   expect(f.audit.list('s', 0, 10)).toHaveLength(1);
+  expect(first.request.summary).toContain('Plan · tasks: 1'); expect(first.request.summary).toContain('business-process');
+  expect(first.request.summary).toContain('run-rule'); expect(first.request.summary).toContain('not declared');
   const monitor = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 10 });
   expect(monitor.runs).toEqual([]);
-  expect(monitor.approvals).toMatchObject([{ runId: 'r', taskId: null, approvalId: first.request.approvalId }]);
+  expect(monitor.approvals).toMatchObject([{ runId: 'r', taskId: null, approvalId: first.request.approvalId, summary: first.request.summary }]);
   const terminal = createWorklineLedgerPorts({ root: f.root, scopeId: 's', options: {},
     inspectWorkers: async () => ({ workers: [] }) as never, inspectRun: async () => ({ run: null }) as never,
     listApprovals: input => f.approval().list(input), decideApproval: input => f.approval().decide(input),
     renderRunCancellation: () => '' });
-  expect((await terminal!.listApprovalPage!(null)).items).toMatchObject([{ runId: 'r', taskId: '-', approvalId: first.request.approvalId, status: 'pending' }]);
+  expect((await terminal!.listApprovalPage!(null)).items).toMatchObject([{ runId: 'r', taskId: '-', approvalId: first.request.approvalId, status: 'pending', summary: first.request.summary }]);
+});
+it('a forged display summary cannot pass the original approval MAC or consume its decision', async () => {
+  const f = await fixture(), request = await pending(f); await f.decide();
+  const approved = f.approvals.load('s', request.request.approvalId)!;
+  f.db.prepare('UPDATE approvals SET snapshot=? WHERE approval_id=? AND current=1').run(JSON.stringify({ ...approved,
+    request: { ...approved.request, summary: 'A different display plan' } }), request.request.approvalId);
+  await expect(f.app().create(command)).rejects.toMatchObject({ code: 'APPROVAL_INTEGRITY' }); noEffects(f);
+});
+it('approve-card-then-assert: an older sealed summary stays byte-exact and only authorizes its original input', async () => {
+  const f = await fixture(), current = await pending(f);
+  const legacy = sealApproval({ ...current, request: { ...current.request, summary: 'Historical binding-only summary' } }, f.integrity);
+  f.db.prepare('UPDATE approvals SET snapshot=? WHERE approval_id=? AND current=1').run(JSON.stringify(legacy), legacy.request.approvalId);
+  await pending(f); expect(f.approvals.load('s', legacy.request.approvalId)).toEqual(legacy);
+  await f.decide();
+  await expect(f.app().create({ ...command, graph: { ...command.graph, revision: 2 } })).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' }); noEffects(f);
+  const created = await f.app().create(command);
+  expect(created.run.authority!.approval!.approvalId).toBe(legacy.request.approvalId);
+  expect(f.approvals.load('s', legacy.request.approvalId)!.request).toEqual(legacy.request);
 });
 it('approve-card-then-assert: creates one Run bound to that decision and approval receipt, replaying even after expiry', async () => {
   const f = await fixture(), request = await pending(f); const decision = await f.decide();

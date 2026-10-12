@@ -1,18 +1,20 @@
 import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema, AuditError,
   type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
-import { ErrorRegistry, sha256, type TrustedClock } from '#platform/index.js';
+import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 import { AuthorityDecisionRecords } from '#engine/core/audit/index.js';
 import { RunCreateApprovalBroker, type RunCreateApprovalInput } from '#engine/core/approval/index.js';
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
 import { runCreateSchema, RunStoreError, type RunCreate } from './store.js';
 import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
 import type { BoundRunAdmission } from './admission.js';
+import { renderRunCreateApprovalSummary } from './approval-summary.js';
 export type RunAdmissionEvaluation = { readonly policy: Policy; readonly verdict: PolicyDecision };
 const hash = (tag: string, input: unknown) => sha256(encodeCommandProjection(tag, input));
 /** Run's first consumer of general sealed authority decisions; only evaluatePolicy owns policy semantics. */
 export class RunCreationAuthority {
   constructor(private readonly source: PolicySource, private readonly records: AuthorityDecisionRecords,
-    private readonly approvals: RunCreateApprovalBroker, private readonly clock: TrustedClock) {}
+    private readonly approvals: RunCreateApprovalBroker, private readonly clock: TrustedClock,
+    private readonly presentation: { readonly locale?: Locale; readonly known?: KnownSecretSnapshot } = {}) {}
   async evaluate(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<RunAdmissionEvaluation> {
     let policy: Policy, verdict: PolicyDecision;
     try { policy = policySchema.parse(await this.source.load()); verdict = evaluatePolicy(policy, { principal, action: 'create',
@@ -48,7 +50,8 @@ export class RunCreationAuthority {
     }
     const record = this.seal(command, principal, evaluation, this.basis(create, workspace));
     const reference = { eventId: record.event.eventId, sequence: record.sequence };
-    const approvalInput = this.approvalInput(record, evaluation.policy);
+    const approvalInput = { ...this.approvalInput(record, evaluation.policy), summary: renderRunCreateApprovalSummary(command, create,
+      evaluation.verdict, this.presentation.locale, this.presentation.known) };
     if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
     const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
       : { decision: reference, approval: this.approve(approvalInput) };

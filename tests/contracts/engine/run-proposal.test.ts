@@ -56,7 +56,7 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
     return approval().decide({ schemaVersion: 1, commandId: 'decision', scopeId: 's', approvalId: record.request.approvalId, expectedRevision: record.revision, decision, reason: 'Reviewed the exact proposed business process' });
   }
   fixtures.push({ root, close: () => { f.close(); store.close(); proposals.close(); } });
-  return { ...f, state, store, proposals, app, runs, inspect, approval, decide, budget, checkpoint: () => checkpoint };
+  return { ...f, source, state, store, proposals, app, runs, inspect, approval, decide, budget, checkpoint: () => checkpoint };
 }
 function noRun(f: Awaited<ReturnType<typeof fixture>>) { for (const name of ['runs', 'run_receipts', 'run_execution_intents', 'attempts']) expect(f.db.prepare(`SELECT count(*) AS n FROM ${name}`).get()!.n).toBe(0); }
 it('standing low-risk proposal commits one decision, one Run and an atomic acceptance receipt, with general business criteria', async () => {
@@ -111,6 +111,22 @@ it('MCP cannot decide either allow or deny; the proposal remains pending and no 
   for (const decision of ['allow', 'deny'] as const) await expect(f.approval({ ...principal, ...ref }).decide({ schemaVersion: 1, commandId: 'mcp-' + decision,
     scopeId: 's', approvalId: pending.proposal.approval!.approvalId, expectedRevision: 0, decision, reason: 'MCP attempt' })).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
   expect((await f.app().propose(proposal)).proposal.status).toBe('pending'); noRun(f);
+});
+it('a verified MCP proposer produces the same durable plan for the authorized human inspection', async () => {
+  const f = await fixture(false), ref = mcpPrincipalRef(principal);
+  f.state.principal = { ...principal, ...ref, id: 'mcp-proposer' };
+  const policy = await f.source.load();
+  // MCP needs named grants; principals: all does not cover its separate actor.
+  f.source.load = async () => ({ ...policy, grants: [...policy.grants, ...policy.grants.filter(row => ['run', 'task'].includes(row.resource.kind))
+    .map(row => ({ ...row, id: 'mcp-' + row.id, principals: [{ issuer: ref.issuer, subject: ref.subject }] }))] });
+  const input = { ...proposal, proposer: { id: f.state.principal.id, issuer: ref.issuer, subject: ref.subject },
+    requiredPermissions: [{ kind: 'task', action: 'execute', resourceId: 'task' }] };
+  const pending = await f.app().propose(input); expect(pending.proposal.status).toBe('pending'); noRun(f);
+  const approval = await f.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: pending.proposal.approval!.approvalId });
+  expect(approval!.request.requester).toEqual(input.proposer);
+  expect(approval!.request.summary).toContain('business-process'); expect(approval!.request.summary).toContain('business');
+  expect(approval!.request.summary).toContain('task / execute / task'); expect(approval!.request.summary).toContain('200 USD');
+  expect(approval!.request.summary).toContain('only at admission');
 });
 it('policy deny seals a denial and never persists an executable proposal or Run', async () => {
   const f = await fixture(true, 'deny'); await expect(f.app().propose(proposal)).rejects.toMatchObject({ code: 'POLICY_DENIED' }); noRun(f);

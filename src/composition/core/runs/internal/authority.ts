@@ -1,5 +1,5 @@
 import { userInfo } from 'node:os';
-import { SystemTrustedClock } from '#platform/index.js';
+import { SystemTrustedClock, getConfigKnownSecrets, resolveLocale } from '#platform/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore } from '#adapters/index.js';
 import { AuditApplication, AuthorityDecisionRecords, RunCreateApprovalBroker, RunCreationAuthority } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -14,7 +14,8 @@ export async function withRunCreationAuthority<T>(context: Awaited<ReturnType<ty
     try {
       return await work(new RunCreationAuthority(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes),
         new AuthorityDecisionRecords(new AuditApplication(audit, integrity)), new RunCreateApprovalBroker(journal.store, integrity, clock,
-          { requestTtlMs: config.approvals.requestTtlMs, admitWithinMs: config.approvals.requestTtlMs }), clock));
+          { requestTtlMs: config.approvals.requestTtlMs, admitWithinMs: config.approvals.requestTtlMs }), clock,
+        { locale: resolveLocale(undefined, {}, config.language), known: getConfigKnownSecrets(config) }));
     } finally { journal.close(); }
   } finally { audit.close(); }
 }

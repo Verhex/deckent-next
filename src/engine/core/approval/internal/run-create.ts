@@ -7,7 +7,7 @@ import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } f
 import { minimumApprovalAssurance } from './assurance.js';
 type Subject = Extract<ApprovalSubject, { kind: 'run-create' }>;
 export interface RunCreateApprovalInput { readonly scopeId: string; readonly subject: Subject; readonly requester: ApprovalActor;
-  readonly policyRevision: string; readonly policy: unknown }
+  readonly policyRevision: string; readonly policy: unknown; readonly summary?: string }
 export const RUN_CREATE_SUBJECT_PROTOCOL_VERSION = 27;
 /** Same broker custody/expiry/session decision contract as operations. One command cannot replace its approved input or actor. */
 export class RunCreateApprovalBroker {
@@ -26,7 +26,7 @@ export class RunCreateApprovalBroker {
     if (!record) {
       const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId,
         subject: input.subject, requester: input.requester, policyRevision: input.policyRevision, actionDigest: digest,
-        summary: `${input.subject.runId} · ${input.subject.inputDigest.slice(0, 12)} · ${input.subject.decisionRecordId}`, createdAt: now,
+        summary: input.summary ?? `${input.subject.runId} · ${input.subject.inputDigest.slice(0, 12)} · ${input.subject.decisionRecordId}`, createdAt: now,
         expiresAt: now + this.options.requestTtlMs, facts: { risk: null, reversibility: null, onExpiry: 'nothing-runs',
           requiredAssurance: minimumApprovalAssurance(input.policy, input.scopeId, 'run-create', null) } });
       try { record = this.store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, this.integrity)); }
