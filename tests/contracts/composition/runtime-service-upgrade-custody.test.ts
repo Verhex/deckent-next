@@ -1,3 +1,4 @@
+import { PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -47,7 +48,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a
   const live = await startConfiguredRuntimeService(f.root, observer, { env: f.env }); services.push(live);
   downgrade(f.ledger); // the live host stands in for an older build whose schema is still the previous version
   await expect(startConfiguredRuntimeService(f.root, observer, { env: f.env })).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ALREADY_RUNNING' });
-  expect(version(f.ledger)).toBe(CURRENT_LEDGER_VERSION - 1);
+  expect(version(f.ledger)).toBe(PREVIOUS_LEDGER_VERSION);
   expect(await backups(f.data)).toEqual([]);
 });
 

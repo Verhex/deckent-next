@@ -329,6 +329,10 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
-    db.exec(sql);
+    if (next === RUN_PROPOSAL_LEDGER_VERSION) {
+      // A previous version cannot contain proposal objects. Refuse a contradictory
+      // schema; never silently adopt an existing table or bypass append-only triggers.
+      try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }
+    } else db.exec(sql);
   }
 }
