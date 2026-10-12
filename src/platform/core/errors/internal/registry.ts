@@ -422,6 +422,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EXECUTION_REGISTRY_VALIDATOR_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_REGISTRY_VALIDATOR_INVALID', p, l) }) },
   RUN_ADMISSION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_ADMISSION_NOT_CONFIGURED', p, l) }) },
   RUN_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CORRUPT', p, l) }) },
+  RUN_APPROVAL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_APPROVAL_REQUIRED', p, l) }) },
   RUN_STORE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CONFLICT', p, l), suggestion: t('remedy.RUN_STORE_CONFLICT', p, l) }) },
   HANDOFF_SOURCE_NOT_ACCEPTED: { category: 'error', render: (p, l) => ({ message: t('error.HANDOFF_SOURCE_NOT_ACCEPTED', p, l) }) },
   HANDOFF_ARTIFACT_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.HANDOFF_ARTIFACT_MISMATCH', p, l) }) },

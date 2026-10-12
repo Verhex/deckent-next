@@ -137,6 +137,8 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
       ...(run.state.kind === 'parked' && run.state.failureCode ? [t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
       ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),
+      ...(run.authority ? [t('cli.run.inspect.authority', { record: run.authority.decision.eventId, sequence: run.authority.decision.sequence,
+        approval: run.authority.approval?.approvalId ?? '-' }, locale)] : []),
       run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
       ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale).map(line => `  ${line}`) : []),
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),

@@ -1,3 +1,4 @@
+import { migrateRunCreateApprovals } from './migration-v52.js';
 import { migrateMeasuredTariffSpend } from './migration-v49.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
@@ -34,7 +35,7 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 51;
+export const CURRENT_LEDGER_VERSION = 52;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
@@ -226,6 +227,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
   // before those validators, inside the same transaction; never skip their independent checks.
   if (version >= 3 && version < IMMEDIATE_ELIGIBILITY_LEDGER_VERSION) migrateImmediateEligibility(db);
   for (let next = version + 1; next <= CURRENT_LEDGER_VERSION; next++) {
+    if (next === 52) { migrateRunCreateApprovals(db); continue; }
     if (next === 49) { migrateMeasuredTariffSpend(db); db.exec('PRAGMA user_version=49;'); continue; }
     if (next === 5) {
       requireLedgerV5Custody(db);

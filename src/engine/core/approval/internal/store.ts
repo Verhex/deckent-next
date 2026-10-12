@@ -5,6 +5,8 @@ export interface ApprovalReceipt { readonly operation?: 'decide' | 'renew'; read
 export interface ApprovalSettlement { readonly record: ApprovalRecord; readonly commit: 'fresh' | 'replay' }
 /** All mutations atomically persist record, command receipt (when present) and outbox event. */
 export interface ApprovalStore {
+  /** First immutable Run-create request for a command, across input/actor variations. */
+  findRunCreate(scopeId: string, commandId: string): ApprovalRecord | null;
   load(scopeId: string, approvalId: string): ApprovalRecord | null;
   find(scopeId: string, runId: string, taskId: string, actionDigest: string): ApprovalRecord | null;
   /** The current approval of one agent tool call (C12): its action digest binds the exact call. */

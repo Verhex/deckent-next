@@ -45,6 +45,12 @@ export class SqliteAuditStore implements AuditStore {
       return record;
     }));
   }
+  load(scopeId: string, eventId: string): AuditRecord | null {
+    return this.guard(() => {
+      const row = this.db.prepare('SELECT scope_id,sequence,event_id,kind,at_ms,key_id,mac,record FROM audit_events WHERE scope_id=? AND event_id=?').get(scopeId, eventId);
+      return row ? this.decode(row) : null;
+    });
+  }
   page(scopeId: string, afterSequence: number, limit: number): readonly AuditRecord[] {
     if (!identitySchema.safeParse(scopeId).success || !Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1) throw new AuditError('AUDIT_INVALID');
     return this.guard(() => Object.freeze(this.db.prepare('SELECT scope_id,sequence,event_id,kind,at_ms,key_id,mac,record FROM audit_events WHERE scope_id=? AND sequence>? ORDER BY sequence LIMIT ?')

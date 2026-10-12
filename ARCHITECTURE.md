@@ -3,7 +3,7 @@
 
 **W3-AUTHORITY (owner 2026-10-09; candidate, no live acceptance):** `deckent-mcp` uses the same verified OS UID with a distinct actor
 (`issuer = <host>/mcp`, actor id suffixed `/mcp`). All handlers, including direct model-connect/activation writes, enter that code-only context;
-service-bound calls carry `channel: mcp` on local protocol v26, lifecycle window `[26,25]`, current-only mutations. This metadata delegates no
+service-bound calls carry `channel: mcp` on local protocol v27, lifecycle window `[27,26]`, current-only mutations. This metadata delegates no
 other OS identity; same-account direct socket access remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
 MCP authority; an explicit rule or role binding must name the MCP actor. Denies/restrictions still apply. Template v9 and add-only upgrades add
 named observation rules only. Budget creation/revision/unfreeze/reconciliation, activation and invocation require an explicit MCP-specific grant;
@@ -205,9 +205,9 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   MARK-LOST-ATOMIC / KARAR 12 in PLAN. No retry launch or automatic release. Author proof and unperformed real Docker/service,
   native-platform, independent-review and live acceptance checks are in external `proof/RESTART-RECOVERY-2026-10-10/WORKER.md`.
 
-- Owner 2026-09-21: new Run admission atomically records automatic progression intent; no separate
-  start command. The running common runtime discovers actor-matched intents, rechecks current
-  operation policy and resumes eligible work. Migration never silently activates old admissions.
+- Owner 2026-09-21: new Run admission atomically records automatic progression intent; no separate start command. KARAR-KAYDI author candidate (2026-10-12): existing `evaluatePolicy` produces a general authority decision in the HMAC-sealed, scope-sequenced audit ledger before a new Run; failed sealing refuses the effect. The record binds COMMAND-ENVELOPE, resource, exact input/admission and policy digests, revision, rule and verdict; deny is recorded without a Run. A later admission-prerequisite refusal retains the evaluated policy with no resolved basis; a decision record alone never proves an effect.
+  `require-approval` opens one sealed `run-create` request per scoped command, with no Run. Existing interactive human approval/session policy decides it; MCP cannot decide. Retrying the same command, actor and resolved input consumes the exact approval receipt; changed input/config/policy, denied or expired approval refuses. The Run transaction rechecks sealed authority and the admission window before atomically pinning the decision/approval reference, progression intent, workspace custody and producer receipt.
+  Inspect/monitor expose the reference; `/approvals` lists pending requests before a Run exists. Ledger v52 widens the existing approval subject; protocol v27 hides it from v26 clients. Historical Run/approval bytes keep their original meaning without invented decisions. Detailed traces and do/Mission consumers remain separate work. The common runtime discovers actor-matched intents, rechecks current operation policy and resumes eligible work; migration never silently activates old admissions. Author proof and runtime/build limits: external `proof/KARAR-KAYDI-2026-10-12/WORKER.md`.
   Ledger25 records evaluation observation in the same transaction as its receipt, distinguishing
   never-evaluated output from an evaluated unknown. Unknown is not automatically re-evaluated without new exact-attempt evidence.
   Owner 2026-10-01 A1/A3, implemented source candidate 2026-10-02 in `lane/run-park-timeout`:

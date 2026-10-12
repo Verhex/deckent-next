@@ -240,7 +240,7 @@ export class SqliteRunJournal {
       return this.record({ commandId: parsed.commandId, command, snapshot });
     });
   }
-  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody): Promise<RunReceipt> {
+  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void): Promise<RunReceipt> {
     const parsed = runCreateSchema.parse(input); assertRunExecution(parsed.graph, parsed.execution); const command = JSON.stringify({ action: 'create-run', ...parsed });
     const { scopeId, runId } = parsed.identity;
     if (workspace && (workspace.scopeId !== scopeId || workspace.runId !== runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
@@ -248,7 +248,8 @@ export class SqliteRunJournal {
       const custody = new SqliteRunWorkspaceCustody(this.db);
       const replay = this.receipt(scopeId, runId, parsed.commandId, command);
       if (replay) { if (workspace && !custody.matchesWithin(workspace)) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return replay; }
-      const snapshot = createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution, parsed.branch);
+      assertAuthority?.();
+      const snapshot = { ...createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution, parsed.branch), ...(parsed.authority ? { authority: parsed.authority } : {}) };
       new SqliteExecutionPools(this.db).require(parsed.policy.poolId);
       planSchedulingWave(snapshot.graph, { schemaVersion: 2, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
       const row = this.db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING')

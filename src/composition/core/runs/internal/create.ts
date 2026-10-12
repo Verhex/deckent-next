@@ -3,12 +3,13 @@ import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
-import { resolveWorkerEffortExecution, admitWorkerModels, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization, authorizeWorkTargetUse,
+import { resolveWorkerEffortExecution, admitWorkerModels, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
   assertDockerResourceCeiling, assertTaskGraphLimits, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
+import { withRunCreationAuthority } from './authority.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
   pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {
@@ -24,13 +25,14 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
       const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try { return await writer.loadRunWorkspaceCustody(scopeId, runId); } finally { writer.close(); }
     },
-    async createRun(request: RunCreate, workspace?: RunWorkspaceCustody) {
+    async createRun(request: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void) {
       const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
-      try { return await writer.createRun(request, workspace); } finally { writer.close(); }
+      try { return await writer.createRun(request, workspace, assertAuthority); } finally { writer.close(); }
     },
   };
+  return withRunCreationAuthority(context, async authority => {
   const app = new RunAdmissionApplication(store, { async verify() { return principal; } },
-    new RunPolicyAuthorization({ async load() { return document; } }), executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null), { async resolve(admitted) {
+    authority, executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null), { async resolve(admitted) {
       const profile = config.admission;
       if (!profile) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
       assertTaskGraphLimits(admitted.graph, profile.graph); // PARALLEL-S3: config policy, refused before the catalog read and any write
@@ -59,6 +61,7 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
     } });
   const admission = await app.create(command, undefined, pin ? replay => pin(context, replay) : undefined);
   return Object.freeze({ schemaVersion: 1 as const, layout, admission, warnings });
+  });
 }
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {
   try { return await admitConfiguredRun(projectRoot, runAdmissionSchema.parse(input), options); }

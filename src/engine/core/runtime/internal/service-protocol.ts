@@ -5,7 +5,7 @@ import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, ef
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 26 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 27 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -166,11 +166,12 @@ export class RuntimeServiceProtocolError extends Error {
  * A mismatched non-lifecycle envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT`); a v18 client's describe of a v17
  * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v20 (S02) kept [20, 19]; v21 (T2) kept [21, 20]; v22 (T3) kept
  * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) kept [23, 22]; v24 (SECRET-STORE-SWITCH: `switchSecretStore`)
- * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) kept [25, 24]; v26 (MCP actor) keeps [26, 25]: a v24 service is outside.
+ * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) kept [25, 24]; v26 (MCP actor) kept [26, 25];
+ * v27 (Run-create approval subject) keeps [27, 26]: a v25 service is outside.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 25] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 26] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(25)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(26)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema, channel: z.literal('mcp').optional(),
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

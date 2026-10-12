@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { RunAdmissionApplication, RunPolicyAuthorization } from '#engine/index.js';
+import { RunAdmissionApplication } from '#engine/index.js';
+import { fixtureRunAuthority } from '../support/run-authority.js';
 import { fixtureExecution } from '../support/execution-registry.js';
-const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
-afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const roots: string[] = []; const stores: SqliteAttemptStore[] = []; const authorities: ReturnType<typeof fixtureRunAuthority>[] = [];
+afterEach(async () => { for (const entry of authorities.splice(0)) entry.close(); for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const command = { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r',
   graph: { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['evidence'] }],
     criterionDefinitions: [{ id: 'evidence', version: 1, description: 'Verify evidence', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } };
@@ -18,9 +19,10 @@ async function fixture() {
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
   const state = { allow: true, poolAllow: true, subject: '1', contexts: 0, now: 10, poolChecks: 0 };
   const verifier = { async verify() { return { id: 'user', issuer: 'host', subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };
-  const authorization = new RunPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'p', restrictions: [], grants: state.allow ? [
+  const authorityFixture = fixtureRunAuthority(path, { async load() { return { schemaVersion: 1, revision: 'p', restrictions: [], grants: state.allow ? [
     { id: 'create', effect: 'allow', actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: ['r'] } },
   ] : [] }; } });
+  authorities.push(authorityFixture); const authorization = authorityFixture.authority;
   const poolAuthorization = { async authorize() { state.poolChecks++; if (!state.poolAllow) throw new Error('POLICY_DENIED'); } };
   const context = { async resolve() { state.contexts++; return { layoutRevision: 'layout', now: state.now++, execution: fixtureExecution(command.graph), policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 }, ordering: ['t'] } }; } };
   const app = new RunAdmissionApplication(store, verifier, authorization, poolAuthorization, context);

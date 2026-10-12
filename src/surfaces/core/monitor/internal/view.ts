@@ -186,6 +186,8 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
   const { locale, now, sep } = w;
   return (): readonly MonitorLine[] => [
     [span(t('monitor.detail.run', { run: run.runId, scope: run.scopeId, revision: run.revision, install: install.id }, locale), 'strong')],
+    ...(run.authority ? [[span(t('cli.run.inspect.authority', { record: run.authority.decision.eventId, sequence: run.authority.decision.sequence,
+      approval: run.authority.approval?.approvalId ?? '-' }, locale), 'muted')]] : []),
     [w.stateCell(run), span(sep), span(w.progress(run)), span(sep), span(t('monitor.detail.span', { created: timeText(run.createdAtMs ?? null), duration: w.runDuration(run) }, locale)),
       span(sep), span(t('monitor.detail.activity', { when: agoText(now, run.lastActivityMs, locale) }, locale), 'muted')],
     ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale, w.ascii).map(text => [span(text, 'muted')]) : []),

@@ -1,5 +1,6 @@
 import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
+import { authorityAdmissionSchema } from '#domain/core/audit/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
@@ -16,6 +17,7 @@ export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
 ]).readonly();
 export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identity: runIdentitySchema, revision: counterSchema,
+  authority: authorityAdmissionSchema.optional(),
   state: runStateSchema, branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
   previousBindings: z.array(runBindingSchema).readonly().optional(),
 }).strict().superRefine((run, context) => {
