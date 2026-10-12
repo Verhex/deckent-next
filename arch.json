@@ -108,7 +108,8 @@
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
         "src/platform/core/clock",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/adapters/core/run-proposal-store"
       ],
       "plan": "STORE"
     },
@@ -141,7 +142,8 @@
         "src/adapters/core/worker-observation",
         "src/domain/core/decision",
         "src/domain/core/identity-profile",
-        "src/engine/core/identity-profile"
+        "src/engine/core/identity-profile",
+        "src/capabilities/core/run-planner"
       ],
       "plan": "PROVIDERS"
     },
@@ -153,7 +155,9 @@
         "src/platform/core/config-fields",
         "src/engine/core/task-inputs",
         "src/adapters/core/native-connection",
-        "src/capabilities/core/artifacts"
+        "src/capabilities/core/artifacts",
+        "src/engine/core/resource-observation",
+        "src/domain/core/attempt"
       ],
       "plan": "ISOLATION"
     },
@@ -281,7 +285,8 @@
         "src/surfaces/core/terminal-turn",
         "src/composition/core/project-instructions",
         "src/composition/core/backup",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/composition/core/run-planner"
       ],
       "plan": "SURFACES"
     },
@@ -307,7 +312,8 @@
         "src/adapters/core/native-connection",
         "src/adapters/core/worker-observation",
         "src/adapters/core/git-patch",
-        "src/engine/core/handoff-observation"
+        "src/engine/core/handoff-observation",
+        "src/composition/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -354,7 +360,8 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/local-keyring",
         "src/domain/core/audit",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/composition/core/run-planner"
       ],
       "plan": "SURFACES"
     },
@@ -484,7 +491,17 @@
         "src/engine/core/workspaces",
         "src/composition/core/workspace-patch",
         "src/adapters/core/monitor-ledger",
-        "src/composition/core/toolchains"
+        "src/composition/core/toolchains",
+        "src/adapters/core/audit-store",
+        "src/composition/core/provider-spend",
+        "src/composition/core/model-invocation",
+        "src/adapters/core/run-proposal-store",
+        "src/adapters/core/provider-openai-chat",
+        "src/platform/core/i18n",
+        "src/adapters/core/contract",
+        "src/engine/core/provider-spend",
+        "src/composition/core/root",
+        "src/composition/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -615,7 +632,9 @@
         "src/domain/core/primitives",
         "src/domain/core/task-graph",
         "src/domain/core/provider-catalog",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/domain/core/audit",
+        "src/domain/core/provider-spend"
       ],
       "plan": "CONTRACT"
     },
@@ -666,7 +685,8 @@
         "src/domain/core/run",
         "src/engine/core/audit",
         "src/engine/core/authentication",
-        "src/engine/core/supervisor"
+        "src/engine/core/supervisor",
+        "src/engine/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -709,7 +729,17 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/worker-event",
         "src/engine/core/model-activation",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/approval",
+        "src/domain/core/command",
+        "src/platform/core/integrity",
+        "src/engine/core/provider-spend",
+        "src/domain/core/model-invocation",
+        "src/capabilities/core/run-planner",
+        "src/platform/core/redaction",
+        "src/platform/core/i18n",
+        "src/domain/core/work-cost",
+        "src/engine/core/resource-observation"
       ],
       "plan": "CONTRACT"
     },
@@ -1043,7 +1073,8 @@
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/project-instructions",
-        "src/engine/core/project-instructions"
+        "src/engine/core/project-instructions",
+        "src/engine/core/runs"
       ],
       "plan": "SURFACES"
     },
@@ -1132,7 +1163,8 @@
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/work-labels",
         "src/surfaces/core/cli-terminal",
-        "src/engine/core/backup"
+        "src/engine/core/backup",
+        "src/surfaces/core/run-planning"
       ],
       "plan": "SURFACES"
     },
@@ -1175,7 +1207,9 @@
         "src/domain/core/model-activation",
         "src/engine/core/project-instructions",
         "src/surfaces/core/project-instructions",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/surfaces/core/run-planning",
+        "src/domain/core/run"
       ],
       "plan": "SURFACES"
     },
@@ -1205,7 +1239,8 @@
         "src/domain/core/effect",
         "src/engine/core/decision",
         "src/engine/core/agent-turn",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/domain/core/run"
       ],
       "plan": "SURFACES"
     },
@@ -1607,7 +1642,9 @@
         "src/domain/core/model-invocation",
         "src/engine/core/authentication",
         "src/domain/core/principal",
-        "src/domain/core/model-activation"
+        "src/domain/core/model-activation",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/run"
       ],
       "plan": "PROVIDERS"
     },
@@ -1895,7 +1932,8 @@
         "src/engine/core/worker-observation",
         "src/platform/core/clock",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -2162,7 +2200,8 @@
     },
     "src/domain/core/audit": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/command"
       ],
       "plan": "SECURITY"
     },
@@ -2302,7 +2341,9 @@
         "src/engine/core/handoff-observation",
         "src/platform/core/errors",
         "src/engine/core/supervisor",
-        "src/domain/core/attempt"
+        "src/domain/core/attempt",
+        "src/domain/core/work-cost",
+        "src/engine/core/resource-observation"
       ],
       "plan": "MONITOR"
     },
@@ -2376,7 +2417,9 @@
         "src/engine/core/config",
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/engine/core/resource-observation",
+        "src/domain/core/work-cost"
       ],
       "plan": "MONITOR"
     },
@@ -2736,6 +2779,118 @@
         "src/engine/core/model-invocation"
       ],
       "plan": "SURFACES"
+    },
+    "src/adapters/core/run-proposal-store": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/command",
+        "src/engine/core/runs",
+        "src/engine/core/provider-spend",
+        "src/platform/core/errors",
+        "src/domain/core/run"
+      ],
+      "plan": "STORE"
+    },
+    "src/capabilities/core/run-planner": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/domain/core/primitives",
+        "src/domain/core/command",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/platform/core/integrity"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/engine/core/run-planner": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/model-invocation",
+        "src/domain/core/command",
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/platform/core/integrity",
+        "src/capabilities/core/run-planner",
+        "src/engine/core/authentication",
+        "src/engine/core/model-invocation",
+        "src/engine/core/runs"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/composition/core/run-planner": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/model-invocation",
+        "src/engine/core/run-planner",
+        "src/engine/core/model-invocation",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/adapters/core/provider-openai-chat",
+        "src/composition/core/scoped-request",
+        "src/composition/core/terminal-chat",
+        "src/composition/core/model-invocation",
+        "src/composition/core/runs",
+        "src/composition/core/runtime-service",
+        "src/composition/core/query-errors",
+        "src/composition/core/root",
+        "src/engine/core/provider-spend",
+        "src/adapters/core/native-coding"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/surfaces/core/run-planning": {
+      "dependencies": [
+        "src/engine/core/runs",
+        "src/platform/core/i18n",
+        "src/platform/core/errors"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/engine/core/resource-observation": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/supervisor",
+        "src/platform/core/config-fields",
+        "src/domain/core/work-cost",
+        "src/domain/core/run",
+        "src/domain/core/worker-event",
+        "src/domain/core/principal",
+        "src/domain/core/primitives"
+      ],
+      "plan": "KAYNAK-KALITE"
+    },
+    "src/adapters/core/resource-trace": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/resource-observation",
+        "src/platform/core/config",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "KAYNAK-KALITE"
+    },
+    "src/composition/core/resource-observation": {
+      "dependencies": [
+        "src/adapters/core/resource-trace",
+        "src/engine/core/resource-observation",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/domain/core/attempt",
+        "src/platform/core/managed-files",
+        "src/adapters/core/file-artifacts",
+        "src/engine/core/worker-observation"
+      ],
+      "plan": "KAYNAK-KALITE"
+    },
+    "src/domain/core/work-cost": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/run"
+      ],
+      "plan": "KAYNAK-KALITE"
     }
   },
   "composition": {
@@ -2964,7 +3119,9 @@
       {
         "file": "src/engine/core/secret-store/internal/helper.ts",
         "symbol": "definition/timeoutMs",
-        "values": [2147483647],
+        "values": [
+          2147483647
+        ],
         "reason": "Node setTimeout signed 32-bit delay ceiling: larger values clamp to 1 ms. Protocol validation rejects overflow rather than changing the registered deadline; not a mutable helper timeout default. SECRET-HELPER v1, official Node timers documentation, 2026-10-10."
       },
       {

@@ -20,6 +20,14 @@ export class AuditApplication {
     const event: AuditEvent = parsed.data;
     return this.guard(() => verifyAuditRecord(this.store.append(event, sequence => sealAuditRecord(event, sequence, this.integrity)), this.integrity));
   }
+  load(scopeId: string, eventId: string): AuditRecord | null {
+    if (!this.store.load) throw new AuditError('AUDIT_UNAVAILABLE');
+    const record = this.guard(() => this.store.load!(scopeId, eventId));
+    if (!record) return null;
+    const verified = verifyAuditRecord(record, this.integrity);
+    if (verified.event.scopeId !== scopeId || verified.event.eventId !== eventId) throw new AuditError('AUDIT_INTEGRITY');
+    return verified;
+  }
   /** Verified page of one scope: every record's seal, and the sequence continuity a deleted row would break. */
   list(scopeId: string, afterSequence: number, limit: number): readonly AuditRecord[] {
     if (!Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new AuditError('AUDIT_INVALID');

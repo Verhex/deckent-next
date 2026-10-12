@@ -9,7 +9,8 @@ import { inspectConfiguredWorkers } from '../../../src/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
+import { clearConfigCache, productResourcePath, getConfigKnownSecrets, DeckentError, reportQueryError } from '#platform/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 const exec = promisify(execFile); const roots: string[] = []; const cleanup: (() => Promise<void>)[] = [];
@@ -24,7 +25,7 @@ async function fixture(delay: number) {
   parameters.imageId = process.env.DECKENT_TEST_DOCKER_IMAGE!; parameters.argv = ['node', '-e', `setTimeout(()=>require('node:fs').writeFileSync('note','after'),${delay})`];
   const { argv: _argv, ...bounds } = parameters; void _argv;
   const configPath = join(project, '.deckent/config.json');
-  const config = { layout: { root: join(root, 'data') }, inspection: { workers: { heartbeatMs: 100, staleMs: 1000, sources: [] as { id: string; kind: string; path: string; scopeId: string }[] } },
+  const config = { resourceObservation: { intervalMs: 100 }, layout: { root: join(root, 'data') }, inspection: { workers: { heartbeatMs: 100, staleMs: 1000, sources: [] as { id: string; kind: string; path: string; scopeId: string }[] } },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
     execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } };
   await writeFile(configPath, JSON.stringify(config)); const options = { env: { HOME: join(root, 'home') } };
@@ -41,7 +42,14 @@ async function fixture(delay: number) {
   const identity = (await reserveConfiguredRunTasks(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve', expectedRevision: 0 }, options)).reservation.identities[0]!;
   const runtime = await openConfiguredExecution(project, project, options);
   cleanup.push(async () => { try { const record = await runtime.store.loadBoundDispatch(identity); if (record) { const supervisor = await DockerSupervisor.restoreProfile(record.profile); await supervisor.cancel(record.request); await supervisor.release(record.request); } } finally { runtime.store.close(); } });
-  const execute = () => executeConfiguredTask(project, identity, options);
+  const execute = async () => {
+    try { return await executeConfiguredTask(project, identity, options); }
+    catch (error) {
+      if (error instanceof DeckentError) await reportQueryError(error, async () => getConfigKnownSecrets(await loadComposedConfig(project, options)),
+        event => { console.info('worker-execution-diagnostic', JSON.stringify(event)); });
+      throw error;
+    }
+  };
   const inspect = () => inspectConfiguredWorkers(project, { schemaVersion: 1, scopeId: 's' }, options);
   return { root, project, config, configPath, options, policy, identity, runtime, execute, inspect };
 }
@@ -69,10 +77,15 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect((await (await DockerSupervisor.restoreProfile(record.profile)).inspectActivity(record.request)).state).toBe('running');
     expect((await execution).execution.terminal?.exitCode).toBe(0);
     const final = await f.inspect(); expect(final.sources[0]?.workers[0]).toMatchObject({ process: 'exited', terminal: { exitCode: 0 }, files: { result: { state: 'available', exitCode: 0 } } });
+    const resources = final.sources[0]?.workers[0]?.resources;
+    console.info('worker-resource-observation', JSON.stringify(resources));
+    expect(resources?.sampleCount, JSON.stringify(resources)).toBeGreaterThanOrEqual(2);
+    expect(resources?.sampledPeakBytes, JSON.stringify(resources)).toBeGreaterThan(0);
     const lease = (await f.runtime.workspaces.openRecorded(f.identity))!;
     for (const extension of ['hb', 'log', 'result']) expect((await readFile(join(dirname(lease.workspace), 'worker.' + extension))).length).toBeGreaterThan(0);
     await other.policy(false); expect((await f.inspect()).sources[1]?.status).toBe('denied');
     await f.policy(true, false); expect((await f.inspect()).sources[0]?.workers[0]?.diagnostics).toContain('output-denied');
+    expect((await f.inspect()).sources[0]?.workers[0]?.resources).toBeUndefined();
     await f.policy(false); await expect(f.inspect()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   }, 30000);
 });

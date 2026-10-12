@@ -73,6 +73,8 @@ export interface MonitorTask {
 }
 export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled' | 'parked' | 'incomplete';
 export interface MonitorRun {
+  readonly costReport?: import('#domain/index.js').WorkCostReport;
+  readonly authority?: import('#domain/index.js').AuthorityAdmission;
   readonly scopeId: string; readonly runId: string; readonly revision: number; readonly state: MonitorRunState;
   readonly phaseCounts: Readonly<Record<string, number>>; readonly tasks: readonly MonitorTask[];
   readonly blocker: MonitorBlocker | null; readonly cancellationRequested: boolean;

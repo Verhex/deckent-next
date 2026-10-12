@@ -1,6 +1,6 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
+import { runProposalBindingSchema, authorityAdmissionSchema, branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import type { ReservationDiagnostic } from '#engine/core/scheduling/index.js';
 import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
 const actor = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict();
@@ -9,7 +9,7 @@ export const executionPoolSchema = z.object({ schemaVersion: z.literal(1), poolI
 export type ExecutionPool = z.infer<typeof executionPoolSchema>;
 export const runExecutionPolicySchema = z.object({ schemaVersion: z.literal(2), poolId: identitySchema, capacity, ordering: z.array(identitySchema) }).strict();
 export const runCreateSchema = z.object({ commandId: clientCommandIdSchema, actor, identity: runIdentitySchema, graph: taskGraphSchema, now: counterSchema,
-  policy: runExecutionPolicySchema, execution: runExecutionSnapshotSchema, branch: branchDecisionSchema.optional(),
+  policy: runExecutionPolicySchema, execution: runExecutionSnapshotSchema, branch: branchDecisionSchema.optional(), authority: authorityAdmissionSchema.optional(), proposal: runProposalBindingSchema.optional(),
 }).strict();
 export const runReservationSchema = z.object({ commandId: clientCommandIdSchema, actor, scopeId: identitySchema, runId: identitySchema,
   expectedRevision: counterSchema, now: counterSchema, identities: z.array(attemptIdentitySchema).min(1),
@@ -32,7 +32,7 @@ export interface RunStore {
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   /** `workspace`, when given, is the Run's immutable workspace custody, written in the admission transaction and never part of the
    * receipt command (record shapes unchanged). A replay whose custody differs is RUN_COMMAND_CONFLICT. */
-  createRun(input: RunCreate, workspace?: RunWorkspaceCustody): Promise<RunReceipt>;
+  createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void): Promise<RunReceipt>;
   /** Atomically admits a nonempty ordered prefix fitting both limits. Command retains candidates;
    * snapshot contains only admitted attempts. Replay never expands the original admission. */
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;

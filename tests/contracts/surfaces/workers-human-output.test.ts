@@ -34,11 +34,13 @@ it('workers list human output is readable lines, JSON is unchanged', async () =>
   const at = (task: string) => lines.findIndex(l => l.includes(`run1/${task} `));
   expect(lines[at('t1')]).toBe('  run1/t1 · attempt abcdefgh · gen 3 · exited 0 · heartbeat fresh · claude');
   expect(lines[at('t1') + 1]).toContain('Task t1: Model on codex-cli');
-  expect(lines[at('t1') + 2]).toBe('  Usage: 6 turns · 24.7s · tokens 8 in / 1066 out · $0.1075 · reported success');
-  expect(lines[at('t1') + 2]!.length).toBeLessThanOrEqual(100);
+  expect(lines[at('t1') + 2]).toBe('Resources unmeasured');
+  expect(lines[at('t1') + 3]).toBe('  Usage: 6 turns · 24.7s · tokens 8 in / 1066 out · $0.1075 · reported success');
+  expect(lines[at('t1') + 3]!.length).toBeLessThanOrEqual(100);
   expect(lines[at('t2')]).toBe('  run1/t2 · attempt 12345678 · gen 3 · running · heartbeat stale · codex');
   expect(lines.filter(l => l.includes('Usage:'))).toHaveLength(2);
-  expect(lines[at('t5') + 1]).toBe('  Usage: 11 turns · 48.0s · tokens 18 in / 4786 out · $0.2039 · reported success');
+  expect(lines[at('t5') + 1]).toBe('Resources unmeasured');
+  expect(lines[at('t5') + 2]).toBe('  Usage: 11 turns · 48.0s · tokens 18 in / 4786 out · $0.2039 · reported success');
   const tr = (await run([], 'list', 'tr')).text.split('\n');
   expect(tr).toContain('  Kullanım: 6 tur · süre 24.7s · token 8 giriş / 1066 çıkış · maliyet $0.1075 · başarılı bildirdi');
   expect(lines[at('t3')]).toBe('  run1/t3 · attempt qrstuvwx · gen 3 · exited 1 · heartbeat missing · docker');

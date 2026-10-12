@@ -5,7 +5,7 @@ import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelC
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
-import { readRunAcceptanceEvaluations, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
@@ -93,7 +93,11 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
       const attempts = snapshot.bindings.map(binding => attempt(db, version, binding, reserved.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null,
         models.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null, snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found));
       const policy = row.policy ? runExecutionPolicySchema.safeParse(json(row.policy)) : null;
-      runs.push(Object.freeze({ snapshot, evaluations: readRunAcceptanceEvaluations(db, snapshot), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
+      // Supplemental cost projection cannot invalidate the canonical Run or its producer acceptance receipt.
+      let costMetrics: MonitorLedgerRun['costMetrics'];
+      try { costMetrics = readRunAcceptanceMetrics(db, snapshot); }
+      catch (error) { recordOnly(error); diagnostics.push('run-cost-unavailable:' + key); }
+      runs.push(Object.freeze({ snapshot, ...(costMetrics ? { costMetrics } : {}), evaluations: readRunAcceptanceEvaluations(db, snapshot), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
         createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts),
         deliveryReceipts: Object.freeze(snapshot.revision === current.revision ? deliveries.get(key) ?? [] : []),
         delivery: snapshot.revision === current.revision ? aggregateDelivery(deliveries.get(key) ?? []) : null }));
@@ -158,7 +162,7 @@ function pendingApprovals(db: DatabaseSync, limit: number, diagnostics: string[]
     try {
       const record = approvalRecordSchema.parse(json(row.snapshot)), request = record.request, subject = approvalSubject(request);
       if (request.scopeId !== row.scope_id || request.approvalId !== row.approval_id) throw new Error();
-      return [Object.freeze({ scopeId: request.scopeId, approvalId: request.approvalId, subjectKind: subject.kind, runId: subject.kind === 'task' ? subject.runId : null,
+      return [Object.freeze({ scopeId: request.scopeId, approvalId: request.approvalId, subjectKind: subject.kind, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : null,
         taskId: subject.kind === 'task' ? subject.taskId : null, summary: request.summary, createdAtMs: request.createdAt, expiresAtMs: request.expiresAt })];
     } catch (error) { recordOnly(error); diagnostics.push(`approval-corrupt:${row.scope_id}/${row.approval_id}`); return []; }
   });

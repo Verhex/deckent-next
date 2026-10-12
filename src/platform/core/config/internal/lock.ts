@@ -12,7 +12,7 @@ import type { ConfigWarning } from './validate/issues.js';
 
 const STALE_MS = 10 * 60_000;
 interface Owner { pid?: number; hostname?: string; createdAt?: string; nonce?: string }
-export interface ConfigLockOptions { onWarning?: (warning: ConfigWarning) => void; locale?: Locale }
+export interface ConfigLockOptions { onWarning?: (warning: ConfigWarning) => void; locale?: Locale; signal?: AbortSignal }
 function pidState(pid: number): 'alive' | 'dead' | 'unknown' {
   try { process.kill(pid, 0); return 'alive'; }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH' ? 'dead' : (error as NodeJS.ErrnoException).code === 'EPERM' ? 'alive' : 'unknown'; }
@@ -124,10 +124,12 @@ async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<ty
 /** Exclusive directory ownership, private metadata, bounded waiting, and inode-safe release.
  * Without a caller timeout the wait is the registered `configFile.writeLockTimeoutMs` default (single source). */
 export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>, timeoutMs = getConfigFieldDefault('configFile').writeLockTimeoutMs, options: ConfigLockOptions = {}): Promise<T> {
+  options.signal?.throwIfAborted();
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const clock = new SystemTrustedClock(), started = clock.sample();
   const lock = `${path}.write-lock`, deadline = started.monotonicMs + timeoutMs;
   while (true) {
+    options.signal?.throwIfAborted();
     try { await mkdir(lock, { mode: 0o700 }); break; }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: error });
@@ -138,7 +140,7 @@ export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>,
           path: lock, pid: owner?.owner.pid ?? 'unknown', ageSeconds: Math.floor(owner?.ageSeconds ?? 0),
         } });
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-      await sleep(25);
+      await sleep(25, undefined, { signal: options.signal, ref: !options.signal });
     }
   }
   const identity = await lstat(lock), ownerPath = join(lock, 'owner.json');
@@ -152,6 +154,7 @@ export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>,
     } finally { await handle.close(); }
     const named = await lstat(lock);
     if (named.ino !== identity.ino || named.dev !== identity.dev || named.birthtimeMs !== identity.birthtimeMs) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+    options.signal?.throwIfAborted();
     return await fn();
   } finally {
     const named = await lstat(lock).catch(() => undefined);

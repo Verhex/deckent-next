@@ -1,3 +1,4 @@
+import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
@@ -37,7 +38,7 @@ describe.skipIf(process.platform === 'win32')('configured SDK cancellation inten
     expect(result.cancellation.run).toMatchObject({ cancellationRequested: true, revision: 1 });
     expect(result.cancellation.run.tasks[0]).toMatchObject({ phase: 'cancelled', cancellation: { reason: 'prevented-before-launch' } });
     const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run;
-    expect(inspected).toEqual(result.cancellation.run);
+    expect(expectEmptyCostObservation(inspected)).toEqual(result.cancellation.run);
     expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
       effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
     expect(await requestRunCancellation(f.project, command, f.options)).toEqual(result);

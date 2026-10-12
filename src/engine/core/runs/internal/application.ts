@@ -9,6 +9,7 @@ import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.
 import { describeRunWorkerModels, type WorkerEventArtifacts, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { RunStoreError, type RunStore } from './store.js';
+import { inspectRunWorkCosts, type WorkCostEvidence } from '#engine/core/resource-observation/index.js';
 export const runQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema }).strict();
 export const runCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, action: z.literal('cancel'), expectedRevision: counterSchema }).strict();
 export type RunQuery = z.infer<typeof runQuerySchema>;
@@ -21,14 +22,16 @@ export interface RunModelEvidence {
 /** Shared authenticated ingress. Cancellation records intent; it never fabricates worker termination. */
 export class RunInspectionApplication {
   constructor(private readonly readStore: Pick<RunStore, 'loadRun'> & Partial<Pick<AttemptStore, 'receipt'>> & { loadRunEvaluations?(snapshot: RunSnapshot): Promise<readonly Readonly<{ identity: { taskId: string } }>[]>; loadRunPoolEvidence?(scopeId: string, runId: string): Promise<RunPoolEvidence> }, protected readonly verifier: PrincipalVerifier,
-    protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }) {}
+    protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }, private readonly costs?: WorkCostEvidence) {}
   async inspect(input: unknown, credential?: unknown) { return (await this.load(input, credential)).run; }
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
   async inspectWithModels(input: unknown, credential?: unknown) {
-    const { run, snapshot, principal } = await this.load(input, credential);
+    const { run, snapshot, principal, evaluations } = await this.load(input, credential);
     const models = run && this.models ? await describeRunWorkerModels(runSnapshotSchema.parse(snapshot), principal, this.models.store, this.models.artifacts,
       this.models.authorization) : Object.freeze([]);
-    return Object.freeze({ run, models });
+    const costReport = run && this.costs && this.models ? await inspectRunWorkCosts(runSnapshotSchema.parse(snapshot), evaluations ?? [], principal, this.costs,
+      (identity, actor) => this.models!.authorization.authorizeIdentity('read-output', identity, actor)) : undefined;
+    return Object.freeze({ run: run && costReport ? Object.freeze({ ...run, costReport }) : run, models });
   }
   private async load(input: unknown, credential?: unknown) {
     const query = runQuerySchema.parse(input);
@@ -50,7 +53,7 @@ export class RunInspectionApplication {
     const evaluations = await this.readStore.loadRunEvaluations?.(parsed) ?? [];
     const view = { ...projectRunView(parsed, receipts, evaluations), ...(pool ? { pool } : {}) };
     if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
-    return { run: view, snapshot, principal };
+    return { run: view, snapshot, principal, evaluations };
   }
 }
 export class RunApplication extends RunInspectionApplication {

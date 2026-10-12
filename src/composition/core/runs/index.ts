@@ -1,3 +1,4 @@
+export { readConfiguredRunBudget, classifyConfiguredRunSpending } from './internal/budget.js';
 export { inspectConfiguredRun } from './internal/inspect.js';
 export { createConfiguredRun, createConfiguredDeliveryRun } from './internal/create.js';
 export { requestConfiguredRunCancellation } from './internal/cancel.js';
@@ -11,3 +12,4 @@ export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
 export { recoverConfiguredReconciliation } from './internal/recover-reconciliation.js';
 export { sweepConfiguredAttemptCustody } from './internal/custody-sweep.js';
 export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle, parkConfiguredRunProgression } from './internal/lifecycle.js';
+export { proposeConfiguredRun, inspectConfiguredRunProposal } from './internal/proposals.js';

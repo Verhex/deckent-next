@@ -2,11 +2,13 @@ import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchem
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
+import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
 export const runViewSchema = z.object({
+  costReport: workCostReportSchema.optional(),
+  authority: authorityAdmissionSchema.optional(), proposal: runProposalBindingSchema.optional(),
   schemaVersion: z.literal(3), runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema,
   registryRevision: identitySchema, pool: runPoolObservationSchema.optional(),
   /** PARALLEL-S3 (additive): DAG summary from the same domain projection the monitor uses; always set by `projectRunView`. */
@@ -36,6 +38,8 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
   if (!parsed.success) throw new RunStoreError('RUN_STORE_CORRUPT');
   const run = parsed.data; const progress = new Map(run.progress.map(task => [task.taskId, task]));
   return runViewSchema.parse({ schemaVersion: 3, runId: run.identity.runId, scopeId: run.identity.scopeId,
+    ...(run.proposal ? { proposal: run.proposal } : {}),
+    ...(run.authority ? { authority: run.authority } : {}),
     layoutRevision: run.identity.layoutRevision, ...(run.branch ? { branch: { schemaVersion: run.branch.schemaVersion, request: run.branch.request, selectedTaskId: run.branch.selectedTaskId, notSelectedTaskId: run.branch.notSelectedTaskId } } : {}), registryRevision: run.execution.registryRevision,
     criteria: run.graph.criterionDefinitions.map(criterion => ({ id: criterion.id, version: criterion.version, description: criterion.description, evaluator: criterion.evaluator, fingerprint: run.execution.criteria.find(entry => entry.criterionId === criterion.id)!.fingerprint })),
     revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state, graphSummary: summarizeTaskGraph(run.graph, run.progress),

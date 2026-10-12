@@ -8,6 +8,7 @@ import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
 import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
 import { operationApprovalFacts } from './assurance.js';
 import { CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION } from './config-change.js';
+import { RUN_CREATE_SUBJECT_PROTOCOL_VERSION } from './run-create.js';
 
 type OperationSubject = Extract<ApprovalSubject, { kind: 'operation' }>;
 /** The action an operation approval authorizes (C12 G1): this scope, this requester and exactly this command — operation id@version, target
@@ -117,7 +118,8 @@ export function approvalResultForProtocol(version: number, action: 'list' | 'ins
 export function approvalSubjectsHiddenFromProtocol(version: number): readonly ApprovalSubjectKind[] {
   // T3 L2: a client below `CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION` (alpha.10's v21) cannot parse a config-change record the same way.
   return [...(version >= OPERATION_SUBJECT_PROTOCOL_VERSION ? [] : ['operation' as const]),
-    ...(version >= CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION ? [] : ['config-change' as const])];
+    ...(version >= CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION ? [] : ['config-change' as const]),
+    ...(version >= RUN_CREATE_SUBJECT_PROTOCOL_VERSION ? [] : ['run-create' as const])];
 }
 
 export type OperationApprovalWait = 'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled';

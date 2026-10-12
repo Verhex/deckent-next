@@ -1,3 +1,4 @@
+import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -48,7 +49,7 @@ async function seedLedger18(file: string) {
   store.close();
   const db = new DatabaseSync(file);
   try {
-    db.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+    db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
       DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts;
       DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=18;`);
   } finally { db.close(); }
@@ -135,7 +136,7 @@ async function seedLedger20(file: string) {
     const reservation = { ...withoutMeasurement, schemaVersion: 1 };
     db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE scope_id=? AND invocation_id=?')
       .run(JSON.stringify(reservation), historicalHash('deckent.provider-spend-reservation.v1', reservation), reservationRow.scope_id, reservationRow.invocation_id);
-    db.exec('DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=20');
+    db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=20`);
   } finally { db.close(); }
 }
 async function seedLedger19(file: string) {
@@ -143,7 +144,7 @@ async function seedLedger19(file: string) {
   const store = await openSqliteModelInvocationStore(file, options, 'allow'); store.close();
   const db = new DatabaseSync(file);
   try {
-    db.exec(`DROP TABLE model_invocation_spend_reservations;
+    db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP TABLE model_invocation_spend_reservations;
       DROP TABLE provider_spend_accounts;
       DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits;
       DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=19;`);

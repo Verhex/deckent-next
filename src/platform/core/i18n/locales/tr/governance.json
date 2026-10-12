@@ -931,5 +931,7 @@
   "error.OPERATION_EVIDENCE_EARLIER": "Operasyon kanıtı bu denemenin başlatma yetkisinden önceye ait; güvenilir nedensel bağ kurulamadı, karar bekleniyor.",
   "error.OPERATION_EVIDENCE_PRINCIPAL": "Operasyonun yetki kimliği Run veya yürütücü kimliğiyle eşleşmiyor.",
   "error.OPERATION_EVIDENCE_REUSED": "Bu operasyon başka bir görevin kabulüne kanıt oldu; tekrar kullanılamaz.",
-  "error.OPERATION_EVIDENCE_OTHER_RUN": "Bu operasyon başka bir Run'ın kabulüne kanıt oldu; yalnız aynı Run'daki görevler bu kanıtı paylaşabilir."
+  "error.OPERATION_EVIDENCE_OTHER_RUN": "Bu operasyon başka bir Run'ın kabulüne kanıt oldu; yalnız aynı Run'daki görevler bu kanıtı paylaşabilir.",
+  "error.RUN_APPROVAL_REQUIRED": "Run oluşturma {approvalId} onayını bekliyor; Run henüz oluşmadı. /approvals veya approval decide ile karar verin, sonra aynı komutu ve girdiyi tekrar gönderin.",
+  "cli.run.inspect.authority": "Yetki kararı: {record} (sıra {sequence}); onay: {approval}"
 }

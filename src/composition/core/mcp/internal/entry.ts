@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { parseArgs } from 'node:util';
@@ -30,6 +31,7 @@ export async function main(root = process.cwd()) {
   // Catalog operations run on the service (runtime client handlers); their tool hints come from this installation's reachable catalog.
   const operationCatalog = await describeConfiguredOperationTools(root);
   return serveStdio(() => createMcpServer(mcpApplications({ ...runtime, operationCatalog, inspectDeclaredModels: () => inspectDeclaredModels(root),
+    planRun: input => planRuntimeRun(root, input),
     recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
     applyRunControl: command => applyConfiguredRunLifecycle(root, command),
     inspectDecision: query => inspectConfiguredDecision(root, query),

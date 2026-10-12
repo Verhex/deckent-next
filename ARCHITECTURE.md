@@ -3,7 +3,7 @@
 
 **W3-AUTHORITY (owner 2026-10-09; candidate, no live acceptance):** `deckent-mcp` uses the same verified OS UID with a distinct actor
 (`issuer = <host>/mcp`, actor id suffixed `/mcp`). All handlers, including direct model-connect/activation writes, enter that code-only context;
-service-bound calls carry `channel: mcp` on local protocol v26, lifecycle window `[26,25]`, current-only mutations. This metadata delegates no
+service-bound calls carry `channel: mcp` on local protocol v28, lifecycle window `[28,27]`, current-only mutations. This metadata delegates no
 other OS identity; same-account direct socket access remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
 MCP authority; an explicit rule or role binding must name the MCP actor. Denies/restrictions still apply. Template v9 and add-only upgrades add
 named observation rules only. Budget creation/revision/unfreeze/reconciliation, activation and invocation require an explicit MCP-specific grant;
@@ -51,7 +51,6 @@ Deckent, müşterinin kendi altyapısına kurulan bir Agent Control & Execution 
   tahmin ve gerçek kullanım ayrılır, eksik ölçüm sıfır sayılmaz; hassas içerik veya sınırsız kimlik metric etiketi olmaz.
 - **Teslim:** Brain kabul, Auditor bağımsız denetim, Nervous gözlem/öneri; öğrenme kanıt/eval/geri dönüşle ilerler.
   Her küçük dilim gerçek yüzey kanıtı ve Türkçe owner raporuyla kapanır; hedef enterprise-grade ürün.
-
 
 Owner 2026-09-17: first workspace implementation is Git-backed worktree/path allocation; non-Git
 workspace adapters remain an extension boundary. Worktree separation is never the sandbox security proof.
@@ -205,9 +204,9 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   MARK-LOST-ATOMIC / KARAR 12 in PLAN. No retry launch or automatic release. Author proof and unperformed real Docker/service,
   native-platform, independent-review and live acceptance checks are in external `proof/RESTART-RECOVERY-2026-10-10/WORKER.md`.
 
-- Owner 2026-09-21: new Run admission atomically records automatic progression intent; no separate
-  start command. The running common runtime discovers actor-matched intents, rechecks current
-  operation policy and resumes eligible work. Migration never silently activates old admissions.
+- Owner 2026-09-21: new Run admission atomically records automatic progression intent; no separate start command. KARAR-KAYDI author candidate (2026-10-12): existing `evaluatePolicy` produces a general authority decision in the HMAC-sealed, scope-sequenced audit ledger before a new Run; failed sealing refuses the effect. The record binds COMMAND-ENVELOPE, resource, exact input/admission and policy digests, revision, rule and verdict; deny is recorded without a Run. A later admission-prerequisite refusal retains the evaluated policy with no resolved basis; a decision record alone never proves an effect.
+  `require-approval` opens one sealed `run-create` request per scoped command, with no Run. Its existing v3 summary is a bounded, record-redacted catalog rendering of the same admission input/basis (task titles/classes, declared permissions/ceiling, admission-only budget semantics and the asking rule); all approval observers retain it after reconnect. Display cuts never change the bound input; older sealed summaries remain byte-exact. Existing interactive human approval/session policy decides it; MCP cannot decide. Retrying the same command, actor and resolved input consumes the exact approval receipt; changed input/config/policy, denied or expired approval refuses. The Run transaction rechecks sealed authority and the admission window before atomically pinning the decision/approval reference, progression intent, workspace custody and producer receipt.
+  Inspect/monitor expose the reference; `/approvals` lists pending requests before a Run exists. Ledger v52 widens the existing approval subject; protocol v27 hides it from v26 clients. Historical Run/approval bytes keep their original meaning without invented decisions. Detailed traces and do/Mission consumers remain separate work. The common runtime discovers actor-matched intents, rechecks current operation policy and resumes eligible work; migration never silently activates old admissions. Author proof and runtime/build limits: external `proof/KARAR-KAYDI-2026-10-12/WORKER.md`.
   Ledger25 records evaluation observation in the same transaction as its receipt, distinguishing
   never-evaluated output from an evaluated unknown. Unknown is not automatically re-evaluated without new exact-attempt evidence.
   Owner 2026-10-01 A1/A3, implemented source candidate 2026-10-02 in `lane/run-park-timeout`:
@@ -301,10 +300,10 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   Use versioned modular definitions/profiles for personal/team/Enterprise use; future purchase refinements
   (internal/external, etc.) can extend the domain without multiplying execution engines. A daily preset
   may propose a schedule; the actual schedule is explicit and separately validated. Kind grants no authority.
-- Owner 2026-09-22: `do` is intent → versioned, receipted RunProposal → deterministic task-graph
-  compilation → scope/cost/effect gates → existing Run admission, with approval when required.
-  It depends on command/effect-policy contracts, not Mission; planning invocation spends are budgeted.
-  Mission AI author remains a separate extension of deterministic Mission rounds and checkpoints.
+- Owner 2026-09-22: `do` is intent → versioned, receipted RunProposal → deterministic task-graph compilation → scope/cost/effect gates → existing Run admission, with approval when required.
+  It depends on command/effect-policy contracts, not Mission; planning invocation spends are budgeted. Mission AI author remains a separate extension of deterministic Mission rounds and checkpoints.
+  DO-DILIM-A2 author candidate (2026-10-12, base `da64947e`, ledger53/protocol28): RunProposal v1 reuses graph/criteria and per-task WorkClass. CLI `run propose --proposal`, SDK `proposeRun`, MCP `propose_run` share one application and existing sealed Run-create admission; source model references require a matching invocation receipt, never a new call.
+  Registry low-risk + standing admission + matching kind binding bypass only the proposal approval gate; policy deny/require-approval remain binding. Subscription-only selected worker bindings carry `budgetSemantics: not-metered` with no money checkpoint. Unknown/mixed/API bindings retain the admission-time ceiling check against the ledger-first scope budget (configured fallback before the first account); selected profile digests and the checked budget source bind into decision input; no runtime total Run-spend ceiling is enforced. Model calls retain existing scope reservations. Proposal/Run acceptance receipts commit together in the existing Run transaction; `inspect-proposal`/SDK/MCP expose recorded/pending/accepted/rejected/parked. Same command/input replays; changed basis parks, changed input conflicts; read inspection cannot write/migrate. Author proof, review and live limits: external `proof/DO-DILIM-A2-2026-10-12/`. DO-DILIM-B natural-intent planning and contribution contract: [Brain Run planning](.deckent/docs/architecture/modules/run-planning.md); author candidate, independent/live acceptance remains open.
 - Owner 2026-09-22: process work uses a versioned business-operation catalog and task kind through
   existing Run/Task/Attempt and tool invocation claim/settle/unknown recovery; no third engine.
   Mission templates add ordered steps, external waits and aggregate outcomes. Operations declare
@@ -927,6 +926,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 
 | Module note | Scope |
 |---|---|
+| [resource-quality](.deckent/docs/architecture/modules/resource-quality.md) | Supervisor resource observation, separate bounded asynchronous trace, cost/quality projections and advisory comparisons; inspect authority applies before aggregation. Evaluation replay excludes read-time `pool`/`costReport`; observer reads/writes are cancellable and timers never keep shutdown alive. |
 | [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md) | Layer map (`src/platform … composition`), startup cost, compiled entries, CI preparation, hardcode ratchet (HARDCODE-P1-B). |
 | [config-and-cli-help](.deckent/docs/architecture/modules/config-and-cli-help.md) | Typed `ConfigApplication`, CONFIG-SURFACE write/overlay contract, CLI config view, CLI help catalog. |
 | [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md) | Operator terminal contract v1, turn phases, tool lines/read limits, `@` index, `/resume`, `/context`, TC-M harness. |
@@ -1090,8 +1090,8 @@ config sections wait for C1.
 
 - `tests/contracts/<package>/` — public API and invariant tests only; no internal-function tests.
 - `tests/e2e/` — real binary journeys (`doctor`, `run`, `start`, `do`, …) on fixture projects under `tests/fixtures/`.
-  Current state 2026-10-01: `tests/e2e/` holds `cli-version`, `i18n-renderer`, `kernel-config`, `product-paths`; there is no
-  `start` or `do` command yet and no `tests/golden/` directory.
+  Current source candidate: `tests/e2e/` holds `cli-version`, `i18n-renderer`, `kernel-config`, `product-paths`; `do` and RunProposal
+  journeys are in `tests/contracts/`. CLI/config/MCP exact golden files live under `tests/fixtures/`; `start` is not a CLI command.
 - Batch G (source candidate, alpha.28; not live): the test-ERP scenarios (`tests/contracts/composition/test-erp-operations.test.ts`) are skipped off Linux without a typed
   refusal or verify-not-run record; that platform evidence gap stays open until the next batch.
 - `tests/golden/` — normalized outputs of deterministic commands, captured from the legacy binary and

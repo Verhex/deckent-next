@@ -1,3 +1,4 @@
+import { PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
@@ -337,7 +338,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(first.timeout, first.output).toBeUndefined();
     expect(first.output).toContain('deckent runtime shutdown');
     const log = await readFile(join(config.layout.root, 'state/runtime-service.log'), 'utf8');
-    expect(log).toContain(`Ledger upgraded from schema ${CURRENT_LEDGER_VERSION - 1} to ${CURRENT_LEDGER_VERSION}`);
+    expect(log).toContain(`Ledger upgraded from schema ${PREVIOUS_LEDGER_VERSION} to ${CURRENT_LEDGER_VERSION}`);
     expect(first.status, first.output).toBe(0);
     expect(Number.isSafeInteger(pid) && pid > 0, first.output).toBe(true);
     // The service outlives the terminal and answers other commands.

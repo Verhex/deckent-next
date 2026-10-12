@@ -3,6 +3,8 @@ import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationCont
 import { approvalsCommand } from './approvals.js';
 import { workersCommand, runInventoryCommand, monitorCommand } from '#surfaces/core/monitor/index.js';
 import { runCommand } from './run.js';
+import { doCommand } from './do.js';
+import { reportCommand } from './report.js';
 import { codingCommand } from './coding.js';
 import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
@@ -25,6 +27,8 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   backup: backupCommand, identity: identityCommand,
   terminal: async (argv, context) => (await import('./terminal.js')).terminalCommand(argv, context),
   init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
+  do: doCommand,
+  report: reportCommand,
   pool: poolCommand, models: modelsCommand, approval: approvalsCommand,
   // The config surface renders through terminal-render (whose barrel carries Ink): a lazy edge keeps it off every other command's start.
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),

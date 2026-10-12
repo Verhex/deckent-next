@@ -1,3 +1,4 @@
+import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,7 +23,8 @@ async function seed(path: string, version = 11) {
   const expected = await store.loadRun('s', 'r'); store.close();
   const db = new DatabaseSync(path);
   downgradeRunEligibilityFixtures(db);
-  if (version < 14) db.exec('DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations');
+  db.exec(DOWNGRADE_TO_V51_LEDGER_SQL);
+  if (version < 14) db.exec(`DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations`);
   if (version < 13) db.exec('DROP TABLE model_activation_receipts; DROP TABLE model_activations');
   if (version < 11) db.exec('DROP TABLE installation_ownership');
   if (version < 10) db.exec('DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes');

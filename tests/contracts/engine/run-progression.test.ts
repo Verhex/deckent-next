@@ -1,3 +1,4 @@
+import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -121,7 +122,7 @@ it('migrates prior evaluation evidence without retrospectively opting old Runs i
   const run = (await f.store.loadRun('s', 'r'))!;
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
   const db = new DatabaseSync(f.path);
-  db.exec('DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management;  DROP TABLE IF EXISTS acceptance_metrics; DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=24'); db.close();
+  db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management;  DROP TABLE IF EXISTS acceptance_metrics; DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=24`); db.close();
   const reopened = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }); stores.push(reopened);
   expect((await reopened.listRunProgression({ actor, after: null, limit: 8 })).items).toEqual([]);
   for (const binding of run.bindings) expect(await reopened.hasTaskEvaluation(binding.identity, binding.observedRevision!)).toBe(true);

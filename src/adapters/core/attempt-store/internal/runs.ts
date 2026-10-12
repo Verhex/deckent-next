@@ -1,3 +1,4 @@
+import { SqliteRunProposals } from '#adapters/core/run-proposal-store/index.js';
 import { readDispatchFence } from './dispatch-fence.js';
 import { propagateRunCancellation } from './run-cancellation.js';
 import { settleRunCancellation } from './run-settlement.js';
@@ -240,7 +241,7 @@ export class SqliteRunJournal {
       return this.record({ commandId: parsed.commandId, command, snapshot });
     });
   }
-  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody): Promise<RunReceipt> {
+  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void): Promise<RunReceipt> {
     const parsed = runCreateSchema.parse(input); assertRunExecution(parsed.graph, parsed.execution); const command = JSON.stringify({ action: 'create-run', ...parsed });
     const { scopeId, runId } = parsed.identity;
     if (workspace && (workspace.scopeId !== scopeId || workspace.runId !== runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
@@ -248,7 +249,9 @@ export class SqliteRunJournal {
       const custody = new SqliteRunWorkspaceCustody(this.db);
       const replay = this.receipt(scopeId, runId, parsed.commandId, command);
       if (replay) { if (workspace && !custody.matchesWithin(workspace)) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return replay; }
-      const snapshot = createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution, parsed.branch);
+      const proposals = new SqliteRunProposals(this.db), proposal = proposals.requireWithin(parsed);
+      assertAuthority?.();
+      const snapshot = { ...createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution, parsed.branch), ...(parsed.proposal ? { proposal: parsed.proposal } : {}), ...(parsed.authority ? { authority: parsed.authority } : {}) };
       new SqliteExecutionPools(this.db).require(parsed.policy.poolId);
       planSchedulingWave(snapshot.graph, { schemaVersion: 2, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
       const row = this.db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING')
@@ -259,7 +262,8 @@ export class SqliteRunJournal {
         .run(scopeId, runId, parsed.actor.id, parsed.actor.issuer, parsed.actor.subject, parsed.now, parsed.commandId);
       // A pinned workspace is durable before any progression turn can observe the Run (never sampled from a moving HEAD later).
       if (workspace) custody.admitWithin(workspace);
-      return this.record({ commandId: parsed.commandId, command, snapshot });
+      const receipt = this.record({ commandId: parsed.commandId, command, snapshot });
+      proposals.acceptWithin(proposal, receipt); return receipt;
     });
   }
   async reserveRunTasks(input: RunReservation): Promise<RunReceipt> {

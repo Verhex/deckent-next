@@ -60,7 +60,7 @@ export function renderTopHelp(locale: Locale = resolveLocale(), all = false, cat
     const commands = catalog.filter(item => item.group === group);
     return !commands.length || (group === 'developer' && !all) ? [] : [message(`cli.help.group.${group}`, locale) + ':',
       ...commands.map(command => `  ${command.name.padEnd(12)}${message(command.summary, locale)}`)];
-  }), t('cli.help.common', {}, locale), t('cli.help.examples', {}, locale), t('cli.help.details', {}, locale), t('cli.help.default', {}, locale)].join('\n');
+  }), t('cli.help.commonExamples', {}, locale), t('cli.help.details', {}, locale), t('cli.help.default', {}, locale)].join('\n');
 }
 
 export function renderCommandHelp(command: CliHelpSpec, locale: Locale): string {

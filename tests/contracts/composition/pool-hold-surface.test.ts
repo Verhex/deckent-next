@@ -71,7 +71,7 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     expect(status).toMatchObject({ poolId: 'p', state: 'held', occupancy: { execution: 0, inFlight: 0 }, drained: true });
     expect(status).toEqual(await inspectPoolHold(f.project, { schemaVersion: 1, scopeId: 's' }, f.options));
     expect((await f.cli('status', '--lang', 'tr')).stdout).toContain('boşaldı: true');
-    expect(f.rows("SELECT kind,scope_id FROM audit_events ORDER BY sequence")).toEqual([{ kind: 'pool-hold', scope_id: 's' }, { kind: 'pool-hold', scope_id: 's' }]);
+    expect(f.rows("SELECT kind,scope_id FROM audit_events ORDER BY sequence")).toEqual([{ kind: 'authority-decision', scope_id: 's' }, { kind: 'pool-hold', scope_id: 's' }, { kind: 'pool-hold', scope_id: 's' }]);
     expect(JSON.parse((await f.cli('resume', '--command-id', 'cli-resume', '--json')).stdout)).toMatchObject({ changed: true, state: 'open' });
     const reserved = await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve-2', expectedRevision: 0 }, f.options);
     expect(reserved.reservation.identities.map(identity => identity.taskId)).toEqual(['t']);

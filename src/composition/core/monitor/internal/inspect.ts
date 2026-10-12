@@ -49,7 +49,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
             scopeId, active: model.availability.invocable, availability: model.availability });
         } catch (error) { modelDiagnostics.push(`model-state-unavailable:${queryFailure(error).code}`); }
       }
-      const effective = { ...reading, pools: reading.pools.map(pool => ({ ...pool,
+      const effective = { ...reading, runs: reading.runs.map(run => ({ ...run, costComparison: { registry: installed.admission?.registry, policy: installed.resourceObservation.recommendation } })), pools: reading.pools.map(pool => ({ ...pool,
         capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })),
         ...(reading.map ? { map: { ...reading.map, models } } : {}), diagnostics: [...reading.diagnostics, ...modelDiagnostics] };
       captures.set(target.path, { ...captured, reading: effective }); return effective; },

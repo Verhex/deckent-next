@@ -1,3 +1,4 @@
+import { PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 import { Worker } from 'node:worker_threads';
 import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { executeBackup, clearConfigCache, configuredApproval, loadConfig, resolveProductLayout, productResourcePath, startConfiguredRuntimeService } from '../../../src/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
-import { openSqliteLedger, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 import { firstRunPolicyTemplate } from '#domain/index.js';
 import { main } from '#surfaces/core/cli/index.js';
@@ -151,10 +152,10 @@ it.skipIf(process.platform !== 'linux')('before-upgrade creates a complete set b
   config.backup={schedule:'before-upgrade',retention:3};await writeFile(path,JSON.stringify(config));clearConfigCache();
   const db=new DatabaseSync(f.ledger);db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);db.close();
   await expect(startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:f.env})).rejects.toMatchObject({code:'BACKUP_SCHEDULE_SECRET_REQUIRED'});
-  const unchanged=new DatabaseSync(f.ledger,{readOnly:true});expect(unchanged.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION-1);unchanged.close();
+  const unchanged=new DatabaseSync(f.ledger,{readOnly:true});expect(unchanged.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);unchanged.close();
   const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:{...f.env,BACKUP_PASSPHRASE:phrase}});services.push(service);
   const directory=join(f.layout.root,'state/backups/recovery'),sets=await readdir(directory);expect(sets).toHaveLength(1);
-  const snapshot=new DatabaseSync(join(directory,sets[0]!,'ledger.db'),{readOnly:true});expect(snapshot.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION-1);snapshot.close();
+  const snapshot=new DatabaseSync(join(directory,sets[0]!,'ledger.db'),{readOnly:true});expect(snapshot.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);snapshot.close();
 });
 it('a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and link targets are refused',async()=>{
   const f=await fixture();await call(f,'create');const {createHash}=await import('node:crypto');

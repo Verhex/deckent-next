@@ -115,9 +115,9 @@ describe('ConfigChangeApprovalBroker', () => {
 describe('protocol: released clients never receive a config-change record', () => {
   it('hides config-change below v22 (alpha.10 speaks v21) and operations below v15; v22 sees every kind', () => {
     expect(CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION).toBe(22); expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBeGreaterThanOrEqual(CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION);
-    expect(approvalSubjectsHiddenFromProtocol(21)).toEqual(['config-change']);
-    expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change']);
-    expect(approvalSubjectsHiddenFromProtocol(22)).toEqual([]);
+    expect(approvalSubjectsHiddenFromProtocol(21)).toEqual(['config-change', 'run-create']);
+    expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change', 'run-create']);
+    expect(approvalSubjectsHiddenFromProtocol(22)).toEqual(['run-create']);
     const record = { request: { schemaVersion: 3, subject: subject() } } as unknown as ApprovalRecord;
     expect(() => approvalResultForProtocol(21, 'inspect', record)).toThrow('APPROVAL_MISSING');
     expect(approvalResultForProtocol(22, 'inspect', record)).toBe(record);

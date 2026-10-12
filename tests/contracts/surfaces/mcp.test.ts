@@ -1,3 +1,4 @@
+import { atSameRunObservation } from '../support/run-cost-observation.js';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
@@ -51,7 +52,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     expect((await inspectRun(project, query, { env })).run).toBeTruthy();
     await writePolicy(true);
     const result = await client.callTool({ name: 'inspect_run', arguments: query }); expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toEqual(await inspectRun(project, query, { env }));
+    expect(atSameRunObservation(result.structuredContent as Awaited<ReturnType<typeof inspectRun>>)).toEqual(atSameRunObservation(await inspectRun(project, query, { env })));
     expect((await client.callTool({ name: 'policy_vocabulary', arguments: {} })).structuredContent).toEqual(getPolicyVocabulary());
     const command = { ...query, commandId: 'cancel', action: 'cancel' as const, expectedRevision: 1 };
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
@@ -71,7 +72,8 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
     expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: query }))).toContain('POLICY_DENIED');
     const tools = (await client.listTools()).tools;
-    expect(tools.filter(t => !['renew_approval', 'create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_hold', 'apply_pool_capacity', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'manage_provider_spending', 'audit_provider_spending', 'update_toolchains', 'control_run'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
+    expect(tools.filter(t => !['plan_run', 'propose_run', 'renew_approval', 'create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_hold', 'apply_pool_capacity', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'manage_provider_spending', 'audit_provider_spending', 'update_toolchains', 'control_run'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
+    for (const name of ['plan_run', 'propose_run']) expect(tools.find(tool => tool.name === name)!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     expect(tools.find(t => t.name === 'apply_pool_capacity')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     expect(tools.find(t => t.name === 'inspect_pool_capacity')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(tools.find(t => t.name === 'update_toolchains')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true }); // W3-AUTHORITY corrected hint

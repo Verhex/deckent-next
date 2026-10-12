@@ -83,6 +83,8 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   inspectPoolCapacity?: import('./pool.js').PoolCapacityInspectHandler;
   applyPoolHold?: import('./pool.js').PoolHoldApplyHandler;
   inspectPoolHold?: import('./pool.js').PoolHoldInspectHandler;
+  proposeRun?: import('./run-proposal.js').RunProposalHandler;
+  inspectRunProposal?: import('./run-proposal.js').RunProposalInspectHandler;
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };

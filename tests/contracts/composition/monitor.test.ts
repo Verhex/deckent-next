@@ -131,7 +131,7 @@ describe('inspectMonitor composition', () => {
     expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], workers: [], approvals: [], pools: [], scopeIds: [] });
     expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
   });
-  it('opt-in open filter: finished dispatches come from the ledger only (no Docker/sidecar/authorization reads); the default listing is unchanged', async () => {
+  it('opt-in open filter keeps terminal process facts in the ledger and withholds private resources under the same read-output gate', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s'], ['s']);
     const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
@@ -150,10 +150,12 @@ describe('inspectMonitor composition', () => {
     const open = byId((await inspectConfiguredWorkers(current.dir, { ...query, open: true }, current.options)).sources[0]!.workers);
     // Default: every entry goes through the attempt read-output decision (denied here) and Docker/sidecar inspection.
     expect(all['done-t']).toMatchObject({ terminal: { exitCode: 3 }, diagnostics: ['output-denied'] });
-    expect(open['done-t']).toEqual({ ...all['done-t'], diagnostics: ['info:ledger-only'] });
+    expect(open['done-t']).toEqual({ ...all['done-t'], diagnostics: ['info:ledger-only', 'output-denied'] });
+    expect(open['done-t']).not.toHaveProperty('resources');
     expect(open['current-s-t']).toEqual(all['current-s-t']);
     const monitor = (await inspectMonitor(current.dir, current.options)).installs[0]!;
-    expect(monitor.workers.find(worker => worker.identity?.attemptId === 'done-t')).toMatchObject({ terminal: { exitCode: 3 }, diagnostics: ['info:ledger-only'] });
+    expect(monitor.workers.find(worker => worker.identity?.attemptId === 'done-t')).toMatchObject({ terminal: { exitCode: 3 }, diagnostics: ['info:ledger-only', 'output-denied'] });
+    expect(monitor.workers.find(worker => worker.identity?.attemptId === 'done-t')).not.toHaveProperty('resources');
     expect(monitor.runs.find(run => run.runId === 'r-done')!.tasks[0]!.lastAttempt).toMatchObject({ exitCode: 3, startedAtMs: 30_000 });
   });
   it('describes the service with one current-protocol attempt: an unanswering endpoint is unknown + diagnostic, no version fan-out', async context => {

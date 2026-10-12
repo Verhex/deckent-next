@@ -1,3 +1,4 @@
+import { atSameRunObservation } from '../support/run-cost-observation.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
@@ -39,7 +40,7 @@ describe.skipIf(process.platform === 'win32')('compiled Run CLI and SDK', () => 
     const cliResult = await exec(process.execPath, [cli, ...args, '--json'], options);
     const sdkResult = await exec(process.execPath, ['--input-type=module', '-e',
       "const {inspectRun}=await import(process.argv[1]); console.log(JSON.stringify(await inspectRun(process.cwd(),{schemaVersion:1,scopeId:'s',runId:'r'})))", sdk], options);
-    expect(JSON.parse(cliResult.stdout)).toEqual(JSON.parse(sdkResult.stdout));
+    expect(atSameRunObservation(JSON.parse(cliResult.stdout))).toEqual(atSameRunObservation(JSON.parse(sdkResult.stdout)));
     expect(JSON.parse(cliResult.stdout).run.tasks[0].phase).toBe('active');
     const human = await exec(process.execPath, [cli, ...args, '--lang', 'tr'], options);
     expect(human.stdout).toContain('canlı durum değil'); expect(human.stdout).toContain('Etkin'); expect(human.stdout).not.toContain('\u001b[');

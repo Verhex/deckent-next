@@ -19,6 +19,8 @@ function action(name: string, group: HelpGroup, summary: MessageKey, detail: Mes
 /** The dispatch catalog. Register a command here with its group, localized summary and detail.
  * Children inherit the family handler; existing handlers retain argument validation and execution. */
 export const CLI_CATALOG = [
+  { name: 'report', group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help' },
+  { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do' },
   { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', children: [
     action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup'),
     action('verify', 'setup', 'cli.help.action.backup.verify', 'cli.help.backup'),
@@ -46,6 +48,8 @@ export const CLI_CATALOG = [
   ] },
   { name: 'run', group: 'work', summary: 'cli.help.summary.run', detail: 'cli.help.run', children: [
     action('create', 'work', 'cli.help.action.create', 'cli.help.run'),
+    action('propose', 'work', 'cli.help.action.propose', 'cli.help.run'),
+    action('inspect-proposal', 'observe', 'cli.help.action.inspectProposal', 'cli.help.run'),
     action('reserve', 'work', 'cli.help.action.reserve', 'cli.help.run'),
     action('inspect', 'work', 'cli.help.action.run.inspect', 'cli.help.run'),
     action('cancel', 'work', 'cli.help.action.run.cancel', 'cli.help.run'),

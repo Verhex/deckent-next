@@ -18,7 +18,7 @@ const undoWord = (undo: ApprovalFacts['reversibility']) => !undo ? null : undo.k
 function approvalView(record: ApprovalRecord): WorklineApproval {
   const { request } = record, subject = approvalSubject(request), facts = approvalFacts(request);
   // A tool-call approval (C12) has no run or task: its summary names the tool, resource and argument digest.
-  return Object.freeze({ approvalId: request.approvalId, runId: subject.kind === 'task' ? subject.runId : '-', taskId: subject.kind === 'task' ? subject.taskId : '-', summary: request.summary,
+  return Object.freeze({ approvalId: request.approvalId, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : '-', taskId: subject.kind === 'task' ? subject.taskId : '-', summary: request.summary,
     requester: request.requester.id, revision: record.revision, status: record.status, decision: record.decision?.decision ?? null, expiresAt: request.expiresAt,
     risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}),
     createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}),

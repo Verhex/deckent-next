@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "summaryChars": 2048,
+  "taskRows": 5,
+  "permissionRows": 3,
+  "titleChars": 80,
+  "taskKindChars": 40,
+  "workClassChars": 40,
+  "permissionKindChars": 32,
+  "permissionActionChars": 32,
+  "permissionResourceChars": 48,
+  "currencyChars": 16,
+  "ruleChars": 64,
+  "reasonChars": 64,
+  "runChars": 64
+}

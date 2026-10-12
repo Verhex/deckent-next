@@ -1,3 +1,4 @@
+import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, readFile, rm, writeFile, symlink, link, chmod, stat } from 'node:fs/promises';
@@ -97,7 +98,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   it('gates version28 writers, explicitly migrates without changing old records, and enforces configured entry bounds', async () => {
     const f = await fixture(); await f.run(); const before = await f.runtime.store.loadBoundDispatch(f.identity);
     const path = productResourcePath(f.runtime.layout, 'ledger');
-    const db = new DatabaseSync(path); db.exec('DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=28;'); db.close();
+    const db = new DatabaseSync(path); db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=28;`); db.close();
     // Resolve actual configured storage settings rather than assume adapter defaults.
     const { loadConfig } = await import('#platform/index.js'); const config = await loadConfig(f.project, f.options);
     await expect(openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: 86400000 }, 'forbid', { validate: validateDockerSupervisorProfile })).rejects.toThrow('ATTEMPT_STORE_VERSION');
@@ -237,7 +238,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   it('refuses an older ledger without creating the integration table or migrating bytes', async () => {
     const f = await fixture(); await f.run();
     const path = productResourcePath(f.runtime.layout, 'ledger'); const db = new DatabaseSync(path);
-    db.exec('DROP TABLE workspace_integrations; PRAGMA user_version=29;'); db.close();
+    db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP TABLE workspace_integrations; PRAGMA user_version=29;`); db.close();
     const before = await readFile(path);
     await expect(inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity: f.identity, commandId: 'absent' }, f.options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
     expect(await readFile(path)).toEqual(before);

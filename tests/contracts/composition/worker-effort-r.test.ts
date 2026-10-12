@@ -1,3 +1,4 @@
+import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -84,15 +85,15 @@ describe.skipIf(process.platform === 'win32')('WORKER-EFFORT-R real admission â†
     expect(f.profile(request.runId)).toEqual(frozen);
   });
 
-  it('explicit Ultra passes unchanged; an unsupported explicit effort refuses before ledger writes', async () => {
+  it('explicit Ultra passes unchanged; an unsupported explicit effort refuses before Run effects', async () => {
     const f = await fixture();
     const created = await createRun(f.project, command('explicit', 'design', 'ultra'), f.options);
     expect(created.admission.run.tasks[0]!.reasoningEffort).toMatchObject({ level: 'ultra', source: 'explicit', status: 'selected' });
     expect(f.profile('explicit').parameters.argv).toEqual(expect.arrayContaining(['-c', 'model_reasoning_effort=ultra']));
     expect(() => assertNativeWorkerBinding(f.profile('explicit'))).not.toThrow();
-    const before = await readFile(f.path);
+    const before = runRefusalEvidence(f.path);
     await expect(createRun(f.project, command('unsupported', 'design', 'max'), f.options)).rejects.toMatchObject({ code: 'WORKER_EFFORT_UNSUPPORTED' });
-    expect(await readFile(f.path)).toEqual(before);
+    expectOnlyUnappliedRunDecisions(f.path, before, [command('unsupported', 'design', 'max')]);
   });
 
   it('a deliberate Ultra registry target remains a policy-default opt-in', async () => {

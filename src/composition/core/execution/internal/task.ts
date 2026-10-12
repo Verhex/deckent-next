@@ -10,6 +10,7 @@ import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWork
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
 
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
@@ -56,7 +57,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       try {
       const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
         ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
-      const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts);
+      const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
       for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
       const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,

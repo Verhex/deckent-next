@@ -3,9 +3,11 @@ Başlarken:
   terminal    Etkileşimli terminali aç
   init        Kurulumu hazırla
 İzleme:
+  report      Run maliyet ve kabul kanıtını incele
   monitor     Kurulumları ve işleri izle
   workers     İşçileri listele veya izle
 İş yürütme:
+  do          Brain ve mevcut onay kapılarıyla bir isteği planla
   run         Run oluştur ve yönet
   task        Görevleri yürüt, değerlendir ve teslim et
   pool        Havuzu incele, beklet veya sürdür
@@ -23,7 +25,6 @@ Kurulum/Bakım:
   secret      Saklanan gizli değerleri yönet
   toolchains  İşçi araçlarını kontrol et veya güncelle
   doctor      Kurulum sağlığını kontrol et
-Genel seçenekler: --json  --lang en|tr  --no-color
-Örnekler: deckent doctor; deckent config get
+Genel: --json --lang en|tr --no-color. Örnek: deckent doctor; deckent config get
 Ayrıntı: deckent <komut> --help; geliştirici: deckent --help --all
 Terminalde argümansız çağrı etkileşimli oturumu açar. --version: sürüm.

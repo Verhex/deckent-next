@@ -32,5 +32,8 @@ export { settledProviderCacheUsage, type SettledProviderCacheUsage } from './int
 
 export { providerSpendHasZeroTariff, providerSpendLocalZeroTariff, certifyProviderSpendNoCharge, providerSpendNoChargeRegistry, registerProviderSpendNoChargeCertification,
   ProviderSpendNoChargeRegistry } from './internal/no-charge.js';
+export { classifyWorkSpending, workSpendingBasis, configuredProviderSpendCheckpoint } from './internal/work-spending.js';
+export type { WorkSpending } from './internal/work-spending.js';
+export { providerSpendLocalZeroTariffProfile } from './internal/no-charge.js';
 export { recoverProviderSpendHold } from './internal/recovery.js';
 export type { ProviderSpendRecoveryStore, ProviderSpendRecoveryResult } from './internal/recovery.js';

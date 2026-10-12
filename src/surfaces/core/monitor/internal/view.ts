@@ -8,6 +8,8 @@ import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, agoText, bl
 import { renderWorkerModelLine } from './worker-model.js';
 import { describeDiagnostics } from './diagnostics.js';
 import { humanWorkerLines } from './human-worker.js';
+import { renderResourceLine, renderResourceDetail } from './resources.js';
+import { renderCostSummary, renderRecommendationLines } from './costs.js';
 import { mapBlocks } from './map.js';
 import { globalRunCell, globalStateCell, globalStateLabel, globalStateLines, globalSummary } from './global-state.js';
 import { renderGraphSummaryLines } from './graph-summary.js';
@@ -186,6 +188,9 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
   const { locale, now, sep } = w;
   return (): readonly MonitorLine[] => [
     [span(t('monitor.detail.run', { run: run.runId, scope: run.scopeId, revision: run.revision, install: install.id }, locale), 'strong')],
+    ...(run.costReport ? [renderCostSummary(run.costReport, locale), ...renderRecommendationLines(run.costReport, locale)].map(text => [span(text)]) : []),
+    ...(run.authority ? [[span(t('cli.run.inspect.authority', { record: run.authority.decision.eventId, sequence: run.authority.decision.sequence,
+      approval: run.authority.approval?.approvalId ?? '-' }, locale), 'muted')]] : []),
     [w.stateCell(run), span(sep), span(w.progress(run)), span(sep), span(t('monitor.detail.span', { created: timeText(run.createdAtMs ?? null), duration: w.runDuration(run) }, locale)),
       span(sep), span(t('monitor.detail.activity', { when: agoText(now, run.lastActivityMs, locale) }, locale), 'muted')],
     ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale, w.ascii).map(text => [span(text, 'muted')]) : []),
@@ -255,9 +260,11 @@ function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) 
     const state = projectHumanState({ kind: 'worker', value: worker, ...(own ? { task: own.task, blocker: own.run.blocker } : {}) });
     const status = [[globalStateCell(state, locale)], ...globalStateLines(state, locale)];
     const activityLine = [span(t('monitor.detail.now', { phase: workerPhaseLabel(activity?.phase ?? own?.attempt.workerPhase, locale), target: [activity?.target, activity?.detail].filter(Boolean).join(' — ') || '—' }, locale))];
-    if (worker.human) return [...status, activityLine, ...humanWorkerLines(worker, locale)];
+    const resources = worker.resources ? renderResourceDetail(worker.resources, locale).map(text => [span(text)]) : [];
+    if (worker.human) return [...status, activityLine, ...resources, ...humanWorkerLines(worker, locale)];
     return [
       ...status,
+      ...resources,
       [span(t('monitor.detail.worker', { task: w.workerName(worker), attempt: worker.identity?.attemptId ?? '—', generation: worker.identity?.generation ?? '—',
         provider: worker.provider, install: install.id }, locale), 'strong')],
       activityLine,
@@ -276,19 +283,20 @@ function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) 
 
 function workersBlock(w: Words, entries: readonly Entry<MonitorWorker>[], empty: string): MonitorBlock {
   const { locale } = w;
+  const resources = entries.some(entry => entry.value.resources !== undefined);
   const started = (entry: Entry<MonitorWorker>) => w.attemptOf(entry.install, entry.value)?.attempt.startedAtMs ?? null;
   // Newest first by the matched attempt's start (workers carry no time of their own); unmatched last, in observation order.
   const ordered = entries.map((entry, index) => ({ entry, index, at: started(entry) })).sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity) || a.index - b.index);
   return { kind: 'table', empty, columns: [w.col(t('monitor.col.task', {}, locale), 0, 20, 48, { sortKey: 'name' }), w.col(t('monitor.col.state', {}, locale), 1, 10, 24),
     w.col(t('monitor.col.heartbeat', {}, locale), 2, 10, 20), w.col(t('monitor.col.process', {}, locale), 3, 9, 20, { sortKey: 'state' }),
-    w.col(t('monitor.col.attempt', {}, locale), 6, 8, 8), w.col(t('monitor.col.model', {}, locale), 4, 16, 32), ...w.installColumn(5)],
+    w.col(t('monitor.col.attempt', {}, locale), 6, 8, 8), w.col(t('monitor.col.model', {}, locale), 4, 16, 32), ...(resources ? [w.col(t('resource.column', {}, locale), 4, 18, 88)] : []), ...w.installColumn(5)],
   rows: ordered.map(({ entry: { install, value: worker }, at }): MonitorRow => {
     const own = w.attemptOf(install, worker), phase = worker.files?.activity?.phase ?? (worker.terminal ? null : own?.attempt.workerPhase ?? null);
     const status = projectHumanState({ kind: 'worker', value: worker, ...(own ? { task: own.task, blocker: own.run.blocker } : {}) });
     return { key: `${install.id}:${worker.identity?.attemptId ?? worker.taskId}`, detail: workerDetail(w, install, worker), detailInText: !!worker.human || status.state === 'held',
       ...(status.state === 'held' ? { context: [[globalStateCell(status, locale)]] } : {}), cells: [span(worker.human?.title ?? (worker.human ? t('monitor.human.noTitle', {}, locale) : w.workerName(worker))),
       status.state === 'held' ? span(globalStateLabel('held', locale), 'warning') : globalStateCell(status, locale), w.heartbeat(worker), span(w.processText(worker), worker.process === 'running' ? undefined : 'muted'),
-      span(short(worker.identity?.attemptId, 8), 'muted'), span(`${worker.provider}/${modelOf(w, install, worker) ?? '—'}`, 'muted'), ...w.installCell(install)],
+      span(short(worker.identity?.attemptId, 8), 'muted'), span(`${worker.provider}/${modelOf(w, install, worker) ?? '—'}`, 'muted'), ...(resources ? [span(renderResourceLine(worker.resources, locale))] : []), ...w.installCell(install)],
     facets: { state: `${status.state} ${globalStateLabel(status.state, locale)} ${worker.process} ${processLabel(worker.process, locale)} ${phase ?? ''}`.toLowerCase(), install: install.id.toLowerCase(),
       kind: own?.task.kind.toLowerCase() ?? '', run: worker.identity?.runId.toLowerCase() ?? '', stateLabel: globalStateCell(status, locale).text },
     sort: { age: at, state: worker.process === 'running' ? 0 : 1, name: worker.taskId },

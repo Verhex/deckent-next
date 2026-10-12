@@ -9,7 +9,8 @@ import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import type { KnownSecretSnapshot } from '#platform/index.js';
+import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
+import type { RunProposalResult } from '#engine/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { freshContextHistory } from './workline-history.js';
@@ -63,6 +64,9 @@ export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal
 export type WorklineErrorText = (error: unknown) => string;
 
 export interface WorklineProps {
+  readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
+    readonly plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelPanelReference) => Promise<RunProposalResult>;
+    readonly lines: (result: RunProposalResult) => readonly string[] };
   readonly labels: WorklineLabels;
   /** Trusted persistent identities from CLI composition; session identity is generated once by the local adapter. */
   readonly context: Omit<TerminalLocalContext, 'kind' | 'sessionId'>;
@@ -158,6 +162,7 @@ export function WorklineApp(props: WorklineProps) {
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
   // A chat turn is running: Esc cancels it now (TL-A D5).
   const [turnRunning, setTurnRunning] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const usages = useRef(new Map<string, SessionUsageView>());
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
@@ -345,6 +350,32 @@ export function WorklineApp(props: WorklineProps) {
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
+    if (slash.command === 'do') {
+      if (!props.doPlan) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
+      const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
+        hints: labels.work?.jobs?.hints ?? props.doPlan!.cancelHint, confirm: false }, ['close']);
+      if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
+      const commandId = globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined);
+      setPlanning(true);
+      try {
+        let result = await plan();
+        setPlanning(false);
+        if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
+        if (result.proposal.status === 'pending' && result.proposal.approval) {
+          await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, props.doPlan.lines(result).join('\n'));
+          if (execution.signal.aborted) return true;
+          result = await plan();
+        }
+        await show(props.doPlan.lines(result));
+        if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
+      } catch (error) {
+        setPlanning(false);
+        if (!execution.signal.aborted) await show([errorText(error)]);
+        else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
+      }
+      finally { setPlanning(false); }
+      return true;
+    }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
     const rich = labels.windows;
     if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
@@ -428,14 +459,14 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, props.doPlan, sessionModel, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel]);
   // SLASH-WINDOWS I-1 (owner 2026-10-08, Jev b1e8286f): with window words a slash command typed with an argument runs bare — every host
   // (information/list slot, panel controller) opens its window as usual — and that window says once that the terminal takes no typed
   // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.
   const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
   const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution, typedArgument = false): Promise<boolean> => {
     const slash = parseSlashLine(line), words = labels.windows;
-    if (!slash || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
+    if (!slash || slash.command === 'do' || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
     const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
     setArgumentNote(note);
     try { return await performLine(`/${slash.command}`, mentioned, execution); }
@@ -463,7 +494,7 @@ export function WorklineApp(props: WorklineProps) {
   };
   // I-1 (Astra 2456): in the rich terminal a slash argument is dropped before the line is queued, shown as queued or remembered in the
   // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
-  const bareSlash = (text: string): string => { const slash = labels.windows ? parseSlashLine(text) : null; return slash?.args ? `/${slash.command}` : text; };
+  const bareSlash = (text: string): string => { const slash = parseSlashLine(text); return slash?.command === 'do' ? redactForRecord(text, props.knownSecrets) : labels.windows && slash?.args ? `/${slash.command}` : text; };
   const submit = (typed: string, mentions: readonly string[] = []) => {
     const before = panel.controller.snapshot(), text = bareSlash(typed), inputId = `input-${++inputSequence.current}`;
     if (text !== typed) typedArgumentInputs.current.add(inputId);
@@ -486,7 +517,7 @@ export function WorklineApp(props: WorklineProps) {
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
-  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null && !localWindowOpen && !instructions.open;
+  const composing = !planning && !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null && !localWindowOpen && !instructions.open;
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
@@ -501,8 +532,10 @@ export function WorklineApp(props: WorklineProps) {
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
+      {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(props.doPlan.planning)] }]} hints={props.doPlan.cancelHint}
+        position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
       {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
-      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || localWindowOpen ? null : liveWin.element}
+      {planning || work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || localWindowOpen ? null : liveWin.element}
       {resumePicker && !work.modalOpen && !work.pickerOpen
         ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
           position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
@@ -515,14 +548,14 @@ export function WorklineApp(props: WorklineProps) {
       <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
         state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
-        selfSource={props.selfSource} cancellable={turnRunning && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
+        selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
       {/* T3 L4 (owner 2026-10-07): while the session holds full access one standing line above the composer says so (text and mark; colour is a hint). */}
       {fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null}
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
       <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
         slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} active={composing} {...(labels.windows ? { historyText: bareSlash } : {})}
+        busy={busy} active={composing} historyText={bareSlash}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />

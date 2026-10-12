@@ -3,7 +3,7 @@ import { configPanelPort } from '#surfaces/core/config/index.js';
 import { cachePanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { planConfiguredProfileCache } from '#composition/core/model-connect/index.js';
 import { anthropicPublishedTariff } from '#adapters/core/provider-anthropic-messages/index.js';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -14,7 +14,7 @@ import { applyPolicyTemplateInstallation } from '#composition/core/installation/
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/index.js';
 import { approvalSubject, type ApprovalRecord } from '#domain/index.js';
-import { clearConfigCache, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 
 // T3 L2 CONFIG-APPROVAL (Jev f0214347 + 9181d2be) through the real configured path: the installed policy, the ledger's approval store, the
 // one decision path (`configuredApproval`, which the terminal window and /approvals use) and the atomic config writer with its sealed audit.
@@ -149,17 +149,22 @@ describe('config-change approval: negative paths (nothing is written)', () => {
   });
 
   it('expiry: a request not decided within approvals.requestTtlMs writes nothing; the resubmission is APPROVAL_EXPIRED', async () => {
-    const f = await setup();
-    await f.app.set({ ...f.command, commandId: 'seed-ttl', keyPath: 'approvals.requestTtlMs', value: 50 }); // an allowed key: a short request lifetime
-    const pending = await f.app.submit('set', { ...f.command, commandId: 'cmd-ttl', keyPath: 'max_workers', value: 2 });
-    if (pending.status !== 'approval-pending') throw new Error('expected pending');
-    expect(pending.approval.expiresAt - Date.now()).toBeLessThanOrEqual(50);
-    const before = await bytesOf(f.path), audits = f.auditCount();
-    await new Promise(resolve => setTimeout(resolve, 120));
-    await expect(f.app.submit('set', { ...f.command, commandId: 'cmd-ttl', keyPath: 'max_workers', value: 2, expect: pending.expect })).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
-    expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
-    const [record] = (await f.list()).filter(item => approvalSubject(item.request).kind === 'config-change');
-    expect(record!.status).toBe('expired');
+    let now = 10_000;
+    const clock = vi.spyOn(SystemTrustedClock.prototype, 'sample').mockImplementation(() => ({ wallMs: now, monotonicMs: now }));
+    try {
+      const f = await setup();
+      await f.app.set({ ...f.command, commandId: 'seed-ttl', keyPath: 'approvals.requestTtlMs', value: 50 }); // an allowed key: a short request lifetime
+      const pending = await f.app.submit('set', { ...f.command, commandId: 'cmd-ttl', keyPath: 'max_workers', value: 2 });
+      if (pending.status !== 'approval-pending') throw new Error('expected pending');
+      const request = (await f.list()).find(item => item.request.approvalId === pending.approval.approvalId)!.request;
+      expect(request.expiresAt - request.createdAt).toBe(50);
+      const before = await bytesOf(f.path), audits = f.auditCount();
+      now += 51; // Cross the exact expiry using the same trusted clock for request and revalidation.
+      await expect(f.app.submit('set', { ...f.command, commandId: 'cmd-ttl', keyPath: 'max_workers', value: 2, expect: pending.expect })).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
+      expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
+      const [record] = (await f.list()).filter(item => approvalSubject(item.request).kind === 'config-change');
+      expect(record!.status).toBe('expired');
+    } finally { clock.mockRestore(); }
   });
 
   it('a raised assurance (policy approvalAssurance on config-change) must be met: a peer-session allow is refused, the request stays pending, nothing is written', async () => {

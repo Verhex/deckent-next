@@ -107,7 +107,9 @@ it.each([{ present: true, refused: false }, { present: false, refused: false }, 
     expect(sdk.run!.tasks[0]!.acceptance).toMatchObject({ workClass: 'business', outcome: refused ? 'failed' : 'accepted', score: present ? refused ? 0 : 1 : null, evaluationId: present ? f.evaluation.evaluationId : null });
     if (refused) expect(sdk.run!.tasks[0]!.acceptance!.results![0]).toMatchObject({ verdict: 'fail', reason: 'EFFECT_REJECTED' });
     const monitor = await readMonitorLedger(opened.path, { busyTimeoutMs: 1000, maxRuns: 10 });
-    expect(monitor.diagnostics).toEqual([]);
+    expect(monitor.diagnostics).toEqual(present ? ['run-cost-unavailable:scope/run'] : []);
+    if (present) expect(monitor.runs[0]).not.toHaveProperty('costMetrics');
+    expect(monitor.runs).toHaveLength(1);
     expect(JSON.stringify(projectMonitorRun({ run: monitor.runs[0]!, pool: monitor.pools[0]!, approvals: [], workers: new Map(), observedAt: 100 }).tasks[0]!.acceptance)).toBe(bytes);
     const out: string[] = [];
     expect(await main(['run', 'inspect', '--scope', identity.scopeId, '--id', identity.runId, '--json'], {

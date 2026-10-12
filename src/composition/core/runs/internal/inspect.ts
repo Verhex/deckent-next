@@ -6,6 +6,7 @@ import { DispatchPolicyAuthorization, RunInspectionApplication, runQuerySchema, 
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { observeConfiguredRunResults } from './result-view.js';
+import { configuredWorkCostEvidence } from '#composition/core/resource-observation/index.js';
 /** Local CLI/SDK scope authority comes from trusted policy, never request/config membership; model rows need `read-output` per attempt. */
 export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
   try {
@@ -13,7 +14,8 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     const store = inventoryReadsPerCall(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
     const app = new RunInspectionApplication(store, { async verify() { return principal; } }, new RunPolicyAuthorization({ async load() { return document; } }), { store,
-      artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization: new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes)) }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity });
+      artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization: new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes)) }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity }, configuredWorkCostEvidence(config, layout,
+      { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
     const inspected = await app.inspectWithModels(query);
     if (!inspected.run) return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected });
     const run = await observeConfiguredRunResults(config, options.env, inspected.run, principal,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
@@ -192,6 +193,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
+  authorityDecisionSubjectSchema,
   z.object({ kind: z.literal('authority-change'), installer: z.object({ basis: z.enum(['first-run', 'named-person']),
     template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), person: auditPrincipalSchema }).strict(),
     commandId: identitySchema, inputDigest: digest, revision: z.object({ before: identitySchema, after: identitySchema }).strict(),

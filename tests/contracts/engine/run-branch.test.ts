@@ -1,3 +1,4 @@
+import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,10 +10,12 @@ import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { RunAdmissionApplication, planSchedulingWave } from '#engine/index.js';
 import { resolveAdmissionBranch, runSnapshotSchema } from '#domain/index.js';
+import { fixtureRunAuthority } from '../support/run-authority.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+const authorities: ReturnType<typeof fixtureRunAuthority>[] = [];
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
-afterEach(async () => { for (const s of stores.splice(0)) s.close(); await Promise.all(roots.splice(0).map(p => rm(p, { recursive: true, force: true }))); });
+afterEach(async () => { for (const entry of authorities.splice(0)) entry.close(); for (const s of stores.splice(0)) s.close(); await Promise.all(roots.splice(0).map(p => rm(p, { recursive: true, force: true }))); });
 const graph = { schemaVersion: 2 as const, revision: 1,
   tasks: ['yes', 'no', 'join'].map(id => ({ id, kind: 'custom', dependencies: id === 'join' ? ['yes', 'no'] : [], acceptanceCriteria: ['verified'] })),
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'Check result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
@@ -25,9 +28,11 @@ async function fixture() {
   const open = async () => { const s = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(s); return s; };
   const store = await open(); await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 8, inFlightSlots: 8 } });
   const state = { contexts: 0, allowed: true };
+  const authorityFixture = fixtureRunAuthority(path, { async load() { return { schemaVersion: 1, revision: 'p', restrictions: [], grants: state.allowed ? [{ id: 'allow', effect: 'allow', actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: ['r'] } }] : [] }; } });
+  authorities.push(authorityFixture);
   const app = (s: SqliteAttemptStore) => new RunAdmissionApplication(s,
     { async verify() { return { ...actor, assurance: 'os-user', scopeIds: ['s'] }; } },
-    { async authorize() { if (!state.allowed) throw new Error('POLICY_DENIED'); } }, { async authorize() {} },
+    authorityFixture.authority, { async authorize() {} },
     { async resolve(input) { state.contexts++; return { now: 0, layoutRevision: 'l', execution: fixtureExecution(input.graph),
       policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 8, inFlightSlots: 8 }, ordering: input.graph.tasks.map(t => t.id) } }; } });
   return { store, path, open, app, state };
@@ -158,7 +163,7 @@ it('upgrades ledger22 without fabricating decisions for ordinary Runs or rewriti
   await f.app(f.store).create(ordinary);
   const before = await f.store.loadRunReceipt('s', 'create');
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
-  const db = new DatabaseSync(f.path); db.exec('DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=22'); db.close();
+  const db = new DatabaseSync(f.path); db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=22`); db.close();
   await expect(openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   const reopened = await f.open();
   expect(await reopened.loadRunReceipt('s', 'create')).toEqual(before);

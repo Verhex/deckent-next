@@ -35,6 +35,7 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
         if (handoff) handoffs.push(handoff);
       }
       const evaluation = describeTaskEvaluationReceipt(receipt, evaluations, handoffs);
+      // Read-time pool and cost observations belong to inspection, never to an immutable command replay.
       const run = await observeConfiguredRunResults(config, options.env, evaluation.run, principal, policy, receipt.snapshot);
       return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: Object.freeze({ ...evaluation, run }) });
     } finally { store.close(); }
