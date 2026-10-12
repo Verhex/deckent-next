@@ -4,11 +4,12 @@ import { z } from 'zod';
 import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
-  type ResultBrief, type MonitorDeliveryState, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
+  type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
 import { readRunAcceptanceEvaluations, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
-const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, INTEGRATION_VERSION = 30, DELIVERY_VERSION = 32, ADOPTION_VERSION = 33, CATALOG_VERSION = 43;
+const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, CATALOG_VERSION = 43;
 /** MONITOR v1.1: where an attempt's recorded files live (output envelope, sealed event log, workspace sidecars) and whether it failed or still runs. */
 export interface MonitorAttemptFiles {
   readonly identity: AttemptIdentity; readonly patch?: ArtifactReceipt | null; readonly output: ArtifactReceipt | null; readonly events: ArtifactReceipt | null; readonly workspace: string | null;
@@ -75,7 +76,7 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
   const rows = db.prepare(`SELECT scope_id,run_id,revision,snapshot,policy,CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
     CASE WHEN json_valid(snapshot) THEN EXISTS(SELECT 1 FROM json_each(snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ${OPEN_PHASES}) ELSE 1 END AS open
     FROM runs ${selected ? 'WHERE scope_id=? AND run_id=?' : ''} ORDER BY open DESC,rowid DESC LIMIT ?`).all(...(selected ? [selected.scopeId, selected.runId, maxRuns] : [maxRuns]));
-  const runs: MonitorLedgerRun[] = []; const deliveries = deliveryStates(db, version);
+  const runs: MonitorLedgerRun[] = []; const deliveries = readDeliveryReceipts(db, version);
   for (const row of rows) {
     const key = `${row.scope_id}/${row.run_id}`;
     try {
@@ -93,7 +94,9 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
         models.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null, snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found));
       const policy = row.policy ? runExecutionPolicySchema.safeParse(json(row.policy)) : null;
       runs.push(Object.freeze({ snapshot, evaluations: readRunAcceptanceEvaluations(db, snapshot), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
-        createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts), delivery: snapshot.revision === current.revision ? deliveries.get(key) ?? null : null }));
+        createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts),
+        deliveryReceipts: Object.freeze(snapshot.revision === current.revision ? deliveries.get(key) ?? [] : []),
+        delivery: snapshot.revision === current.revision ? aggregateDelivery(deliveries.get(key) ?? []) : null }));
       files.push(...found);
     } catch (error) { recordOnly(error); diagnostics.push('run-corrupt:' + key); }
   }
@@ -104,32 +107,6 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
     pools: Object.freeze(pools(db, version, diagnostics)), diagnostics: Object.freeze(diagnostics), map: catalog(db, version) });
 }
 
-/** Furthest proven delivery step per Run: adoption (latest sequence) › delivery › integration; only the ledger's own intent records. */
-function deliveryStates(db: DatabaseSync, version: number) {
-  const states = new Map<string, NonNullable<ResultBrief['runDelivery']>>(); const rank = new Map<string, number>();
-  const histories = new Map<string, NonNullable<NonNullable<ResultBrief['runDelivery']>['receipts']>[number][]>();
-  const put = (key: string, order: number, state: MonitorDeliveryState, commit: unknown, commandId: unknown, targetRef: unknown) => {
-    const receipt = { state, commit: typeof commit === 'string' && /^[0-9a-f]{40,64}$/.test(commit) ? commit : null,
-      commandId: typeof commandId === 'string' ? commandId : null, targetRef: typeof targetRef === 'string' ? targetRef : null };
-    let receipts = histories.get(key);
-    if (!receipts) histories.set(key, receipts = []);
-    receipts.push(receipt);
-    if ((rank.get(key) ?? -1) > order) return;
-    rank.set(key, order); states.set(key, receipt);
-  };
-  const runOf = "CASE WHEN json_valid(intent) THEN json_extract(intent,'$.command.identity.runId') END";
-  if (version >= INTEGRATION_VERSION) for (const row of db.prepare(`SELECT scope_id,command_id,${runOf} AS run_id,manifest FROM workspace_integrations`).all()) {
-    put(`${row.scope_id}/${row.run_id}`, 1, row.manifest === null ? 'integrating' : 'integrated', null, row.command_id, null);
-  }
-  if (version >= DELIVERY_VERSION) for (const row of db.prepare(`SELECT scope_id,command_id,${runOf} AS run_id,delivered,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.ref') END AS target_ref,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.commit') END AS commit_id
-    FROM workspace_deliveries`).all()) put(`${row.scope_id}/${row.run_id}`, 2, row.delivered === 1 ? 'delivered' : 'delivering', row.commit_id, row.command_id, row.target_ref);
-  if (version >= ADOPTION_VERSION) for (const row of db.prepare(`SELECT scope_id,command_id,${runOf} AS run_id,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.targetRef') END AS target_ref,kind,settled,sequence,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.toCommit') END AS commit_id
-    FROM workspace_adoptions ORDER BY sequence`).all()) {
-    put(`${row.scope_id}/${row.run_id}`, 3, row.kind === 'rollback' ? (row.settled === 1 ? 'rolled-back' : 'rolling-back') : (row.settled === 1 ? 'adopted' : 'adopting'), row.commit_id, row.command_id, row.target_ref);
-  }
-  for (const [key, state] of states) states.set(key, Object.freeze({ ...state, receipts: Object.freeze(histories.get(key)!) }));
-  return states;
-}
 /** Catalog metadata only. Composition supplies scoped invocation readiness; this adapter never guesses it from activation tables. */
 function catalog(db: DatabaseSync, version: number): MonitorMap | null {
   if (version < CATALOG_VERSION) return null;

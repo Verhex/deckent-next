@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, attemptIdentitySchema, counterSchema, sameAttemptIdentity, type AuditRecord, type DispatchLossDecision } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, attemptIdentitySchema, counterSchema, sameAttemptIdentity, releaseWorkerCustody, type AuditRecord, type DispatchLossDecision } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
 import { sandboxObservationSchema, type ExecutionSupervisor } from '#engine/core/supervisor/index.js';
@@ -72,7 +72,16 @@ export class LostDispatchApplication {
       if (!observed) return Object.freeze({ ...fenced, decision: { kind: 'hold-manual' as const, reason: 'termination-required' as const } });
       proof = { ...observed, identity, owner: record.owner, receiptId: commandId };
     }
-    const write = { identity, owner: record.owner, expectedRunRevision: fenced.receipt.snapshot.revision, actor: principal, proof, now: this.now() };
+    // A replayed fence pins historical evidence, not the Run revision after sibling progress.
+    // Recheck current binding, fence and termination against the fresh snapshot; the writer repeats this under CAS.
+    const current = await this.store.loadRun(identity.scopeId, identity.runId);
+    const dispatch = await this.store.loadBoundDispatch(identity);
+    if (!current || !dispatch) throw new DispatchError('DISPATCH_NOT_ADMITTED');
+    const fence = { identity, owner: dispatch.owner, receiptId: fenced.receipt.commandId };
+    if (dispatch.owner !== record.owner) throw new DispatchError('DISPATCH_FENCE_CONFLICT');
+    if (!prior) releaseWorkerCustody(current, current.revision, { identity, owner: dispatch.owner, launch: dispatch.launch,
+      lost: true, worker: dispatch.worker ?? null }, fence, proof);
+    const write = { identity, owner: dispatch.owner, expectedRunRevision: current.revision, actor: principal, proof, now: this.now() };
     const encoded = JSON.stringify({ operation: 'release-worker-custody', identity, owner: record.owner, actor: principal, proof });
     const receipt = await this.store.releaseLostDispatch(write, (store, snapshot) => this.recorder(store).record({
       schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: commandId, scopeId: identity.scopeId,

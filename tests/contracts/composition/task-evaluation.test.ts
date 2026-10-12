@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRun, inspectRun, evaluateTask, inspectConfiguredWorkerTranscript } from '../../../src/index.js';
+import { createRun, inspectRun, evaluateTask, inspectMonitor, inspectConfiguredWorkerTranscript } from '../../../src/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { main } from '#surfaces/index.js';
@@ -21,7 +21,7 @@ import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'private output', twoTasks = false) {
+async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'private output', twoTasks = false, unbound = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-configured-evaluation-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const configPath = join(project, '.deckent/config.json'); const registry = fixtureDockerRegistry(['purchase']);
@@ -41,6 +41,7 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept configured process exits', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes } }] };
   if (twoTasks) graph.tasks.push({ id: 't2', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] });
+  if (unbound) graph.tasks.push({ id: 'unbound', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] });
   await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph }, options);
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: opened.layout.revision };
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
@@ -63,6 +64,78 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
 }
 
 describe.skipIf(process.platform === 'win32')('configured evaluation reply authority', () => {
+  it.each(['a', 'a2'])('filters every receipt by producer authority with only %s allowed, through inspect/evaluate/monitor/replay/revoke', async allowed => {
+    const f = await fixture(0, [0], 'private first task claim', true, true);
+    const first = await evaluateConfiguredTask(f.project, f.command, f.options);
+    const identity = { ...f.command.identity, taskId: 't2', attemptId: 'a2' };
+    const store = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' },
+      { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
+    try {
+      await store.reserveRunTasks({ commandId: 'reserve-second', actor: { id: 'fixture', issuer: 'test', subject: 'service' },
+        scopeId: 's', runId: 'r', expectedRevision: first.evaluation.run.revision, now: 0, identities: [identity] });
+      const claim = { owner: 'fixture-worker', request: { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['private-task-command'] } };
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
+      const artifacts = new FileArtifactStore({ root: join(f.data, 'artifacts'), maxBytes: 65536 });
+      const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'private second task claim', stderr: '' })));
+      await store.retainDispatchOutput(claim, output);
+      await store.finishDispatch(claim, { handle: 'fixture-second', exitCode: 0, interrupted: false });
+    } finally { store.close(); }
+    const command = { ...f.command, identity, commandId: 'evaluation-second', expectedRevision: first.evaluation.run.revision + 2 };
+    // The first evaluation now exercises a new write with mixed output authority; repeats exercise receipt replay.
+    const receipts = [f.command.identity, identity].map((producer, index) => ({ producer,
+      commit: (index ? 'b' : 'a').repeat(40), targetRef: `refs/heads/private-${index ? 'second' : 'first'}`,
+      delivery: `delivery-${index ? 'second' : 'first'}`, adoption: `adoption-${index ? 'second' : 'first'}`, integration: `integration-${index ? 'second' : 'first'}` }));
+    const writer = new DatabaseSync(f.path);
+    try {
+      for (const value of receipts) {
+        writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', value.integration,
+          JSON.stringify({ command: { identity: value.producer } }), 'retained-manifest');
+        writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', value.delivery,
+          JSON.stringify({ command: { identity: value.producer }, plan: { commit: value.commit, ref: value.targetRef } }), 1);
+        writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)').run('s', value.adoption, value.targetRef, 1, 'adopt',
+          JSON.stringify({ command: { identity: value.producer }, targetRef: value.targetRef, toCommit: value.commit }), 1);
+      }
+      writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', 'unattributed-secret',
+        JSON.stringify({ command: { identity: { scopeId: 's', runId: 'r' } }, plan: { commit: 'f'.repeat(40), ref: 'refs/heads/unattributed-secret' } }), 1);
+    } finally { writer.close(); }
+    const setPolicy = async (ids: readonly string[] | boolean) => {
+      await f.policy(true, ids);
+      const path = join(f.data, 'policy.json'), document = JSON.parse(await readFile(path, 'utf8'));
+      document.grants.push({ id: 'monitor-scope', effect: 'allow', actions: ['inspect'], scopes: ['s'],
+        principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'scope', ids: ['s'] } });
+      await writeFile(path, JSON.stringify(document), { mode: 0o600 });
+    };
+    const assertHidden = (value: unknown, denied: typeof receipts[number]) => {
+      const json = JSON.stringify(value);
+      for (const secret of [denied.commit, denied.targetRef, denied.delivery, denied.adoption, denied.integration,
+        'unattributed-secret', 'f'.repeat(40)]) expect(json).not.toContain(secret);
+    };
+    await setPolicy([allowed]);
+    const visible = receipts.find(value => value.producer.attemptId === allowed)!, hidden = receipts.find(value => value !== visible)!;
+    const runtime = createConfiguredRuntimeOperations(f.project, f.options);
+    const result = await evaluateTask(f.project, command, f.options);
+    const before = await f.snapshot();
+    for (const value of [result, await evaluateTask(f.project, command, f.options), await runtime.evaluateTask(command),
+      await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options), await inspectMonitor(f.project, f.options)]) {
+      assertHidden(value, hidden);
+      expect(JSON.stringify(value)).toContain(visible.adoption);
+      expect(JSON.stringify(value)).toContain(visible.delivery);
+      expect(JSON.stringify(value)).toContain(visible.integration);
+    }
+    expect(result.evaluation.run.tasks.find(task => task.id === 'unbound')!.resultBrief).toMatchObject({ runDelivery: null });
+    expect(result.evaluation.run.tasks.find(task => task.id === 'unbound')!.resultBrief).not.toHaveProperty('deliveryOutlook');
+    expect(result.evaluation.run.tasks.find(task => task.id === hidden.producer.taskId)).not.toHaveProperty('resultBrief');
+    // Revocation must filter an already produced result and its delivery summary, without rewriting the receipt.
+    await setPolicy(false);
+    for (const value of [await evaluateTask(f.project, command, f.options), await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options),
+      await inspectMonitor(f.project, f.options)]) { assertHidden(value, hidden); assertHidden(value, visible); }
+    expect(await f.snapshot()).toEqual(before);
+    // Replay of an earlier Run snapshot must not acquire a later producer's delivery.
+    await setPolicy(true);
+    const earlier = await evaluateTask(f.project, f.command, f.options);
+    for (const value of receipts) assertHidden(earlier, value);
+    expect(earlier.evaluation.run.revision).toBe(first.evaluation.run.revision);
+  });
   it('all surfaces require inspection before the first write and after revocation, with unchanged durable state', async () => {
     const f = await fixture(0, [0], 'private first task claim', true);
     const runtime = createConfiguredRuntimeOperations(f.project, f.options);
@@ -160,6 +233,7 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     expect(restricted.evaluation.run.tasks).toEqual((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks);
     expect(restricted.evaluation.run.tasks[0]).not.toHaveProperty('resultBrief');
     expect(restricted.evaluation.run.tasks[1]!.resultBrief!.report).toEqual(report('private second task claim'));
+    expect(restricted.evaluation.run.tasks[1]!.resultBrief).not.toHaveProperty('deliveryOutlook');
     expect(JSON.stringify(restricted)).not.toContain('private first task claim');
     await f.policy(true, true, false);
     await expect(evaluateConfiguredTask(f.project, secondCommand, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
