@@ -477,7 +477,6 @@
         "src/engine/core/dispatch",
         "src/engine/core/policy",
         "src/engine/core/runs",
-        "src/engine/core/resource-observation",
         "src/engine/core/runtime",
         "src/engine/core/supervisor",
         "src/engine/core/task-evaluation",

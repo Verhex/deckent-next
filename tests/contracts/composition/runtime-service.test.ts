@@ -1,4 +1,4 @@
-import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
+import { atSameCostObservation } from '../support/run-cost-observation.js';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { createConnection } from 'node:net';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -125,7 +125,19 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     const admitted = await admit(client);
     expect(admitted.created.admission.run.runId).toBe('r'); expect(admitted.reserved.reservation.identities).toHaveLength(1);
     const inspected = await client.inspectRun({ schemaVersion: 1, scopeId: 's', runId: 'r' });
-    expect(expectEmptyCostObservation(inspected.run!, 1)).toEqual({ ...admitted.reserved.reservation.run, pool: { poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 1, inFlight: 1 }, drift: [], waiting: [] } });
+    const { costReport, ...recorded } = inspected.run!;
+    expect(atSameCostObservation(inspected.run!).costReport).toEqual({ schemaVersion: 1, scopeId: 's', runId: 'r', runRevision: recorded.revision,
+      observedAtMs: 0, coverage: 'partial', withheld: 0, recommendations: [], recommendationsTruncated: false,
+      attempts: [{ schemaVersion: 1, identity: admitted.reserved.reservation.identities[0], profile: { id: 'fixture-docker', version: 1 },
+        model: null, effort: null, acceptance: { outcome: 'incomplete', workClass: null, profileVersion: null, policyRevision: null,
+          score: null, criteria: [], ceilingReasons: [], evaluationId: null },
+        axes: { cpuSeconds: null, sampledPeakBytes: null, kernelPeakBytes: null, wallMs: null, apiMoney: null, subscription: null,
+          localModel: null, humanInterventions: null }, quality: { reworkCount: null, rollbackCount: null, interventionCount: null, followup: 'unknown' },
+        coverage: 'partial', sampleCount: 0, gapCount: 0 }],
+      summary: { acceptedTasks: 0, failedTasks: 0, unknownTasks: 1, measuredApiUsdNanos: null, measuredCpuSeconds: null,
+        sampledCpuSecondsPerAcceptedTask: null, sampledPeakBytes: null, unknownApiAttempts: 1 } });
+    void costReport;
+    expect(recorded).toEqual({ ...admitted.reserved.reservation.run, pool: { poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 1, inFlight: 1 }, drift: [], waiting: [] } });
     const before = await readFile(f.ledgerPath);
     await expect(client.createRun({ ...admitted.command, schemaVersion: 99 })).rejects.toThrow();
     expect(await readFile(f.ledgerPath)).toEqual(before);

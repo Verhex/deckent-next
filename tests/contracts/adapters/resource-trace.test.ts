@@ -1,5 +1,5 @@
-import { mkdtemp, rm, chmod, symlink, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtemp, rm, chmod, symlink, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { FileResourceTraceStore } from '#adapters/index.js';
@@ -29,4 +29,18 @@ it.skipIf(process.platform !== 'linux')('reports an impossible byte budget as a 
 });
 it.skipIf(process.platform === 'linux')('refuses unsupported file custody before filesystem access', async () => {
   const { store } = await fixture(); await expect(store.read(identity)).rejects.toThrow('RESOURCE_TRACE_UNSUPPORTED');
+});
+it.skipIf(process.platform !== 'linux')('aborts a contended trace write without reclaiming another owner or publishing a late sample', async () => {
+  const { root, settings, store } = await fixture();
+  const lock = join(root, `${settings.fileName}.write-lock`), owner = JSON.stringify({ pid: process.pid, hostname: hostname(), nonce: 'held-trace', createdAt: new Date().toISOString() });
+  await mkdir(lock, { mode: 0o700 }); await writeFile(join(lock, 'owner.json'), owner, { mode: 0o600 });
+  const controller = new AbortController(), writing = store.append(resourceGap(identity, 100, 'starting'), controller.signal);
+  const refused = expect(writing).rejects.toMatchObject({ name: 'AbortError' });
+  await new Promise(resolve => setTimeout(resolve, 50));
+  controller.abort(); await refused;
+  expect(await readFile(join(lock, 'owner.json'), 'utf8')).toBe(owner);
+  await expect(readFile(join(root, settings.fileName))).rejects.toMatchObject({ code: 'ENOENT' });
+  await rm(lock, { recursive: true });
+  await store.append(resourceGap(identity, 200, 'missing'));
+  expect((await store.read(identity)).samples.map(row => row.observedAtMs)).toEqual([200]);
 });

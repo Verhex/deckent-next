@@ -16,7 +16,7 @@ export const resourceSampleSchema = z.object({ schemaVersion: z.literal(1), iden
 export type ResourceSample = z.infer<typeof resourceSampleSchema>;
 export interface ResourceTrace { readonly samples: readonly ResourceSample[]; readonly trimmedBeforeMs: number | null }
 export interface ResourceTraceStore {
-  append(sample: ResourceSample): Promise<void>;
+  append(sample: ResourceSample, signal?: AbortSignal): Promise<void>;
   read(identity: AttemptIdentity): Promise<ResourceTrace>;
 }
 export interface ResourceReader {

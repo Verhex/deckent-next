@@ -1,4 +1,4 @@
-import { atSameCostObservation, atSameEvaluationObservation } from '../support/run-cost-observation.js';
+import { expectRecordedEvaluation } from '../support/run-cost-observation.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
@@ -167,7 +167,7 @@ describe.skipIf(process.platform === 'win32')('configured evaluation reply autho
       for (const call of calls) { await expect(call()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); expect(await f.snapshot()).toEqual(before); }
       await f.policy(true);
       const accepted = await calls[0]!();
-      for (const call of calls) expect(atSameEvaluationObservation(await call() as Awaited<ReturnType<typeof evaluateTask>>)).toEqual(atSameEvaluationObservation(accepted));
+      for (const call of calls) expect(expectRecordedEvaluation(await call() as Awaited<ReturnType<typeof evaluateTask>>)).toEqual(expectRecordedEvaluation(accepted));
       const after = await f.snapshot();
       expect(after.receipt).not.toBeNull(); expect(after.run!.progress[0]!.phase).toBe('accepted');
       await f.policy(true, true, false);
@@ -219,25 +219,27 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     const second = await evaluateConfiguredTask(f.project, secondCommand, f.options);
     const inspected = await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options);
     expect(second.evaluation.run.tasks).toEqual(inspected.run!.tasks);
-    const { pool, ...inspectedRun } = inspected.run!; void pool;
-    expect(atSameCostObservation(second.evaluation.run)).toEqual(atSameCostObservation(inspectedRun));
+    const { pool, costReport, ...inspectedRun } = inspected.run!; void pool;
+    expect(expectRecordedEvaluation(second).evaluation.run).toEqual(inspectedRun);
     expect(second.evaluation.run.tasks.map(task => task.resultBrief)).toEqual(['a', 'a2'].map((attemptId, index) => ({
       schemaVersion: 1, attemptId, claimLabel: 'CLAIM', report: report(index ? 'private second task claim' : 'private first task claim'),
       evaluation: { verdict: 'accepted' }, openIssues: [], runDelivery: null, deliveryOutlook: 'none',
     })));
     expect(second.evaluation.run.tasks.map(task => task.acceptance!.evaluationId)).toEqual(['evaluation', 'evaluation-second']);
-    expect(second.evaluation.run.costReport).toMatchObject({ runRevision: second.evaluation.run.revision, withheld: 0,
+    expect(costReport).toMatchObject({ runRevision: second.evaluation.run.revision, withheld: 0,
       attempts: [{ identity: f.command.identity, acceptance: second.evaluation.run.tasks[0]!.acceptance },
         { identity, acceptance: second.evaluation.run.tasks[1]!.acceptance }],
       summary: { acceptedTasks: 2, measuredApiUsdNanos: null, measuredCpuSeconds: null } });
-    expect(atSameEvaluationObservation(await evaluateConfiguredTask(f.project, secondCommand, f.options))).toEqual(atSameEvaluationObservation(second));
-    expect(atSameEvaluationObservation(await evaluateConfiguredTask(f.project, f.command, f.options))).toEqual(atSameEvaluationObservation(first));
+    expect(expectRecordedEvaluation(await evaluateConfiguredTask(f.project, secondCommand, f.options))).toEqual(expectRecordedEvaluation(second));
+    expect(expectRecordedEvaluation(await evaluateConfiguredTask(f.project, f.command, f.options))).toEqual(expectRecordedEvaluation(first));
     expect(first.evaluation.run.tasks[1]!.acceptance!.evaluationId).toBeNull();
     await f.policy(true, ['a2']);
     const restricted = await evaluateConfiguredTask(f.project, secondCommand, f.options);
-    expect(restricted.evaluation.run.tasks).toEqual((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks);
+    const restrictedInspect = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!;
+    expect(restricted.evaluation.run.tasks).toEqual(restrictedInspect.tasks);
+    expectRecordedEvaluation(restricted);
     expect(restricted.evaluation.run.tasks[0]).not.toHaveProperty('resultBrief');
-    expect(restricted.evaluation.run.costReport).toMatchObject({ withheld: 1, attempts: [{ identity }],
+    expect(restrictedInspect.costReport).toMatchObject({ withheld: 1, attempts: [{ identity }],
       summary: { acceptedTasks: 1, measuredApiUsdNanos: null, measuredCpuSeconds: null, sampledCpuSecondsPerAcceptedTask: null } });
     expect(restricted.evaluation.run.tasks[1]!.resultBrief!.report).toEqual(report('private second task claim'));
     expect(restricted.evaluation.run.tasks[1]!.resultBrief).not.toHaveProperty('deliveryOutlook');
@@ -249,21 +251,21 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     expect(hidden.evaluation.run.tasks[1]).not.toHaveProperty('resultBrief');
     expect(JSON.stringify(hidden)).not.toContain('private second task claim');
     const runtime = createConfiguredRuntimeOperations(f.project, f.options);
-    expect(atSameEvaluationObservation(await runtime.evaluateTask(secondCommand))).toEqual(atSameEvaluationObservation(hidden));
-    expect(atSameEvaluationObservation(await evaluateTask(f.project, secondCommand, f.options))).toEqual(atSameEvaluationObservation(hidden));
+    expect(expectRecordedEvaluation(await runtime.evaluateTask(secondCommand))).toEqual(expectRecordedEvaluation(hidden));
+    expect(expectRecordedEvaluation(await evaluateTask(f.project, secondCommand, f.options))).toEqual(expectRecordedEvaluation(hidden));
     let cliText = '';
     expect(await main(['task', 'evaluate', '--scope', 's', '--run', 'r', '--task', 't2', '--attempt', 'a2',
       '--generation', '1', '--layout-revision', identity.layoutRevision, '--command-id', secondCommand.commandId,
       '--expected-revision', String(secondCommand.expectedRevision), '--json'],
     { stdout: { write(value: string) { cliText += value; } }, evaluateTask: (_root, command) => evaluateTask(f.project, command, f.options) })).toBe(0);
-    expect(atSameEvaluationObservation(JSON.parse(cliText))).toEqual(atSameEvaluationObservation(hidden));
+    expect(expectRecordedEvaluation(JSON.parse(cliText))).toEqual(expectRecordedEvaluation(hidden));
     const server = createMcpServer(runtime, { maxConcurrentCalls: 2, responseMaxBytes: 65536 }, 'en');
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'evaluation-security', version: '1' });
     try {
       await server.connect(serverTransport); await client.connect(clientTransport);
       const response = await client.callTool({ name: 'evaluate_task', arguments: secondCommand });
-      expect(response.isError).not.toBe(true); expect(atSameEvaluationObservation(response.structuredContent as typeof hidden)).toEqual(atSameEvaluationObservation(hidden));
+      expect(response.isError).not.toBe(true); expect(expectRecordedEvaluation(response.structuredContent as typeof hidden)).toEqual(expectRecordedEvaluation(hidden));
       expect(JSON.stringify(response)).not.toContain('private second task claim');
       await f.policy(true, true, false);
       const denied = await client.callTool({ name: 'evaluate_task', arguments: secondCommand });
@@ -305,7 +307,7 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     config.admission.registry.revision = 'current-registry-changed'; config.admission.registry.evaluators[0].implementation.version = 99;
     await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
     const first = await evaluateConfiguredTask(f.project, f.command, f.options); expect(first.evaluation.run.tasks[0]!.phase).toBe('accepted');
-    expect(atSameEvaluationObservation(await evaluateConfiguredTask(f.project, f.command, f.options))).toEqual(atSameEvaluationObservation(first));
+    expect(expectRecordedEvaluation(await evaluateConfiguredTask(f.project, f.command, f.options))).toEqual(expectRecordedEvaluation(first));
     await f.policy(false); await expect(evaluateConfiguredTask(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
   it.each([false, 'require-approval'] as const)('requires Run inspect %s before mutation and replay, preserving durable state', async inspect => {
@@ -322,7 +324,7 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     await f.policy(true);
     const first = await evaluateConfiguredTask(f.project, f.command, f.options);
     expect(first.evaluation.run.tasks[0]!.phase).toBe('accepted');
-    expect(atSameEvaluationObservation(await evaluateConfiguredTask(f.project, f.command, f.options))).toEqual(atSameEvaluationObservation(first));
+    expect(expectRecordedEvaluation(await evaluateConfiguredTask(f.project, f.command, f.options))).toEqual(expectRecordedEvaluation(first));
     const accepted = await snapshot();
     await f.policy(true, true, inspect);
     await expect(evaluateConfiguredTask(f.project, f.command, f.options)).rejects.toMatchObject(rejection);

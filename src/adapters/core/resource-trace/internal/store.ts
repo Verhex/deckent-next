@@ -41,9 +41,11 @@ export class FileResourceTraceStore implements ResourceTraceStore {
       return { samples: trace.samples.filter(row => sameAttemptIdentity(row.identity, identity)),
         trimmedBeforeMs: trace.lastTrim && sameAttemptIdentity(trace.lastTrim.identity, identity) ? trace.lastTrim.throughMs : null }; });
   }
-  async append(input: ResourceSample): Promise<void> {
+  async append(input: ResourceSample, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const sample = resourceSampleSchema.parse(input);
     await this.withPath(path => withConfigWriteLock(path, async () => {
+      signal?.throwIfAborted();
       const trace = await this.load(path), threshold = this.now() - this.settings.retentionMs;
       const key = JSON.stringify(sample);
       if (trace.samples.some(row => JSON.stringify(row) === key)) return;
@@ -58,10 +60,12 @@ export class FileResourceTraceStore implements ResourceTraceStore {
       if (!samples.includes(sample) || Buffer.byteLength(content()) > this.settings.maxStoreBytes) throw new Error('RESOURCE_TRACE_FULL');
       const temporary = `${path}.${randomUUID()}.tmp`;
       try {
+        signal?.throwIfAborted();
         const file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
         try { await file.writeFile(content()); await file.sync(); } finally { await file.close(); }
+        signal?.throwIfAborted();
         await rename(temporary, path);
       } finally { await unlink(temporary).catch(error => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }); }
-    }, this.settings.timeoutMs, { onWarning() { /* Trace locks never print into the worker result. */ } }));
+    }, this.settings.timeoutMs, { ...(signal ? { signal } : {}), onWarning() { /* Trace locks never print into the worker result. */ } }));
   }
 }

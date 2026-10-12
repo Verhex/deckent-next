@@ -54,3 +54,28 @@ it('does not read or write telemetry when disabled', async () => {
   collector.start(request, { readResources } as unknown as ExecutionSupervisor).stop();
   expect(append).not.toHaveBeenCalled(); expect(readResources).not.toHaveBeenCalled();
 });
+it('bounds an abort-ignoring read, keeps its physical slot occupied and discards its late sample', async () => {
+  vi.useFakeTimers(); const written: ResourceSample[] = []; let resolveRead!: (value: ResourceSample) => void, signal!: AbortSignal;
+  const readResources = vi.fn((_r: unknown, _w: unknown, _s: unknown, input: AbortSignal) => {
+    signal = input; return new Promise<ResourceSample>(resolve => { resolveRead = resolve; });
+  });
+  const collector = new ResourceCollector({ async append(row) { written.push(row); }, async read() { return { samples: [], trimmedBeforeMs: null }; } }, settings);
+  const observed = collector.start(request, { readResources } as unknown as ExecutionSupervisor);
+  await vi.advanceTimersByTimeAsync(settings.timeoutMs - 1); expect(written).toEqual([]);
+  await vi.advanceTimersByTimeAsync(1); expect(signal.aborted).toBe(true); expect(written.map(row => row.gap)).toEqual(['timeout']);
+  await vi.advanceTimersByTimeAsync(settings.intervalMs * 3); expect(readResources).toHaveBeenCalledTimes(1);
+  expect(written.slice(1).every(row => row.gap === 'overload')).toBe(true);
+  observed.stop(); resolveRead(sample(Date.now(), 1)); await vi.advanceTimersByTimeAsync(0);
+  expect(written.every(row => row.gap !== null)).toBe(true);
+  const next = collector.start(request, { async readResources() { return sample(Date.now(), 2); } } as unknown as ExecutionSupervisor);
+  await vi.advanceTimersByTimeAsync(0); next.stop(); expect(written.at(-1)?.gap).toBeNull();
+});
+it('aborts an in-flight trace write and drops queued samples on stop without awaiting storage', async () => {
+  vi.useFakeTimers(); let signal: AbortSignal | undefined;
+  const append = vi.fn((_row: ResourceSample, input?: AbortSignal) => { signal = input; return new Promise<void>(() => {}); });
+  const collector = new ResourceCollector({ append, async read() { return { samples: [], trimmedBeforeMs: null }; } }, settings);
+  const observed = collector.start(request, { async readResources() { return sample(Date.now(), 1); } } as unknown as ExecutionSupervisor);
+  await vi.advanceTimersByTimeAsync(settings.intervalMs * 2); expect(append).toHaveBeenCalledTimes(1);
+  observed.stop(); expect(signal?.aborted).toBe(true);
+  await vi.advanceTimersByTimeAsync(settings.intervalMs * 2); expect(append).toHaveBeenCalledTimes(1);
+});

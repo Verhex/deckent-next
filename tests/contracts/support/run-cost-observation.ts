@@ -11,8 +11,11 @@ export function atSameCostObservation(run: RunView): RunView {
 export function atSameRunObservation<T extends { readonly run: RunView | null }>(result: T): T {
   return { ...result, run: result.run ? atSameCostObservation(result.run) : null };
 }
-export function atSameEvaluationObservation<T extends { readonly evaluation: { readonly run: RunView } }>(result: T): T {
-  return { ...result, evaluation: { ...result.evaluation, run: atSameCostObservation(result.evaluation.run) } };
+/** A command replay must remain fully equal, without inspection-only observations. */
+export function expectRecordedEvaluation<T extends { readonly evaluation: { readonly run: RunView } }>(result: T): T {
+  expect(result.evaluation.run).not.toHaveProperty('costReport');
+  expect(result.evaluation.run).not.toHaveProperty('pool');
+  return result;
 }
 /** An immutable admission/cancellation receipt has no cost observation. Assert the whole additive report separately. */
 export function expectEmptyCostObservation(run: RunView, withheld = 0) {
