@@ -11,7 +11,9 @@ import { dockerEndpointSchema } from './profile.js';
 const counter = z.number().int().nonnegative().safe();
 const inspection = z.object({ Id: z.string(), Config: z.object({ Labels: z.record(z.string()).nullable() }),
   State: z.object({ Status: z.string(), StartedAt: z.string(), Pid: counter.optional() }) });
-const stats = z.object({ id: z.string(), read: z.string(), cpu_stats: z.object({ cpu_usage: z.object({ total_usage: counter }) }),
+// Older Engine one-shot replies omit id (Moby #51302). Custody comes from the full-id request
+// bracketed by matching inspections; a supplied contradictory id still refuses the sample.
+const stats = z.object({ id: z.string().optional(), read: z.string(), cpu_stats: z.object({ cpu_usage: z.object({ total_usage: counter }) }),
   memory_stats: z.object({ usage: counter.optional(), limit: counter.optional(), max_usage: counter.optional() }) });
 class ResourceReadError extends Error { constructor(readonly reason: ResourceSample['gap']) { super('RESOURCE_READ'); } }
 /** Fixed local socket; no credentials, redirects, arbitrary paths or unbounded body. */
@@ -62,9 +64,10 @@ export async function sampleDockerResources(endpoint: string, request: SandboxRe
     if (expected && !sameResourceWorker(expected, pinned.data)) throw new ResourceReadError('identity');
     worker = pinned.data;
     const data = stats.parse(await get(`/containers/${worker.id}/stats?stream=false&one-shot=true`));
+    if (data.id !== undefined && data.id !== worker.id) throw new ResourceReadError('identity');
     const peak = data.memory_stats.max_usage ?? await kernelPeak(worker.id, observed.State.Pid, settings);
     const after = inspection.parse(await get(`/containers/${worker.id}/json`));
-    if (after.Id !== worker.id || after.State.StartedAt !== worker.startedAt || after.Config.Labels?.['deckent.request'] !== digest || data.id !== worker.id) throw new ResourceReadError('identity');
+    if (after.Id !== worker.id || after.State.StartedAt !== worker.startedAt || after.Config.Labels?.['deckent.request'] !== digest) throw new ResourceReadError('identity');
     const observedAtMs = Date.parse(data.read);
     if (!Number.isFinite(observedAtMs) || observedAtMs < Date.parse(worker.startedAt)) throw new ResourceReadError('invalid');
     return resourceSampleSchema.parse({ schemaVersion: 1, identity: request.identity, worker, source: 'docker-engine', observedAtMs,
