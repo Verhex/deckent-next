@@ -3,6 +3,7 @@ Getting started:
   terminal    Open the interactive terminal
   init        Set up an installation
 Observe:
+  report      Inspect cost and acceptance evidence for a Run
   monitor     Watch installations and work
   workers     List or watch workers
 Execute work:
@@ -31,7 +32,6 @@ Developer:
   coding      Prepare native coding profiles
   inference   Inspect local inference capacity
   operation   Execute or inspect typed operations
-Global options: --json  --lang en|tr  --no-color
-Examples: deckent doctor; deckent config get
+Options: --json --lang en|tr --no-color. Try: deckent doctor; deckent config get
 Details: deckent <command> --help; developer commands: deckent --help --all
 No arguments on a terminal opens the interactive session. --version: version.

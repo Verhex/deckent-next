@@ -1095,6 +1095,7 @@
   "cli.help.action.metrics": "Read inference metrics",
   "cli.help.action.compensate": "Compensate an operation",
   "cli.help.common": "Global options: --json  --lang en|tr  --no-color",
+  "cli.help.commonExamples": "Options: --json --lang en|tr --no-color. Try: deckent doctor; deckent config get",
   "cli.help.examples": "Examples: deckent doctor; deckent config get",
   "cli.help.details": "Details: deckent <command> --help; developer commands: deckent --help --all",
   "cli.help.default": "No arguments on a terminal opens the interactive session. --version: version.",

@@ -102,6 +102,28 @@
   "output_mode": "standard",
   "projectName": "deckent-project",
   "reconciliationRuntime": null,
+  "resourceObservation": {
+    "enabled": true,
+    "fileName": "resource-trace.json",
+    "intervalMs": 5000,
+    "maxConcurrentReads": 2,
+    "maxQueueEntries": 64,
+    "maxReadBytes": 65536,
+    "maxStoreBytes": 4194304,
+    "maxStoreEntries": 2048,
+    "provisional": true,
+    "recommendation": {
+      "axis": "cpu-seconds",
+      "confidence": 0.99,
+      "maxCandidates": 8,
+      "maxEvidenceEntries": 2048,
+      "maxLossRisk": 0.01,
+      "minPairs": 30
+    },
+    "retentionMs": 86400000,
+    "staleMs": 15000,
+    "timeoutMs": 1000
+  },
   "runRuntime": {
     "failureBackoffMs": 5000,
     "maxConcurrentRuns": 8,

@@ -1095,6 +1095,7 @@
   "cli.help.action.metrics": "Çıkarım ölçümlerini oku",
   "cli.help.action.compensate": "İşlemi telafi et",
   "cli.help.common": "Genel seçenekler: --json  --lang en|tr  --no-color",
+  "cli.help.commonExamples": "Genel: --json --lang en|tr --no-color. Örnek: deckent doctor; deckent config get",
   "cli.help.examples": "Örnekler: deckent doctor; deckent config get",
   "cli.help.details": "Ayrıntı: deckent <komut> --help; geliştirici: deckent --help --all",
   "cli.help.default": "Terminalde argümansız çağrı etkileşimli oturumu açar. --version: sürüm.",
