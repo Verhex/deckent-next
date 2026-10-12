@@ -1090,8 +1090,8 @@ config sections wait for C1.
 
 - `tests/contracts/<package>/` — public API and invariant tests only; no internal-function tests.
 - `tests/e2e/` — real binary journeys (`doctor`, `run`, `start`, `do`, …) on fixture projects under `tests/fixtures/`.
-  Current state 2026-10-01: `tests/e2e/` holds `cli-version`, `i18n-renderer`, `kernel-config`, `product-paths`; there is no
-  `start` or `do` command yet and no `tests/golden/` directory.
+  Current source candidate: `tests/e2e/` holds `cli-version`, `i18n-renderer`, `kernel-config`, `product-paths`; `do` and RunProposal
+  journeys are in `tests/contracts/`. CLI/config/MCP exact golden files live under `tests/fixtures/`; `start` is not a CLI command.
 - Batch G (source candidate, alpha.28; not live): the test-ERP scenarios (`tests/contracts/composition/test-erp-operations.test.ts`) are skipped off Linux without a typed
   refusal or verify-not-run record; that platform evidence gap stays open until the next batch.
 - `tests/golden/` — normalized outputs of deterministic commands, captured from the legacy binary and

@@ -6,6 +6,7 @@ Başlarken:
   monitor     Kurulumları ve işleri izle
   workers     İşçileri listele veya izle
 İş yürütme:
+  do          Brain ve mevcut onay kapılarıyla bir isteği planla
   run         Run oluştur ve yönet
   task        Görevleri yürüt, değerlendir ve teslim et
   pool        Havuzu incele, beklet veya sürdür

@@ -90,15 +90,15 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket request admi
       seen.push(`${request.schemaVersion}:${request.operation}`); return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result: { operation: request.operation } };
     });
     try {
-      // A v26 client describing a v27 service receives its own envelope version.
-      await expect(requestLocalRuntime(options, { schemaVersion: 26, requestId: 'request-1', operation: 'describeService', input: {} }))
+      // A v27 client describing a v28 service receives its own envelope version.
+      await expect(requestLocalRuntime(options, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION - 1, requestId: 'request-1', operation: 'describeService', input: {} }))
         .resolves.toMatchObject({ requestId: 'request-1', ok: true, result: { operation: 'describeService' } });
       // Effectful or other operations stay current-version only (refused before dispatch, no client-side downgrade either).
       await expect(requestLocalRuntime(options, { schemaVersion: 24, requestId: 'request-2', operation: 'inspectRun', input: {} } as never)).rejects.toThrow();
       const raw = await connect(options.endpoint);
       raw.end(encodeServiceFrame({ schemaVersion: 24, requestId: 'request-3', operation: 'inspectRun', input: {} }, options.inputMaxBytes));
       await once(raw, 'close');
-      // Protocol v27 (Run-create approval): the window is [27, 26]; a v22 lifecycle envelope is outside it and never dispatched.
+      // Protocol v28 (Run proposals): the window is [28, 27]; a v22 lifecycle envelope is outside it and never dispatched.
       const outside = await connect(options.endpoint);
       outside.end(encodeServiceFrame({ schemaVersion: 22, requestId: 'request-4', operation: 'describeService', input: {} }, options.inputMaxBytes));
       await once(outside, 'close');
@@ -113,7 +113,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket request admi
     try {
       await expect(requestLocalRuntime(options, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', operation: 'inspectRun', input: {} }))
         .resolves.toMatchObject({ ok: false, error: { code: 'CONFIG_VALIDATION', params: { issues: 'terminal.scopeId: unrecognized key' } } });
-      const older = await requestLocalRuntime(options, { schemaVersion: 26, requestId: 'request-2', operation: 'describeService', input: {} });
+      const older = await requestLocalRuntime(options, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION - 1, requestId: 'request-2', operation: 'describeService', input: {} });
       // The client normalizes the previous version's envelope to the current one; the parameters survive the round trip.
       expect(older).toEqual({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-2', ok: false,
         error: { code: 'CONFIG_VALIDATION', category: 'config', params: { issues: 'terminal.scopeId: unrecognized key' } } });

@@ -32,7 +32,7 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
   await until(() => view.stdout.frame.includes('Durable business evidence'), 'actual approval preview');
   expect(decisions).toEqual([]); expect(plans).toHaveLength(1); expect(plans[0]!.intent).toBe('Prepare purchase api_key=[REDACTED]');
   expect(history).toEqual(['/do Prepare purchase api_key=[REDACTED]']);
-  expect(view.stdout.frame).toContain('No total Run spending limit is enforced');
+  expect(view.stdout.frame).toContain('no total Run spending limit is enforced');
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO approval ${key}\n${view.stdout.frame}\n`);
   await settle(40); view.stdin.write(key); // Approve/deny the displayed original card, then assert the effect.
   await until(() => plans.length === 2 && view.stdout.frame.includes(key === 'y' ? 'Admitted; task outcomes are not yet accepted' : 'Rejected'), 'recorded result window');

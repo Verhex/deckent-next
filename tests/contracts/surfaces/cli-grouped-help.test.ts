@@ -11,7 +11,7 @@ it.each(['en', 'tr'] as const)('renders the approved compact %s golden through m
     stdout: { write: text => { output += text; } }, stderr: { write: text => { errors += text; } },
   });
   expect(code).toBe(0); expect(errors).toBe('');
-  expect(output).toBe(readFileSync(new URL(`../../fixtures/cli-help/top-${language}.txt`, import.meta.url), 'utf8'));
+  await expect(output).toMatchFileSnapshot(`../../fixtures/cli-help/top-${language}.txt`);
   expect(output.trimEnd().split('\n').length).toBeLessThanOrEqual(30);
   expect(output.split('\n').every(line => [...line].length <= 80)).toBe(true);
 });

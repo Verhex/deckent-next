@@ -701,7 +701,7 @@
   "brain.planning": "Brain is planning with the selected model. No Run has been admitted.",
   "brain.cancelHint": "Esc / Ctrl+C: cancel planning",
   "brain.requestHint": "Enter /do followed by the work you want planned.",
-  "cli.help.summary.do": "Plan work from an intent through Brain and the existing approval gates",
+  "cli.help.summary.do": "Plan an intent through Brain and existing approval gates",
   "cli.help.do": "deckent do --request <intent> [--scope <scope>] [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals.",
   "mcp.tool.planRun": "Generate a receipted RunProposal from an intent with the selected active model and provider-spend budget. Same command/input replays. MCP cannot decide approvals.",
   "config.field.brain_planner": "Versioned Brain planning template registry"

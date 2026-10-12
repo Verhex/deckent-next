@@ -119,6 +119,10 @@ describe('terminal slash registry', () => {
     await type(view, '/status \r');
     await until(() => view.stdout.text.includes('STATUS-LINE'), `dispatch ${command.name} then status`);
     expect(view.stdout.text).not.toContain('UNKNOWN');
+    if (command.name === 'do') {
+      expect(view.stdout.text).toContain('NO-PORT do');
+      expect(view.stdout.text).not.toContain('NO-PORT {part}');
+    }
     expect(completeTurn).not.toHaveBeenCalled();
   });
 

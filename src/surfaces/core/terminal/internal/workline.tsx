@@ -350,7 +350,8 @@ export function WorklineApp(props: WorklineProps) {
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
-    if (slash.command === 'do' && props.doPlan) {
+    if (slash.command === 'do') {
+      if (!props.doPlan) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
       const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
         hints: labels.work?.jobs?.hints ?? props.doPlan!.cancelHint, confirm: false }, ['close']);
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }

@@ -6,6 +6,7 @@ Observe:
   monitor     Watch installations and work
   workers     List or watch workers
 Execute work:
+  do          Plan an intent through Brain and existing approval gates
   run         Create and manage Runs
   task        Execute, evaluate and deliver Tasks
   pool        Inspect, hold or resume a pool
