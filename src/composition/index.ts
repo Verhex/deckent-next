@@ -33,3 +33,4 @@ export * from '#composition/core/decision/index.js';
 export { executeConfiguredBackup } from '#composition/core/backup/index.js';
 
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
+export { planConfiguredRun, planRuntimeRun } from '#composition/core/run-planner/index.js';

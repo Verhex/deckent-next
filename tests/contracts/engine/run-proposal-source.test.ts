@@ -3,6 +3,7 @@ import { parseModelInvocationReceipt, modelInvocationRequestEvidence, encodeMode
   resolveModelBindingDefinition, encodeModelBindingDefinition, type RunProposal } from '#domain/index.js';
 import { assertRunProposalSource } from '#engine/index.js';
 import { sha256 } from '#platform/index.js';
+import { brainOutputDigest } from '#capabilities/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 const reference = { providerId: 'test-provider', providerVersion: 1, modelId: 'test-model', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: reference.providerId, version: 1,
@@ -33,4 +34,20 @@ it.each(['missing', 'pending', 'actor', 'scope', 'command', 'invocation', 'diges
   const refs = { ...source.receipt, ...(kind === 'command' ? { commandId: 'foreign' } : kind === 'invocation' ? { invocationId: 'foreign' }
     : kind === 'digest' ? { responseDigest: sha256('foreign') } : kind === 'model' ? { reference: { ...reference, modelVersion: 2 } } : {}) };
   expect(() => assertRunProposalSource({ ...modelProposal, source: { ...source, receipt: refs } }, changed)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
+});
+it('binds a Brain graph to the retained model output, invocation request, binding and activation before Run admission', () => {
+  const draft = { graph: modelProposal.graph, budgetCeiling: modelProposal.budgetCeiling, requiredPermissions: modelProposal.requiredPermissions };
+  if (modelProposal.source.kind !== 'model') throw new Error('fixture');
+  const contribution = { schemaVersion: 1 as const, template: { id: 'fixture', version: 1, digest: sha256('template') },
+    inputDigest: sha256('input'), contextDigest: sha256('context'), outputDigest: brainOutputDigest(draft), requestDigest,
+    activationRevision: 1, bindingDigest: binding.digest, inputSummary: 'Plan a purchase', outputSummary: 'Readback', usage: null };
+  const brain: RunProposal = { ...modelProposal, source: { ...modelProposal.source, contribution } }, text = JSON.stringify(draft);
+  expect(() => assertRunProposalSource(brain, receipt, text)).not.toThrow();
+  for (const altered of [{ ...brain, graph: { ...brain.graph, revision: 2 } },
+    { ...brain, source: { ...brain.source, contribution: { ...contribution, requestDigest: sha256('foreign') } } },
+    { ...brain, source: { ...brain.source, contribution: { ...contribution, activationRevision: 2 } } },
+    { ...brain, source: { ...brain.source, contribution: { ...contribution, bindingDigest: sha256('foreign') } } }] as RunProposal[]) {
+    expect(() => assertRunProposalSource(altered, receipt, text)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
+  }
+  expect(() => assertRunProposalSource(brain, receipt, null)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
 });

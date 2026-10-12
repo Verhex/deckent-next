@@ -4,6 +4,7 @@ import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 import { providerSpendBudgetSchema } from '#domain/core/provider-spend/index.js';
 import { taskGraphSchema } from '#domain/core/task-graph/index.js';
+import { brainContributionSchema } from './brain.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const proposalPermissionSchema = z.object({ kind: identitySchema, action: identitySchema, resourceId: identitySchema }).strict().readonly();
 /** Attribution is checked against the authenticated principal; a model receipt reference never grants authority. */
@@ -14,7 +15,7 @@ export const runProposalSchema = z.object({ schemaVersion: z.literal(1), command
   proposer: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly(),
   source: z.discriminatedUnion('kind', [z.object({ kind: z.literal('human') }).strict(),
     z.object({ kind: z.literal('model'), receipt: z.object({ commandId: clientCommandIdSchema, invocationId: identitySchema,
-      reference: modelReferenceSchema, responseDigest: digest }).strict().readonly() }).strict()]).readonly(),
+      reference: modelReferenceSchema, responseDigest: digest }).strict().readonly(), contribution: brainContributionSchema.optional() }).strict()]).readonly(),
 }).strict().readonly();
 export type RunProposal = z.infer<typeof runProposalSchema>;
 export type ProposalPermission = z.infer<typeof proposalPermissionSchema>;

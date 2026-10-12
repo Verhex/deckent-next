@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "intentMaxCodeUnits": 16384,
+  "summaryMaxCodeUnits": 1024,
+  "commandLimits": { "maxDepth": 6, "maxNodes": 64, "maxCodeUnits": 20000 }
+}

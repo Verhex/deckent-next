@@ -68,7 +68,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     approvalWatch.current = state;
     if (fresh.length) setApprovalStatus(fillTemplate(work!.approvalNotify, { count: fresh.length }));
   }, error => setApprovalStatus(`${work!.approvalPollFailed}: ${errorText(error)}`));
-  const run = async (command: 'approvals' | 'cancel', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string): Promise<void> => {
+  const run = async (command: 'approvals' | 'cancel', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string, preview?: string): Promise<void> => {
     if (!work || !ledger) return;
     const title = command === 'approvals' ? work.window.approvalsTitle : work.jobs!.runTitle;
     slashSummary.current = [];
@@ -107,7 +107,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       }
       while (!execution.signal.aborted) {
         pickedReason.current = undefined;
-        const answer = await panel.pick(execution, { kind: 'approval', approval: target, remaining: pending.length - 1 }, ['allow', 'deny']);
+        const answer = await panel.pick(execution, { kind: 'approval', approval: target, remaining: pending.length - 1, ...(preview ? { preview } : {}) }, ['allow', 'deny']);
         if (answer === null || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }
         try { await decideApproval(target, pending.length - 1, answer === 'allow', undefined, pickedReason.current); return; }
         catch (error) {
