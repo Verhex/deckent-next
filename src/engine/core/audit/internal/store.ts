@@ -5,6 +5,8 @@ import type { AuditCounter, AuditEvent, AuditRecord } from '#domain/index.js';
  * content atomically. Nothing here updates or deletes an event; counters are mutable summaries only (owner q5).
  */
 export interface AuditStore {
+  /** Exact scoped lookup; implementations supporting decision replay expose this port. */
+  load?(scopeId: string, eventId: string): AuditRecord | null;
   /** Appends `event` as the next record of its scope, or returns the existing record of the same event id and content
    * (`AUDIT_CONFLICT` when the content differs). Any failure to persist is `AUDIT_UNAVAILABLE`: the caller applies no effect. */
   append(event: AuditEvent, seal: (sequence: number) => AuditRecord): AuditRecord;

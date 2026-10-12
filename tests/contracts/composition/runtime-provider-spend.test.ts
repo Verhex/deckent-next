@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { ProviderSpendError, runtimeServiceResultCapacity } from '#engine/index.js';
+import { ProviderSpendError, runtimeServiceResultCapacity, RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 const calls: Array<{ maximum: number }> = [];
@@ -16,7 +16,7 @@ vi.mock('#composition/core/provider-spend/index.js', () => ({
 const command = { schemaVersion: 1 as const, commandId: 'audit', scopeId: 'scope', budgetId: 'budget', budgetRevision: 1,
   expectedCheckpointDigest: 'b'.repeat(64) };
 const peer = { schemaVersion: 1 as const, kind: 'unix-peer' as const, uid: 1000, gid: 1000, pid: 10 };
-const request = { schemaVersion: 26 as const, requestId: 'request', operation: 'auditProviderSpendAccount' as const,
+const request = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request', operation: 'auditProviderSpendAccount' as const,
   input: command, delivery: { maxResultBytes: 1234 } };
 
 beforeEach(() => { calls.length = 0; failure = null; });

@@ -931,5 +931,7 @@
   "error.OPERATION_EVIDENCE_EARLIER": "The operation evidence predates this attempt's launch grant; no trusted causal link is established, so a decision is pending.",
   "error.OPERATION_EVIDENCE_PRINCIPAL": "The operation principal does not match the Run or executing principal.",
   "error.OPERATION_EVIDENCE_REUSED": "This operation already backed another task acceptance and cannot be reused.",
-  "error.OPERATION_EVIDENCE_OTHER_RUN": "This operation already backed acceptance in another Run; only tasks in the same Run may share it."
+  "error.OPERATION_EVIDENCE_OTHER_RUN": "This operation already backed acceptance in another Run; only tasks in the same Run may share it.",
+  "error.RUN_APPROVAL_REQUIRED": "Run creation is waiting for approval {approvalId}; no Run exists. Decide it in /approvals or approval decide, then retry the same command and input.",
+  "cli.run.inspect.authority": "Authority decision: {record} (sequence {sequence}); approval: {approval}"
 }

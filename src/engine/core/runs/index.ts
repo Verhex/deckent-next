@@ -43,3 +43,4 @@ export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrie
 export type { TaskBrief, ResultBrief } from './internal/brief.js';
 export { recordAttemptClosure, classifyLaunchRefusal } from './internal/closure.js';
 export { runControlCommandSchema, runProgressionParkCommandSchema, proposeRunLifecycleWrite } from './internal/lifecycle.js';
+export { RunCreationAuthority } from './internal/authority.js';

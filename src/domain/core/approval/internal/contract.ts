@@ -33,6 +33,8 @@ export const configChangeSubjectConsistent = (subject: z.infer<typeof configChan
  * layer, key, value digest and previewed layer digest the same way.
  */
 export const approvalSubjectSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('run-create'), commandId: identitySchema, runId: identitySchema,
+    inputDigest: digest, admissionDigest: digest, decisionRecordId: identitySchema }).strict(),
   z.object({ kind: z.literal('task'), runId: identitySchema, taskId: identitySchema }).strict(),
   z.object({ kind: z.literal('agent-tool-call'), turnId: identitySchema, round: counterSchema.positive(), index: counterSchema,
     tool: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), toolVersion: counterSchema.positive(), resource: z.string().min(1).max(4096),

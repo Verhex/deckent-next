@@ -105,7 +105,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async loadRunEvaluationPrincipal(identity: AttemptIdentity) { return readRunEvaluationPrincipal(this.db, identity); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRun(scopeId, runId); }
   async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunExecutionPolicy(scopeId, runId); }
-  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace); }
+  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody, assertAuthority?: () => void) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace, assertAuthority); }
   async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db, this.admission, this.lifecycleTiming, this.poolCeiling).reserveRunTasks(input); }
   async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }

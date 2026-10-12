@@ -57,7 +57,7 @@ export type PolicyBinding = z.infer<typeof binding>;
  * raise it; a level nobody can attest is unsatisfiable (allow refused). The level vocabulary is versioned code (and its registry), not this data.
  * `config-change` (T3 L2, lead 2026-10-07): a company raises the assurance of config approvals the same way (an earlier build refuses such a policy).
  */
-const assuranceRule = z.object({ id: identitySchema, scopes: selection, subject: z.enum(['task', 'agent-tool-call', 'operation', 'config-change']), cells: z.array(localId).min(1).readonly().optional(),
+const assuranceRule = z.object({ id: identitySchema, scopes: selection, subject: z.enum(['task', 'agent-tool-call', 'operation', 'config-change', 'run-create']), cells: z.array(localId).min(1).readonly().optional(),
   effectClasses: z.array(z.enum(['read', 'write', 'irreversible'])).min(1).readonly().optional(), authority: z.literal(true).optional(), minimum: localId }).strict().readonly();
 export type ApprovalAssuranceRule = z.infer<typeof assuranceRule>;
 const v2Shape = { roles: z.array(role).readonly(), grants: z.array(markedGrant).readonly(), restrictions: z.array(restriction).readonly(),

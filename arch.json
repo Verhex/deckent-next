@@ -484,7 +484,8 @@
         "src/engine/core/workspaces",
         "src/composition/core/workspace-patch",
         "src/adapters/core/monitor-ledger",
-        "src/composition/core/toolchains"
+        "src/composition/core/toolchains",
+        "src/adapters/core/audit-store"
       ],
       "plan": "EXECUTION"
     },
@@ -615,7 +616,8 @@
         "src/domain/core/primitives",
         "src/domain/core/task-graph",
         "src/domain/core/provider-catalog",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/domain/core/audit"
       ],
       "plan": "CONTRACT"
     },
@@ -709,7 +711,10 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/worker-event",
         "src/engine/core/model-activation",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/approval",
+        "src/domain/core/command",
+        "src/platform/core/integrity"
       ],
       "plan": "CONTRACT"
     },
@@ -2162,7 +2167,8 @@
     },
     "src/domain/core/audit": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/command"
       ],
       "plan": "SECURITY"
     },
@@ -2964,7 +2970,9 @@
       {
         "file": "src/engine/core/secret-store/internal/helper.ts",
         "symbol": "definition/timeoutMs",
-        "values": [2147483647],
+        "values": [
+          2147483647
+        ],
         "reason": "Node setTimeout signed 32-bit delay ceiling: larger values clamp to 1 ms. Protocol validation rejects overflow rather than changing the registered deadline; not a mutable helper timeout default. SECRET-HELPER v1, official Node timers documentation, 2026-10-10."
       },
       {
