@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
@@ -37,7 +38,7 @@ import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfigured
 export async function main(argv: readonly string[] = process.argv.slice(2), serviceEntry?: string) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
-  const handlesSignals = isRuntimeServe || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask');
+  const handlesSignals = isRuntimeServe || argv[0] === 'do' || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask');
   const controller = new AbortController();
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
@@ -91,6 +92,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
+    planRun: planRuntimeRun,
     describeTerminalChatPlan: describeTerminalChat,
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),

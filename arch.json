@@ -142,7 +142,8 @@
         "src/adapters/core/worker-observation",
         "src/domain/core/decision",
         "src/domain/core/identity-profile",
-        "src/engine/core/identity-profile"
+        "src/engine/core/identity-profile",
+        "src/capabilities/core/run-planner"
       ],
       "plan": "PROVIDERS"
     },
@@ -282,7 +283,8 @@
         "src/surfaces/core/terminal-turn",
         "src/composition/core/project-instructions",
         "src/composition/core/backup",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/composition/core/run-planner"
       ],
       "plan": "SURFACES"
     },
@@ -355,7 +357,8 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/local-keyring",
         "src/domain/core/audit",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/composition/core/run-planner"
       ],
       "plan": "SURFACES"
     },
@@ -489,7 +492,8 @@
         "src/adapters/core/audit-store",
         "src/composition/core/provider-spend",
         "src/composition/core/model-invocation",
-        "src/adapters/core/run-proposal-store"
+        "src/adapters/core/run-proposal-store",
+        "src/adapters/core/provider-openai-chat"
       ],
       "plan": "EXECUTION"
     },
@@ -721,7 +725,9 @@
         "src/domain/core/command",
         "src/platform/core/integrity",
         "src/engine/core/provider-spend",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/capabilities/core/run-planner",
+        "src/platform/core/redaction"
       ],
       "plan": "CONTRACT"
     },
@@ -1055,7 +1061,8 @@
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/project-instructions",
-        "src/engine/core/project-instructions"
+        "src/engine/core/project-instructions",
+        "src/engine/core/runs"
       ],
       "plan": "SURFACES"
     },
@@ -1144,7 +1151,8 @@
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/work-labels",
         "src/surfaces/core/cli-terminal",
-        "src/engine/core/backup"
+        "src/engine/core/backup",
+        "src/surfaces/core/run-planning"
       ],
       "plan": "SURFACES"
     },
@@ -1187,7 +1195,9 @@
         "src/domain/core/model-activation",
         "src/engine/core/project-instructions",
         "src/surfaces/core/project-instructions",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/surfaces/core/run-planning",
+        "src/domain/core/run"
       ],
       "plan": "SURFACES"
     },
@@ -2761,6 +2771,64 @@
         "src/domain/core/run"
       ],
       "plan": "STORE"
+    },
+    "src/capabilities/core/run-planner": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/domain/core/primitives",
+        "src/domain/core/command",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/platform/core/integrity"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/engine/core/run-planner": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/model-invocation",
+        "src/domain/core/command",
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/platform/core/integrity",
+        "src/capabilities/core/run-planner",
+        "src/engine/core/authentication",
+        "src/engine/core/model-invocation",
+        "src/engine/core/runs"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/composition/core/run-planner": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/model-invocation",
+        "src/engine/core/run-planner",
+        "src/engine/core/model-invocation",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/adapters/core/contract",
+        "src/adapters/core/provider-openai-chat",
+        "src/composition/core/scoped-request",
+        "src/composition/core/terminal-chat",
+        "src/composition/core/model-invocation",
+        "src/composition/core/provider-spend",
+        "src/composition/core/runs",
+        "src/composition/core/runtime-service",
+        "src/composition/core/query-errors",
+        "src/composition/core/root"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/surfaces/core/run-planning": {
+      "dependencies": [
+        "src/engine/core/runs",
+        "src/platform/core/i18n",
+        "src/platform/core/errors"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
     }
   },
   "composition": {

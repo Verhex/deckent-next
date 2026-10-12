@@ -23,7 +23,7 @@ import { providerPanelPort } from './provider-panel.js';
 import { policyPanelPort } from './policy-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts, spendRecoveryView } from '#surfaces/core/terminal-admin/index.js';
-import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
+import type { ProjectIdentity, PermissionMode, ModelReference } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 import { providerDisplayName } from './provider-label.js';
 
@@ -432,6 +432,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // NO_COLOR concerns colour only, so it does not stop the clear.
     clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
     completeTurn: turn, errorText: error => errorText(error, locale),
+    ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale),
+      plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference) => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal),
+      lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
@@ -479,3 +482,4 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.signal ? { signal: context.signal } : {}),
   }); } finally { if (beat) clearInterval(beat); }
 }
+import { brainProposalLines } from '#surfaces/core/run-planning/index.js';

@@ -1,6 +1,7 @@
 import { TaskGraphError, validateTaskGraph, resolveTaskWorkClass, getPolicyVocabulary, encodeCommandProjection, type ModelInvocationReceipt, type RunProposal,
   type RunProposalBinding, type WorkClassRegistry } from '#domain/index.js';
-import { ErrorRegistry, sha256 } from '#platform/index.js';
+import { ErrorRegistry, sha256, type KnownSecretSnapshot } from '#platform/index.js';
+import { brainOutputDigest, parseBrainDraft } from '#capabilities/index.js';
 import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 /** Pure gates. Registry metadata advertises permissions; evaluatePolicy still decides each permission. */
 export function validateRunProposal(proposal: RunProposal, registry: WorkClassRegistry | undefined, checkpointInput: ProviderSpendCheckpoint | null,
@@ -37,7 +38,7 @@ export function validateRunProposal(proposal: RunProposal, registry: WorkClassRe
       remainingMinorUnits: Number(remaining), checkedAt: now } });
 }
 
-export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInvocationReceipt | null): void {
+export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInvocationReceipt | null, text?: string | null, known?: KnownSecretSnapshot): void {
   if (proposal.source.kind !== 'model') return;
   const reference = proposal.source.receipt;
   if (!receipt || receipt.request.commandId !== reference.commandId || receipt.claim.invocationId !== reference.invocationId
@@ -45,4 +46,12 @@ export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInv
     || encodeCommandProjection('model-ref', receipt.request.reference) !== encodeCommandProjection('model-ref', reference.reference)
     || encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })
       !== encodeCommandProjection('actor', proposal.proposer)) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+  const contribution = proposal.source.contribution;
+  if (contribution) {
+    if (contribution.requestDigest !== receipt.request.requestDigest || contribution.activationRevision !== receipt.activationRevision
+      || contribution.bindingDigest !== receipt.request.expectedBinding.digest || !text) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+    const draft = parseBrainDraft(text, known);
+    if (brainOutputDigest(draft) !== contribution.outputDigest || brainOutputDigest({ graph: proposal.graph,
+      budgetCeiling: proposal.budgetCeiling, requiredPermissions: proposal.requiredPermissions }) !== contribution.outputDigest) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+  }
 }

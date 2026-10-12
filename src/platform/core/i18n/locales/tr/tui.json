@@ -1008,5 +1008,7 @@
   "tui.workspace.shared": "Profil iki yapılandırma katmanında da var; workspace seçiminden önce sahipliğini çözün.",
   "tui.workspace.applied": "Model profilinde {id} workspace seçildi. Sonraki turda hazırlık yeniden kontrol edilir.",
   "tui.workspace.hints": "y: onayla · n / Escape: iptal",
-  "tui.workspace.required": "Bu anahtar workspace seçimi gerektiriyor. Model bağlayın, ilk turdan önce /model → Sağlayıcı workspace seç adımını kullanın."
+  "tui.workspace.required": "Bu anahtar workspace seçimi gerektiriyor. Model bağlayın, ilk turdan önce /model → Sağlayıcı workspace seç adımını kullanın.",
+  "terminal.slash.do": "İsteğinizden iş planı hazırla",
+  "terminal.slash.doArgument": "istek"
 }

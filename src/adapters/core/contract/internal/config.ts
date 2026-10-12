@@ -1,4 +1,5 @@
 import { registerIdentityProfileConfig } from './identity-profile.js';
+import { registerBrainPlannerConfig } from './brain.js';
 import { registerDecisionConfig } from './decision.js';
 import { registerProviderCatalogConfig } from './catalog.js';
 import { registerInvocationProfileConfig } from './invocation.js';
@@ -19,6 +20,7 @@ export function registerProviderConfig(): void {
   registerProviderSpendAuditConfig();
   registerInferenceServingConfig();
   registerTerminalConfig();
+  registerBrainPlannerConfig();
   registerOperationsConfig();
   registerSecretStoreConfig();
   registerDecisionConfig();

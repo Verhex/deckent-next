@@ -1008,5 +1008,7 @@
   "tui.workspace.shared": "This profile exists in both config layers; resolve its ownership before selecting a workspace.",
   "tui.workspace.applied": "Workspace {id} selected for the model profile. Readiness is rechecked at the next turn.",
   "tui.workspace.hints": "y: confirm · n / Escape: cancel",
-  "tui.workspace.required": "This key needs a workspace. Connect a model, then open /model → Select provider workspace before the first turn."
+  "tui.workspace.required": "This key needs a workspace. Connect a model, then open /model → Select provider workspace before the first turn.",
+  "terminal.slash.do": "Plan work from your request",
+  "terminal.slash.doArgument": "request"
 }

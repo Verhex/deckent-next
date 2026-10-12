@@ -1,4 +1,5 @@
 import { runProposalSchema, type RunProposal } from '#domain/index.js';
+import { brainPlanCommandSchema, type BrainPlanCommand } from '#domain/index.js';
 import { runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { AuditError, providerSpendManagementCommandSchema, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult } from '#engine/index.js';
@@ -22,6 +23,7 @@ import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrenc
 import { poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 export interface McpApplications {
+  planRun?(command: BrainPlanCommand): Promise<unknown>;
   /** Composition records only sealed digests under the authenticated MCP principal, never decoded text. */
   recordModelIngress?(notice: ModelIngressProjection, input: unknown): Promise<void>;
   inspectMonitor?(query: MonitorQuery): Promise<MonitorSnapshot>;
@@ -128,6 +130,9 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     description: t('mcp.tool.updateToolchains', {}, locale), schema: updateToolchainsSchema,
     invoke: (input: unknown) => updateToolchains.call(applications, updateToolchainsSchema.parse(input)) });
   const proposeRun = applications.proposeRun, inspectProposal = applications.inspectRunProposal;
+  const planRun = applications.planRun;
+  if (planRun) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'plan_run', description: t('mcp.tool.planRun', {}, locale),
+    schema: brainPlanCommandSchema, invoke: input => planRun.call(applications, brainPlanCommandSchema.parse(input)) });
   if (proposeRun) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'propose_run', description: t('mcp.tool.proposeRun', {}, locale),
     schema: runProposalSchema, invoke: input => proposeRun.call(applications, runProposalSchema.parse(input)) });
   if (inspectProposal) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_run_proposal', description: t('mcp.tool.inspectRunProposal', {}, locale),

@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { executionRegistrySchema, type RunProposal } from '#domain/index.js';
-import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteRunProposalStore, openSqliteRunProposalReader } from '#adapters/index.js';
+import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
+import { openSqliteRunProposalStore, openSqliteRunProposalReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
 import { assertRunProposalSource, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
   runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -23,8 +23,12 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
             if (value.source.kind === 'human') return;
             const reference = value.source.receipt;
             const inspected = await inspectConfiguredModelInvocation(projectRoot,
-              { schemaVersion: 2, scopeId: value.scopeId, invocationId: reference.invocationId, reference: reference.reference }, options);
-            assertRunProposalSource(value, inspected.invocation);
+              { schemaVersion: 2, scopeId: value.scopeId, invocationId: reference.invocationId, reference: reference.reference,
+                ...(value.source.contribution ? { includeResponseContent: true } : {}) }, options);
+            const content = inspected.responseContent;
+            const text = content?.kind === 'native-response' && inspected.invocation ? extractOpenAiChatTextFromInvocation({ replayed: true,
+              receipt: inspected.invocation, response: content.response, contentStatus: 'retained', purge: null }) : null;
+            assertRunProposalSource(value, inspected.invocation, text, getConfigKnownSecrets(context.config));
           },
         }).propose(proposal);
       } finally { store.close(); }

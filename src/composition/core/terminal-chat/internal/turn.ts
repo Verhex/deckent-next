@@ -44,11 +44,11 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
  * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
  */
 /** Builds the governed command of one turn from fresh config and catalog binding (shared by both turn forms). */
-export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean) {
+export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference) {
   const config = await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>;
   const configuredChat = readTerminalChatConfig(config);
   if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  const reference = (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? configuredChat.reference;
+  const reference = pinned ?? (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? configuredChat.reference;
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const chat = { ...configuredChat, maxCompletionTokens: effectiveTerminalOutputCap(config, input.scopeId, reference) };
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);

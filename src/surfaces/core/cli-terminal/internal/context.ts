@@ -1,4 +1,6 @@
 import type { ProjectInstructionPort } from '#engine/index.js';
+import type { BrainPlanCommand } from '#domain/index.js';
+import type { RunProposalResult } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
 import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunQuery, RunView, SurfaceSnapshotAccess,
@@ -70,6 +72,7 @@ export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
 export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
+  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<RunProposalResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;

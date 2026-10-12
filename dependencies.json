@@ -345,9 +345,10 @@
       "reviewedVersion": "3.25.0",
       "owners": [
         "src/surfaces/core/mcp",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/capabilities/core/run-planner"
       ],
-      "purpose": "Converts MCP tool input zod schemas to JSON Schema (draft-07) for tools/list.",
+      "purpose": "Converts existing Zod schemas to JSON Schema (draft-07) for MCP tools/list, config descriptions and the governed Brain proposal prompt; no separately maintained proposal schema.",
       "features": [
         "zodToJsonSchema(schema, { $refStrategy: 'none' })"
       ],
