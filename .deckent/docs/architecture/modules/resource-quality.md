@@ -12,6 +12,12 @@ cancel, settle, accept or change any work. Docker reads the pinned local Engine 
 the request label and full container id/start time before and after stats, and never attaches
 another incarnation. The optional cgroup-v2 peak requires that the local PID's cgroup contains
 the full container id; Docker Desktop/other namespaces with no proven match keep it unknown.
+Older Docker Engine one-shot responses may omit `id` (Moby #51302). Samples still require
+the full-id stats request bracketed by matching id/start/label inspections; any supplied
+stats id must agree. Missing response id does not imply unsupported sampling. Engine access
+denial/unsupported responses remain explicit gaps, and unreadable optional cgroup peak never
+turns measured Engine CPU/RAM into zero or invents a peak. Author regression and retained
+hosted diagnosis: external `proof/HOSTED-KAYNAK-2026-10-12/`; fresh hosted acceptance is open.
 
 `resourceObservation` is registered configuration: interval, timeout, concurrency, body/queue,
 store byte/entry/retention and stale bounds, segment byte/entry/age bounds and sync interval. Defaults are explicitly provisional until an
