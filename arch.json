@@ -155,7 +155,9 @@
         "src/platform/core/config-fields",
         "src/engine/core/task-inputs",
         "src/adapters/core/native-connection",
-        "src/capabilities/core/artifacts"
+        "src/capabilities/core/artifacts",
+        "src/engine/core/resource-observation",
+        "src/domain/core/attempt"
       ],
       "plan": "ISOLATION"
     },
@@ -310,7 +312,8 @@
         "src/adapters/core/native-connection",
         "src/adapters/core/worker-observation",
         "src/adapters/core/git-patch",
-        "src/engine/core/handoff-observation"
+        "src/engine/core/handoff-observation",
+        "src/composition/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -497,7 +500,8 @@
         "src/platform/core/i18n",
         "src/adapters/core/contract",
         "src/engine/core/provider-spend",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -681,7 +685,8 @@
         "src/domain/core/run",
         "src/engine/core/audit",
         "src/engine/core/authentication",
-        "src/engine/core/supervisor"
+        "src/engine/core/supervisor",
+        "src/engine/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -732,7 +737,9 @@
         "src/domain/core/model-invocation",
         "src/capabilities/core/run-planner",
         "src/platform/core/redaction",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/domain/core/work-cost",
+        "src/engine/core/resource-observation"
       ],
       "plan": "CONTRACT"
     },
@@ -1925,7 +1932,8 @@
         "src/engine/core/worker-observation",
         "src/platform/core/clock",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/resource-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -2333,7 +2341,9 @@
         "src/engine/core/handoff-observation",
         "src/platform/core/errors",
         "src/engine/core/supervisor",
-        "src/domain/core/attempt"
+        "src/domain/core/attempt",
+        "src/domain/core/work-cost",
+        "src/engine/core/resource-observation"
       ],
       "plan": "MONITOR"
     },
@@ -2407,7 +2417,9 @@
         "src/engine/core/config",
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/engine/core/resource-observation",
+        "src/domain/core/work-cost"
       ],
       "plan": "MONITOR"
     },
@@ -2836,6 +2848,49 @@
         "src/platform/core/errors"
       ],
       "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/engine/core/resource-observation": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/supervisor",
+        "src/platform/core/config-fields",
+        "src/domain/core/work-cost",
+        "src/domain/core/run",
+        "src/domain/core/worker-event",
+        "src/domain/core/principal",
+        "src/domain/core/primitives"
+      ],
+      "plan": "KAYNAK-KALITE"
+    },
+    "src/adapters/core/resource-trace": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/resource-observation",
+        "src/platform/core/config",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "KAYNAK-KALITE"
+    },
+    "src/composition/core/resource-observation": {
+      "dependencies": [
+        "src/adapters/core/resource-trace",
+        "src/engine/core/resource-observation",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/domain/core/attempt",
+        "src/platform/core/managed-files",
+        "src/adapters/core/file-artifacts",
+        "src/engine/core/worker-observation"
+      ],
+      "plan": "KAYNAK-KALITE"
+    },
+    "src/domain/core/work-cost": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/run"
+      ],
+      "plan": "KAYNAK-KALITE"
     }
   },
   "composition": {

@@ -11,3 +11,4 @@ export { collectDockerOutputFiles, dockerOutputFilesSchema } from './internal/ou
 export { resolveDockerReadOnlyMounts, dockerReadOnlyMountsSchema } from './internal/mounts.js';
 export type { DockerReadOnlyMount } from './internal/mounts.js';
 export { recordedDockerSupervisor } from './internal/recorded.js';
+export { sampleDockerResources } from './internal/resources.js';

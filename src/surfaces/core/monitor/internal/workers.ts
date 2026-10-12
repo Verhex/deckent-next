@@ -5,6 +5,7 @@ import { resolveWorkerUsage, type WorkerObservation, type WorkerObservationQuery
 import type { MonitorCommandContext } from './context.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { seconds } from './transcript.js';
+import { renderResourceDetail } from './resources.js';
 export type WorkerObservationHandler = (root: string, query: WorkerObservationQuery, options: ConfigLoadOptions) => Promise<WorkerObservationReport>;
 function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
   const h = w.files?.heartbeat;
@@ -34,7 +35,7 @@ export const renderWorkerUsage = (u: NonNullable<WorkerObservation['usage']>, lo
 const renderUsage = (worker: WorkerObservation, locale: Locale): string[] => {
   const usage = resolveWorkerUsage(worker);
   if (worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable') return [t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale)];
-  return usage ? [renderWorkerUsage(usage, locale)] : [];
+  return [...renderResourceDetail(worker.resources, locale), ...(usage ? [renderWorkerUsage(usage, locale)] : [])];
 };
 export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale): string[] => [t('cli.workers.source', { source: s.id, path: s.path, status: s.status }, locale) + (s.truncated ? t('cli.workers.sourceMore', { nextAfter: s.nextAfter ?? '-' }, locale) : ''), ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale), ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : []), ...renderUsage(w, locale)]) : [t('cli.workers.empty', {}, locale)])];
 export async function workersCommand(argv: readonly string[], context: MonitorCommandContext) {

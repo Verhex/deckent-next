@@ -19,6 +19,7 @@ function action(name: string, group: HelpGroup, summary: MessageKey, detail: Mes
 /** The dispatch catalog. Register a command here with its group, localized summary and detail.
  * Children inherit the family handler; existing handlers retain argument validation and execution. */
 export const CLI_CATALOG = [
+  { name: 'report', group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help' },
   { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do' },
   { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', children: [
     action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup'),

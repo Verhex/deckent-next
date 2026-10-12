@@ -132,7 +132,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     };
     const run = data.run;
     if (!run) return '';
-    return [...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []), t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
+    return [...(run.costReport ? [renderCostSummary(run.costReport, locale)] : []), ...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []), t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
       ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
       t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
       ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
@@ -159,3 +159,4 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     ].join('\n');
   } });
 }
+import { renderCostSummary } from '#surfaces/core/monitor/index.js';

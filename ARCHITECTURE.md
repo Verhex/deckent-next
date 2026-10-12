@@ -52,7 +52,6 @@ Deckent, müşterinin kendi altyapısına kurulan bir Agent Control & Execution 
 - **Teslim:** Brain kabul, Auditor bağımsız denetim, Nervous gözlem/öneri; öğrenme kanıt/eval/geri dönüşle ilerler.
   Her küçük dilim gerçek yüzey kanıtı ve Türkçe owner raporuyla kapanır; hedef enterprise-grade ürün.
 
-
 Owner 2026-09-17: first workspace implementation is Git-backed worktree/path allocation; non-Git
 workspace adapters remain an extension boundary. Worktree separation is never the sandbox security proof.
 Host refactor kit lives in `.agents/` and is development tooling, not a runtime or Enterprise module.
@@ -927,6 +926,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 
 | Module note | Scope |
 |---|---|
+| [resource-quality](.deckent/docs/architecture/modules/resource-quality.md) | Supervisor resource observation, separate bounded asynchronous trace, cost/quality projections and advisory comparisons; inspect authority applies before aggregation. |
 | [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md) | Layer map (`src/platform … composition`), startup cost, compiled entries, CI preparation, hardcode ratchet (HARDCODE-P1-B). |
 | [config-and-cli-help](.deckent/docs/architecture/modules/config-and-cli-help.md) | Typed `ConfigApplication`, CONFIG-SURFACE write/overlay contract, CLI config view, CLI help catalog. |
 | [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md) | Operator terminal contract v1, turn phases, tool lines/read limits, `@` index, `/resume`, `/context`, TC-M harness. |

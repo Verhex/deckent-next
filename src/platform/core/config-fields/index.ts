@@ -6,3 +6,5 @@ export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_
 export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit } from './internal/choices.js';
 export { configStepper, stepConfigNumber, configNumberText } from './internal/numeric.js';
 export type { ConfigStepper } from './internal/numeric.js';
+export { RESOURCE_OBSERVATION_SETTINGS } from './internal/resource-observation.js';
+export type { ResourceObservationSettings } from './internal/resource-observation.js';
