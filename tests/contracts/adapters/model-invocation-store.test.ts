@@ -1,3 +1,4 @@
+import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -278,7 +279,7 @@ it('migrates schema13 to current without changing activation rows and read-only 
   const current = await openSqliteModelActivationStore(path, options); current.close();
   const db = new DatabaseSync(path);
   // Reconstruct a complete v13 ledger, including its existing execution/receipt tables.
-  db.exec(`DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations;
+  db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations;
     DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints;
     DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
     DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges;
@@ -305,6 +306,7 @@ it('allows exactly one process to claim the final in-flight slot', async () => {
   const child = resolve('tests/fixtures/model-invocation-claim.mjs');
   const results = await Promise.all(encoded.map(value => execute(process.execPath, [child, base.path, value],
     { cwd: process.cwd(), timeout: 10_000, maxBuffer: 1_048_576 })));
+  for (const result of results) expect(result.stdout.trim(), result.stderr).not.toBe('');
   const outcomes = results.map(result => JSON.parse(result.stdout.trim()) as { ok: boolean; code?: string });
   expect(outcomes.filter(value => value.ok)).toHaveLength(1);
   expect(outcomes.filter(value => value.code === 'MODEL_INVOCATION_CAPACITY_EXHAUSTED')).toHaveLength(1);
@@ -319,6 +321,7 @@ it('converges two processes racing the same command on one canonical claim', asy
   const child = resolve('tests/fixtures/model-invocation-claim.mjs');
   const results = await Promise.all(encoded.map(value => execute(process.execPath, [child, base.path, value],
     { cwd: process.cwd(), timeout: 10_000, maxBuffer: 1_048_576 })));
+  for (const result of results) expect(result.stdout.trim(), result.stderr).not.toBe('');
   const outcomes = results.map(result => JSON.parse(result.stdout.trim()) as { ok: boolean; replayed?: boolean; invocationId?: string; code?: string });
   expect(outcomes).toEqual(expect.arrayContaining([expect.objectContaining({ ok: true, replayed: false }), expect.objectContaining({ ok: true, replayed: true })]));
   expect(new Set(outcomes.map(value => value.invocationId)).size).toBe(1);

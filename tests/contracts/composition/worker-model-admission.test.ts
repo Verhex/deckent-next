@@ -1,3 +1,4 @@
+import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -81,21 +82,23 @@ async function seeded(extraProfiles: readonly Profile[] = []) {
 }
 
 describe.skipIf(process.platform === 'win32')('new worker Run admission against the ledger model catalog (WORKER-CURRENCY-1)', () => {
-  it('admits the exact, current, active model of an active channel with a CLI at its minimum, and records nothing on refusal', async () => {
+  it('admits the exact, current, active model of an active channel with a CLI at its minimum, and records only policy evidence on refusal', async () => {
     const f = await seeded();
     const created = await createRun(f.project, run('ok', 'sonnet'), f.options);
     expect(created.admission.run.tasks[0]!.phase).toBe('pending');
     expect((await createRun(f.project, run('stable', 'opus-stable-cli'), f.options)).admission.run.runId).toBe('stable');
     expect(f.runs()).toBe(2);
-    const before = await readFile(f.path);
-    for (const [kind, code] of [['cli-alias', 'WORKER_MODEL_ALIAS_REFUSED'], ['api-alias', 'WORKER_MODEL_ALIAS_REFUSED'], ['unknown', 'WORKER_MODEL_UNKNOWN'],
+    const before = runRefusalEvidence(f.path);
+    const refused = [['cli-alias', 'WORKER_MODEL_ALIAS_REFUSED'], ['api-alias', 'WORKER_MODEL_ALIAS_REFUSED'], ['unknown', 'WORKER_MODEL_UNKNOWN'],
       ['unpinned', 'WORKER_MODEL_UNPINNED'], ['sonnet-r3-cli', 'WORKER_MODEL_CLI_TOO_OLD'], ['opus-old-cli', 'WORKER_MODEL_CLI_TOO_OLD'],
-      ['codex-on-claude', 'WORKER_CHANNEL_MISMATCH']] as const) {
+      ['codex-on-claude', 'WORKER_CHANNEL_MISMATCH']] as const;
+    for (const [kind, code] of refused) {
       await expect(createRun(f.project, run(`refused-${kind}`, kind), f.options)).rejects.toMatchObject({ code });
     }
     await expect(createRun(f.project, run('r3', 'sonnet-r3-cli'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_CLI_TOO_OLD',
       message: expect.stringContaining('2.1.284') });
-    expect(f.runs()).toBe(2); expect(await readFile(f.path)).toEqual(before);
+    expect(f.runs()).toBe(2); expectOnlyUnappliedRunDecisions(f.path, before,
+      [...refused.map(([kind]) => run(`refused-${kind}`, kind)), run('r3', 'sonnet-r3-cli')]);
   });
   it('refuses inactive channels and models, legacy/deprecated and retired lifecycles (also for a declared helper model)', async () => {
     const f = await fixture(); const catalog = await seedCatalog(); await f.catalog({ action: 'register', catalog });
@@ -224,17 +227,18 @@ describe.skipIf(process.platform === 'win32')('WORKER-CURRENCY-1 review fixes (A
     edit('provider-mismatch', (_argv, binding) => { binding.provider = 'cursor'; }),
     composedEdit('composed-argv-model', false), composedEdit('composed-argv-model-rehashed', true),
   ];
-  it('WC-R2: SDK createRun refuses every argv/pin divergence with one typed code before any write; compiler output passes', async () => {
+  it('WC-R2: SDK createRun refuses every argv/pin divergence with one typed code before any Run effect; compiler output passes', async () => {
     const f = await seeded([...tampered, composedBase(), base()]);
-    const before = await readFile(f.path);
+    const before = runRefusalEvidence(f.path);
     for (const profile of tampered) {
       await expect(createRun(f.project, run(`t-${profile.id}`, profile.id), f.options), profile.id).rejects.toMatchObject({ code: 'WORKER_MODEL_BINDING_MISMATCH' });
     }
-    expect(f.runs()).toBe(0); expect(f.count('run_receipts')).toBe(0); expect(await readFile(f.path)).toEqual(before);
+    expect(f.runs()).toBe(0); expect(f.count('run_receipts')).toBe(0);
+    expectOnlyUnappliedRunDecisions(f.path, before, tampered.map(profile => run(`t-${profile.id}`, profile.id)));
     expect((await createRun(f.project, run('plain', 'bound'), f.options)).admission.run.runId).toBe('plain');
     expect((await createRun(f.project, run('composed', 'bound-composed'), f.options)).admission.run.runId).toBe('composed');
   });
-  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] WC-R2: the runtime service refuses with the same typed code before any write', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] WC-R2: the runtime service refuses with the same typed code before any Run effect', async () => {
     const f = await seeded(tampered); const observer = { async onPage() {}, async onError() {} };
     const service = await startConfiguredRuntimeService(f.project, observer, f.options); const client = createConfiguredRuntimeClient(f.project, f.options);
     try {

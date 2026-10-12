@@ -1,3 +1,4 @@
+import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -146,10 +147,10 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     expect(JSON.stringify(registry.profiles[0])).not.toContain(TASK);
   });
 
-  it('refuses alias, unknown, inactive, unsupported effort, turn limit and unpaired inputs with typed codes before any write', async () => {
+  it('refuses alias, unknown, inactive, unsupported effort, turn limit and unpaired inputs with typed codes before any Run effect', async () => {
     const f = await seeded();
-    const before = await readFile(f.path);
-    for (const [label, input, kind, code] of [
+    const before = runRefusalEvidence(f.path);
+    const refused = [
       ['cli-alias', workInput('sonnet'), 'coding', 'WORKER_MODEL_ALIAS_REFUSED'],
       ['catalog-alias', workInput('claude-haiku-4-5', {}, []), 'coding', 'WORKER_MODEL_ALIAS_REFUSED'],
       ['helper-alias', workInput('claude-sonnet-5-5', {}, ['haiku']), 'coding', 'WORKER_MODEL_ALIAS_REFUSED'],
@@ -160,12 +161,14 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
       ['codex-turns', workInput('gpt-exact-1', { maxTurns: 5 }, []), 'codex-coding', 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'],
       ['turns-exceed', workInput('claude-sonnet-5-5', { maxTurns: 41 }), 'coding', 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE'],
       ['on-prepared', workInput(), 'hand', 'WORK_INPUT_TEMPLATE_REQUIRED'],
-    ] as const) {
+    ] as const;
+    for (const [label, input, kind, code] of refused) {
       await expect(createRun(f.project, run(label, kind, input), f.options), label).rejects.toMatchObject({ code });
     }
     await expect(createRun(f.project, run('no-input', 'coding', undefined, 2), f.options)).rejects.toMatchObject({ code: 'WORK_INPUT_REQUIRED' });
     await expect(createRun(f.project, run('no-input-v3', 'coding'), f.options)).rejects.toMatchObject({ code: 'WORK_INPUT_REQUIRED' });
-    expect(f.runs()).toBe(0); expect(await readFile(f.path)).toEqual(before);
+    expect(f.runs()).toBe(0); expectOnlyUnappliedRunDecisions(f.path, before,
+      [...refused.map(([label, input, kind]) => run(label, kind, input)), run('no-input', 'coding', undefined, 2), run('no-input-v3', 'coding')]);
     // WORKER-EFFORT: a declared effort reaches the frozen command, before any worker starts.
     const created = await createRun(f.project, run('effort-ok', 'coding', workInput('claude-sonnet-5-5', { effort: 'high' })), f.options);
     expect(created.admission.run.runId).toBe('effort-ok');
@@ -173,7 +176,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     expect(f.snapshotProfile('effort-ok').tasks[0]!.profile.parameters.nativeSubscription).toMatchObject({ reasoningEffort: { level: 'high', source: 'explicit', status: 'selected' } });
   });
 
-  it.each(['codex', 'cursor'] as const)('admits %s through the real catalog with exact argv and refuses undeclared effort before writes', async provider => {
+  it.each(['codex', 'cursor'] as const)('admits %s through the real catalog with exact argv and refuses undeclared effort before Run effects', async provider => {
     const channelId = `${provider}-fixture`, modelId = provider === 'cursor' ? 'grok-4.7-high' : 'gpt-exact-1';
     const catalog = await seedCatalog();
     catalog.providers.push({ id: channelId, version: 1, channel: { ...catalog.providers[0].channel, cli: provider, client: provider, protocolFamily: 'fixture', aliases: [], aliasesRefused: [] }, models: [{
@@ -191,9 +194,9 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     const argv = f.snapshotProfile('native').tasks[0]!.profile.parameters.argv as string[];
     expect(argv.slice(-4, -2)).toEqual(['--model', modelId]);
     if (provider === 'codex') expect(argv).toContain('model_reasoning_effort=high'); else expect(argv).not.toContain('--effort');
-    const before = await readFile(f.path);
+    const before = runRefusalEvidence(f.path);
     await expect(createRun(f.project, run('refused', 'feature', { ...input, effort: 'max' }), f.options)).rejects.toMatchObject({ code: 'WORKER_EFFORT_UNSUPPORTED' });
-    expect(await readFile(f.path)).toEqual(before); expect(f.runs()).toBe(1);
+    expectOnlyUnappliedRunDecisions(f.path, before, [run('refused', 'feature', { ...input, effort: 'max' })]); expect(f.runs()).toBe(1);
   });
 
   it('shows unsupported without a requested knob, supports explicit over default and keeps replay after policy changes identical', async () => {

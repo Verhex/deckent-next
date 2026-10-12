@@ -1,3 +1,4 @@
+import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -105,15 +106,16 @@ describe.skipIf(process.platform === 'win32')('configured inspect RunView readon
 
   it('preserves unsupported-effort refusal, absent Run and current Run policy revocation', async () => {
     const f = await fixture(['medium']), request = command('accepted', 'small', 'medium');
-    await createRun(f.project, request, f.options); const before = await readFile(f.path);
+    await createRun(f.project, request, f.options); const before = runRefusalEvidence(f.path);
     await expect(createRun(f.project, command('refused', 'small', 'ultra'), f.options)).rejects.toMatchObject({ code: 'WORKER_EFFORT_UNSUPPORTED' });
-    expect(await readFile(f.path)).toEqual(before);
+    expectOnlyUnappliedRunDecisions(f.path, before, [command('refused', 'small', 'ultra')]);
+    const afterRefusal = await readFile(f.path);
     const missing = await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'missing' }, f.options);
     expect(missing.run).toBeNull(); expect(Object.isFrozen(missing)).toBe(true);
     const policyPath = join(f.project, 'd', 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
     policy.grants = policy.grants.filter((grant: { resource: { kind: string } }) => grant.resource.kind !== 'run');
     await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
     await expect(inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: request.runId }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    expect(await readFile(f.path)).toEqual(before);
+    expect(await readFile(f.path)).toEqual(afterRefusal);
   });
 });
