@@ -1,3 +1,4 @@
+export { readConfiguredRunBudget, classifyConfiguredRunSpending } from './internal/budget.js';
 export { inspectConfiguredRun } from './internal/inspect.js';
 export { createConfiguredRun, createConfiguredDeliveryRun } from './internal/create.js';
 export { requestConfiguredRunCancellation } from './internal/cancel.js';

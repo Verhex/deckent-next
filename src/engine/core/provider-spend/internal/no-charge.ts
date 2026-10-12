@@ -42,7 +42,9 @@ export function registerProviderSpendNoChargeCertification(input: unknown): void
 export function providerSpendHasZeroTariff(quote: ProviderSpendQuote): boolean {
   providerSpendQuoteDigest(quote);
   if (quote.maxChargeMinorUnits !== 0) return false;
-  const tariff = quote.pricing.definition;
+  return providerSpendTariffIsZero(quote.pricing.definition);
+}
+function providerSpendTariffIsZero(tariff: Readonly<Record<string, unknown>>): boolean {
   const zero = (value: unknown) => (typeof value === 'number' || typeof value === 'string') && /^0(?:\.0+)?$/.test(String(value));
   if (tariff['kind'] === 'operator-static') return zero(tariff['inputMinorUnitsPerMillionTokens']) && zero(tariff['outputMinorUnitsPerMillionTokens'])
     && (tariff['cachedInputMinorUnitsPerMillionTokens'] === undefined || zero(tariff['cachedInputMinorUnitsPerMillionTokens']));
@@ -61,8 +63,16 @@ function literalLoopback(value: unknown): boolean {
 /** Budget exemption (owner 2026-10-09, Jev 3f877ac4): a literal zero tariff AND every declared endpoint (`endpoint`, `tokenizeEndpoint`, …)
  * on a literal loopback address. A zero tariff declared for any other host is only a claim: it keeps the budget gate and a 0 reservation. */
 export function providerSpendLocalZeroTariff(profile: ModelInvocationProfile, quote: ProviderSpendQuote): boolean {
+  return providerSpendHasZeroTariff(quote) && localEndpoints(profile);
+}
+function localEndpoints(profile: ModelInvocationProfile): boolean {
   const endpoints = Object.entries(profile.adapter.definition).filter(([key]) => /endpoint$/iu.test(key));
-  return providerSpendHasZeroTariff(quote) && endpoints.some(([key]) => key === 'endpoint') && endpoints.every(([, value]) => literalLoopback(value));
+  return endpoints.some(([key]) => key === 'endpoint') && endpoints.every(([, value]) => literalLoopback(value));
+}
+/** Pure preflight of a configured tariff; the invocation owner still validates, quotes and reserves the actual call. */
+export function providerSpendLocalZeroTariffProfile(profile: ModelInvocationProfile): boolean {
+  const tariff = profile.adapter.definition['tariff'];
+  return !!tariff && typeof tariff === 'object' && !Array.isArray(tariff) && providerSpendTariffIsZero(tariff as Readonly<Record<string, unknown>>) && localEndpoints(profile);
 }
 
 /** Receipt metadata is validated separately; complete retained body bytes are required by the recovering store. */

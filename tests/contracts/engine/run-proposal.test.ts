@@ -25,7 +25,7 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
   const root = await mkdtemp(join(tmpdir(), 'deckent-proposal-')), path = join(root, 'ledger.db');
   const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: () => 100, timeoutMs: 1000 });
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
-  const state = { now: 100, principal, registry: registry(standing), effect, permissionEffect: 'allow' as 'allow' | 'deny' | 'require-approval', inspect: true, samples: 0 };
+  const state = { now: 100, principal, registry: registry(standing), effect, permissionEffect: 'allow' as 'allow' | 'deny' | 'require-approval', inspect: true, samples: 0, spending: undefined as { semantics: 'metered' | 'not-metered'; digest: string } | undefined };
   const source = { async load() { state.samples++; return { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
     { id: 'run-create', effect: state.effect, actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: 'all' } },
     { id: 'permission', effect: state.permissionEffect, actions: ['execute'], scopes: ['s'], principals: 'all', resource: { kind: 'task', ids: 'all' } },
@@ -42,11 +42,13 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
   }
   budget(checkpoint);
   const runs = (port: Pick<SqliteAttemptStore, 'createRun' | 'loadRunReceipt' | 'loadRunWorkspaceCustody'> = store) => new RunAdmissionApplication(port, { verify: async () => state.principal }, f.authority,
-    { authorize: async () => {} }, { async resolve(command) { return { now: state.now, layoutRevision: 'layout', execution: fixtureExecution(command.graph, { workClasses: state.registry }),
+    { authorize: async () => {} }, { async resolve(command) { return { now: state.now, layoutRevision: 'layout', execution: (() => { const value = fixtureExecution(command.graph, { workClasses: state.registry });
+        return state.spending?.semantics === 'not-metered' ? { ...value, tasks: value.tasks.map(row => ({ ...row, profile: { ...row.profile,
+          parameters: { ...row.profile.parameters, nativeSubscription: { schemaVersion: 2, provider: 'claude' } } } })) } : value; })(),
       policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: command.graph.tasks.map(t => t.id) } }; } });
   const app = (port: RunProposalStore = proposals, runPort?: Pick<SqliteAttemptStore, 'createRun' | 'loadRunReceipt' | 'loadRunWorkspaceCustody'>) => new RunProposalApplication(port,
     { verify: async () => state.principal }, f.authority, runs(runPort), { registry: state.registry, clock: f.clock,
-      loadBudget: async () => checkpoint, verifySource: async value => { if (value.source.kind === 'model') throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID'); } });
+      loadBudget: async () => checkpoint, ...(state.spending ? { classifySpending: async () => state.spending! } : {}), verifySource: async value => { if (value.source.kind === 'model') throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID'); } });
   const inspect = () => new RunProposalInspectionApplication(proposals, { verify: async () => state.principal }, { authorize: async () => { if (!state.inspect) throw ErrorRegistry.createError('POLICY_DENIED'); } });
   const sessions = { verifySession: async () => ({ principal, session: { schemaVersion: 1, sessionId: 'human', authorityRef: 'verified-test-authority', kind: 'os-user', principalRef: proposal.proposer,
     scopeIds: ['s'], authenticatedAt: 0, expiresAt: 10000 } }), isSessionActive: async () => true, revoke: async () => {} };
@@ -158,7 +160,7 @@ it.each(['missing', 'over-ceiling', 'currency', 'frozen'] as const)('budget %s r
 it('budget gates subtract reserved and settled money, accept equality using exact integer arithmetic', async () => {
   const f = await fixture(), account = { ...f.checkpoint().account, reservedMinorUnits: 700, settledMinorUnits: 100, settledExactMinorUnits: '100' };
   const cp = createProviderSpendCheckpoint(account, 2, 0);
-  expect(validateRunProposal(proposal, f.state.registry, cp, 100).budget.remainingMinorUnits).toBe(200);
+  expect(validateRunProposal(proposal, f.state.registry, cp, 100).budget!.remainingMinorUnits).toBe(200);
   expect(() => validateRunProposal({ ...proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 201 } }, f.state.registry, cp, 100)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_BUDGET_EXCEEDED' }));
 });
 it.each(['budget', 'registry'] as const)('a pending proposal parks after %s drift rather than consuming its old approval', async changed => {
@@ -208,4 +210,39 @@ it('inspect authorizes the exact Run before reading proposal content; spoofed at
   await expect(f.inspect().inspect({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'propose' })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   await expect(f.app().propose({ ...proposal, proposer: { ...proposal.proposer, subject: 'someone-else' } })).rejects.toMatchObject({ code: 'RUN_PROPOSAL_ACTOR_MISMATCH' });
   await expect(f.runs().create({ schemaVersion: 1, commandId: 'forged', scopeId: 's', runId: 'other', graph: proposal.graph, proposal: { standingAdmission: true } })).rejects.toBeDefined();
+});
+
+it('trusted subscription selection admits without budget; approval and policy remain binding', async () => {
+  const f = await fixture(false); f.state.spending = { semantics: 'not-metered', digest: 'a'.repeat(64) }; f.budget(null);
+  const pending = await f.app().propose(proposal);
+  expect(pending).toMatchObject({ budgetSemantics: 'not-metered', proposal: { status: 'pending', binding: { admission: { budget: null } } } }); noRun(f);
+  await f.decide(); const accepted = await f.app().propose(proposal);
+  expect(accepted.proposal.status).toBe('accepted'); expect(accepted.run!.proposal).toEqual(accepted.proposal.binding);
+  expect(await f.app().propose(proposal)).toEqual(accepted);
+});
+it('subscription selection never bypasses policy denial', async () => {
+  const f = await fixture(false, 'deny'); f.state.spending = { semantics: 'not-metered', digest: 'a'.repeat(64) }; f.budget(null);
+  await expect(f.app().propose(proposal)).rejects.toMatchObject({ code: 'POLICY_DENIED' }); noRun(f);
+});
+it('changed selected worker billing parks a previously approved non-metered proposal', async () => {
+  const f = await fixture(false); f.state.spending = { semantics: 'not-metered', digest: 'a'.repeat(64) };
+  await f.app().propose(proposal); await f.decide(); f.state.spending = { semantics: 'metered', digest: 'b'.repeat(64) };
+  expect((await f.app().propose(proposal)).proposal).toMatchObject({ status: 'parked', reason: 'RUN_PROPOSAL_BASIS_STALE' }); noRun(f);
+});
+it('mixed/unknown selection still refuses missing API budget', async () => {
+  const f = await fixture(); f.state.spending = { semantics: 'metered', digest: 'a'.repeat(64) }; f.budget(null);
+  expect((await f.app().propose(proposal)).proposal).toMatchObject({ status: 'rejected', reason: 'RUN_PROPOSAL_BUDGET_MISSING' }); noRun(f);
+});
+
+it('non-metered proposal cannot admit an actual metered execution profile in the Run transaction', async () => {
+  const f = await fixture(); f.state.spending = { semantics: 'not-metered', digest: 'a'.repeat(64) };
+  const original = f.store.createRun.bind(f.store);
+  const port = { loadRunReceipt: f.store.loadRunReceipt.bind(f.store), loadRunWorkspaceCustody: f.store.loadRunWorkspaceCustody.bind(f.store),
+    createRun: async (...args: Parameters<typeof original>) => {
+      const create = args[0];
+      const execution = { ...create.execution, tasks: create.execution.tasks.map(row => ({ ...row,
+        profile: { ...row.profile, parameters: { fixture: true } } })) };
+      return original({ ...create, execution }, args[1], args[2]);
+    } };
+  expect((await f.app(f.proposals, port).propose(proposal)).proposal).toMatchObject({ status: 'parked', reason: 'RUN_PROPOSAL_BASIS_STALE' }); noRun(f);
 });

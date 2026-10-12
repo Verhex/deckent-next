@@ -14,11 +14,15 @@ principal and existing engine admission own authority.
 
 The existing connected-model invocation owns activation, binding, credentials,
 spending, claim and response custody. Planning has one model step, no tool loop
-and no automatic retry. Before invocation, a current scope budget must exist and
-have available capacity; the invocation still owns the exact quote/reservation.
-Prompt context includes the configured budget limit. Current remaining capacity
-is separately checked by invocation spending and A2 admission. No total Run
-spending ceiling is enforced during execution.
+and no automatic retry. Before metered invocation, the ledger-first scope budget
+(with configured fallback) must exist and have available capacity. A literal-zero
+tariff on exclusively literal-loopback endpoints needs no money budget; the
+invocation still owns validation, quote, freeze checks and reservations.
+Prompt context carries a budget only when applicable. Selected subscription-only
+worker bindings carry `budgetSemantics: not-metered` into the sealed admission;
+unknown/mixed/API profiles keep the admission ceiling check. No total Run spending
+ceiling is enforced during execution. Native subscription planning transport is
+not installed; its future binding must reuse these gates without bypassing invocation authority.
 
 A successful repeated command/input reads its recorded proposal and sends no
 second model request. Failed or interrupted invocation claims also forbid a

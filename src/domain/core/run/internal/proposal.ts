@@ -24,8 +24,9 @@ export const runProposalBindingSchema = z.object({ schemaVersion: z.literal(1), 
   budgetCeiling: runProposalSchema.unwrap().shape.budgetCeiling,
   requiredPermissions: z.array(proposalPermissionSchema).max(256).readonly(),
   admission: z.object({ registryRevision: identitySchema, registryDigest: digest, standingAdmission: z.boolean(),
+    budgetSemantics: z.enum(['admission-check-only', 'not-metered']).optional(), spendingDigest: digest.optional(),
     budget: z.object({ budgetId: identitySchema, budgetRevision: counterSchema.positive(), checkpointDigest: digest,
-      remainingMinorUnits: counterSchema, checkedAt: counterSchema }).strict().readonly(),
-  }).strict().readonly().nullable(),
+      remainingMinorUnits: counterSchema, checkedAt: counterSchema, source: z.literal('configured').optional() }).strict().readonly().nullable(),
+  }).strict().refine(value => (value.budgetSemantics === 'not-metered') === (value.budget === null)).readonly().nullable(),
 }).strict().readonly();
 export type RunProposalBinding = z.infer<typeof runProposalBindingSchema>;

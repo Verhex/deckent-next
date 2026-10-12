@@ -57,3 +57,12 @@ it('bounds many long tasks and permissions while preserving totals, omissions, b
     expect(text).toContain('owner-purchase'); expect(text).toContain('…');
   }
 });
+
+it.each(['en', 'tr'] as const)('subscription approval summary declares budget exemption without replacing approval (%s)', locale => {
+  const value = { ...command, proposal: { ...command.proposal!, admission: { registryRevision: 'r', registryDigest: 'b'.repeat(64),
+    standingAdmission: false, budgetSemantics: 'not-metered' as const, budget: null } } };
+  const text = renderRunCreateApprovalSummary(value, create, verdict, locale);
+  expect(text).toContain(locale === 'tr' ? 'Abonelik/ücretsiz model — bütçe kontrolü uygulanmaz' : 'Subscription/free model — budget check does not apply');
+  expect(text).toContain('owner-purchase'); expect(text).toContain('run-business');
+  expect(text).not.toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
+});

@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
+import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { runProposalDigest, type RunProposalResult } from '#engine/index.js';
 import { runCommand } from '../../fixtures/cli-input.js';
 import { proposalFixture } from '../support/run-proposal.js';
@@ -28,10 +29,10 @@ it('CLI file/pipe and inspect pass the same typed application input and expose t
   await runCommand(['run', 'propose', '--proposal', file, '--json'], context);
   expect(JSON.parse(output.pop()!)).toEqual(receipt); expect(calls.pop()).toEqual(proposal);
   await runCommand(['run', 'propose', '--proposal', '-', '--lang', 'tr'], { ...context, stdin: Readable.from([JSON.stringify(proposal)]) });
-  const tr = output.pop()!; expect(tr).toContain('Onay bekliyor'); expect(tr).toContain('toplam Run harcama sınırı uygulanmıyor'); expect(tr).toContain('MCP onay kararı veremez');
+  const tr = output.pop()!; expect(tr).toContain('Onay bekliyor'); expect(tr).toContain('toplam Run harcaması henüz sınırlanmıyor'); expect(tr).toContain('MCP onay kararı veremez');
   await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', 'en'], context);
   expect(calls.pop()).toEqual({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'propose' });
-  expect(output.pop()).toContain('No total Run spending limit is enforced');
+  expect(output.pop()).toContain('no total Run spending limit is enforced');
   for (const status of ['recorded', 'accepted', 'rejected', 'parked'] as const) {
     await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--json'],
       { ...context, inspectRunProposal: async () => ({ ...receipt, proposal: { ...receipt.proposal, status } }) });
@@ -46,8 +47,9 @@ it('CLI file/pipe and inspect pass the same typed application input and expose t
 });
 it('MCP wire submits and inspects the same contract, rejects forged fields and exposes no approval mutator', async () => {
   const calls: unknown[] = [];
+  let response = receipt;
   const server = createMcpServer({ inspectRun: async () => ({}), inspectInventory: async () => ({}),
-    proposeRun: async input => { calls.push(input); return receipt; }, inspectRunProposal: async query => { calls.push(query); return receipt; } },
+    proposeRun: async input => { calls.push(input); return response; }, inspectRunProposal: async query => { calls.push(query); return response; } },
     { maxConcurrentCalls: 2, responseMaxBytes: 65536 }, 'tr');
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); await server.connect(serverTransport);
   const client = new Client({ name: 'proposal-test', version: '1' }); await client.connect(clientTransport);
@@ -65,4 +67,19 @@ it('MCP wire submits and inspects the same contract, rejects forged fields and e
     expect(JSON.stringify(await client.callTool({ name, arguments: { ...query, decision: 'allow' } }))).toContain('MCP_TOOL_UNKNOWN');
   }
   expect(calls).toEqual([]);
+  response = { ...receipt, budgetSemantics: 'not-metered', proposal: { ...receipt.proposal, binding: { ...receipt.proposal.binding,
+    admission: { ...receipt.proposal.binding.admission!, budgetSemantics: 'not-metered', budget: null } } } };
+  expect((await client.callTool({ name: 'propose_run', arguments: proposal })).structuredContent).toEqual(response);
+  expect((await client.callTool({ name: 'inspect_run_proposal', arguments: query })).structuredContent).toEqual(response);
+});
+
+it.each(['en', 'tr'] as const)('non-metered proposal and /do preview explicitly waive only money checks (%s)', async locale => {
+  const value: RunProposalResult = { ...receipt, budgetSemantics: 'not-metered', proposal: { ...receipt.proposal, binding: { ...receipt.proposal.binding,
+    admission: { ...receipt.proposal.binding.admission!, budgetSemantics: 'not-metered', budget: null } } } };
+  const expected = locale === 'tr' ? 'Abonelik/ücretsiz model — bütçe kontrolü uygulanmaz' : 'Subscription/free model — budget check does not apply';
+  const output: string[] = [];
+  await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', locale], {
+    inspectRunProposal: async () => value, stdout: { write(text: string) { output.push(text); } } });
+  expect(output.join('')).toContain(expected); expect(brainProposalLines(value, locale).join('\n')).toContain(expected);
+  expect(output.join('')).not.toContain(locale === 'tr' ? 'kabul anında kontrol' : 'checked at admission');
 });

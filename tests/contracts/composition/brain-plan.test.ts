@@ -63,4 +63,36 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     while (!f.bodies.length) await new Promise(resolve => setTimeout(resolve, 5));
     controller.abort(); await assertion; expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
   });
+  it.each([null, 0, 1000])('local zero-tariff planning with subscription workers passes budget %s and enters the same Run approval chain', async budget => {
+    const f = await fixture({ budget, noCharge: true, subscription: true }), first = await planRun(f.project, command, f.options);
+    expect(first).toMatchObject({ budgetSemantics: 'not-metered', proposal: { status: 'pending', binding: { admission: { budget: null } } } });
+    expect(first.proposal.approval).not.toBeNull(); expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
+    const inspected = await inspectConfiguredProviderSpendAccount(f.project, { schemaVersion: 1, scopeId: 's', current: true }, f.options);
+    expect(inspected.checkpoint).toBeNull();
+    expect(await planRun(f.project, command, f.options)).toEqual(first); expect(f.posts).toBe(1);
+  });
+  it('configured budget without a ledger account supports local free planning and metered/unknown worker admission', async () => {
+    const f = await fixture({ noCharge: true, standing: true }), first = await planRun(f.project, command, f.options);
+    expect(first).toMatchObject({ budgetSemantics: 'admission-check-only', proposal: { status: 'accepted', binding: { admission: { budget: { source: 'configured' } } } } });
+    expect(first.run).not.toBeNull(); expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 1, proposals: 1 });
+    expect((await inspectConfiguredProviderSpendAccount(f.project, { schemaVersion: 1, scopeId: 's', current: true }, f.options)).checkpoint).toBeNull();
+  });
+  it('subscription workers do not waive a metered planning call budget', async () => {
+    const f = await fixture({ subscription: true, budget: null });
+    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'RUN_PROPOSAL_BUDGET_MISSING' });
+    expect(f.posts).toBe(0); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+  });
+  it('subscription standing admission creates a durable Run despite a zero money ceiling', async () => {
+    const f = await fixture({ subscription: true, noCharge: true, budget: 0, standing: true }), first = await planRun(f.project, command, f.options);
+    expect(first).toMatchObject({ budgetSemantics: 'not-metered', proposal: { status: 'accepted' } });
+    expect(first.run?.proposal?.admission).toMatchObject({ budgetSemantics: 'not-metered', budget: null });
+    expect(counts(f.path)).toEqual({ runs: 1, proposals: 1 }); expect(await planRun(f.project, command, f.options)).toEqual(first);
+  });
+
+  it('local no-charge planning with only metered/unknown worker targets and no budget refuses before POST', async () => {
+    const f = await fixture({ noCharge: true, budget: null });
+    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'RUN_PROPOSAL_BUDGET_MISSING' });
+    expect(f.posts).toBe(0); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+  });
+
 });

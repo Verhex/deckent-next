@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { encodeCommandProjection, runSnapshotSchema } from '#domain/index.js';
-import { parseRunProposalRecord, parseProviderSpendCheckpoint, type RunProposalRecord, type RunCreate, type RunReceipt } from '#engine/index.js';
+import { parseRunProposalRecord, parseProviderSpendCheckpoint, classifyWorkSpending, type RunProposalRecord, type RunCreate, type RunReceipt } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { requireLedgerVersion, RUN_PROPOSAL_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 export function readRunProposal(db: DatabaseSync, scopeId: string, commandId: string): RunProposalRecord | null {
@@ -77,9 +77,18 @@ export class SqliteRunProposals {
       || record.proposal.runId !== create.identity.runId || JSON.stringify(record.proposal.graph) !== JSON.stringify(create.graph)
       || encodeCommandProjection('actor', record.proposal.proposer) !== encodeCommandProjection('actor', create.actor)
       || JSON.stringify(record.binding) !== JSON.stringify(create.proposal)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
+    if (record.binding.admission.budgetSemantics) {
+      const semantics = create.execution.tasks.every(row => classifyWorkSpending({ kind: 'worker', profile: row.profile }) === 'not-metered')
+        ? 'not-metered' : 'admission-check-only';
+      if (semantics !== record.binding.admission.budgetSemantics) throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
+    }
     // The same writer lock protects the admission-time monetary snapshot. No reservation or runtime ceiling is created.
+    const budget = record.binding.admission.budget;
+    if (record.binding.admission.budgetSemantics === 'not-metered') return record;
+    if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
     const account = this.db.prepare('SELECT record,revision,reservation_count,digest FROM provider_spend_accounts WHERE scope_id=?').get(create.identity.scopeId);
-    if (!account || parseProviderSpendCheckpoint({ schemaVersion: 2, revision: account.revision, reservationCount: account.reservation_count, digest: account.digest, account: JSON.parse(String(account.record)) }).digest !== record.binding.admission.budget.checkpointDigest) {
+    if (budget.source === 'configured' && !account) return record;
+    if (budget.source === 'configured' || !account || parseProviderSpendCheckpoint({ schemaVersion: 2, revision: account.revision, reservationCount: account.reservation_count, digest: account.digest, account: JSON.parse(String(account.record)) }).digest !== budget.checkpointDigest) {
       throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
     }
     return record;

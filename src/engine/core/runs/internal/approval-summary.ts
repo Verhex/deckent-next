@@ -27,7 +27,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   const ceiling = command.proposal?.budgetCeiling;
   const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale),
     t('approval.plan.budget', { ceiling: ceiling ? `${ceiling.limitMinorUnits} ${field(ceiling.currency, limits.currencyChars, known)}` : unknown }, locale),
-    t('approval.plan.budgetNotice', {}, locale),
+    command.proposal?.admission?.budgetSemantics === 'not-metered' ? t('proposal.budget.notMetered', {}, locale) : t('approval.plan.budgetNotice', {}, locale),
     t('approval.plan.decision', { decision: t('approval.plan.required', {}, locale),
       rule: verdict.ruleId ? field(verdict.ruleId, limits.ruleChars, known) : t('approval.plan.registryGate', {}, locale), reason: field(verdict.reason, limits.reasonChars, known) }, locale),
     t('approval.plan.run', { run: field(command.runId, limits.runChars, known) }, locale)];

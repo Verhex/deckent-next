@@ -385,7 +385,7 @@
   "proposal.budget": "Beyan tavanı: {amount} {currency} alt para birimi; {status}.",
   "proposal.budget.checked": "kabul anında kontrol edildi",
   "proposal.budget.unchecked": "kontrol edilmedi",
-  "proposal.budget.notice": "Yürütme sırasında toplam Run harcama sınırı uygulanmıyor. Model çağrılarında mevcut scope bütçesi ve rezervasyon koruması sürer.",
+  "proposal.budget.notice": "API — yürütme boyunca toplam Run harcaması henüz sınırlanmıyor. Model çağrılarında scope bütçesi ve rezervasyon koruması sürer.",
   "proposal.next.recorded": "Kabulü uzlaştırmak için bu komutu inceleyin veya aynı girdilerle tekrarlayın.",
   "proposal.next.pending": "İnsan kararından sonra aynı öneriyi ve commandId değerini tekrar verin.",
   "proposal.next.accepted": "Çalışmayı gözleyin: run inspect --scope {scope} --id {run}. Bu istemciyi kapatmak Run işlemini iptal etmez.",
@@ -406,5 +406,6 @@
   "approval.plan.registryGate": "iş sınıfı registry: düşük riskli kalıcı kabul yok",
   "approval.plan.decision": "Karar: {decision} · kural: {rule} · neden: {reason}",
   "approval.plan.run": "Oluşturulacak Run: {run}",
-  "approval.plan.budgetNotice": "Tavan yalnız kabul anında kontrol edilir; yürütmede toplam Run harcama sınırı uygulanmaz."
+  "approval.plan.budgetNotice": "API — tavan yalnız kabul anında kontrol edilir; yürütme boyunca toplam Run harcaması henüz sınırlanmıyor.",
+  "proposal.budget.notMetered": "Abonelik/ücretsiz model — bütçe kontrolü uygulanmaz."
 }

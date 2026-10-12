@@ -11,17 +11,24 @@ import type { RunView } from './view.js';
 export interface RunProposalContext {
   readonly registry?: WorkClassRegistry | undefined;
   readonly clock: TrustedClock;
-  loadBudget(scopeId: string, principal: VerifiedPrincipal): Promise<ProviderSpendCheckpoint | null>;
+  loadBudget(scopeId: string, principal: VerifiedPrincipal): Promise<ProviderSpendCheckpoint | Readonly<{ checkpoint: ProviderSpendCheckpoint | null; source?: 'configured' }> | null>;
+  classifySpending?(proposal: RunProposal): Promise<Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>>;
   verifySource(proposal: RunProposal, principal: VerifiedPrincipal): Promise<void>;
 }
 export interface RunProposalResult { readonly schemaVersion: 1; readonly proposal: RunProposalRecord; readonly run: RunView | null;
-  readonly budgetSemantics: 'admission-check-only'; readonly runtimeTotalSpendEnforced: false }
+  readonly budgetSemantics: 'admission-check-only' | 'not-metered'; readonly runtimeTotalSpendEnforced: false }
 const result = (proposal: RunProposalRecord, run: RunView | null = null): RunProposalResult => Object.freeze({ schemaVersion: 1,
-  proposal, run, budgetSemantics: 'admission-check-only', runtimeTotalSpendEnforced: false });
+  proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false });
 const codeOf = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
 export class RunProposalApplication {
   constructor(private readonly store: RunProposalStore, private readonly verifier: PrincipalVerifier, private readonly authority: RunCreationAuthority,
     private readonly runs: RunAdmissionApplication, private readonly context: RunProposalContext) {}
+  private async validate(proposal: RunProposal, principal: VerifiedPrincipal, now: number) {
+    const spending = await this.context.classifySpending?.(proposal);
+    const loaded = spending?.semantics === 'not-metered' ? null : await this.context.loadBudget(proposal.scopeId, principal);
+    const snapshot = loaded && 'checkpoint' in loaded ? loaded : { checkpoint: loaded };
+    return validateRunProposal(proposal, this.context.registry, snapshot.checkpoint, now, spending, 'source' in snapshot ? snapshot.source : undefined);
+  }
   async propose(input: unknown, credential?: unknown): Promise<RunProposalResult> {
     const proposal = parseRunProposal(input), principal = await authenticate(this.verifier, credential, proposal.scopeId);
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
@@ -40,7 +47,7 @@ export class RunProposalApplication {
         status: 'recorded', binding: command.proposal!, reason: null, approval: null, authority: null };
       try {
         await this.context.verifySource(proposal, principal);
-        const admission = validateRunProposal(proposal, this.context.registry, await this.context.loadBudget(proposal.scopeId, principal), record.recordedAt);
+        const admission = await this.validate(proposal, principal, record.recordedAt);
         record = { ...record, binding: { ...record.binding, admission } };
       } catch (error) {
         const code = codeOf(error); if (!code || !ErrorRegistry.has(code)) throw error;
@@ -56,7 +63,7 @@ export class RunProposalApplication {
       const replay = await this.runs.hasReceipt(proposal.scopeId, proposal.commandId);
       if (!replay) {
         await this.context.verifySource(proposal, principal);
-        const current = validateRunProposal(proposal, this.context.registry, await this.context.loadBudget(proposal.scopeId, principal), record.recordedAt);
+        const current = await this.validate(proposal, principal, record.recordedAt);
         if (encodeCommandProjection('proposal-basis', current) !== encodeCommandProjection('proposal-basis', record.binding.admission)) throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
       }
       const admitted = await this.runs.admitEvaluated(bound, principal, evaluation);

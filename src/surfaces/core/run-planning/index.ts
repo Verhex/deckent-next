@@ -8,8 +8,10 @@ export function brainProposalLines(result: RunProposalResult, locale: Locale): r
     t('brain.scope', { scope: proposal.scopeId, actor: proposal.proposer.id }, locale),
     ...proposal.graph.tasks.flatMap(task => [t('brain.task', { id: task.id, kind: task.kind, workClass: task.workClass ?? '-', text: task.workInput?.title ?? task.workInput?.task ?? task.id }, locale),
       ...task.acceptanceCriteria.map(id => t('brain.criterion', { text: proposal.graph.criterionDefinitions.find(row => row.id === id)?.description ?? id }, locale))]),
-    t('proposal.budget', { currency: proposal.budgetCeiling.currency, amount: proposal.budgetCeiling.limitMinorUnits, status: record.binding.admission ? t('proposal.budget.checked', {}, locale) : t('proposal.budget.unchecked', {}, locale) }, locale),
-    t('proposal.budget.notice', {}, locale),
+    ...(result.budgetSemantics === 'not-metered' ? [t('proposal.budget.notMetered', {}, locale)] : [
+      t('proposal.budget', { currency: proposal.budgetCeiling.currency, amount: proposal.budgetCeiling.limitMinorUnits,
+        status: record.binding.admission ? t('proposal.budget.checked', {}, locale) : t('proposal.budget.unchecked', {}, locale) }, locale),
+      t('proposal.budget.notice', {}, locale)]),
     t('brain.permissions', { permissions: proposal.requiredPermissions.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ') || '-' }, locale),
     ...(record.reason && record.reason !== 'RUN_APPROVAL_REQUIRED' ? [ErrorRegistry.createError(record.reason, { locale }).message] : []),
     ...(record.approval ? [t('brain.waiting', { id: record.approval.approvalId, expires: new Date(record.approval.expiresAt).toISOString() }, locale), t('brain.revise', {}, locale)] : []),

@@ -5,7 +5,7 @@ import { brainOutputDigest, parseBrainDraft } from '#capabilities/index.js';
 import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 /** Pure gates. Registry metadata advertises permissions; evaluatePolicy still decides each permission. */
 export function validateRunProposal(proposal: RunProposal, registry: WorkClassRegistry | undefined, checkpointInput: ProviderSpendCheckpoint | null,
-  now: number): NonNullable<RunProposalBinding['admission']> {
+  now: number, spending?: Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>, budgetSource?: 'configured'): NonNullable<RunProposalBinding['admission']> {
   try { validateTaskGraph(proposal.graph); } catch (error) {
     if (!(error instanceof TaskGraphError)) throw error;
     throw ErrorRegistry.createError('RUN_PROPOSAL_GRAPH_INVALID', { params: { reason: error.code } });
@@ -27,15 +27,18 @@ export function validateRunProposal(proposal: RunProposal, registry: WorkClassRe
     }
     seen.add(key);
   }
+  const basis = { registryRevision: policy!.revision, registryDigest: sha256(encodeCommandProjection('proposal-registry:1', policy)), standingAdmission,
+    ...(spending ? { budgetSemantics: spending.semantics === 'not-metered' ? 'not-metered' as const : 'admission-check-only' as const, spendingDigest: spending.digest } : {}) };
+  if (spending?.semantics === 'not-metered') return Object.freeze({ ...basis, budget: null });
   if (!checkpointInput) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_MISSING');
   const checkpoint = parseProviderSpendCheckpoint(checkpointInput), account = checkpoint.account, budget = account.budget;
   if (budget.scopeId !== proposal.scopeId) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_SCOPE');
   if (budget.currency !== proposal.budgetCeiling.currency) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_CURRENCY');
   const remaining = BigInt(budget.limitMinorUnits) - BigInt(account.reservedMinorUnits) - BigInt(account.settledMinorUnits);
   if (account.frozen || remaining < BigInt(proposal.budgetCeiling.limitMinorUnits)) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED');
-  return Object.freeze({ registryRevision: policy!.revision, registryDigest: sha256(encodeCommandProjection('proposal-registry:1', policy)), standingAdmission,
+  return Object.freeze({ ...basis,
     budget: { budgetId: budget.budgetId, budgetRevision: budget.revision, checkpointDigest: checkpoint.digest,
-      remainingMinorUnits: Number(remaining), checkedAt: now } });
+      remainingMinorUnits: Number(remaining), checkedAt: now, ...(budgetSource ? { source: budgetSource } : {}) } });
 }
 
 export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInvocationReceipt | null, text?: string | null, known?: KnownSecretSnapshot): void {

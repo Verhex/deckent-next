@@ -1,14 +1,13 @@
 import { executionRegistrySchema, type BrainPlanCommand,
-  brainPlanCommandInputSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { BrainPlanApplication, prepareBrainRegistryPrompt, type ModelInvocationResult, modelInvocationRequestDigest } from '#engine/index.js';
+  brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
+import { BrainPlanApplication, prepareBrainRegistryPrompt, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, providerSpendingConfiguredBudget } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, isNativeCodingTemplate } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
-import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
-import { inspectConfiguredRunProposal, proposeConfiguredRun } from '#composition/core/runs/index.js';
+import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. */
@@ -41,15 +40,23 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       async prepare(command) {
         const registry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
         if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
-        const inspected = await inspectConfiguredProviderSpendAccount(root, { schemaVersion: 1, scopeId: command.scopeId, current: true }, options);
-        const budget = inspected.checkpoint?.account.budget ?? providerSpendingConfiguredBudget(context.config, command.scopeId);
-        if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_MISSING');
-        const account = inspected.checkpoint?.account;
-        const remaining = budget.limitMinorUnits - (account?.reservedMinorUnits ?? 0) - (account?.settledMinorUnits ?? 0);
-        if (account?.frozen || remaining <= 0) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED');
-        const prompt = prepareBrainRegistryPrompt(command, registry, { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits },
+        const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference);
+        const configured = context.config['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
+        const profile = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value)).find(value => value.scopeId === command.scopeId
+          && JSON.stringify(value.reference) === JSON.stringify(selected.command.reference)) ?? null;
+        const spending = classifyWorkSpending({ kind: 'model', profile });
+        const requiresTaskBudget = registry.profiles.every(value => !isNativeCodingTemplate(value) && classifyWorkSpending({ kind: 'worker', profile: value }) === 'metered');
+        const needsBudget = spending === 'metered' || requiresTaskBudget;
+        const snapshot = needsBudget ? await readConfiguredRunBudget(root, command.scopeId, options) : null;
+        const account = snapshot?.checkpoint?.account, budget = account?.budget ?? null;
+        if (needsBudget) {
+          if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_MISSING');
+          const remaining = budget.limitMinorUnits - (account?.reservedMinorUnits ?? 0) - (account?.settledMinorUnits ?? 0);
+          if (account?.frozen || remaining <= 0) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED');
+        }
+        const prompt = prepareBrainRegistryPrompt(command, registry, budget ? { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits } : null,
           context.config['brain_planner'], getConfigKnownSecrets(context.config));
-        const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, command.reference);
+        const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference);
         return { invocation: prepared.command, prompt };
       },
     }).plan(input, undefined, signal);

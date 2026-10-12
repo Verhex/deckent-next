@@ -5,16 +5,18 @@ import { join } from 'node:path';
 import { vi } from 'vitest';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
-import { readLocalOsIdentity, openSqliteModelActivationStore } from '#adapters/index.js';
+import { readLocalOsIdentity, openSqliteModelActivationStore, compileNativeCodingDockerProfile } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { applyModelCatalog } from '../../../src/index.js';
+import { seedCatalog, SEED_CHANNEL } from './model-catalog.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { fixtureDockerRegistry } from './execution-registry.js';
 import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
-export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string; hold?: boolean } = {}) {
+export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string; hold?: boolean; noCharge?: boolean; subscription?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-provider-'));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await mkdir(join(project, '.deckent'), { recursive: true });
@@ -44,17 +46,23 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   const profile = { schemaVersion: 1, id: 'fixture', version: 1, scopeId: 's', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
       definition: { endpoint: 'https://127.0.0.1:1234/chat', authentication: { type: 'none' }, maxOutputTokens: 8,
-        tariff: { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: 200,
-          cachedInputMinorUnitsPerMillionTokens: 50, outputMinorUnitsPerMillionTokens: 1000 } } }, allocation: { id: 'fixture', maxCalls: 8, maxInFlight: 2 },
+        tariff: { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 200,
+          cachedInputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 50, outputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 1000 } } }, allocation: { id: 'fixture', maxCalls: 8, maxInFlight: 2 },
     limits: { requestMaxBytes: 128_000, responseMaxBytes: 16_384, timeoutMs: 2_000 } };
   const workClasses = { schemaVersion: 2, revision: 'business-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
     proposalAdmission: { risk: 'low', standingAdmission: options.standing ?? false }, acceptanceProfile: { schemaVersion: 1, version: 1,
       criterionTypes: ['completion'], evidenceTypes: ['verification-result'], rubric: [{ criterionType: 'completion', evidenceTypes: ['verification-result'], weight: 1 }],
       ceilingRules: [], decisionThresholds: { rejectBelow: 0.2, acceptAt: 1 } } }], bindings: [{ kind: 'purchase', classId: 'business' }] };
+  const workerRegistry = fixtureDockerRegistry(['purchase']);
+  const seed = options.subscription ? await seedCatalog() : null;
+  const workerModel = seed?.providers[0].models.find((row: { lifecycle: { state: string }; nativeId: string }) => row.lifecycle.state === 'active' && row.nativeId === 'claude-sonnet-5-5');
+  if (options.subscription) workerRegistry.profiles[0] = compileNativeCodingDockerProfile(workerRegistry.profiles[0], { schemaVersion: 4,
+    provider: 'claude', cliVersion: '2.1.285 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
+    model: { channelId: SEED_CHANNEL, modelId: workerModel.nativeId, auxiliaryModelIds: [] }, prompt: 'Prepare a purchase and business readback.' }) as typeof workerRegistry.profiles[0];
   const config = { layout: { root: data }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
     terminal: { scopeId: 's', chat: { schemaVersion: 1, ...(options.model === 'missing' ? {} : { reference }), maxCompletionTokens: 8 } },
     ...(options.budget === null ? {} : { provider_spending: { ...fixtureBudget('s'), budgets: [{ ...fixtureBudget('s').budgets[0]!, limitMinorUnits: options.budget ?? 1000 }] } }),
-    admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2, ordering: 'input-order', registry: { ...fixtureDockerRegistry(['purchase']), workClasses } } };
+    admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2, ordering: 'input-order', registry: { ...workerRegistry, workClasses } } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify(config));
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '' }, loadOptions = { env };
   await loadComposedConfig(project, loadOptions);
@@ -70,9 +78,15 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     { id: 'pool', actions: ['use'], resource: { kind: 'pool', ids: ['p'] } },
     { id: 'account', actions: ['inspect'], resource: { kind: 'provider-spend-account', ids: 'all' } },
     { id: 'invocation', actions: ['invoke', 'inspect', 'inspect-content', 'cancel'], resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } },
+    ...(options.subscription ? [{ id: 'catalog', actions: ['activate'], resource: { kind: 'model-activation', ids: 'all' } }] : []),
     { id: 'approval', actions: ['inspect', 'decide'], resource: { kind: 'approval', ids: 'all' } },
-  ].map(grant => ({ ...grant, effect: 'allow', scopes: ['s'], principals: [{ issuer: principal.issuer, subject: principal.subject }] }));
+  ].map(grant => ({ ...grant, effect: 'allow', scopes: grant.id === 'catalog' ? 'all' : ['s'], principals: [{ issuer: principal.issuer, subject: principal.subject }] }));
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'fixture-policy', restrictions: [], grants }), { mode: 0o600 });
+  if (seed) {
+    await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-seed', scopeId: 's', action: 'register', catalog: seed }, loadOptions);
+    for (const modelId of [null, workerModel.nativeId]) await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-activate-' + modelId,
+      scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 }, loadOptions);
+  }
   return { project, data, path, options: loadOptions, reference, config, bodies, get posts() { return posts; }, setOutput(value: string) { output = value; },
     async close() { clearConfigCache(); transport.mockRestore(); await rm(root, { recursive: true, force: true }); } };
 }

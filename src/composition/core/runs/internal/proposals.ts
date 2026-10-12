@@ -5,7 +5,7 @@ import { openSqliteRunProposalStore, openSqliteRunProposalReader, extractOpenAiC
 import { assertRunProposalSource, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
   runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
+import { readConfiguredRunBudget, classifyConfiguredRunSpending } from './budget.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -18,7 +18,8 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
       try {
         return await new RunProposalApplication(store, { verify: async () => context.principal }, authority, runs, {
           registry: context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry).workClasses : undefined, clock: new SystemTrustedClock(),
-          loadBudget: async scopeId => (await inspectConfiguredProviderSpendAccount(projectRoot, { schemaVersion: 1, scopeId, current: true }, options)).checkpoint,
+          loadBudget: scopeId => readConfiguredRunBudget(projectRoot, scopeId, options),
+          classifySpending: value => classifyConfiguredRunSpending(projectRoot, value, options),
           async verifySource(value) {
             if (value.source.kind === 'human') return;
             const reference = value.source.receipt;

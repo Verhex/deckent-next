@@ -494,7 +494,10 @@
         "src/composition/core/model-invocation",
         "src/adapters/core/run-proposal-store",
         "src/adapters/core/provider-openai-chat",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/adapters/core/contract",
+        "src/engine/core/provider-spend",
+        "src/composition/core/root"
       ],
       "plan": "EXECUTION"
     },
@@ -1632,7 +1635,9 @@
         "src/domain/core/model-invocation",
         "src/engine/core/authentication",
         "src/domain/core/principal",
-        "src/domain/core/model-activation"
+        "src/domain/core/model-activation",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/run"
       ],
       "plan": "PROVIDERS"
     },
@@ -2811,16 +2816,16 @@
         "src/engine/core/model-invocation",
         "src/platform/core/errors",
         "src/platform/core/config",
-        "src/adapters/core/contract",
         "src/adapters/core/provider-openai-chat",
         "src/composition/core/scoped-request",
         "src/composition/core/terminal-chat",
         "src/composition/core/model-invocation",
-        "src/composition/core/provider-spend",
         "src/composition/core/runs",
         "src/composition/core/runtime-service",
         "src/composition/core/query-errors",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/engine/core/provider-spend",
+        "src/adapters/core/native-coding"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },

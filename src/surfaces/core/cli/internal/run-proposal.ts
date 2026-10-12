@@ -16,9 +16,10 @@ export function renderRunProposal(data: RunProposalResult, locale: Locale): stri
     t('proposal.attribution', { actor: r.proposal.proposer.id, scope: r.proposal.scopeId, source: r.proposal.source.kind }, locale),
     ...(r.reason ? [ErrorRegistry.createError(r.reason, { locale }).message] : []),
     ...(r.approval ? [t('proposal.approval', { id: r.approval.approvalId, expiry: r.approval.expiresAt }, locale)] : []),
-    t('proposal.budget', { currency: r.proposal.budgetCeiling.currency, amount: r.proposal.budgetCeiling.limitMinorUnits,
-      status: r.binding.admission ? t('proposal.budget.checked', {}, locale) : t('proposal.budget.unchecked', {}, locale) }, locale),
-    t('proposal.budget.notice', {}, locale),
+    ...(data.budgetSemantics === 'not-metered' ? [t('proposal.budget.notMetered', {}, locale)] : [
+      t('proposal.budget', { currency: r.proposal.budgetCeiling.currency, amount: r.proposal.budgetCeiling.limitMinorUnits,
+        status: r.binding.admission ? t('proposal.budget.checked', {}, locale) : t('proposal.budget.unchecked', {}, locale) }, locale),
+      t('proposal.budget.notice', {}, locale)]),
     next[r.status],
   ].join('\n');
 }
