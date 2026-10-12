@@ -91,3 +91,4 @@ export { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 export { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
 export { inspectInstallationStartabilityFiles, type InstallationStartability } from '#adapters/core/installation-files/index.js';
 export { firstSessionTargets, firstSessionPublication } from '#adapters/core/installation-files/index.js';
+export { openSqliteRunProposalStore, openSqliteRunProposalReader } from '#adapters/core/run-proposal-store/index.js';

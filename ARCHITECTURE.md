@@ -3,7 +3,7 @@
 
 **W3-AUTHORITY (owner 2026-10-09; candidate, no live acceptance):** `deckent-mcp` uses the same verified OS UID with a distinct actor
 (`issuer = <host>/mcp`, actor id suffixed `/mcp`). All handlers, including direct model-connect/activation writes, enter that code-only context;
-service-bound calls carry `channel: mcp` on local protocol v27, lifecycle window `[27,26]`, current-only mutations. This metadata delegates no
+service-bound calls carry `channel: mcp` on local protocol v28, lifecycle window `[28,27]`, current-only mutations. This metadata delegates no
 other OS identity; same-account direct socket access remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
 MCP authority; an explicit rule or role binding must name the MCP actor. Denies/restrictions still apply. Template v9 and add-only upgrades add
 named observation rules only. Budget creation/revision/unfreeze/reconciliation, activation and invocation require an explicit MCP-specific grant;
@@ -301,10 +301,10 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   Use versioned modular definitions/profiles for personal/team/Enterprise use; future purchase refinements
   (internal/external, etc.) can extend the domain without multiplying execution engines. A daily preset
   may propose a schedule; the actual schedule is explicit and separately validated. Kind grants no authority.
-- Owner 2026-09-22: `do` is intent → versioned, receipted RunProposal → deterministic task-graph
-  compilation → scope/cost/effect gates → existing Run admission, with approval when required.
-  It depends on command/effect-policy contracts, not Mission; planning invocation spends are budgeted.
-  Mission AI author remains a separate extension of deterministic Mission rounds and checkpoints.
+- Owner 2026-09-22: `do` is intent → versioned, receipted RunProposal → deterministic task-graph compilation → scope/cost/effect gates → existing Run admission, with approval when required.
+  It depends on command/effect-policy contracts, not Mission; planning invocation spends are budgeted. Mission AI author remains a separate extension of deterministic Mission rounds and checkpoints.
+  DO-DILIM-A2 author candidate (2026-10-12, base `da64947e`, ledger53/protocol28): RunProposal v1 reuses graph/criteria and per-task WorkClass. CLI `run propose --proposal`, SDK `proposeRun`, MCP `propose_run` share one application and existing sealed Run-create admission; source model references require a matching invocation receipt, never a new call.
+  Registry low-risk + standing admission + matching kind binding bypass only the proposal approval gate; policy deny/require-approval remain binding. The declared ceiling is checked against the current scope budget remainder and bound with its checkpoint into decision input; no runtime total Run-spend ceiling is enforced. Model calls retain existing scope reservations. Proposal/Run acceptance receipts commit together in the existing Run transaction; `inspect-proposal`/SDK/MCP expose recorded/pending/accepted/rejected/parked. Same command/input replays; changed basis parks, changed input conflicts; read inspection cannot write/migrate. Author proof, review and live limits: external `proof/DO-DILIM-A2-2026-10-12/`.
 - Owner 2026-09-22: process work uses a versioned business-operation catalog and task kind through
   existing Run/Task/Attempt and tool invocation claim/settle/unknown recovery; no third engine.
   Mission templates add ordered steps, external waits and aggregate outcomes. Operations declare

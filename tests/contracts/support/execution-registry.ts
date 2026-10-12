@@ -1,12 +1,12 @@
-import { validateTaskGraph } from '#domain/index.js';
+import { validateTaskGraph, type WorkClassRegistry } from '#domain/index.js';
 import { resolveExecutionRegistry } from '#engine/index.js';
 /** Explicit test-only admission data. Production never invents missing profile or evaluator choices. */
 /** `noWorkspaceDelivery`: every fixture kind declares `workspaceDelivery: 'none'` (EXEC-RELEASE C2, owner B). */
-export function fixtureExecution(graphInput: unknown, options: { noWorkspaceDelivery?: boolean } = {}) {
+export function fixtureExecution(graphInput: unknown, options: { noWorkspaceDelivery?: boolean; workClasses?: WorkClassRegistry } = {}) {
   const graph = validateTaskGraph(graphInput);
   const evaluators = [...new Map(graph.criterionDefinitions.map(value => [JSON.stringify(value.evaluator),
     { ...value.evaluator, implementation: { id: 'test-evaluator', version: 1 } }])).values()];
-  return resolveExecutionRegistry(graph, { schemaVersion: 1, revision: 'fixture-registry',
+  return resolveExecutionRegistry(graph, { schemaVersion: 1, revision: 'fixture-registry', ...(options.workClasses ? { workClasses: options.workClasses } : {}),
     profiles: [{ id: 'fixture-profile', version: 1, adapter: { id: 'test-supervisor', version: 1 }, parameters: { fixture: true } }],
     kinds: [...new Set(graph.tasks.map(task => task.kind))].map(kind => ({ kind, profile: { id: 'fixture-profile', version: 1 }, ...(options.noWorkspaceDelivery ? { workspaceDelivery: 'none' as const } : {}) })), evaluators,
   }, {

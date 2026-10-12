@@ -11,9 +11,8 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 import { withRunCreationAuthority } from './authority.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
-  pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {
-  const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
+export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
+  work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[]) => Promise<T>) {
   let warnings: readonly WorkerAdmissionWarning[] = [];
   const { config, layout, document, principal, path } = context;
   const store = {
@@ -56,11 +55,18 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
           { imageRefreshInProgress: await isToolchainRefreshInProgress(projectRoot, options) });
       } finally { catalog.close(); }
       return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
-        capacity: { executionSlots: Math.min(profile.executionSlots, config.max_workers === 'auto' ? Infinity : config.max_workers),
-          inFlightSlots: Math.min(profile.inFlightSlots, config.max_workers === 'auto' ? Infinity : config.max_workers) }, ordering: admitted.graph.tasks.map(task => task.id) } };
+        capacity: { executionSlots: Math.min(profile.executionSlots, typeof config.max_workers === 'number' ? config.max_workers : Infinity),
+          inFlightSlots: Math.min(profile.inFlightSlots, typeof config.max_workers === 'number' ? config.max_workers : Infinity) }, ordering: admitted.graph.tasks.map(task => task.id) } };
     } });
-  const admission = await app.create(command, undefined, pin ? replay => pin(context, replay) : undefined);
-  return Object.freeze({ schemaVersion: 1 as const, layout, admission, warnings });
+  return work(app, authority, () => warnings);
+  });
+}
+async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
+  pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {
+  const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
+  return withConfiguredRunAdmission(projectRoot, context, options, async (app, _authority, warnings) => {
+    const admission = await app.create(command, undefined, pin ? replay => pin(context, replay) : undefined);
+    return Object.freeze({ schemaVersion: 1 as const, layout: context.layout, admission, warnings: warnings() });
   });
 }
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {

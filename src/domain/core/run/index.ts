@@ -27,3 +27,5 @@ export type { AcceptanceView } from './internal/acceptance-view.js';
 export { releaseWorkerCustody } from './internal/worker-custody.js';
 export { operationEvidenceBindingSchema, operationEvidenceBindingReason } from './internal/operation-binding.js';
 export type { OperationEvidenceBinding } from './internal/operation-binding.js';
+export { runProposalSchema, proposalPermissionSchema, runProposalBindingSchema } from './internal/proposal.js';
+export type { RunProposal, ProposalPermission, RunProposalBinding } from './internal/proposal.js';

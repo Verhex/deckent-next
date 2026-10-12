@@ -37,7 +37,7 @@ export function assertAcceptanceCriteria(reference: z.infer<typeof taskAcceptanc
 }
 /** Admission is the sole resolver; absent v1 profiles stay absent without a default or backfill. */
 export function freezeTaskAcceptance(task: TaskDefinition, definitions: readonly CriterionDefinition[], configured?: WorkClassRegistry) {
-  const { policy, workClass } = resolveTaskWorkClass(task.kind, task.workInput?.workClass, configured);
+  const { policy, workClass } = resolveTaskWorkClass(task.kind, task.workClass ?? task.workInput?.workClass, configured);
   if (!workClass || !('acceptanceProfile' in workClass)) return undefined;
   const frozen = frozenWorkClassProfileSchema.parse({ workClass: workClass.id, policyRevision: policy.revision,
     profileVersion: workClass.acceptanceProfile.version, profile: workClass.acceptanceProfile,

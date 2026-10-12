@@ -3,11 +3,11 @@ import { configuredApproval } from '#composition/core/approvals/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema } from '#domain/index.js';
 import { cancellationRecoveryCommandSchema, dispatchInventoryInputSchema, runAdmissionSchema, runCommandSchema, runQuerySchema,
-  runReservationCommandSchema, taskEvaluationCommandSchema } from '#engine/index.js';
+  parseRunProposal, runProposalQuerySchema, runReservationCommandSchema, taskEvaluationCommandSchema } from '#engine/index.js';
 import type { RuntimeServiceOperation, RuntimeServiceRequest } from '#engine/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
-import { createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfiguredTask, inspectConfiguredRun,
+import { proposeConfiguredRun, inspectConfiguredRunProposal, createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfiguredTask, inspectConfiguredRun,
   reconcileConfiguredAttempt, recoverConfiguredCancellations, requestConfiguredRunCancellation,
   reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 /** Closed local composition map. Each operation revalidates untrusted protocol input before any I/O. */
@@ -17,6 +17,8 @@ export function createConfiguredRuntimeOperations(projectRoot: string, options: 
     listApprovals(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'list', input, options, undefined, delivery?.maxResultBytes); },
     inspectApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'inspect', input, options, undefined, delivery?.maxResultBytes); },
     decideApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'decide', input, options, undefined, delivery?.maxResultBytes); },
+    proposeRun(input: Parameters<typeof proposeConfiguredRun>[1]) { return proposeConfiguredRun(projectRoot, input, options); },
+    inspectRunProposal(input: Parameters<typeof inspectConfiguredRunProposal>[1]) { return inspectConfiguredRunProposal(projectRoot, input, options); },
     createRun(input: Parameters<typeof createConfiguredRun>[1]) { return createConfiguredRun(projectRoot, input, options); },
     reserveRunTasks(input: Parameters<typeof reserveConfiguredRunTasks>[1]) { return reserveConfiguredRunTasks(projectRoot, input, options); },
     executeTask(input: Parameters<typeof executeConfiguredTask>[1]) { return executeConfiguredTask(projectRoot, input, options); },
@@ -36,6 +38,8 @@ export async function executeConfiguredRuntimeOperation(projectRoot: string, req
   options: ConfigLoadOptions = {}): Promise<unknown> {
   const operations = createConfiguredRuntimeOperations(projectRoot, options);
   const handlers = {
+    proposeRun: input => operations.proposeRun(parseRunProposal(input)),
+    inspectRunProposal: input => operations.inspectRunProposal(runProposalQuerySchema.parse(input)),
     createRun: input => operations.createRun(runAdmissionSchema.parse(input)),
     reserveRunTasks: input => operations.reserveRunTasks(runReservationCommandSchema.parse(input)),
     executeTask: input => operations.executeTask(attemptIdentitySchema.parse(input)),

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, DOWNGRADE_TO_V35_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, DOWNGRADE_TO_V35_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -18,10 +18,10 @@ it('backs up an older ledger with its version in the name, then migrates it to t
   openSqliteLedger(path, options).close();
   const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); db.close();
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-24T00:00:00.000Z'));
-  expect(upgrade).toEqual({ from: CURRENT_LEDGER_VERSION - 1, to: CURRENT_LEDGER_VERSION,
-    backupPath: join(backups, `ledger-v${CURRENT_LEDGER_VERSION - 1}-2026-09-24T00-00-00-000Z.db`) });
+  expect(upgrade).toEqual({ from: PREVIOUS_LEDGER_VERSION, to: CURRENT_LEDGER_VERSION,
+    backupPath: join(backups, `ledger-v${PREVIOUS_LEDGER_VERSION}-2026-09-24T00-00-00-000Z.db`) });
   expect(version(path)).toBe(CURRENT_LEDGER_VERSION);
-  expect(version(upgrade!.backupPath)).toBe(CURRENT_LEDGER_VERSION - 1);
+  expect(version(upgrade!.backupPath)).toBe(PREVIOUS_LEDGER_VERSION);
   // Current and missing ledgers are left untouched: no second backup, no file created.
   expect(await upgradeExistingProductLedger(path, options, backups, new Date())).toBeNull();
   expect(await upgradeExistingProductLedger(join(root, 'absent.db'), options, backups, new Date())).toBeNull();

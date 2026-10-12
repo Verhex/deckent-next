@@ -6,14 +6,14 @@ import { RunCreateApprovalBroker, type RunCreateApprovalInput } from '#engine/co
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
 import { runCreateSchema, RunStoreError, type RunCreate } from './store.js';
 import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
-import type { RunAdmission } from './admission.js';
-type Evaluation = { readonly policy: Policy; readonly verdict: PolicyDecision };
+import type { BoundRunAdmission } from './admission.js';
+export type RunAdmissionEvaluation = { readonly policy: Policy; readonly verdict: PolicyDecision };
 const hash = (tag: string, input: unknown) => sha256(encodeCommandProjection(tag, input));
 /** Run's first consumer of general sealed authority decisions; only evaluatePolicy owns policy semantics. */
 export class RunCreationAuthority {
   constructor(private readonly source: PolicySource, private readonly records: AuthorityDecisionRecords,
     private readonly approvals: RunCreateApprovalBroker, private readonly clock: TrustedClock) {}
-  async evaluate(command: RunAdmission, principal: VerifiedPrincipal): Promise<Evaluation> {
+  async evaluate(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<RunAdmissionEvaluation> {
     let policy: Policy, verdict: PolicyDecision;
     try { policy = policySchema.parse(await this.source.load()); verdict = evaluatePolicy(policy, { principal, action: 'create',
       scopeId: command.scopeId, resource: { kind: 'run', id: command.runId } }); }
@@ -24,12 +24,27 @@ export class RunCreationAuthority {
     }
     return { policy, verdict };
   }
-  async prepare(command: RunAdmission, principal: VerifiedPrincipal, evaluation: Evaluation, create: RunCreate, workspace?: RunWorkspaceCustody) {
+  evaluatePermissions(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): RunAdmissionEvaluation {
+    let verdict = evaluation.verdict;
+    for (const permission of command.proposal?.requiredPermissions ?? []) {
+      const checked = evaluatePolicy(evaluation.policy, { principal, scopeId: command.scopeId, action: permission.action, resource: { kind: permission.kind, id: permission.resourceId } });
+      if (verdict.decision !== 'deny' && (checked.decision === 'deny' || (checked.decision === 'require-approval' && verdict.decision === 'allow'))) verdict = checked;
+    }
+    if (verdict.decision === 'deny') { this.seal(command, principal, { ...evaluation, verdict }, null); throw new PolicyAuthorizationError('POLICY_DENIED'); }
+    return { ...evaluation, verdict };
+  }
+  async prepare(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, create: RunCreate, workspace?: RunWorkspaceCustody) {
     // Resolution may have awaited catalogs or workspace custody; never apply a stale sampled policy.
     const current = policySchema.parse(await this.source.load());
     if (hash('policy:1', current) !== hash('policy:1', evaluation.policy)) {
       this.recordUnapplied(command, principal, evaluation);
       throw ErrorRegistry.createError('APPROVAL_STALE');
+    }
+    // A proposal may only lower the registry gate when every exact class declares low risk and standing admission.
+    // It never lowers policy require-approval or deny.
+    if (command.proposal && !command.proposal.admission) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
+    if (command.proposal && !command.proposal.admission!.standingAdmission && evaluation.verdict.decision === 'allow') {
+      evaluation = { ...evaluation, verdict: { decision: 'require-approval', revision: evaluation.verdict.revision, reason: 'APPROVAL_REQUIRED' } };
     }
     const record = this.seal(command, principal, evaluation, this.basis(create, workspace));
     const reference = { eventId: record.event.eventId, sequence: record.sequence };
@@ -44,10 +59,10 @@ export class RunCreationAuthority {
     } };
   }
   /** A evaluated Run policy remains evidence even when another admission prerequisite refuses the effect. */
-  recordUnapplied(command: RunAdmission, principal: VerifiedPrincipal, evaluation: Evaluation): void {
+  recordUnapplied(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): void {
     this.seal(command, principal, evaluation, null);
   }
-  verifyReplay(command: RunAdmission, principal: VerifiedPrincipal, create: RunCreate, workspace?: RunWorkspaceCustody): void {
+  verifyReplay(command: BoundRunAdmission, principal: VerifiedPrincipal, create: RunCreate, workspace?: RunWorkspaceCustody): void {
     if (!create.authority) return; // Historical pre-v52 receipts stay byte-exact; no invented decision.
     const record = this.records.load(command.scopeId, create.authority.decision.eventId);
     if (!record || record.sequence !== create.authority.decision.sequence || record.event.subject.kind !== 'authority-decision') throw new AuditError('AUDIT_INTEGRITY');
@@ -62,7 +77,7 @@ export class RunCreationAuthority {
   private basis(create: RunCreate, workspace?: RunWorkspaceCustody) {
     return { create: runCreateSchema.omit({ now: true, authority: true }).strip().parse(create), workspace: workspace ?? null };
   }
-  private seal(command: RunAdmission, principal: VerifiedPrincipal, evaluation: Evaluation, basis: unknown) {
+  private seal(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, basis: unknown) {
     const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: command.commandId, scopeId: command.scopeId,
       principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, idempotencyKeyHash: sha256(command.commandId) });
     return this.records.record({ kind: 'authority-decision', schemaVersion: 1, envelope, action: 'create', resource: { kind: 'run', id: command.runId },

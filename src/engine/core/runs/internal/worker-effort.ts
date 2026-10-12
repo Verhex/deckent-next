@@ -25,7 +25,7 @@ export async function prepareWorkerEffortAdmission(graphInput: unknown, registry
   const select = (profile: ExecutionProfileDefinition, kind: string, taskId: string, pin: { channelId: string; modelId: string }, input?: WorkInput): WorkerEffort | undefined => {
     const model = models.get(key(pin)); if (!model) return undefined;
     const prepared = input ? undefined : readWorkerModelPin(profile.parameters)?.reasoningEffort;
-    try { return selectWorkerEffort({ model, capability: compiler.capability(profile), kind, workClass: input?.workClass,
+    try { return selectWorkerEffort({ model, capability: compiler.capability(profile), kind, workClass: graph.tasks.find(task => task.id === taskId)?.workClass ?? input?.workClass,
       explicit: input?.effort ?? (prepared?.source === 'explicit' ? prepared.level ?? undefined : undefined), policy: registry.workClasses }); }
     catch (error) {
       if (!(error instanceof WorkerEffortError)) throw error;

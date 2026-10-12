@@ -1,3 +1,4 @@
+import { runProposalCommand } from './run-proposal.js';
 import { poolDriftLine, poolWaitLine } from './pool.js';
 import { cliUsage, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
@@ -39,6 +40,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
+  if (action === 'propose' || action === 'inspect-proposal') return runProposalCommand(argv, context, earlyLocale);
   if (!hasCliAction('run', action)) throw usage();
   const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
     ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(action === 'hold' ? ['--reason'] : action === 'resume' ? ['--task', '--answer'] : [])];
@@ -130,7 +132,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     };
     const run = data.run;
     if (!run) return '';
-    return [t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
+    return [...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []), t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
       ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
       t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
       ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),

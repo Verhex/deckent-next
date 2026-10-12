@@ -26,6 +26,10 @@ export const workClassAcceptanceProfileSchema = z.object({ schemaVersion: z.lite
   && value.evidenceTypes.every(kind => value.rubric.some(row => row.evidenceTypes.includes(kind)))
   && value.decisionThresholds.rejectBelow <= value.decisionThresholds.acceptAt).readonly();
 const classSchema = z.object({ id: identitySchema, defaultEffort: z.enum(REASONING_EFFORTS) }).strict().readonly();
+/** Trusted registry policy only; absence never means standing admission. No parent inherits this grant. */
+const proposalAdmission = z.object({ risk: z.enum(['low', 'normal', 'high']), standingAdmission: z.boolean() }).strict()
+  .refine(value => !value.standingAdmission || value.risk === 'low').readonly();
+const proposalPermissions = z.array(z.object({ kind: identitySchema, actions: z.array(identitySchema).min(1).max(256).readonly() }).strict().readonly()).max(256).readonly();
 const bindingSchema = z.object({ kind: identitySchema, classId: identitySchema }).strict().readonly();
 const legacyRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema,
   classes: z.array(classSchema).min(1).max(256).readonly(),
@@ -33,11 +37,12 @@ const legacyRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: i
 }).strict();
 const currentRegistrySchema = z.object({ schemaVersion: z.literal(2), revision: identitySchema,
   classes: z.array(z.object({ id: identitySchema, defaultEffort: z.enum(REASONING_EFFORTS),
-    parentClassId: identitySchema.optional(), acceptanceProfile: workClassAcceptanceProfileSchema,
+    parentClassId: identitySchema.optional(), acceptanceProfile: workClassAcceptanceProfileSchema, proposalAdmission: proposalAdmission.optional(),
   }).strict().readonly()).min(1).max(256).readonly(),
   bindings: z.array(z.object({ kind: identitySchema, classId: identitySchema,
     override: z.object({ previousClassId: identitySchema }).strict().readonly().optional(),
   }).strict().readonly()).max(1024).readonly(),
+  proposalPermissions: proposalPermissions.optional(),
 }).strict();
 export const evidenceExtensionSchema = z.object({ id: z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/),
   version: z.number().int().positive().safe(), mapsTo: coreEvidenceTypeSchema,
@@ -66,7 +71,8 @@ export class WorkClassRegistryError extends Error {
     | 'WORK_CLASS_REVISION_INVALID' | 'WORK_CLASS_EVIDENCE_NOT_REGISTERED' | 'TASK_EVALUATION_PROFILE_MISMATCH') { super(code); this.name = 'WorkClassRegistryError'; }
 }
 export type WorkClassPolicy = Readonly<{ revision: string; classes: readonly WorkClassRegistry['classes'][number][];
-  bindings: readonly Readonly<{ kind: string; classId: string }>[]; evidenceExtensions?: readonly z.infer<typeof evidenceExtensionSchema>[] }>;
+  bindings: readonly Readonly<{ kind: string; classId: string }>[]; evidenceExtensions?: readonly z.infer<typeof evidenceExtensionSchema>[];
+  proposalPermissions?: z.infer<typeof proposalPermissions> | undefined }>;
 /** Caller order is explicit precedence; revisions are an unambiguous ordered tuple, bounded by the existing wire identifier budget.
  * Class definitions never override. A binding override is a compare-and-set against its prior class, not an implicit permission. */
 export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayInputs: readonly WorkClassRegistry[]): WorkClassPolicy {
@@ -75,6 +81,7 @@ export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayIn
   const extensions = new Map((core.schemaVersion === 3 ? core.evidenceExtensions : []).map(row => [row.id, row]));
   const classes = new Map(core.classes.map(row => [row.id, row]));
   const bindings = new Map(core.bindings.map(row => [row.kind, row.classId]));
+  const permissions = [core, ...overlays].flatMap(row => row.schemaVersion === 1 ? [] : row.proposalPermissions ?? []);
   for (const overlay of overlays) {
     for (const row of overlay.schemaVersion === 3 ? overlay.evidenceExtensions : []) {
       if (extensions.has(row.id)) throw new WorkClassRegistryError('WORK_CLASS_OVERRIDE_DENIED');
@@ -109,7 +116,7 @@ export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayIn
   }
   const revision = overlays.length === 0 ? core.revision : JSON.stringify([core.revision, ...overlays.map(row => row.revision)]);
   if (!identitySchema.safeParse(revision).success) throw new WorkClassRegistryError('WORK_CLASS_REVISION_INVALID');
-  return Object.freeze({ revision, evidenceExtensions: Object.freeze([...extensions.values()]), classes: Object.freeze([...classes.values()]),
+  return Object.freeze({ revision, proposalPermissions: Object.freeze(permissions), evidenceExtensions: Object.freeze([...extensions.values()]), classes: Object.freeze([...classes.values()]),
     bindings: Object.freeze([...bindings].map(([kind, classId]) => Object.freeze({ kind, classId }))) });
 }
 /** One effective policy/class owner shared by effort selection and acceptance admission. */

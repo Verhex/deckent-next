@@ -46,6 +46,8 @@ export const CLI_CATALOG = [
   ] },
   { name: 'run', group: 'work', summary: 'cli.help.summary.run', detail: 'cli.help.run', children: [
     action('create', 'work', 'cli.help.action.create', 'cli.help.run'),
+    action('propose', 'work', 'cli.help.action.propose', 'cli.help.run'),
+    action('inspect-proposal', 'observe', 'cli.help.action.inspectProposal', 'cli.help.run'),
     action('reserve', 'work', 'cli.help.action.reserve', 'cli.help.run'),
     action('inspect', 'work', 'cli.help.action.run.inspect', 'cli.help.run'),
     action('cancel', 'work', 'cli.help.action.run.cancel', 'cli.help.run'),
