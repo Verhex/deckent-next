@@ -1,3 +1,4 @@
+import { mcpPrincipalRef } from '#domain/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -49,11 +50,12 @@ async function fixture(execute = true, twoTasks = false, withInputs = false, rea
     execution: { docker: { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 },
       git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
-  const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
+  const os = userInfo(); const owner = { issuer: hostname(), subject: String(os.uid) };
+  const principals = [owner, mcpPrincipalRef(owner)];
   const policy = async (allowExecute: boolean) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: allowExecute ? 'allow' : 'deny', restrictions: [], grants: [
     { id: 'create', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    ...(allowExecute ? [{ id: 'execute', effect: 'allow', actions: ['execute', 'evaluate', ...(withInputs && readOutput ? ['read-output'] : [])], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] : []),
+    ...(allowExecute ? [{ id: 'execute', effect: 'allow', actions: ['execute', 'evaluate', ...(readOutput ? ['read-output'] : [])], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] : []),
   ] }), { mode: 0o600 });
   await policy(execute);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] },
@@ -173,7 +175,11 @@ describe.skipIf(!dockerEnabled)('selected task execution', () => {
       const command = { schemaVersion: 1 as const, commandId: 'evaluate', identity, expectedRevision: 2 };
       const evaluated = await evaluate(command);
       expect(evaluated.evaluation.run.tasks[0]!.phase).toBe('accepted');
-      expect(await evaluateTask(f.project, command, f.options)).toEqual(evaluated);
+      expect(await evaluate(command)).toEqual(evaluated);
+      // MCP owns a different actor-bound receipt; the OS caller cannot replay that mutation.
+      if (client) await expect(evaluateTask(f.project, command, f.options)).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
+      else expect(await evaluateTask(f.project, command, f.options)).toEqual(evaluated);
+      await expect(evaluate({ ...command, expectedRevision: command.expectedRevision + 1 })).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
       expect(JSON.stringify({ first, evaluated })).not.toContain('argv');
       expect(JSON.stringify({ first, evaluated })).not.toContain('/workspace');
       expect(JSON.stringify({ first, evaluated })).not.toContain('base\\n');
@@ -207,8 +213,8 @@ describe.skipIf(!dockerEnabled)('selected task execution', () => {
 });
 
 describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () => {
-  it('shares one accepted Run across compiled CLI and real stdio MCP with exact artifact and receipt identity', async () => {
-    const f = await fixture();
+  it.each([true, false])('shares one accepted Run across compiled CLI and real stdio MCP with exact artifact and receipt identity (read-output=%s)', async readOutput => {
+    const f = await fixture(true, false, false, readOutput);
     const publicSurface = await reserveThroughPublicSurface('cli', f); const identity = publicSurface.identity;
     const transport = new StdioClientTransport({ command: process.execPath,
       args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', f.project], env: f.options.env, stderr: 'pipe' });
@@ -230,24 +236,25 @@ describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () =>
 
       const inspected = await cliCall<Awaited<ReturnType<typeof inspectRun>>>(f,
         ['run', 'inspect', '--scope', 's', '--id', 'r', '--json']);
-      // Inspection adds read-time observations to the recorded Run: the pool and (M2) the delivery outlook of an accepted Run without a
-      // delivery receipt. Both are asserted exactly and are identical on the MCP inspection; everything else equals the evaluation result.
+      // Evaluation and inspection share output-authorized result/delivery observations; inspection also adds the pool.
       expect((await client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r' } })).structuredContent).toEqual(inspected);
       const { pool, ...recordedRun } = inspected.run;
       expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
         effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
       // The only task carries no work input, so nothing is owed to delivery.
-      expect(recordedRun.tasks.map(task => task.resultBrief?.deliveryOutlook)).toEqual(['none']);
-      const recordedTasks = recordedRun.tasks.map(({ resultBrief, ...task }) => {
-        const brief = { ...resultBrief! }; delete brief.deliveryOutlook; return { ...task, resultBrief: brief };
-      });
-      expect({ ...recordedRun, tasks: recordedTasks }).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
+      if (readOutput) expect(recordedRun.tasks.map(task => task.resultBrief?.deliveryOutlook)).toEqual(['none']);
+      else for (const task of recordedRun.tasks) expect(task).not.toHaveProperty('resultBrief');
+      expect(recordedRun).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
+      expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toEqual(inspected.run);
+      expect((await client.callTool({ name: 'evaluate_task', arguments: command })).structuredContent).toEqual(evaluationResult.structuredContent);
+      await expect(evaluateTask(f.project, { ...command, schemaVersion: 1 }, f.options)).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
       record = await runtime.store.loadBoundDispatch(identity);
       const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record!.output!)));
       expect(output).toMatchObject({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'base\n' });
       const receipt = await runtime.store.loadRunReceipt('s', 'cross-evaluate');
       expect(receipt?.snapshot.identity).toMatchObject({ scopeId: 's', runId: 'r' });
       expect(JSON.parse(receipt!.command)).toMatchObject({ action: 'apply-task-evaluation', commandId: 'cross-evaluate',
+        actor: mcpPrincipalRef({ issuer: hostname(), subject: String(userInfo().uid) }),
         evaluation: { identity }, dispatch: { request: { identity } } });
       lease = await runtime.workspaces.openRecorded(identity);
     } finally {

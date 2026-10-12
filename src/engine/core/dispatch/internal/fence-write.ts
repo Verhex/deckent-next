@@ -20,6 +20,7 @@ export interface LostDispatchReceipt {
 }
 export type LostDispatchAudit = (store: AuditStore, snapshot: RunSnapshot) => AuditRecord;
 export interface LostDispatchStore {
+  loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   releaseLostDispatch?(write: LostDispatchRelease, audit: LostDispatchAudit): Promise<LostDispatchReceipt>;
   fenceLostDispatch(write: LostDispatchWrite, audit: LostDispatchAudit): Promise<LostDispatchReceipt>;
   loadRunReceipt(scopeId: string, commandId: string): Promise<LostDispatchReceipt | null>;

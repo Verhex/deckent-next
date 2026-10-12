@@ -1,3 +1,4 @@
+import { mcpPrincipalRef } from '#domain/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { spawn, execFile } from 'node:child_process';
@@ -35,9 +36,10 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
   const seed = await openSqliteAttemptStore(configured.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow',
     { validate: validateDockerSupervisorProfile });
   await admitRunAttempts(seed, [identity]); seed.close();
+  const principal = { issuer: hostname(), subject: String(os.uid) };
   const policy = { schemaVersion: 1, revision: 'p', restrictions: [], grants: [
-    { id: 'member', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(os.uid) }], resource: { kind: 'run', ids: ['r'] } },
-    { id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(os.uid) }], resource: { kind: 'attempt', ids: [identity.attemptId] } },
+    { id: 'member', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [principal, mcpPrincipalRef(principal)], resource: { kind: 'run', ids: ['r'] } },
+    { id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [principal, mcpPrincipalRef(principal)], resource: { kind: 'attempt', ids: [identity.attemptId] } },
   ] };
   await writeFile(join(data, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
   const runtime = await startTestRuntimeService(project, options.env);
@@ -70,6 +72,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
     await expect(exec('/usr/bin/docker', ['--host', endpoint, 'inspect', handle])).rejects.toMatchObject({ stderr: expect.stringMatching(/no such object/i) });
     if (client && transport) await client.connect(transport);
     const result = client ? await client.callTool({ name: 'reconcile_attempt', arguments: identity }) : await reconcileAttempt(project, identity, options);
+    if (client) expect((result as { isError?: boolean }).isError).not.toBe(true);
     const reconciliation = client ? (result as { structuredContent: { reconciliation: unknown } }).structuredContent.reconciliation
       : result.reconciliation;
     expect(reconciliation).toMatchObject({ status: 'unresolved', terminal: null, outputRecorded: false });

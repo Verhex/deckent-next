@@ -31,7 +31,9 @@ async function fixture(allow = true, shutdownGraceMs = 1000, headerTimeoutMs = 1
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: allow ? 'allow' : 'deny', restrictions: [], grants: [
     ...(allow ? [{ id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
       { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-      { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } }] : []),
+      { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
+      // Result briefs follow the producing Attempt's read-output grant (alpha.30); the inspection below asserts the brief.
+      { id: 'output', effect: 'allow', actions: ['read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] : []),
   ] }), { mode: 0o600 }); const ledgerPath = opened.path; opened.store.close();
   return { project, data, env, ledgerPath };
 }

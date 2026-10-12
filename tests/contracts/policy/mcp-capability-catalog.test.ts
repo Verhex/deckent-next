@@ -22,6 +22,14 @@ describe('MCP capability catalog and governed preview contract', () => {
     expect(mcpCapabilityRegistry.get('dogfood-worker').proposed).toBe(true);
     expect(mcpCapabilityRegistry.get('dogfood-worker').cells.every(cell => ['run', 'attempt', 'pool', 'work-target'].includes(cell.resource.kind))).toBe(true);
   });
+  it.each(['work', 'dogfood-worker'])('%s requires Run inspection as well as Attempt authority for evaluation', groupId => {
+    const requirements = mcpCapabilityRegistry.get(groupId).cells.filter(cell => Object.hasOwn(cell.tools, 'evaluate_task'));
+    expect(requirements.find(cell => cell.resource.kind === 'run')).toMatchObject({
+      scope: 'selected', tools: { evaluate_task: ['inspect'] }, actions: expect.arrayContaining(['inspect']),
+    });
+    expect(requirements.find(cell => cell.resource.kind === 'attempt')?.tools['evaluate_task']).toEqual(['evaluate', 'read-output', 'recover-output']);
+    expect(requirements.some(cell => cell.actions.includes('decide'))).toBe(false);
+  });
   it('Enterprise adds a namespaced immutable group through the registry; duplicate, Core override and late registration refuse', () => {
     const registry = new McpCapabilityRegistry(mcpCapabilityRegistry.list()), core = mcpCapabilityRegistry.get('service');
     const extension = { ...core, id: 'enterprise.erp', cells: core.cells.map(cell => ({ ...cell, actions: [...cell.actions] })) };

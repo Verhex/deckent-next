@@ -68,7 +68,12 @@ describe('configured handoff producer to dependent (source only)', () => {
     }
     expect((await executeConfiguredTask(project, target, options)).execution.terminal?.exitCode).toBe(0);
     const inspected = await inspectConfiguredRun(project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, options);
-    expect(inspected.run!.tasks[1]!.handoffs).toHaveLength(1);
+    const handoffs = inspected.run!.tasks[1]!.handoffs!;
+    expect(handoffs.map(receipt => receipt.kind).sort()).toEqual(startFrom
+      ? ['handoff-received', 'workspace-started-from-patch'] : ['handoff-received']);
+    for (const receipt of handoffs) expect(receipt).toMatchObject({ source, digest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    if (startFrom) expect(handoffs.find(receipt => receipt.kind === 'workspace-started-from-patch')).toMatchObject({
+      bindingDigest: expect.stringMatching(/^[a-f0-9]{64}$/), snapshotDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
     const lease = await runtime.workspaces.openRecorded(target); expect(lease!.baseCommit).toBe(base);
     expect(await readFile(join(project, 'input'), 'utf8')).toBe('owner-wip\n');
     const output = (await runtime.store.loadBoundDispatch(target))!.output!;

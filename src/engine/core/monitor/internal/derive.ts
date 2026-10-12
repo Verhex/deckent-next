@@ -121,7 +121,7 @@ function closeReasonOf(attempt: MonitorLedgerAttempt): MonitorCloseReason | null
  * else a retained patch awaits delivery; no such task means nothing to deliver. Unknown evidence (an older reader without the patch record) yields no outlook.
  */
 function deliveryOutlookOf(e: MonitorRunEvidence, state: MonitorRunState): MonitorDeliveryOutlook | undefined {
-  if (state !== 'accepted' || e.run.delivery) return undefined;
+  if (state !== 'accepted' || e.run.delivery || e.run.deliveryOutputPermitted === false) return undefined;
   const snapshot = e.run.snapshot; let ready = false, unknown = false;
   for (const task of snapshot.graph.tasks) {
     const progress = snapshot.progress.find(value => value.taskId === task.id);

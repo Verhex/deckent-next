@@ -10,6 +10,7 @@ import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
 import { emptyWorkerContent, readMonitorWorkerContent } from './worker-content.js';
 import { scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
+import { authorizeMonitorDelivery } from './receipt-observation.js';
 import limits from './display-limits.json' with { type: 'json' };
 
 /** MONITOR v1.1 bounds: recorded outputs larger than this are not parsed for a first failure; events kept per attempt; live tail bytes. */
@@ -23,15 +24,19 @@ const recent = (events: readonly { readonly atMs: number | null; readonly event:
 /** Capture one read-only ledger transaction and its file identities. Content is deferred until readShown:
  * only exact selected identities pass through read-output, then artifact/sidecar reads outside the transaction.
  * No product files, state or policy are created or healed. */
-export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }, retained?: RunSnapshot) {
+export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }, retained?: RunSnapshot,
+  expected?: { revision: number; layoutRevision: string }) {
   const layout = config.productLayout;
   const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
     { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}) }, retained);
+  // Reject stale/future result views before any output decision or read, including receipt observations.
+  const scoped = expected ? { ...scan.reading, runs: scan.reading.runs.filter(value => value.snapshot.revision === expected.revision
+    && value.snapshot.identity.layoutRevision === expected.layoutRevision) } : scan.reading;
   const diagnostics = [...scan.reading.diagnostics];
   const artifacts = FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes);
   const contentNamespace = JSON.stringify([productResourcePath(layout, 'artifacts'), config.artifacts.maxBytes]);
   const map = run ? scan.reading.map ?? null : await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics);
-  const reading = Object.freeze({ ...scan.reading, map, diagnostics: Object.freeze([...diagnostics]) });
+  const reading = await authorizeMonitorDelivery(Object.freeze({ ...scoped, map, diagnostics: Object.freeze([...diagnostics]) }), readOutput);
   return { reading, async readShown(identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading> {
     const selected = scan.files.filter(files => identities.some(identity => sameAttemptIdentity(identity, files.identity)));
     const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
@@ -55,7 +60,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     const runs = reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map(value => {
       const found = extra.get(`${run.snapshot.identity.scopeId}/${value.attemptId}`); return found ? Object.freeze({ ...value, ...found }) : value;
     })) }));
-    return Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) });
+    return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
   } };
 }
 /** Metadata only. Artifact reads are explicitly deferred until the application selects its visible worker set. */

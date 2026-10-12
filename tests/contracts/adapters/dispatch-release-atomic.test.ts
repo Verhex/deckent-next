@@ -22,15 +22,18 @@ afterEach(async () => {
 async function open(path: string) {
   const store = await openSqliteAttemptStore(path, options, timing, 'allow', custodyProfiles); stores.push(store); return store;
 }
-async function fixture(granted = true) {
+async function fixture(granted = true, siblings = false) {
   const root = await mkdtemp(join(tmpdir(), 'dispatch-fence-atomic-')); roots.push(root);
   const path = join(root, 'ledger.db'), store = await open(path);
   const identity = { scopeId: 's', runId: 'run', taskId: 'task', attemptId: 'attempt', layoutRevision: 'layout', generation: 1 };
-  await admitRunAttempts(store, [identity]);
+  const siblingIdentity = { ...identity, taskId: 'sibling', attemptId: 'sibling-attempt' };
+  await admitRunAttempts(store, siblings ? [identity, siblingIdentity] : [identity]);
   const claim = { request: { protocolVersion: 1 as const, identity, workspace: root, argv: ['fixture'] }, owner: 'owner' };
   await store.claimDispatch(dispatchAdmission(claim)); if (granted) await grantTestLaunch(store, claim);
   const worker = { kind: 'container' as const, id: 'a'.repeat(64), startedAt: '2026-10-11T01:00:00.000000001Z' };
   await store.retainDispatchWorker(claim, worker);
+  const sibling = { request: { ...claim.request, identity: siblingIdentity }, owner: 'sibling-owner' };
+  if (siblings) { await store.claimDispatch(dispatchAdmission(sibling)); await grantTestLaunch(store, sibling); }
   const attempt = (await store.load('s', 'attempt'))!, run = (await store.loadRun('s', 'run'))!;
   const { write, commandId, command } = encodeLostDispatchWrite({ schemaVersion: 1, identity, owner: claim.owner,
     actor: custodyPrincipal, reasonCode: 'WORKER_LOST', now: 10,
@@ -40,7 +43,7 @@ async function fixture(granted = true) {
     policyRevision: 'fixture-policy', atMs: write.now, subject: { kind: 'run-lifecycle', action: 'hold',
       runId: 'run', taskId: 'task', commandId, revision: snapshot.revision, evidence: null,
       inputDigest: createHash('sha256').update(command).digest('hex') } });
-  return { path, store, claim, worker, attempt, run, write, commandId, audit };
+  return { path, store, claim, sibling, worker, attempt, run, write, commandId, audit };
 }
 
 async function fenced() { const f = await fixture(); await f.store.fenceLostDispatch(f.write, f.audit); return f; }
@@ -105,5 +108,76 @@ it.each(['runs', 'audit_events', 'run_receipts'])('rolls back the custody releas
   try { raw.exec(`CREATE TRIGGER release_fault BEFORE ${table === 'runs' ? 'UPDATE' : 'INSERT'} ON ${table} BEGIN SELECT RAISE(ABORT, 'fixture fault'); END`); } finally { raw.close(); }
   await expect(application(f, async () => ({ kind: 'worker-absent', worker: f.worker })).recover(await input(f))).rejects.toThrow();
   expect(await f.store.loadRun('s', 'run')).toEqual(run); expect((await f.store.readPoolHold('fixture-pool')).occupancy).toEqual({ execution: 1, inFlight: 1 });
+  expect(await f.store.loadRunReceipt('s', dispatchReleaseReceiptId(f.write.identity, f.claim.owner))).toBeNull();
+});
+
+// The first recovery must create its own fence and use that committed revision for release.
+it.each([true, false])('first unfenced recover releases only with termination evidence %s', async terminated => {
+  const f = await fixture(); let observed = 0;
+  const app = new LostDispatchApplication(f.store, { async verify() { return custodyPrincipal; } }, { async authorizeIdentity() {} },
+    { async observe() { observed++; return { handle: 'worker', result: { kind: 'unknown', reasonCode: 'WORKER_LOST' } }; },
+      async termination() { return terminated ? { kind: 'worker-absent', worker: f.worker } : null; } },
+    target => new AuditApplication(target, integrity), 'fixture-policy', () => 20);
+  expect(await f.store.loadRunReceipt('s', f.commandId)).toBeNull();
+  const originalInput = await input(f), result = await app.recover(originalInput);
+  expect(observed).toBe(1);
+  expect(result.decision.kind).toBe(terminated ? 'release' : 'hold-manual');
+  const run = (await f.store.loadRun('s', 'run'))!;
+  expect(run.revision).toBe(f.run.revision + (terminated ? 2 : 1));
+  expect(run.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
+  expect((await f.store.readPoolHold('fixture-pool')).occupancy).toEqual(terminated ? { execution: 0, inFlight: 0 } : { execution: 1, inFlight: 1 });
+  expect(await app.recover(originalInput)).toEqual(result);
+  expect(observed).toBe(1);
+  const raw = new DatabaseSync(f.path);
+  try { expect(raw.prepare('SELECT count(*) AS n FROM audit_events').get()?.n).toBe(terminated ? 2 : 1); } finally { raw.close(); }
+});
+
+it.each(['sibling-exit', 'sibling-fence'] as const)('recovers a replayed fence after %s advances the Run, with one durable release and reopen replay', async advance => {
+  const f = await fixture(true, true); let terminated = false, observations = 0;
+  const app = new LostDispatchApplication(f.store, { async verify() { return custodyPrincipal; } }, { async authorizeIdentity() {} },
+    { async observe() { observations++; return { handle: 'worker', result: { kind: 'unknown', reasonCode: 'WORKER_LOST' } }; },
+      async termination() { return terminated ? { kind: 'worker-absent', worker: f.worker } : null; } },
+    target => new AuditApplication(target, integrity), 'fixture-policy', () => 20);
+  const originalInput = await input(f), held = await app.recover(originalInput);
+  expect(held.decision).toEqual({ kind: 'hold-manual', reason: 'termination-required' });
+  const fenceRevision = held.receipt.snapshot.revision;
+  if (advance === 'sibling-exit') await f.store.finishDispatch(f.sibling, { handle: 'sibling', exitCode: 0, interrupted: false });
+  else await app.fence({ schemaVersion: 1, identity: f.sibling.request.identity,
+    expectedRunRevision: fenceRevision, expectedAttemptRevision: (await f.store.load('s', 'sibling-attempt'))!.revision });
+  const current = (await f.store.loadRun('s', 'run'))!, before = (await f.store.readPoolHold('fixture-pool')).occupancy;
+  expect(current.revision).toBeGreaterThan(fenceRevision);
+  const sibling = current.progress.find(value => value.taskId === 'sibling');
+  terminated = true;
+  const released = await app.recover(await input(f));
+  expect(released.decision.kind).toBe('release');
+  expect(released.receipt.snapshot.revision).toBe(current.revision + 1);
+  expect(released.receipt.snapshot.progress.find(value => value.taskId === 'sibling')).toEqual(sibling);
+  const after = { execution: before.execution - 1, inFlight: before.inFlight - 1 };
+  expect((await f.store.readPoolHold('fixture-pool')).occupancy).toEqual(after);
+  expect(await app.recover(originalInput)).toEqual(released);
+  expect(observations).toBe(advance === 'sibling-fence' ? 2 : 1);
+  f.store.close(); stores.splice(stores.indexOf(f.store), 1); const reopened = await open(f.path);
+  expect(await application(f, async () => { throw new Error('release replay must not observe'); }, reopened).recover(await input(f, reopened))).toEqual(released);
+  expect((await reopened.readPoolHold('fixture-pool')).occupancy).toEqual(after);
+  const raw = new DatabaseSync(f.path);
+  try { expect(raw.prepare('SELECT count(*) AS n FROM run_receipts WHERE scope_id=? AND command_id=?').get('s', dispatchReleaseReceiptId(f.write.identity, f.claim.owner))?.n).toBe(1); }
+  finally { raw.close(); }
+  console.log(JSON.stringify({ advance, fenceRevision, currentRevision: current.revision, releaseRevision: released.receipt.snapshot.revision, before, after, reopen: after }));
+});
+
+it('preserves a typed CAS refusal when a sibling advances after the fresh read but before release', async () => {
+  const f = await fixture(true, true); await f.store.fenceLostDispatch(f.write, f.audit);
+  const store = new Proxy(f.store, { get(target, key) {
+    if (key === 'releaseLostDispatch') return async (...args: Parameters<typeof target.releaseLostDispatch>) => {
+      await target.finishDispatch(f.sibling, { handle: 'sibling', exitCode: 0, interrupted: false });
+      return target.releaseLostDispatch(...args);
+    };
+    const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+  } });
+  await expect(application(f, async () => ({ kind: 'worker-absent', worker: f.worker }), store).recover(await input(f)))
+    .rejects.toMatchObject({ code: 'RUN_REVISION_CONFLICT' });
+  const current = (await f.store.loadRun('s', 'run'))!;
+  expect(current.progress.find(value => value.taskId === 'task')).not.toHaveProperty('workerCustody');
+  expect((await f.store.readPoolHold('fixture-pool')).occupancy).toEqual({ execution: 1, inFlight: 2 });
   expect(await f.store.loadRunReceipt('s', dispatchReleaseReceiptId(f.write.identity, f.claim.owner))).toBeNull();
 });

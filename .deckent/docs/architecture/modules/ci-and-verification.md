@@ -1,5 +1,14 @@
 # CI and verification tooling — module note
 
+**CI doctor preparation (CI-ONARIM, 2026-10-11; author candidate, hosted acceptance pending).**
+`ci-shell-realm.mjs` verifies the locked source/dist bundles and the service's bubblewrap probe, then
+initializes a disposable project with an isolated HOME through the normal `init policy --apply` command.
+The same built CLI must return zero from `doctor --json`, report ready startability with no checks and
+select available bubblewrap from the runner's existing `DECKENT_GLOBAL_HOME`. The project is removed
+in `finally`; the checkout is never initialized and no runtime or provider is started. Installation,
+doctor, bundle and sandbox failures still stop the job. This aligns CI with the first-install readiness
+checks added in W5-INSTALL-FLOW; it does not change doctor or weaken its nonzero refusal.
+
 **CI-SPEED amendment (owner approved 2026-10-06; isolated author candidate, hosted acceptance pending).**
 The required Ubuntu Node24/26 check names stay unchanged for PR/integration verification. Each Node builds once,
 then all Vitest files run in eight duration-balanced shards with normal fork/file isolation and four workers per runner.

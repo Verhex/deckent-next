@@ -23,6 +23,8 @@ export const taskEvaluationCommitSchema = z.object({
 export type TaskEvaluationCommit = z.infer<typeof taskEvaluationCommitSchema>;
 export interface TaskEvaluationStore {
   commitTaskEvaluation(input: TaskEvaluationCommit): Promise<RunReceipt>;
+  /** Exact effect references already accepted by this Run; no timestamp-only exception. */
+  loadAcceptedOperationSettlements?(run: import('#domain/index.js').RunSnapshot): Promise<NonNullable<import('#domain/index.js').OperationEvidenceBinding['acceptedSettlements']>>;
   /** Immutable Run admission authority, never the evaluating caller or criterion parameters. */
   loadRunEvaluationPrincipal?(identity: import('#domain/index.js').AttemptIdentity): Promise<TaskEvaluationCommit['actor'] | null>;
 }

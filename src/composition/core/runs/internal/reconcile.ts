@@ -29,7 +29,8 @@ export async function reconcileConfiguredAttempt(projectRoot: string, input: Att
       const app = new DispatchApplication(dispatchStore, supervisor, verifier, authorization, principal.id, artifacts);
       const fence = await store.loadRunReceipt(identity.scopeId, dispatchFenceReceiptId(identity, recorded.owner));
       if (fence) {
-        const run = (await store.loadRun(identity.scopeId, identity.runId))!, attempt = (await store.load(identity.scopeId, identity.attemptId))!;
+        const run = await store.loadRun(identity.scopeId, identity.runId), attempt = await store.load(identity.scopeId, identity.attemptId);
+        if (!run || !attempt) throw new DispatchError('DISPATCH_NOT_ADMITTED');
         const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
         const recovery = new LostDispatchApplication(store, verifier, authorization, {
           observe: record => supervisor.observe(record.request),

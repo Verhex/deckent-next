@@ -82,10 +82,11 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
     emit(await inspect(root, options), { ...sinks, render: snapshot => renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters }) });
     return;
   }
+  // The command already selected the interactive TTY lane; do not let Ink infer a different lane from ambient CI.
   const palette = resolveWorklinePalette(colorTier({ env, isTTY: true, noColor: parsed.noColor }));
   const instance = render(createElement(MonitorApp, { load: () => inspect(root, options), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters,
     ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}),
-    errorText: (error: unknown) => monitorFailureText(error, locale) }), { alternateScreen: true, patchConsole: false,
+    errorText: (error: unknown) => monitorFailureText(error, locale) }), { interactive: true, alternateScreen: true, patchConsole: false,
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}), ...(context.stdin ? { stdin: context.stdin as unknown as NodeJS.ReadStream } : {}) });
   const stop = () => instance.unmount();
   context.signal?.addEventListener('abort', stop, { once: true });

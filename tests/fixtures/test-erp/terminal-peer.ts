@@ -10,7 +10,13 @@ if pid == 0:
     os.write(1, (json.dumps({'pid': os.getpid(), 'uid': os.getuid(), 'gid': os.getgid()}) + '\n').encode())
     while True: signal.pause()
 try:
-    sys.stdout.write(os.read(terminal, 4096).decode()); sys.stdout.flush()
+    # PTY reads are a byte stream: retain fragments until the readiness line is complete.
+    ready = bytearray()
+    while b'\n' not in ready:
+        chunk = os.read(terminal, 4096)
+        if not chunk: raise RuntimeError('test terminal closed before readiness')
+        ready.extend(chunk)
+    sys.stdout.write(ready.decode()); sys.stdout.flush()
     sys.stdin.buffer.read()
 finally:
     os.kill(pid, signal.SIGTERM)

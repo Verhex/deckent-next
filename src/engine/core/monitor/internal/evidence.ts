@@ -51,6 +51,10 @@ export interface MonitorLedgerRun {
   readonly createdAtMs: number | null;
   readonly attempts: readonly MonitorLedgerAttempt[];
   readonly delivery?: import('#engine/core/runs/index.js').ResultBrief['runDelivery'];
+  /** Internal producer custody, stripped before public projection; malformed/missing identity grants no output access. */
+  readonly deliveryReceipts?: readonly Readonly<{ identity: AttemptIdentity | null; receipt: NonNullable<ResultBrief['runDelivery']> }>[];
+  /** False when the output-derived Run outlook lacks authority for every bound producer. */
+  readonly deliveryOutputPermitted?: boolean;
 }
 export interface MonitorLedgerApproval {
   readonly scopeId: string; readonly approvalId: string; readonly subjectKind: string; readonly runId: string | null; readonly taskId: string | null;

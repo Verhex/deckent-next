@@ -1,3 +1,4 @@
+import { mcpPrincipalRef } from '#domain/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -28,9 +29,10 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
   const workspace = join(workspaceRoot, 'worker'); await mkdir(workspace, { mode: 0o700 }); const os = userInfo();
   const supervisor = new DockerSupervisor({ ...docker, workspaceRoot, uid: os.uid, gid: os.gid });
   const request = { protocolVersion: 1 as const, identity, workspace, argv: ['node', '-e', "require('node:fs').writeFileSync('/workspace/ready','yes');setInterval(()=>{},1000)"] };
+  const principal = { issuer: hostname(), subject: String(os.uid) };
   const policy = async (allow: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [
-    { id: 'member', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(os.uid) }], resource: { kind: 'run', ids: ['r'] } },
-    ...(allow ? [{ id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(os.uid) }], resource: { kind: 'attempt', ids: [identity.attemptId] } }] : []),
+    { id: 'member', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [principal, mcpPrincipalRef(principal)], resource: { kind: 'run', ids: ['r'] } },
+    ...(allow ? [{ id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [principal, mcpPrincipalRef(principal)], resource: { kind: 'attempt', ids: [identity.attemptId] } }] : []),
   ] }), { mode: 0o600 });
   const runtime = await startTestRuntimeService(project, options.env);
   const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath,
@@ -52,7 +54,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, ...changedExecution })); clearConfigCache();
     if (client && transport) {
       await client.connect(transport);
-      expect((await client.listTools()).tools.find(tool => tool.name === 'reconcile_attempt')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
+      expect((await client.listTools()).tools.find(tool => tool.name === 'reconcile_attempt')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     }
     await policy(false); await expect(reconcile(identity)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await policy(true);
@@ -106,7 +108,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reject
   const profile = { ...captured, parameters: { ...parameters, origin: { ...parameters.origin, daemonId: foreignDaemonId } } };
   const principal = { issuer: hostname(), subject: String(os.uid) };
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [
-    { id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [principal], resource: { kind: 'attempt', ids: [identity.attemptId] } },
+    { id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [principal, mcpPrincipalRef(principal)], resource: { kind: 'attempt', ids: [identity.attemptId] } },
   ] }), { mode: 0o600 });
   const listContainers = async () => (await runNodeDockerCommand({ executable: docker.executable,
     args: ['--host', parameters.endpoint, 'ps', '-aq', '--filter', `name=^/${handle}$`], timeoutMs: docker.controlTimeoutMs, outputBytes: docker.outputBytes })).stdout.trim().split('\n').filter(Boolean).sort();
@@ -132,8 +134,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reject
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } })); clearConfigCache();
     if (client && transport) await client.connect(transport);
     const failure = await reconcile().then(() => null, error => error as { code?: string; text?: string; message?: string });
-    expect(failure).toMatchObject({ code: 'INVENTORY_UNAVAILABLE' });
-    expect(JSON.stringify(failure)).not.toContain('SUPERVISOR_PROFILE_ORIGIN_MISMATCH');
+    expect(failure).toMatchObject({ code: 'SUPERVISOR_PROFILE_ORIGIN_MISMATCH' });
     expect(JSON.stringify(failure)).not.toContain(foreignDaemonId);
     expect(JSON.stringify(failure)).not.toContain('writeFileSync');
     expect({ dispatch: await store.readDispatch(request), attempt: await store.load('s', identity.attemptId), run: await store.loadRun('s', 'r') }).toEqual(before);

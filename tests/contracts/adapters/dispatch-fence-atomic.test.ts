@@ -144,6 +144,7 @@ it('authenticates and authorizes before reading/observing; unknown yields hold-m
 it('does not read custody after policy refusal or accept caller termination/manual release fields', async () => {
   const f = await fixture(); let reads = 0;
   const application = new LostDispatchApplication({ fenceLostDispatch: f.store.fenceLostDispatch.bind(f.store),
+    loadRun: f.store.loadRun.bind(f.store),
     loadRunReceipt: f.store.loadRunReceipt.bind(f.store), receipt: f.store.receipt.bind(f.store), async loadBoundDispatch() { reads++; return null; } },
   { async verify() { return custodyPrincipal; } }, { async authorizeIdentity() { throw new Error('POLICY_DENIED'); } },
   { async observe() { throw new Error('must not observe'); } }, target => new AuditApplication(target, integrity), 'fixture-policy', () => 10);

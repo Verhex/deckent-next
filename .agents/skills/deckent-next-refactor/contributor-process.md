@@ -35,7 +35,7 @@ Sessions update only their own row through `board.mjs`; main reconciles the role
 workers in its own sub-list. A worker/lane without the shared board leaves the lead a handoff;
 it does not create a competing board. PLAN owns remaining work, COMPLETED-PLAN owns completed work,
 ARCHITECTURE owns contracts, core-memory owns lasting principles, and retained proof stays in the
-external refactor proof area. `follow-up-works/current-flow.md` is a pointer only.
+external refactor proof area. `follow-up-works/current-flow.md` is short-term task memory (owner 2026-10-10).
 
 ## Human branches and commits
 
