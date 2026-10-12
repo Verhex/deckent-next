@@ -1,5 +1,5 @@
 import { appendFileSync } from 'node:fs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorklineApproval, TurnDelta } from '#surfaces/core/terminal/index.js';
 import { approvalCardLines, diffRows } from '#surfaces/core/terminal-work/index.js';
 import { workSurfaceLabels, createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
@@ -259,17 +259,25 @@ describe('approval window in the real Workline', () => {
     }
   });
 
+});
+describe('approval window in the real Workline', () => {
   it('after expiry the window says nothing ran and y decides nothing', async () => {
     const calls: unknown[][] = [];
     let release!: () => void; const hold = new Promise<void>(resolve => { release = resolve; });
     const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en') };
-    const view = mountWorkline({ labels, streamTurn: turn({ expiresAt: Date.now() + 1_300 }, hold) as never, ledger: port(calls) as never });
+    const expiresAt = Date.now() + 600_000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt - 600_000);
+    const view = mountWorkline({ labels, streamTurn: turn({ expiresAt }, hold) as never, ledger: port(calls) as never });
     mounted.push(view.instance);
-    await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('Time is up — nothing ran'), 'expired window', 400);
-    view.stdin.write('y'); await settle(80); view.stdin.write('\r'); await settle(80);
-    expect(calls).toEqual([]);
-    release();
+    try {
+      await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
+      await until(() => view.stdout.frame.includes('What:'), 'pending approval before expiry');
+      expect(view.stdout.frame).not.toContain('Time is up — nothing ran');
+      clock.mockReturnValue(expiresAt + 1);
+      await until(() => view.stdout.frame.includes('Time is up — nothing ran'), 'expired window', 400);
+      view.stdin.write('y'); await settle(80); view.stdin.write('\r'); await settle(80);
+      expect(calls).toEqual([]);
+    } finally { release(); clock.mockRestore(); }
   });
 
   it('Tab writes a reason (a typed y there is text, not a decision); the decision carries it to the port', async () => {
