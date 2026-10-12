@@ -2,11 +2,12 @@ import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchem
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
+import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
 export const runViewSchema = z.object({
+  costReport: workCostReportSchema.optional(),
   authority: authorityAdmissionSchema.optional(), proposal: runProposalBindingSchema.optional(),
   schemaVersion: z.literal(3), runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema,
   registryRevision: identitySchema, pool: runPoolObservationSchema.optional(),

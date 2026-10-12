@@ -81,3 +81,4 @@ export * from '#engine/core/identity-profile/index.js';
 export * from '#engine/core/project-instructions/index.js';
 export * from '#engine/core/backup/index.js';
 export * from '#engine/core/run-planner/index.js';
+export * from '#engine/core/resource-observation/index.js';

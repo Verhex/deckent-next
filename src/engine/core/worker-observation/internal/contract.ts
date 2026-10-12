@@ -26,6 +26,7 @@ export interface WorkerSidecars {
 }
 export type WorkerUsageEvidence = 'sealed' | 'live' | 'none' | 'invalid' | 'unavailable';
 export interface WorkerObservation {
+  readonly resources?: import('#engine/core/resource-observation/index.js').ResourceView;
   readonly taskId: string; readonly identity: AttemptIdentity | null; readonly authority: 'next-ledger' | 'legacy-activity';
   readonly provider: string; readonly workspace: string | null; readonly process: WorkerProcessState;
   readonly handle: string | null; readonly terminal: DispatchTerminal | null;

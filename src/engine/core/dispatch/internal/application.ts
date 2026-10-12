@@ -4,6 +4,7 @@ import { identitySchema, type CorePolicyAction, type AttemptIdentity, type Verif
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { sandboxRequestSchema, sandboxResultSchema, sandboxObservationSchema, sandboxOutputSchema, SupervisorError, type ExecutionSupervisor, type SupervisorProfileSource, type SandboxRequest } from '#engine/core/supervisor/index.js';
 import { DispatchError, type DispatchRecord, type DispatchStore } from './port.js';
+import type { ResourceExecutionObserver } from '#engine/core/resource-observation/index.js';
 export interface DispatchAuthorization {
   authorize(action: CorePolicyAction<'attempt'>, request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
 }
@@ -19,7 +20,7 @@ export class DispatchApplication {
   private readonly owner: string;
   constructor(private readonly store: DispatchStore, private readonly supervisor: ExecutionSupervisor & SupervisorProfileSource,
     private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string, private readonly artifacts: ArtifactStore,
-    private readonly now: () => number = Date.now) {
+    private readonly now: () => number = Date.now, private readonly resources?: ResourceExecutionObserver) {
     this.owner = identitySchema.parse(owner);
   }
   private async admit(action: CorePolicyAction<'attempt'>, input: unknown, credential: unknown) {
@@ -39,7 +40,10 @@ export class DispatchApplication {
     const grant = await this.store.grantLaunch({ claim, principal, now: this.now() });
     if (grant.kind === 'prevented') return Object.freeze({ kind: 'prevented', record: grant.record });
     // A throw or unknown result deliberately leaves the durable claim unresolved. No retry launch.
-    const result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal));
+    const observation = this.resources?.start(request, this.supervisor);
+    let result;
+    try { result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal)); }
+    finally { observation?.stop(); }
     if (result.worker) await this.store.retainDispatchWorker?.(claim, result.worker);
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: grant.record });
     const output = await retainOutput(this.artifacts, request, result, await this.supervisor.collectOutputFiles?.(request) ?? []);

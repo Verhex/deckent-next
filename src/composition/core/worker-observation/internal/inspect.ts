@@ -7,6 +7,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { inspectConfiguredResources } from '#composition/core/resource-observation/index.js';
 export async function inspectConfiguredWorkers(root: string, input: WorkerObservationQuery, options: ConfigLoadOptions = {}): Promise<WorkerObservationReport> {
   try {
     const query = workerObservationQuerySchema.parse(input);
@@ -38,18 +39,19 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
             const basic: WorkerObservation = { taskId: entry.identity.taskId, identity: entry.identity, authority: 'next-ledger',
               provider: 'unknown', workspace: null, process: 'unknown', handle: entry.terminal?.handle ?? null,
               terminal: entry.terminal, outputRecorded: entry.outputRecorded, patchRecorded: false, files: null, diagnostics: [] };
-            if (query.open && entry.terminal) { workers.push({ ...basic, diagnostics: ['info:ledger-only'] }); continue; }
             try {
               await authorization.authorizeIdentity('read-output', entry.identity, target.principal);
+              const resources = await inspectConfiguredResources(target.config, target.layout, entry.identity);
+              if (query.open && entry.terminal) { workers.push({ ...basic, resources, diagnostics: ['info:ledger-only'] }); continue; }
               const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
               const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).catch(() => ({ state: 'unknown' as const, handle: null }));
               let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity)
                 .catch((error: { code?: unknown }) => { absent = error?.code === 'ENOENT'; return null; }), released = absent && !!record.patch && activity.state === 'missing';
               const evidence = await observeAttemptWorkerModels(reader, FileArtifactStore.reader(() => inspectProductDirectory(target.layout, 'artifacts'), target.config.artifacts.maxBytes), entry.identity, files?.usage ?? null), model = evidence.model;
-              workers.push({ ...basic, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle ?? basic.handle,
+              workers.push({ ...basic, resources, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle ?? basic.handle,
                 patchRecorded: !!record.patch, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
                   ...(evidence.usageEvidence === 'unavailable' ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable'])] });
-            } catch (error) { workers.push({ ...basic, diagnostics: [['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable'] }); }
+            } catch (error) { workers.push({ ...basic, diagnostics: [...(query.open && entry.terminal ? ['info:ledger-only'] : []), ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable'] }); }
           }
         } finally { reader.close(); }
         remaining -= workers.length;

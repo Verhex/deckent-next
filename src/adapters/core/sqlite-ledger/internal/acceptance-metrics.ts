@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { encodeDeckentJson, type JsonValue, type RunSnapshot, type OperationEvidenceBinding } from '#domain/index.js';
+import { deckentMetricsSchema, encodeDeckentJson, type JsonValue, type RunSnapshot, type OperationEvidenceBinding } from '#domain/index.js';
 import { deriveAcceptanceMetric, selectRunAcceptanceEvaluations, RunStoreError } from '#engine/index.js';
 
 /** Caller owns the producer transaction; there is no independent metrics commit or public submission path. */
@@ -21,6 +21,24 @@ export function readRunAcceptanceEvaluations(db: DatabaseSync, snapshot: RunSnap
   const rows = db.prepare(`SELECT command_id,command FROM run_receipts WHERE scope_id=? AND CASE WHEN json_valid(command) THEN
     json_extract(command,'$.action')='apply-task-evaluation' AND json_extract(command,'$.evaluation.identity.runId')=? ELSE 0 END`).all(snapshot.identity.scopeId, snapshot.identity.runId);
   return selectRunAcceptanceEvaluations(snapshot, rows.map(row => ({ commandId: String(row.command_id), command: String(row.command) })));
+}
+/** Scoped, digest-checked retained metrics; the consumer still owns per-Attempt output admission. */
+export function readRunAcceptanceMetrics(db: DatabaseSync, snapshot: RunSnapshot) {
+  const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='acceptance_metrics'").get();
+  if (!table) return [];
+  return snapshot.bindings.flatMap(binding => {
+    const records = db.prepare(`SELECT m.record FROM acceptance_metrics m JOIN run_receipts r ON r.scope_id=m.scope_id AND r.command_id=m.producer_command_id
+      WHERE m.scope_id=? AND m.run_id=? AND m.attempt_id=? AND m.outcome_kind=? AND json_valid(r.snapshot)
+      AND json_type(r.snapshot,'$.revision')='integer' AND json_extract(r.snapshot,'$.revision')<=? ORDER BY m.rowid DESC LIMIT 1`)
+      .all(snapshot.identity.scopeId, snapshot.identity.runId, binding.identity.attemptId, 'task', snapshot.revision);
+    return records.flatMap(row => { try {
+      const record = JSON.parse(String(row.record)) as { metric: unknown; digest: string };
+      const metric = deckentMetricsSchema.parse(record.metric);
+      if (metric.identity.scopeId !== binding.identity.scopeId || metric.identity.runId !== binding.identity.runId || metric.identity.taskId !== binding.identity.taskId
+        || metric.identity.attemptId !== binding.identity.attemptId || createHash('sha256').update(encodeDeckentJson(metric as unknown as JsonValue)).digest('hex') !== record.digest) throw new Error();
+      return [metric];
+    } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); } });
+  });
 }
 
 /** Same-Run sharing requires a currently accepted Task and its exact immutable settlement digest, never mere prior use. */

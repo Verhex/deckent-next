@@ -1,7 +1,9 @@
 import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.js';
+import { summarizeWorkCosts } from '#domain/index.js';
+import { projectAttemptWorkCost, recommendRunWorkCosts } from '#engine/core/resource-observation/index.js';
 import { projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDependencyIds, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
-import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
+import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorCloseReason, MonitorDeliveryOutlook, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
 
@@ -174,7 +176,18 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
   const ends = snapshot.bindings.map(binding => endOf(e.run.attempts.find(value => value.attemptId === binding.identity.attemptId)));
   const finishedAtMs = !current && ends.length && ends.every(value => value !== null) ? Math.max(...ends as number[]) : null;
   const state = deriveRunState(e, current), outlook = deliveryOutlookOf(e, state);
+  const costAttempts = snapshot.bindings.flatMap(binding => {
+    const worker = e.workers.get(binding.identity.attemptId), dispatch = attemptOf(e.run, binding.identity.taskId)?.dispatch;
+    if (!worker?.resources) return [];
+    try { return [projectAttemptWorkCost(snapshot, binding.identity, worker.resources,
+      dispatch ? { request: { identity: binding.identity }, terminal: dispatch.terminal } : null,
+      e.run.costMetrics?.find(row => row.identity.attemptId === binding.identity.attemptId && row.outcome.kind === 'task'),
+      e.run.evaluations?.find(row => row.identity.taskId === binding.identity.taskId), resolveWorkerUsage(worker))]; } catch { return []; }
+  });
+  const costReport = [...e.workers.values()].some(worker => worker.resources) ? summarizeWorkCosts({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId,
+    runRevision: snapshot.revision, observedAtMs: e.observedAt, attempts: costAttempts, withheld: snapshot.bindings.length - costAttempts.length }) : undefined;
   return Object.freeze({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId, revision: snapshot.revision, state,
+    ...(costReport ? { costReport: e.run.costComparison ? recommendRunWorkCosts(costReport, e.run.costComparison.registry, e.run.costComparison.policy) : costReport } : {}),
     ...(snapshot.authority ? { authority: snapshot.authority } : {}),
     phaseCounts: Object.freeze(phaseCounts), graphSummary: summarizeTaskGraph(snapshot.graph, snapshot.progress), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
     lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}) });

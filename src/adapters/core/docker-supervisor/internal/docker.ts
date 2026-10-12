@@ -1,4 +1,5 @@
 import { collectDockerOutputFiles } from './output-files.js';
+import { sampleDockerResources } from './resources.js';
 import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
@@ -47,6 +48,11 @@ export class DockerSupervisor implements ExecutionSupervisor {
     return this.runner({ executable: this.options.executable, args: ['--host', await this.resolveEndpoint(), ...args], timeoutMs: timeout, outputBytes: this.options.outputBytes }, signal);
   }
   private identity(request: SandboxRequest) { return identifyDockerRequest(request, this.options); }
+  async readResources(request: SandboxRequest, expected: import('#domain/index.js').WorkerIncarnation | null,
+    settings: import('#platform/index.js').ResourceObservationSettings, signal: AbortSignal) {
+    const { handle, digest } = this.identity(request);
+    return sampleDockerResources(await this.resolveEndpoint(), request, handle, digest, expected, settings, signal);
+  }
   private async inspect(handle: string, digest: string): Promise<Inspection | null> {
     let stdout: string;
     try { stdout = (await this.command(['inspect', handle], this.options.controlTimeoutMs)).stdout; }
