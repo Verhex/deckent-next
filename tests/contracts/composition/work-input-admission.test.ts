@@ -314,7 +314,8 @@ describe.skipIf(process.platform === 'win32')('fixed-Ultra opt-in producer to su
     expect(inspected.run.tasks[0]!.reasoningEffort).toEqual(selected);
     expect(inspected.run.tasks[0]!.taskBrief).toMatchObject({ task: TASK, acceptance: ACCEPTANCE,
       scopePaths: PATHS, model: input.model, effort: choice === 'explicit' ? 'ultra' : null });
-    expect(inspected.run.tasks[0]!.resultBrief).toMatchObject({ claimLabel: 'CLAIM', report: null, openIssues: null });
+    // No read-output grant: the whole result brief is withheld, not only its report (alpha.30 security narrowing).
+    expect(inspected.run.tasks[0]).not.toHaveProperty('resultBrief');
     expect(inspected.models[0]!.reasoningEffort).toEqual(selected);
     const surface = await loadMonitorSurface();
     for (const lang of ['en', 'tr'] as const) {
