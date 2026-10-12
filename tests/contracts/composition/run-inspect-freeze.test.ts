@@ -1,3 +1,4 @@
+import { atSameCostObservation } from '../support/run-cost-observation.js';
 import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -88,7 +89,7 @@ describe.skipIf(process.platform === 'win32')('configured inspect RunView readon
     expect(Object.isFrozen(view)).toBe(true); expect(Object.isFrozen(view.tasks)).toBe(true); expect(Object.isFrozen(task)).toBe(true);
     expect(Reflect.set(view, 'revision', 99)).toBe(false);
     expect(JSON.stringify(view)).toBe(valueBefore);
-    expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: request.runId }, f.options)).run).toEqual(view);
+    expect(atSameCostObservation((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: request.runId }, f.options)).run!)).toEqual(atSameCostObservation(view));
     expect(await readFile(f.path)).toEqual(before);
   });
 

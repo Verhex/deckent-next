@@ -1,3 +1,4 @@
+import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
@@ -105,7 +106,7 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     const result = await createRun(f.project, command, f.options);
     expect(result.admission.run).toMatchObject({ runId: 'r', layoutRevision: f.layout.revision, revision: 0 });
     expect(result.admission.run.tasks[0]!.phase).toBe('pending');
-    const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run; expect(inspected).toEqual(result.admission.run);
+    const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run; expect(expectEmptyCostObservation(inspected)).toEqual(result.admission.run);
     expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, effectiveCapacity: { executionSlots: 2, inFlightSlots: 2 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
     const { store } = await openConfiguredAttemptStore(f.project, f.options);
     try { expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibility).toEqual({ kind: 'immediate' }); } finally { store.close(); }

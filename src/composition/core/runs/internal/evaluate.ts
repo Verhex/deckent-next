@@ -3,11 +3,12 @@ import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteAttemptStore, inventoryReadsPerCall } from '#adapters/index.js';
 import { createInstalledTerminalEvaluator } from '#capabilities/index.js';
-import { authenticate, describeTaskEvaluationReceipt, readAttemptHandoffEvents, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, RunPolicyAuthorization, type TaskEvaluationCommand, type HandoffStartRecord } from '#engine/index.js';
+import { authenticate, describeTaskEvaluationReceipt, inspectRunWorkCosts, readAttemptHandoffEvents, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, RunPolicyAuthorization, type TaskEvaluationCommand, type HandoffStartRecord } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { observeConfiguredRunResults } from './result-view.js';
+import { configuredWorkCostEvidence } from '#composition/core/resource-observation/index.js';
 /** Installed implementation selection. The current registry cannot replace a Run's pinned definitions. */
 export async function evaluateConfiguredTask(projectRoot: string, input: TaskEvaluationCommand, options: ConfigLoadOptions = {}) {
   try {
@@ -35,7 +36,10 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
         if (handoff) handoffs.push(handoff);
       }
       const evaluation = describeTaskEvaluationReceipt(receipt, evaluations, handoffs);
-      const run = await observeConfiguredRunResults(config, options.env, evaluation.run, principal, policy, receipt.snapshot);
+      const costReport = await inspectRunWorkCosts(receipt.snapshot, evaluations, principal, configuredWorkCostEvidence(config, layout,
+        { readDispatch: reader.loadBoundDispatch, readMetrics: reader.loadRunMetrics, loadWorkerEventLog: reader.loadWorkerEventLog }),
+      (identity, actor) => policy.authorizeIdentity('read-output', identity, actor));
+      const run = await observeConfiguredRunResults(config, options.env, { ...evaluation.run, costReport }, principal, policy, receipt.snapshot);
       return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: Object.freeze({ ...evaluation, run }) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

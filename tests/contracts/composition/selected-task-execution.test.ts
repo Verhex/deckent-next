@@ -1,3 +1,4 @@
+import { atSameCostObservation, atSameRunObservation, atSameEvaluationObservation } from '../support/run-cost-observation.js';
 import { mcpPrincipalRef } from '#domain/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -237,16 +238,17 @@ describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () =>
       const inspected = await cliCall<Awaited<ReturnType<typeof inspectRun>>>(f,
         ['run', 'inspect', '--scope', 's', '--id', 'r', '--json']);
       // Evaluation and inspection share output-authorized result/delivery observations; inspection also adds the pool.
-      expect((await client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r' } })).structuredContent).toEqual(inspected);
+      expect(atSameRunObservation((await client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r' } })).structuredContent as typeof inspected)).toEqual(atSameRunObservation(inspected));
       const { pool, ...recordedRun } = inspected.run;
       expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
         effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
       // The only task carries no work input, so nothing is owed to delivery.
       if (readOutput) expect(recordedRun.tasks.map(task => task.resultBrief?.deliveryOutlook)).toEqual(['none']);
       else for (const task of recordedRun.tasks) expect(task).not.toHaveProperty('resultBrief');
-      expect(recordedRun).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
-      expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toEqual(inspected.run);
-      expect((await client.callTool({ name: 'evaluate_task', arguments: command })).structuredContent).toEqual(evaluationResult.structuredContent);
+      expect(atSameCostObservation(recordedRun)).toEqual(atSameCostObservation((evaluationResult.structuredContent as { evaluation: { run: typeof recordedRun } }).evaluation.run));
+      expect(atSameRunObservation(await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options))).toEqual(atSameRunObservation(inspected));
+      type Evaluation = Awaited<ReturnType<typeof evaluateTask>>;
+      expect(atSameEvaluationObservation((await client.callTool({ name: 'evaluate_task', arguments: command })).structuredContent as Evaluation)).toEqual(atSameEvaluationObservation(evaluationResult.structuredContent as Evaluation));
       await expect(evaluateTask(f.project, { ...command, schemaVersion: 1 }, f.options)).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
       record = await runtime.store.loadBoundDispatch(identity);
       const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record!.output!)));

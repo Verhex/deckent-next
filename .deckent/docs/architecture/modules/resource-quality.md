@@ -39,6 +39,12 @@ scoped snapshot. Denied evidence is absent from per-worker values and subtotals;
 an accepted denominator, or with withheld/missing CPU, is null. Replay/conflicting rows cannot
 double-count consumption. This view cannot write acceptance or settlement.
 
+Task evaluation uses the same authorized cost projection, pinned to its receipt's Run revision
+even on replay. `costReport.observedAtMs` is the current sampling instant, separate from the
+immutable evaluation/admission/cancellation receipt; independent reads may have different
+sampling instants. Supplemental cost-metric corruption produces `run-cost-unavailable` and
+withholds those metrics without hiding the canonical Run or its acceptance producer receipt.
+
 The pure `recommendCostProfile` engine compares registered profile identities per WorkClass and
 explicit cost axis. A pair binds exact Attempts, workload, environment, criterion/policy and
 held-out split digests. One acceptance, criterion, safety, score, intervention, rework or rollback

@@ -1,3 +1,4 @@
+import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
 import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -236,7 +237,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     expect(f.snapshotProfile('r')).toEqual(frozen);
     // POOL-CAPACITY: inspect adds the read-only pool observation; the admitted Run itself replays unchanged.
     const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run;
-    expect(inspected).toEqual(created.admission.run);
+    expect(expectEmptyCostObservation(inspected)).toEqual(created.admission.run);
     expect(inspected.tasks[0]!.reasoningEffort).toMatchObject({ level: 'xhigh', source: 'policy-default' });
     expect(pool).toMatchObject({ poolId: 'p', drift: [], waiting: [] });
     const reserved = (await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 }, f.options)).reservation.identities;
@@ -307,7 +308,7 @@ describe.skipIf(process.platform === 'win32')('fixed-Ultra opt-in producer to su
     const evaluate = await terminal(f, request.runId, reserved[0]!);
     const evaluated = stage === 'evaluated' ? await evaluate() : null;
     const snapshot = await inspectMonitor(f.project, f.options), worker = snapshot.installs[0]!.workers.find(value => value.identity?.attemptId === reserved[0]!.attemptId)!;
-    expect(worker).toMatchObject({ terminal: { exitCode: 0 }, diagnostics: ['info:ledger-only'], model: { reasoningEffort: selected } });
+    expect(worker).toMatchObject({ terminal: { exitCode: 0 }, diagnostics: ['info:ledger-only', 'output-denied'], model: { reasoningEffort: selected } });
     if (evaluated) {
       const { reasoningEffort, ...model } = worker.model!;
       expect(reasoningEffort).toEqual(selected); expect(model).toEqual({ ...evaluated, evidence: 'none' });
@@ -319,6 +320,7 @@ describe.skipIf(process.platform === 'win32')('fixed-Ultra opt-in producer to su
       scopePaths: PATHS, model: input.model, effort: choice === 'explicit' ? 'ultra' : null });
     // No read-output grant: the whole result brief is withheld, not only its report (alpha.30 security narrowing).
     expect(inspected.run.tasks[0]).not.toHaveProperty('resultBrief');
+    expectEmptyCostObservation(inspected.run, 1);
     expect(inspected.models[0]!.reasoningEffort).toEqual(selected);
     const surface = await loadMonitorSurface();
     for (const lang of ['en', 'tr'] as const) {

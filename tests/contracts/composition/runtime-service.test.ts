@@ -1,3 +1,4 @@
+import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { createConnection } from 'node:net';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -124,7 +125,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     const admitted = await admit(client);
     expect(admitted.created.admission.run.runId).toBe('r'); expect(admitted.reserved.reservation.identities).toHaveLength(1);
     const inspected = await client.inspectRun({ schemaVersion: 1, scopeId: 's', runId: 'r' });
-    expect(inspected.run).toEqual({ ...admitted.reserved.reservation.run, pool: { poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 1, inFlight: 1 }, drift: [], waiting: [] } });
+    expect(expectEmptyCostObservation(inspected.run!, 1)).toEqual({ ...admitted.reserved.reservation.run, pool: { poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 1, inFlight: 1 }, drift: [], waiting: [] } });
     const before = await readFile(f.ledgerPath);
     await expect(client.createRun({ ...admitted.command, schemaVersion: 99 })).rejects.toThrow();
     expect(await readFile(f.ledgerPath)).toEqual(before);

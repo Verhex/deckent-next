@@ -1,3 +1,4 @@
+import { atSameRunObservation } from '../support/run-cost-observation.js';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
@@ -51,7 +52,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     expect((await inspectRun(project, query, { env })).run).toBeTruthy();
     await writePolicy(true);
     const result = await client.callTool({ name: 'inspect_run', arguments: query }); expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toEqual(await inspectRun(project, query, { env }));
+    expect(atSameRunObservation(result.structuredContent as Awaited<ReturnType<typeof inspectRun>>)).toEqual(atSameRunObservation(await inspectRun(project, query, { env })));
     expect((await client.callTool({ name: 'policy_vocabulary', arguments: {} })).structuredContent).toEqual(getPolicyVocabulary());
     const command = { ...query, commandId: 'cancel', action: 'cancel' as const, expectedRevision: 1 };
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
