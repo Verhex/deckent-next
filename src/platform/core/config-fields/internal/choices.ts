@@ -174,6 +174,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'brain_planner.schemaVersion': { kind: 'schema' },
   'brain_planner.selected': { kind: 'document' },
   'brain_planner.templates': { kind: 'document' },
+  'brain_planner.reasoning': { kind: 'schema' },
   'brain_planner.maxCompletionTokens': { kind: 'numeric', unit: 'count', step: 1024, presets: [4096, 8192, 16384, 32768, 65536] },
   'brain_planner.context.maxKinds': { kind: 'numeric', unit: 'count', step: 1, presets: [32, 64, 128, 256, 1024] },
   'brain_planner.context.maxModels': { kind: 'numeric', unit: 'count', step: 1, presets: [16, 32, 64, 128, 256] },
