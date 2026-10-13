@@ -1,15 +1,16 @@
 import { executionRegistrySchema, type BrainPlanCommand,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { BrainPlanApplication, prepareBrainRegistryPrompt, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending } from '#engine/index.js';
+import { BrainPlanApplication, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, isNativeCodingTemplate } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, isNativeCodingTemplate, nativeCodingTemplateWorker, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
-import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { invokeConfiguredModel, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. */
 export function planConfiguredRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   return plan(root, input, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal);
@@ -54,10 +55,21 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
           const remaining = budget.limitMinorUnits - (account?.reservedMinorUnits ?? 0) - (account?.settledMinorUnits ?? 0);
           if (account?.frozen || remaining <= 0) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED');
         }
+        const templates = registry.profiles.filter(isNativeCodingTemplate).map(value => ({ profile: { id: value.id, version: value.version }, ...nativeCodingTemplateWorker(value) }));
+        const catalog = await openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
+        let workerModels;
+        try { workerModels = await inspectAdmissibleWorkerModels(templates, command.scopeId, catalog, Date.now(),
+          { imageRefreshInProgress: await isToolchainRefreshInProgress(root, options) }); } finally { catalog.close(); }
+        const kinds = registry.kinds.map(row => { const template = templates.find(value => value.profile.id === row.profile.id && value.profile.version === row.profile.version);
+          return { kind: row.kind, profile: row.profile, type: template ? 'template' as const : 'prepared' as const, ...(template ? { provider: template.provider } : {}) }; });
         const prompt = prepareBrainRegistryPrompt(command, registry, budget ? { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits } : null,
-          context.config['brain_planner'], getConfigKnownSecrets(context.config));
+          context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels });
         const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference);
-        return { invocation: prepared.command, prompt };
+        assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
+        const measured = await measureConfiguredModel(root, prepared.command, options, signal);
+        if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
+        assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
+        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind) };
       },
     }).plan(input, undefined, signal);
   } catch (error) { throw queryFailure(error); }

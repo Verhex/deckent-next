@@ -62,6 +62,33 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
 /** K3 work input as recorded in the Run graph: the requested pin and optional effort of a task compiled from a template. */
 export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }>; effort?: string | undefined }> | undefined }>;
 
+export interface WorkerPlanningTemplate { readonly profile: { id: string; version: number }; readonly provider: string; readonly cliVersion: string }
+/** Read-only planner choices share the admission check, including scope activation, lifecycle, alias and CLI floor. */
+export async function inspectAdmissibleWorkerModels(templates: readonly WorkerPlanningTemplate[], scopeId: string, reader: ModelCatalogReader,
+  nowMs: number, options: WorkerAdmissionOptions = {}) {
+  const choices = [];
+  const channels = await reader.channels();
+  for (const template of templates) {
+    for (const channel of channels.filter(row => row.channel.kind === 'native-cli' && row.channel.cli === template.provider)) {
+      const admitted: Readonly<{ record: ModelCatalogModelRecord; warnings: readonly WorkerAdmissionWarning[] }>[] = [];
+      for (const row of await reader.models(channel.channelId)) {
+        const warnings: WorkerAdmissionWarning[] = [];
+        try {
+          const record = await checkModel(reader, scopeId, template.profile.id, template.provider, template.cliVersion,
+            channel.channelId, row.modelId, nowMs, options.imageRefreshInProgress ? warnings : undefined);
+          admitted.push({ record, warnings });
+        } catch (error) { if (!(error instanceof WorkerModelAdmissionError)) throw error; }
+      }
+      const ids = admitted.map(row => row.record.modelId).sort();
+      for (const { record: row, warnings } of admitted) choices.push({ profile: template.profile, channelId: channel.channelId, modelId: row.modelId,
+        auxiliaryModelIds: [] as readonly string[], availableAuxiliaryModelIds: ids,
+        billing: 'billing' in channel.channel ? channel.channel.billing : null, efforts: row.model.efforts,
+        ...(warnings.length ? { warnings } : {}) });
+    }
+  }
+  return choices;
+}
+
 /** Throws the first typed refusal in task order; resolves (with any caveats) when every worker task may be admitted. Reads only, writes nothing.
  * `requests` (the Run graph tasks) add the K3 checks: a compiled pin must equal the requested one exactly, and a requested effort must be
  * one the catalog declares for the main model. The effort is recorded in the Run graph; the chosen CLI setting is frozen in the execution profile. */
