@@ -2,13 +2,15 @@ import type { DatabaseSync } from 'node:sqlite';
 
 /** Transactional projection of Run custody. Only migration scans historical Runs; reads use the active channel index. */
 export function migrateQuotaWaits(db: DatabaseSync): void {
+  // Projection is not snapshot authority. Preserve corrupt bytes for the canonical Run reader's RUN_STORE_CORRUPT refusal.
+  // CASE guards JSON parsing in both historical backfill and triggers, regardless of SQL predicate evaluation order.
   const insert = (scope: string, run: string, snapshot: string) => `INSERT INTO run_quota_waits
     SELECT ${scope},${run},json_extract(q.value,'$.identity.attemptId'),json_extract(q.value,'$.channelId'),
       json_extract(q.value,'$.since'),json_extract(q.value,'$.deadline'),json_extract(q.value,'$.quota.resetsAtMs'),
       json_extract(q.value,'$.releasedAtMs'),CASE WHEN json_extract(q.value,'$.quota.source')='claude-rate-limit'
         AND json_extract(q.value,'$.quota.resetsAtMs')>json_extract(q.value,'$.since')
         AND COALESCE(json_extract(q.value,'$.resetBoundExceeded'),0)=0 THEN 1 ELSE 0 END
-    FROM json_each(${snapshot},'$.quotaWaits') q;`;
+    FROM json_each(CASE WHEN json_valid(${snapshot}) THEN ${snapshot} ELSE NULL END,'$.quotaWaits') q;`;
   db.exec(`CREATE TABLE run_quota_waits(scope_id TEXT NOT NULL,run_id TEXT NOT NULL,attempt_id TEXT NOT NULL,
     channel_id TEXT NOT NULL,since_ms INTEGER NOT NULL,deadline_ms INTEGER NOT NULL,resets_at_ms INTEGER,
     released_at_ms INTEGER,channel_held INTEGER NOT NULL CHECK(channel_held IN(0,1)),PRIMARY KEY(scope_id,run_id,attempt_id));

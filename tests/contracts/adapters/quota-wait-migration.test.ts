@@ -48,3 +48,28 @@ it('conflicting v54 schema rolls back the additive migration and leaves v53 unto
     expect(db.prepare('PRAGMA table_info(quota_release_receipts)').all()[0]!.name).toBe('foreign_record');
   } finally { db.close(); }
 });
+
+it.each(['migration', 'insert', 'update'] as const)('%s skips malformed snapshot projection without rewriting it or disturbing other channel holds', path => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    migrateLedger(db, 'allow');
+    if (path === 'migration') db.exec(DOWNGRADE_TO_V53_LEDGER_SQL);
+    const snapshot = JSON.stringify({ quotaWaits: [{ identity: { attemptId: 'attempt' }, channelId: 'channel', since: 1000, deadline: 6000,
+      quota: { source: 'claude-rate-limit', resetsAtMs: 6000 } }] });
+    const insert = db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)');
+    insert.run('s', 'valid', 1, snapshot, '{}');
+    if (path === 'update') insert.run('s', 'corrupt', 1, snapshot, '{}');
+    else insert.run('s', 'corrupt', 1, 'not-json', '{}');
+    if (path === 'migration') { db.exec('BEGIN IMMEDIATE'); migrateLedger(db, 'allow'); db.exec('COMMIT'); }
+    if (path === 'update') {
+      db.exec('BEGIN IMMEDIATE'); db.prepare("UPDATE runs SET snapshot='not-json' WHERE run_id='corrupt'").run();
+      expect(db.prepare("SELECT count(*) n FROM run_quota_waits WHERE run_id='corrupt'").get()!.n).toBe(0);
+      db.exec('ROLLBACK');
+      expect(db.prepare("SELECT channel_held FROM run_quota_waits WHERE run_id='corrupt'").get()!.channel_held).toBe(1);
+      db.prepare("UPDATE runs SET snapshot='not-json' WHERE run_id='corrupt'").run();
+    }
+    expect(db.prepare("SELECT snapshot FROM runs WHERE run_id='corrupt'").get()!.snapshot).toBe('not-json');
+    expect(db.prepare("SELECT count(*) n FROM run_quota_waits WHERE run_id='corrupt'").get()!.n).toBe(0);
+    expect(db.prepare("SELECT channel_held FROM run_quota_waits WHERE run_id='valid'").get()!.channel_held).toBe(1);
+  } finally { db.close(); }
+});
