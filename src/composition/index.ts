@@ -20,7 +20,8 @@ export { connectConfiguredModel } from '#composition/core/model-connect/index.js
 export * from '#composition/core/model-invocation/index.js';
 export { invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation } from '#composition/core/runtime-service/index.js';
 export { auditRuntimeProviderSpendAccount, inspectRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
-export { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
+export { prepareNativeCodingProfile, configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
+export type { CodingTemplateRequest, CodingTemplateResult } from '#composition/core/native-coding/index.js';
 export * from '#composition/core/workspace-patch/index.js';
 // Public SDK: the local operation entries only; the peer entries belong to the runtime service composition (C12 G4).
 export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';

@@ -1777,7 +1777,14 @@
       "dependencies": [
         "src/domain/core/run",
         "src/adapters/core/native-coding",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/toolchain-currency",
+        "src/engine/core/config",
+        "src/platform/core/config",
+        "src/composition/core/config",
+        "src/platform/core/integrity",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "PROVIDERS"
     },
@@ -3166,6 +3173,14 @@
           3
         ],
         "reason": "RFC 3339 fractional seconds: the first 3 digits are milliseconds, later digits are sub-millisecond evidence; format invariant (2026-10-03, batch-27 integration)."
+      },
+      {
+        "file": "src/adapters/core/native-coding/internal/template.ts",
+        "symbol": "createNativeCodingTemplate/parsed/docker",
+        "values": [
+          "docker"
+        ],
+        "reason": "The existing native-coding-template@1 wire contract requires the docker parameter key; it is an adapter-owned protocol field, not a provider choice or mutable policy."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

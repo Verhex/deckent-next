@@ -163,6 +163,7 @@ export const CLI_CATALOG = [
   ] },
   { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'cli.coding.help', children: [
     action('prepare', 'developer', 'cli.help.action.prepare', 'cli.coding.help'),
+    action('template', 'developer', 'cli.help.action.codingTemplate', 'cli.coding.template.help'),
   ] },
   { name: 'inference', group: 'developer', summary: 'cli.help.summary.inference', detail: 'cli.help.inference', children: [
     action('plan', 'developer', 'cli.help.action.plan', 'cli.help.inference'),

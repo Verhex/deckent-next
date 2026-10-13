@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, loadConfigLanguage, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import type { ExecutionProfileDefinition } from '#domain/index.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -9,6 +9,7 @@ export type CodingProfilePreparationHandler = (input: unknown) => Readonly<{
 }>;
 
 export async function codingCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+  if (argv[1] === 'template') return codingTemplateCommand(argv, context);
   let source: string | undefined; let language: string | undefined; let json = false;
   const help = argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h');
   if (!help && argv[1] !== 'prepare') throw ErrorRegistry.createError('CLI_USAGE');
@@ -33,4 +34,29 @@ export async function codingCommand(argv: readonly string[], context: CommandCon
   const result = context.prepareCodingProfile(input);
   // The output is a preparation artifact, never evidence that a worker was started.
   emit(result, { ...sinks, json, render: value => JSON.stringify(value, null, 2) });
+}
+
+export type CodingTemplateHandler = (root: string, input: { provider: string; kind: string; image?: string; apply: boolean },
+  options: ConfigLoadOptions) => Promise<{ status: 'preview' | 'applied' | 'unchanged'; profile: ExecutionProfileDefinition; kind: unknown;
+    registry: { revision: string }; expect: string | null; write: unknown }>;
+async function codingTemplateCommand(argv: readonly string[], context: CommandContext) {
+  const values = new Map<string, string>(); const flags = new Set<string>();
+  for (let i = 2; i < argv.length; i++) {
+    const flag = argv[i]!;
+    if (['--preview', '--apply', '--json'].includes(flag) && !flags.has(flag)) { flags.add(flag); continue; }
+    if (!['--provider', '--kind', '--image', '--lang'].includes(flag) || values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
+    const value = argv[++i];
+    if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE');
+    values.set(flag, value);
+  }
+  if (!values.has('--provider') || !values.has('--kind') || flags.has('--preview') === flags.has('--apply') || !context.configureCodingTemplate) throw ErrorRegistry.createError('CLI_USAGE');
+  const root = context.root ?? process.cwd(), env = context.env ?? process.env;
+  const locale = resolveLocale(values.get('--lang'), env, await loadConfigLanguage(root, { env })); context.onLocale?.(locale);
+  const result = await context.configureCodingTemplate(root, { provider: values.get('--provider')!, kind: values.get('--kind')!,
+    ...(values.has('--image') ? { image: values.get('--image')! } : {}), apply: flags.has('--apply') }, { env, heal: false });
+  const output = { schemaVersion: 1, status: result.status, profile: result.profile, kind: result.kind,
+    registryRevision: result.registry.revision, expect: result.expect, write: result.write };
+  emit(output, { json: flags.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}),
+    render: value => `${value.status === 'preview' ? t('cli.coding.template.preview', {}, locale)
+      : value.status === 'applied' ? t('cli.coding.template.applied', {}, locale) : t('cli.coding.template.unchanged', {}, locale)}\n${JSON.stringify(value, null, 2)}` });
 }
