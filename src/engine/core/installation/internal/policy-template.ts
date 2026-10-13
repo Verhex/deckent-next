@@ -185,7 +185,7 @@ export interface PolicyTemplateUpgradeResult {
   readonly people: readonly Person[];
   /** The policy revision read (preview: pass it back as `--expect`); after an upgrade, the new one. */
   readonly revision: string | null;
-  /** The v5 rules this upgrade adds (nothing is replaced or removed). */
+  /** The current template rules this upgrade adds (nothing is replaced or removed). */
   readonly rules: readonly unknown[];
   /** Rule ids the upgrade would add that already exist with other content: kept as they are, shown for the person to review. */
   readonly conflicts: readonly string[];
@@ -194,12 +194,12 @@ export interface PolicyTemplateUpgradeResult {
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /**
- * The first-run v4 → v5 migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
- * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install v5
- * on a fresh installation today. It adds every v5 rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
+ * The first-run older-template → v10 migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
+ * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install v10
+ * on a fresh installation today. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
  * call operation, the proposal tool, the `policy.administer` operation and approval decisions — K1 option A) and keeps everything else:
  * hand-added rules, edited first-run rules, modes and bindings; a rule id that exists with other content is kept and named as a conflict. An
- * untouched v4 template becomes exactly the v5 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
+ * untouched v4–v9 template becomes exactly the v10 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
  * takes the same additions only for a person the file owner names explicitly (`person`), who must already be named on an allow rule of this
  * scope (`namedPersonPolicyAdditions`); without `person` the refusal lists the people the policy names. On a template policy `person` replaces
  * the OS identity and the template's read rule must name it. The write goes through the authority documents' one conditional, archived writer
@@ -235,7 +235,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const wireRules = ((current as { grants?: { id: string; resource?: { kind?: string; ids?: unknown } }[] } | null)?.grants ?? [])
       .filter(grant => grant.resource?.kind === 'agent-tool' && Array.isArray(grant.resource.ids) && grant.resource.ids.some(id => typeof id === 'string' && id.startsWith('mcp__')))
       .map(grant => grant.id);
-    // An untouched v4 template becomes exactly the v5 template (doctor names it v5).
+    // An untouched older template becomes exactly v10 (doctor names it v10).
     const exact = upgradeFirstRunPolicy(current, template);
     if (exact.status === 'upgrade') {
       const rules = (exact.policy.schemaVersion === 2 ? exact.policy.grants : []).filter(rule => !((current as { grants: { id: string }[] }).grants.some(held => JSON.stringify(held) === JSON.stringify(rule))));
@@ -256,7 +256,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next: nextWith(current, revision, additions.rules) };
   };
   // Security (lead 2026-10-07): this path writes outside the governed chain, so only the installation's owner may use it; anyone else is sent to
-  // `deckent policy upgrade --template v5` (policy.administer@1, card, audit, I2). Fail closed before anything is read.
+  // `deckent policy upgrade --template current` (policy.administer@1, card, audit, I2). Fail closed before anything is read.
   if (!input.owner) return result('unavailable', { reason: 'not-owner' });
   // An unusable named person (control characters, too long) is refused as such, before anything is read.
   if (person === undefined) return result('unavailable', { reason: 'invalid' });

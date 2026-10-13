@@ -1,7 +1,7 @@
 export { policySchema, policyRequestSchema, evaluatePolicy, modeEligibleApproval, PolicyError } from './internal/evaluate.js';
 export { bindingsFileSchema, PERMISSION_MODES, policyFileSchema, policyHasResourceRules, principalPermissionMode, resolvePolicyBindings, separationOfDutiesViolation,
   upgradeBindingsDocument } from './internal/schema.js';
-export { FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, HARD_FLOOR_CARD_CELLS, firstRunPolicyTemplate, matchFirstRunPolicyTemplate, upgradeFirstRunPolicy, firstRunTemplateAdditions, FIRST_RUN_UPGRADE_RULE_IDS, type FirstRunTemplateUpgrade,
+export { FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, HARD_FLOOR_CARD_CELLS, firstRunPolicyTemplate, matchFirstRunPolicyTemplate, upgradeFirstRunPolicy, firstRunTemplateAdditions, FIRST_RUN_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, type FirstRunTemplateUpgrade,
   namedPersonPolicyAdditions, policyNamedPeople, type NamedPersonAdditions,
   type FirstRunTemplateAdditions } from './internal/first-run-template.js';
 export type { FirstRunPolicyTemplate, FirstRunPolicyTemplateInput } from './internal/first-run-template.js';
