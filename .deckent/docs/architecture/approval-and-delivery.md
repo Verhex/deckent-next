@@ -746,9 +746,9 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
   re-enables reservation. The runtime progression maps `RUN_POOL_HELD` to a quiet `waiting` through the one engine mapping
   `reservationRefusalOutcome` (no error, no back-off).
 - **Granularity.** The pool is installation-wide (`execution_pools` has no scope column), so the hold is too. Per-scope holds are a later layer.
-- **Authority.** Vocabulary `pool {use, hold, resume, inspect}` (schema 1, additive). `hold`/`resume` need the scoped decision **and** the
+- **Authority.** Vocabulary `pool {use, hold, resume, inspect, set-capacity, release-quota}` (schema 1, additive). `hold`/`resume` need the scoped decision **and** the
   delegation bound over `scopes: 'all'` on the same policy snapshot (WC-R1 pattern; a deny/restriction in any scope refuses); `inspect` the
-  scoped decision. The first-run template grants none of these.
+  scoped decision. The v11 first-run template grants use/inspect and separate release-quota, never hold/resume/set-capacity.
 - **State and owner.** Ledger v44: `execution_pool_holds(pool_id → execution_pools, revision, state, record)` (no row = open) and
   `execution_pool_hold_receipts(scope_id, command_id, record)`. The hold never lives in `execution_pools.policy` (installer replay compares it
   byte for byte). Engine `decidePoolHold` is the pure transition; `SqlitePoolHoldJournal.applyPoolHold` the only writer (replay, pool
@@ -860,3 +860,27 @@ of committed authority archives; it excludes fresh-install rules and changed-the
 keeps modified rules as conflicts, and refuses unavailable history. The archive read has no healing
 or write side effects and shares the configured policy byte budget. Local-owner archives are not
 signed. Author controls and open acceptance limits live in external POLITIKA-P0 proof; no live claim.
+
+
+## First-run template v11 (SABLON-V11, owner 2026-10-13)
+
+Fresh installs and installer `init policy --upgrade` add three named-person rules:
+`first-run-quota-release` grants pool `release-quota` for all ids and all scopes;
+`first-run-integration` grants attempt `prepare-integration`, `deliver-integration`,
+`adopt-integration`, `rollback-integration` for all ids in the installed scope;
+`first-run-work-target-adopt` grants target `adopt` for all ids in that scope.
+MCP retains observation only. Pool hold/resume/set-capacity remain separate; resume
+holders must explicitly obtain release-quota. Each selected/affected pool still
+requires its own scoped decision and installation delegation on one revision;
+any denial leaves all Run/binding/wait/receipt state unchanged, with sealed refusal audit.
+
+Exact v4–v10 templates upgrade to v11. Edited first-run and explicitly named-person
+hand-built policies use add-only plans, preserving same-id customizations as conflicts.
+Installer preview lists the three rules before revision-bound apply and archived audit.
+Governed upgrades still enforce I2 and their operation approval card; v11 does not
+add an integration approval broker. Adoption still requires configured
+`execution.adoption.targets` (empty means denied), target policy and existing effect guards.
+Rollback targets only content-equal v11 delta rules with proven current-version upgrade
+origin and unchanged archive lineage; fresh-install/modified/changed-then-restored rules
+stay. v10 execution and older administration/observation rules remain. The locked
+last-admin invariant is unchanged. Binary, hosted and live acceptance are separate gates.

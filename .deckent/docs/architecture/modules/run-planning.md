@@ -93,10 +93,10 @@ reservation, dispatch and inspection, which uses the current clock. The v53→v5
 migration backfills historical waits once without rewriting retained snapshots.
 
 CLI `deckent pool quota-release --channel <id> --scope <scope>`, SDK `releaseQuota`
-and MCP `release_quota` use one application and the existing installation-level
-`pool/resume` policy cell. The selected pool must exist and be authorized; each
+and MCP `release_quota` use one application and the separate installation-level
+`pool/release-quota` policy cell. The selected pool must exist and be authorized; each
 pool assigned to a Run with matching active waits also needs installation-level
-resume authority. Any denied pool produces a sealed refusal without changing any
+release-quota authority; resume alone never grants it. Any denied pool produces a sealed refusal without changing any
 Run. The writer re-reads the affected pool set under `BEGIN IMMEDIATE` and refuses
 `RUN_STORE_CONFLICT` before writing if an unauthorized pool appeared during the
 policy checks; a new wait on an already authorized pool is covered. Default MCP
