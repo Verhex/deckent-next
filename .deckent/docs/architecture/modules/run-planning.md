@@ -94,12 +94,20 @@ migration backfills historical waits once without rewriting retained snapshots.
 
 CLI `deckent pool quota-release --channel <id> --scope <scope>`, SDK `releaseQuota`
 and MCP `release_quota` use one application and the existing installation-level
-`pool/resume` policy cell. The selected pool must exist; its explicit resume grant
-is the installation authority for subscription recovery. Default MCP grants do
-not permit it. A release ends matching active waits across the installation,
+`pool/resume` policy cell. The selected pool must exist and be authorized; each
+pool assigned to a Run with matching active waits also needs installation-level
+resume authority. Any denied pool produces a sealed refusal without changing any
+Run. The writer re-reads the affected pool set under `BEGIN IMMEDIATE` and refuses
+`RUN_STORE_CONFLICT` before writing if an unauthorized pool appeared during the
+policy checks; a new wait on an already authorized pool is covered. Default MCP
+grants do not permit it. A release ends matching active waits across the installation,
 including local weak-signal waits, without changing provider reset timestamps
 or the pool hold. Snapshot revisions, replay receipt and sealed audit commit
-atomically. Cancelled/terminal Runs remain terminal; an operator hold remains
+atomically. The receipt and audit carry the affected `poolIds`; the audit also
+identifies the pool whose decision it records. Replay reauthorizes the original
+affected pools and never releases later waits. Historical receipts without a pool
+list refuse replay with `RUN_COMMAND_CONFLICT` rather than guessing their authority
+scope; historical audit records remain readable. Cancelled/terminal Runs remain terminal; an operator hold remains
 held. Pending quota bindings move to history so fresh reservation is possible;
 normal admission/policy/approval/dispatch gates still apply. Exact replay does
 not release later waits. Failure to seal audit rolls back the change.
