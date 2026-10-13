@@ -134,15 +134,16 @@ export class ModelInvocationApplication {
     const activationReader = await this.openActivationReader(); let activation;
     try { activation = await activationReader.loadRecord(command.scopeId, command.reference); }
     finally { activationReader.close(); }
-    if (preview === 'invocable-now' && (!activation || activation.state !== 'active')) refuseInactiveModel(activation);
-    if (!activation || activation.state !== 'active' || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
+    if (!activation || activation.state !== 'active') refuseInactiveModel(command, activation);
+    if (activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
     if (!preview && activation.catalogRevision !== command.catalogRevision) {
       if (!this.refreshActivation) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
       await this.refreshActivation({ schemaVersion: 1, action: 'activate', commandId: this.runtime.invocationId(), scopeId: command.scopeId, reference: command.reference,
         expectedRevision: activation.revision, catalogRevision: command.catalogRevision, expectedBinding: command.expectedBinding });
       const reader = await this.openActivationReader();
       try { activation = await reader.loadRecord(command.scopeId, command.reference); } finally { reader.close(); }
-      if (!activation || activation.state !== 'active' || activation.catalogRevision !== command.catalogRevision
+      if (!activation || activation.state !== 'active') refuseInactiveModel(command, activation);
+      if (activation.catalogRevision !== command.catalogRevision
         || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
     }
     const profile = await this.profiles.resolve(command.scopeId, command.reference);

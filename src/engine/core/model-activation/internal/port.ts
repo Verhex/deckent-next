@@ -21,10 +21,13 @@ export interface ModelActivationStore {
   admit(input: ModelActivationAdmission): Promise<ModelActivationResult>;
   close(): void;
 }
+export interface ModelActivationDeliveryFinding {
+  readonly profileId: string; readonly surface: string; readonly requiredBytes: number; readonly availableBytes: number;
+}
 export class ModelActivationStoreError extends Error {
   constructor(readonly code: 'MODEL_ACTIVATION_COMMAND_CONFLICT' | 'MODEL_ACTIVATION_CORRUPT'
     | 'MODEL_ACTIVATION_UNAVAILABLE' | 'MODEL_ACTIVATION_OUTCOME_UNKNOWN' | 'MODEL_ACTIVATION_CATALOG_CONFLICT'
-    | 'MODEL_ACTIVATION_DELIVERY_UNFIT') {
+    | 'MODEL_ACTIVATION_DELIVERY_UNFIT', readonly deliveryFinding?: ModelActivationDeliveryFinding) {
     super(code); this.name = 'ModelActivationStoreError';
   }
 }

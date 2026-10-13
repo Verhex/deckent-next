@@ -36,7 +36,7 @@ function inspectionReader(f: ReturnType<typeof fixture>) { return { async loadIn
   return f.stored ? { record: f.stored, control: { schemaVersion: 1 as const, claim: f.stored.receipt.claim, reference,
     send: { state: 'permitted' as const, ownerId: 'runtime-owner', permittedAtMs: 10 }, cancellation: null }, spending: null } : null;
 }, close() { f.store.close(); } }; }
-function fixture(options: { staleActivation?: boolean; spendingDrift?: boolean; deltas?: readonly string[]; liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
+function fixture(options: { activationState?: 'missing' | 'inactive' | 'digest-conflict'; staleActivation?: boolean; spendingDrift?: boolean; deltas?: readonly string[]; liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
   substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint;
   permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner' } = {}) {
   const controllers = new ModelInvocationControllers(2), registrations: ModelInvocationClaim[] = [];
@@ -86,7 +86,8 @@ function fixture(options: { staleActivation?: boolean; spendingDrift?: boolean; 
     { async authorize() { policy++; if (options.denySecond && policy === 2) throw new Error('DENIED'); return authorization; } },
     { async inspect() { calls.bindings++; return { schemaVersion: 1 as const, reference, status: 'declared' as const,
       catalogRevision: 'catalog', definition, binding, availability: 'not-observed' as const }; } },
-    async () => ({ async loadRecord() { calls.activations++; return options.staleActivation ? { ...activation, catalogRevision: 'old-catalog' } : activation; }, close() {} }),
+    async () => ({ async loadRecord() { calls.activations++; return options.activationState === 'missing' ? null : options.activationState === 'inactive' ? { ...activation, state: 'inactive' as const }
+      : options.activationState === 'digest-conflict' ? { ...activation, binding: { ...binding, digest: 'e'.repeat(64) } } : options.staleActivation ? { ...activation, catalogRevision: 'old-catalog' } : activation; }, close() {} }),
     { async resolve() { calls.profiles++; return selectedProfile; } }, { resolve() { return {
       ...(options.responseBound === undefined ? {} : { responseBytesUpperBound: () => options.responseBound! }),
       async prepare() { options.prepare?.(); if (options.changeProfile) selectedProfile = { ...profile, version: 2 }; return Object.freeze({ body: 'prepared' }); },
@@ -142,6 +143,25 @@ describe('model invocation streamed deltas', () => {
 });
 
 describe('model invocation application', () => {
+  it.each(['missing', 'inactive', 'digest-conflict', 'catalog-conflict'] as const)('distinguishes %s before claim, preparation or send', async state => {
+    let prepared = 0;
+    const f = fixture({ ...(state === 'catalog-conflict' ? { staleActivation: true } : { activationState: state }), prepare() { prepared++; } });
+    const code = state === 'missing' || state === 'inactive' ? 'MODEL_NOT_ACTIVATED' : 'MODEL_INVOCATION_ACTIVATION_CONFLICT';
+    for (const preview of [false, true]) {
+      if (preview && state === 'catalog-conflict') {
+        await expect(f.app.preview(command)).resolves.toMatchObject({ refreshRequired: true }); continue;
+      }
+      await expect(preview ? f.app.preview(command) : f.app.invoke(command)).rejects.toMatchObject({ code,
+        ...(code === 'MODEL_NOT_ACTIVATED' ? { params: { scope: 'scope', provider: 'p', model: 'm', providerVersion: 1, modelVersion: 1,
+          revision: state === 'missing' ? 0 : 1, digest: binding.digest, catalog: 'catalog' } } : {}) });
+    }
+    const reading = await new ModelInvocableNowApplication(async () => {
+      await f.app.preview(command, undefined, undefined, { surfaces: [], credentialPresent: async () => true });
+    }).read('scope', [{ reference, label: 'model', nativeId: 'native', catalogRevision: 'catalog', bindingDigest: binding.digest }]);
+    expect(reading.models[0]!.availability).toMatchObject({ invocable: false, reason: { code,
+      kind: code === 'MODEL_NOT_ACTIVATED' ? 'not-carried' : 'stale-activation' } });
+    expect(prepared).toBe(state === 'catalog-conflict' ? 1 : 0); expect(f.calls).toMatchObject({ claims: 0, permissions: 0, sends: 0, ...(state === 'catalog-conflict' ? {} : { profiles: 0 }) }); expect(f.stored).toBeNull();
+  });
   it('readiness performs no claim or send and rechecks policy/profile after native preparation', async () => {
     const ready = fixture();
     expect(await ready.app.preview(command)).toMatchObject({ activation, refreshRequired: false });

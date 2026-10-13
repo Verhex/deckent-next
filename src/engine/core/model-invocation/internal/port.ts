@@ -48,9 +48,9 @@ export interface ModelInvocationStore {
   close(): void;
 }
 export type ModelInvocationStoreErrorCode = 'MODEL_INVOCATION_COMMAND_CONFLICT' | 'MODEL_INVOCATION_CORRUPT'
-  | 'MODEL_INVOCATION_UNAVAILABLE' | 'MODEL_INVOCATION_OUTCOME_UNKNOWN' | 'MODEL_INVOCATION_ACTIVATION_CONFLICT' | 'MODEL_INVOCATION_REASONING_UNSUPPORTED'
+  | 'MODEL_INVOCATION_UNAVAILABLE' | 'MODEL_INVOCATION_OUTCOME_UNKNOWN' | 'MODEL_INVOCATION_ACTIVATION_CONFLICT' | 'MODEL_NOT_ACTIVATED' | 'MODEL_INVOCATION_REASONING_UNSUPPORTED'
   | 'MODEL_INVOCATION_ALLOCATION_CONFLICT' | 'MODEL_INVOCATION_QUOTA_EXHAUSTED' | 'MODEL_INVOCATION_CAPACITY_EXHAUSTED'
   | 'MODEL_INVOCATION_DELIVERY_UNAVAILABLE' | 'MODEL_INVOCATION_RESULT_LIMIT';
 export class ModelInvocationStoreError extends Error {
-  constructor(readonly code: ModelInvocationStoreErrorCode) { super(code); this.name = 'ModelInvocationStoreError'; }
+  constructor(readonly code: ModelInvocationStoreErrorCode, readonly params?: Readonly<Record<string, string | number>>) { super(code); this.name = 'ModelInvocationStoreError'; }
 }

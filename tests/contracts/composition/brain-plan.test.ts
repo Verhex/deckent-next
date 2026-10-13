@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planRun, inspectRun, configuredApproval } from '../../../src/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
+import { completeTerminalChatTurn } from '#composition/core/terminal-chat/index.js';
+import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { exitCodeFor } from '#platform/index.js';
 import { brainRunId } from '#engine/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { proposalFixture } from '../support/run-proposal.js';
@@ -91,8 +94,21 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     await expect(planRun('uninitialized-fixture', input)).rejects.toMatchObject({ code: 'BRAIN_INPUT_INVALID' });
     expect(reads).toBe(0);
   });
-  it.each([['missing', 'TERMINAL_CHAT_NOT_CONFIGURED'], ['inactive', 'MODEL_INVOCATION_ACTIVATION_CONFLICT']] as const)('refuses %s model without fallback or POST', async (model, code) => {
+  it.each([['missing', 'TERMINAL_CHAT_NOT_CONFIGURED'], ['inactive', 'MODEL_NOT_ACTIVATED']] as const)('refuses %s model without fallback or POST', async (model, code) => {
     const f = await fixture({ model }); await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code });
+    if (model === 'inactive') {
+      const error = await planRun(f.project, command, f.options).catch(error => error);
+      expect(error.params).toMatchObject({ scope: 's', provider: f.reference.providerId, model: f.reference.modelId, revision: 0 });
+      expect(exitCodeFor(error)).toBe(1);
+      for (const locale of ['en', 'tr'] as const) {
+        const message = error.localize(locale).message;
+        expect(message).toContain(`${f.reference.providerId}@1/${f.reference.modelId}@1`);
+        expect(message).toContain(locale === 'tr' ? 'kapsamında etkin değil' : 'not active in scope');
+        expect(message).toContain('deckent models activate --scope s'); expect(message).toContain('/model');
+      }
+      await expect(completeTerminalChatTurn({ projectRoot: f.project, scopeId: 's', messages: [{ role: 'user', content: 'hello' }], options: f.options },
+        { invoke: invokeConfiguredModel, cancel: async () => { throw new Error('MUST_NOT_CANCEL'); } })).rejects.toMatchObject({ code, params: error.params });
+    }
     expect(f.posts).toBe(0); expect(counts(f.path).runs).toBe(0);
   });
   it.each([null, 0])('refuses unavailable/exhausted budget %s before the model', async budget => {

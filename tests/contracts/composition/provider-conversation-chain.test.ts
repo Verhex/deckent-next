@@ -237,7 +237,7 @@ describe.skipIf(process.platform === 'win32')('W8 fixture producer â†’ history â
       else await f.activations.admit({ schemaVersion: 1, action: 'deactivate', commandId: 'deactivate', scopeId: 'scope', reference: f.reference,
         expectedRevision: 1, expectedBinding: f.binding });
       f.catalog.revision = 'changed'; await writeFile(f.configPath, JSON.stringify(f.config)); clearConfigCache();
-      await expect(invokeConfiguredModel(f.project, f.command('refused', [{ role: 'user', content: 'hi' }]), f.options)).rejects.toMatchObject({ code: changed === 'binding' ? 'MODEL_INVOCATION_BINDING_CONFLICT' : 'MODEL_INVOCATION_ACTIVATION_CONFLICT' });
+      await expect(invokeConfiguredModel(f.project, f.command('refused', [{ role: 'user', content: 'hi' }]), f.options)).rejects.toMatchObject({ code: changed === 'binding' ? 'MODEL_INVOCATION_BINDING_CONFLICT' : 'MODEL_NOT_ACTIVATED' });
       expect(wire.seen).toEqual([]);
     }
   });

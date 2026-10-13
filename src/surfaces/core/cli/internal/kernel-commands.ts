@@ -174,5 +174,4 @@ export async function runKernelCommand(argv: readonly string[], context: Command
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');
-  // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
 }

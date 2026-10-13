@@ -170,11 +170,20 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Delivery fit (SESSION-RESULT-LIMIT-2026-09-28):** the worst-case delivered size of every declared provider profile —
   `modelInvocationNativeResponseUpperBound` (one formula shared by the adapters) plus the same arithmetic as
   `assertInvocationDeliveryFit` — is reported ahead of time by `deckent doctor` (`modelInvocationDelivery`, unconditional, `[]` when
-  clean) against the runtime-service and MCP surfaces; `models activate` refuses the admission when a profile is already declared for
+  clean) against the runtime-service and MCP surfaces. Human output emits one EN/TR line per finding with profile, exact model,
+  scope, surface and required/available delivered bytes; remediation names `service.responseMaxBytes` for runtime-service or
+  `mcp.responseMaxBytes` for MCP, or the profile's `limits.responseMaxBytes`. Available bytes are envelope-adjusted result capacity,
+  not the raw configured frame limit. `models activate` refuses the admission when a profile is already declared for
   the reference and can never deliver on some surface (`MODEL_ACTIVATION_DELIVERY_UNFIT`, before `app.admit()`, no claim or ledger
-  effect). The check lives in `engine/core/model-activation` / `engine/core/model-invocation`; composition only wires the surfaces
+  effect), carrying the first finding's profile, surface and byte values in its typed error. The check lives in
+  `engine/core/model-activation` / `engine/core/model-invocation`; composition only wires the surfaces
   (the MCP capacity comes from `adapters/core/mcp-transport`, never from the surface layer). A profile declared later, or a
   `service.responseMaxBytes` lowered after activation, is reported by doctor only (the one ongoing authority).
+- **Inactive invocation:** `/do` planning and terminal chat share the invocation application's `MODEL_NOT_ACTIVATED` refusal
+  when the exact model has no activation record or is inactive in the caller's scope. EN/TR text identifies the versioned reference
+  and scope and offers the existing `deckent models activate` command or `/model` panel (CLI exit 1). Digest/catalog conflicts
+  retain `MODEL_INVOCATION_ACTIVATION_CONFLICT`; binding conflicts retain their own code. No fallback or automatic inactive-model
+  activation is introduced. These are source behavior contracts; local author checks are separate from installed/live acceptance.
 - **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`.
   TTY `/runs` reads the same inventory into a scrollable list window (SW-2, alpha.15); it does not create or cancel a run. Line/CLI text producers are unchanged.
   Chat text is not run truth. **S18/S18B/S18B-AUTH (batch 36):** üretim yolu runtime SQLite ledger’ına salt okunur `fs.watch` + heartbeat takibidir; servis tek yazardır, okuyucu outbox silmez/etki açmaz. `inspectMonitor` ile ortak principal/scope/policy kapısı okuma öncesi ve takip boyunca yeniden değerlendirilir; ret/veri bağlamı değişimi takibi durdurur. R4 yetkili açılış snapshot’ı, sıra boşluğunda resync ve reconnect başlangıç cursor’ını; R5 çalışan worker’ın canlı panel gözlemini korur. Takip portu olmayan tüketici bounded single-flight poll kullanır. The Ink `Static`

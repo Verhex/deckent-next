@@ -20,6 +20,9 @@ export interface RecoveryFilesDoctorView { readonly leftovers: readonly string[]
 
 /** What the human rendering reads from the collected doctor report; the pool readiness lines arrive already rendered. */
 export interface DoctorRenderInput {
+  readonly modelInvocationDelivery?: readonly { readonly scopeId: string; readonly profileId: string;
+    readonly reference: { readonly providerId: string; readonly providerVersion: number; readonly modelId: string; readonly modelVersion: number };
+    readonly surface: 'runtime-service' | 'mcp'; readonly requiredBytes: number; readonly availableBytes: number }[];
   readonly startability?: InstallationStartabilityView | null;
   readonly platform: string;
   readonly host: { readonly cpuCores: number; readonly totalMemMB: number; readonly recommendedMaxWorkers: number };
@@ -81,5 +84,9 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
   ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),
   ...poolLines,
+  ...(result.modelInvocationDelivery ?? []).map(finding => t('doctor.modelInvocationDelivery', { profile: finding.profileId,
+    model: `${finding.reference.providerId}@${finding.reference.providerVersion}/${finding.reference.modelId}@${finding.reference.modelVersion}`,
+    scope: finding.scopeId, surface: finding.surface, required: finding.requiredBytes, available: finding.availableBytes,
+    setting: finding.surface === 'mcp' ? t('doctor.modelInvocationDelivery.config.mcp', {}, locale) : t('doctor.modelInvocationDelivery.config.runtime-service', {}, locale) }, locale)),
   ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n');
 }
