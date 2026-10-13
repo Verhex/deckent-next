@@ -161,10 +161,10 @@ it.skipIf(process.platform === 'win32')('does not recycle an earlier rejection a
   expect(f.evaluator.evaluate).toHaveBeenCalledOnce();
 });
 
-function release(f: Awaited<ReturnType<typeof fixture>>, scopes: 'all' | string[] = 'all', mcp = false, brokenAudit = false, poolIds = ['p']) {
+function release(f: Awaited<ReturnType<typeof fixture>>, scopes: 'all' | string[] = 'all', mcp = false, brokenAudit = false, poolIds = ['p'], action = 'release-quota') {
   const person = mcp ? { ...principal, ...mcpPrincipalRef(principal) } : principal;
-  const document = { schemaVersion: 1, revision: 'quota-policy', restrictions: [], grants: [{ id: 'owner-resume', effect: 'allow',
-    actions: ['resume'], scopes, principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: poolIds } }] };
+  const document = { schemaVersion: 1, revision: 'quota-policy', restrictions: [], grants: [{ id: 'owner-release-quota', effect: 'allow',
+    actions: [action], scopes, principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: poolIds } }] };
   return new QuotaReleaseApplication({ async verify() { return person; } }, new PoolControlPolicyAuthorization({ async load() { return document; } }), f.store,
     audit => brokenAudit ? { record() { throw new Error('BROKEN_AUDIT'); } } : new AuditApplication(audit, createHmacIntegrity('quota-test', randomBytes(32))), () => 2000, 'p');
 }
@@ -210,7 +210,7 @@ it.skipIf(process.platform === 'win32').each(['p', 'q'])('covers a wait added du
   const f = await fixture(), second = await secondWait(f, poolId), beforeP = (await f.evaluate()).snapshot;
   // Publish the second sealed quota result after the advisory read, before the writer's BEGIN IMMEDIATE.
   const real = new PoolControlPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'quota-policy', restrictions: [], grants: [{
-    id: 'owner-resume', effect: 'allow', actions: ['resume'], scopes: 'all', principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p'] } }] }; } });
+    id: 'owner-release-quota', effect: 'allow', actions: ['release-quota'], scopes: 'all', principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p'] } }] }; } });
   let added: Awaited<ReturnType<typeof f.evaluate>> | undefined;
   const authorization = { async decide(...args: Parameters<PoolControlPolicyAuthorization['decide']>) {
     added = await f.evaluate(second); return real.decide(...args);
@@ -239,7 +239,7 @@ it.skipIf(process.platform === 'win32')('refuses mixed policy revisions before a
   const f = await fixture(), second = await secondWait(f, 'q');
   const beforeP = (await f.evaluate()).snapshot, beforeQ = (await f.evaluate(second)).snapshot; let revision = 0;
   const authorization = new PoolControlPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: `policy-${++revision}`, restrictions: [], grants: [{
-    id: 'owner-resume', effect: 'allow', actions: ['resume'], scopes: 'all', principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p', 'q'] } }] }; } });
+    id: 'owner-release-quota', effect: 'allow', actions: ['release-quota'], scopes: 'all', principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p', 'q'] } }] }; } });
   const app = new QuotaReleaseApplication(verifier, authorization, f.store,
     audit => new AuditApplication(audit, createHmacIntegrity('quota-revision', randomBytes(32))), () => 2000, 'p');
   await expect(app.apply(releaseCommand)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
@@ -291,14 +291,14 @@ it.skipIf(process.platform === 'win32')('owner release re-enables own and other 
   const db = new DatabaseSync(f.path, { readOnly: true });
   try {
     const rows = db.prepare("SELECT record FROM audit_events WHERE kind='quota-release'").all(); expect(rows).toHaveLength(1);
-    expect(JSON.parse(String(rows[0]!.record))).toMatchObject({ mac: expect.any(String), event: { subject: { released: 1, decision: { effect: 'allow', ruleId: 'owner-resume' } } } });
+    expect(JSON.parse(String(rows[0]!.record))).toMatchObject({ mac: expect.any(String), event: { subject: { released: 1, decision: { effect: 'allow', ruleId: 'owner-release-quota' } } } });
     const plan = db.prepare("EXPLAIN QUERY PLAN SELECT since_ms,deadline_ms FROM run_quota_waits WHERE channel_id=? AND deadline_ms>? AND released_at_ms IS NULL AND channel_held=1 ORDER BY deadline_ms DESC LIMIT 1").all(pin.channelId, 1000);
     expect(JSON.stringify(plan)).toContain('run_quota_waits_channel'); expect(JSON.stringify(plan)).not.toContain('SCAN runs');
   } finally { db.close(); }
 });
-it.skipIf(process.platform === 'win32').each(['scoped', 'mcp', 'audit'] as const)('refuses %s release without changing the wait, revision or receipt', async variant => {
+it.skipIf(process.platform === 'win32').each(['scoped', 'mcp', 'audit', 'resume-only'] as const)('refuses %s release without changing the wait, revision or receipt', async variant => {
   const f = await fixture(); const before = (await f.evaluate()).snapshot;
-  await expect(release(f, variant === 'scoped' ? ['s'] : 'all', variant === 'mcp', variant === 'audit').apply(releaseCommand)).rejects.toThrow(variant === 'audit' ? 'BROKEN_AUDIT' : 'POLICY_DENIED');
+  await expect(release(f, variant === 'scoped' ? ['s'] : 'all', variant === 'mcp', variant === 'audit', ['p'], variant === 'resume-only' ? 'resume' : 'release-quota').apply(releaseCommand)).rejects.toThrow(variant === 'audit' ? 'BROKEN_AUDIT' : 'POLICY_DENIED');
   expect(await f.store.loadRun('s', 'r')).toEqual(before);
   const db = new DatabaseSync(f.path, { readOnly: true }); try {
     expect(db.prepare('SELECT count(*) n FROM quota_release_receipts').get()!.n).toBe(0);

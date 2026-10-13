@@ -19,7 +19,7 @@ export interface QuotaReleaseStore {
   releaseQuota(write: QuotaReleaseWrite, audit: (store: AuditStore, released: number, poolIds: readonly string[]) => void): Promise<QuotaReleaseReceipt>;
   recordPoolHoldRefusal(audit: (store: AuditStore) => void): Promise<void>;
 }
-/** Installation-wide subscription recovery uses the existing pool/resume cell. No provider timestamp or pool hold is edited. */
+/** Installation-wide subscription recovery uses the separate pool/release-quota cell. No provider timestamp or pool hold is edited. */
 export class QuotaReleaseApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorization: PoolControlAuthorization,
     private readonly store: QuotaReleaseStore, private readonly recorder: PoolHoldAuditRecorder, private readonly now: () => number,
@@ -37,7 +37,7 @@ export class QuotaReleaseApplication {
         commandId: command.commandId, decision: { effect: decision.effect, ruleId: decision.ruleId }, released } });
     let selected: PoolControlDecision | undefined;
     for (const target of authorizedPoolIds) {
-      const decision = await this.authorization.decide('resume', target, command.scopeId, principal);
+      const decision = await this.authorization.decide('release-quota', target, command.scopeId, principal);
       if (decision.effect !== 'allow') await this.store.recordPoolHoldRefusal(store => { this.recorder(store).record(event(decision, target, null, poolIds)); });
       assertPoolControlAllowed(decision);
       if (selected && selected.revision !== decision.revision) throw new RunStoreError('RUN_STORE_CONFLICT');
