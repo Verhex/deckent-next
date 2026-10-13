@@ -118,6 +118,9 @@ describe.skipIf(process.platform !== 'linux')('identity profile distribution (re
     const f = await fixture(true, true), prepared = await f.app.preview(selection()), before = await f.files(); await f.approve(prepared);
     await expect(f.app.submit(prepared.submission, prepared.digest)).rejects.toMatchObject({ code: 'EFFECT_REJECTED' });
     expect(await f.files()).toEqual(before); expect(await f.effects.loadEffect('s', prepared.submission.command.commandId)).toMatchObject({ state: 'refused' });
+    // No record, no change: the failed audit stopped the writer before any archive record (prepared or committed) or rename.
+    expect((await readdir(f.archive).catch(() => [] as string[])).filter(name => /^[kr]-/.test(name))).toEqual([]);
+    expect(f.events().filter(event => event.subject.kind === 'authority-change')).toEqual([]);
   });
   it('refuses a non-admin and rejects handwritten principals, role permissions and personas', async () => {
     const f = await fixture(false), before = await f.files();
@@ -148,9 +151,11 @@ describe.skipIf(process.platform !== 'linux')('identity profile distribution (re
     const command = { ...prepared.submission.command, commandId: 'remove-last-owner', idempotencyKey: 'remove-last-owner',
       input: { ...change, changes: [{ kind: 'binding.remove', id: 'root' }] } };
     const pending = await f.deps.administration.submit(command); await f.decide(pending);
-    await expect(f.deps.administration.submit(command)).rejects.toMatchObject({ code: 'POLICY_CHANGE_INVALID' });
+    // P0 (alpha.35): the general last-admin invariant of the authority writer refuses it (owner decision: POLICY_LAST_ADMIN on every policy input).
+    await expect(f.deps.administration.submit(command)).rejects.toMatchObject({ code: 'POLICY_LAST_ADMIN' });
     expect(await f.files()).toEqual(before); expect(f.events().filter(event => event.subject.kind === 'authority-change')).toEqual([]);
-    expect(f.events().filter(event => event.subject.kind === 'authority-refusal')).toHaveLength(1);
+    expect(f.events().filter(event => event.subject.kind === 'authority-refusal')).toEqual([expect.objectContaining({ subject: expect.objectContaining({ code: 'POLICY_LAST_ADMIN' }) })]);
+    expect((await readdir(f.archive).catch(() => [] as string[])).filter(name => /^[kr]-/.test(name))).toEqual([]);
   });
   it('preserves an existing second-person rule; its exact pending card cannot be self-approved', async () => {
     const f = await fixture(), file = JSON.parse((await f.files()).policy);
