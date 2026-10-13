@@ -32,6 +32,11 @@ function parseTemplate(profile: ExecutionProfileDefinition) {
   try { validateDockerTaskProfile(docker); } catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   return { docker, invocation: parameters.data.invocation };
 }
+/** Only invocation identity for planning; never task prompts, composition or Docker parameters. */
+export function nativeCodingTemplateWorker(profile: ExecutionProfileDefinition) {
+  const { provider, cliVersion } = parseTemplate(profile).invocation;
+  return { provider, cliVersion };
+}
 
 /** The Docker task profile a template compiles onto (installation preview reads its image through this). Throws on an invalid template. */
 export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return parseTemplate(profile).docker; }

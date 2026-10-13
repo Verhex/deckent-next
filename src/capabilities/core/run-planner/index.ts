@@ -1,16 +1,24 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { runProposalSchema, validateTaskGraph, identitySchema, encodeCommandProjection, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { runProposalSchema, validateTaskGraph, TaskGraphError, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import templates from './internal/templates.json' with { type: 'json' };
 const selected = z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict();
 const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: z.number().int().min(1).max(1024) }).strict();
 export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).default(1),
   selected: selected.default(templates.selected), templates: z.array(template).min(1).max(256).default(templates.templates),
+  context: z.object({ maxKinds: z.number().int().positive().safe(), maxModels: z.number().int().positive().safe(),
+    maxEvaluators: z.number().int().positive().safe(), maxBytes: z.number().int().positive().safe(),
+    requestMaxBytes: z.number().int().positive().safe(), tokenFramingAllowance: z.number().int().nonnegative().safe(),
+  }).strict().default(templates.context),
 }).strict();
 export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
 export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();
+export { boundBrainContext } from './internal/context.js';
+export type { BrainRegistryContext } from './internal/context.js';
 export type BrainDraft = z.infer<typeof brainDraftSchema>;
+export const prepareBrainEvaluatorParameters = (evaluator: EvaluatorDefinition) => zodToJsonSchema(installedEvaluatorParameters(evaluator), { $refStrategy: 'none' });
 function redactJson(input: unknown, known?: KnownSecretSnapshot): unknown {
   if (typeof input === 'string') return redactForRecord(input, known);
   if (Array.isArray(input)) return input.map(value => redactJson(value, known));
@@ -25,6 +33,8 @@ export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassP
   if (chosen.length !== 1) throw ErrorRegistry.createError('BRAIN_TEMPLATE_UNAVAILABLE');
   const chosenTemplate = chosen[0]!, intent = redactForRecord(command.intent, known);
   const projected = JSON.stringify(redactJson({ scopeId: command.scopeId, workClasses: policy, context }, known));
+  const bytes = new TextEncoder().encode(projected).length;
+  if (bytes > config.context.maxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: config.context.maxBytes, observed: bytes, unit: 'bytes' } });
   return Object.freeze({ template: { id: chosenTemplate.id, version: chosenTemplate.version,
     digest: sha256(encodeCommandProjection('brain-template:1', chosenTemplate)) }, summaryChars: chosenTemplate.summaryChars,
     inputDigest: brainInputDigest(command, known), contextDigest: sha256(projected), intent,
@@ -38,7 +48,9 @@ export function parseBrainDraft(text: string, known?: KnownSecretSnapshot): Brai
   try { input = redactJson(JSON.parse(text) as unknown, known); } catch { throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'json' } }); }
   const parsed = brainDraftSchema.safeParse(input);
   if (!parsed.success) throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'schema' } });
-  try { validateTaskGraph(parsed.data.graph); } catch { throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'graph' } }); }
+  try { validateTaskGraph(parsed.data.graph); } catch (error) {
+    throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: error instanceof TaskGraphError ? error.code : 'TASK_GRAPH_INVALID' } });
+  }
   return parsed.data;
 }
 export const brainOutputDigest = (draft: BrainDraft) => sha256(encodeCommandProjection('brain-output:1', draft));

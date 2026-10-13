@@ -704,5 +704,8 @@
   "cli.help.summary.do": "Plan an intent through Brain and existing approval gates",
   "cli.help.do": "deckent do --request <intent> [--scope <scope>] [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals.",
   "mcp.tool.planRun": "Generate a receipted RunProposal from an intent with the selected active model and provider-spend budget. Same command/input replays. MCP cannot decide approvals.",
-  "config.field.brain_planner": "Versioned Brain planning template registry"
+  "config.field.brain_planner": "Versioned Brain planning template registry",
+  "error.BRAIN_CONTEXT_TOO_LARGE": "Planning context exceeds the {limit} {unit} limit (observed {observed}). Narrow the intent/catalog selection or use an explicitly activated model with a larger context window; no automatic retry.",
+  "error.BRAIN_GRAPH_INVALID": "The model plan violates graph rule {rule}. Correct the request or model plan. No Run was created.",
+  "error.BRAIN_PROVIDER_REJECTED": "The planning provider rejected the request ({reason}, HTTP {status}). Inspect its invocation receipt and correct the configuration or context before a new request; no automatic retry."
 }

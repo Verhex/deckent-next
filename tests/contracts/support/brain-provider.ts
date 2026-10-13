@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { readLocalOsIdentity, openSqliteModelActivationStore, compileNativeCodingDockerProfile } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
+import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, createModelInvocationResponseEvidence } from '#engine/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -16,18 +16,28 @@ import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { fixtureDockerRegistry } from './execution-registry.js';
 import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
-export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string; hold?: boolean; noCharge?: boolean; subscription?: boolean } = {}) {
+export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string; hold?: boolean;
+  noCharge?: boolean; subscription?: boolean; template?: boolean; contextWindow?: number; tokenCount?: { count: number; max_model_len?: number } | null; rejectStatus?: number } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-provider-'));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await mkdir(join(project, '.deckent'), { recursive: true });
   const bodies: string[] = [];
+  const counterBodies: string[] = [];
   const draft = proposalFixture('business');
   const { graph, budgetCeiling, requiredPermissions } = draft;
   let output = options.response ?? JSON.stringify({ graph, budgetCeiling, requiredPermissions });
   let posts = 0;
   const transport = vi.spyOn(httpTransport, 'sendNativeJsonHttp').mockImplementation(async (request, sendOptions, signal) => {
+    if (request.definition.endpoint === 'https://127.0.0.1:1234/tokenize' && sendOptions.parseResponse) {
+      counterBodies.push(request.body);
+      const parsed = sendOptions.parseResponse(Buffer.from(JSON.stringify(options.tokenCount)));
+      if (!('response' in parsed)) return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(request.adapter, 'invalid-response', 200, Buffer.from('null'), true) };
+      return parsed.response;
+    }
     if (request.definition.endpoint !== 'https://127.0.0.1:1234/chat' || !sendOptions.parseResponse) throw new Error('UNROUTED_FIXTURE_EFFECT');
     posts++; bodies.push(request.body);
+    if (options.rejectStatus) return { kind: 'rejected', evidence: createModelInvocationResponseEvidence(request.adapter,
+      'http-status', options.rejectStatus, Buffer.from('context window exceeded api_key=sk-provider-private'), true) };
     if (options.hold) await new Promise<never>((_resolve, reject) => {
       if (signal?.aborted) reject(new Error('FIXTURE_ABORTED'));
       else signal?.addEventListener('abort', () => reject(new Error('FIXTURE_ABORTED')), { once: true });
@@ -39,16 +49,19 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     return parsed.response;
   });
   const reference = { providerId: 'test-operator', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
-  const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] };
+  const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openai-chat-completions', version: 'v1',
+    capabilities: options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }] }] };
   const catalog = { schemaVersion: 1 as const, revision: 'fixture-catalog', providers: [{ id: reference.providerId, version: 1, models: [model] }] };
   const definition = { encodingVersion: 1 as const, provider: { id: reference.providerId, version: 1 }, model };
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1, id: 'fixture', version: 1, scopeId: 's', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
       definition: { endpoint: 'https://127.0.0.1:1234/chat', authentication: { type: 'none' }, maxOutputTokens: 8,
+        ...(options.tokenCount === undefined ? {} : { tokenizeEndpoint: 'https://127.0.0.1:1234/tokenize' }),
         tariff: { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 200,
           cachedInputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 50, outputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 1000 } } }, allocation: { id: 'fixture', maxCalls: 8, maxInFlight: 2 },
-    limits: { requestMaxBytes: 128_000, responseMaxBytes: 16_384, timeoutMs: 2_000 } };
+    limits: { requestMaxBytes: 128_000, responseMaxBytes: 16_384, timeoutMs: 2_000 },
+    ...(options.contextWindow ? { contextWindowTokens: options.contextWindow } : {}) };
   const workClasses = { schemaVersion: 2, revision: 'business-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
     proposalAdmission: { risk: 'low', standingAdmission: options.standing ?? false }, acceptanceProfile: { schemaVersion: 1, version: 1,
       criterionTypes: ['completion'], evidenceTypes: ['verification-result'], rubric: [{ criterionType: 'completion', evidenceTypes: ['verification-result'], weight: 1 }],
@@ -59,6 +72,12 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   if (options.subscription) workerRegistry.profiles[0] = compileNativeCodingDockerProfile(workerRegistry.profiles[0], { schemaVersion: 4,
     provider: 'claude', cliVersion: '2.1.285 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
     model: { channelId: SEED_CHANNEL, modelId: workerModel.nativeId, auxiliaryModelIds: [] }, prompt: 'Prepare a purchase and business readback.' }) as typeof workerRegistry.profiles[0];
+  if (options.template) {
+    const base = fixtureDockerRegistry(['purchase']).profiles[0]!;
+    const docker = Object.fromEntries(Object.entries(base.parameters).filter(([key]) => key !== 'argv'));
+    workerRegistry.profiles[0] = { ...base, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker,
+      invocation: { provider: 'claude', cliVersion: '2.1.285 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' } } } as unknown as typeof base;
+  }
   const config = { layout: { root: data }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
     terminal: { scopeId: 's', chat: { schemaVersion: 1, ...(options.model === 'missing' ? {} : { reference }), maxCompletionTokens: 8 } },
     ...(options.budget === null ? {} : { provider_spending: { ...fixtureBudget('s'), budgets: [{ ...fixtureBudget('s').budgets[0]!, limitMinorUnits: options.budget ?? 1000 }] } }),
@@ -87,6 +106,6 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     for (const modelId of [null, workerModel.nativeId]) await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-activate-' + modelId,
       scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 }, loadOptions);
   }
-  return { project, data, path, options: loadOptions, reference, config, bodies, get posts() { return posts; }, setOutput(value: string) { output = value; },
+  return { project, data, path, options: loadOptions, reference, config, bodies, counterBodies, get posts() { return posts; }, setOutput(value: string) { output = value; },
     async close() { clearConfigCache(); transport.mockRestore(); await rm(root, { recursive: true, force: true }); } };
 }

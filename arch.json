@@ -2799,7 +2799,8 @@
         "src/domain/core/command",
         "src/platform/core/errors",
         "src/platform/core/redaction",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/capabilities/core/evaluation-evidence"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -2837,7 +2838,10 @@
         "src/composition/core/query-errors",
         "src/composition/core/root",
         "src/engine/core/provider-spend",
-        "src/adapters/core/native-coding"
+        "src/adapters/core/native-coding",
+        "src/engine/core/model-activation",
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/toolchains"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },

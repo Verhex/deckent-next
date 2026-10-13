@@ -31,6 +31,15 @@ export async function measurePeerConfiguredModel(projectRoot: string, input: Mod
     return await application(context, options).measure(command, undefined, signal);
   } catch (error) { throw queryFailure(error); }
 }
+/** Direct local measurement shares invocation's principal, policy, binding and activation gates; no model execution or spending. */
+export async function measureConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  try {
+    const parsed = modelInvocationCommandInputSchema.safeParse(input);
+    if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+    const command = parsed.data as ModelInvocationCommand, context = await loadInvocationContext(projectRoot, command.scopeId, options, 'write');
+    return await application(context, options).measure(command, undefined, signal);
+  } catch (error) { throw queryFailure(error); }
+}
 export function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost, readOnly = false) {
   // One trusted clock for pricing and durable invocation records (I40).
   const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly);

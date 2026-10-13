@@ -704,5 +704,8 @@
   "cli.help.summary.do": "Brain ve mevcut onay kapılarıyla bir isteği planla",
   "cli.help.do": "deckent do --request <istek> [--scope <kapsam>] [--command-id <kimlik>] [--json]. Tekrar için aynı komut kimliği ve isteği kullanın; bu komut onay kararı vermez.",
   "mcp.tool.planRun": "Seçilen etkin model ve provider-spend bütçesiyle istekten makbuzlu RunProposal üretir. Aynı komut/girdi kayıttan devam eder. MCP onay kararı veremez.",
-  "config.field.brain_planner": "Sürümlü Brain planlama şablonu kaydı"
+  "config.field.brain_planner": "Sürümlü Brain planlama şablonu kaydı",
+  "error.BRAIN_CONTEXT_TOO_LARGE": "Planlama bağlamı {limit} {unit} sınırını aşıyor (gözlenen {observed}). İsteği/katalog seçimini daraltın veya daha geniş bağlamlı, açıkça etkinleştirilmiş model seçin; otomatik tekrar yok.",
+  "error.BRAIN_GRAPH_INVALID": "Model planı {rule} graph kuralını ihlal ediyor. İsteği veya model planını düzeltin. Run oluşturulmadı.",
+  "error.BRAIN_PROVIDER_REJECTED": "Planlama sağlayıcısı isteği reddetti ({reason}, HTTP {status}). Yeni istekten önce çağrı makbuzunu inceleyip yapılandırmayı veya bağlamı düzeltin; otomatik tekrar yok."
 }

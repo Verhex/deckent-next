@@ -20,9 +20,24 @@ it.each(['missing', 'duplicate'])('refuses %s selected template instead of fallb
   expect(() => prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'missing', version: 1 }, templates: kind === 'missing' ? [{ ...row, version: 2 }] : [row, row] }))
     .toThrow(expect.objectContaining({ code: 'BRAIN_TEMPLATE_UNAVAILABLE' }));
 });
-it.each([['not-json', 'json'], [JSON.stringify({ ...draft, approved: true }), 'schema'], [JSON.stringify({ ...draft,
-  graph: { ...graph, tasks: [{ ...graph.tasks[0]!, dependencies: ['task'] }] } }), 'graph']] as const)('stages %s failures without provider diagnostics', (input, stage) => {
+it.each([['not-json', 'json'], [JSON.stringify({ ...draft, approved: true }), 'schema']] as const)('stages %s failures without provider diagnostics', (input, stage) => {
   expect(() => parseBrainDraft(input)).toThrow(expect.objectContaining({ code: 'BRAIN_OUTPUT_INVALID', params: { stage } }));
+});
+it.each([
+  ['TASK_GRAPH_CYCLE', { ...graph.tasks[0]!, dependencies: ['task'] }],
+  ['TASK_CRITERION_DEFINITION_MISSING', { ...graph.tasks[0]!, acceptanceCriteria: ['invented'] }],
+  ['TASK_DEPENDENCY_MISSING', { ...graph.tasks[0]!, dependencies: ['invented'] }],
+] as const)('keeps safe graph rule %s without provider text', (rule, task) => {
+  expect(() => parseBrainDraft(JSON.stringify({ ...draft, graph: { ...graph, tasks: [task] } })))
+    .toThrow(expect.objectContaining({ code: 'BRAIN_GRAPH_INVALID', params: { rule } }));
+});
+it('supplies criterion-id annotation and selects v2 while keeping v1 available', () => {
+  const current = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {});
+  expect(current.template.version).toBe(2);
+  const schema = JSON.parse(current.messages[1]!.content).schema;
+  expect(schema.properties.graph.properties.tasks.items.properties.acceptanceCriteria.description).toContain('criterionDefinitions ids');
+  const old = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 1 } });
+  expect(old.template.version).toBe(1);
 });
 it('masks both credential-shaped and known escaped secrets before model context, output graph or summary can retain them', () => {
   const secret = 'opaque"and\\quoted', known = snapshotKnownSecrets([{ name: 'FIXTURE', value: secret }]);
