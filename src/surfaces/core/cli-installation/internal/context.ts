@@ -1,4 +1,4 @@
-import type { ProjectInstructionPort } from '#engine/index.js';
+import type { InstallationPoolResult, ProjectInstructionPort } from '#engine/index.js';
 import type { InstallationIdentityChoice, InstallationIdentityResolution } from '#domain/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink } from '#platform/index.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
@@ -17,4 +17,5 @@ export interface InstallationCommandContext {
   previewPolicyTemplateInstallation?: PolicyTemplatePreviewHandler;
   applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
   upgradePolicyTemplateInstallation?: PolicyTemplateUpgradeHandler;
+  installConfiguredExecutionPool?: (root: string, scopeId: string, apply: boolean) => Promise<InstallationPoolResult>;
 }

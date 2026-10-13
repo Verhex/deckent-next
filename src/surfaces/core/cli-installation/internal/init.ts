@@ -42,14 +42,14 @@ export async function initCommand(argv: readonly string[], context: Installation
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
   let proposalDigest: string | undefined, json = false, allowShutdown = false, acceptCustom = false;
   let scopeId: string | undefined, policyPreview = false, policyApply = false, policyUpgrade = false, expect: string | undefined, person: Person | undefined;
-  if (!['preview', 'inspect', 'apply', 'resume', 'policy', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!['preview', 'inspect', 'apply', 'resume', 'policy', 'pool', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--json' && !json) { json = true; continue; }
     if (flag === '--allow-shutdown' && !allowShutdown) { allowShutdown = true; continue; }
     if (flag === '--no-color') continue;
-    if (flag === '--preview' && action === 'policy' && !policyPreview && !policyApply) { policyPreview = true; continue; }
-    if (flag === '--apply' && action === 'policy' && !policyApply && !policyPreview) { policyApply = true; continue; }
+    if (flag === '--preview' && ['policy', 'pool'].includes(action) && !policyPreview && !policyApply) { policyPreview = true; continue; }
+    if (flag === '--apply' && ['policy', 'pool'].includes(action) && !policyApply && !policyPreview) { policyApply = true; continue; }
     if (flag === '--upgrade' && action === 'policy' && !policyUpgrade) { policyUpgrade = true; continue; }
     if (flag === '--expect' && action === 'policy' && expect === undefined) {
       expect = argv[++i];
@@ -57,7 +57,7 @@ export async function initCommand(argv: readonly string[], context: Installation
       continue;
     }
     if (flag === '--person' && action === 'policy' && person === undefined) { person = parsePerson(argv[++i]); continue; }
-    if (flag === '--scope' && action === 'policy' && scopeId === undefined) {
+    if (flag === '--scope' && ['policy', 'pool'].includes(action) && scopeId === undefined) {
       scopeId = argv[++i];
       if (!scopeId || scopeId.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
       continue;
@@ -85,7 +85,7 @@ export async function initCommand(argv: readonly string[], context: Installation
     }
     throw ErrorRegistry.createError('CLI_USAGE');
   }
-  const locale = resolveLocale(language, context.env, policyUpgrade && language === undefined
+  const locale = resolveLocale(language, context.env, (policyUpgrade || action === 'pool') && language === undefined
     ? await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }) : undefined); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (action === '--help' || action === '-h') {
@@ -93,6 +93,25 @@ export async function initCommand(argv: readonly string[], context: Installation
     emit(t('cli.help.initPreview', {}, locale), sinks); return;
   }
   const root = context.root ?? process.cwd();
+  if (action === 'pool') {
+    if (!scopeId || policyPreview === policyApply || profilePath || allowShutdown || !context.installConfiguredExecutionPool) throw ErrorRegistry.createError('CLI_USAGE');
+    const result = await context.installConfiguredExecutionPool(root, scopeId, policyApply);
+    emit(result, { ...sinks, json, render: value => {
+      const pool = value.configured;
+      const params = { scope: terminalSafeText(scopeId!), pool: terminalSafeText(pool?.poolId ?? '-'),
+        execution: pool?.capacity.executionSlots ?? '-', inFlight: pool?.capacity.inFlightSlots ?? '-',
+        storedExecution: value.stored?.capacity.executionSlots ?? '-', storedInFlight: value.stored?.capacity.inFlightSlots ?? '-',
+        reason: value.reason ?? '-', version: value.ledgerVersion ?? '-' };
+      return value.reason === 'not-owner' ? t('cli.init.pool.notOwner', params, locale)
+        : value.reason === 'ledger-version' ? t('cli.init.pool.ledgerVersion', params, locale)
+        : value.status === 'preview' ? t('cli.init.pool.preview', params, locale)
+        : value.status === 'created' ? t('cli.init.pool.created', params, locale)
+        : value.status === 'current' ? t('cli.init.pool.current', params, locale)
+        : value.status === 'conflict' ? t('cli.init.pool.conflict', params, locale)
+        : t('cli.init.pool.unavailable', params, locale);
+    } });
+    return;
+  }
   if (action === 'resume') {
     if (!dockerExecutable || !proposalDigest || !acceptCustom || !context.resumeInstallation) throw ErrorRegistry.createError('CLI_USAGE');
     const result = await context.resumeInstallation(root, { allowShutdown, dockerExecutable, proposalDigest, acceptCustom: true });

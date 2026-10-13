@@ -124,6 +124,7 @@ dosyalarını yeniden kontrol etmez.
 sahibinin tüm kapsamlar için `backup` policy izni gerekir. Mevcut kurulumda önce
 `deckent init policy --scope <id> --upgrade --preview` ile ekleme planını görün; sonra
 `--apply --expect <önizlemedeki-revision>` kullanın. Çakışan kurallar değiştirilmez.
+Mevcut güncel kurulumda eksik havuz: `deckent init pool --scope <id> --preview`, ardından `--apply`; kapasite config admission alanından alınır, farklı mevcut havuz değiştirilmez.
 
 ```sh
 deckent backup create --scope <id> --set /private/recovery/set-1
