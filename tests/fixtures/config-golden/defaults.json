@@ -178,6 +178,7 @@
       "schemaVersion": 1
     },
     "clearOnStart": true,
+    "maxTrackedRuns": 128,
     "persistHistory": true,
     "serviceStartTimeoutMs": 20000,
     "theme": "auto"

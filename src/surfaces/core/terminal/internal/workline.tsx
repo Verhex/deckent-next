@@ -2,7 +2,7 @@ import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, useStdout, type Instance } from 'ink';
-import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
+import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
@@ -75,6 +75,7 @@ export interface WorklineProps {
   readonly projectInstructions?: { readonly port: ProjectInstructionPort; readonly labels: ProjectInstructionLabels };
   /** Window of the plain (non-streaming) path only; the agent path sends the whole conversation (T-L5, Astra 2091 R1). */
   readonly historyMessages: number;
+  readonly maxTrackedRuns?: number | undefined;
   readonly model?: string;
   readonly provider?: string;
   readonly completeTurn: WorklineCompleteTurn;
@@ -182,7 +183,10 @@ export function WorklineApp(props: WorklineProps) {
   const liveRef = useRef<ReturnType<typeof useLiveWindows> | null>(null);
   const taskActionRef = useRef<(action: TaskWindowAction) => void>(() => undefined), taskActions = useRef(new Map<string, TaskWindowAction>());
   const announced = useRef(new Set<string>()), openingTold = useRef(false);
+  const [completionRefused, setCompletionRefused] = useState(false);
+  const completion = useRunCompletion({ limit: props.maxTrackedRuns, labels: labels.work?.jobs, ledger, pollMs, refused: completionRefused, push, errorText });
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
+    if (step.status === 'denied' || step.status === 'not-initialized') setCompletionRefused(true);
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
     // A stopped follow leaves nothing to update: the window closes (its single summary line records the access refusal).
     // With snapshots, publications are invalidations, never a substitute for typed surface state.
@@ -212,7 +216,10 @@ export function WorklineApp(props: WorklineProps) {
       const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
       workRef.current?.observeWorkers(workers);
     }
-    if (snapshot.runs && watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => liveRunEntry(run, `watch-run-${index}`)));
+    if (snapshot.runs) {
+      completion.observe(snapshot.runs);
+      if (watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => liveRunEntry(run, `watch-run-${index}`)));
+    }
     if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
     // I-5: the opening snapshot says once whether work is running (one system line from what it was allowed to read; nothing when idle).
     if (!openingTold.current) {
@@ -221,7 +228,7 @@ export function WorklineApp(props: WorklineProps) {
       if (text) push([systemSummaryEntry(text)]);
     }
     return snapshot.denied;
-  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
+  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}:${completion.generation}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => setWatchStatusLines([`${labels.watchFailed}: ${errorText(error)}`]), [errorText, labels.watchFailed]);
@@ -359,12 +366,14 @@ export function WorklineApp(props: WorklineProps) {
       setPlanning(true);
       try {
         let result = await plan();
+        if (result.run) completion.register(result.run);
         setPlanning(false);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
         if (result.proposal.status === 'pending' && result.proposal.approval) {
           await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, props.doPlan.lines(result).join('\n'));
           if (execution.signal.aborted) return true;
           result = await plan();
+          if (result.run) completion.register(result.run);
         }
         await show(props.doPlan.lines(result));
         if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
@@ -459,7 +468,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, props.doPlan, sessionModel, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, props.doPlan, sessionModel, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel, completion.register]);
   // SLASH-WINDOWS I-1 (owner 2026-10-08, Jev b1e8286f): with window words a slash command typed with an argument runs bare — every host
   // (information/list slot, panel controller) opens its window as usual — and that window says once that the terminal takes no typed
   // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.

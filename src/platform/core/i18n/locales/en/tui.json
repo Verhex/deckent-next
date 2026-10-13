@@ -1010,5 +1010,9 @@
   "tui.workspace.hints": "y: confirm · n / Escape: cancel",
   "tui.workspace.required": "This key needs a workspace. Connect a model, then open /model → Select provider workspace before the first turn.",
   "terminal.slash.do": "Plan work from your request",
-  "terminal.slash.doArgument": "request"
+  "terminal.slash.doArgument": "request",
+  "terminal.jobs.completed": "Run {run} [{state}] · accepted {accepted}, rejected {rejected}, failed {failed}, cancelled {cancelled} · delivery: none {none}, patch not prepared {patch}, awaiting delivery {awaiting}, unknown {unknown}",
+  "terminal.jobs.deliveryNext": "Delivery is pending. See /run {run} for details.",
+  "terminal.jobs.detailsUnavailable": "Details cannot be read: output permission or evidence is unavailable.",
+  "terminal.jobs.trackingFull": "Completion tracking is full ({limit}). Run {run} was admitted; check it with /run."
 }
