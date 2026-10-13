@@ -4,7 +4,7 @@ import { appendFile, readFile, writeFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { clearConfigCache } from '#platform/index.js';
-import { encodeCommandProjection, firstRunPolicyTemplate, FIRST_RUN_UPGRADE_RULE_IDS, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type McpCapabilityPreview } from '#domain/index.js';
+import { encodeCommandProjection, firstRunPolicyTemplate, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type McpCapabilityPreview } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { changeConfiguredMcpCapabilities, inspectConfiguredMcpCapabilities, listConfiguredMcpCapabilityScopes } from '#composition/core/approvals/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
@@ -143,7 +143,8 @@ describe.skipIf(process.platform !== 'linux')('selection-only MCP capability adm
     const { f, body, read, preview, apply, audits } = await fixture();
     const plan = await preview(); await apply(plan);
     expect(await terminalApplication(f, 'policy-upgrade', 'scope', { mode: 'rollback', reason: 'W5 rollback regression' })).toMatchObject({ status: 'rolled-back' });
-    const ids = new Set<string>(Object.values(FIRST_RUN_UPGRADE_RULE_IDS));
+    // Rollback removes this version's execution rules; earlier authority and the named MCP rules survive.
+    const ids = new Set<string>(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS);
     expect((await read()).grants).toEqual([...body.grants.filter(grant => !ids.has(grant.id)), ...plan.rules]);
     expect(audits()).toHaveLength(2);
     expect(await apply(await preview('spend', 'revoke'))).toMatchObject({ status: 'applied' });

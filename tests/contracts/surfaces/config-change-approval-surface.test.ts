@@ -94,7 +94,7 @@ describe('config write routes: pending writes nothing and says how it applies', 
 
 describe('the model cannot reach a config write', () => {
   const files = (dir: string): string[] => readdirSync(dir).flatMap(name => { const path = join(dir, name); return statSync(path).isDirectory() ? files(path) : [path]; });
-  it('only human surfaces (CLI entry, terminal /config and its window, the monitor\'s settings view, toolchain refresh) and the governed models.connect operation compose the config write path; no agent tool and no MCP config tool does', () => {
+  it('only human surfaces (CLI entry, coding template, terminal /config and its window, the monitor\'s settings view, toolchain refresh) and the governed models.connect operation compose the config write path; no agent tool and no MCP config tool does', () => {
     // T3 L4: the `/config` window is a new caller — the list grows by exactly its files, and the pattern also catches a non-null-asserted
     // factory call (`configApplication!(`), the terminal write (`terminalConfigWrite(`) and the window port (`configPanelPort(`).
     // T4-B D2 (owner 2026-10-08, ARCHITECTURE `models.connect`): the one `models.connect` operation (CLI, MCP `connect_model`, SDK, terminal
@@ -104,7 +104,9 @@ describe('the model cannot reach a config write', () => {
       .filter(path => /createConfiguredConfigApplication|configApplication!?\(|configWrite\(|terminalConfigWrite\(|configPanelPort\(/.test(readFileSync(path, 'utf8')))
       .map(path => path.replaceAll('\\', '/')).sort();
     expect(writers).toEqual(['src/composition/core/cli/internal/entry.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
-      'src/composition/core/model-connect/internal/connect.ts', 'src/composition/core/toolchains/internal/refresh.ts',
+      'src/composition/core/model-connect/internal/connect.ts',
+      'src/composition/core/native-coding/internal/template.ts', // RUN-HAZIR-B: human coding CLI only, through the governed writer
+      'src/composition/core/toolchains/internal/refresh.ts',
       'src/surfaces/core/cli-terminal/internal/cache-panel.ts', // CACHE-SLICE1 (34270fae): the terminal cache-choice window writes profiles through the same writer
       'src/surfaces/core/cli-terminal/internal/model-panel.ts',
       'src/surfaces/core/cli-terminal/internal/protocol-panel.ts', // OPENAI-RESPONSES: the terminal /model protocol-migration window writes profiles through the same governed writer (as cache-panel)
@@ -116,6 +118,9 @@ describe('the model cannot reach a config write', () => {
     // The governed models.connect route is not reachable from the agent loop either: no agent unit names it.
     expect(files('src').filter(path => /agent-turn|agent-tool/.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /connectConfiguredModel|connectModel|model-connect/.test(readFileSync(path, 'utf8')))).toEqual([]);
+    // Coding-template configuration remains internal to the human CLI; neither agent nor MCP dispatch can reach it.
+    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path) && /\.(ts|tsx)$/.test(path))
+      .filter(path => /configureNativeCodingTemplate|configureCodingTemplate|native-coding/.test(readFileSync(path, 'utf8')))).toEqual([]);
     const mcp = readFileSync('src/surfaces/core/mcp/internal/server.ts', 'utf8');
     expect([...mcp.matchAll(/name: '([a-z_]+)'/g)].map(match => match[1]).filter(name => /config/.test(name!))).toEqual([]);
   });

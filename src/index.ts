@@ -22,8 +22,7 @@ export type { Locale, MessageKey, OutputMode, Params, ErrorCategory, ExitCode, C
   ConfigWarning, ResolvedConfig, ConfigLoadOptions, PrincipalEvidence, ActorContext, OutputSink, EmitOptions, MessageFamily, MessageRegistry,
   ProductLayout, ProductLayoutInput, ProductResource, SecretResolver, SecretResolution, ProductPathInspection, TrustedClock, ClockSample,
   IntegrityAuthority, BootstrapJournal, BootstrapJournalPayload, BootstrapObservation, BootstrapStateErrorCode } from '#platform/index.js';
-export { prepareNativeCodingProfile, configureNativeCodingTemplate } from '#composition/index.js';
-export type { CodingTemplateRequest, CodingTemplateResult } from '#composition/index.js';
+export { prepareNativeCodingProfile } from '#composition/index.js';
 
 export { inspectConfiguredInventory as inspectInventory } from '#composition/index.js';
 export type { DispatchInventoryInput, DispatchInventoryPage, DispatchInventoryEntry } from '#engine/index.js';
