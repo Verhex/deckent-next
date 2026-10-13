@@ -1,4 +1,4 @@
-import { authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, FIRST_RUN_UPGRADE_RULE_IDS, planPolicyChange, policySchema,
+import { authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, planPolicyChange, policySchema,
   type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
@@ -20,8 +20,8 @@ export interface TemplateUpgradeResult {
  * `deckent policy upgrade --template current`: missing current first-run rules added through the governed `policy.administer@1` chain —
  * the same chain, delegation bound (I2), `authority-change` audit and authority archive (the backup of every change) as every policy change.
  * Preview reads only and names what the person lacks; apply submits only a non-empty plan on the revision read (`expect`: the caller's previewed
- * revision, else the current one), so a second run is `current` and writes nothing. Rollback removes held upgrade-rule ids (by
- * id), through the same chain; nothing else is touched. Historical `template-v5` audit tags remain stable.
+ * revision, else the current one), so a second run is `current` and writes nothing. Rollback removes only held rules introduced by the
+ * current template version, through the same chain; earlier versions stay. Historical `template-v5` audit tags remain stable.
  */
 export class PolicyTemplateUpgrade {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve' | 'policy'>,
@@ -43,7 +43,7 @@ export class PolicyTemplateUpgrade {
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const held = Object.values(FIRST_RUN_UPGRADE_RULE_IDS).filter(id => policy.grants.some(grant => grant.id === id));
+      const held = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.filter(id => policy.grants.some(grant => grant.id === id));
       if (!held.length) return result('nothing-to-roll-back');
       const change = { schemaVersion: 1 as const, changes: held.map(id => ({ kind: 'grant.remove' as const, id })) };
       const planned = planPolicyChange(files.policy, files.bindings, change);

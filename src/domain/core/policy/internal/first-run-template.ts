@@ -18,7 +18,7 @@ import { policyChangeSchema, type PolicyChange } from './administer.js';
  * ask. The scratch write operation (SCR-A cross-lane note, 2026-09-28: `workspace.scratch.write`, target kind
  * `scratch-file`) is its own operation, separate from `workspace.file.write` (edit_file/write_file's effect):
  * without that separate grant a scratch write safely falls back to asking, never to a silent allow. No
- * pool/service/other operation grant is produced: that authority stays the owner's explicit decision
+ * service/other operation grant is produced: that authority stays the owner's explicit decision
  * ("operasyon/servis yönetimi owner'a"), so any such request defaults to `NO_GRANT` (deny) until granted elsewhere.
  */
 export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
@@ -41,7 +41,8 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * recovery set is installation-wide); restore still needs the service stopped and every operation is audited. */
 /** v9 (W3-AUTHORITY): a separately named MCP actor gets observation only. Mutations and paid calls need an explicit MCP grant;
  * neither an owner grant nor `principals: all` is a delegation to MCP. No approval broker is claimed on model/spend paths. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 9;
+/** v10 (RUN-HAZIR-A): the named installing person can run work in the installed scope; pool management and integration remain separate. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 10;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -75,7 +76,7 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
   const built = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION);
   return Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION, policy: built.policy, bindings: built.bindings });
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -111,6 +112,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       // v8: backup over every scope (a recovery set covers the whole installation).
       ...(v8 ? [{ ...grant(FIRST_RUN_UPGRADE_RULE_IDS.backup, 'allow', 'backup', 'all'), scopes: 'all' as const }] : []),
       ...(version >= 9 ? mcpObservationRules(principal, [scopeId]) : []),
+      ...(version >= 10 ? executionRules(principal, [scopeId]) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -119,7 +121,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -131,8 +133,8 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   if (!parsed.success) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
-  // v8: an exact v4, v5, v6 or v7 template (never touched since) is replaced by the current one; anything else takes the explicit additions.
-  for (const from of [8, 7, 6, 5, 4] as const) {
+  // Exact older templates become the current one; edited policies take the explicit add-only plan.
+  for (const from of [9, 8, 7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -161,7 +163,12 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   administer: 'first-run-policy-administer', approvals: 'first-run-approvals', secretSwitch: 'first-run-secret-switch',
   modelActivation: 'first-run-model-activation', modelInvocation: 'first-run-model-invocation', spending: 'first-run-provider-spending', backup: 'first-run-backup',
   observeRun: 'first-run-mcp-observe-run', observeScope: 'first-run-mcp-observe-scope', observeApproval: 'first-run-mcp-observe-approval',
-  observeActivation: 'first-run-mcp-observe-model-activation', observeInvocation: 'first-run-mcp-observe-model-invocation', observeSpending: 'first-run-mcp-observe-provider-spend-account' });
+  observeActivation: 'first-run-mcp-observe-model-activation', observeInvocation: 'first-run-mcp-observe-model-invocation', observeSpending: 'first-run-mcp-observe-provider-spend-account',
+  runs: 'first-run-runs', pools: 'first-run-pools', attempts: 'first-run-attempts', workTargets: 'first-run-work-targets' });
+/** Rollback of the current template version never removes earlier versions' administration or observation authority. */
+export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([
+  FIRST_RUN_UPGRADE_RULE_IDS.runs, FIRST_RUN_UPGRADE_RULE_IDS.pools, FIRST_RUN_UPGRADE_RULE_IDS.attempts, FIRST_RUN_UPGRADE_RULE_IDS.workTargets,
+]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -192,7 +199,7 @@ export function firstRunTemplateAdditions(current: unknown, input: { readonly pe
   if (!read || read.scopes === 'all') return Object.freeze({ status: 'unavailable', reason: 'not-first-run' });
   const person = { issuer: identitySchema.parse(input.person.issuer), subject: identitySchema.parse(input.person.subject) };
   // Security (lead 2026-10-07): the read rule must NAME this person; a rule for `all` principals proves no installation owner (fail closed).
-  if (!namesPerson(read, person)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
+  if (isMcpPrincipal(person) || !namesPerson(read, person)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
   return plannedAdditions(grants, person, read.scopes, input);
 }
 /** The v5 rules this person lacks over `grants` (shared by the first-run and the named-person upgrade, so both add exactly the same rules). */
@@ -211,7 +218,7 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     rule(ids.modelActivation, 'model-activation', MODEL_ACTIVATION_ACTIONS, 'all', 'all'), rule(ids.modelInvocation, 'model-invocation', MODEL_INVOCATION_ACTIONS, 'all', scopes),
     rule(ids.spending, 'provider-spend-account', PROVIDER_SPEND_ACCOUNT_ACTIONS, 'all', scopes),
     // v8 (BACKUP-COMMAND): installation-wide backup authority, added the same add-only way.
-    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all'), ...mcpObservationRules(person, scopes)];
+    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all'), ...mcpObservationRules(person, scopes), ...executionRules(person, scopes)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
@@ -273,4 +280,16 @@ function mcpObservationRules(owner: Person, scopes: readonly string[]): readonly
     [ids.observeInvocation, 'model-invocation'], [ids.observeSpending, 'provider-spend-account']].map(([id, kind]) => policyGrantSchema.parse({
     id, effect: 'allow', actions: ['inspect'], scopes: [...scopes], principals: [principal], resource: { kind, ids: 'all' },
   }));
+}
+
+/** v10 execution authority is shared by fresh installs and both add-only upgrade paths; MCP retains v9 observation only. */
+function executionRules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
+  if (isMcpPrincipal(person)) return [];
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS;
+  return [
+    { id: ids.runs, kind: 'run', actions: ['create', 'reserve', 'inspect', 'cancel'] },
+    { id: ids.pools, kind: 'pool', actions: ['use', 'inspect'] },
+    { id: ids.attempts, kind: 'attempt', actions: ['execute', 'evaluate', 'read-output', 'recover-output', 'cancel', 'reconcile', 'release'] },
+    { id: ids.workTargets, kind: 'work-target', actions: ['use'] },
+  ].map(({ id, kind, actions }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: [...scopes], principals: [person], resource: { kind, ids: 'all' } }));
 }
