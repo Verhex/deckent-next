@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createElement } from 'react';
 import { Text } from 'ink';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RunView } from '#engine/index.js';
+import { projectResultBrief, type RunView } from '#engine/index.js';
 import type { WorkLedgerEntry, WorklineLedgerPorts, WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { runDetailLines } from '#surfaces/core/terminal-work/index.js';
@@ -22,7 +22,7 @@ vi.mock('#surfaces/core/terminal-work/index.js', async importOriginal => {
 const EN = workSurfaceLabels('en'), ESC = '\u001B';
 const runId = '3f2a9c1e-8b4d-4e7a-9c55-1d2e3f4a5b6c', attemptId = '4b0c9811-1b2c-4d3e-8f90-a1b2c3d4e5f6';
 const run = { schemaVersion: 3, runId, scopeId: 'scope-a', revision: 7, cancellationRequested: false, state: { kind: 'running' }, tasks: [{ id: 'task-id', phase: 'active',
-  taskBrief: { task: 'Fix checkout', model: null }, resultBrief: { attemptId, runDelivery: { state: 'delivered', commit: '0123456789abcdef' } } }] } as unknown as RunView;
+  taskBrief: { schemaVersion: 1, task: 'Fix checkout', model: null, scopePaths: [], acceptance: null, criteria: [], profile: null, effort: null, contextRefs: [] }, resultBrief: projectResultBrief(attemptId, { verdict: 'accepted' }, null, { state: 'delivered', commit: '0123456789abcdef' }) }] } as unknown as RunView;
 const approval: WorklineApproval = { approvalId: 'approval-1', revision: 2, summary: 'Review checkout', expiresAt: Date.now() + 600_000, runId, taskId: 'task-id', requester: 'owner', status: 'pending', decision: null };
 function ports(extra: Partial<WorklineLedgerPorts> = {}): WorklineLedgerPorts {
   return { scopeId: 'scope-a', listRunIds: async () => [runId], inspectRun: async id => id === runId ? run : null,

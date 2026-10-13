@@ -1053,7 +1053,9 @@
         "src/surfaces/core/terminal-picker",
         "src/platform/core/common",
         "src/domain/core/agent-turn",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/surfaces/core/monitor",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },

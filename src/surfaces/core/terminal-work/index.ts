@@ -11,3 +11,5 @@ export { systemSummaryEntry } from './internal/system-summary.js';
 export { JobWindow, openingWorkText, runDetailLines, runJobWindow, type JobWindowLabels } from './internal/job-windows.js';
 export { dispatchWorkCommand } from './internal/job-command.js';
 export { openTaskAction } from './internal/task-actions.js';
+
+export { useRunCompletion, runCompletionText } from './internal/run-completion.js';

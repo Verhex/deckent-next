@@ -1010,5 +1010,9 @@
   "tui.workspace.hints": "y: onayla · n / Escape: iptal",
   "tui.workspace.required": "Bu anahtar workspace seçimi gerektiriyor. Model bağlayın, ilk turdan önce /model → Sağlayıcı workspace seç adımını kullanın.",
   "terminal.slash.do": "İsteğinizden iş planı hazırla",
-  "terminal.slash.doArgument": "istek"
+  "terminal.slash.doArgument": "istek",
+  "terminal.jobs.completed": "Run {run} [{state}] · kabul {accepted}, ret {rejected}, başarısız {failed}, iptal {cancelled} · teslim: gerekmiyor {none}, yama hazır değil {patch}, bekliyor {awaiting}, bilinmiyor {unknown}",
+  "terminal.jobs.deliveryNext": "Teslim bekliyor. Ayrıntı için /run {run}.",
+  "terminal.jobs.detailsUnavailable": "Ayrıntı okunamıyor: çıktı okuma izni veya kanıtı kullanılamıyor.",
+  "terminal.jobs.trackingFull": "Bitiş izleme sınırı dolu ({limit}). Run {run} kabul edildi; /run ile kontrol edin."
 }
