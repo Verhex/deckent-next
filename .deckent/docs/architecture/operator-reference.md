@@ -117,6 +117,7 @@ and does not migrate storage, repair candidates, or recheck their current files.
 needs the installation-wide `backup` policy grant. Existing installations can preview
 `deckent init policy --scope <id> --upgrade --preview`, then apply the add-only plan with
 `--apply --expect <previewed-revision>`; conflicting rules are preserved.
+For a missing pool on an existing current installation: `deckent init pool --scope <id> --preview`, then `--apply`; capacity comes from admission config and a differing existing pool is never overwritten.
 
 ```sh
 deckent backup create --scope <id> --set /private/recovery/set-1

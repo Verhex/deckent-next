@@ -5,7 +5,7 @@ export async function openSqliteAttemptStore(path: string, options: SqliteLedger
   const { SqliteAttemptStore } = await import('./internal/sqlite.js');
   return new SqliteAttemptStore(path, options, timing, migration, profiles);
 }
-export { InstallationLedgerError } from './internal/installation.js';
+export { InstallationLedgerError } from './internal/installation.js'; export { SqliteExecutionPools } from './internal/pools.js';
 export type { InstallationLedgerErrorCode, InstallationLedgerOwnership } from './internal/installation.js';
 /** Load the native driver only for the explicit installer operation. */
 export async function initializeInstallationLedger(path: string, options: SqliteLedgerOptions, ownership: unknown, pool: unknown) {

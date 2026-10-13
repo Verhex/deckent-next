@@ -196,6 +196,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   authorityDecisionSubjectSchema,
+  z.object({ kind: z.literal('installation-pool'), installer: z.object({ basis: z.literal('file-owner') }).strict(),
+    poolId: identitySchema, capacity: z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict() }).strict(),
   z.object({ kind: z.literal('authority-change'), installer: z.object({ basis: z.enum(['first-run', 'named-person']),
     template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), person: auditPrincipalSchema }).strict(),
     commandId: identitySchema, inputDigest: digest, revision: z.object({ before: identitySchema, after: identitySchema }).strict(),

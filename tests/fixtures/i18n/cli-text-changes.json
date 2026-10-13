@@ -455,6 +455,10 @@
     "tui.slash.desc.config": {
       "before": "Settings — bare /config opens a menu; /config set <key> <value> writes directly",
       "after": "Settings — choose values in the /config window"
+    },
+    "cli.help.initPreview": {
+      "before": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <file> [--allow-shutdown] [--json]\ndeckent init inspect --profile <file> --docker-executable <absolute-path>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <file> --docker-executable <absolute-path>\n  --proposal <digest> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <absolute-path> --proposal <digest>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (hand-built policy: the person to upgrade)",
+      "after": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <file> [--allow-shutdown] [--json]\ndeckent init inspect --profile <file> --docker-executable <absolute-path>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <file> --docker-executable <absolute-path>\n  --proposal <digest> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <absolute-path> --proposal <digest>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (hand-built policy: the person to upgrade)\ndeckent init pool --scope <id> --preview|--apply"
     }
   },
   "tr": {
@@ -1029,6 +1033,10 @@
     "tui.slash.desc.config": {
       "before": "Ayarlar — çıplak /config menü açar; /config set <anahtar> <değer> doğrudan yazar",
       "after": "Ayarlar — /config penceresinde değer seçin"
+    },
+    "cli.help.initPreview": {
+      "before": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <dosya> [--allow-shutdown] [--json]\ndeckent init inspect --profile <dosya> --docker-executable <mutlak-yol>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <dosya> --docker-executable <mutlak-yol> --proposal\n  <özet> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <mutlak-yol> --proposal <özet>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (elle yazılmış policy: yükseltilecek kişi)",
+      "after": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <dosya> [--allow-shutdown] [--json]\ndeckent init inspect --profile <dosya> --docker-executable <mutlak-yol>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <dosya> --docker-executable <mutlak-yol> --proposal\n  <özet> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <mutlak-yol> --proposal <özet>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (elle yazılmış policy: yükseltilecek kişi)\ndeckent init pool --scope <id> --preview|--apply"
     }
   }
 }

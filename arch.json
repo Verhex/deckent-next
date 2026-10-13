@@ -1252,6 +1252,16 @@
       ],
       "plan": "SURFACES"
     },
+    "src/adapters/core/installation-pool-store": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger",
+        "src/engine/core/installation",
+        "src/engine/core/runs"
+      ],
+      "plan": "INSTALLATION"
+    },
     "src/adapters/core/installation-profile-file": {
       "dependencies": [],
       "plan": "INSTALLATION"
@@ -1263,7 +1273,8 @@
         "src/domain/core/run",
         "src/engine/core/runs",
         "src/platform/core/bootstrap-state",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/engine/core/audit"
       ],
       "plan": "INSTALLATION"
     },
@@ -1276,6 +1287,7 @@
         "src/composition/core/policy",
         "src/adapters/core/local-keyring",
         "src/adapters/core/attempt-store",
+        "src/adapters/core/installation-pool-store",
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/installation-artifacts",
         "src/adapters/core/installation-files",

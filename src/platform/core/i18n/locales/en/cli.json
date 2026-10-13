@@ -435,7 +435,7 @@
   "cli.runtime.shutdownAdmitted": "Runtime shutdown accepted for {serviceId} instance {instanceId} (command {commandId}).",
   "mcp.tool.runtimeServiceDescriptor": "Return the local runtime service descriptor and exact current instance identity. This grants no shutdown permission.",
   "mcp.tool.shutdownRuntimeService": "Admit a policy-authorized shutdown for the exact service and instance. Acceptance does not mean the service has stopped.",
-  "cli.help.initPreview": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <file> [--allow-shutdown] [--json]\ndeckent init inspect --profile <file> --docker-executable <absolute-path>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <file> --docker-executable <absolute-path>\n  --proposal <digest> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <absolute-path> --proposal <digest>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (hand-built policy: the person to upgrade)",
+  "cli.help.initPreview": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <file> [--allow-shutdown] [--json]\ndeckent init inspect --profile <file> --docker-executable <absolute-path>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <file> --docker-executable <absolute-path>\n  --proposal <digest> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <absolute-path> --proposal <digest>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (hand-built policy: the person to upgrade)\ndeckent init pool --scope <id> --preview|--apply",
   "cli.init.previewOnly": "Preview only: package/image trust and availability remain unverified; nothing was installed.",
   "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation.",
   "cli.init.applied": "Installation result (explicit local trust; publisher verification remains unavailable):",
@@ -1435,5 +1435,13 @@
   "cli.coding.template.applied": "Coding template added to the admission registry.",
   "cli.coding.template.unchanged": "The kind already uses this coding template; configuration was not changed.",
   "cli.pool.quotaReleased": "Channel {channel}: released {released} waits (command {command})",
-  "mcp.tool.releaseQuota": "Release subscription quota waits with installation-level pool/resume authority for the selected pool and every affected pool; leaves provider reset evidence unchanged."
+  "mcp.tool.releaseQuota": "Release subscription quota waits with installation-level pool/resume authority for the selected pool and every affected pool; leaves provider reset evidence unchanged.",
+  "cli.help.action.init.pool": "Provision the configured execution pool",
+  "cli.init.pool.preview": "Pool {pool}: execution slots {execution}, in-flight slots {inFlight}; nothing was written. Apply: deckent init pool --scope {scope} --apply. Then re-run /do.",
+  "cli.init.pool.created": "Created pool {pool}: execution slots {execution}, in-flight slots {inFlight}. Re-run /do.",
+  "cli.init.pool.current": "Pool {pool} is already configured: execution slots {execution}, in-flight slots {inFlight}. Re-run /do.",
+  "cli.init.pool.conflict": "Pool {pool} was not changed: stored slots {storedExecution}/{storedInFlight}, configured slots {execution}/{inFlight}. Review the configuration; use deckent pool set-capacity for capacity changes before re-running /do.",
+  "cli.init.pool.notOwner": "Pool {pool} was not changed. Only the owner of both policy and bindings files may provision it. Ask the installation owner to run deckent init pool --scope {scope} --preview.",
+  "cli.init.pool.ledgerVersion": "Pool {pool} was not changed: ledger version {version} is not the current version. Use the installation upgrade path, then run deckent init pool --scope {scope} --preview.",
+  "cli.init.pool.unavailable": "Pool {pool} is unavailable ({reason}); nothing was written. Check admission configuration and the existing installation ledger, then run deckent init pool --scope {scope} --preview."
 }

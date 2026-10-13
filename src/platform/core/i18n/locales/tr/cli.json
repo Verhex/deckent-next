@@ -435,7 +435,7 @@
   "cli.runtime.shutdownAdmitted": "Runtime kapatma isteği {serviceId} örneği {instanceId} için kabul edildi (komut {commandId}).",
   "mcp.tool.runtimeServiceDescriptor": "Yerel runtime servisi tanımlayıcısını ve mevcut örneğin kimliğini döndürür. Kapatma izni vermez.",
   "mcp.tool.shutdownRuntimeService": "Belirtilen servis ve örnek için politika denetimli kapatma isteğini kabul eder. Kabul, servisin durduğu anlamına gelmez.",
-  "cli.help.initPreview": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <dosya> [--allow-shutdown] [--json]\ndeckent init inspect --profile <dosya> --docker-executable <mutlak-yol>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <dosya> --docker-executable <mutlak-yol> --proposal\n  <özet> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <mutlak-yol> --proposal <özet>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (elle yazılmış policy: yükseltilecek kişi)",
+  "cli.help.initPreview": "deckent init [--preview] [--lang en|tr]\ndeckent init preview --profile <dosya> [--allow-shutdown] [--json]\ndeckent init inspect --profile <dosya> --docker-executable <mutlak-yol>\n  [--allow-shutdown] [--json]\ndeckent init apply --profile <dosya> --docker-executable <mutlak-yol> --proposal\n  <özet> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <mutlak-yol> --proposal <özet>\n  --accept-custom [--allow-shutdown] [--json]\ndeckent init policy --scope <id> --preview|--apply\ndeckent init policy --scope <id> --upgrade --preview|--apply [--expect <rev>]\n  [--person <issuer>/<subject>]  (elle yazılmış policy: yükseltilecek kişi)\ndeckent init pool --scope <id> --preview|--apply",
   "cli.init.previewOnly": "Yalnız önizleme: paket/imaj güveni ve kullanılabilirliği doğrulanmadı; hiçbir şey kurulmadı.",
   "cli.init.evidenceOnly": "Yazmasız gözlem: paket dosyaları ve yerel imaj varlığı ölçüldü; operatör onayı, yayıncı doğrulaması veya kurulum yapılmadı.",
   "cli.init.applied": "Kurulum sonucu (açık yerel güven; yayıncı doğrulaması mevcut değil):",
@@ -1435,5 +1435,13 @@
   "cli.coding.template.applied": "Kodlama şablonu admission registry’ye eklendi.",
   "cli.coding.template.unchanged": "Görev türü zaten bu kodlama şablonunu kullanıyor; config değiştirilmedi.",
   "cli.pool.quotaReleased": "Kanal {channel}: {released} bekleme serbest bırakıldı (komut {command})",
-  "mcp.tool.releaseQuota": "Seçilen havuz ve etkilenen her havuz için kurulum düzeyi pool/resume yetkisiyle abonelik kota beklemelerini serbest bırakır; provider reset kanıtı değişmez."
+  "mcp.tool.releaseQuota": "Seçilen havuz ve etkilenen her havuz için kurulum düzeyi pool/resume yetkisiyle abonelik kota beklemelerini serbest bırakır; provider reset kanıtı değişmez.",
+  "cli.help.action.init.pool": "Yapılandırılan yürütme havuzunu kur",
+  "cli.init.pool.preview": "Havuz {pool}: yürütme slotu {execution}, işlemdeki slot {inFlight}; hiçbir şey yazılmadı. Uygulamak için: deckent init pool --scope {scope} --apply. Ardından /do komutunu yeniden çalıştırın.",
+  "cli.init.pool.created": "Havuz {pool} oluşturuldu: yürütme slotu {execution}, işlemdeki slot {inFlight}. /do komutunu yeniden çalıştırın.",
+  "cli.init.pool.current": "Havuz {pool} zaten yapılandırılmış: yürütme slotu {execution}, işlemdeki slot {inFlight}. /do komutunu yeniden çalıştırın.",
+  "cli.init.pool.conflict": "Havuz {pool} değiştirilmedi: kayıtlı slotlar {storedExecution}/{storedInFlight}, yapılandırılan slotlar {execution}/{inFlight}. Yapılandırmayı inceleyin; kapasite değişikliği için deckent pool set-capacity kullanın, ardından /do komutunu yeniden çalıştırın.",
+  "cli.init.pool.notOwner": "Havuz {pool} değiştirilmedi. Yalnız policy ve bindings dosyalarının sahibi havuzu kurabilir. Kurulum sahibinden deckent init pool --scope {scope} --preview çalıştırmasını isteyin.",
+  "cli.init.pool.ledgerVersion": "Havuz {pool} değiştirilmedi: ledger sürümü {version} güncel sürüm değil. Kurulum yükseltme yolunu kullanın, ardından deckent init pool --scope {scope} --preview çalıştırın.",
+  "cli.init.pool.unavailable": "Havuz {pool} kullanılamıyor ({reason}); hiçbir şey yazılmadı. admission yapılandırmasını ve mevcut kurulum ledger kaydını kontrol edin, ardından deckent init pool --scope {scope} --preview çalıştırın."
 }

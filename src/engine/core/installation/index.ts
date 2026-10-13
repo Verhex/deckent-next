@@ -1,4 +1,6 @@
 export { InstallationIdentityError } from './internal/installation-identity.js';
+export { configuredInstallationPool, installExecutionPool } from './internal/pool.js';
+export type { InstallationPoolResult, InstallationPoolStore } from './internal/pool.js';
 export { assessInstallationBinding } from './internal/installation-identity.js';
 export type { InstallationIdentityStore, InstallationIdentityErrorCode, InstallationBindingSource, InstallationBindingCapability, InstallationIdentityRead,
   InstallationBindingObservation, InstallationBindingAssessment } from './internal/installation-identity.js';
