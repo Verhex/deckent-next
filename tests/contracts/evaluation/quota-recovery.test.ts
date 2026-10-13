@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -5,15 +6,16 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { inventoryReadsPerCall, createNormalizerState, createCodexState, normalizeClaudeLine, normalizeCodexLine, FileArtifactStore, openSqliteAttemptStore, sealAttemptWorkerEvents, type SqliteAttemptStore } from '#adapters/index.js';
-import { TaskEvaluationApplication, RunLifecycleApplication, RunReservationApplication, projectMonitorRun, projectRunView } from '#engine/index.js';
-import { runSnapshotSchema, requestRunCancellation, verifyWorkerModels, type WorkerEvent, type AttemptIdentity } from '#domain/index.js';
+import { AuditApplication, QuotaReleaseApplication, PoolControlPolicyAuthorization, TaskEvaluationApplication, RunLifecycleApplication, RunReservationApplication, projectMonitorRun, projectRunView } from '#engine/index.js';
+import { runSnapshotSchema, requestRunCancellation, verifyWorkerModels, mcpPrincipalRef, holdRun, type WorkerEvent, type AttemptIdentity } from '#domain/index.js';
+import { createHmacIntegrity } from '#platform/index.js';
 import { quotaWaitText } from '#surfaces/core/monitor/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
 const quotaPolicy = JSON.parse(readFileSync(new URL('../../../src/adapters/core/native-connection/internal/providers.json', import.meta.url), 'utf8')).quotaPolicy;
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
-afterEach(async () => { stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const actor = { id: 'operator', issuer: 'fixture', subject: 'operator' };
 const principal = { ...actor, assurance: 'os-user' as const, scopeIds: ['s'] };
 const verifier = { async verify() { return principal; } }, authorization = { async authorize() {} };
@@ -21,7 +23,7 @@ const pin = { channelId: 'subscription-channel', modelId: 'native-model', auxili
 const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'business criterion', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 type Variant = 'claude-rate-limit' | 'codex-text' | 'exit-text';
-async function fixture(source: Variant = 'claude-rate-limit', options: { substituted?: boolean; resetsAtMs?: number | null; maxResumes?: number; interrupted?: boolean; partial?: boolean; noSeal?: boolean; recoveredSession?: boolean } = {}) {
+async function fixture(source: Variant = 'claude-rate-limit', options: { substituted?: boolean; resetsAtMs?: number | null; maxResumes?: number; maxWaitMs?: number; interrupted?: boolean; partial?: boolean; noSeal?: boolean; recoveredSession?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-quota-')); roots.push(root); let now = 1000, sequence = 0;
   const path = join(root, 'ledger.db'), storage = { busyTimeoutMs: 100, journalMode: 'wal' as const, durability: 'full' as const };
   const store = await openSqliteAttemptStore(path, storage, { now: () => now, timeoutMs: 5000 }, 'allow', custodyProfiles); stores.push(store);
@@ -44,7 +46,7 @@ async function fixture(source: Variant = 'claude-rate-limit', options: { substit
   await create('r'); const first = await reserveRun('r'); const identity = first.identities[0]!;
   const evaluator = { evaluate: vi.fn(async () => 'fail' as const) };
   const app = new TaskEvaluationApplication(store, verifier, authorization, evaluator, artifacts, { maxEvidenceItems: 1, maxTotalBytes: 65536 },
-    { now: () => now, timeoutMs: 5000 }, undefined, undefined, { maxResumes: options.maxResumes ?? 1 });
+    { now: () => now, timeoutMs: 5000 }, undefined, undefined, { maxResumes: options.maxResumes ?? 1, maxWaitMs: options.maxWaitMs ?? 10000 });
   async function finish(identity: AttemptIdentity, resetsAtMs: number | null = source === 'claude-rate-limit' ? options.resetsAtMs === undefined ? 6000 : options.resetsAtMs : null) {
     const claim = { request: { protocolVersion: 1 as const, identity, workspace: '/fixture', argv: ['fixture'] }, owner: 'worker' };
     await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
@@ -117,6 +119,7 @@ it.skipIf(process.platform === 'win32')('holds other Runs and reserved Attempts 
   expect((await f.store.loadBoundDispatch(live.identities[0]!))!.launch).toBe('granted');
   expect((await f.reserveRun('other')).identities).toHaveLength(1);
   const before = (await f.store.loadRun('s', 'waiting'))!; const holds = await f.store.quotaHeldTasks(before, 1000); expect(holds).toEqual(['t']);
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
   const evidence = await inventoryReadsPerCall(async () => f.path, { busyTimeoutMs: 100 }).loadRunPoolEvidence('s', 'waiting');
   expect(evidence.quotaHolds).toEqual([{ taskId: 't', since: 1000, deadline: 6000, resetsAtMs: 6000 }]);
   const monitor = projectMonitorRun({ run: { snapshot: before, poolId: 'p', admitted: true, createdAtMs: 0, attempts: [], quotaHolds: evidence.quotaHolds }, approvals: [], pool: null, workers: new Map(), observedAt: 1000 });
@@ -156,4 +159,78 @@ it.skipIf(process.platform === 'win32')('does not recycle an earlier rejection a
   const f = await fixture('claude-rate-limit', { recoveredSession: true }); const evaluated = await f.evaluate();
   expect(evaluated.snapshot.quotaWaits).toBeUndefined(); expect(evaluated.snapshot.progress[0]!.phase).toBe('failed');
   expect(f.evaluator.evaluate).toHaveBeenCalledOnce();
+});
+
+function release(f: Awaited<ReturnType<typeof fixture>>, scopes: 'all' | string[] = 'all', mcp = false, brokenAudit = false) {
+  const person = mcp ? { ...principal, ...mcpPrincipalRef(principal) } : principal;
+  const document = { schemaVersion: 1, revision: 'quota-policy', restrictions: [], grants: [{ id: 'owner-resume', effect: 'allow',
+    actions: ['resume'], scopes, principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p'] } }] };
+  return new QuotaReleaseApplication({ async verify() { return person; } }, new PoolControlPolicyAuthorization({ async load() { return document; } }), f.store,
+    audit => brokenAudit ? { record() { throw new Error('BROKEN_AUDIT'); } } : new AuditApplication(audit, createHmacIntegrity('quota-test', randomBytes(32))), () => 2000, 'p');
+}
+const releaseCommand = { schemaVersion: 1, scopeId: 's', commandId: 'release-channel', channelId: pin.channelId };
+it.skipIf(process.platform === 'win32').each(['codex-text', 'exit-text', 'unknown', 'bounded'] as const)('does not hold any other Run for weak/invalid signal %s', async variant => {
+  const f = await fixture(variant === 'unknown' || variant === 'bounded' ? 'claude-rate-limit' : variant,
+    variant === 'unknown' ? { resetsAtMs: null } : variant === 'bounded' ? { resetsAtMs: 50000, maxWaitMs: 10000 } : {});
+  const parked = (await f.evaluate()).snapshot;
+  await f.create('waiting'); expect((await f.reserveRun('waiting')).identities).toHaveLength(1);
+  expect(parked.state).toMatchObject({ kind: 'parked', deadline: 6000 });
+  if (variant === 'bounded') {
+    expect(parked.quotaWaits?.[0]).toMatchObject({ resetBoundExceeded: true, quota: { resetsAtMs: 50000 } });
+    expect((await f.store.load('s', f.identity.attemptId))!.lastObservation?.result).toMatchObject({ resetBoundExceeded: true });
+  }
+  f.setNow(6000); await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
+  expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'terminal', reason: 'park-timeout' });
+});
+it.skipIf(process.platform === 'win32')('owner release re-enables own and other reservations, retains reset evidence, seals audit and cannot replay over a later hold', async () => {
+  const f = await fixture(); const before = (await f.evaluate()).snapshot; await f.create('waiting');
+  await expect(f.reserveRun('waiting')).rejects.toThrow('RUN_CAPACITY_OR_ORDER');
+  const app = release(f), receipt = await app.apply(releaseCommand); expect(receipt).toMatchObject({ released: 1, atMs: 2000 });
+  const resumed = (await f.store.loadRun('s', 'r'))!;
+  expect(resumed.state).toEqual({ kind: 'running' }); expect(resumed.quotaWaits?.[0]).toMatchObject({ ...before.quotaWaits![0]!, releasedAtMs: 2000 });
+  expect(resumed.previousBindings?.[0]?.identity).toEqual(f.identity); expect((await f.reserveRun('waiting')).identities).toHaveLength(1);
+  const second = (await f.reserveRun('r')).identities[0]!; expect(second.generation).toBe(2);
+  await f.finish(second); await f.evaluate(second);
+  expect(await app.apply(releaseCommand)).toEqual(receipt);
+  expect((await f.store.loadRun('s', 'r'))!.state.kind).toBe('parked');
+  await expect(app.apply({ ...releaseCommand, channelId: 'different' })).rejects.toThrow('RUN_COMMAND_CONFLICT');
+  const db = new DatabaseSync(f.path, { readOnly: true });
+  try {
+    const rows = db.prepare("SELECT record FROM audit_events WHERE kind='quota-release'").all(); expect(rows).toHaveLength(1);
+    expect(JSON.parse(String(rows[0]!.record))).toMatchObject({ mac: expect.any(String), event: { subject: { released: 1, decision: { effect: 'allow', ruleId: 'owner-resume' } } } });
+    const plan = db.prepare("EXPLAIN QUERY PLAN SELECT since_ms,deadline_ms FROM run_quota_waits WHERE channel_id=? AND deadline_ms>? AND released_at_ms IS NULL AND channel_held=1 ORDER BY deadline_ms DESC LIMIT 1").all(pin.channelId, 1000);
+    expect(JSON.stringify(plan)).toContain('run_quota_waits_channel'); expect(JSON.stringify(plan)).not.toContain('SCAN runs');
+  } finally { db.close(); }
+});
+it.skipIf(process.platform === 'win32').each(['scoped', 'mcp', 'audit'] as const)('refuses %s release without changing the wait, revision or receipt', async variant => {
+  const f = await fixture(); const before = (await f.evaluate()).snapshot;
+  await expect(release(f, variant === 'scoped' ? ['s'] : 'all', variant === 'mcp', variant === 'audit').apply(releaseCommand)).rejects.toThrow(variant === 'audit' ? 'BROKEN_AUDIT' : 'POLICY_DENIED');
+  expect(await f.store.loadRun('s', 'r')).toEqual(before);
+  const db = new DatabaseSync(f.path, { readOnly: true }); try {
+    expect(db.prepare('SELECT count(*) n FROM quota_release_receipts').get()!.n).toBe(0);
+    const events = db.prepare("SELECT record FROM audit_events WHERE kind='quota-release'").all(); expect(events).toHaveLength(variant === 'audit' ? 0 : 1);
+    if (events[0]) expect(JSON.parse(String(events[0].record)).event.subject).toMatchObject({ released: null, decision: { effect: 'deny' } });
+  } finally { db.close(); }
+});
+it.skipIf(process.platform === 'win32')('release keeps cancelled Runs terminal and operator-held Runs held', async () => {
+  const f = await fixture(); const parked = (await f.evaluate()).snapshot;
+  await f.store.cancelRun({ commandId: 'cancel', actor, scopeId: 's', runId: 'r', expectedRevision: parked.revision });
+  await release(f).apply(releaseCommand); expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'terminal', outcome: 'cancelled' });
+  await f.create('waiting'); expect((await f.reserveRun('waiting')).identities).toHaveLength(1);
+  const g = await fixture(); const quota = (await g.evaluate()).snapshot;
+  const held = holdRun(quota, quota.revision, 'manual intervention', 1500, 10000);
+  const db = new DatabaseSync(g.path); try { db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=?').run(held.revision, JSON.stringify(held), 's', 'r'); } finally { db.close(); }
+  await release(g).apply(releaseCommand); expect((await g.store.loadRun('s', 'r'))!.state).toEqual(held.state);
+  expect((await g.store.loadRun('s', 'r'))!.bindings).toEqual([]);
+});
+it.skipIf(process.platform === 'win32')('inspect uses current time and omits expired channel holds', async () => {
+  const f = await fixture(); await f.evaluate(); await f.create('waiting');
+  vi.spyOn(Date, 'now').mockReturnValue(6000);
+  const evidence = await inventoryReadsPerCall(async () => f.path, { busyTimeoutMs: 100 }).loadRunPoolEvidence('s', 'waiting'); expect(evidence.quotaHolds).toEqual([]);
+});
+it.each(['en', 'tr'] as const)('shows dates for distant resets and the release command in %s', locale => {
+  const now = new Date(2026, 9, 13, 10).getTime(), deadline = now + 48 * 60 * 60 * 1000;
+  expect(quotaWaitText(deadline, true, locale, false, now)).toContain('2026-10-15');
+  expect(quotaWaitText(deadline, false, locale, false, now)).toContain('quota-release --channel');
+  expect(quotaWaitText(now + 60 * 60 * 1000, true, locale, false, now)).not.toContain('2026-10-13');
 });

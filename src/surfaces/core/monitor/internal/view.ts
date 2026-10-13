@@ -84,7 +84,7 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
     installCell: (install: MonitorInstall): readonly MonitorSpan[] => multi ? [span(install.id, 'muted')] : [],
     stateCell: (run: MonitorRun) => globalRunCell(run, locale),
     blockerText: (blocker: MonitorBlocker) => ['quota-exhausted', 'quota-reset-unknown', 'quota-retry-limit'].includes(blocker.detail ?? '') && blocker.deadlineMs !== undefined
-      ? quotaWaitText(blocker.deadlineMs, blocker.detail !== 'quota-reset-unknown', locale, blocker.detail === 'quota-retry-limit') : `${blockerLabel(blocker.code, locale)}${blocker.detail ? ` (${blocker.detail === 'patch-missing' ? t('monitor.blocker.patchMissing', {}, locale) : blocker.detail})` : ''}`,
+      ? quotaWaitText(blocker.deadlineMs, blocker.detail !== 'quota-reset-unknown', locale, blocker.detail === 'quota-retry-limit', now) : `${blockerLabel(blocker.code, locale)}${blocker.detail ? ` (${blocker.detail === 'patch-missing' ? t('monitor.blocker.patchMissing', {}, locale) : blocker.detail})` : ''}`,
     runName: (run: MonitorRun) => `${run.scopeId}/${run.runId}`,
     progress: (run: MonitorRun) => t('monitor.progress', { accepted: run.phaseCounts['accepted'] ?? run.tasks.filter(task => task.phase === 'accepted').length,
       total: run.tasks.length }, locale),

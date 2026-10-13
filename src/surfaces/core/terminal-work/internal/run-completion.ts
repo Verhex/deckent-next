@@ -21,6 +21,7 @@ export function runCompletionText(run: RunView, labels: JobWindowLabels): string
   }
   const details = run.tasks.some(task => !task.resultBrief);
   return [fillTemplate(labels.completed, { run: run.runId, state: runStateText(run, labels), ...counts, rejected: details ? labels.unknown : counts.rejected }),
+    ...(counts.patch + counts.awaiting > 0 ? [fillTemplate(labels.deliveryCounts, { ...counts, patch: counts.patch > 0 ? fillTemplate(labels.deliveryPatch, { patch: counts.patch }) : '' })] : counts.unknown > 0 ? [fillTemplate(labels.deliveryCounts, { ...counts, none: labels.unknown, patch: '', awaiting: labels.unknown })] : []),
     ...(counts.patch + counts.awaiting > 0 ? [fillTemplate(labels.deliveryNext, { run: run.runId })] : [])].join('\n');
 }
 

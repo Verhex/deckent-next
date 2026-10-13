@@ -27,3 +27,9 @@ it.each(['turn.failed', 'error', 'item.completed'])('classifies Codex %s quota t
   expect(normalizeCodexLine(JSON.stringify({ type: 'turn.failed', error: { message: 'Permission denied' } }), createNormalizerState([], 0, registry.quotaPolicy), createCodexState())
     .some(event => event.kind === 'quota-exhausted')).toBe(false);
 });
+
+it.each(['HTTP 429 from an unrelated endpoint', 'rate limit documentation', 'quota module failed', 'usage limit configuration'])('does not infer quota exhaustion from generic prose %s', message => {
+  const events = normalizeCodexLine(JSON.stringify({ type: 'turn.failed', error: { message } }), createNormalizerState([], 0, registry.quotaPolicy), createCodexState());
+  expect(events.some(event => event.kind === 'quota-exhausted')).toBe(false);
+  expect(registry.quotaPolicy.codexEvidence).toMatchObject({ cliVersion: 'unverified', asOf: '2026-10-13', observation: expect.stringContaining('unverified') });
+});

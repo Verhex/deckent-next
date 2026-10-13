@@ -55,3 +55,6 @@ export type { BoundRunAdmission } from './internal/admission.js';
 
 export { taskQuotaHoldSchema } from './internal/pool-observation.js';
 export type { TaskQuotaHold } from './internal/pool-observation.js';
+
+export { QuotaReleaseApplication, quotaReleaseCommandSchema, quotaReleaseReceiptSchema } from './internal/quota-control.js';
+export type { QuotaReleaseCommand, QuotaReleaseReceipt, QuotaReleaseWrite, QuotaReleaseStore } from './internal/quota-control.js';

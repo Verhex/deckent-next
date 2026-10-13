@@ -1,4 +1,4 @@
-import { AuditApplication, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema } from '#engine/index.js';
+import { AuditApplication, QuotaReleaseApplication, quotaReleaseCommandSchema, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAttemptStore } from '#adapters/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -7,8 +7,9 @@ export async function applyConfiguredPoolHold(root: string, input: unknown, opti
 export async function inspectConfiguredPoolHold(root: string, input: unknown, options: ConfigLoadOptions = {}) { return poolControl(root, input, options, poolHoldQuerySchema, false, (hold, _capacity, value) => hold.inspect(value)); }
 export async function applyConfiguredPoolCapacity(root: string, input: unknown, options: ConfigLoadOptions = {}) { return poolControl(root, input, options, poolCapacityCommandSchema, true, (_hold, capacity, value) => capacity.apply(value)); }
 export async function inspectConfiguredPoolCapacity(root: string, input: unknown, options: ConfigLoadOptions = {}) { return poolControl(root, input, options, poolHoldQuerySchema, false, (_hold, capacity, value) => capacity.inspect(value)); }
+export async function releaseConfiguredQuota(root: string, input: unknown, options: ConfigLoadOptions = {}) { return poolControl(root, input, options, quotaReleaseCommandSchema, true, (_hold, _capacity, value, quota) => quota.apply(value)); }
 async function poolControl<T>(root: string, input: unknown, options: ConfigLoadOptions, schema: { parse(input: unknown): { scopeId: string } }, write: boolean,
-  use: (hold: ExecutionPoolHoldApplication, capacity: ExecutionPoolCapacityApplication, input: unknown) => Promise<T>) {
+  use: (hold: ExecutionPoolHoldApplication, capacity: ExecutionPoolCapacityApplication, input: unknown, quota: QuotaReleaseApplication) => Promise<T>) {
   try {
     const parsed = schema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(root, parsed.scopeId, options, write ? 'write' : 'read');
@@ -17,7 +18,7 @@ async function poolControl<T>(root: string, input: unknown, options: ConfigLoadO
     try {
       const args = [{ async verify() { return principal; } }, new PoolControlPolicyAuthorization({ async load() { return document; } }),
         store, (audit: import('#engine/index.js').AuditStore) => new AuditApplication(audit, integrity!), () => clock.sample().wallMs, config.admission?.poolId ?? null] as const;
-      return await use(new ExecutionPoolHoldApplication(...args), new ExecutionPoolCapacityApplication(...args), parsed);
+      return await use(new ExecutionPoolHoldApplication(...args), new ExecutionPoolCapacityApplication(...args), parsed, new QuotaReleaseApplication(...args));
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

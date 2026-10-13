@@ -1,13 +1,13 @@
+import { releaseQuota } from '#adapters/core/quota-control-store/index.js';
 import { readDispatchFence } from './dispatch-fence.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteDeliveryJournal } from './delivery.js';
 import { SqliteAdoptionJournal } from './adoption.js';
 import { SqliteEffectJournal } from './effect.js';
 import { SqliteWorkerEventLogs } from './worker-events.js';
-import type { IntegrationIntent, IntegrationDeliveryCommand, IntegrationDeliveryIntent, IntegrationQuery, IntegrationAdoptionIntent } from '#engine/index.js';
+import type { IntegrationIntent, IntegrationDeliveryCommand, IntegrationDeliveryIntent, IntegrationQuery, IntegrationAdoptionIntent, ProgressionQuery } from '#engine/index.js';
 import { SqliteIntegrationJournal, readIntegration } from './integration.js';
 import { SqliteRunProgression } from './progression.js';
-import type { ProgressionQuery } from '#engine/index.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { readRunEvaluationPrincipal } from './evaluation-evidence.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
@@ -19,9 +19,8 @@ import { SqliteServiceShutdownJournal } from '#adapters/core/service-shutdown-st
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
 import { SqlitePoolCapacityJournal } from './pool-capacity.js';
-import type { PoolCapacityStore } from '#engine/index.js';
 import { SqlitePoolHoldJournal } from './pool-holds.js';
-import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, ServiceShutdownStore, TaskEvaluationCommit, TaskEvaluationStore, PoolHoldStore } from '#engine/index.js';
+import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, ServiceShutdownStore, TaskEvaluationCommit, TaskEvaluationStore, PoolHoldStore, PoolCapacityStore } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, CancellationDeliveryStore, DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
@@ -43,6 +42,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   constructor(path: string, options: SqliteLedgerOptions, private readonly lifecycleTiming: { now: () => number; timeoutMs: number }, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     this.db = openSqliteLedger(path, options, migration, this.profiles);
   }
+  async releaseQuota(write: import('#engine/index.js').QuotaReleaseWrite, audit: (store: import('#engine/index.js').AuditStore, released: number) => void) { return releaseQuota(this.db, write, audit); }
   async quotaHeldTasks(run: import('#domain/index.js').RunSnapshot, now: number) { return quotaHeldTasks(this.db, run, now); }
   async loadTaskHandoffEvaluation(identity: AttemptIdentity) { return readTaskHandoffEvaluation(this.db, identity); }
   async loadBoundDispatch(identity: AttemptIdentity) {

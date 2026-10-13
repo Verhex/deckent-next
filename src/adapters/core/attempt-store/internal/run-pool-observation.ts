@@ -18,6 +18,6 @@ export async function readRunPoolEvidence(db: DatabaseSync, scopeId: string, run
       const admitted = requireLedgerVersion(db, 0) >= 25 && !!db.prepare('SELECT 1 FROM run_execution_intents WHERE scope_id=? AND run_id=?').get(scopeId, runId);
       pool = { poolId: current.poolId, capacity: current.capacity, runCapacity: policy.capacity, occupancy: pools.occupancy(current.poolId), hold: requireLedgerVersion(db, 0) >= POOL_HOLD_LEDGER_VERSION ? pools.hold(current.poolId) : null, admitted };
     }
-    const evidence = { snapshot, pool, ...(snapshot ? { quotaHolds: readQuotaHolds(db, snapshot, 0) } : {}) }; db.exec('COMMIT'); active = false; return evidence;
+    const evidence = { snapshot, pool, ...(snapshot ? { quotaHolds: readQuotaHolds(db, snapshot, Date.now()) } : {}) }; db.exec('COMMIT'); active = false; return evidence;
   } catch (error) { if (active) db.exec('ROLLBACK'); throw sqliteFailure(error); }
 }

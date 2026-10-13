@@ -51,7 +51,7 @@ export class TaskEvaluationApplication {
     private readonly authorization: TaskEvaluationAuthorization, private readonly evaluator: TaskTerminalEvaluator,
     private readonly artifacts: Pick<ArtifactStore, 'read'>, private readonly limits: EvaluationEvidenceLimits,
     private readonly lifecycle: { now: () => number; timeoutMs: number }, private readonly unknownPolicy?: UnknownEvaluationPolicy,
-    private readonly preparePatch?: (identity: AttemptIdentity) => Promise<void>, private readonly quotaRecovery?: { maxResumes: number }) {}
+    private readonly preparePatch?: (identity: AttemptIdentity) => Promise<void>, private readonly quotaRecovery?: { maxResumes: number; maxWaitMs: number }) {}
   async execute(input: unknown, credential?: unknown) {
     const command = taskEvaluationCommandSchema.parse(input), principal = await authenticate(this.verifier, credential, command.identity.scopeId);
     await this.authorization.authorize(command.identity, principal);
@@ -134,7 +134,7 @@ export class TaskEvaluationApplication {
         const evidenceDigest = signal.source === 'exit-text' ? dispatch.output.digest : log?.events.digest ?? dispatch.output.digest;
         const evidenceDigests = [dispatch.output.digest, ...(log ? [log.events.digest] : []), ...(task.workInput && dispatch.patch ? [dispatch.patch.digest] : [])];
         const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...manifestEvaluation, model, evidenceDigests,
-          quota: { signal, channelId: model.requested.channelId, evidenceDigest, maxResumes: this.quotaRecovery.maxResumes } }));
+          quota: { signal, channelId: model.requested.channelId, evidenceDigest, maxResumes: this.quotaRecovery.maxResumes, maxWaitMs: this.quotaRecovery.maxWaitMs } }));
         proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, evaluation, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
         await this.authorization.authorize(identity, principal);
         return this.store.commitTaskEvaluation({ commandId: command.commandId, actor, expectedRevision: command.expectedRevision, evaluation, dispatch,

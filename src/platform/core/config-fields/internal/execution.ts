@@ -48,4 +48,5 @@ export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().pos
 export const RUN_PARKING_SETTINGS = z.object({ schemaVersion: z.literal(1),
   timeoutMs: z.number().int().positive().safe().default(86_400_000) }).strict();
 
-export const QUOTA_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), maxResumes: z.number().int().nonnegative().safe().default(quotaDefaults.maxResumes) }).strict();
+export const QUOTA_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), maxResumes: z.number().int().nonnegative().safe().default(quotaDefaults.maxResumes),
+  maxWaitMs: z.number().int().positive().safe().default(quotaDefaults.maxWaitMs) }).strict();

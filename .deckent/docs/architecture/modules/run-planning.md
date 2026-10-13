@@ -67,27 +67,55 @@ retry bound in the immutable evaluation receipt and Run snapshot. It records no
 acceptance metric and executes no business criterion or Git-specific retry flow.
 
 `runRuntime.quotaRecovery` v1 supplies `maxResumes` (zero disables automatic
-recovery; the shipped registry default allows one). Known future reset times
-set the deadline. Unknown or stale reset times use `runRuntime.parking.timeoutMs`
+recovery; the shipped registry default allows one). Known future structured reset times within `runRuntime.quotaRecovery.maxWaitMs`
+set the deadline (registry default: seven days). An over-bound worker timestamp falls
+back to parking timeout and records `resetBoundExceeded` in the Run wait and classified
+Attempt observation; it never grants automatic recovery. Unknown or stale reset times use `runRuntime.parking.timeoutMs`
 and ordinary timeout closure; elapsed timeout is not reset evidence. After a
 known reset, lifecycle advancement moves the finished binding to retained history
 once and allows a fresh generation with the exact frozen profile. Fresh admission,
 policy, approvals and launch authority still apply. Uncertain effects and
 cancellation forbid automatic recovery. Multiple waits keep the latest deadline.
 
+Only `claude-rate-limit` signals with a known future reset within the configured
+bound open installation-wide channel holds. Weak `codex-text`/`exit-text` and
+unknown/stale/over-bound resets park only their own Task/Run. Codex exhaustion
+patterns are narrowed and explicitly marked `unverified` with source/date metadata;
+fixtures are not observations of a vendor CLI version.
+
 Installation ledger channel holds exclude matching tasks at reservation and
 atomically refuse new dispatch claims, including already reserved tasks. Existing
 dispatch custody continues under its original grant/claim; no claim is stolen or
 replayed into a fresh launch. Holds survive cancellation/terminal Run state until
-their deadline. Inspect and monitor expose only the target task and wait metadata,
+their deadline or an explicit operator release. Ledger v54 projects Run waits
+transactionally into `run_quota_waits`; active channel/deadline indexes serve
+reservation, dispatch and inspection, which uses the current clock. The v53→v54
+migration backfills historical waits once without rewriting retained snapshots.
+
+CLI `deckent pool quota-release --channel <id> --scope <scope>`, SDK `releaseQuota`
+and MCP `release_quota` use one application and the existing installation-level
+`pool/resume` policy cell. The selected pool must exist; its explicit resume grant
+is the installation authority for subscription recovery. Default MCP grants do
+not permit it. A release ends matching active waits across the installation,
+including local weak-signal waits, without changing provider reset timestamps
+or the pool hold. Snapshot revisions, replay receipt and sealed audit commit
+atomically. Cancelled/terminal Runs remain terminal; an operator hold remains
+held. Pending quota bindings move to history so fresh reservation is possible;
+normal admission/policy/approval/dispatch gates still apply. Exact replay does
+not release later waits. Failure to seal audit rolls back the change.
+
+Inspect and monitor expose only the target task and wait metadata,
 not another scope's identities or output. Inspection wait projections also omit
 channel identities and evidence digests; canonical records retain both. EN/TR labels distinguish a known reset,
-an unknown reset and exhausted automatic retries.
+an unknown reset and exhausted automatic retries, show the date beyond 24 hours,
+and include the quota-release command hint. Completion summaries show code patch
+counts only when positive; generic business Runs do not acquire a Git delivery counter.
 
 The quota payload/config are versioned additions to existing JSON contracts;
-legacy snapshots remain byte-equivalent on read. SQL tables and ledger version
-do not change, so no database migration/backup is introduced. An older binary
-that cannot parse the new evidence must not reopen these enriched records.
+legacy snapshots remain byte-equivalent on read and during v54 backfill. Ledger
+v54 adds quota wait indexes/projection and release receipts through the existing
+explicit migration and versioned service-start backup path. Read/normal client
+paths do not migrate. An older binary must not reopen the newer ledger.
 Author fixture/check evidence is outside Git in KOTA-D1 proof; paid, live, N1,
 browser, hosted and independent acceptance were not performed by this lane.
 

@@ -1,4 +1,4 @@
-export { parkRunQuota, resetRunQuota } from './internal/quota.js';
+export { parkRunQuota, resetRunQuota, releaseRunQuota } from './internal/quota.js';
 export type { RunQuotaWait } from './internal/quota.js';
 export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError } from './internal/contract.js';
 export type { RunIdentity, RunSnapshot } from './internal/contract.js';

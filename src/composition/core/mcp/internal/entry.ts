@@ -16,7 +16,7 @@ import { listConfiguredSecretNames } from '#composition/core/secrets/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { describeMcpInference } from './inference-query.js';
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
-import { applyConfiguredRunLifecycle, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
+import { releaseConfiguredQuota, applyConfiguredRunLifecycle, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
 import { recordConfiguredMcpIngress } from './ingress.js';
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
@@ -50,7 +50,7 @@ export async function main(root = process.cwd()) {
     admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
     connectModel: command => connectConfiguredModel(root, command, {}, { listSecretNames: listConfiguredSecretNames }),
     applyPoolCapacity: command => applyConfiguredPoolCapacity(root, command), inspectPoolCapacity: query => inspectConfiguredPoolCapacity(root, query),
-    inspectPoolHold: query => inspectConfiguredPoolHold(root, query), applyPoolHold: command => applyConfiguredPoolHold(root, command),
+    releaseQuota: command => releaseConfiguredQuota(root, command), inspectPoolHold: query => inspectConfiguredPoolHold(root, query), applyPoolHold: command => applyConfiguredPoolHold(root, command),
     inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),
     inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }), { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
