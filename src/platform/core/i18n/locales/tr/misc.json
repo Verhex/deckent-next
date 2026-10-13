@@ -687,6 +687,7 @@
   "error.BRAIN_INPUT_INVALID": "Planlama isteği geçersiz.",
   "error.BRAIN_TEMPLATE_UNAVAILABLE": "Seçilen sürümlü planlama şablonu yok.",
   "error.BRAIN_OUTPUT_INVALID": "Model planı {stage} aşamasında doğrulanamadı. Run oluşturulmadı.",
+  "error.BRAIN_OUTPUT_TRUNCATED": "Planlama, yanıt üretmeden tamamlama bütçesini ({maxCompletionTokens} token) tüketti. Model profili ve bağlam sınırları içinde brain_planner.maxCompletionTokens değerini artırın veya model destekliyorsa brain_planner.reasoning=off seçin. Yeni bir istek gönderin. Run oluşturulmadı.",
   "error.BRAIN_OUTCOME_UNKNOWN": "Planlama çağrısının doğrulanmış yanıtı yok. Devam etmeden makbuzunu inceleyin; otomatik tekrar yapılmaz.",
   "error.BRAIN_CANCELLED": "Planlama iptal edildi. Run kabul edilmedi. Sağlayıcı etkileri çağrı uzlaştırmasına tabidir.",
   "brain.preview": "Run {run} için plan · {status}",

@@ -17,6 +17,8 @@ import { fixtureDockerRegistry } from './execution-registry.js';
 import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
 export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string; hold?: boolean;
+  finishReason?: 'stop' | 'length'; maxOutputTokens?: number; responseMaxBytes?: number;
+  thinking?: 'supported' | 'unsupported' | 'unknown' | 'wrong-version' | 'wrong-protocol';
   noCharge?: boolean; subscription?: boolean; template?: boolean; contextWindow?: number; tokenCount?: { count: number; max_model_len?: number } | null; rejectStatus?: number } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-provider-'));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -43,24 +45,28 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
       else signal?.addEventListener('abort', () => reject(new Error('FIXTURE_ABORTED')), { once: true });
     });
     const parsed = sendOptions.parseResponse(Buffer.from(JSON.stringify({ id: 'fixture', object: 'chat.completion', created: 1, model: 'vendor/model',
-      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: output } }],
+      choices: [{ index: 0, finish_reason: options.finishReason ?? 'stop', message: { role: 'assistant', content: output } }],
       usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })));
     if (!('response' in parsed)) throw new Error('FIXTURE_RESPONSE_INVALID');
     return parsed.response;
   });
   const reference = { providerId: 'test-operator', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
   const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openai-chat-completions', version: 'v1',
-    capabilities: options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }] }] };
+    capabilities: [...(options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }]),
+      ...(options.thinking && options.thinking !== 'wrong-protocol' ? [{ id: 'chat-template-enable-thinking',
+        version: options.thinking === 'wrong-version' ? 2 : 1, state: options.thinking === 'wrong-version' ? 'supported' : options.thinking }] : [])] },
+      ...(options.thinking === 'wrong-protocol' ? [{ family: 'other-protocol', version: 'v1',
+        capabilities: [{ id: 'chat-template-enable-thinking', version: 1, state: 'supported' }] }] : [])] };
   const catalog = { schemaVersion: 1 as const, revision: 'fixture-catalog', providers: [{ id: reference.providerId, version: 1, models: [model] }] };
   const definition = { encodingVersion: 1 as const, provider: { id: reference.providerId, version: 1 }, model };
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1, id: 'fixture', version: 1, scopeId: 's', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
-      definition: { endpoint: 'https://127.0.0.1:1234/chat', authentication: { type: 'none' }, maxOutputTokens: 8,
+      definition: { endpoint: 'https://127.0.0.1:1234/chat', authentication: { type: 'none' }, maxOutputTokens: options.maxOutputTokens ?? 8,
         ...(options.tokenCount === undefined ? {} : { tokenizeEndpoint: 'https://127.0.0.1:1234/tokenize' }),
         tariff: { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 200,
           cachedInputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 50, outputMinorUnitsPerMillionTokens: options.noCharge ? 0 : 1000 } } }, allocation: { id: 'fixture', maxCalls: 8, maxInFlight: 2 },
-    limits: { requestMaxBytes: 128_000, responseMaxBytes: 16_384, timeoutMs: 2_000 },
+    limits: { requestMaxBytes: 128_000, responseMaxBytes: options.responseMaxBytes ?? 16_384, timeoutMs: 2_000 },
     ...(options.contextWindow ? { contextWindowTokens: options.contextWindow } : {}) };
   const workClasses = { schemaVersion: 2, revision: 'business-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
     proposalAdmission: { risk: 'low', standingAdmission: options.standing ?? false }, acceptanceProfile: { schemaVersion: 1, version: 1,
