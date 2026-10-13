@@ -12,13 +12,17 @@ const object = (v: unknown): Record<string, unknown> | null => v !== null && typ
 const index = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 const CR = '\r'.charCodeAt(0);
 
+/** Only reasoning ciphertext is opaque across emissions; retain the terminal object's value for continuation. */
+const outputItemDigest = (item: Record<string, unknown>) => digest(item['type'] === 'reasoning'
+  ? Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'encrypted_content')) : item);
+
 /** Compare streamed observations with the complete provider output; object field order carries no meaning. */
 function compareResponsesOutput(items: ReadonlyMap<number, Item>, texts: ReadonlyMap<string, Text>, output: unknown, onlyPosition?: number): boolean {
   if (!Array.isArray(output)) return false;
   for (const [position, item] of items) {
     if (onlyPosition !== undefined && position !== onlyPosition) continue;
     const final = object(output[position]);
-    if (!final || final['id'] !== item.id || final['type'] !== item.type || (item.done && item.done !== digest(final))) return false;
+    if (!final || final['id'] !== item.id || final['type'] !== item.type || (item.done && item.done !== outputItemDigest(final))) return false;
     if (item.type === 'function_call' && (final['name'] !== item.name || final['call_id'] !== item.callId
       || typeof final['arguments'] !== 'string' || (item.argumentsDone ? final['arguments'] !== item.arguments : !final['arguments'].startsWith(item.arguments)))) return false;
   }
@@ -96,7 +100,7 @@ export function createResponsesStream(request: OpenAiChatTextRequest, limits: Op
       } else {
         if (!found || found.done || !responsesOutputItemSchema.safeParse(item).success
           || !compareOutput([...Array(position).fill(null), item], position)) { fail(); return; }
-        found.done = digest(item); // retain a fixed digest, not a second copy of the entire streamed item.
+        found.done = outputItemDigest(item); // retain a fixed digest, not a second copy of the entire streamed item.
       }
       return;
     }

@@ -10,11 +10,15 @@ import { encodeModelBindingDefinition } from '#domain/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteProviderSpendIntegrityReader, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, createModelInvocationResponseEvidence, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
-import { responsesFixture, responsesFinal, responsesCreated, responsesUsage, event, toolStream } from '../support/openai-responses.js';
+import { responsesFixture, responsesFinal, responsesCreated, responsesUsage, reasoningItem, callItem, event, toolStream } from '../support/openai-responses.js';
 
 // Real policy, activation, reservation and SQLite settlement; only HTTP is synthetic. No live settings, key, socket or paid call.
 const roots: string[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
+const reencrypted = toolStream();
+reencrypted[reencrypted.length - 1] = event('response.completed', 11, { response: responsesFinal([
+  { ...reasoningItem(), encrypted_content: 'final-opaque-reasoning' }, callItem(),
+]) });
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(wire: string, status = 200, zeroTariff = false) {
   let calls = 0;
@@ -61,7 +65,8 @@ async function spendOf(f: Awaited<ReturnType<typeof fixture>>, invocationId: str
   try { return { inspection, integrity: await verifyProviderSpendIntegrity(spend, 'scope', 10) }; } finally { spend.close(); }
 }
 describe.skipIf(process.platform === 'win32')('Responses through the existing governed invocation and durable spend ledger', () => {
-  it.each([['text', event('response.completed', 1, { response: responsesFinal() })], ['tools and reasoning', toolStream().join('')]])(
+  it.each([['text', event('response.completed', 1, { response: responsesFinal() })], ['tools and reasoning', toolStream().join('')],
+    ['re-encrypted reasoning', reencrypted.join('')]])(
     'settles %s exactly once, preserves replay and records separate reasoning without double billing', async (_name, wire) => {
       const f = await fixture(wire), result = await invokeConfiguredModel(f.project, f.command as never, f.options);
       expect(result.receipt.outcome?.state).toBe('responded');
@@ -78,6 +83,9 @@ describe.skipIf(process.platform === 'win32')('Responses through the existing go
     ['cut tool arguments', toolStream().slice(0, -1).join('')],
     ['contradictory terminal', event('response.completed', 1, { response: responsesFinal() }) + event('response.completed', 2, { response: responsesFinal() })],
     ['truncated contradictory tail', event('response.completed', 1, { response: responsesFinal() }) + 'data: {'],
+    ['reasoning summary contradiction', toolStream().slice(0, -1).join('') + event('response.completed', 11, { response: responsesFinal([
+      { ...reasoningItem(), encrypted_content: 'final-opaque-reasoning', summary: [{ type: 'summary_text', text: 'Changed' }] }, callItem(),
+    ]) })],
   ])('holds the reservation for %s, never inventing final usage', async (_name, wire) => {
     const f = await fixture(wire), result = await invokeConfiguredModel(f.project, f.command as never, f.options);
     expect(result.receipt.outcome?.state).not.toBe('responded');
