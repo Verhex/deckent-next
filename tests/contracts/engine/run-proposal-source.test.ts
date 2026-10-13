@@ -51,3 +51,12 @@ it('binds a Brain graph to the retained model output, invocation request, bindin
   }
   expect(() => assertRunProposalSource(brain, receipt, null)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
 });
+it('keeps verifying a stored model contribution whose valid graph is an older version (pending proposal survives an upgrade)', () => {
+  const older = { ...modelProposal, graph: { ...modelProposal.graph, schemaVersion: 3 as const } };
+  const draft = { graph: older.graph, budgetCeiling: older.budgetCeiling, requiredPermissions: older.requiredPermissions };
+  if (older.source.kind !== 'model') throw new Error('fixture');
+  const contribution = { schemaVersion: 1 as const, template: { id: 'fixture', version: 1, digest: sha256('template') },
+    inputDigest: sha256('input'), contextDigest: sha256('context'), outputDigest: brainOutputDigest(draft), requestDigest,
+    activationRevision: 1, bindingDigest: binding.digest, inputSummary: 'Plan a purchase', outputSummary: 'Readback', usage: null };
+  expect(() => assertRunProposalSource({ ...older, source: { ...older.source, contribution } }, receipt, JSON.stringify(draft))).not.toThrow();
+});

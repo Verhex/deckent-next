@@ -426,6 +426,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   BRAIN_INPUT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_INPUT_INVALID', p, l) }) },
   BRAIN_TEMPLATE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_TEMPLATE_UNAVAILABLE', p, l) }) },
   BRAIN_OUTPUT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTPUT_INVALID', p, l) }) },
+  BRAIN_OUTPUT_TRUNCATED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTPUT_TRUNCATED', p, l) }) },
   BRAIN_CONTEXT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_CONTEXT_TOO_LARGE', p, l) }) },
   BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_GRAPH_INVALID', p, l) }) },
   BRAIN_PROVIDER_REJECTED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_PROVIDER_REJECTED', p, l) }) },

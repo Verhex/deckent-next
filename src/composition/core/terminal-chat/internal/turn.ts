@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap, type TerminalModelSource } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, openAiChatProtocol, type TerminalModelSource } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -44,19 +45,24 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
  * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
  */
 /** Builds the governed command of one turn from fresh config and catalog binding (shared by both turn forms). */
-export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference) {
+export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference,
+  settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off' }> = {}) {
   const config = await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>;
   const configuredChat = readTerminalChatConfig(config);
   if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const reference = pinned ?? (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? configuredChat.reference;
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  const chat = { ...configuredChat, maxCompletionTokens: effectiveTerminalOutputCap(config, input.scopeId, reference) };
+  const chat = { ...configuredChat, maxCompletionTokens: settings.maxCompletionTokens ?? effectiveTerminalOutputCap(config, input.scopeId, reference) };
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
+  if (settings.reasoning === 'off' && !binding.definition.model.protocols.some(protocol => protocol.family === openAiChatProtocol.family
+    && protocol.version === openAiChatProtocol.version && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_ENABLE_THINKING_CAPABILITY
+      && capability.version === 1 && capability.state === 'supported'))) throw ErrorRegistry.createError('MODEL_INVOCATION_REASONING_UNSUPPORTED');
   const nativeRequest = {
     model: binding.definition.model.nativeId,
     messages: input.messages.map(message => ({ role: message.role, content: message.content })),
     max_completion_tokens: chat.maxCompletionTokens,
+    ...(settings.reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {}),
     ...(streamed ? { stream: true, stream_options: { include_usage: true } } : { stream: false }),
   } as unknown as JsonObject;
   const command: ModelInvocationCommand = { schemaVersion: 1, commandId: randomUUID(), scopeId: input.scopeId,

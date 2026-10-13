@@ -172,3 +172,37 @@ is `BRAIN_PROVIDER_REJECTED`, carrying only the typed reason and HTTP status;
 incomplete/unknown outcomes remain unknown. Raw provider bodies never enter
 Brain error parameters. No automatic retry or new acceptance/effect flow is added.
 Yazar kanıtı ve açık sınırlar dış `proof/BRAIN-BAGLAM-2026-10-13/WORKER.md` içindedir.
+
+BRAIN-DUSUNME author candidate (2026-10-13): `brain_planner.maxCompletionTokens`
+selects the planning call's completion cap independently of terminal chat.
+Omitted or `null` inherits the effective terminal cap, including its profile limit;
+an explicit positive safe integer is not silently narrowed. The native adapter
+still rejects a cap beyond profile `maxOutputTokens`. Profile request/response
+byte limits and context windows remain binding; raise the planner cap only within
+those declared limits. Shipped defaults are registry data, with no universal
+claim that one token budget suffices for every model or intent.
+
+`brain_planner.reasoning` is `model-default` (shipped default) or `off`.
+The default sends no thinking override. Explicit `off` requires supported
+`chat-template-enable-thinking@1` on the current OpenAI chat binding and sends
+`chat_template_kwargs: { enable_thinking: false }`; otherwise it refuses with
+`MODEL_INVOCATION_REASONING_UNSUPPORTED` before token measurement or model POST.
+This does not select another model or change activation, policy or approval.
+
+The final request, including the planner cap and template switch, is used for
+token measurement, context fit and the existing governed invocation. Its spending
+quote reserves from that same completion cap. The existing profile `responseMaxBytes`,
+delivery checks and `MODEL_ACTIVATION_DELIVERY_UNFIT` rule remain unchanged; token
+budget selection does not enlarge transport capacity.
+
+A length finish with empty or whitespace-only answer yields
+`BRAIN_OUTPUT_TRUNCATED` in EN/TR, naming the effective cap and the planner budget
+or supported thinking-off setting. Reasoning text is never an answer. Other empty
+responses retain `BRAIN_OUTPUT_INVALID stage=content`. No proposal or Run is stored
+for these failures. Failed invocation replay never resends; after changing settings,
+submit a new request/command identity. Successful proposal replay still returns
+the recorded proposal even after settings change, without measurement or POST.
+Templates, context and contribution versions/digests are unchanged; the existing
+request digest binds the added native settings. Author checks and open limits are
+in external `proof/BRAIN-DUSUNME-2026-10-13/WORKER.md`; independent, hosted and
+live/N1 acceptance are separate.

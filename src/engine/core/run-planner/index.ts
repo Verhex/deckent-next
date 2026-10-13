@@ -12,7 +12,7 @@ export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: 
   budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
   selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels'] }>) {
   const workClasses = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
-  const limits = brainPlannerConfigSchema.parse(config).context;
+  const settings = brainPlannerConfigSchema.parse(config), limits = settings.context;
   const order = <T>(rows: readonly T[], key: (row: T) => string) => [...rows].sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
   const context = boundBrainContext(command.scopeId, workClasses, { schemaVersion: 2, registryRevision: registry.revision,
     kinds: order(selections?.kinds ?? registry.kinds.map(row => ({ kind: row.kind, profile: row.profile, type: 'prepared' as const })), row => row.kind),
@@ -22,7 +22,8 @@ export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: 
   const prompt = prepareBrainPrompt(command, workClasses, context, config, known);
   const bytes = new TextEncoder().encode(JSON.stringify(prompt.messages)).length;
   if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
-  return prompt;
+  return { ...prompt, invocationSettings: { ...(settings.maxCompletionTokens === null ? {} : { maxCompletionTokens: settings.maxCompletionTokens }),
+    ...(settings.reasoning === 'off' ? { reasoning: settings.reasoning } : {}) } };
 }
 /** Provider count when available; UTF-8 bytes plus configured framing is a conservative tagged estimate otherwise. */
 export function assertBrainContextFits(command: ModelInvocationCommand, config: unknown, profileWindow: number | null,
@@ -46,6 +47,7 @@ export interface BrainPlanPorts {
   prepare(command: BrainPlanCommand, principal: VerifiedPrincipal): Promise<BrainPreparation>;
   invoke(command: ModelInvocationCommand, signal?: AbortSignal): Promise<ModelInvocationResult>;
   text(result: ModelInvocationResult): string | null;
+  stoppedAtLength(result: ModelInvocationResult): boolean;
   propose(proposal: RunProposal): Promise<RunProposalResult>;
 }
 const assertActive = (signal?: AbortSignal) => { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); };
@@ -83,8 +85,11 @@ export class BrainPlanApplication {
       params: { reason: receipt.outcome.evidence.reason, status: receipt.outcome.evidence.httpStatus ?? 'unknown' } });
     if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN');
     const text = this.ports.text(result);
-    if (!text) throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
-    const draft = parseBrainDraft(text, this.ports.knownSecrets), usage = openAiChatUsageSchema.safeParse(result.response?.usage);
+    const outputCap = invocation.nativeRequest['max_completion_tokens'];
+    if (!text) throw this.ports.stoppedAtLength(result)
+      ? ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED', { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } })
+      : ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
+    const draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }), usage = openAiChatUsageSchema.safeParse(result.response?.usage);
     if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
       throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
     }

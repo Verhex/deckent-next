@@ -1,5 +1,8 @@
 {
   "schemaVersion": 1,
+  "maxCompletionTokens": null,
+  "reasoning": "model-default",
+  "reasoningModes": ["model-default", "off"],
   "selected": {
     "id": "run-proposal",
     "version": 2
