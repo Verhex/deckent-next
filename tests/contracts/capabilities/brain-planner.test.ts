@@ -1,11 +1,19 @@
 import { expect, it } from 'vitest';
 import { CORE_WORK_CLASSES } from '#domain/index.js';
-import { prepareBrainPrompt, parseBrainDraft, brainOutputDigest } from '#capabilities/index.js';
+import { prepareBrainPrompt, parseBrainDraft, brainOutputDigest, brainPlannerConfigSchema } from '#capabilities/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 const command = { schemaVersion: 1 as const, scopeId: 's', commandId: 'brain', intent: 'Plan a durable customer process' };
 const { graph, budgetCeiling, requiredPermissions } = proposalFixture();
 const draft = { graph, budgetCeiling, requiredPermissions };
+it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '64'])('refuses invalid planner completion budget %j', maxCompletionTokens => {
+  expect(brainPlannerConfigSchema.safeParse({ maxCompletionTokens }).success).toBe(false);
+});
+it('defaults to model behavior and inherited chat budget, with explicit validated choices', () => {
+  expect(brainPlannerConfigSchema.parse({})).toMatchObject({ maxCompletionTokens: null, reasoning: 'model-default' });
+  expect(brainPlannerConfigSchema.parse({ maxCompletionTokens: 64, reasoning: 'off' })).toMatchObject({ maxCompletionTokens: 64, reasoning: 'off' });
+  expect(brainPlannerConfigSchema.safeParse({ reasoning: 'on' }).success).toBe(false);
+});
 it('uses a configured versioned template, actual catalogs and the same proposal JSON schema without model or authority literals', () => {
   const prompt = prepareBrainPrompt(command, CORE_WORK_CLASSES, { permissions: ['inspect'] }, { selected: { id: 'customer', version: 7 },
     templates: [{ id: 'customer', version: 7, instruction: 'Propose only', summaryChars: 200 }] });
