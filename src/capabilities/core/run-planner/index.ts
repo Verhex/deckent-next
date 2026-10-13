@@ -55,12 +55,14 @@ export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassP
         schema: brainDraftJsonSchema() }) }] });
 }
 /** Each failure stage is explicit and contains no provider text or secret-bearing parse diagnostics. */
-export function parseBrainDraft(text: string, known?: KnownSecretSnapshot): BrainDraft {
+/** `requireCurrentGraph` is for a NEW model reply only. Verifying a stored proposal's model contribution keeps reading every graph
+ * version the contract accepts, so an upgrade never turns a pending, valid older proposal into a rejection (Astra 2524). */
+export function parseBrainDraft(text: string, known?: KnownSecretSnapshot, options: { readonly requireCurrentGraph?: boolean } = {}): BrainDraft {
   let input: unknown;
   try { input = redactJson(JSON.parse(text) as unknown, known); } catch { throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'json' } }); }
   const parsed = brainDraftSchema.safeParse(input);
   if (!parsed.success) throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'schema' } });
-  if (parsed.data.graph.schemaVersion !== TASK_GRAPH_SCHEMA_VERSION) throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_GRAPH_VERSION' } });
+  if (options.requireCurrentGraph && parsed.data.graph.schemaVersion !== TASK_GRAPH_SCHEMA_VERSION) throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_GRAPH_VERSION' } });
   try { validateTaskGraph(parsed.data.graph); } catch (error) {
     throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: error instanceof TaskGraphError ? error.code : 'TASK_GRAPH_INVALID' } });
   }

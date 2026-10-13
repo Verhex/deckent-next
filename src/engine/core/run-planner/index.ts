@@ -89,7 +89,7 @@ export class BrainPlanApplication {
     if (!text) throw this.ports.stoppedAtLength(result)
       ? ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED', { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } })
       : ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
-    const draft = parseBrainDraft(text, this.ports.knownSecrets), usage = openAiChatUsageSchema.safeParse(result.response?.usage);
+    const draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }), usage = openAiChatUsageSchema.safeParse(result.response?.usage);
     if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
       throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
     }

@@ -26,8 +26,11 @@ it('uses a configured versioned template, actual catalogs and the same proposal 
 it('asks for and enforces the current graph version so typed work input is never planned on an older graph', () => {
   const user = JSON.parse(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {}).messages[1]!.content);
   expect(user.schema.properties.graph.properties.schemaVersion).toEqual({ type: 'number', const: graph.schemaVersion });
-  expect(() => parseBrainDraft(JSON.stringify({ ...draft, graph: { ...graph, schemaVersion: 3 } })))
+  const older = JSON.stringify({ ...draft, graph: { ...graph, schemaVersion: 3 } });
+  expect(() => parseBrainDraft(older, undefined, { requireCurrentGraph: true }))
     .toThrow(expect.objectContaining({ code: 'BRAIN_GRAPH_INVALID', params: { rule: 'TASK_GRAPH_VERSION' } }));
+  // Stored-proposal source verification keeps reading a valid older graph (no rejection after an upgrade).
+  expect(parseBrainDraft(older).graph.schemaVersion).toBe(3);
 });
 it.each(['missing', 'duplicate'])('refuses %s selected template instead of fallback', kind => {
   const row = { id: 'missing', version: 1, instruction: 'Propose', summaryChars: 200 };
