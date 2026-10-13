@@ -19,7 +19,7 @@ export class PoolPolicyAuthorization implements PoolAuthorization {
   }
 }
 
-export type PoolControlAction = 'hold' | 'resume' | 'inspect' | 'set-capacity';
+export type PoolControlAction = 'hold' | 'resume' | 'inspect' | 'set-capacity' | 'release-quota';
 /** The decision on one `pool` control cell, kept for the audit record: effect, the deciding rule (null when none) and the policy revision. */
 export interface PoolControlDecision { readonly effect: 'allow' | 'deny' | 'require-approval'; readonly ruleId: string | null; readonly revision: string }
 export interface PoolControlAuthorization {
@@ -27,7 +27,7 @@ export interface PoolControlAuthorization {
 }
 /**
  * K5 typed pool hold. A pool has no scope (every scope's Runs share it), so `hold`/`resume` stop or restart reservations installation-wide
- * and take installation-level authority — the WC-R1 pattern of the ledger model catalog: the scoped decision (membership) **and** the
+ * and take installation-level authority; the separate `release-quota` cell uses the same bound for each affected pool — the WC-R1 pattern of the ledger model catalog: the scoped decision (membership) **and** the
  * delegation bound over `scopes: 'all'` on the same policy snapshot (a deny or restriction in any one scope refuses; scopes registered later
  * are covered). `inspect` reads the status with the scoped decision only. Returns the decision; the caller records it and refuses.
  */
