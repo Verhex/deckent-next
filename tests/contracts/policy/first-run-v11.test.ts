@@ -17,16 +17,21 @@ const source = (policy: unknown) => ({ async load() { return resolvePolicyBindin
 it('migrates exact v10 to v11 and plans the same named delta additively for first-run and hand-built policies', () => {
   expect(upgradeFirstRunPolicy(v10, input)).toEqual({ status: 'upgrade', from: 10, policy: built.policy });
   expect(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS).toEqual(ids);
-  const custom = { ...v10, revision: 'custom', grants: v10.grants.filter(rule => rule.id !== 'first-run-read-tools') };
+  // A hand-built v10 retains its earlier proposal authority under a custom read-rule id.
+  // Removing that grant would also remove the v5 proposal tool, so this would no longer be a v10-only delta.
+  const custom = { ...v10, revision: 'custom', grants: v10.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
+  const before = JSON.stringify(custom);
   const first = firstRunTemplateAdditions(v10, { ...names, person });
   const hand = namedPersonPolicyAdditions(custom, { ...names, person, scopeId: 'installation' });
   for (const plan of [first, hand]) {
     expect(plan.status).toBe('plan'); if (plan.status !== 'plan') throw new Error('missing v11 delta');
     expect(plan.rules.map(rule => rule.id)).toEqual(ids);
+    expect(plan.rules.some(rule => rule.id === 'first-run-mcp-propose-tool')).toBe(false);
     expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     expect(plan.rules[0]).toMatchObject({ actions: ['release-quota'], scopes: 'all', principals: [person], resource: { kind: 'pool', ids: 'all' } });
     for (const rule of plan.rules.slice(1)) expect(rule).toMatchObject({ scopes: ['installation'], principals: [person], resource: { ids: 'all' } });
   }
+  expect(JSON.stringify(custom)).toBe(before);
 });
 
 it.each(['prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const)('%s is denied before v11, allowed after, and denied to MCP/other scope or a missing target grant', async action => {

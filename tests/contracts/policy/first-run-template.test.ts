@@ -65,7 +65,7 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
   });
   it('v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of their installation in its scope, nobody else', () => {
     const template = firstRunPolicyTemplate(input), policy = resolvePolicyBindings(template.policy, template.bindings);
-    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(10);
+    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(11);
     // v8 (BACKUP-COMMAND): installation-wide backup for the installing owner alone.
     expect(template.policy.grants.find(grant => grant.id === 'first-run-backup')).toEqual({ id: 'first-run-backup', effect: 'allow',
       actions: ['create', 'verify', 'restore'], scopes: 'all', principals: [me], resource: { kind: 'backup', ids: 'all' } });

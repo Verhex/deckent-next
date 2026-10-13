@@ -4,6 +4,7 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { FilePolicySource } from '#adapters/index.js';
 import { firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID } from '#engine/index.js';
@@ -154,7 +155,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(bytes()).toBe(kept);
   }, 180_000);
 
-  it('(e) rollback keeps lockout protection when a custom v11 id holds the only policy.administer grant', async () => {
+  it('(e) rollback without archived provenance keeps a custom v11 id holding the only policy.administer grant', async () => {
     const { f, upgrade, bytes } = await project('pure');
     const v5 = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
       scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
@@ -163,10 +164,40 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...v5, grants: v5.grants.filter(rule => rule.id !== 'first-run-policy-administer')
       .map(rule => rule.id === 'first-run-integration' ? { ...rule, actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule) }), { mode: 0o600 });
     const before = bytes();
-    const refused = await upgrade('rollback');
-    expect(refused).toMatchObject({ status: 'refused' });
-    expect(refused.missing).toContain('lockout');
+    expect(await upgrade('rollback')).toMatchObject({ status: 'unavailable', reason: 'history-unavailable', conflicts: ['first-run-integration'] });
     expect(bytes()).toBe(before);
+    expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(0);
+  }, 120_000);
+
+  it('(e, archived) approves rollback, preserves the customized only admin grant, and still refuses loss of approval authority', async () => {
+    const { f, upgrade, grants, bytes } = await project('pure');
+    // Installer upgrade supplies real provenance; a later archived customization is not an upgrade-owned rule.
+    expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'upgraded' });
+    const source = new FilePolicySource({ path: join(f.data, 'policy.json'), bindingsPath: join(f.data, 'bindings.json'),
+      archivePath: join(f.data, 'audit', 'authority-revisions'), ownerUid: process.getuid!(), maxBytes: 65_536 });
+    await source.updateAuthority(state => ({ write: { policy: { ...state.policy, revision: 'a-custom-admin',
+      grants: state.policy.grants.filter(rule => rule.id !== 'first-run-policy-administer').map(rule => rule.id === 'first-run-integration'
+        ? { ...rule, actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule) }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-custom-admin');
+    const before = grants(), auditCount = f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
+    const customAdmin = before.find(rule => rule.id === 'first-run-integration');
+    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: 'first-run-quota-release,first-run-work-target-adopt', conflicts: ['first-run-integration'] });
+    expect(grants()).toEqual(before.filter(rule => !['first-run-quota-release', 'first-run-work-target-adopt'].includes(rule.id)));
+    expect(grants().find(rule => rule.id === 'first-run-integration')).toEqual(customAdmin);
+    expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(auditCount + 1);
+    const kept = bytes();
+    expect(await upgrade('rollback')).toMatchObject({ status: 'nothing-to-roll-back', conflicts: ['first-run-integration'] });
+    expect(bytes()).toBe(kept);
+
+    const guarded = await project('pure');
+    expect(await upgradePolicyTemplateInstallation(guarded.f.project, 'scope', true, undefined, { env: guarded.f.env })).toMatchObject({ status: 'upgraded' });
+    const guardedSource = new FilePolicySource({ path: join(guarded.f.data, 'policy.json'), bindingsPath: join(guarded.f.data, 'bindings.json'),
+      archivePath: join(guarded.f.data, 'audit', 'authority-revisions'), ownerUid: process.getuid!(), maxBytes: 65_536 });
+    await guardedSource.updateAuthority(state => ({ write: { policy: { ...state.policy, revision: 'a-no-approval',
+      grants: state.policy.grants.filter(rule => rule.id !== 'first-run-approvals') }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-no-approval');
+    const guardedBytes = guarded.bytes(), guardedAudit = guarded.f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change');
+    expect(await guarded.upgrade('rollback')).toMatchObject({ status: 'refused', missing: ['approval-decide', 'lockout'] });
+    expect(guarded.bytes()).toBe(guardedBytes);
+    expect(guarded.f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toEqual(guardedAudit);
   }, 120_000);
 
   it('(b) a pure first-run v4 policy: the preview names what the person lacks (policy.administer, deciding the card, the authority itself); apply writes nothing', async () => {
