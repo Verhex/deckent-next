@@ -860,8 +860,8 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   preserving the typed `openai-chat-completions@v1` facade and binding digest. Sourced per-model registry routes select Responses for Astra,
   Sol and Luna; effort support/defaults are route data. Flat function tools/results, typed refusals and bounded SSE reuse the existing transport,
   egress, cancellation, reservation and spend owner. `store:false` is mandatory; no server conversation. Opaque encrypted reasoning for tool
-  continuations stays process-local, bounded and tied to scope/profile/tools/message prefix; restart/expiry drops it. Reservation bounds actual
-  wire bytes and additionally each replayed opaque block's originating output-token ceiling; ciphertext size is not a token count. Reasoning is a subset of
+  continuations stays process-local, bounded and tied to scope/profile/tools/message prefix; restart/expiry drops it. Item-done/final digest consistency excludes only a reasoning item's top-level `encrypted_content`; all other fields and final schema validation remain strict.
+  The terminal object's blob is retained for continuation (RESPONSES-SIFRELI-DUSUNME author candidate, 2026-10-14; independent/live acceptance separate). Reservation bounds actual wire bytes and additionally each replayed opaque block's originating output-token ceiling; ciphertext size is not a token count. Reasoning is a subset of
   output, split for audit at the output rate; cached reads/writes use the pinned tariff and reported actual tier. Only validated completed/incomplete
   terminal-event usage measures spend; later contradictions (including a truncated tail) withdraw it. Missing cache-write count or unknown
   published tier stays unmeasured. Existing v4/v5 exact verified profiles migrate only through `/model` "Güncel protokole geç": route preview,
