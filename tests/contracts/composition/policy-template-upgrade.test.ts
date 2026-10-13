@@ -169,7 +169,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(0);
   }, 120_000);
 
-  it('(e, archived) approves rollback, preserves the customized only admin grant, and still refuses loss of approval authority', async () => {
+  it('(e, archived) approves rollback, preserves the customized only admin grant; the writer refuses losing approval authority and a hand-staged headless state cannot roll back', async () => {
     const { f, upgrade, grants, bytes } = await project('pure');
     // Installer upgrade supplies real provenance; a later archived customization is not an upgrade-owned rule.
     expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'upgraded' });
@@ -192,10 +192,18 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(await upgradePolicyTemplateInstallation(guarded.f.project, 'scope', true, undefined, { env: guarded.f.env })).toMatchObject({ status: 'upgraded' });
     const guardedSource = new FilePolicySource({ path: join(guarded.f.data, 'policy.json'), bindingsPath: join(guarded.f.data, 'bindings.json'),
       archivePath: join(guarded.f.data, 'audit', 'authority-revisions'), ownerUid: process.getuid!(), maxBytes: 65_536 });
-    await guardedSource.updateAuthority(state => ({ write: { policy: { ...state.policy, revision: 'a-no-approval',
-      grants: state.policy.grants.filter(rule => rule.id !== 'first-run-approvals') }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-no-approval');
+    // The governed writer itself refuses to remove the last approval authority (P0); assert that, then stage the headless state on disk.
+    const upgradedBytes = guarded.bytes();
+    await expect(guardedSource.updateAuthority(state => ({ write: { policy: { ...state.policy, revision: 'a-no-approval',
+      grants: state.policy.grants.filter(rule => rule.id !== 'first-run-approvals') }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-no-approval'))
+      .rejects.toMatchObject({ code: 'POLICY_LAST_ADMIN' });
+    expect(guarded.bytes()).toBe(upgradedBytes);
+    const headless = JSON.parse(upgradedBytes) as { grants: { id: string }[] };
+    writeFileSync(join(guarded.f.data, 'policy.json'), JSON.stringify({ ...headless, revision: 'a-no-approval',
+      grants: headless.grants.filter(rule => rule.id !== 'first-run-approvals') }), { mode: 0o600 });
     const guardedBytes = guarded.bytes(), guardedAudit = guarded.f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change');
-    expect(await guarded.upgrade('rollback')).toMatchObject({ status: 'refused', missing: ['approval-decide', 'lockout'] });
+    // A hand-staged headless state has no archived provenance for its revision: rollback refuses before any write or audit.
+    expect(await guarded.upgrade('rollback')).toMatchObject({ status: 'unavailable', reason: 'history-unavailable', missing: [] });
     expect(guarded.bytes()).toBe(guardedBytes);
     expect(guarded.f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toEqual(guardedAudit);
   }, 120_000);
