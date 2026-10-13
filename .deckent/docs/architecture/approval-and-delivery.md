@@ -843,10 +843,14 @@ Validation: 12 targeted files 106/106; additional bounded composition admission 
 is its one application checkpoint in the locked `FilePolicySource` writer. It covers v1/v2 change
 inputs, profiles, installer upgrades and permission modes, including role/restriction/SoD/assurance
 changes at the authority port. Each previously administered scope partition retains a named non-MCP
-principal able to execute `policy.administer` and inspect/decide all approval records. Denies and
-restrictions win; SoD needs a different authorized requester. Core authority cards support
+principal able to request `policy.administer` and inspect/decide new approval records. The existing
+pure policy evaluator probes an approval id outside every explicit selector: a deny, restriction or
+require-approval on an old id affects that id only; general blockers still win. SoD needs a different authorized requester. Core authority cards support
 `peer-session`; injected decision-producer availability allows Enterprise assurance without an owner
-role-name bypass. Modes cannot create admin capability. Existing headless policies remain repairable.
+role-name bypass. Modes cannot create admin capability. Zero or uncomputable before authority never
+exempts a reduction. Headless repair preserves existing positive administration rules and adds no
+new blockers; rule rewrites whose monotonicity cannot be proven refuse with `POLICY_LAST_ADMIN`.
+Unrelated changes and additive authority repairs remain available; malformed snapshots fail closed.
 The writer checks final and intermediate snapshots before invoking `AuthorityWrite.beforePublish`
 (the producer's synchronous audit callback), then retains existing conditional writes and archives.
 
