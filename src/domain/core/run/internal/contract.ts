@@ -1,3 +1,4 @@
+import { readWorkerModelPin, quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
 import { runProposalBindingSchema } from './proposal.js';
@@ -8,11 +9,11 @@ import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisi
 import { workerReportLimits } from '#domain/core/worker-event/index.js';
 export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).strict().readonly();
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
-  observedKind: z.enum(['started', 'exited', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused']).nullable(),
+  observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused']).nullable(),
 }).strict().readonly();
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
-  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed']),
+  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted']),
     failureCode: identitySchema.optional(),
     note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), since: counterSchema, deadline: counterSchema }).strict(),
   z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
@@ -21,6 +22,8 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
   proposal: runProposalBindingSchema.optional(),
   authority: authorityAdmissionSchema.optional(),
   state: runStateSchema, branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
+  quotaWaits: z.array(z.object({ identity: attemptIdentitySchema, channelId: z.string().min(1).max(256), quota: quotaExhaustedSchema,
+    evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), since: counterSchema, deadline: counterSchema, maxResumes: counterSchema }).strict().readonly()).readonly().optional(),
   previousBindings: z.array(runBindingSchema).readonly().optional(),
 }).strict().superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });
@@ -37,13 +40,13 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
   }
   if (run.state.kind === 'parked' && (run.state.deadline <= run.state.since || (run.state.reason === 'operator-hold') !== (run.state.note !== undefined)
     || (run.state.reason === 'progression-failed') !== (run.state.failureCode !== undefined)
-    || (!['operator-hold', 'needs-input', 'progression-failed'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
+    || (!['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
   if (run.state.kind === 'terminal' && (run.progress.some(task => task.unresolvedEffects || ['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision'].includes(task.phase)) || (run.state.outcome === 'completed' && run.progress.some(task => task.phase !== 'accepted')) || (run.state.outcome === 'incomplete' && (!run.progress.some(task => task.phase === 'accepted') || run.progress.every(task => task.phase === 'accepted'))) || (['failed', 'cancelled'].includes(run.state.outcome) && run.progress.some(task => task.phase === 'accepted')))) invalid();
   const tasks = new Set(run.graph.tasks.map(task => task.id)); const bound = new Set<string>(); const attempts = new Set<string>();
   for (const binding of run.previousBindings ?? []) {
     const id = binding.identity;
     if (!tasks.has(id.taskId) || attempts.has(id.attemptId) || id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId
-      || id.layoutRevision !== run.identity.layoutRevision || binding.observedKind !== 'exited' || binding.observedRevision === null) invalid();
+      || id.layoutRevision !== run.identity.layoutRevision || !['exited', 'quota-exhausted'].includes(binding.observedKind ?? '') || binding.observedRevision === null) invalid();
     attempts.add(id.attemptId);
   }
   for (const binding of run.bindings) {
@@ -52,11 +55,20 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
       (binding.observedRevision === null) !== (binding.observedKind === null)) invalid();
     bound.add(id.taskId); attempts.add(id.attemptId);
   }
+  const waits = run.quotaWaits ?? [];
+  if (new Set(waits.map(wait => wait.identity.attemptId)).size !== waits.length) invalid();
+  for (const wait of waits) {
+    const binding = [...run.bindings, ...(run.previousBindings ?? [])].find(row => row.identity.attemptId === wait.identity.attemptId);
+    const pin = readWorkerModelPin(run.execution.tasks.find(row => row.taskId === wait.identity.taskId)?.profile.parameters);
+    if (!pin || pin.pin.channelId !== wait.channelId || !binding || binding.observedKind !== 'quota-exhausted' || JSON.stringify(binding.identity) !== JSON.stringify(wait.identity) || wait.deadline <= wait.since) invalid();
+  }
+  for (const binding of [...run.bindings, ...(run.previousBindings ?? [])]) if (binding.observedKind === 'quota-exhausted' && !waits.some(wait => wait.identity.attemptId === binding.identity.attemptId)) invalid();
+  if (run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' && !run.bindings.some(row => row.observedKind === 'quota-exhausted')) invalid();
   for (const task of run.progress) {
     if (task.inputAnswer && (task.inputAnswer.source.taskId !== task.taskId || task.inputAnswer.source.runId !== run.identity.runId
       || task.inputAnswer.source.scopeId !== run.identity.scopeId || task.inputAnswer.source.layoutRevision !== run.identity.layoutRevision)) invalid();
     const binding = run.bindings.find(value => value.identity.taskId === task.taskId);
-    if (task.inputAnswer && binding && (binding.identity.generation !== task.inputAnswer.source.generation + 1 || binding.identity.attemptId === task.inputAnswer.source.attemptId)) invalid();
+    if (task.inputAnswer && binding && !(run.previousBindings ?? []).some(row => row.identity.taskId === task.taskId && row.identity.generation >= task.inputAnswer!.source.generation) && (binding.identity.generation !== task.inputAnswer.source.generation + 1 || binding.identity.attemptId === task.inputAnswer.source.attemptId)) invalid();
     if (['active', 'evaluating', 'reconciling', 'awaiting-decision'].includes(task.phase) && !bound.has(task.taskId)) invalid();
     if (task.phase === 'awaiting-decision' && run.bindings.find(binding => binding.identity.taskId === task.taskId)?.observedKind !== 'exited') invalid();
   }

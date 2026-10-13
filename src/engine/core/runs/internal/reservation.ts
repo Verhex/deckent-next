@@ -12,6 +12,7 @@ import { projectRunView } from './view.js';
 export const runReservationCommandSchema = runQuerySchema.extend({ commandId: clientCommandIdSchema, expectedRevision: counterSchema }).strict();
 export type RunReservationCommand = z.infer<typeof runReservationCommandSchema>;
 export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
+  quotaHeldTasks?(run: RunSnapshot, now: number): Promise<readonly string[]>;
   loadRunExecutionPolicy(scopeId: string, runId: string): Promise<z.infer<typeof runExecutionPolicySchema>>;
 }
 export interface RunAdmissionFilter {
@@ -81,12 +82,12 @@ export class RunReservationApplication {
       }
       const policy = runExecutionPolicySchema.parse(await this.store.loadRunExecutionPolicy(command.scopeId, command.runId));
       const now = counterSchema.parse(this.runtime.now());
-      const excludedTaskIds = await this.admission?.prepare(run, principal, now) ?? [];
+      const excludedTaskIds = [...(await this.admission?.prepare(run, principal, now) ?? []), ...(await this.store.quotaHeldTasks?.(run, now) ?? [])];
       const wave = planSchedulingWave(run.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, excludedTaskIds,
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
       if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,
-        attemptId: identitySchema.parse(this.runtime.attemptId()), generation: (run.progress.find(task => task.taskId === taskId)?.inputAnswer?.source.generation ?? 0) + 1 }));
+        attemptId: identitySchema.parse(this.runtime.attemptId()), generation: Math.max(run.progress.find(task => task.taskId === taskId)?.inputAnswer?.source.generation ?? 0, ...(run.previousBindings ?? []).filter(row => row.identity.taskId === taskId).map(row => row.identity.generation)) + 1 }));
       await this.authorization.authorize('reserve', command, principal);
       await this.poolAuthorization.authorize(policy.poolId, command.scopeId, principal);
       return this.project(await this.store.reserveRunTasks({ commandId: command.commandId, actor,

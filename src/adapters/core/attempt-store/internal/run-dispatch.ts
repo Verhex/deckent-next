@@ -1,6 +1,7 @@
+import { quotaHeldTasks } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { runSnapshotSchema, observeRunAttempt, sameAttemptIdentity, type AttemptIdentity, type AttemptSnapshot, type RunLifecycleTiming } from '#domain/index.js';
-import { DispatchError, runExecutionPolicySchema } from '#engine/index.js';
+import { DispatchError, RunStoreError, runExecutionPolicySchema } from '#engine/index.js';
 import { SqliteExecutionPools } from './pools.js';
 import { settleBoundAttempt } from './run-settlement.js';
 /** All methods run inside the dispatch journal's write transaction. */
@@ -16,9 +17,10 @@ export class SqliteRunDispatch {
     if (!binding || !sameAttemptIdentity(binding.identity, identity)) throw new DispatchError('DISPATCH_NOT_ADMITTED');
     return { run, binding, policy: row.policy };
   }
-  admit(identity: AttemptIdentity): void {
+  admit(identity: AttemptIdentity, now: number): void {
     const { run, policy } = this.read(identity);
     if (run.cancelRequested || run.progress.find(task => task.taskId === identity.taskId)?.phase !== 'active') throw new DispatchError('DISPATCH_NOT_ADMITTED');
+    if (quotaHeldTasks(this.db, run, now).includes(identity.taskId)) throw new RunStoreError('RUN_POOL_HELD');
     try {
       const parsed = runExecutionPolicySchema.parse(JSON.parse(String(policy)));
       new SqliteExecutionPools(this.db).assertAvailable(parsed.poolId, 0);

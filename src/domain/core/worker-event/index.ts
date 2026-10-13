@@ -4,4 +4,6 @@ export { workerFinalReportSchema, workerFinalReportResultSchema, readWorkerFinal
 export type { WorkerFinalReportResult, WorkerFinalReport, WorkerHandoffNote, WorkerReportLimits } from './internal/report.js';
 export { workerModelPinSchema, readWorkerModelPin, viewWorkerModels } from './internal/models.js';
 export type { WorkerModelPin, WorkerProvider, WorkerModelEvidence, WorkerModelVerdict, WorkerModelView } from './internal/models.js';
+export { quotaExhaustedSchema } from './internal/quota.js';
+export type { QuotaExhausted } from './internal/quota.js';
 export { workerNeedsInputSchema } from './internal/report.js';

@@ -31,7 +31,9 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
         try { await reserveConfiguredRunTasks(projectRoot, command, options); return 'reserved'; }
         catch (error) { const outcome = reservationRefusalOutcome(queryFailure(error).code); if (outcome) return outcome; throw error; }
       },
-      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) await executeConfiguredTask(projectRoot, identity, options); }, waited => { waitedForSlotMs += waited; }); },
+      canExecute: identity => withRunStore(query, async store => { const run = await store.loadRun(identity.scopeId, identity.runId);
+        return !!run && !(await store.quotaHeldTasks(run, Date.now())).includes(identity.taskId); }),
+      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) try { await executeConfiguredTask(projectRoot, identity, options); } catch (error) { if (queryFailure(error).code !== 'RUN_POOL_HELD') throw error; } }, waited => { waitedForSlotMs += waited; }); },
       async evaluate(command) {
         try { await evaluateConfiguredTask(projectRoot, command, options); return 'recorded'; }
         catch (error) {

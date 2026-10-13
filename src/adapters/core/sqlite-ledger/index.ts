@@ -10,3 +10,5 @@ export { upgradeExistingLedger, type LedgerUpgrade } from './internal/upgrade.js
 
 export { recordAcceptanceMetric, readRunAcceptanceEvaluations, readAcceptedOperationSettlements } from './internal/acceptance-metrics.js';
 export { readRunAcceptanceMetrics } from './internal/acceptance-metrics.js';
+
+export { quotaHeldTasks, readQuotaHolds, persistQuotaAttempt } from './internal/quota.js';

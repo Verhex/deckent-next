@@ -51,7 +51,8 @@ export class RunInspectionApplication {
     }
     const pool = evidence ? observeRunPool(evidence, Date.now(), this.poolConfig?.admission, this.poolConfig?.ceiling) : undefined;
     const evaluations = await this.readStore.loadRunEvaluations?.(parsed) ?? [];
-    const view = { ...projectRunView(parsed, receipts, evaluations), ...(pool ? { pool } : {}) };
+    const channelWaits = evidence?.quotaHolds?.filter(wait => wait.deadline > Date.now());
+    const view = { ...projectRunView(parsed, receipts, evaluations), ...(channelWaits?.length ? { channelWaits } : {}), ...(pool ? { pool } : {}) };
     if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     return { run: view, snapshot, principal, evaluations };
   }

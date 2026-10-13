@@ -9,7 +9,7 @@ export { phaseLabel, renderWorkerTranscript, type WorkerTranscriptHandler } from
 
 export { renderBriefLines } from './internal/brief.js';
 export { renderGraphSummaryLines } from './internal/graph-summary.js';
-export { clockText, processLabel } from './internal/labels.js';
+export { quotaWaitText, clockText, processLabel } from './internal/labels.js';
 
 export { renderAcceptanceLine } from './internal/acceptance.js';
 export { renderCostReport, renderCostSummary } from './internal/costs.js';

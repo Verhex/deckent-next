@@ -107,3 +107,9 @@ export function deliveryOutlookDetail(outlook: MonitorDeliveryOutlook, locale: L
     'patch-not-prepared': t('monitor.detail.deliveryOutlook.patchNotPrepared', {}, locale), 'awaiting-delivery': t('monitor.detail.deliveryOutlook.awaiting', {}, locale) };
   return labels[outlook];
 }
+
+export function quotaWaitText(deadline: number, resetKnown: boolean, locale: Locale, retryLimit = false): string {
+  if (retryLimit) return t('run.quota.retryLimit', {}, locale);
+  const date = new Date(deadline), time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  return resetKnown ? t('run.quota.reset', { time }, locale) : t('run.quota.wait', { time }, locale);
+}

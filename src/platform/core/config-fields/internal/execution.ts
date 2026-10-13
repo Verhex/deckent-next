@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import quotaDefaults from './quota-policy.json' with { type: 'json' };
 /** Required runtime capability settings; install/config composition supplies policy values. */
 export const DOCKER_EXECUTION_SETTINGS = z.object({
   executable: z.string().min(1), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -46,3 +47,5 @@ export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().pos
  * not a measured optimum. Explicit version and strict keys make unsupported policy fail closed. */
 export const RUN_PARKING_SETTINGS = z.object({ schemaVersion: z.literal(1),
   timeoutMs: z.number().int().positive().safe().default(86_400_000) }).strict();
+
+export const QUOTA_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), maxResumes: z.number().int().nonnegative().safe().default(quotaDefaults.maxResumes) }).strict();
