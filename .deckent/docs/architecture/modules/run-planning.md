@@ -9,7 +9,7 @@ exact model reference. SDK `planRun`, CLI `do --request ... --json`, MCP `plan_r
 and terminal `/do <intent>` share one Brain planning application. Versioned
 `brain_planner` configuration selects the prompt template. Capabilities derives
 the JSON schema from the existing RunProposal contract and stages JSON, schema
-and task-graph parse failures. The model proposes a graph; the authenticated
+and task-graph parse failures. Graph failures retain a safe typed rule (criterion id, dependency, cycle or unregistered kind), never provider diagnostics. The model proposes a graph; the authenticated
 principal and existing engine admission own authority.
 
 The existing connected-model invocation owns activation, binding, credentials,
@@ -49,3 +49,49 @@ admission/uncertain-outcome contract owns reconciliation; the terminal preserves
 a returned Run identity even if local cancellation races with that handoff.
 Author evidence and independent/live limits are in external
 `proof/DO-DILIM-B-2026-10-12/WORKER.md`.
+
+
+BRAIN-BAGLAM author candidate (2026-10-13): context projection v2 replaces raw
+execution-registry serialization. It carries sorted kinds with `template`/`prepared`
+pairing and template provider, merged WorkClasses, installed evaluator parameter
+JSON schemas, policy vocabulary, applicable budget and scoped worker-model choices.
+Prepared parameters, argv, task prompts and prompt composition are excluded.
+Evaluator schemas come from the same installed Zod parameter schemas used by
+admission; the planner owns their JSON Schema rendering. Each template's model
+options reuse worker admission checks for exact ids, channel/provider, activation,
+lifecycle and pinned CLI minimum (including the existing image-refresh caveat).
+An option carries `(channelId, modelId, auxiliaryModelIds)`, template profile,
+billing (`null` for older catalog metadata) and supported efforts. The default
+auxiliary list is empty; `availableAuxiliaryModelIds` is the same channel's admitted
+set from which the existing bounded workInput contract may select helper ids.
+This avoids enumerating combinations; admission still verifies the final compiled
+pin and effort and remains the authority. Truncated choices are not an admission
+promise. No models are activated or substituted by context preparation.
+
+`brain_planner.context` config owns `maxKinds`, `maxModels`, `maxEvaluators`,
+`maxBytes`, `requestMaxBytes` and `tokenFramingAllowance`; shipped defaults live in
+the versioned planner asset. Count limits apply first, then complete entries are
+removed until the full scope/WorkClass/context envelope fits UTF-8 `maxBytes`.
+`truncation` records reason and omitted counts; metadata that cannot fit yields
+`BRAIN_CONTEXT_TOO_LARGE`. Redacted context and the complete request have final
+byte guards. Context declares paths `not-inspected`: this slice discovers no files,
+and v2 forbids invented paths beyond those explicitly supplied in intent.
+
+The selected `run-proposal` template is v2; v1 stays selectable and its digest is
+unchanged. Task `acceptanceCriteria` is described as criterionDefinitions ids.
+Projection version participates in contextDigest; contribution/input/output/receipt
+versions and successful replay semantics stay unchanged. A retained v1 proposal
+replays after v2 selection without another token count or model send.
+
+Before a model send, the existing governed invocation measurement path counts the
+exact prompt when binding capability and profile endpoint provide a counter. No
+claim, spending or model execution occurs at measurement. Input count plus the
+prepared completion cap must fit the narrower profile/served window. Without a
+counter, UTF-8 request bytes plus configured framing is a tagged conservative
+estimate; without a known window only the byte cap is asserted. The estimate is
+not a tokenizer or a guarantee for arbitrary custom chat templates. Overflow is
+`BRAIN_CONTEXT_TOO_LARGE`, with an EN/TR next action. A complete provider rejection
+is `BRAIN_PROVIDER_REJECTED`, carrying only the typed reason and HTTP status;
+incomplete/unknown outcomes remain unknown. Raw provider bodies never enter
+Brain error parameters. No automatic retry or new acceptance/effect flow is added.
+Yazar kanıtı ve açık sınırlar dış `proof/BRAIN-BAGLAM-2026-10-13/WORKER.md` içindedir.
