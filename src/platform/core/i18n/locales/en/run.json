@@ -412,5 +412,6 @@
   "run.quota.reset": "Subscription limit reached; resumes at {time}",
   "run.quota.wait": "Subscription limit reached; reset time unknown, waiting until {time}",
   "run.quota.retryLimit": "Subscription limit reached; automatic retry limit reached",
-  "run.quota.unknown": "Subscription limit reached; reset time unknown"
+  "run.quota.unknown": "Subscription limit reached; reset time unknown",
+  "run.quota.releaseHint": "to release: deckent pool quota-release --channel <id> --scope <scope>"
 }

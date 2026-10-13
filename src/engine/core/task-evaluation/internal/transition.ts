@@ -45,8 +45,9 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
     if (!pinned || pinned.pin.channelId !== evaluation.quota.channelId || evaluation.model?.verdict === 'substituted' || evaluation.workerExit || dispatch.terminal!.exitCode === 0 || dispatch.terminal!.interrupted !== false
       || !evaluation.evidenceDigests?.includes(evaluation.quota.evidenceDigest)) notReady();
     const { signal, channelId, evidenceDigest, maxResumes } = evaluation.quota;
-    const deadline = signal.resetsAtMs !== null && signal.resetsAtMs > timing.now ? signal.resetsAtMs : timing.now + timing.timeoutMs;
-    const proposed = parkRunQuota(run, expectedRunRevision, attempt, { identity: evaluation.identity, channelId, quota: signal, evidenceDigest, since: timing.now, deadline, maxResumes });
+    const resetBoundExceeded = signal.resetsAtMs !== null && signal.resetsAtMs - timing.now > (evaluation.quota.maxWaitMs ?? timing.timeoutMs);
+    const deadline = signal.resetsAtMs !== null && signal.resetsAtMs > timing.now && !resetBoundExceeded ? signal.resetsAtMs : timing.now + timing.timeoutMs;
+    const proposed = parkRunQuota(run, expectedRunRevision, attempt, { identity: evaluation.identity, channelId, quota: signal, evidenceDigest, since: timing.now, deadline, maxResumes, ...(resetBoundExceeded ? { resetBoundExceeded: true } : {}) });
     return Object.freeze({ ...proposed, evaluation, conclusion: 'unknown' as const, output: dispatch.output });
   }
   const result = applyTaskEvaluation(run, expectedRunRevision, evaluation, timing);

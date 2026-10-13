@@ -121,6 +121,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'cancellation.retryDelayMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'cancellation.claimTtlMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'runRuntime.quotaRecovery.schemaVersion': { kind: 'schema' },
+  'runRuntime.quotaRecovery.maxWaitMs': { kind: 'numeric', unit: 'ms', step: 3600000, presets: [3600000, 86400000, 604800000] },
   'runRuntime.quotaRecovery.maxResumes': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1, 2, 3, 5] },
   'runRuntime.parking.schemaVersion': { kind: 'schema' },
   'runRuntime.parking.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },

@@ -1,16 +1,16 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { runSnapshotSchema, readWorkerModelPin, sameAttemptIdentity, type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
+import { readWorkerModelPin, sameAttemptIdentity, type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
 import { RunStoreError } from '#engine/index.js';
 /** Installation ledger is the subscription custody boundary; pool/scope changes never evade a held channel. */
 export function readQuotaHolds(db: DatabaseSync, run: RunSnapshot, now: number) {
-  const channels = new Map<string, { since: number; deadline: number; resetsAtMs: number | null }>();
-  const rows = db.prepare(`SELECT snapshot FROM runs WHERE EXISTS (SELECT 1 FROM json_each(snapshot,'$.quotaWaits') q
-    WHERE json_extract(q.value,'$.deadline')>?)`).all(now);
-  for (const row of rows) {
-    let snapshot; try { snapshot = runSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-    for (const wait of snapshot.quotaWaits ?? []) if (wait.deadline > now) { const prior = channels.get(wait.channelId); if (!prior || prior.deadline < wait.deadline) channels.set(wait.channelId, { since: wait.since, deadline: wait.deadline, resetsAtMs: wait.quota.resetsAtMs !== null && wait.quota.resetsAtMs > wait.since ? wait.quota.resetsAtMs : null }); }
-  }
-  return run.execution.tasks.flatMap(task => { const pin = readWorkerModelPin(task.profile.parameters), hold = pin ? channels.get(pin.pin.channelId) : null; return hold ? [{ taskId: task.taskId, ...hold }] : []; });
+  return run.execution.tasks.flatMap(task => {
+    const pin = readWorkerModelPin(task.profile.parameters);
+    if (!pin) return [];
+    const hold = db.prepare(`SELECT since_ms,deadline_ms,resets_at_ms FROM run_quota_waits
+      WHERE channel_id=? AND deadline_ms>? AND released_at_ms IS NULL AND channel_held=1 ORDER BY deadline_ms DESC LIMIT 1`)
+      .get(pin.pin.channelId, now);
+    return hold ? [{ taskId: task.taskId, since: Number(hold.since_ms), deadline: Number(hold.deadline_ms), resetsAtMs: Number(hold.resets_at_ms) }] : [];
+  });
 }
 export function quotaHeldTasks(db: DatabaseSync, run: RunSnapshot, now: number): readonly string[] { return readQuotaHolds(db, run, now).map(row => row.taskId); }
 /** Caller owns the evaluation transaction. The definite exit is enriched once, with exact identity and revision custody. */

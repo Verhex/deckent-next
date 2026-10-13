@@ -119,3 +119,6 @@ export type { RunProposal } from '#domain/index.js';
 export type { RunProposalQuery, RunProposalResult, RunProposalRecord } from '#engine/index.js';
 export { planConfiguredRun as planRun } from '#composition/index.js';
 export type { BrainPlanCommand, BrainContribution } from '#domain/index.js';
+
+export { releaseConfiguredQuota as releaseQuota } from '#composition/index.js';
+export type { QuotaReleaseCommand, QuotaReleaseReceipt } from '#engine/index.js';

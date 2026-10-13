@@ -83,8 +83,13 @@
       ],
       "plan": "STORE"
     },
+    "src/adapters/core/quota-control-store": {
+      "dependencies": ["src/domain/core/run", "src/engine/core/runs", "src/engine/core/attempts", "src/engine/core/audit", "src/adapters/core/audit-store", "src/adapters/core/sqlite-ledger"],
+      "plan": "STORE"
+    },
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/adapters/core/quota-control-store",
         "src/adapters/core/service-shutdown-store",
         "src/domain/core/task-evaluation",
         "src/adapters/core/audit-store",

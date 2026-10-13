@@ -64,13 +64,18 @@
       "rejected"
     ],
     "codexPatterns": [
-      "\\bquota(?: exceeded| exhausted)?\\b",
-      "\\brate[ _-]?limit(?:ed| exceeded)?\\b",
-      "\\busage limit\\b",
-      "\\b429\\b"
+      "\\bquota (?:exceeded|exhausted)\\b",
+      "\\brate[ _-]?limit(?:ed| exceeded| reached)\\b",
+      "\\busage limit (?:exceeded|reached)\\b"
     ],
     "source": "https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/CHANGELOG.md",
     "sourceVersion": "0.3.280 (Claude Code 2.1.280)",
-    "asOf": "2026-10-13"
+    "asOf": "2026-10-13",
+    "codexEvidence": {
+      "source": "https://developers.openai.com/codex/noninteractive",
+      "asOf": "2026-10-13",
+      "cliVersion": "unverified",
+      "observation": "unverified; synthetic adapter fixtures only; no vendor quota capture"
+    }
   }
 }

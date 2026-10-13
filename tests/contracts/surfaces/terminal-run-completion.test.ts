@@ -131,3 +131,12 @@ describe('session /do completion and shared /run briefs', () => {
     expect(runCompletionText(run(runId, true), TR.jobs!)).toContain('kabul 1');
   });
 });
+
+it.each(['en', 'tr'] as const)('%s generic business completions omit code delivery counts, while a positive patch count remains visible', locale => {
+  const current = run(runId, true), jobs = workSurfaceLabels(locale).jobs!;
+  const generic = { ...current, tasks: current.tasks.map(task => ({ ...task, resultBrief: { ...task.resultBrief!, deliveryOutlook: 'none' as const } })) };
+  const text = runCompletionText(generic, jobs); expect(text).not.toMatch(/patch|yama/); expect(text).not.toMatch(/Delivery:|Teslim:/);
+  expect(runCompletionText(current, jobs)).not.toMatch(/patch not prepared 0|yama hazır değil 0/);
+  const patch = { ...current, tasks: current.tasks.map(task => ({ ...task, resultBrief: { ...task.resultBrief!, deliveryOutlook: 'patch-not-prepared' as const } })) };
+  expect(runCompletionText(patch, jobs)).toContain(locale === 'en' ? 'patch not prepared 1' : 'yama hazır değil 1');
+});

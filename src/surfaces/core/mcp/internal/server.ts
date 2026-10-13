@@ -20,7 +20,7 @@ import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, ru
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
-import { poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
+import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 export interface McpApplications {
   planRun?(command: BrainPlanCommand): Promise<unknown>;
@@ -37,6 +37,7 @@ export interface McpApplications {
   applyModelCatalog?(command: ModelCatalogCommand): Promise<ModelCatalogResult>;
   /** T4-B `models.connect`: the same application as CLI `models connect`, SDK `connectModel` and the terminal (secret names only, never a value). */
   connectModel?(command: ModelConnectCommand): Promise<ModelConnectResult>;
+  releaseQuota?(command: QuotaReleaseCommand): Promise<QuotaReleaseReceipt>;
   inspectPoolCapacity?(query: PoolHoldQuery): Promise<PoolCapacityView>;
   applyPoolCapacity?(command: PoolCapacityCommand): Promise<PoolCapacityReceipt>;
   inspectPoolHold?(query: PoolHoldQuery): Promise<PoolHoldView>;
@@ -203,6 +204,9 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     schema: poolCapacityCommandSchema, invoke: input => applyPoolCapacity.call(applications, poolCapacityCommandSchema.parse(input)) });
   if (inspectPoolCapacity) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_pool_capacity', description: t('mcp.tool.inspectPoolCapacity', {}, locale),
     schema: poolHoldQuerySchema, invoke: input => inspectPoolCapacity.call(applications, poolHoldQuerySchema.parse(input)) });
+  const releaseQuota = applications.releaseQuota;
+  if (releaseQuota) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'release_quota', description: t('mcp.tool.releaseQuota', {}, locale),
+    schema: quotaReleaseCommandSchema, invoke: input => releaseQuota.call(applications, quotaReleaseCommandSchema.parse(input)) });
   const inspectPoolHold = applications.inspectPoolHold, applyPoolHold = applications.applyPoolHold; // K5: same application as CLI `pool` and SDK
   if (inspectPoolHold) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_pool_hold', description: t('mcp.tool.inspectPoolHold', {}, locale),
     schema: poolHoldQuerySchema, invoke: input => inspectPoolHold.call(applications, poolHoldQuerySchema.parse(input)) });

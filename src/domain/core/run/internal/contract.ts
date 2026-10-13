@@ -23,7 +23,7 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
   authority: authorityAdmissionSchema.optional(),
   state: runStateSchema, branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
   quotaWaits: z.array(z.object({ identity: attemptIdentitySchema, channelId: z.string().min(1).max(256), quota: quotaExhaustedSchema,
-    evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), since: counterSchema, deadline: counterSchema, maxResumes: counterSchema }).strict().readonly()).readonly().optional(),
+    evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), since: counterSchema, deadline: counterSchema, maxResumes: counterSchema, resetBoundExceeded: z.boolean().optional(), releasedAtMs: counterSchema.optional() }).strict().readonly()).readonly().optional(),
   previousBindings: z.array(runBindingSchema).readonly().optional(),
 }).strict().superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });

@@ -82,6 +82,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   // K5 typed pool hold: `pool hold|resume|status` (local application, no runtime service needed).
   applyPoolCapacity?: import('./pool.js').PoolCapacityApplyHandler;
   inspectPoolCapacity?: import('./pool.js').PoolCapacityInspectHandler;
+  releaseQuota?: import('./pool.js').QuotaReleaseHandler;
   applyPoolHold?: import('./pool.js').PoolHoldApplyHandler;
   inspectPoolHold?: import('./pool.js').PoolHoldInspectHandler;
   proposeRun?: import('./run-proposal.js').RunProposalHandler;
