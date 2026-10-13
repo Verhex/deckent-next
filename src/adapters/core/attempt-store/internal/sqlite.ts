@@ -1,4 +1,4 @@
-import { releaseQuota } from '#adapters/core/quota-control-store/index.js';
+import { loadQuotaReleasePools, releaseQuota } from '#adapters/core/quota-control-store/index.js';
 import { readDispatchFence } from './dispatch-fence.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteDeliveryJournal } from './delivery.js';
@@ -16,7 +16,6 @@ import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import { SqliteCancellationRecoveryQuery } from './cancellation-recovery.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { SqliteServiceShutdownJournal } from '#adapters/core/service-shutdown-store/index.js';
-import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
 import { SqlitePoolCapacityJournal } from './pool-capacity.js';
 import { SqlitePoolHoldJournal } from './pool-holds.js';
@@ -26,7 +25,7 @@ import { SqliteDispatchJournal } from './dispatch.js';
 import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, CancellationDeliveryStore, DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
 import { quotaHeldTasks, readAcceptedOperationSettlements, openSqliteLedger, sqliteFailure, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
+import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { AttemptStoreError, dispatchRecordSchema, DispatchError, attemptDispatchWriteToken,  readSealedWorkerEvents, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore, PoolCapacityStore {
@@ -42,7 +41,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   constructor(path: string, options: SqliteLedgerOptions, private readonly lifecycleTiming: { now: () => number; timeoutMs: number }, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     this.db = openSqliteLedger(path, options, migration, this.profiles);
   }
-  async releaseQuota(write: import('#engine/index.js').QuotaReleaseWrite, audit: (store: import('#engine/index.js').AuditStore, released: number) => void) { return releaseQuota(this.db, write, audit); }
+  async loadQuotaReleasePools(write: Omit<import('#engine/index.js').QuotaReleaseWrite, 'authorizedPoolIds'>) { return loadQuotaReleasePools(this.db, write); }
+  async releaseQuota(write: import('#engine/index.js').QuotaReleaseWrite, audit: (store: import('#engine/index.js').AuditStore, released: number, poolIds: readonly string[]) => void) { return releaseQuota(this.db, write, audit); }
   async quotaHeldTasks(run: import('#domain/index.js').RunSnapshot, now: number) { return quotaHeldTasks(this.db, run, now); }
   async loadTaskHandoffEvaluation(identity: AttemptIdentity) { return readTaskHandoffEvaluation(this.db, identity); }
   async loadBoundDispatch(identity: AttemptIdentity) {

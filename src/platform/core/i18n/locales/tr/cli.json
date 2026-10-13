@@ -1435,5 +1435,5 @@
   "cli.coding.template.applied": "Kodlama şablonu admission registry’ye eklendi.",
   "cli.coding.template.unchanged": "Görev türü zaten bu kodlama şablonunu kullanıyor; config değiştirilmedi.",
   "cli.pool.quotaReleased": "Kanal {channel}: {released} bekleme serbest bırakıldı (komut {command})",
-  "mcp.tool.releaseQuota": "Kurulum düzeyi pool/resume yetkisiyle abonelik kota beklemelerini serbest bırakır; provider reset kanıtı değişmez."
+  "mcp.tool.releaseQuota": "Seçilen havuz ve etkilenen her havuz için kurulum düzeyi pool/resume yetkisiyle abonelik kota beklemelerini serbest bırakır; provider reset kanıtı değişmez."
 }

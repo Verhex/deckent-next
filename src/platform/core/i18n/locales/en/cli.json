@@ -1435,5 +1435,5 @@
   "cli.coding.template.applied": "Coding template added to the admission registry.",
   "cli.coding.template.unchanged": "The kind already uses this coding template; configuration was not changed.",
   "cli.pool.quotaReleased": "Channel {channel}: released {released} waits (command {command})",
-  "mcp.tool.releaseQuota": "Release subscription quota waits with installation-level pool/resume authority; leaves provider reset evidence unchanged."
+  "mcp.tool.releaseQuota": "Release subscription quota waits with installation-level pool/resume authority for the selected pool and every affected pool; leaves provider reset evidence unchanged."
 }

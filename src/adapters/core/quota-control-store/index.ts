@@ -1,1 +1,1 @@
-export { releaseQuota } from './internal/control.js';
+export { loadQuotaReleasePools, releaseQuota } from './internal/control.js';
