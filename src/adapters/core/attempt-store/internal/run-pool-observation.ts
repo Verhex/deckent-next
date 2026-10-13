@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema } from '#domain/index.js';
 import { RunStoreError, runExecutionPolicySchema, type RunPoolEvidence } from '#engine/index.js';
-import { sqliteFailure, requireLedgerVersion, POOL_HOLD_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { readQuotaHolds, sqliteFailure, requireLedgerVersion, POOL_HOLD_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { readRunSnapshot } from './runs.js';
 import { SqliteExecutionPools } from './pools.js';
 /** Run, policy, pool and occupancy from a single deferred read transaction. Never persist a per-poll wait. */
@@ -18,6 +18,6 @@ export async function readRunPoolEvidence(db: DatabaseSync, scopeId: string, run
       const admitted = requireLedgerVersion(db, 0) >= 25 && !!db.prepare('SELECT 1 FROM run_execution_intents WHERE scope_id=? AND run_id=?').get(scopeId, runId);
       pool = { poolId: current.poolId, capacity: current.capacity, runCapacity: policy.capacity, occupancy: pools.occupancy(current.poolId), hold: requireLedgerVersion(db, 0) >= POOL_HOLD_LEDGER_VERSION ? pools.hold(current.poolId) : null, admitted };
     }
-    db.exec('COMMIT'); active = false; return { snapshot, pool };
+    const evidence = { snapshot, pool, ...(snapshot ? { quotaHolds: readQuotaHolds(db, snapshot, Date.now()) } : {}) }; db.exec('COMMIT'); active = false; return evidence;
   } catch (error) { if (active) db.exec('ROLLBACK'); throw sqliteFailure(error); }
 }

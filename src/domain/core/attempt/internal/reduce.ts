@@ -18,7 +18,7 @@ export function attemptPhase(state: AttemptSnapshot): AttemptPhase {
     case undefined: return 'reserved';
     case 'started': return 'running';
     case 'unknown': return 'unknown';
-    case 'exited': case 'cancelled': case 'handoff-refused': case 'launch-refused': return 'finished';
+    case 'quota-exhausted': case 'exited': case 'cancelled': case 'handoff-refused': case 'launch-refused': return 'finished';
   }
 }
 function checkRevision(state: AttemptSnapshot, expectedRevision: number): void {

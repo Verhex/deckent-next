@@ -1,5 +1,6 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
+import { detectWorkerQuota } from './quota.js';
 import { readWorkspaceChange } from './workspace-change.js';
 import { createHash } from 'node:crypto';
 import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport,
@@ -50,7 +51,7 @@ export class TaskEvaluationApplication {
     private readonly authorization: TaskEvaluationAuthorization, private readonly evaluator: TaskTerminalEvaluator,
     private readonly artifacts: Pick<ArtifactStore, 'read'>, private readonly limits: EvaluationEvidenceLimits,
     private readonly lifecycle: { now: () => number; timeoutMs: number }, private readonly unknownPolicy?: UnknownEvaluationPolicy,
-    private readonly preparePatch?: (identity: AttemptIdentity) => Promise<void>) {}
+    private readonly preparePatch?: (identity: AttemptIdentity) => Promise<void>, private readonly quotaRecovery?: { maxResumes: number; maxWaitMs: number }) {}
   async execute(input: unknown, credential?: unknown) {
     const command = taskEvaluationCommandSchema.parse(input), principal = await authenticate(this.verifier, credential, command.identity.scopeId);
     await this.authorization.authorize(command.identity, principal);
@@ -106,7 +107,7 @@ export class TaskEvaluationApplication {
       if (snapshot.identity.scopeId !== identity.scopeId || snapshot.identity.runId !== identity.runId
         || snapshot.identity.layoutRevision !== identity.layoutRevision || snapshot.revision !== stored.expectedRevision + 1
         || !snapshot.bindings.some(binding => sameAttemptIdentity(binding.identity, identity)
-          && binding.observedRevision === stored.evaluation.attemptRevision)) throw new RunStoreError('RUN_STORE_CORRUPT');
+          && binding.observedRevision === stored.evaluation.attemptRevision + (stored.evaluation.quota ? 1 : 0))) throw new RunStoreError('RUN_STORE_CORRUPT');
       assertRunExecution(snapshot.graph, snapshot.execution);
       return replay;
     }
@@ -119,14 +120,30 @@ export class TaskEvaluationApplication {
     const task = run.graph.tasks.find(value => value.id === identity.taskId);
     if (!task) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
     // A typed input request is consumed only from complete, exact-attempt retained output after a clean host exit.
-    const manifestEvaluation = { schemaVersion: 1, evaluationId: command.commandId, identity, graphRevision: run.graph.revision,
-      attemptRevision: attempt.revision, criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown', evidenceIds: ['dispatch-output'] })) };
+    const manifestEvaluation = { schemaVersion: 1 as const, evaluationId: command.commandId, identity, graphRevision: run.graph.revision,
+      attemptRevision: attempt.revision, criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown' as const, evidenceIds: ['dispatch-output'] })) };
     await verifyDispatchEvaluationEvidence(manifestEvaluation, dispatch.request, [{ evidenceId: 'dispatch-output', receipt: dispatch.output }],
       { async readDispatch() { return dispatch; } }, this.artifacts, this.limits);
     const retained = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);
+    const model = await this.workerModel(run, identity);
+    if (this.quotaRecovery && model?.verdict !== 'substituted' && dispatch.terminal.interrupted === false && dispatch.terminal.exitCode !== 0) {
+      const sealed = await readSealedWorkerEvents(this.store, this.artifacts, identity);
+      const signal = model ? detectWorkerQuota(sealed, retained.stdout) : null;
+      if (signal && model) {
+        const log = await this.store.loadWorkerEventLog(identity.scopeId, identity.attemptId);
+        const evidenceDigest = signal.source === 'exit-text' ? dispatch.output.digest : log?.events.digest ?? dispatch.output.digest;
+        const evidenceDigests = [dispatch.output.digest, ...(log ? [log.events.digest] : []), ...(task.workInput && dispatch.patch ? [dispatch.patch.digest] : [])];
+        const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...manifestEvaluation, model, evidenceDigests,
+          quota: { signal, channelId: model.requested.channelId, evidenceDigest, maxResumes: this.quotaRecovery.maxResumes, maxWaitMs: this.quotaRecovery.maxWaitMs } }));
+        proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, evaluation, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
+        await this.authorization.authorize(identity, principal);
+        return this.store.commitTaskEvaluation({ commandId: command.commandId, actor, expectedRevision: command.expectedRevision, evaluation, dispatch,
+          now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
+      }
+    }
     const finalReport = readWorkerFinalReport(retained.stdout);
     const workerExit = dispatch.terminal.exitCode === 0 && dispatch.terminal.interrupted !== true && finalReport.status === 'reported' ? finalReport.report.exit : undefined;
-    if (!workerExit && task.workInput && !dispatch.patch && this.preparePatch && run.revision === command.expectedRevision && !run.cancelRequested
+    if (model?.verdict !== 'substituted' && !workerExit && task.workInput && !dispatch.patch && this.preparePatch && run.revision === command.expectedRevision && !run.cancelRequested
       && !attempt.cancelRequested && dispatch.terminal.interrupted !== true) {
       try { await this.preparePatch(identity); }
       catch (error) {
@@ -137,7 +154,6 @@ export class TaskEvaluationApplication {
       if (!dispatch?.terminal || !dispatch.output) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
     }
     const evidenceId = 'dispatch-output';
-    const model = await this.workerModel(run, identity);
     const proposed = taskEvaluationSchema.parse(bindTaskAcceptance(run, { schemaVersion: 1, evaluationId: command.commandId, identity,
       graphRevision: run.graph.revision, attemptRevision: attempt.revision,
       criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown', evidenceIds: [evidenceId] })),

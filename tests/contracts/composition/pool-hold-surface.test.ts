@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyPoolHold, inspectPoolHold } from '../../../src/index.js';
+import { releaseQuota, applyPoolHold, inspectPoolHold } from '../../../src/index.js';
+import { withMcpPrincipal } from '#adapters/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { advanceConfiguredRun } from '../../../src/composition/core/run-progression/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -39,7 +40,7 @@ async function fixture(controlScopes: 'all' | readonly string[] = 'all') {
   const cli = async (...argv: string[]) => {
     const out: string[] = [], err: string[] = [];
     const code = await main(['pool', ...argv, ...(argv.includes('--no-scope') ? [] : ['--scope', 's'])].filter(arg => arg !== '--no-scope'), { root: project, env, initialize() {}, stdout: { write(value: string) { out.push(value); } },
-      stderr: { write(value: string) { err.push(value); } }, applyPoolHold: applyPoolHold as never, inspectPoolHold: inspectPoolHold as never });
+      stderr: { write(value: string) { err.push(value); } }, releaseQuota: releaseQuota as never, applyPoolHold: applyPoolHold as never, inspectPoolHold: inspectPoolHold as never });
     return { code, stdout: out.join(''), stderr: err.join('') };
   };
   return { project, options, rows, cli };
@@ -113,4 +114,17 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
       expect((await session.client.callTool({ name: 'inspect_pool_hold', arguments: { schemaVersion: 1, scopeId: 's' } })).structuredContent).toMatchObject({ state: 'held', drained: true });
     } finally { await session.close(); }
   });
+});
+
+it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited receipts; production MCP principal is denied even with owner pool grants', async () => {
+  const f = await fixture(), command = { schemaVersion: 1, scopeId: 's', commandId: 'cli-release', channelId: 'subscription-channel' };
+  const result = await f.cli('quota-release', '--channel', command.channelId, '--command-id', command.commandId, '--json');
+  expect(result.code).toBe(0); expect(JSON.parse(result.stdout)).toEqual(await releaseQuota(f.project, command, f.options));
+  expect(JSON.parse(result.stdout)).toMatchObject({ released: 0, poolId: 'p', poolIds: [] });
+  expect((await f.cli('quota-release', '--channel', command.channelId, '--lang', 'tr')).stdout).toContain('serbest bırakıldı');
+  expect((await f.cli('quota-release')).code).toBe(2);
+  const session = await mcp({ releaseQuota: input => withMcpPrincipal(() => releaseQuota(f.project, input, f.options)) });
+  try { expect(JSON.stringify(await session.client.callTool({ name: 'release_quota', arguments: { ...command, commandId: 'mcp-release' } }))).toContain('POLICY_DENIED'); }
+  finally { await session.close(); }
+  expect(f.rows("SELECT count(*) n FROM quota_release_receipts")[0]!.n).toBe(2);
 });

@@ -1,6 +1,7 @@
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
   type RunProposal, type VerifiedPrincipal } from '#domain/index.js';
-import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt } from '#capabilities/index.js';
+import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext,
+  prepareBrainEvaluatorParameters, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
@@ -8,11 +9,37 @@ import type { RunProposalQuery, RunProposalResult } from '#engine/core/runs/inde
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
-  budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot) {
+  budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
+  selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels'] }>) {
   const workClasses = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
-  return prepareBrainPrompt(command, workClasses, { registry, permissions: getPolicyVocabulary().resources, budget }, config, known);
+  const limits = brainPlannerConfigSchema.parse(config).context;
+  const order = <T>(rows: readonly T[], key: (row: T) => string) => [...rows].sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
+  const context = boundBrainContext(command.scopeId, workClasses, { schemaVersion: 2, registryRevision: registry.revision,
+    kinds: order(selections?.kinds ?? registry.kinds.map(row => ({ kind: row.kind, profile: row.profile, type: 'prepared' as const })), row => row.kind),
+    workerModels: order(selections?.workerModels ?? [], row => JSON.stringify([row.profile.id, row.profile.version, row.channelId, row.modelId])),
+    evaluators: order(registry.evaluators.map(row => ({ id: row.id, version: row.version, parameters: prepareBrainEvaluatorParameters(row) })), row => JSON.stringify([row.id, row.version])),
+    permissions: getPolicyVocabulary().resources, budget, scopePaths: { state: 'not-inspected' } }, limits);
+  const prompt = prepareBrainPrompt(command, workClasses, context, config, known);
+  const bytes = new TextEncoder().encode(JSON.stringify(prompt.messages)).length;
+  if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
+  return prompt;
 }
-export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt> }
+/** Provider count when available; UTF-8 bytes plus configured framing is a conservative tagged estimate otherwise. */
+export function assertBrainContextFits(command: ModelInvocationCommand, config: unknown, profileWindow: number | null,
+  measurement: Readonly<{ promptTokens: number; windowTokens: number | null }> | null) {
+  const limits = brainPlannerConfigSchema.parse(config).context;
+  const bytes = new TextEncoder().encode(JSON.stringify(command.nativeRequest)).length;
+  if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
+  const windows = [profileWindow, measurement?.windowTokens ?? null].filter((value): value is number => value !== null);
+  const window = windows.length ? Math.min(...windows) : null;
+  const input = measurement?.promptTokens ?? bytes + limits.tokenFramingAllowance;
+  const output = command.nativeRequest['max_completion_tokens'];
+  if (window !== null && typeof output === 'number' && input + output > window) {
+    throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: window, observed: input + output,
+      unit: measurement ? 'tokens' : 'estimated-tokens' } });
+  }
+}
+export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[] }
 export interface BrainPlanPorts {
   readonly knownSecrets?: KnownSecretSnapshot | undefined;
   inspect(query: RunProposalQuery): Promise<RunProposalResult | null>;
@@ -52,10 +79,15 @@ export class BrainPlanApplication {
       || receipt.request.expectedBinding.digest !== invocation.expectedBinding.digest
       || receipt.request.scopeId !== command.scopeId || encodeCommandProjection('actor', proposer)
         !== encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+    if (receipt.outcome?.state === 'rejected') throw ErrorRegistry.createError('BRAIN_PROVIDER_REJECTED', {
+      params: { reason: receipt.outcome.evidence.reason, status: receipt.outcome.evidence.httpStatus ?? 'unknown' } });
     if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN');
     const text = this.ports.text(result);
     if (!text) throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
     const draft = parseBrainDraft(text, this.ports.knownSecrets), usage = openAiChatUsageSchema.safeParse(result.response?.usage);
+    if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
+      throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
+    }
     const prompt = prepared.prompt, limit = prompt.summaryChars;
     const proposal: RunProposal = { schemaVersion: 1, commandId: command.commandId, proposalId: runId, scopeId: command.scopeId, runId,
       proposer, ...draft, source: { kind: 'model', receipt: { commandId: invocation.commandId, invocationId: receipt.claim.invocationId,

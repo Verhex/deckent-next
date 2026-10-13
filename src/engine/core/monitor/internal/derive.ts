@@ -39,6 +39,10 @@ const heartbeatAt = (worker: WorkerObservation | undefined, observedAt: number) 
   const age = worker?.files?.heartbeat.ageMs; return typeof age === 'number' ? observedAt - age : null;
 };
 
+function channelBlocker(taskId: string, e: MonitorRunEvidence): MonitorBlocker | null {
+  const wait = e.run.quotaHolds?.find(row => row.taskId === taskId && row.deadline > e.observedAt);
+  return wait ? { ...blocker('pool-held', taskId, wait.since, wait.resetsAtMs === null ? 'quota-reset-unknown' : 'quota-exhausted'), deadlineMs: wait.deadline } : null;
+}
 function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttempt | null, worker: WorkerObservation | undefined, e: MonitorRunEvidence): MonitorBlocker {
   const dispatch = attempt?.dispatch ?? null, terminal = dispatch?.terminal ?? null;
   if (phase === 'evaluating') {
@@ -52,6 +56,7 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
   }
   if (!attempt) return blocker('unknown', taskId, null, 'attempt-missing');
   // Reserved automatic work without dispatch awaits execution; this is derived ledger evidence, not a measured service-gate wait.
+  if (!dispatch && channelBlocker(taskId, e)) return channelBlocker(taskId, e)!;
   if (!dispatch) return e.run.admitted === false ? blocker('not-admitted', taskId, e.run.createdAtMs)
     : blocker(e.run.admitted === true ? 'waiting-execution-slot' : 'none', taskId, attempt.reservedAtMs, 'dispatch-pending');
   if (dispatch.launch === 'pending') return blocker('none', taskId, attempt.reservedAtMs, 'launch-pending');
@@ -65,6 +70,7 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
   return blocker('worker-stale-heartbeat', taskId, heartbeatAt(worker, e.observedAt), freshness === 'fresh' ? 'process-' + worker.process : freshness);
 }
 function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBlocker {
+  if (task.disposition === 'ready' && channelBlocker(task.taskId, e)) return channelBlocker(task.taskId, e)!;
   const id = task.taskId;
   if (task.disposition === 'waiting' || task.disposition === 'blocked') return blocker('waiting-dependency', id, null, task.dependencies[0] ?? null);
   if (task.disposition === 'delayed') return blocker('none', id, null, 'not-before');
@@ -83,7 +89,7 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBloc
 export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   const snapshot = e.run.snapshot;
   if (snapshot.state.kind === 'terminal') return null;
-  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason), deadlineMs: snapshot.state.deadline };
+  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.reason), deadlineMs: snapshot.state.deadline };
   if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];

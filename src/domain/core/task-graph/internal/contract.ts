@@ -20,7 +20,7 @@ export const taskDefinitionSchema = z.object({
   kind: identity,
   workClass: identity.optional(),
   dependencies: z.array(taskDependencySchema).readonly(),
-  acceptanceCriteria: z.array(identity).min(1).readonly(),
+  acceptanceCriteria: z.array(identity).min(1).readonly().describe('Only criterionDefinitions ids, never descriptions or sentences.'),
   inputs: z.array(z.object({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).strict().readonly()).readonly().optional(),
   workInput: workInputSchema.optional(),
 }).strict().readonly();

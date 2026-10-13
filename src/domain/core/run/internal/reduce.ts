@@ -18,10 +18,12 @@ export function reserveRunTasks(input: unknown, expectedRevision: number, identi
   if (run.state.kind === 'terminal') throw new RunError('RUN_TERMINAL');
   const identities = z.array(attemptIdentitySchema).min(1).parse(identitiesInput); const now = counterSchema.parse(nowInput);
   const ready = new Set(inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, progress: run.progress, now }).filter(task => task.disposition === 'ready').map(task => task.taskId));
-  const selected = new Set<string>(); const attempts = new Set(run.bindings.map(binding => binding.identity.attemptId));
+  const selected = new Set<string>(); const attempts = new Set([...run.bindings, ...(run.previousBindings ?? [])].map(binding => binding.identity.attemptId));
   for (const id of identities) {
+    const previous = (run.previousBindings ?? []).filter(row => row.identity.taskId === id.taskId).at(-1);
+    if (previous && (id.generation !== previous.identity.generation + 1 || attempts.has(id.attemptId))) throw new RunError('RUN_ATTEMPT_CONFLICT');
     const answer = run.progress.find(task => task.taskId === id.taskId)?.inputAnswer;
-    if (answer && (id.generation !== answer.source.generation + 1 || id.attemptId === answer.source.attemptId)) throw new RunError('RUN_ATTEMPT_CONFLICT');
+    if (answer && !previous && (id.generation !== answer.source.generation + 1 || id.attemptId === answer.source.attemptId)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     if (id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId || id.layoutRevision !== run.identity.layoutRevision || attempts.has(id.attemptId) || selected.has(id.taskId) || run.bindings.some(binding => binding.identity.taskId === id.taskId)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     if (!ready.has(id.taskId)) throw new RunError('RUN_TASK_NOT_READY');
     selected.add(id.taskId); attempts.add(id.attemptId);
@@ -63,11 +65,12 @@ export function observeRunAttempt(input: unknown, expectedRevision: number, atte
 export function requestRunCancellation(input: unknown, expectedRevision: number, timing: RunLifecycleTiming) {
   const run = checkedRun(input, expectedRevision);
   const bound = new Set(run.bindings.map(binding => binding.identity.taskId));
-  const unreserved = run.progress.some(task => (task.phase === 'pending' && !bound.has(task.taskId)) || task.phase === 'awaiting-decision');
+  const pendingCanClose = (taskId: string) => !bound.has(taskId) || run.bindings.some(binding => binding.identity.taskId === taskId && binding.observedKind === 'quota-exhausted');
+  const unreserved = run.progress.some(task => (task.phase === 'pending' && pendingCanClose(task.taskId)) || task.phase === 'awaiting-decision');
   if (run.cancelRequested && !unreserved) return run;
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1, cancelRequested: true,
     progress: run.progress.map(task => {
-      if (task.phase !== 'awaiting-decision' && !(task.phase === 'pending' && !bound.has(task.taskId))) return task;
+      if (task.phase !== 'awaiting-decision' && !(task.phase === 'pending' && pendingCanClose(task.taskId))) return task;
       return { ...task, decision: undefined, phase: 'cancelled' };
     }) }, timing.now, timing.timeoutMs);
 }

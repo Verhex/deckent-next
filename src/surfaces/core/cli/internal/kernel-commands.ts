@@ -52,6 +52,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   previewWorkspacePatch?: TaskPatchHandler;
   renderUnifiedDiff?: (path: string, before: string | null, after: string | null) => string;
   prepareCodingProfile?: CodingProfilePreparationHandler;
+  configureCodingTemplate?: import('./coding.js').CodingTemplateHandler;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;
@@ -81,6 +82,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   // K5 typed pool hold: `pool hold|resume|status` (local application, no runtime service needed).
   applyPoolCapacity?: import('./pool.js').PoolCapacityApplyHandler;
   inspectPoolCapacity?: import('./pool.js').PoolCapacityInspectHandler;
+  releaseQuota?: import('./pool.js').QuotaReleaseHandler;
   applyPoolHold?: import('./pool.js').PoolHoldApplyHandler;
   inspectPoolHold?: import('./pool.js').PoolHoldInspectHandler;
   proposeRun?: import('./run-proposal.js').RunProposalHandler;
@@ -173,5 +175,4 @@ export async function runKernelCommand(argv: readonly string[], context: Command
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');
-  // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
 }

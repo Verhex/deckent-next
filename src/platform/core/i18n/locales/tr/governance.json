@@ -515,7 +515,7 @@
   "error.MODEL_ACTIVATION_UNAVAILABLE": "Aktivasyon deposuna erişilemiyor. Başarılı bir değişiklik doğrulanmadı.",
   "error.MODEL_ACTIVATION_OUTCOME_UNKNOWN": "Aktivasyon sonucu belirsiz. Aynı komut kimliğiyle tekrar denemeden önce kalıcı kaydı inceleyin.",
   "error.MODEL_ACTIVATION_CATALOG_CONFLICT": "Güncel katalog istenen tam model tanımıyla artık eşleşmiyor.",
-  "error.MODEL_ACTIVATION_DELIVERY_UNFIT": "Bu referans için bildirilmiş bir çağırım profili en kötü durum sonucunu her yüzeyde teslim edemez. Aktivasyon reddedildi; hangi profil ve yüzey olduğunu görmek için `deckent doctor` çalıştırın, yüzey kapasitesini genişletin ya da profilin kendi yanıt sınırını daraltın, sonra yeniden deneyin.",
+  "error.MODEL_ACTIVATION_DELIVERY_UNFIT": "Aktivasyon reddedildi: profil {profile}, yüzey {surface}, gerekli {required} bayt, mevcut {available} bayt. `deckent doctor` çalıştırın; {setting} değerini artırın veya bu profilin limits.responseMaxBytes değerini azaltın, sonra yeniden etkinleştirin.",
   "error.WORKER_MODEL_UNPINNED": "{taskId} görevi, katalogda tam model referansı olmayan bir native kodlama profili kullanıyor. Yeni Run'lar için profil çağırım şeması 4 ile (kanal + tam model kimliği) hazırlanmalı; `deckent coding prepare` ile yeniden hazırlayın. Önceden kabul edilmiş Run'lar etkilenmez.",
   "error.WORKER_MODEL_ALIAS_REFUSED": "Model adı bir takma ad; tam API model kimliği değil. Takma adlar hiçbir zaman çözülmez ve başka modelle değiştirilmez. Bu kanal için model kataloğundaki tam model kimliğini sabitleyip profili yeniden hazırlayın.",
   "error.WORKER_CHANNEL_NOT_ACTIVE": "{taskId} görevi: {channelId} sağlayıcı kanalı bu kapsamda kayıtlı ya da etkin değil. Yeni Run kabulünden önce kanalı model kataloğuna kaydedip etkinleştirin.",
@@ -582,6 +582,7 @@
   "error.MODEL_INVOCATION_CORRUPT": "Çağrı kanıtı tutarsız; yürütme bekletildi.",
   "error.MODEL_INVOCATION_UNAVAILABLE": "Çağrı yeteneği veya kalıcı kayıt kullanılamıyor.",
   "error.MODEL_INVOCATION_OUTCOME_UNKNOWN": "Çağrı sonucu belirsiz. Otomatik tekrar gönderme yapmayın.",
+  "error.MODEL_NOT_ACTIVATED": "{provider}@{providerVersion}/{model}@{modelVersion} modeli {scope} kapsamında etkin değil. `{command}` ile etkinleştirin veya /model panelini açın.",
   "error.MODEL_INVOCATION_ACTIVATION_CONFLICT": "Etkin modelin kesin kaydı değişti veya kullanılamıyor.",
   "error.MODEL_INVOCATION_ALLOCATION_CONFLICT": "Çağrı tahsisinin tavanları kalıcı kaydıyla çelişiyor.",
   "error.MODEL_INVOCATION_RESULT_LIMIT": "Çağrının tam sonucu bu yüzeyin yapılandırılmış kapasitesini aşıyor. Mevcut çağrı yeniden gönderilmez.",
@@ -933,5 +934,11 @@
   "error.OPERATION_EVIDENCE_REUSED": "Bu operasyon başka bir görevin kabulüne kanıt oldu; tekrar kullanılamaz.",
   "error.OPERATION_EVIDENCE_OTHER_RUN": "Bu operasyon başka bir Run'ın kabulüne kanıt oldu; yalnız aynı Run'daki görevler bu kanıtı paylaşabilir.",
   "error.RUN_APPROVAL_REQUIRED": "Run oluşturma {approvalId} onayını bekliyor; Run henüz oluşmadı. /approvals veya approval decide ile karar verin, sonra aynı komutu ve girdiyi tekrar gönderin.",
-  "cli.run.inspect.authority": "Yetki kararı: {record} (sıra {sequence}); onay: {approval}"
+  "cli.run.inspect.authority": "Yetki kararı: {record} (sıra {sequence}); onay: {approval}",
+  "error.CODING_TEMPLATE_INPUT_INVALID": "Kodlama şablonu girdisi geçersiz. Kayıtlı sağlayıcı, geçerli görev türü ve değişmez sha256 imajı seçin; model, prompt veya efor kabul edilmez.",
+  "error.CODING_TEMPLATE_ADMISSION_REQUIRED": "Önce `deckent config set admission` veya `/config` ile registry, poolId, executionSlots ve inFlightSlots değerlerini yapılandırın. Şablon komutu havuz politikası oluşturmaz.",
+  "error.CODING_TEMPLATE_IMAGE_REQUIRED": "Kodlama şablonu oluşturmadan önce execution.docker bölümünde değişmez imaj ve kaynak sınırlarını yapılandırın.",
+  "error.CODING_TEMPLATE_TOOLCHAIN_REQUIRED": "Bu sağlayıcı ve imaj için tek bir kabul edilmiş CLI sürümü ve keşif seçimi yok. Önce seçilen imaj için kabul edilmiş toolchain profili yapılandırın.",
+  "error.CODING_TEMPLATE_KIND_CONFLICT": "Görev türü veya üretilen profil kimliği farklı profil verisine bağlı. Başka tür seçin; mevcut bağlar değiştirilmez.",
+  "error.CODING_TEMPLATE_REGISTRY_INVALID": "Mevcut admission registry geçersiz. Önce `deckent config set admission` veya `/config` ile geçerli profiller, görev türü bağları ve değerlendiriciler yapılandırın."
 }

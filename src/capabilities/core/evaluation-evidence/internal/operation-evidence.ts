@@ -3,11 +3,16 @@ import { z } from 'zod';
 import { counterSchema, attemptIdentitySchema, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema, operationEvidenceBindingReason,
   type OperationEvidenceBinding,
   type AttemptIdentity, type CriterionDefinition, type EvaluatorDefinition, type TaskEvaluation } from '#domain/index.js';
-import { PROCESS_EXIT_EVALUATOR, processExitTerminalEvaluator, validateInstalledProcessExitEvaluator, validateProcessExitCriterion } from './process-exit.js';
+import { PROCESS_EXIT_EVALUATOR, processExitParametersSchema, processExitTerminalEvaluator, validateInstalledProcessExitEvaluator, validateProcessExitCriterion } from './process-exit.js';
 
 export const OPERATION_EVIDENCE_EVALUATOR = Object.freeze({ id: 'operation-evidence', version: 1,
   implementation: Object.freeze({ id: 'operation-evidence', version: 1 }) });
 const parametersSchema = z.object({ commandId: identitySchema }).strict().readonly();
+/** Planner metadata comes from the same installed parameter schemas that admission validates. */
+export function installedEvaluatorParameters(evaluator: EvaluatorDefinition) {
+  validateInstalledEvaluator(evaluator);
+  return evaluator.implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id ? processExitParametersSchema : parametersSchema;
+}
 /** Structurally compatible with the existing effect store's read method. The reader owns canonical record validation;
  * this capability checks only its consumed projection, never replaces the effect contract or writes a settlement. */
 export interface OperationEvidenceReader {

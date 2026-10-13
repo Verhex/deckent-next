@@ -408,5 +408,10 @@
   "approval.plan.decision": "Karar: {decision} · kural: {rule} · neden: {reason}",
   "approval.plan.run": "Oluşturulacak Run: {run}",
   "approval.plan.budgetNotice": "API — tavan yalnız kabul anında kontrol edilir; yürütme boyunca toplam Run harcaması henüz sınırlanmıyor.",
-  "proposal.budget.notMetered": "Abonelik/ücretsiz model — bütçe kontrolü uygulanmaz."
+  "proposal.budget.notMetered": "Abonelik/ücretsiz model — bütçe kontrolü uygulanmaz.",
+  "run.quota.reset": "Abonelik limiti doldu, {time}'de devam edecek",
+  "run.quota.wait": "Abonelik limiti doldu; sıfırlanma zamanı bilinmiyor, {time}'e kadar bekleniyor",
+  "run.quota.retryLimit": "Abonelik limiti doldu; otomatik yeniden deneme sınırına ulaşıldı",
+  "run.quota.unknown": "Abonelik limiti doldu; sıfırlanma zamanı bilinmiyor",
+  "run.quota.releaseHint": "serbest bırakmak için: deckent pool quota-release --channel <id> --scope <scope>"
 }

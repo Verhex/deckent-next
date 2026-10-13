@@ -3,8 +3,9 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource } from '#adapters/index.js';
-import { evaluatePolicy } from '#domain/index.js';
+import { evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 import { decideAgentToolCall } from '#engine/index.js';
+import { main } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
 
 // POLICY-UPGRADE-HANDBUILT (lead 2026-10-08, Jev b6dba079): the live and N1 installations run a hand-built policy (`live-read-tools`, no
@@ -98,6 +99,10 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       // v9 (W3-AUTHORITY, owner 2026-10-09): MCP observation only, for the person's separate MCP actor `<issuer>/mcp`.
       ...['run', 'scope', 'approval', 'model-activation', 'model-invocation', 'provider-spend-account'].map(kind => ({ id: `first-run-mcp-observe-${kind}`, effect: 'allow',
         actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind, ids: 'all' } })),
+      grant('first-run-runs', 'run', ['create', 'reserve', 'inspect', 'cancel'], 'all'),
+      grant('first-run-pools', 'pool', ['use', 'inspect'], 'all'),
+      grant('first-run-attempts', 'attempt', ['execute', 'evaluate', 'read-output', 'recover-output', 'cancel', 'reconcile', 'release'], 'all'),
+      grant('first-run-work-targets', 'work-target', ['use'], 'all'),
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -114,7 +119,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v9-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v10-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
 
@@ -130,9 +135,47 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(await f.mcpActor('activate', 'model-activation')).toBe('deny');
   });
 
+  it('upgrades the hand-built live-read-tools v9 shape to v10 and enables the /do policy chain only for its owner', async () => {
+    const f = await installation();
+    // Retain the older add-only upgrades in a hand-built policy; no first-run-read-tools anchor is invented.
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
+    const current = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
+    const v9 = { ...current, revision: 'hand-built-v9', grants: current.grants.filter(rule => !['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets'].includes(rule.id)) };
+    await writeFile(f.policyPath, JSON.stringify(v9), { mode: 0o600 });
+    expect(v9.grants.some(rule => rule.id === 'live-read-tools')).toBe(true);
+    expect(v9.grants.some(rule => rule.id === 'first-run-read-tools')).toBe(false);
+    const before = await f.bytes();
+    const output: string[] = [], errors: string[] = [];
+    const context = { root: f.root, stdout: { write: (text: string) => { output.push(text); return true; } },
+      stderr: { write: (text: string) => { errors.push(text); return true; } },
+      upgradePolicyTemplateInstallation: (root: string, scopeId: string, apply: boolean, expect?: string, person?: typeof PERSON) =>
+        upgradePolicyTemplateInstallation(root, scopeId, apply, expect, {}, process.getuid?.(), person) };
+    const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
+    expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
+    const preview = JSON.parse(output.join('')) as { revision: string; rules: { id: string }[] };
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 10 } });
+    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets']);
+    expect(await f.bytes()).toBe(before);
+    output.length = 0;
+    expect(await main([...argv, '--apply', '--expect', preview.revision], context)).toBe(0); expect(errors).toEqual([]);
+    expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded' });
+    const file = JSON.parse(await f.bytes());
+    const policy = resolvePolicyBindings(file, JSON.parse(await readFile(join(f.root, '.deckent', 'bindings.json'), 'utf8')));
+    const owner = { id: 'owner', ...PERSON, assurance: 'os-user' as const, scopeIds: [SCOPE] };
+    for (const [kind, action] of [['run', 'inspect'], ['run', 'create'], ['run', 'reserve'], ['pool', 'use'], ['attempt', 'execute'], ['attempt', 'evaluate'], ['attempt', 'read-output']]) {
+      const request = { principal: owner, scopeId: SCOPE, action: action!, resource: { kind: kind!, id: 'any' } };
+      expect(evaluatePolicy(policy, request).decision).toBe('allow');
+      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, subject: '1001', id: 'stranger' } }).decision).toBe('deny');
+      expect(evaluatePolicy(policy, { ...request, principal: { ...owner, ...MCP_PERSON, id: 'mcp' } }).decision).toBe(kind === 'run' && action === 'inspect' ? 'allow' : 'deny');
+    }
+    expect(file.grants.slice(0, v9.grants.length)).toEqual(v9.grants);
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current' });
+  });
+
   it('refuses and writes nothing: a person the policy does not name, `all` principals only, a caller who is not the file owner, a stale --expect', async () => {
     const f = await installation();
     const before = await f.bytes();
+    expect(await f.upgrade(true, { person: MCP_PERSON })).toMatchObject({ status: 'unavailable', reason: 'person-not-named' });
     const stranger = { issuer: 'DESKTOP-7NLBLGA', subject: '1001' };
     expect(await f.upgrade(false, { person: stranger })).toMatchObject({ status: 'unavailable', reason: 'person-not-named', people: [PERSON], rules: [] });
     expect(await f.upgrade(true, { person: stranger })).toMatchObject({ status: 'unavailable', reason: 'person-not-named' });
@@ -167,7 +210,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: { issuer: string; subject: string }[]; resource: { ids: unknown } }[] };
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
-      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(rule.id)
+      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets'].includes(rule.id)
       && !rule.id.startsWith('first-run-mcp-observe-')).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });

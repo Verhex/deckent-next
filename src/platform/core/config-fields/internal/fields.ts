@@ -1,4 +1,4 @@
-import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, RUN_PARKING_SETTINGS } from './execution.js';
+import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { RESOURCE_OBSERVATION_SETTINGS } from './resource-observation.js';
 import { z } from 'zod';
@@ -96,6 +96,7 @@ export const CONFIG_FIELDS = Object.freeze({
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   runRuntime: field('config.field.runRuntime', { state: 'bound', consumers: ['src/composition/core/run-progression'] }, 'restart', z.object({
     parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
+    quotaRecovery: QUOTA_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
     maxConcurrentRuns: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),

@@ -1,9 +1,10 @@
 import { poolCapacityDrift, type PoolCapacity, type PoolDrift, type PoolWait } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { PoolCapacityCommand, PoolCapacityReceipt, PoolCapacityView, PoolHoldCommand, PoolHoldQuery, PoolHoldReceipt, PoolHoldView } from '#engine/index.js';
+import type { QuotaReleaseCommand, QuotaReleaseReceipt, PoolCapacityCommand, PoolCapacityReceipt, PoolCapacityView, PoolHoldCommand, PoolHoldQuery, PoolHoldReceipt, PoolHoldView } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
+export type QuotaReleaseHandler = (root: string, command: QuotaReleaseCommand, options: ConfigLoadOptions) => Promise<QuotaReleaseReceipt>;
 export type PoolCapacityApplyHandler = (root: string, command: PoolCapacityCommand, options: ConfigLoadOptions) => Promise<PoolCapacityReceipt>;
 export type PoolCapacityInspectHandler = (root: string, query: PoolHoldQuery, options: ConfigLoadOptions) => Promise<PoolCapacityView>;
 export type PoolHoldApplyHandler = (root: string, command: PoolHoldCommand, options: ConfigLoadOptions) => Promise<PoolHoldReceipt>;
@@ -29,8 +30,8 @@ export async function poolCommand(argv: readonly string[], context: CommandConte
   const action = argv[1], env = context.env ?? process.env;
   const usage = (flag?: string) => ErrorRegistry.createError('CLI_USAGE', { params: { command: 'deckent pool', usage: t('cli.help.pool', {}, resolveLocale(undefined, env)),
     ...(flag ? { flag } : {}) } });
-  if (action !== 'status' && action !== 'hold' && action !== 'resume' && action !== 'set-capacity') throw usage();
-  const allowed = action === 'set-capacity' ? ['--scope', '--pool', '--lang', '--command-id', '--execution-slots', '--in-flight-slots'] : action === 'status' ? ['--scope', '--pool', '--lang'] : ['--scope', '--pool', '--lang', '--command-id', '--reason'];
+  if (action !== 'status' && action !== 'hold' && action !== 'resume' && action !== 'set-capacity' && action !== 'quota-release') throw usage();
+  const allowed = action === 'quota-release' ? ['--scope', '--pool', '--lang', '--command-id', '--channel'] : action === 'set-capacity' ? ['--scope', '--pool', '--lang', '--command-id', '--execution-slots', '--in-flight-slots'] : action === 'status' ? ['--scope', '--pool', '--lang'] : ['--scope', '--pool', '--lang', '--command-id', '--reason'];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -43,6 +44,14 @@ export async function poolCommand(argv: readonly string[], context: CommandConte
   const scopeId = values.get('--scope') ?? ((await loadConfig(root, { env }))['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   if (typeof scopeId !== 'string' || !scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   const pool = values.get('--pool'), sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
+  if (action === 'quota-release') {
+    const channelId = values.get('--channel'); if (!channelId) throw usage('--channel');
+    if (!context.releaseQuota) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    emit(await context.releaseQuota(root, { schemaVersion: 1, scopeId, commandId: values.get('--command-id') ?? randomUUID(),
+      channelId, ...(pool ? { poolId: pool } : {}) }, { env }), { ...sinks, render: receipt => t('cli.pool.quotaReleased', {
+        channel: receipt.channelId, released: receipt.released, command: receipt.commandId }, locale) });
+    return;
+  }
   if (action === 'status') {
     if (!context.inspectPoolHold) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const query = { schemaVersion: 1 as const, scopeId, ...(pool ? { poolId: pool } : {}) };

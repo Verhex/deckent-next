@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { quotaExhaustedSchema } from './quota.js';
 import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 
 /** Worker Event Contract. One current version; provider normalizers map native streams onto it. Events are reported by the
@@ -20,6 +21,7 @@ const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
     target: text(256).nullable(), detail: text(240).nullable() }).strict(),
   z.object({ ...base, kind: z.literal('tool.result'), toolId: text(96), status: z.enum(['ok', 'error']), bytes: count }).strict(),
   z.object({ ...base, kind: z.literal('usage'), tokens }).strict(),
+  quotaExhaustedSchema.unwrap().extend({ ...base, kind: z.literal('quota-exhausted') }).strict(),
   z.object({ ...base, kind: z.literal('quota'), window: text(32), utilization: z.number().min(0).max(1), resetsAtMs: count.nullable(), status: text(32) }).strict(),
   z.object({ ...base, kind: z.literal('limit'), limit: z.enum(['max-turns', 'budget', 'duration', 'structured-output']), detail: text(120) }).strict(),
   z.object({ ...base, kind: z.literal('session.ended'), outcome: z.enum(['success', 'error', 'limit']), turns: count, durationMs: count,

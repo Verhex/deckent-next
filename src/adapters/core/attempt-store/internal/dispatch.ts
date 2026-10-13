@@ -116,7 +116,7 @@ export class SqliteDispatchJournal {
     const parsed = sandboxRequestSchema.parse(request);
     try { return this.read(parsed); } catch (error) { throw sqliteFailure(error); }
   }
-  async claimDispatch(input: DispatchAdmission) {
+  async claimDispatch(input: DispatchAdmission, now: number) {
     const claim = dispatchAdmissionSchema.parse(input);
     if (!this.profiles) throw new DispatchError('DISPATCH_PROFILE_VALIDATION_REQUIRED');
     if (this.profiles.validate(claim.profile) !== undefined) throw new DispatchError('DISPATCH_PROFILE_VALIDATION_REQUIRED');
@@ -129,7 +129,7 @@ export class SqliteDispatchJournal {
       let attempt;
       try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
       if (!sameAttemptIdentity(identity, attempt.identity) || attempt.cancelRequested || attempt.lastObservation !== null) throw new DispatchError('DISPATCH_NOT_ADMITTED');
-      new SqliteRunDispatch(this.db).admit(identity);
+      new SqliteRunDispatch(this.db).admit(identity, now);
       const record = dispatchRecordSchema.parse({ schemaVersion: 2, ...claim, launch: 'pending', terminal: null });
       this.db.prepare('INSERT INTO dispatches(scope_id,attempt_id,record) VALUES(?,?,?)').run(identity.scopeId, identity.attemptId, JSON.stringify(record));
       return Object.freeze({ acquired: true, record });

@@ -2,6 +2,7 @@ import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchem
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
+import { taskQuotaHoldSchema } from './pool-observation.js';
 import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
@@ -15,6 +16,8 @@ export const runViewSchema = z.object({
   graphSummary: taskGraphSummarySchema.optional(),
   branch: branchDecisionSchema.unwrap().omit({ sourceGraph: true }).optional(),
   criteria: z.array(z.object({ id: identitySchema, version: counterSchema.positive(), description: z.string(), evaluator: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).readonly(),
+  channelWaits: z.array(taskQuotaHoldSchema).readonly().optional(),
+  quotaWaits: z.array(taskQuotaHoldSchema.unwrap().extend({ retryLimitReached: z.boolean() }).strict().readonly()).readonly().optional(),
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,
   tasks: z.array(z.object({
     taskBrief: taskBriefSchema.optional(), resultBrief: resultBriefSchema.optional(),
@@ -42,7 +45,7 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
     ...(run.authority ? { authority: run.authority } : {}),
     layoutRevision: run.identity.layoutRevision, ...(run.branch ? { branch: { schemaVersion: run.branch.schemaVersion, request: run.branch.request, selectedTaskId: run.branch.selectedTaskId, notSelectedTaskId: run.branch.notSelectedTaskId } } : {}), registryRevision: run.execution.registryRevision,
     criteria: run.graph.criterionDefinitions.map(criterion => ({ id: criterion.id, version: criterion.version, description: criterion.description, evaluator: criterion.evaluator, fingerprint: run.execution.criteria.find(entry => entry.criterionId === criterion.id)!.fingerprint })),
-    revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state, graphSummary: summarizeTaskGraph(run.graph, run.progress),
+    ...(run.quotaWaits ? { quotaWaits: run.quotaWaits.filter(wait => wait.releasedAtMs === undefined && run.bindings.some(row => row.identity.attemptId === wait.identity.attemptId)).map(wait => ({ taskId: wait.identity.taskId, since: wait.since, deadline: wait.deadline, resetsAtMs: !wait.resetBoundExceeded && wait.quota.resetsAtMs !== null && wait.quota.resetsAtMs > wait.since ? wait.quota.resetsAtMs : null, retryLimitReached: run.quotaWaits!.filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes })) } : {}), revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state, graphSummary: summarizeTaskGraph(run.graph, run.progress),
     tasks: run.graph.tasks.map(task => ({ acceptance: deriveAcceptanceView(run, task.id, evaluations.find(row => row.identity.taskId === task.id)), taskBrief: projectTaskBrief(run, task.id), resultBrief: projectResultBrief(run.bindings.find(binding => binding.identity.taskId === task.id)?.identity.attemptId ?? null,
       { verdict: progress.get(task.id)!.phase === 'accepted' ? progress.get(task.id)!.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : 'accepted' : null,
         ...(progress.get(task.id)!.notAcceptedReason ? { reason: progress.get(task.id)!.notAcceptedReason } : {}) }), id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),

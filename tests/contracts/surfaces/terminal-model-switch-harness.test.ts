@@ -166,7 +166,7 @@ describe('W6: in-process terminal model switch with governed owners', () => {
     // Use the already-admitted owner before the denied policy for this independent negative fixture.
     const g = await fixture(), active = await g.activation();
     await g.activations.admit({ schemaVersion: 1, action: 'deactivate', commandId: 'deactivate', scopeId: 'scope', reference: refs[1]!, expectedRevision: active.revision, expectedBinding: active.binding });
-    await expect(prepareModelSwitch('scope', refs[1]!, g.ports)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT' });
+    await expect(prepareModelSwitch('scope', refs[1]!, g.ports)).rejects.toMatchObject({ code: 'MODEL_NOT_ACTIVATED' });
     expect((await g.activation()).state).toBe('inactive'); expect(current.state).toBe('active'); expect(g.sends).toHaveLength(0);
   });
 

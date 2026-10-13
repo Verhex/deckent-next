@@ -1,9 +1,16 @@
 import { DatabaseSync } from 'node:sqlite';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planRun, inspectRun, configuredApproval } from '../../../src/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
+import { completeTerminalChatTurn } from '#composition/core/terminal-chat/index.js';
+import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { exitCodeFor } from '#platform/index.js';
 import { brainRunId } from '#engine/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
+import { proposalFixture } from '../support/run-proposal.js';
+import { clearConfigCache } from '#platform/index.js';
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); vi.restoreAllMocks(); });
 const command = { schemaVersion: 1 as const, scopeId: 's', commandId: 'brain-business', intent: 'Prepare a purchase and durable business readback' };
@@ -12,13 +19,56 @@ function counts(path: string) { const db = new DatabaseSync(path, { readOnly: tr
   return { runs: Number(db.prepare('SELECT count(*) AS n FROM runs').get()!.n), proposals: Number(db.prepare('SELECT count(*) AS n FROM run_proposals').get()!.n) };
 } finally { db.close(); } }
 describe.skipIf(process.platform === 'win32')('Brain through the public SDK and a local priced provider', () => {
+  it.each([
+    { contextWindow: 1000, tokenCount: { count: 993, max_model_len: 2000 } },
+    { contextWindow: 2000, tokenCount: { count: 993, max_model_len: 1000 } },
+    { contextWindow: 1000, tokenCount: null },
+    { contextWindow: 1000 },
+  ])('refuses context overflow before model POST or proposal: %j', async settings => {
+    const f = await fixture(settings);
+    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_CONTEXT_TOO_LARGE' });
+    expect(f.posts).toBe(0); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+    expect(f.counterBodies.length).toBe(settings.tokenCount === undefined ? 0 : 1);
+  });
+  it('counts exactly the sent prompt, preserves v1 proposal replay after selecting v2, and never recounts successful replay', async () => {
+    const f = await fixture({ contextWindow: 2000, tokenCount: { count: 10, max_model_len: 1000 } });
+    const configPath = join(f.project, '.deckent/config.json');
+    await writeFile(configPath, JSON.stringify({ ...f.config, brain_planner: { selected: { id: 'run-proposal', version: 1 } } })); clearConfigCache();
+    const first = await planRun(f.project, command, f.options);
+    expect(first.proposal.proposal.source).toMatchObject({ contribution: { template: { version: 1 } } });
+    await writeFile(configPath, JSON.stringify({ ...f.config, brain_planner: { selected: { id: 'run-proposal', version: 2 } } })); clearConfigCache();
+    expect(JSON.parse(f.counterBodies[0]!).messages).toEqual(JSON.parse(f.bodies[0]!).messages);
+    expect(await planRun(f.project, command, f.options)).toEqual(first); expect(f.counterBodies).toHaveLength(1); expect(f.posts).toBe(1);
+  });
+  it.each([400, 413])('shows a definite provider rejection %s without exposing its body or resending', async rejectStatus => {
+    const f = await fixture({ rejectStatus });
+    for (let i = 0; i < 2; i++) await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', params: { reason: 'http-status', status: rejectStatus } });
+    expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+  });
+  it('keeps the unknown kind rule before proposal storage', async () => {
+    const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
+    const f = await fixture({ response: JSON.stringify({ graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'invented-kind' }] }, budgetCeiling, requiredPermissions }) });
+    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_GRAPH_INVALID', params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
+    expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+  });
+  it('projects the actual scoped template worker model and billing through SDK without any prepared task prompt', async () => {
+    const f = await fixture({ subscription: true, template: true, response: '{}' });
+    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_OUTPUT_INVALID' });
+    const context = JSON.parse(f.bodies[0]!).messages[1];
+    const projection = JSON.parse(context.content).context.context;
+    expect(projection.kinds).toEqual([{ kind: 'purchase', profile: { id: 'fixture-docker', version: 1 }, type: 'template', provider: 'claude' }]);
+    expect(projection.workerModels).toHaveLength(1);
+    expect(projection.workerModels[0]).toMatchObject({ channelId: 'claude-cli-subscription', modelId: 'claude-sonnet-5-5',
+      auxiliaryModelIds: [], availableAuxiliaryModelIds: ['claude-sonnet-5-5'], billing: 'subscription' });
+    expect(projection).not.toHaveProperty('registry'); expect(projection.scopePaths.state).toBe('not-inspected');
+  });
   it('records a masked contribution and charged invocation; replay reads the same pending proposal without POST or Run', async () => {
     const f = await fixture(), input = { ...command, intent: command.intent + ' api_key=sk-fixture-do-not-send' };
     const first = await planRun(f.project, input, f.options);
     expect(first.proposal.status).toBe('pending'); expect(first.run).toBeNull(); expect(f.posts).toBe(1);
     const source = first.proposal.proposal.source;
     expect(source).toMatchObject({ kind: 'model', receipt: { reference: f.reference }, contribution: { schemaVersion: 1, activationRevision: 1,
-      template: { version: 1 }, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } } });
+      template: { version: 2 }, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } } });
     expect(f.bodies[0]).not.toContain('sk-fixture-do-not-send'); expect(JSON.stringify(first)).not.toContain('sk-fixture-do-not-send');
     expect(f.bodies[0]).toContain('[REDACTED]');
     expect(await planRun(f.project, input, f.options)).toEqual(first); expect(f.posts).toBe(1);
@@ -44,8 +94,21 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     await expect(planRun('uninitialized-fixture', input)).rejects.toMatchObject({ code: 'BRAIN_INPUT_INVALID' });
     expect(reads).toBe(0);
   });
-  it.each([['missing', 'TERMINAL_CHAT_NOT_CONFIGURED'], ['inactive', 'MODEL_INVOCATION_ACTIVATION_CONFLICT']] as const)('refuses %s model without fallback or POST', async (model, code) => {
+  it.each([['missing', 'TERMINAL_CHAT_NOT_CONFIGURED'], ['inactive', 'MODEL_NOT_ACTIVATED']] as const)('refuses %s model without fallback or POST', async (model, code) => {
     const f = await fixture({ model }); await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code });
+    if (model === 'inactive') {
+      const error = await planRun(f.project, command, f.options).catch(error => error);
+      expect(error.params).toMatchObject({ scope: 's', provider: f.reference.providerId, model: f.reference.modelId, revision: 0 });
+      expect(exitCodeFor(error)).toBe(1);
+      for (const locale of ['en', 'tr'] as const) {
+        const message = error.localize(locale).message;
+        expect(message).toContain(`${f.reference.providerId}@1/${f.reference.modelId}@1`);
+        expect(message).toContain(locale === 'tr' ? 'kapsamında etkin değil' : 'not active in scope');
+        expect(message).toContain('deckent models activate --scope s'); expect(message).toContain('/model');
+      }
+      await expect(completeTerminalChatTurn({ projectRoot: f.project, scopeId: 's', messages: [{ role: 'user', content: 'hello' }], options: f.options },
+        { invoke: invokeConfiguredModel, cancel: async () => { throw new Error('MUST_NOT_CANCEL'); } })).rejects.toMatchObject({ code, params: error.params });
+    }
     expect(f.posts).toBe(0); expect(counts(f.path).runs).toBe(0);
   });
   it.each([null, 0])('refuses unavailable/exhausted budget %s before the model', async budget => {

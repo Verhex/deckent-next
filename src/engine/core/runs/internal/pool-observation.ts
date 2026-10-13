@@ -11,7 +11,9 @@ export const runPoolObservationSchema = z.object({ poolId: identitySchema, capac
   drift: z.array(poolDriftSchema).readonly(), waiting: z.array(z.object({ taskId: identitySchema, reason: poolWaitSchema }).strict().readonly()).readonly() }).strict().readonly();
 export type PoolWait = z.infer<typeof poolWaitSchema>;
 export type PoolDrift = z.infer<typeof poolDriftSchema>;
-export interface RunPoolEvidence { readonly snapshot: RunSnapshot | null; readonly pool: { readonly poolId: string; readonly capacity: z.infer<typeof capacity>;
+export const taskQuotaHoldSchema = z.object({ taskId: identitySchema, since: counterSchema, deadline: counterSchema, resetsAtMs: counterSchema.nullable() }).strict().readonly();
+export type TaskQuotaHold = z.infer<typeof taskQuotaHoldSchema>;
+export interface RunPoolEvidence { readonly quotaHolds?: readonly TaskQuotaHold[]; readonly snapshot: RunSnapshot | null; readonly pool: { readonly poolId: string; readonly capacity: z.infer<typeof capacity>;
   readonly runCapacity: z.infer<typeof capacity>; readonly occupancy: z.infer<typeof poolOccupancySchema>; readonly hold: PoolHoldRecord | null; readonly admitted: boolean } | null }
 export const poolCapacityDrift = (poolId: string, requested: z.infer<typeof capacity>, current: z.infer<typeof capacity>, source: PoolDrift['source']): PoolDrift | null =>
   requested.executionSlots > current.executionSlots || requested.inFlightSlots > current.inFlightSlots

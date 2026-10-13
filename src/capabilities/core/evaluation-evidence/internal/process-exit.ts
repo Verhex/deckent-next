@@ -3,9 +3,10 @@ import { criterionDefinitionSchema, evaluatorDefinitionSchema, processExitCauseS
 
 export const PROCESS_EXIT_EVALUATOR = Object.freeze({ id: 'process-exit', version: 1,
   implementation: Object.freeze({ id: 'process-exit', version: 1 }) });
-const parametersSchema = z.object({
+export const processExitParametersSchema = z.object({
   acceptedExitCodes: z.array(z.number().int().safe()).min(1).refine(values => new Set(values).size === values.length, 'PROCESS_EXIT_CODES_DUPLICATE'),
 }).strict().readonly();
+const parametersSchema = processExitParametersSchema;
 export type ProcessExitParameters = z.infer<typeof parametersSchema>;
 
 /** Installation checks implementation availability without inventing a task criterion. */

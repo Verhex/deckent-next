@@ -83,8 +83,13 @@
       ],
       "plan": "STORE"
     },
+    "src/adapters/core/quota-control-store": {
+      "dependencies": ["src/domain/core/run", "src/engine/core/runs", "src/engine/core/attempts", "src/engine/core/audit", "src/adapters/core/audit-store", "src/adapters/core/sqlite-ledger"],
+      "plan": "STORE"
+    },
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/adapters/core/quota-control-store",
         "src/adapters/core/service-shutdown-store",
         "src/domain/core/task-evaluation",
         "src/adapters/core/audit-store",
@@ -605,7 +610,8 @@
     "src/domain/core/attempt": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event"
       ],
       "plan": "CONTRACT"
     },
@@ -1053,7 +1059,9 @@
         "src/surfaces/core/terminal-picker",
         "src/platform/core/common",
         "src/domain/core/agent-turn",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/surfaces/core/monitor",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },
@@ -1380,7 +1388,8 @@
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
         "src/engine/core/provider-spend",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/domain/core/worker-event"
       ],
       "plan": "STORE"
     },
@@ -1777,7 +1786,14 @@
       "dependencies": [
         "src/domain/core/run",
         "src/adapters/core/native-coding",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/toolchain-currency",
+        "src/engine/core/config",
+        "src/platform/core/config",
+        "src/composition/core/config",
+        "src/platform/core/integrity",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "PROVIDERS"
     },
@@ -2799,7 +2815,8 @@
         "src/domain/core/command",
         "src/platform/core/errors",
         "src/platform/core/redaction",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/capabilities/core/evaluation-evidence"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -2837,7 +2854,10 @@
         "src/composition/core/query-errors",
         "src/composition/core/root",
         "src/engine/core/provider-spend",
-        "src/adapters/core/native-coding"
+        "src/adapters/core/native-coding",
+        "src/engine/core/model-activation",
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/toolchains"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3166,6 +3186,14 @@
           3
         ],
         "reason": "RFC 3339 fractional seconds: the first 3 digits are milliseconds, later digits are sub-millisecond evidence; format invariant (2026-10-03, batch-27 integration)."
+      },
+      {
+        "file": "src/adapters/core/native-coding/internal/template.ts",
+        "symbol": "createNativeCodingTemplate/parsed/docker",
+        "values": [
+          "docker"
+        ],
+        "reason": "The existing native-coding-template@1 wire contract requires the docker parameter key; it is an adapter-owned protocol field, not a provider choice or mutable policy."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

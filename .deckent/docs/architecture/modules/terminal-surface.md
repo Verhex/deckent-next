@@ -131,7 +131,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   from outside; the settings picker of the panel controller; any argument keeps the text command; no window on TERM=dumb; `/mode show` is the
   text answer). `/mcp` adds stdio and HTTP servers (URL + masked headers; the registry validates), revokes trust with the grant, shows the
   person's `mcp-server` grant and offers `sandbox-net` first. `terminal-work/live-windows.tsx` + `terminal/workline-live.tsx` (L5): `/monitor`
-  (the monitor's `MonitorBody` through `monitorWindow`, the terminal never imports the monitor), `/watch-workers`, `/watch-runs`, `/tasks` as
+  (the monitor's `MonitorBody` through `monitorWindow`, the monitor body stays behind its host port), `/watch-workers`, `/watch-runs`, `/tasks` as
   modal live windows updated in place (Esc closes and stops the watch, one summary line stays); a card, picker, `/resume` or settings window
   takes the screen and the live window returns after it. Config-change approvals speak in setting words in the approval window.
 - **Bounded windows (TUI2 L1, 2026-10-07; `wave/tui-2`; released with alpha.10, PR #37):** unit `terminal-window` (← terminal-kit, terminal-render)
@@ -170,11 +170,20 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Delivery fit (SESSION-RESULT-LIMIT-2026-09-28):** the worst-case delivered size of every declared provider profile —
   `modelInvocationNativeResponseUpperBound` (one formula shared by the adapters) plus the same arithmetic as
   `assertInvocationDeliveryFit` — is reported ahead of time by `deckent doctor` (`modelInvocationDelivery`, unconditional, `[]` when
-  clean) against the runtime-service and MCP surfaces; `models activate` refuses the admission when a profile is already declared for
+  clean) against the runtime-service and MCP surfaces. Human output emits one EN/TR line per finding with profile, exact model,
+  scope, surface and required/available delivered bytes; remediation names `service.responseMaxBytes` for runtime-service or
+  `mcp.responseMaxBytes` for MCP, or the profile's `limits.responseMaxBytes`. Available bytes are envelope-adjusted result capacity,
+  not the raw configured frame limit. `models activate` refuses the admission when a profile is already declared for
   the reference and can never deliver on some surface (`MODEL_ACTIVATION_DELIVERY_UNFIT`, before `app.admit()`, no claim or ledger
-  effect). The check lives in `engine/core/model-activation` / `engine/core/model-invocation`; composition only wires the surfaces
+  effect), carrying the first finding's profile, surface and byte values in its typed error. The check lives in
+  `engine/core/model-activation` / `engine/core/model-invocation`; composition only wires the surfaces
   (the MCP capacity comes from `adapters/core/mcp-transport`, never from the surface layer). A profile declared later, or a
   `service.responseMaxBytes` lowered after activation, is reported by doctor only (the one ongoing authority).
+- **Inactive invocation:** `/do` planning and terminal chat share the invocation application's `MODEL_NOT_ACTIVATED` refusal
+  when the exact model has no activation record or is inactive in the caller's scope. EN/TR text identifies the versioned reference
+  and scope and offers the existing `deckent models activate` command or `/model` panel (CLI exit 1). Digest/catalog conflicts
+  retain `MODEL_INVOCATION_ACTIVATION_CONFLICT`; binding conflicts retain their own code. No fallback or automatic inactive-model
+  activation is introduced. These are source behavior contracts; local author checks are separate from installed/live acceptance.
 - **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`.
   TTY `/runs` reads the same inventory into a scrollable list window (SW-2, alpha.15); it does not create or cancel a run. Line/CLI text producers are unchanged.
   Chat text is not run truth. **S18/S18B/S18B-AUTH (batch 36):** üretim yolu runtime SQLite ledger’ına salt okunur `fs.watch` + heartbeat takibidir; servis tek yazardır, okuyucu outbox silmez/etki açmaz. `inspectMonitor` ile ortak principal/scope/policy kapısı okuma öncesi ve takip boyunca yeniden değerlendirilir; ret/veri bağlamı değişimi takibi durdurur. R4 yetkili açılış snapshot’ı, sıra boşluğunda resync ve reconnect başlangıç cursor’ını; R5 çalışan worker’ın canlı panel gözlemini korur. Takip portu olmayan tüketici bounded single-flight poll kullanır. The Ink `Static`
@@ -322,3 +331,22 @@ family (the merged `cli` family passed the 1500-line gate). Proof: `proof/TUI2-2
 **W2 FIRST-TEST-FIXES + TERMINAL-UX T5 (owner 2026-10-08; alpha.21 `4afa7c81`, PR #60).** `/usage` opens with the ledger-current scoped account before configuration choices: budget id/revision, exact settled amount, reserved amount, available admission balance and frozen state. A USD account reads in dollars (registry minor units per USD; exact sub-cent digits kept), another currency in minor units (batch A, FOLLOWUPS item 5). A failed live read carries no amount. The status strip receives a separate model segment from the current conversation pin or configured launch reference; `/clear`/`/resume` preserve per-session pin ownership. Spend refusal notes use EN/TR catalogs and `/model` budget next steps. The preset/stepper budget confirm window warns for limits at or below exact settled spend; lowering remains governed and does not erase spending. Selection token uses inverse plus existing textual row markers; no-colour/ASCII retain those markers. Watch workers/runs frames register no keyboard layer; the composer owns input and `/watch-stop` closes observation. `/tasks` retains one interactive focus owner: Enter opens the selected worker attempt transcript (a run with several workers offers a transcript picker), x refreshes the selected run and opens the existing cancellation approval. Deny/Escape send no cancellation; allow uses the refreshed revision through the existing scoped ledger port. Missing capability is explicit. Session cache read/write tokens and hit ratio come from the shared governed inspection application: a typed local command lookup resolves each immutable round command to its actual invocation, with authentication/read policy before the lookup and fresh inspect policy before returning the record. Only settled tariff dimensions are projected; no wire or package version change. Totals are held per conversation within this terminal process, restored on resume; earlier-process historical totals are unknown. Missing permission/measurement and held spending remain unknown; partial ratios name their measured coverage. Rich and line `/usage` share the live-first model. `/context` projects the configured absolute token trigger as well as the window trigger. Ink author verification, independent review, hosted/native-platform evidence and live acceptance remain separate. Proof: `proof/FIRST-TEST-FIXES-2026-10-08/W2-TERMINAL/`.
 
 **CACHE-SLICE1 (owner 2026-10-09, batch A).** `/usage` adds the raw cache write classes (5 min, 1 hour; a write reported without its TTL split stays only in the total) and the same-request net cache benefit in USD: read savings minus the write premium at each settled request's own rates, labelled an estimate, negative shown as it is, partial when some reports carry no measured benefit (never a zero). `/model` and `/provider` list "Turn on prompt cache (5 min)" when this scope has profiles without a cache choice: the window names each model's own write/read price ratio and the reuses within 5 minutes after which it pays back; Yes writes through the governed `/config` writer (an approval opens after the window closes), No/Esc writes nothing; `none` profiles are never offered. Choosing another model while the conversation's measured prompt is at or above `model-switch.json` `askFreshContextAtTokens` (50,000) asks "new context / continue" before the pin; Esc pins nothing. A new context keeps the system prompt, the person's own messages (attached file bodies dropped) and any runtime summary; answers and tool traffic are left behind and the next turn carries it to the new model. Proof: `proof/BATCH-A-2026-10-09/cache-slice1/`.
+
+
+## Session Run completion (DONGU-KAPATMA slice 1)
+
+The interactive Workline tracks only its own `/do` admissions, including a Run
+returned during local cancellation, up to `terminal.maxTrackedRuns` (registry
+default 128). Authorized Run snapshots announce the first terminal transition once,
+even with `/tasks` closed: Run identity, localized state, acceptance/rejection/failure/
+cancellation counts and known delivery-outlook counts. Missing output evidence
+keeps unknown counts and adds one explicit details-unavailable line. Pending delivery
+points to `/run <id>`; the rich terminal retains its existing picker and no new delivery
+authority. `/run` reuses the monitor's shared `renderBriefLines` for each permitted
+task's CLAIM, open issues, failed checks/tests and delivery outlook; the existing
+per-attempt `read-output` projection remains the content authority.
+
+Older ports without push snapshots poll only admitted identities. Completed records
+can make room at the configured limit; when all records are open, a new admitted Run
+gets a visible tracking-limit notice and remains inspectable with `/run`. Tracking
+ends with the terminal process and is not durable notification, acceptance or delivery.

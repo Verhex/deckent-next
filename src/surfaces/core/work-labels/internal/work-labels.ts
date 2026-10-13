@@ -51,6 +51,8 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
   const phases = ['starting', 'thinking', 'reading', 'editing', 'running', 'searching', 'fetching', 'delegating', 'finished', 'failed'] as const;
   return {
     jobs: {
+      locale, completed: t('terminal.jobs.completed', {}, locale), deliveryCounts: t('terminal.jobs.deliveryCounts', {}, locale), deliveryPatch: t('terminal.jobs.deliveryPatch', {}, locale), deliveryNext: t('terminal.jobs.deliveryNext', {}, locale),
+      detailsUnavailable: t('terminal.jobs.detailsUnavailable', {}, locale), trackingFull: t('terminal.jobs.trackingFull', {}, locale),
       hints: t('terminal.jobs.hints', {}, locale), watchStatus: t('terminal.jobs.watchStatus', {}, locale), push: t('terminal.jobs.push', {}, locale), poll: t('terminal.jobs.poll', {}, locale),
       system: t('terminal.info.systemLabel', {}, locale), cancelPickerTitle: t('terminal.jobs.cancelPickerTitle', {}, locale), runTitle: t('terminal.jobs.runTitle', {}, locale), runFallback: t('terminal.jobs.runFallback', {}, locale),
       transcriptTitle: t('terminal.jobs.transcriptTitle', {}, locale), state: t('terminal.jobs.state', {}, locale), tasks: t('terminal.jobs.tasks', {}, locale),

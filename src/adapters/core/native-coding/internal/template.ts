@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, NativeCodingProfileError } from './command.js';
@@ -32,9 +33,25 @@ function parseTemplate(profile: ExecutionProfileDefinition) {
   try { validateDockerTaskProfile(docker); } catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   return { docker, invocation: parameters.data.invocation };
 }
+/** Only invocation identity for planning; never task prompts, composition or Docker parameters. */
+export function nativeCodingTemplateWorker(profile: ExecutionProfileDefinition) {
+  const { provider, cliVersion } = parseTemplate(profile).invocation;
+  return { provider, cliVersion };
+}
 
 /** The Docker task profile a template compiles onto (installation preview reads its image through this). Throws on an invalid template. */
 export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return parseTemplate(profile).docker; }
+
+/** Adapter-owned template wire shape and content identity; host configuration supplies every resource and CLI selection. */
+export function createNativeCodingTemplate(resourceLimits: unknown, invocation: unknown): ExecutionProfileDefinition {
+  const parsed = templateParametersSchema.safeParse({ schemaVersion: 1, docker: resourceLimits, invocation });
+  if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
+  const parameters = immutableJsonObjectSchema.parse(parsed.data);
+  const profile = executionProfileDefinitionSchema.parse({ id: `native-coding-template-${createHash('sha256').update(JSON.stringify(parameters)).digest('hex')}`,
+    version: 1, adapter: NATIVE_CODING_TEMPLATE_ADAPTER, parameters });
+  nativeCodingTemplateBase(profile);
+  return profile;
+}
 
 /** Deterministic scope text: one repository path per line, in the author's order. A hand-prepared profile with this text is identical. */
 export const renderWorkScope = (paths: readonly string[]) => paths.join('\n');

@@ -33,7 +33,12 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
     ? 'MODEL_INVOCATION_INVALID' : error.code === 'PRIVACY_UNAVAILABLE' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : 'PROVIDER_SPEND_UNAVAILABLE');
   if (error instanceof OpenRouterChatError) return registeredFailure(error.code === 'INVALID_PROFILE'
     ? 'MODEL_INVOCATION_PROFILE_CONFLICT' : error.code === 'TARIFF_CONFLICT' ? 'PROVIDER_SPEND_CONFLICT' : 'MODEL_INVOCATION_INVALID');
-  if (error instanceof ModelInvocationError || error instanceof ModelInvocationStoreError || error instanceof OpenAiChatHttpError
+  if (error instanceof ModelInvocationStoreError) return registeredFailure(error.code,
+    error.code === 'MODEL_NOT_ACTIVATED' && error.params ? { params: error.params } : undefined);
+  if (error instanceof ModelActivationStoreError && error.deliveryFinding) return registeredFailure(error.code, { params: {
+    profile: error.deliveryFinding.profileId, surface: error.deliveryFinding.surface,
+    required: error.deliveryFinding.requiredBytes, available: error.deliveryFinding.availableBytes } });
+  if (error instanceof ModelInvocationError || error instanceof OpenAiChatHttpError
     || error instanceof ModelActivationError || error instanceof ModelActivationStoreError || error instanceof ModelCatalogError) return registeredFailure(error.code);
   if (error instanceof WorkerModelAdmissionError) { const d = error.detail; return registeredFailure(error.code, { params: { taskId: d.taskId,
     channelId: d.channelId ?? '-', modelId: d.modelId ?? '-', minCliVersion: d.minCliVersion ?? '-', cliVersion: d.cliVersion ?? 'unparsed' } }); }

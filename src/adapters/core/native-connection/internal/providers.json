@@ -5,7 +5,10 @@
     "connections": 24,
     "headerBytes": 8192,
     "idleMs": 30000,
-    "trafficBytes": 67108864, "eventBatchBytes": 262144, "maxEvents": 5000, "maxEventBytes": 4194304
+    "trafficBytes": 67108864,
+    "eventBatchBytes": 262144,
+    "maxEvents": 5000,
+    "maxEventBytes": 4194304
   },
   "providers": {
     "codex": {
@@ -53,6 +56,26 @@
         "AGENT_CLI_CREDENTIAL_STORE": "file"
       },
       "credentialEnvironment": "CURSOR_AUTH_TOKEN"
+    }
+  },
+  "quotaPolicy": {
+    "schemaVersion": 1,
+    "claudeRejectedStatuses": [
+      "rejected"
+    ],
+    "codexPatterns": [
+      "\\bquota (?:exceeded|exhausted)\\b",
+      "\\brate[ _-]?limit(?:ed| exceeded| reached)\\b",
+      "\\busage limit (?:exceeded|reached)\\b"
+    ],
+    "source": "https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/CHANGELOG.md",
+    "sourceVersion": "0.3.280 (Claude Code 2.1.280)",
+    "asOf": "2026-10-13",
+    "codexEvidence": {
+      "source": "https://developers.openai.com/codex/noninteractive",
+      "asOf": "2026-10-13",
+      "cliVersion": "unverified",
+      "observation": "unverified; synthetic adapter fixtures only; no vendor quota capture"
     }
   }
 }

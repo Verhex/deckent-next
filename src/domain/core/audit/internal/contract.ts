@@ -181,6 +181,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     capacity: z.object({ previous: z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict(),
       next: z.object({ executionSlots: counterSchema.positive(), inFlightSlots: counterSchema.positive() }).strict() }).strict().nullable() }).strict(),
+  z.object({ kind: z.literal('quota-release'), poolId: identitySchema, poolIds: z.array(identitySchema).readonly().optional(), decisionPoolId: identitySchema.optional(), channelId: z.string().min(1).max(256), commandId: identitySchema,
+    decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(), released: counterSchema.nullable() }).strict(),
   z.object({ kind: z.literal('pool-hold'), action: z.enum(['hold', 'resume']), poolId: identitySchema, commandId: identitySchema,
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     state: z.object({ previous: z.enum(['open', 'held']), next: z.enum(['open', 'held']) }).strict().nullable() }).strict(),

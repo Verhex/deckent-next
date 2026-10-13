@@ -50,7 +50,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(outcome).toEqual({ provider_catalog: false, provider_invocation_profiles: false, provider_spending: false, provider_spend_audit: false,
       inference_serving: false, terminal: true, operations: true, secrets: false, decision: false, identity: false, brain_planner: true });
     const defaults = createDefaultConfig();
-    expect(defaults['terminal']).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
+    expect(defaults['terminal']).toEqual({ persistHistory: true, maxTrackedRuns: 128, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
       chat: { schemaVersion: 1, maxCompletionTokens: 16384, historyMessages: 40, readResultMaxBytes: 65536, compactionThresholdTokens: 100000 } });
     expect(defaults['operations']).toEqual({ catalog: [], targets: [] });
     // SECRET-K1: `secrets` stays absent from the defaults, so a healed or default-filled project file never carries a backend selection.
@@ -74,7 +74,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8, maxServers: 20 });
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
       maxConcurrentExecutions: 8, headerTimeoutMs: 10_000, responseTimeoutMs: 10_000, acceptRetryDelayMs: 25, acceptRetryLimit: 3, shutdownGraceMs: 30_000, admissionWaitMs: 250, busyRetryLimit: 2, idleShutdown: { afterMs: 900_000 } });
-    expect(d.runRuntime).toEqual({ parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, pageSize: 64 });
+    expect(d.runRuntime).toEqual({ quotaRecovery: { schemaVersion: 1, maxResumes: 1, maxWaitMs: 604800000 }, parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, pageSize: 64 });
     expect(d.inspection).toEqual({ maxPageSize: 64, policyMaxBytes: 1_048_576,
       workers: { heartbeatMs: 2000, staleMs: 10_000, maxFileBytes: 65_536, maxEntries: 4096, sources: [] } });
     expect(d.toolchains).toEqual({ currency: { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', timeoutMs: 5000, responseMaxBytes: 65_536 },
@@ -128,7 +128,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   });
 
   it('terminal: chat has registered defaults; other optional sub-objects stay absent and their readers fill documented defaults', () => {
-    expect(terminalConfigSchema.parse({})).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
+    expect(terminalConfigSchema.parse({})).toEqual({ persistHistory: true, maxTrackedRuns: 128, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
       chat: { schemaVersion: 1, maxCompletionTokens: 16384, historyMessages: 40, readResultMaxBytes: 65536, compactionThresholdTokens: 100000 } });
     expect(terminalConfigSchema.parse({ shell: { schemaVersion: 1 } }).shell).toEqual({ schemaVersion: 1, timeoutMs: 300_000, realm: 'prefer-sandbox', environment: [] });
     expect(readTerminalShellConfig({})).toEqual({ realm: 'prefer-sandbox', timeoutMs: 300_000, environment: [] });

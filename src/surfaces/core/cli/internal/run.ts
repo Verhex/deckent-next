@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
-import { renderAcceptanceLine, renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { quotaWaitText, renderAcceptanceLine, renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import type { RunCancellationDeliveryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type { RunCancellationDeliveryHandler, RunQueryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly Readonly<{ code: string; taskId: string; modelId: string; minCliVersion: string; cliVersion: string | null }>[] }>>;
@@ -135,7 +135,9 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     return [...(run.costReport ? [renderCostSummary(run.costReport, locale)] : []), ...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []), t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
       ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
       t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
+      ...(run.channelWaits ?? []).map(wait => `${wait.taskId}: ${quotaWaitText(wait.deadline, wait.resetsAtMs !== null, locale)}`),
       ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
+      ...(run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? [quotaWaitText(run.state.deadline, (run.quotaWaits ?? []).every(wait => wait.resetsAtMs !== null), locale, (run.quotaWaits ?? []).some(wait => wait.retryLimitReached))] : []),
       ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
       ...(run.state.kind === 'parked' && run.state.failureCode ? [t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
       ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),

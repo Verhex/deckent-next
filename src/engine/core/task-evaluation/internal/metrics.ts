@@ -11,6 +11,7 @@ export function deriveAcceptanceMetric(command: string, input: RunSnapshot): Dec
   if (payload['action'] === 'apply-task-evaluation') {
     const value = { ...payload }; delete value['action'];
     const commit = taskEvaluationCommitSchema.parse(value); evaluation = taskEvaluationSchema.parse(commit.evaluation);
+    if (evaluation.quota) return null;
     identity = evaluation.identity;
     if (commit.dispatch.output) references.set('dispatch-output', commit.dispatch.output.digest);
     if (commit.dispatch.patch) references.set('workspace-patch', commit.dispatch.patch.digest);

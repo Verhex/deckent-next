@@ -1,5 +1,6 @@
 import type { RunView } from '#engine/index.js';
-import { shortId } from '#platform/index.js';
+import { renderBriefLines } from '#surfaces/core/monitor/index.js';
+import { shortId, type Locale } from '#platform/index.js';
 import { loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
@@ -9,6 +10,7 @@ import type { LocalExecution, WorklinePanel } from './workline-panel.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
 
 export interface JobWindowLabels {
+  readonly locale: Locale; readonly completed: string; readonly deliveryCounts: string; readonly deliveryPatch: string; readonly deliveryNext: string; readonly detailsUnavailable: string; readonly trackingFull: string;
   readonly hints: string; readonly watchStatus: string; readonly push: string; readonly poll: string;
   readonly cancelPickerTitle: string; readonly system: string; readonly runTitle: string; readonly runFallback: string; readonly transcriptTitle: string;
   readonly state: string; readonly tasks: string; readonly attempts: string; readonly delivery: string; readonly unknown: string;
@@ -42,12 +44,15 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels): WindowLin
   const labels = work.jobs!;
   const section = (title: string): WindowLine => ({ spans: [span(title, { bold: true, role: 'accent' })] });
   const field = (label: string, text: string, muted = false): WindowLine => ({ label: [span(label, { bold: true })], spans: [span(text, muted ? { role: 'muted' } : {})] });
-  const taskLabel = (task: RunView['tasks'][number], index: number) => task.taskBrief?.task ?? `${labels.tasks} ${index + 1}`;
+  const taskLabel = (task: RunView['tasks'][number], index: number) => (task.resultBrief ? task.taskBrief?.task : undefined) ?? `${labels.tasks} ${index + 1}`;
   return [section(labels.state), { spans: [span(`[${runStateText(run, labels)}]`, { role: run.cancellationRequested ? 'warning' : 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] },
     section(labels.tasks), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: [span(`[${fillTemplate(work.workerLine.card?.runPhases[task.phase] ?? task.phase, { count: 1 })}]`, { role: 'accent' }), span(` · ${displayId(task.id)}`, { role: 'muted' })] })),
     section(labels.attempts), ...run.tasks.map((task, index) => field(taskLabel(task, index), task.resultBrief?.attemptId ? displayId(task.resultBrief.attemptId) : labels.unknown, true)),
     section(labels.delivery), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: task.resultBrief?.runDelivery
-      ? [span(labels.runStates[task.resultBrief.runDelivery.state] ?? task.resultBrief.runDelivery.state), ...(task.resultBrief.runDelivery.commit ? [span(` · ${displayId(task.resultBrief.runDelivery.commit)}`, { role: 'muted' })] : [])] : [span(labels.unknown, { role: 'muted' })] }))];
+      ? [span(labels.runStates[task.resultBrief.runDelivery.state] ?? task.resultBrief.runDelivery.state), ...(task.resultBrief.runDelivery.commit ? [span(` · ${displayId(task.resultBrief.runDelivery.commit)}`, { role: 'muted' })] : [])] : [span(labels.unknown, { role: 'muted' })] })),
+    ...run.tasks.flatMap((task, index) => [section(taskLabel(task, index)), ...(task.resultBrief
+      ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale).map(text => ({ spans: [span(text)] }))
+      : [{ spans: [span(labels.detailsUnavailable, { role: 'warning' })] }])])];
 }
 
 /** Window and picker share the existing stack and project transported text below the Workline secret provider. */

@@ -1,4 +1,5 @@
-import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationProfile, ModelReference } from '#domain/index.js';
+import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationCommand, ModelInvocationProfile, ModelReference } from '#domain/index.js';
+import { ModelInvocationStoreError } from './port.js';
 import type { ModelInvocationDelivery } from './delivery.js';
 import type { ModelInvocationDeliverySurface } from './profile-delivery.js';
 import { assessModelInvocationProfileDeliveries } from './profile-delivery.js';
@@ -21,8 +22,10 @@ export interface ModelInvocableNowChecks {
 class InvocabilityRefusal extends Error {
   constructor(readonly reason: ModelInvocabilityReason) { super(reason.code); }
 }
-export function refuseInactiveModel(activation: ModelActivationRecord | null): never {
-  throw new InvocabilityRefusal({ kind: 'not-carried', code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT', activationRevision: activation?.revision ?? 0 });
+export function refuseInactiveModel(command: ModelInvocationCommand, activation: ModelActivationRecord | null): never {
+  const r = command.reference;
+  throw new ModelInvocationStoreError('MODEL_NOT_ACTIVATED', { scope: command.scopeId, provider: r.providerId, providerVersion: r.providerVersion,
+    model: r.modelId, modelVersion: r.modelVersion, revision: activation?.revision ?? 0, digest: command.expectedBinding.digest, catalog: command.catalogRevision });
 }
 /** Pure delivery/current-activation gates plus the composition-owned credential existence port. No activation repair. */
 export async function assertModelInvocableNow(activation: ModelActivationRecord, profile: ModelInvocationProfile,
@@ -37,7 +40,7 @@ export function modelInvocabilityRefusal(error: unknown): ModelInvocability {
   if (error instanceof InvocabilityRefusal) return { invocable: false, reason: error.reason };
   const raw = (error as { code?: unknown } | null)?.code;
   const code = typeof raw === 'string' && /^[A-Z][A-Z0-9_]*$/u.test(raw) ? raw : 'MODEL_INVOCATION_UNAVAILABLE';
-  const kind: ModelInvocabilityReasonKind = code === 'MODEL_INVOCATION_ACTIVATION_CONFLICT' ? 'not-carried'
+  const kind: ModelInvocabilityReasonKind = code === 'MODEL_NOT_ACTIVATED' ? 'not-carried' : code === 'MODEL_INVOCATION_ACTIVATION_CONFLICT' ? 'stale-activation'
     : code === 'MODEL_INVOCATION_BINDING_CONFLICT' ? 'binding' : code === 'MODEL_INVOCATION_PROFILE_CONFLICT' ? 'profile'
     : code === 'MODEL_INVOCATION_RESULT_LIMIT' ? 'delivery-unfit'
     : code.includes('TARIFF') || code.includes('PRICING') || code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'tariff'
@@ -50,7 +53,9 @@ export function modelInvocabilityRefusal(error: unknown): ModelInvocability {
   const currency = params?.currency;
   if (code === 'PROVIDER_SPEND_EXHAUSTED' && typeof requested === 'number' && Number.isSafeInteger(requested) && requested >= 0 && typeof currency === 'string' && /^[A-Z]{3}$/u.test(currency))
     return { invocable: false, reason: { kind, code, reservation: { requestedMinorUnits: requested, currency } } };
-  return { invocable: false, reason: { kind, code } };
+  const revision = error instanceof ModelInvocationStoreError && code === 'MODEL_NOT_ACTIVATED' ? error.params?.['revision'] : undefined;
+  return { invocable: false, reason: { kind, code, ...(typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0
+    ? { activationRevision: revision } : {}) } };
 }
 /** The sole read model owner. Sequential checks bound resource use; one failed reference cannot mark another ready. */
 export class ModelInvocableNowApplication {
