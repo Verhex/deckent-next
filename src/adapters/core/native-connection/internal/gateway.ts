@@ -106,7 +106,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     statistics.bootstrapReads++;
     response.setHeader('Cache-Control', 'no-store');
     response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, capabilities, home: spec.home, file: spec.file,
-      credential, preflight: binding.preflight, promptDelivery: binding.promptDelivery, dependencyContext: input.dependencyContext ? { ...input.dependencyContext, maxBytes: workerReportLimits.promptBytes } : undefined, finalReport: binding.finalReport ? { ...binding.finalReport, limits: workerReportLimits } : undefined,
+      credential, quotaPolicy: catalog.quotaPolicy, preflight: binding.preflight, promptDelivery: binding.promptDelivery, dependencyContext: input.dependencyContext ? { ...input.dependencyContext, maxBytes: workerReportLimits.promptBytes } : undefined, finalReport: binding.finalReport ? { ...binding.finalReport, limits: workerReportLimits } : undefined,
       ...('credentialEnvironment' in spec ? { credentialEnvironment: spec.credentialEnvironment } : {}), environment: spec.environment, limits }));
     credential = undefined;
   });

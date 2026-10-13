@@ -1,3 +1,4 @@
+import { resetRunQuota } from './quota.js';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { inspectTaskReadiness, taskDependencyIds, type TaskProgress } from '#domain/core/task-graph/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
@@ -28,7 +29,11 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
   const readiness = inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now, progress: tasks });
   let state: RunSnapshot['state'];
   if (tasks.every(task => task.phase === 'accepted')) state = { kind: 'terminal', outcome: 'completed', reason: 'completed' };
-  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed'].includes(run.state.reason)) state = run.state;
+  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted'].includes(run.state.reason)) state = run.state;
+  else if (!run.cancelRequested && run.bindings.some(row => row.observedKind === 'quota-exhausted' && tasks.some(task => task.taskId === row.identity.taskId && task.phase === 'pending'))) {
+    const waits = (run.quotaWaits ?? []).filter(wait => run.bindings.some(row => row.identity.attemptId === wait.identity.attemptId));
+    state = { kind: 'parked', reason: 'quota-exhausted', since: Math.min(...waits.map(wait => wait.since)), deadline: Math.max(...waits.map(wait => wait.deadline)) };
+  }
   else if (!run.cancelRequested && tasks.some(task => task.decision?.reason === 'needs-input')) {
     const decision = tasks.find(task => task.decision?.reason === 'needs-input')!.decision!;
     state = { kind: 'parked', reason: 'needs-input', since: decision.since, deadline: decision.deadline };
@@ -49,13 +54,15 @@ function incrementIfChanged(run: RunSnapshot, next: RunSnapshot) {
 export function advanceRunLifecycle(input: unknown, expectedRevision: number, now: number, timeoutMs: number): RunSnapshot {
   const run = checkedRun(input, expectedRevision); deadlineAt(now, timeoutMs);
   if (run.state.kind === 'terminal') return run;
+  const reset = resetRunQuota(run, now);
+  if (reset) return reset;
   const expired = run.progress.some(task => task.decision && task.decision.deadline <= now);
   const progress = run.progress.map(task => {
-    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
+    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
     if (!task.decision || (task.decision.deadline > now && !(run.state.kind === 'parked' && run.state.deadline <= now))) return task;
     return { ...task, decision: undefined, phase: 'failed' as const };
   });
-  const dueHold = run.state.kind === 'parked' && ['operator-hold', 'progression-failed'].includes(run.state.reason) && run.state.deadline <= now;
+  const dueHold = run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted'].includes(run.state.reason) && run.state.deadline <= now;
   const live = progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase));
   let next = reconcileRunLifecycle({ ...run, progress, ...(dueHold && !live ? { state: { kind: 'running' } } : {}) }, now, timeoutMs);
   if ((run.state.kind === 'parked' && run.state.deadline <= now) || (expired && next.state.kind === 'parked')) {

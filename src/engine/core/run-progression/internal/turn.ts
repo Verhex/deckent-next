@@ -18,6 +18,7 @@ export interface RunProgressionOperations {
   advanceLifecycle?(query: RunQuery): Promise<void>;
   read(query: RunQuery): Promise<RunSnapshot>;
   reserve(command: RunReservationCommand): Promise<'reserved' | 'waiting' | 'changed'>;
+  canExecute?(identity: AttemptIdentity): Promise<boolean>;
   execute(identity: AttemptIdentity): Promise<void>;
   evaluate(command: TaskEvaluationCommand): Promise<'recorded' | 'changed'>;
   evaluationRecorded(identity: AttemptIdentity, revision: number): Promise<boolean>;
@@ -71,12 +72,13 @@ export class RunProgressionTurn {
     let attempted = 0, reservations = 0;
     let failure: { error: unknown } | undefined;
     const throwIfFailed = () => { if (failure) throw failure.error; };
-    const startReserved = (run: RunSnapshot) => {
+    const startReserved = async (run: RunSnapshot) => {
       for (const binding of run.bindings) {
         if (failure || signal.aborted || running.size >= this.concurrency) break;
         const identity = binding.identity;
         const task = run.progress.find(value => value.taskId === identity.taskId);
         if (started.has(identity.attemptId) || task?.phase !== 'active' || task.unresolvedEffects) continue;
+        if (this.operations.canExecute && !await this.operations.canExecute(identity)) continue;
         started.add(identity.attemptId); attempted++;
         // Capture failures immediately. Every admitted execution is drained before returning, even on error.
         const work = Promise.resolve().then(async () => {
@@ -101,14 +103,14 @@ export class RunProgressionTurn {
         run = await read(query);
         throwIfFailed();
         if (signal.aborted || run.cancelRequested || run.state.kind === 'terminal' || (run.state.kind === 'parked' && !['operator-hold', 'needs-input'].includes(run.state.reason))) break;
-        startReserved(run);
+        await startReserved(run);
         // Cooperative yield: stop taking new reservations, but drain existing custody before returning.
         if (run.state.kind === 'running' && (this.maxReservations === undefined || reservations < this.maxReservations)
           && running.size < this.concurrency && run.progress.some(task => task.phase === 'pending')) {
           reservations++;
           await this.operations.reserve({ ...query, commandId: this.runtime.commandId(), expectedRevision: run.revision });
           run = await read(query);
-          if (!run.cancelRequested) startReserved(run);
+          if (!run.cancelRequested) await startReserved(run);
         }
         if (!running.size) break;
         const completed = await Promise.race(running.values());

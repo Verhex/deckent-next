@@ -1,3 +1,4 @@
+import { readQuotaHolds } from '#adapters/core/sqlite-ledger/index.js';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
@@ -97,7 +98,7 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
       let costMetrics: MonitorLedgerRun['costMetrics'];
       try { costMetrics = readRunAcceptanceMetrics(db, snapshot); }
       catch (error) { recordOnly(error); diagnostics.push('run-cost-unavailable:' + key); }
-      runs.push(Object.freeze({ snapshot, ...(costMetrics ? { costMetrics } : {}), evaluations: readRunAcceptanceEvaluations(db, snapshot), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
+      runs.push(Object.freeze({ snapshot, quotaHolds: readQuotaHolds(db, snapshot, 0), ...(costMetrics ? { costMetrics } : {}), evaluations: readRunAcceptanceEvaluations(db, snapshot), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
         createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts),
         deliveryReceipts: Object.freeze(snapshot.revision === current.revision ? deliveries.get(key) ?? [] : []),
         delivery: snapshot.revision === current.revision ? aggregateDelivery(deliveries.get(key) ?? []) : null }));

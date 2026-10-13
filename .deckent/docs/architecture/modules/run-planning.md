@@ -49,3 +49,44 @@ admission/uncertain-outcome contract owns reconciliation; the terminal preserves
 a returned Run identity even if local cancellation races with that handoff.
 Author evidence and independent/live limits are in external
 `proof/DO-DILIM-B-2026-10-12/WORKER.md`.
+
+## Subscription quota recovery (KOTA-D1)
+
+Native worker events carry an additive `quota-exhausted` hint with optional window,
+nullable reset time and adapter source. Claude emits it only for the documented
+rejected status; allowed/overage warnings remain observational. Codex error
+matching comes from the adapter JSON registry. These hints never prove process
+termination or authorize an API fallback.
+
+The existing Task evaluation ingress verifies exact Attempt output custody, a
+definite nonzero uninterrupted exit and sealed model evidence before recording
+quota exhaustion. Model substitution retains its failure consequence. A quota
+evaluation atomically classifies the finished Attempt, leaves its Task pending,
+parks the Run and retains channel, reset/deadline, evidence digest and configured
+retry bound in the immutable evaluation receipt and Run snapshot. It records no
+acceptance metric and executes no business criterion or Git-specific retry flow.
+
+`runRuntime.quotaRecovery` v1 supplies `maxResumes` (zero disables automatic
+recovery; the shipped registry default allows one). Known future reset times
+set the deadline. Unknown or stale reset times use `runRuntime.parking.timeoutMs`
+and ordinary timeout closure; elapsed timeout is not reset evidence. After a
+known reset, lifecycle advancement moves the finished binding to retained history
+once and allows a fresh generation with the exact frozen profile. Fresh admission,
+policy, approvals and launch authority still apply. Uncertain effects and
+cancellation forbid automatic recovery. Multiple waits keep the latest deadline.
+
+Installation ledger channel holds exclude matching tasks at reservation and
+atomically refuse new dispatch claims, including already reserved tasks. Existing
+dispatch custody continues under its original grant/claim; no claim is stolen or
+replayed into a fresh launch. Holds survive cancellation/terminal Run state until
+their deadline. Inspect and monitor expose only the target task and wait metadata,
+not another scope's identities or output. Inspection wait projections also omit
+channel identities and evidence digests; canonical records retain both. EN/TR labels distinguish a known reset,
+an unknown reset and exhausted automatic retries.
+
+The quota payload/config are versioned additions to existing JSON contracts;
+legacy snapshots remain byte-equivalent on read. SQL tables and ledger version
+do not change, so no database migration/backup is introduced. An older binary
+that cannot parse the new evidence must not reopen these enriched records.
+Author fixture/check evidence is outside Git in KOTA-D1 proof; paid, live, N1,
+browser, hosted and independent acceptance were not performed by this lane.

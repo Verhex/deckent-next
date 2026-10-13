@@ -1,4 +1,4 @@
-import { applyTaskEvaluation, attemptSnapshotSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity } from '#domain/index.js';
+import { parkRunQuota, applyTaskEvaluation, attemptSnapshotSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity } from '#domain/index.js';
 import { dispatchRecordSchema } from '#engine/core/dispatch/index.js';
 import { assertRunExecution } from '#engine/core/runs/index.js';
 
@@ -41,6 +41,14 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
   if (attempt.revision !== evaluation.attemptRevision) stale();
   if (evaluation.workerExit && dispatch.terminal!.exitCode !== 0) notReady();
   if (evaluation.workspaceChange && evaluation.workspaceChange.patchDigest !== dispatch.patch?.digest) stale();
+  if (evaluation.quota) {
+    if (!pinned || pinned.pin.channelId !== evaluation.quota.channelId || evaluation.model?.verdict === 'substituted' || evaluation.workerExit || dispatch.terminal!.exitCode === 0 || dispatch.terminal!.interrupted !== false
+      || !evaluation.evidenceDigests?.includes(evaluation.quota.evidenceDigest)) notReady();
+    const { signal, channelId, evidenceDigest, maxResumes } = evaluation.quota;
+    const deadline = signal.resetsAtMs !== null && signal.resetsAtMs > timing.now ? signal.resetsAtMs : timing.now + timing.timeoutMs;
+    const proposed = parkRunQuota(run, expectedRunRevision, attempt, { identity: evaluation.identity, channelId, quota: signal, evidenceDigest, since: timing.now, deadline, maxResumes });
+    return Object.freeze({ ...proposed, evaluation, conclusion: 'unknown' as const, output: dispatch.output });
+  }
   const result = applyTaskEvaluation(run, expectedRunRevision, evaluation, timing);
-  return Object.freeze({ ...result, output: dispatch.output });
+  return Object.freeze({ ...result, attempt: undefined, output: dispatch.output });
 }

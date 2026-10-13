@@ -42,6 +42,7 @@ export interface MonitorLedgerAttempt {
 }
 export interface MonitorEvent { readonly atMs: number | null; readonly kind: string; readonly summary: string }
 export interface MonitorLedgerRun {
+  readonly quotaHolds?: readonly import('#engine/core/runs/index.js').TaskQuotaHold[];
   readonly costComparison?: { readonly registry: unknown; readonly policy: import('#domain/index.js').CostRecommendationPolicy };
   readonly costMetrics?: readonly import('#domain/index.js').DeckentMetrics[];
   readonly capacity?: { readonly executionSlots: number; readonly inFlightSlots: number };

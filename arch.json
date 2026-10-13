@@ -605,7 +605,8 @@
     "src/domain/core/attempt": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event"
       ],
       "plan": "CONTRACT"
     },
@@ -1382,7 +1383,8 @@
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
         "src/engine/core/provider-spend",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/domain/core/worker-event"
       ],
       "plan": "STORE"
     },

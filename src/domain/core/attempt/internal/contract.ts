@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { workerEffortSchema } from '#domain/core/provider-catalog/index.js';
 import { identitySchema as identity, counterSchema as counter } from '#domain/core/primitives/index.js';
 
@@ -22,13 +23,14 @@ export const attemptObservationSchema = z.object({
   result: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('started') }).strict(),
     z.object({ kind: z.literal('handoff-refused'), code: z.enum(['HANDOFF_PATCH_UNAPPLICABLE', 'HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_SOURCE_NOT_ACCEPTED', 'HANDOFF_LIMIT_EXCEEDED', 'HANDOFF_INVALID']) }).strict(),
+    z.object({ kind: z.literal('quota-exhausted'), ...processExitCauseShape, quota: quotaExhaustedSchema, evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
     z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
     z.object({ kind: z.literal('cancelled') }).strict(),
     z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),
     // Typed refusal before any dispatch claim (no launch, no effect); `code` is the refusing error code, open to adapter checks.
     z.object({ kind: z.literal('launch-refused'), code: identity }).strict(),
   ]).superRefine((result, context) => {
-    if (result.kind === 'exited' && !isValidExitCause(result)) {
+    if ((result.kind === 'exited' || result.kind === 'quota-exhausted') && !isValidExitCause(result)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
     }
   }).readonly(),

@@ -14,7 +14,7 @@ import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { assertEvaluationDigests, readEvaluationDigests, bindOperationEvidenceUse } from './evaluation-evidence.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
-import { recordAcceptanceMetric, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 // Shared reads have no writer timing dependency and expose no mutation path.
@@ -167,6 +167,7 @@ export class SqliteRunJournal {
       const evaluation = { ...normalized, evidenceDigests: normalized.evidenceDigests ?? Object.values(readEvaluationDigests(this.db, parsed.evaluation.identity)).filter((value): value is string => value !== undefined) };
       const proposed = proposeTaskEvaluationCommit(run, attempt, dispatch, parsed.expectedRevision, evaluation,
         { now: parsed.now ?? this.timing.now(), timeoutMs: parsed.timeoutMs ?? this.timing.timeoutMs, ...(parsed.unknownDisposition ? { unknownDisposition: parsed.unknownDisposition } : {}) });
+      if (proposed.attempt) persistQuotaAttempt(this.db, attempt, proposed.attempt);
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(proposed.snapshot.revision, JSON.stringify(proposed.snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -280,7 +281,7 @@ export class SqliteRunJournal {
       let policy;
       try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_POOL_REQUIRED'); }
       let wave;
-      try { wave = planSchedulingWave(current.graph, { excludedTaskIds: this.admission?.excluded(current, parsed.actor, parsed.now) ?? [], schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
+      try { wave = planSchedulingWave(current.graph, { excludedTaskIds: [...(this.admission?.excluded(current, parsed.actor, parsed.now) ?? []), ...quotaHeldTasks(this.db, current, parsed.now)], schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
       catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'transaction-wave-mismatch', parsed.identities.length, policy.capacity));
       // Validate every candidate before trimming; an invalid suffix must never disappear silently.

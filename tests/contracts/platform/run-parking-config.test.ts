@@ -15,3 +15,10 @@ it.each([
 ])('refuses unsafe or unsupported Run parking configuration %j', parking => {
   expect(() => CORE_SCHEMA.shape.runRuntime.parse({ parking })).toThrow();
 });
+
+it('keeps quota recovery versioned and bounded by configurable resume count, including disabled recovery', () => {
+  expect(CORE_SCHEMA.shape.runRuntime.parse({}).quotaRecovery).toEqual({ schemaVersion: 1, maxResumes: 1 });
+  expect(CORE_SCHEMA.shape.runRuntime.parse({ quotaRecovery: { schemaVersion: 1, maxResumes: 0 } }).quotaRecovery.maxResumes).toBe(0);
+  for (const quotaRecovery of [{ schemaVersion: 2, maxResumes: 1 }, { schemaVersion: 1, maxResumes: -1 }, { schemaVersion: 1, maxResumes: 0.5 }, { schemaVersion: 1, maxResumes: Number.MAX_SAFE_INTEGER + 1 }])
+    expect(() => CORE_SCHEMA.shape.runRuntime.parse({ quotaRecovery })).toThrow();
+});

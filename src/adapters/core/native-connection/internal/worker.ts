@@ -237,9 +237,11 @@ const CLAUDE_TOOLS: Readonly<Record<string, string>> = { Read: 'read', NotebookR
   Write: 'write', Bash: 'shell', BashOutput: 'shell', KillShell: 'shell', KillBash: 'shell', Grep: 'search', Glob: 'search', LS: 'search',
   WebFetch: 'network', WebSearch: 'network', Task: 'agent', Agent: 'agent' };
 const IGNORED_SYSTEM = new Set(['thinking_tokens', 'hook_started', 'hook_response', 'hook_progress', 'compact_boundary', 'informational', 'status']);
-export interface NormalizerState { sequence: number; readonly startMs: number; cwd: string; readonly usageIds: Set<string>; readonly unmapped: Map<string, number>; readonly secrets: readonly string[] }
-export function createNormalizerState(secrets: readonly string[], startMs = Date.now()): NormalizerState {
-  return { sequence: 0, startMs, cwd: '/workspace', usageIds: new Set(), unmapped: new Map(), secrets };
+const NATIVE_TIMESTAMP_SCALE = 1000; // Native protocol reset timestamps are Unix seconds; contract uses milliseconds.
+export interface QuotaPolicy { readonly claudeRejectedStatuses: readonly string[]; readonly codexPatterns: readonly string[] }
+export interface NormalizerState { readonly quotaPolicy?: QuotaPolicy; sequence: number; readonly startMs: number; cwd: string; readonly usageIds: Set<string>; readonly unmapped: Map<string, number>; readonly secrets: readonly string[] }
+export function createNormalizerState(secrets: readonly string[], startMs = Date.now(), quotaPolicy?: QuotaPolicy): NormalizerState {
+  return { ...(quotaPolicy ? { quotaPolicy } : {}), sequence: 0, startMs, cwd: '/workspace', usageIds: new Set(), unmapped: new Map(), secrets };
 }
 /** Unmapped native type names are worker text too: redacted and bounded before they become counts (Astra 2066 R1). */
 export function countUnmapped(state: NormalizerState, raw: string, count = 1): void {
@@ -301,9 +303,13 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
     }
   } else if (type === 'rate_limit_event') {
     const info = (data.rate_limit_info ?? {}) as Record<string, unknown>, windows = (info.unifiedWindows ?? {}) as Record<string, Record<string, unknown>>;
+    if (typeof info.status === 'string' && state.quotaPolicy?.claudeRejectedStatuses.includes(info.status)) {
+      const resetsAtMs = typeof info.resetsAt === 'number' && Number.isSafeInteger(info.resetsAt * NATIVE_TIMESTAMP_SCALE) && info.resetsAt >= 0 ? info.resetsAt * NATIVE_TIMESTAMP_SCALE : null;
+      emit('quota-exhausted', { source: 'claude-rate-limit', resetsAtMs, ...(typeof info.rateLimitType === 'string' ? { window: red(info.rateLimitType, 32) } : {}) });
+    }
     for (const [window, value] of Object.entries(windows)) {
       const utilization = typeof value.utilization === 'number' ? Math.min(1, Math.max(0, value.utilization)) : null;
-      if (utilization !== null) emit('quota', { window: window.slice(0, 32), utilization, resetsAtMs: typeof value.resetsAt === 'number' ? Math.round(value.resetsAt * 1000) : null,
+      if (utilization !== null) emit('quota', { window: window.slice(0, 32), utilization, resetsAtMs: typeof value.resetsAt === 'number' ? Math.round(value.resetsAt * NATIVE_TIMESTAMP_SCALE) : null,
         status: String(info.status ?? 'unknown').slice(0, 32) });
     }
   } else if (type === 'result') {
@@ -354,6 +360,11 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
   const data = record(parsed);
   if (!data) { miss('non-object'); return; }
   const type = typeof data.type === 'string' ? data.type : 'untyped';
+  const errorText = type === 'turn.failed' ? record(data.error)?.message : type === 'error' ? data.message
+    : type === 'item.completed' && record(data.item)?.type === 'error' ? record(data.item)?.message : null;
+  if (typeof errorText === 'string' && state.quotaPolicy?.codexPatterns.some(pattern => new RegExp(pattern, 'i').test(errorText))) {
+    emit('quota-exhausted', { source: 'codex-text', resetsAtMs: null });
+  }
   /** Stable, bounded, schema-valid tool id: a plain short native id as is, otherwise a digest (never the redacted text). */
   const toolId = (raw: string, suffix = '') => {
     const base = raw.length > 0 && raw.length <= 64 && /^[A-Za-z0-9_.:-]+$/.test(raw) && red(raw, 96) === raw ? raw : `h${createHash('sha256').update(raw).digest('hex').slice(0, 40)}`;
@@ -535,7 +546,7 @@ async function main() {
     request.on('error', reject); request.on('timeout', () => request.destroy(new Error()));
   });
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; capabilities: NativeWorkerCapabilities; home: string; file: string;
-    credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
+    quotaPolicy?: QuotaPolicy; credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
     finalReport?: { schemaVersion: 1; limits: ReportLimits };
     dependencyContext?: { text: string; sha256: string; maxBytes: number };
     preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] };
@@ -612,7 +623,7 @@ async function main() {
     segments: delivery.segments }) + '\n'));
   // Native events can contain tool output and request headers. Never forward raw events: only redacted contract events leave.
   let tail = ''; let bytes = 0;
-  const state = createNormalizerState([...secretValues(setup.credential), proxy]);
+  const state = createNormalizerState([...secretValues(setup.credential), proxy], Date.now(), setup.quotaPolicy);
   const channel = eventChannel(socketPath);
   const codex = createCodexState();
   if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);

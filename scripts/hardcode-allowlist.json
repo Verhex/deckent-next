@@ -131,7 +131,6 @@
   {"file":"src/adapters/core/native-connection/internal/worker.ts","fingerprint":"a8c31330b2be1abdccc3713b0688785a849dea9281c28d2c7540ce10bfa17325","rule":"G1"},
   {"file":"src/adapters/core/native-connection/internal/worker.ts","fingerprint":"b2fb65c168ec92ca9b2bdc6c204f32d218497a8f814ffa2e93a4b7c4b36805bf","rule":"G2"},
   {"file":"src/adapters/core/native-connection/internal/worker.ts","fingerprint":"b8cb45807e46220a33c33cb3a11586e7ce5bf5bee87244e228f48c17cec4198a","rule":"G1"},
-  {"file":"src/adapters/core/native-connection/internal/worker.ts","fingerprint":"cc96c3f7bfab0e259c827b665ffce414988d133ebf8587a702ee2465d96720e7","rule":"G2"},
   {"file":"src/adapters/core/native-connection/internal/worker.ts","fingerprint":"d8f4677d01f65e7e099de827da0ed9f5b4181ee634e98d0e59790d4df1aa0d77","rule":"G2"},
   {"file":"src/adapters/core/npm-registry/internal/fetch.ts","fingerprint":"05ef7bf109c2c0f4abf583afe9f289764060c8a70fa77212ee2fb60c2c340fa4","rule":"G2"},
   {"file":"src/adapters/core/process-runner/internal/contract.ts","fingerprint":"2854fa3317aa6113a4e43d909e13fb501b3342a6a28cc2b5448d96841439c9a0","rule":"G2"},

@@ -1,5 +1,6 @@
 import { t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase, WorkerFinalReportResult, WorkerModelView } from '#domain/index.js';
+import { quotaWaitText } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
   schemaVersion: 1 | 2; identity: AttemptIdentity; finalReport?: WorkerFinalReportResult; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
@@ -38,6 +39,7 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
     else if (event.kind === 'tool.result' && event.status === 'error') lines.push(`${at}  ${t('cli.task.transcript.toolError', { tool: event.toolId }, locale)}`);
     else if (event.kind === 'message' && !event.thinking && event.excerpt) lines.push(`${at}  ${phaseLabel('thinking', locale)}  ${event.excerpt}`);
     else if (event.kind === 'limit') lines.push(`${at}  ${t('cli.task.transcript.limit', { limit: event.limit }, locale)}`);
+    else if (event.kind === 'quota-exhausted') lines.push(`${at}  ${event.resetsAtMs === null ? t('run.quota.unknown', {}, locale) : quotaWaitText(event.resetsAtMs, true, locale)}`);
     else if (event.kind === 'session.ended') lines.push(`${at}  ${phaseLabel(event.outcome === 'success' ? 'finished' : 'failed', locale)}`);
   }
   if (data.sealed?.projection === 'partial') lines.push(t('cli.task.transcript.projectionPartial', {}, locale));

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './acceptance.js';
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
@@ -19,6 +20,7 @@ export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend(
   Object.freeze({ ...model, evidenceCapability: model.evidenceCapability ?? readLegacyModelUsageEvidence(model.provider) }));
 export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
+  quota: z.object({ signal: quotaExhaustedSchema, channelId: modelText, evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), maxResumes: counterSchema }).strict().optional(),
   workerExit: workerNeedsInputSchema.optional(), acceptance: evaluationAcceptanceSchema.optional(),
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
   sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),

@@ -138,7 +138,11 @@
       "schemaVersion": 1,
       "timeoutMs": 86400000
     },
-    "pollIntervalMs": 1000
+    "pollIntervalMs": 1000,
+    "quotaRecovery": {
+      "maxResumes": 1,
+      "schemaVersion": 1
+    }
   },
   "schema_version": 4,
   "service": {
