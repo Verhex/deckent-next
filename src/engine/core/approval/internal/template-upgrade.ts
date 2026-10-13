@@ -1,5 +1,8 @@
-import { authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, planPolicyChange, policySchema,
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, planPolicyChange, policySchema,
   type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
+import { sha256 } from '#platform/index.js';
+import { effectWireKey } from '#engine/core/effect/index.js';
+import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
@@ -14,6 +17,7 @@ export interface TemplateUpgradeResult {
   readonly summary: string | null;
   readonly missing: readonly TemplateUpgradeMissing[];
   readonly reason: string | null;
+  readonly conflicts: readonly string[];
 }
 
 /**
@@ -24,7 +28,7 @@ export interface TemplateUpgradeResult {
  * current template version, through the same chain; earlier versions stay. Historical `template-v5` audit tags remain stable.
  */
 export class PolicyTemplateUpgrade {
-  constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve' | 'policy'>,
+  constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve'> & { readonly policy: PersistentStandingDependencies['policy'] & Partial<AuthorityHistorySource> },
     private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string }) {}
   private async snapshot() { return policySchema.parse(await this.deps.policy.load()); }
   private missing(policy: ReturnType<typeof policySchema.parse>, principal: VerifiedPrincipal, scopeId: string, touched: Parameters<typeof delegationWithin>[2]): TemplateUpgradeMissing[] {
@@ -34,17 +38,54 @@ export class PolicyTemplateUpgrade {
     if (!delegationWithin(policy, principal, touched).ok) out.push('delegation');
     return out;
   }
+  private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
+    const prefix = `policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-`;
+    if (entry.key?.startsWith(prefix) && /^[a-f0-9]{64}$/.test(entry.key.slice(prefix.length))) return true;
+    if (entry.before.schemaVersion !== 2) return false;
+    const plan = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, ...this.names });
+    if (plan.status !== 'plan') return false;
+    const tag = `template-v5:${plan.rules.map(rule => rule.id).join(',')}`;
+    const commandId = sha256(`policy-template-upgrade:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
+    return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
+      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: plan.change, expectedVersion: entry.before.revision });
+  }
   async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
     readonly reason: string }): Promise<TemplateUpgradeResult> {
     const policy = await this.snapshot();
     const result = (status: TemplateUpgradeResult['status'], extra: Partial<TemplateUpgradeResult> = {}): TemplateUpgradeResult => Object.freeze({ schemaVersion: 1, status,
-      revision: policy.revision, rules: [], summary: null, missing: [], reason: null, ...extra });
+      revision: policy.revision, rules: [], summary: null, missing: [], reason: null, conflicts: [], ...extra });
     if (policy.schemaVersion !== 2) return result('unavailable', { reason: 'invalid' });
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const held = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.filter(id => policy.grants.some(grant => grant.id === id));
-      if (!held.length) return result('nothing-to-roll-back');
+      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId);
+      const history = await this.deps.policy.authorityHistory?.();
+      if (!history || history.length === 0) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
+      // Follow exact effective revisions back from the snapshot, never infer provenance from an id or current template alone.
+      const chain = []; let revision = policy.revision;
+      const visited = new Set<string>();
+      while (!visited.has(revision)) {
+        visited.add(revision);
+        const candidates = history.filter(entry => entry.after.revision === revision);
+        if (candidates.length > 1) return result('unavailable', { reason: 'history-unavailable' });
+        const entry = candidates[0];
+        if (!entry) {
+          if (revision.split('+').some(part => part.startsWith('a-') || part.startsWith('m-'))) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
+          break;
+        }
+        chain.push(entry); revision = entry.before.revision;
+      }
+      if (chain.some(entry => entry.before.revision === policy.revision)) return result('unavailable', { reason: 'history-unavailable' });
+      const conflicts = [...delta.conflicts], held: string[] = [];
+      for (const rule of delta.rules) {
+        const changes = chain.filter(entry => JSON.stringify(entry.before.grants.find(item => item.id === rule.id)) !== JSON.stringify(entry.after.grants.find(item => item.id === rule.id)));
+        const added = changes.find(entry => !entry.before.grants.some(item => item.id === rule.id));
+        if (!added) continue;
+        if (!this.upgraded(added, input.principal, input.scopeId)) { conflicts.push(rule.id); continue; }
+        if (changes[0] === added && JSON.stringify(added.after.grants.find(item => item.id === rule.id)) === JSON.stringify(rule)) held.push(rule.id);
+        else conflicts.push(rule.id);
+      }
+      if (!held.length) return result('nothing-to-roll-back', { conflicts });
       const change = { schemaVersion: 1 as const, changes: held.map(id => ({ kind: 'grant.remove' as const, id })) };
       const planned = planPolicyChange(files.policy, files.bindings, change);
       const missing = this.missing(policy, input.principal, input.scopeId, planned.touched);
@@ -52,10 +93,10 @@ export class PolicyTemplateUpgrade {
       const after = resolvePolicyBindings({ ...(planned.policy ?? files.policy as object), revision: 'planned' }, files.bindings);
       if (evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'execute', resource: { kind: 'operation', id: 'policy.administer' } }).decision !== 'allow'
         || evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'decide', resource: { kind: 'approval', id: 'policy-template-upgrade' } }).decision !== 'allow') missing.push('lockout');
-      if (missing.length) return result('refused', { missing });
+      if (missing.length) return result('refused', { missing, conflicts });
       await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change, tag: `template-v5-rollback:${held.join(',')}`,
         reason: input.reason, revision: policy.revision, kind: 'policy-template-upgrade' });
-      return result('rolled-back', { reason: held.join(',') });
+      return result('rolled-back', { reason: held.join(','), conflicts });
     }
     const plan = firstRunTemplateAdditions(files.policy, { person: input.principal, ...this.names });
     if (plan.status === 'unavailable') return result('unavailable', { reason: plan.reason });

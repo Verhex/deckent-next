@@ -79,7 +79,7 @@ export type EffectApprovalPending = Readonly<{ schemaVersion: 2; status: 'approv
   target: EffectTargetRef; approval: EffectApprovalPendingRequest }>;
 export type EffectOutcome = EffectResult | EffectApprovalPending;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-const wireKey = (command: EffectCommand) => digest(['effect-key:1', command.scopeId, command.target.kind, command.target.id,
+export const effectWireKey = (command: EffectCommand) => digest(['effect-key:1', command.scopeId, command.target.kind, command.target.id,
   `${command.operation.id}@${command.operation.version}`, command.idempotencyKey].join('\0'));
 const binding = (descriptor: OperationDescriptor, target: EffectTarget) =>
   digest(`effect-binding:1\0${encodeCommandProjection('effect-descriptor', descriptor)}\0${target.identity()}`);
@@ -170,7 +170,7 @@ export class EffectApplication {
     // claim carries the approval it consumed; every later pass of this command verifies that record, not a window.
     const approval = await gate(await policy(), null);
     const intent = effectIntentSchema.parse({ schemaVersion: 1, command, descriptor, actor: verified.session.principalRef,
-      idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest, wireKey: wireKey(command), targetBinding: current,
+      idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest, wireKey: effectWireKey(command), targetBinding: current,
       ...(approval ? { approval } : {}) });
     return this.apply(await this.store.claimEffect(intent), target, settle);
   }

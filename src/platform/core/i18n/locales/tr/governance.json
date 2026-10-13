@@ -409,6 +409,7 @@
   "error.SCOPE_UNKNOWN": "Bu scope şirketinize kayıtlı değil. Kurulum politikasında adlandırın ya da bir yöneticiden kaydetmesini isteyin.",
   "error.POLICY_APPROVAL_UNSUPPORTED": "Bu işlem onay gerektiriyor, ama katalog dışında henüz bir onay akışı yok. Yetki verilmiyor, reddediliyor.",
   "error.POLICY_DELEGATION_EXCEEDS": "Değişiklik, kararı veren kişinin sahip olduğundan fazlasını veriyor ya da kaldırıyor ({detail}). Hiçbir şey değişmedi; bu yetkiye sahip birinin karar vermesini isteyin.",
+  "error.POLICY_LAST_ADMIN": "Bu değişiklik son kullanılabilir politika yöneticisini kaldırır. Önce politika yönetimi ve onay inceleme/karar yetkisi olan başka bir admin ekleyin.",
   "error.POLICY_CHANGE_INVALID": "Policy değişikliği güncel policy için geçerli değil (eksik ya da tekrarlanan id, bilinmeyen rol ya da geçersiz sonuç). Hiçbir şey değişmedi.",
   "error.POLICY_CHANGE_TOO_LARGE": "Policy değişikliği delegasyon sınırına göre denetlenemeyecek kadar büyük. Daha küçük değişikliklere bölün.",
   "error.POLICY_ADMINISTER_UNSUPPORTED": "Bu kurulumun policy'si (şema sürümü 1) rol bağlaması içermiyor; policy yönetimi policy sürüm 2 ister.",
@@ -940,5 +941,19 @@
   "error.CODING_TEMPLATE_IMAGE_REQUIRED": "Kodlama şablonu oluşturmadan önce execution.docker bölümünde değişmez imaj ve kaynak sınırlarını yapılandırın.",
   "error.CODING_TEMPLATE_TOOLCHAIN_REQUIRED": "Bu sağlayıcı ve imaj için tek bir kabul edilmiş CLI sürümü ve keşif seçimi yok. Önce seçilen imaj için kabul edilmiş toolchain profili yapılandırın.",
   "error.CODING_TEMPLATE_KIND_CONFLICT": "Görev türü veya üretilen profil kimliği farklı profil verisine bağlı. Başka tür seçin; mevcut bağlar değiştirilmez.",
-  "error.CODING_TEMPLATE_REGISTRY_INVALID": "Mevcut admission registry geçersiz. Önce `deckent config set admission` veya `/config` ile geçerli profiller, görev türü bağları ve değerlendiriciler yapılandırın."
+  "error.CODING_TEMPLATE_REGISTRY_INVALID": "Mevcut admission registry geçersiz. Önce `deckent config set admission` veya `/config` ile geçerli profiller, görev türü bağları ve değerlendiriciler yapılandırın.",
+  "cli.policy.status": "Politika yönetimi · {scope}: {count} kullanılabilir admin; {template}; revizyon {revision}",
+  "cli.policy.status.first-run": "ilk kurulum v{version}",
+  "cli.policy.status.hand-built": "elle kurulmuş politika",
+  "cli.policy.status.drift": "şablon soyu doğrulanmadı / sapma",
+  "cli.policy.status.bootstrap": "Bootstrap gerekli: kurulum yöneticisinin kurtarma yolunu kullanın.",
+  "cli.policy.status.recovery": "Kurtarma gerekli: kullanılabilir admin kalmamış.",
+  "cli.policy.status.ready": "Politika yönetimi kullanılabilir.",
+  "cli.policy.status.unverified": "Dış kimlik etkinliği, terminal mevcudiyeti ve host sahipliği doğrulanmadı.",
+  "cli.policy.upgrade.conflicts": "Değişmiş kurallar korundu: {ids}",
+  "doctor.policyAdministration": "Politika yönetimi: {count} kullanılabilir admin. {status}",
+  "cli.help.action.policyStatus": "Politika yönetimi hazırlığını incele",
+  "cli.help.policyStatus": "deckent policy status [--scope <id>] [--json] [--lang en|tr] — admin, şablon soyu, revizyon ve bootstrap/kurtarma hazırlığı; salt okunur.",
+  "mcp.tool.policyAdministration": "Kapsamdaki politika yönetimi hazırlığını, adminleri ve revizyonu incele; salt okunur, onay kararı vermez.",
+  "doctor.policyAdministration.unavailable": "Politika yönetimi: erişilemiyor veya yetki yok; hazırlık durumu bilinmiyor."
 }

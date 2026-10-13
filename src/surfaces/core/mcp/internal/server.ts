@@ -22,7 +22,9 @@ import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, ru
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
 import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
+import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 export interface McpApplications {
+  inspectPolicyAdministration?(query: PolicyAdministrationQuery): Promise<PolicyAdministrationStatus>;
   planRun?(command: BrainPlanCommand): Promise<unknown>;
   /** Composition records only sealed digests under the authenticated MCP principal, never decoded text. */
   recordModelIngress?(notice: ModelIngressProjection, input: unknown): Promise<void>;
@@ -101,6 +103,9 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
     description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,
     invoke: input => inspectDecision.call(applications, decisionQuerySchema.parse(input)) });
+  if (applications.inspectPolicyAdministration) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_policy_administration',
+    description: t('mcp.tool.policyAdministration', {}, locale), schema: policyAdministrationQuerySchema,
+    invoke: input => applications.inspectPolicyAdministration!(policyAdministrationQuerySchema.parse(input)) });
   if (renewApproval) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: false, name: 'renew_approval',
     description: t('mcp.tool.renewApproval', {}, locale), schema: approvalRenewalSchema, boundedDelivery: true,
     invoke: (input, delivery) => renewApproval.call(applications, approvalRenewalSchema.parse(input), delivery) });

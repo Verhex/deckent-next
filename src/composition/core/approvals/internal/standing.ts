@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
-  PolicyTemplateUpgrade, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
+  PolicyAdministrationInspection, PolicyTemplateUpgrade, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -15,7 +15,7 @@ function withStanding<T>(root: string, scopeId: string, options: ConfigLoadOptio
 }
 /** The local OS person's governed `policy.administer@1` chain (read: a policy source only; write: the administration, and the approval decided as that person). */
 export async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
-  use: (deps: PersistentStandingDependencies & { readonly effects?: import('#engine/index.js').EffectStore }, person: Person) => Promise<T>): Promise<T> {
+  use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore }, person: Person) => Promise<T>): Promise<T> {
   try {
     const { config, layout, principal, path } = await loadConfiguredScopeContext(root, scopeId, options, access);
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
@@ -84,4 +84,9 @@ export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, o
     new PolicyTemplateUpgrade(deps, { proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
       policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID })
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }) }));
+}
+
+/** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */
+export function inspectConfiguredPolicyAdministration(root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions = {}): Promise<PolicyAdministrationStatus> {
+  return withPolicyAdministration(root, query.scopeId, options, 'read', (deps, person) => new PolicyAdministrationInspection(deps.policy).inspect(person, query));
 }

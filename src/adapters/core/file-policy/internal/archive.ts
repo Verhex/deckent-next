@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, opendir, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 
@@ -36,6 +36,32 @@ export class AuthorityArchive {
       const directory = await open(this.directory, constants.O_RDONLY | constants.O_DIRECTORY);
       try { await directory.sync(); } finally { await directory.close(); }
     } finally { if (!renamed) await unlink(temporary).catch(() => undefined); }
+  }
+  /** Bounded, read-only history: directory names and total retained bytes share the policy source's byte budget. */
+  async history(maxBytes: number): Promise<readonly AuthorityArchiveEntry[] | null> {
+    try {
+      const directory = await lstat(this.directory);
+      if (!directory.isDirectory() || directory.isSymbolicLink() || directory.uid !== this.ownerUid || (directory.mode & 0o077) !== 0) return null;
+      const entries: AuthorityArchiveEntry[] = []; let bytes = 0;
+      const handle = await opendir(this.directory);
+      for await (const item of handle) {
+        bytes += Buffer.byteLength(item.name);
+        if (bytes > maxBytes) return null;
+        if (!/^[kr]-[A-Za-z0-9_-]+\.json$/.test(item.name)) continue;
+        const file = await open(join(this.directory, item.name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        try {
+          const stat = await file.stat();
+          bytes += stat.size;
+          if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== this.ownerUid || (stat.mode & (constants.S_IRWXG | constants.S_IRWXO)) !== 0 || bytes > maxBytes) return null;
+          const buffer = Buffer.alloc(stat.size); let offset = 0;
+          while (offset < buffer.length) { const chunk = await file.read(buffer, offset, buffer.length - offset, offset); if (!chunk.bytesRead) break; offset += chunk.bytesRead; }
+          const value = entrySchema.safeParse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer))), after = await file.stat();
+          if (!value.success || offset !== buffer.length || stat.size !== after.size || stat.mtimeMs !== after.mtimeMs || stat.ctimeMs !== after.ctimeMs) return null;
+          if (value.data.state === 'committed') entries.push(value.data);
+        } finally { await file.close(); }
+      }
+      return entries;
+    } catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? [] : null; }
   }
   async remove(name: string): Promise<void> { await unlink(join(this.directory, name)).catch(() => undefined); }
   /** The keyed record, `missing`, or null when it cannot be trusted (unreadable, torn, a link, foreign). */
