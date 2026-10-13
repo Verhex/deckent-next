@@ -37,24 +37,29 @@ function parse(parts: string[], request = responsesFixture('http://127.0.0.1:1/v
   for (const part of parts) for (const chunk of split ? [...Buffer.from(part)].map(byte => Buffer.from([byte])) : [Buffer.from(part)]) deltas.push(...stream.push(chunk).deltas);
   return { result: stream.finish(), final, withdrawn, deltas, stream };
 }
-it('sends Responses tools/reasoning/store:false; streams a tool turn, replays opaque reasoning only for the exact scope/profile/prefix', async () => {
-  const host = await fixture(toolStream().join('')), f = responsesFixture(host.endpoint), priced = createOpenAiChatPricedNative();
+it.each([true, false])('sends Responses tools/reasoning/store:false; stream=%s, replays final opaque reasoning only for the exact scope/profile/prefix', async stream => {
+  const parts = toolStream();
+  parts[5] = event('response.output_item.done', 5, { output_index: 0, item: { ...reasoningItem(), encrypted_content: 'done-opaque-canary' } });
+  const host = await fixture(stream ? parts.join('') : JSON.stringify(responsesFinal([reasoningItem(), callItem()])), 200, stream);
+  const f = responsesFixture(host.endpoint, stream), priced = createOpenAiChatPricedNative();
   const prepared = await priced.native.prepare(f.profile, f.definition, f.request), deltas: ModelInvocationDelta[] = [];
   const result = await priced.native.send(prepared, undefined, delta => deltas.push(delta));
   expect('kind' in result).toBe(false);
   expect(host.sent[0]).toMatchObject({ store: false, reasoning: { effort: 'medium' }, max_output_tokens: 32,
     tools: [{ type: 'function', name: 'read_file', strict: false }], input: [{ role: 'user', content: 'read a.ts' }] });
   for (const absent of ['messages', 'reasoning_effort', 'max_completion_tokens', 'stream_options', 'previous_response_id', 'conversation']) expect(host.sent[0]).not.toHaveProperty(absent);
-  expect(deltas).toEqual([{ kind: 'reasoning', text: 'Plan' }]);
+  expect(deltas).toEqual(stream ? [{ kind: 'reasoning', text: 'Plan' }] : []);
   expect(openAiChatMessageFromInvocation(invocation(result))).toMatchObject({ finish: 'tool_calls', toolCalls: [{ id: 'call_1', name: 'read_file', argumentsJson: '{"path":"a.ts"}' }] });
   expect(openAiChatUsageFromInvocation(invocation(result))).toEqual({ promptTokens: 100, completionTokens: 10, reasoningTokens: 6 });
   expect(JSON.stringify(result)).not.toContain('opaque-reasoning-canary');
+  expect(JSON.stringify(result)).not.toContain('done-opaque-canary');
   const messages = [...f.request.messages, { role: 'assistant', content: '', tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.ts"}' } }] },
     { role: 'tool', tool_call_id: 'call_1', content: 'file content' }];
   const continuationRequest = { ...f.request, messages, max_completion_tokens: 1 };
   const continuation = await priced.native.prepare(f.profile, f.definition, continuationRequest);
   const input = JSON.parse((continuation as { body: string }).body).input;
   expect(input).toContainEqual(expect.objectContaining({ type: 'reasoning', encrypted_content: 'opaque-reasoning-canary' }));
+  expect(JSON.stringify(input)).not.toContain('done-opaque-canary');
   expect(input).toContainEqual({ type: 'function_call_output', call_id: 'call_1', output: 'file content' });
   const command = { ...f.command, commandId: 'follow', nativeRequest: continuationRequest };
   const quote = priced.quote({ ...f, command, prepared: continuation, profileDigest: modelInvocationProfileDigest(f.profile), requestDigest: modelInvocationRequestDigest(command) } as never);

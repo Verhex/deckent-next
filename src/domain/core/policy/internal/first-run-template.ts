@@ -42,7 +42,8 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v9 (W3-AUTHORITY): a separately named MCP actor gets observation only. Mutations and paid calls need an explicit MCP grant;
  * neither an owner grant nor `principals: all` is a delegation to MCP. No approval broker is claimed on model/spend paths. */
 /** v10 (RUN-HAZIR-A): the named installing person can run work in the installed scope; pool management and integration remain separate. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 10;
+/** v11 (SABLON-V11): the named person gets separate installation-wide quota release and scoped integration/adoption authority. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 11;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -76,7 +77,7 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
   const built = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION);
   return Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION, policy: built.policy, bindings: built.bindings });
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -113,6 +114,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(v8 ? [{ ...grant(FIRST_RUN_UPGRADE_RULE_IDS.backup, 'allow', 'backup', 'all'), scopes: 'all' as const }] : []),
       ...(version >= 9 ? mcpObservationRules(principal, [scopeId]) : []),
       ...(version >= 10 ? executionRules(principal, [scopeId]) : []),
+      ...(version >= 11 ? deliveryRules(principal, [scopeId]) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -121,7 +123,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -134,7 +136,7 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
   // Exact older templates become the current one; edited policies take the explicit add-only plan.
-  for (const from of [9, 8, 7, 6, 5, 4] as const) {
+  for (const from of [10, 9, 8, 7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -164,10 +166,11 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   modelActivation: 'first-run-model-activation', modelInvocation: 'first-run-model-invocation', spending: 'first-run-provider-spending', backup: 'first-run-backup',
   observeRun: 'first-run-mcp-observe-run', observeScope: 'first-run-mcp-observe-scope', observeApproval: 'first-run-mcp-observe-approval',
   observeActivation: 'first-run-mcp-observe-model-activation', observeInvocation: 'first-run-mcp-observe-model-invocation', observeSpending: 'first-run-mcp-observe-provider-spend-account',
-  runs: 'first-run-runs', pools: 'first-run-pools', attempts: 'first-run-attempts', workTargets: 'first-run-work-targets' });
+  runs: 'first-run-runs', pools: 'first-run-pools', attempts: 'first-run-attempts', workTargets: 'first-run-work-targets',
+  quotaRelease: 'first-run-quota-release', integration: 'first-run-integration', workTargetAdopt: 'first-run-work-target-adopt' });
 /** Rollback of the current template version never removes earlier versions' administration or observation authority. */
 export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([
-  FIRST_RUN_UPGRADE_RULE_IDS.runs, FIRST_RUN_UPGRADE_RULE_IDS.pools, FIRST_RUN_UPGRADE_RULE_IDS.attempts, FIRST_RUN_UPGRADE_RULE_IDS.workTargets,
+  FIRST_RUN_UPGRADE_RULE_IDS.quotaRelease, FIRST_RUN_UPGRADE_RULE_IDS.integration, FIRST_RUN_UPGRADE_RULE_IDS.workTargetAdopt,
 ]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
@@ -218,7 +221,7 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     rule(ids.modelActivation, 'model-activation', MODEL_ACTIVATION_ACTIONS, 'all', 'all'), rule(ids.modelInvocation, 'model-invocation', MODEL_INVOCATION_ACTIONS, 'all', scopes),
     rule(ids.spending, 'provider-spend-account', PROVIDER_SPEND_ACCOUNT_ACTIONS, 'all', scopes),
     // v8 (BACKUP-COMMAND): installation-wide backup authority, added the same add-only way.
-    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all'), ...mcpObservationRules(person, scopes), ...executionRules(person, scopes)];
+    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all'), ...mcpObservationRules(person, scopes), ...executionRules(person, scopes), ...deliveryRules(person, scopes)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
@@ -292,4 +295,33 @@ function executionRules(person: Person, scopes: readonly string[]): readonly Pol
     { id: ids.attempts, kind: 'attempt', actions: ['execute', 'evaluate', 'read-output', 'recover-output', 'cancel', 'reconcile', 'release'] },
     { id: ids.workTargets, kind: 'work-target', actions: ['use'] },
   ].map(({ id, kind, actions }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: [...scopes], principals: [person], resource: { kind, ids: 'all' } }));
+}
+
+/** v11 keeps quota release separate from pool management; integration uses the installation's existing scoped attempt/target gates. */
+function deliveryRules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
+  if (isMcpPrincipal(person)) return [];
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS;
+  return [
+    { id: ids.quotaRelease, kind: 'pool', actions: ['release-quota'], scopes: 'all' as const },
+    { id: ids.integration, kind: 'attempt', actions: ['prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'], scopes: [...scopes] },
+    { id: ids.workTargetAdopt, kind: 'work-target', actions: ['adopt'], scopes: [...scopes] },
+  ].map(({ id, kind, actions, scopes: ruleScopes }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: ruleScopes,
+    principals: [person], resource: { kind, ids: 'all' } }));
+}
+
+/** Current version delta by content: a same-id customization is preserved and reported, never deleted as a template rule. */
+export function firstRunTemplateRollback(current: unknown, person: Person, scopeId?: string): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] } {
+  const policy = policyFileSchema.parse(current);
+  if (policy.schemaVersion !== 2) return { rules: [], conflicts: [] };
+  const read = policy.grants.find(rule => rule.id === 'first-run-read-tools');
+  if (isMcpPrincipal(person)) return { rules: [], conflicts: [] };
+  const scopes = read && read.scopes !== 'all' && namesPerson(read, person) ? read.scopes : scopeId ? [identitySchema.parse(scopeId)] : null;
+  if (!scopes) return { rules: [], conflicts: [] };
+  const expected = deliveryRules({ issuer: person.issuer, subject: person.subject }, scopes), rules: PolicyGrant[] = [], conflicts: string[] = [];
+  for (const want of expected) {
+    const held = policy.grants.find(rule => rule.id === want.id);
+    if (held && canonicalJson(held) === canonicalJson(want)) rules.push(held);
+    else if (held) conflicts.push(held.id);
+  }
+  return { rules: Object.freeze(rules), conflicts: Object.freeze(conflicts) };
 }

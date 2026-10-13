@@ -34,7 +34,7 @@ async function fixture(controlScopes: 'all' | readonly string[] = 'all') {
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
     { id: 'run', effect: 'allow', actions: ['create', 'inspect', 'reserve'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
     { id: 'pool-use', effect: 'allow', actions: ['use', 'inspect'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    { id: 'pool-control', effect: 'allow', actions: ['hold', 'resume'], scopes: controlScopes, principals, resource: { kind: 'pool', ids: ['p'] } },
+    { id: 'pool-control', effect: 'allow', actions: ['hold', 'resume', 'release-quota'], scopes: controlScopes, principals, resource: { kind: 'pool', ids: ['p'] } },
   ] }), { mode: 0o600 });
   const rows = (sql: string) => { const db = new DatabaseSync(opened.path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const cli = async (...argv: string[]) => {

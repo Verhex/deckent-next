@@ -121,3 +121,6 @@ export type { BrainPlanCommand, BrainContribution } from '#domain/index.js';
 
 export { releaseConfiguredQuota as releaseQuota } from '#composition/index.js';
 export type { QuotaReleaseCommand, QuotaReleaseReceipt } from '#engine/index.js';
+
+export { inspectConfiguredPolicyAdministration as inspectPolicyAdministration } from '#composition/index.js';
+export type { PolicyAdministrationQuery, PolicyAdministrationStatus } from '#engine/index.js';

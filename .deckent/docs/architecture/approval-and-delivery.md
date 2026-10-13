@@ -746,9 +746,9 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
   re-enables reservation. The runtime progression maps `RUN_POOL_HELD` to a quiet `waiting` through the one engine mapping
   `reservationRefusalOutcome` (no error, no back-off).
 - **Granularity.** The pool is installation-wide (`execution_pools` has no scope column), so the hold is too. Per-scope holds are a later layer.
-- **Authority.** Vocabulary `pool {use, hold, resume, inspect}` (schema 1, additive). `hold`/`resume` need the scoped decision **and** the
+- **Authority.** Vocabulary `pool {use, hold, resume, inspect, set-capacity, release-quota}` (schema 1, additive). `hold`/`resume` need the scoped decision **and** the
   delegation bound over `scopes: 'all'` on the same policy snapshot (WC-R1 pattern; a deny/restriction in any scope refuses); `inspect` the
-  scoped decision. The first-run template grants none of these.
+  scoped decision. The v11 first-run template grants use/inspect and separate release-quota, never hold/resume/set-capacity.
 - **State and owner.** Ledger v44: `execution_pool_holds(pool_id → execution_pools, revision, state, record)` (no row = open) and
   `execution_pool_hold_receipts(scope_id, command_id, record)`. The hold never lives in `execution_pools.policy` (installer replay compares it
   byte for byte). Engine `decidePoolHold` is the pure transition; `SqlitePoolHoldJournal.applyPoolHold` the only writer (replay, pool
@@ -836,3 +836,55 @@ Validation: 12 targeted files 106/106; additional bounded composition admission 
 - Kalıcı/geçici ayrım engine `classifyLaunchRefusal`: kalıcı kodlar `EXECUTION_NOT_CONFIGURED`, `EXECUTION_HOST_UNSUPPORTED`, `EXECUTION_PROFILE_INVALID`, `DISPATCH_ARTIFACT_REQUIRED`; geçici retler (örn. `POLICY_DENIED`, credential, daemon, workspace) kayıt yazmaz, runtime `failureBackoffMs` geçerli. Hata yine çağırana fırlatılır.
 - `deckent task mark-lost` takip kartına ertelendi (owner 2026-10-06, Astra 2384): `unknown` gözlem commit'i ile Run projeksiyonu ayrı işlemlerdi; aradaki kesintide geç `finishDispatch` hold'u açabiliyordu. Takip kartı: atomik mark-lost (attempt `unknown` gözlemi ve Run `reconciling/unresolvedEffects` aynı işlemde, ya da terminal projeksiyonun önceki kalıcı `unknown`'ı kaybetmesinin engellenmesi) + KARAR 12 (slot bırakma: tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı). O zamana kadar granted + terminal yok deneme main davranışında: görev `active`, slot tutulur, başarısız sayılmaz (`tests/contracts/composition/unresolved-launch.test.ts`).
 - Monitor: worker anlatısı (başlangıç/bitiş/süre/tur/kapanış nedeni/oturum sonucu) yalnız ledger dispatch terminal kaydı ve mühürlü worker olaylarından; kanıt yoksa parça yazılmaz. `MonitorAttempt` opsiyonel `closeReason|turns|sessionOutcome|failedTests`; `MonitorRun.deliveryOutlook` (`none|patch-not-prepared|awaiting-delivery`, integrate/deliver/adopt makbuzu her zaman öncelikli); `MonitorLedgerDispatch.patchRecorded`; blocker detayı `patch-missing`; `ResultBrief` opsiyonel `failedTests`/`deliveryOutlook` (run inspect ile paylaşılır); `display-limits.json` `maxFailedTests`; düşen testler `scripts/verification-reporter.mjs` `verify-failed-test:` satırlarından read-output kapısı + 8 MiB sınırı altında (worker stdout'u untrusted: yalnız gösterim kanıtı, kabulü etkilemez). PATCH_LIMIT sebebi/değeri/alanı kayıtlı değil; "kayıtlı değil" denir, patch-prepare reddi tipli makbuz kartı açık.
+
+## POLITIKA-P0 author candidate (2026-10-13)
+
+`assertPolicyAdministrationPreserved` is a pure capability invariant; engine `validateAuthorityWrite`
+is its one application checkpoint in the locked `FilePolicySource` writer. It covers v1/v2 change
+inputs, profiles, installer upgrades and permission modes, including role/restriction/SoD/assurance
+changes at the authority port. Each previously administered scope partition retains a named non-MCP
+principal able to request `policy.administer` and inspect/decide new approval records. The existing
+pure policy evaluator probes an approval id outside every explicit selector: a deny, restriction or
+require-approval on an old id affects that id only; general blockers still win. SoD needs a different authorized requester. Core authority cards support
+`peer-session`; injected decision-producer availability allows Enterprise assurance without an owner
+role-name bypass. Modes cannot create admin capability. Zero or uncomputable before authority never
+exempts a reduction. Headless repair preserves existing positive administration rules and adds no
+new blockers; rule rewrites whose monotonicity cannot be proven refuse with `POLICY_LAST_ADMIN`.
+Unrelated changes and additive authority repairs remain available; malformed snapshots fail closed.
+The writer checks final and intermediate snapshots before invoking `AuthorityWrite.beforePublish`
+(the producer's synchronous audit callback), then retains existing conditional writes and archives.
+
+`PolicyAdministrationInspection` shares one read-only scope-inspector/admin contract across CLI
+`policy status`, SDK `inspectPolicyAdministration`, MCP `inspect_policy_administration` and doctor.
+It returns policy-capable principal refs/count, revision, template revision recognition or deviation,
+bootstrap/recovery indicators and explicitly unverified external identity/custody. Template revision
+recognition is metadata, not a guarantee of untampered policy content. No approval decision is exposed
+through MCP. Rollback uses current-version expected content and a bounded complete revision chain
+of committed authority archives; it excludes fresh-install rules and changed-then-restored rules,
+keeps modified rules as conflicts, and refuses unavailable history. The archive read has no healing
+or write side effects and shares the configured policy byte budget. Local-owner archives are not
+signed. Author controls and open acceptance limits live in external POLITIKA-P0 proof; no live claim.
+
+
+## First-run template v11 (SABLON-V11, owner 2026-10-13)
+
+Fresh installs and installer `init policy --upgrade` add three named-person rules:
+`first-run-quota-release` grants pool `release-quota` for all ids and all scopes;
+`first-run-integration` grants attempt `prepare-integration`, `deliver-integration`,
+`adopt-integration`, `rollback-integration` for all ids in the installed scope;
+`first-run-work-target-adopt` grants target `adopt` for all ids in that scope.
+MCP retains observation only. Pool hold/resume/set-capacity remain separate; resume
+holders must explicitly obtain release-quota. Each selected/affected pool still
+requires its own scoped decision and installation delegation on one revision;
+any denial leaves all Run/binding/wait/receipt state unchanged, with sealed refusal audit.
+
+Exact v4–v10 templates upgrade to v11. Edited first-run and explicitly named-person
+hand-built policies use add-only plans, preserving same-id customizations as conflicts.
+Installer preview lists the three rules before revision-bound apply and archived audit.
+Governed upgrades still enforce I2 and their operation approval card; v11 does not
+add an integration approval broker. Adoption still requires configured
+`execution.adoption.targets` (empty means denied), target policy and existing effect guards.
+Rollback targets only content-equal v11 delta rules with proven current-version upgrade
+origin and unchanged archive lineage; fresh-install/modified/changed-then-restored rules
+stay. v10 execution and older administration/observation rules remain. The locked
+last-admin invariant is unchanged. Binary, hosted and live acceptance are separate gates.

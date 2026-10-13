@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, POLICY_ADMINISTER_OPERATION,
-  type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
+  evaluatePolicy, type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { ApprovalApplication, AuditApplication, AuthorityDocumentTarget, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization,
-  PermissionModeApplication, PolicyAdministrationApplication } from '#engine/index.js';
+  PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 
 // POLICY-ADMIN P3: `policy.administer@1` is a Core catalog operation over the C11 effect port. Every change opens a C12 approval (a card)
@@ -22,7 +22,7 @@ afterEach(async () => { for (const close of closers.splice(0).reverse()) await c
 type Actor = { issuer: string; subject: string };
 const readTool = (id: string, principal: Actor) => ({ id, effect: 'allow', actions: ['invoke'], scopes: ['s'], principals: [principal], resource: { kind: 'agent-tool', ids: ['read_file'] } });
 
-async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Actor) => unknown[], modes: (me: Actor) => unknown[] = () => []) {
+async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Actor) => unknown[], modes: (me: Actor) => unknown[] = () => [], restrictions: (me: Actor) => unknown[] = () => []) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-policy-admin-')); closers.push(() => rm(root, { recursive: true, force: true }));
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
   const time = { wallMs: 1_000 };
@@ -31,7 +31,7 @@ async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Ac
   const { principal } = await sessions.verifySession(undefined);
   const me = { issuer: principal.issuer, subject: principal.subject };
   const policyPath = join(root, 'policy.json'), bindingsPath = join(root, 'bindings.json'), archive = join(root, 'audit', 'authority-revisions');
-  await writeFile(policyPath, JSON.stringify({ schemaVersion: 2, revision: 'p1', separationOfDuties: [], restrictions: [], grants: grantsFor(me),
+  await writeFile(policyPath, JSON.stringify({ schemaVersion: 2, revision: 'p1', separationOfDuties: [], restrictions: restrictions(me), grants: grantsFor(me),
     roles: [{ id: INSTALLATION_OWNER_ROLE_ID, permissions: installationOwnerPermissions(kinds) }] }), { mode: 0o600 });
   await writeFile(bindingsPath, JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: bindingsFor(me), modes: modes(me) }), { mode: 0o600 });
   const source = new FilePolicySource({ path: policyPath, bindingsPath, archivePath: archive, ownerUid: process.getuid!(), maxBytes: 16_384 });
@@ -175,3 +175,84 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     expect(record.after.bindings).toMatchObject({ schemaVersion: 3 });
   });
 });
+
+it.skipIf(process.platform !== 'linux')('POLITIKA-P0: approve the exact v1/v2 removal card then refuse losing the last effective admin without a write or change audit', async () => {
+  for (const schemaVersion of [1, 2]) {
+    const f = await fixture(() => [], ownerRoot);
+    const input = { schemaVersion, changes: [{ kind: 'binding.remove', id: 'root' }], ...(schemaVersion === 2 ? {
+      profile: { id: 'test:profile', version: 1, digest: '1'.repeat(64), registryDigest: '2'.repeat(64), previewDigest: '3'.repeat(64) }
+    } : {}) };
+    const command = f.command(`last-admin-v${schemaVersion}`, input), before = await f.files();
+    const pending = await f.admin.submit(command);
+    expect(pending.status).toBe('approval-pending');
+    if (pending.status !== 'approval-pending') throw new Error('card required');
+    await f.decide(f.principal, pending.approval.approvalId);
+    await expect(f.admin.submit(command)).rejects.toMatchObject({ code: 'POLICY_LAST_ADMIN' });
+    expect(await f.files()).toEqual(before);
+    expect(f.events().filter(event => event.subject.kind === 'authority-change')).toEqual([]);
+    expect(f.events().filter(event => event.subject.kind === 'authority-refusal')).toMatchObject([{ subject: { code: 'POLICY_LAST_ADMIN', stage: 'settle' } }]);
+    expect((await f.effects.loadEffect('s', command.commandId))?.state).toBe('refused');
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('POLITIKA-P0: two effective admins permit removing one through its approved operation card', async () => {
+  const f = await fixture(() => [], me => [...ownerRoot(me), { id: 'second', principals: [{ issuer: me.issuer, subject: '424242' }], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }]);
+  const command = f.command('remove-one', { schemaVersion: 1, changes: [{ kind: 'binding.remove', id: 'root' }] });
+  const pending = await f.admin.submit(command);
+  expect(pending.status).toBe('approval-pending'); if (pending.status !== 'approval-pending') throw new Error('card required');
+  await f.decide(f.principal, pending.approval.approvalId);
+  expect(await f.admin.submit(command)).toMatchObject({ status: 'settled' });
+  expect((await f.files()).bindings.bindings).toMatchObject([{ id: 'second' }]);
+  expect(f.events().filter(event => event.subject.kind === 'authority-change')).toHaveLength(1);
+});
+
+const management = (person: Actor) => [
+  { id: `manage-${person.subject}`, effect: 'allow', actions: ['execute'], scopes: ['s'], principals: [person], resource: { kind: 'operation', ids: ['policy.administer'] } },
+  { id: `decide-${person.subject}`, effect: 'allow', actions: ['inspect', 'decide'], scopes: ['s'], principals: [person], resource: { kind: 'approval', ids: 'all' } },
+];
+const narrowApproval = (me: Actor, effect?: string) => ({ id: 'old-approval', ...(effect ? { effect } : {}), actions: ['decide'], scopes: ['s'], principals: [me],
+  resource: { kind: 'approval', ids: ['old-X'] } });
+
+it.skipIf(process.platform !== 'linux').each(['deny', 'restriction', 'require-approval'])(
+  'POLITIKA-P0 correction: old approval %s leaves new cards usable but cannot remove the sole operation grant', async effect => {
+    const f = await fixture(me => [...management(me), ...(effect === 'restriction' ? [] : [narrowApproval(me, effect)])], () => [], () => [],
+      me => effect === 'restriction' ? [narrowApproval(me)] : []);
+    const before = await Promise.all(['policy.json', 'bindings.json'].map(name => readFile(join(f.root, name))));
+    const inspection = new PolicyAdministrationInspection(f.source);
+    const command = f.command(`old-${effect}`, { schemaVersion: 1, changes: [{ kind: 'grant.remove', id: `manage-${f.me.subject}` }] });
+    const pending = await f.admin.submit(command);
+    expect(pending.status).toBe('approval-pending'); if (pending.status !== 'approval-pending') throw new Error('card required');
+    expect(pending.approval.approvalId).not.toBe('old-X');
+    const document = await f.source.load();
+    for (const action of ['inspect', 'decide']) expect(evaluatePolicy(document, { principal: f.principal, scopeId: 's', action,
+      resource: { kind: 'approval', id: pending.approval.approvalId } }).decision).toBe('allow');
+    expect(evaluatePolicy(document, { principal: f.principal, scopeId: 's', action: 'decide', resource: { kind: 'approval', id: 'old-X' } }).decision)
+      .toBe(effect === 'require-approval' ? 'require-approval' : 'deny');
+    await f.decide(f.principal, pending.approval.approvalId);
+    await expect(f.admin.submit(command)).rejects.toMatchObject({ code: 'POLICY_LAST_ADMIN' });
+    expect(await inspection.inspect(f.principal, { schemaVersion: 1, scopeId: 's' })).toMatchObject({ usableAdminCount: 1, admins: [f.me], bootstrapRequired: false, recoveryRequired: false });
+    expect(await Promise.all(['policy.json', 'bindings.json'].map(name => readFile(join(f.root, name))))).toEqual(before);
+    expect(f.events().filter(event => event.subject.kind === 'authority-change')).toEqual([]);
+    expect(f.events().filter(event => event.subject.kind === 'authority-refusal')).toMatchObject([{ subject: { code: 'POLICY_LAST_ADMIN', stage: 'settle', approvalId: pending.approval.approvalId } }]);
+    expect((await f.effects.loadEffect('s', command.commandId))?.state).toBe('refused');
+    expect(await readdir(f.archive).catch(() => [])).toEqual([]);
+  });
+
+it.skipIf(process.platform !== 'linux').each(['deny', 'restriction', 'require-approval'])(
+  'POLITIKA-P0 correction: old approval %s permits approved removal when another named administrator remains', async effect => {
+    const f = await fixture(me => [...management(me), ...management({ issuer: me.issuer, subject: 'second-admin' }),
+      ...(effect === 'restriction' ? [] : [narrowApproval(me, effect)])], () => [], () => [],
+      me => effect === 'restriction' ? [narrowApproval(me)] : []);
+    const inspection = new PolicyAdministrationInspection(f.source);
+    expect(await inspection.inspect(f.principal, { schemaVersion: 1, scopeId: 's' })).toMatchObject({ usableAdminCount: 2 });
+    const command = f.command(`two-${effect}`, { schemaVersion: 1, changes: [{ kind: 'grant.remove', id: `manage-${f.me.subject}` }] });
+    const pending = await f.admin.submit(command);
+    expect(pending.status).toBe('approval-pending'); if (pending.status !== 'approval-pending') throw new Error('card required');
+    await f.decide(f.principal, pending.approval.approvalId);
+    expect(await f.admin.submit(command)).toMatchObject({ status: 'settled' });
+    expect((await f.files()).policy.grants.some((grant: { id: string }) => grant.id === `manage-${f.me.subject}`)).toBe(false);
+    expect(await inspection.inspect(f.person('second-admin'), { schemaVersion: 1, scopeId: 's' })).toMatchObject({ usableAdminCount: 1, bootstrapRequired: false, recoveryRequired: false });
+    expect(f.events().filter(event => event.subject.kind === 'authority-change')).toHaveLength(1);
+    expect(f.events().filter(event => event.subject.kind === 'authority-refusal')).toEqual([]);
+    expect((await readdir(f.archive)).filter(name => name.startsWith('k-'))).toHaveLength(1);
+  });

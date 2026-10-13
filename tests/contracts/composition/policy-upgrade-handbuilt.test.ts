@@ -103,6 +103,9 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       grant('first-run-pools', 'pool', ['use', 'inspect'], 'all'),
       grant('first-run-attempts', 'attempt', ['execute', 'evaluate', 'read-output', 'recover-output', 'cancel', 'reconcile', 'release'], 'all'),
       grant('first-run-work-targets', 'work-target', ['use'], 'all'),
+      grant('first-run-quota-release', 'pool', ['release-quota'], 'all', { scopes: 'all' }),
+      grant('first-run-integration', 'attempt', ['prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'], 'all'),
+      grant('first-run-work-target-adopt', 'work-target', ['adopt'], 'all'),
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -119,7 +122,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v10-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v11-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
 
@@ -135,12 +138,12 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(await f.mcpActor('activate', 'model-activation')).toBe('deny');
   });
 
-  it('upgrades the hand-built live-read-tools v9 shape to v10 and enables the /do policy chain only for its owner', async () => {
+  it('upgrades the hand-built live-read-tools v9 shape to v11 and enables the /do policy chain only for its owner', async () => {
     const f = await installation();
     // Retain the older add-only upgrades in a hand-built policy; no first-run-read-tools anchor is invented.
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
     const current = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
-    const v9 = { ...current, revision: 'hand-built-v9', grants: current.grants.filter(rule => !['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets'].includes(rule.id)) };
+    const v9 = { ...current, revision: 'hand-built-v9', grants: current.grants.filter(rule => !['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt'].includes(rule.id)) };
     await writeFile(f.policyPath, JSON.stringify(v9), { mode: 0o600 });
     expect(v9.grants.some(rule => rule.id === 'live-read-tools')).toBe(true);
     expect(v9.grants.some(rule => rule.id === 'first-run-read-tools')).toBe(false);
@@ -153,8 +156,8 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; rules: { id: string }[] };
-    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 10 } });
-    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets']);
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 11 } });
+    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
     expect(await main([...argv, '--apply', '--expect', preview.revision], context)).toBe(0); expect(errors).toEqual([]);
@@ -210,7 +213,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: { issuer: string; subject: string }[]; resource: { ids: unknown } }[] };
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
-      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets'].includes(rule.id)
+      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt'].includes(rule.id)
       && !rule.id.startsWith('first-run-mcp-observe-')).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });

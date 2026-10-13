@@ -56,6 +56,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;
+  inspectPolicyAdministration?: (root: string, query: import('#engine/index.js').PolicyAdministrationQuery, options: ConfigLoadOptions) => Promise<import('#engine/index.js').PolicyAdministrationStatus>;
   upgradePolicyTemplate?: import('./policy-grants.js').PolicyUpgradeHandler;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/doctor/index.js').InstallationStartabilityView>;
@@ -153,6 +154,9 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   if (args.toolchains && !context.inspectToolchainCurrency) throw ErrorRegistry.createError('CLI_USAGE');
   const toolchains = args.toolchains ? await context.inspectToolchainCurrency!(root, options) : undefined;
   // SCR-B: a local, soft read (no template, no policy file, or an unsafe/custom one -> null); never blocks doctor.
+  const policyScope = (config.terminal as { scopeId?: string } | undefined)?.scopeId;
+  const policyAdministration = context.inspectPolicyAdministration && policyScope
+    ? await context.inspectPolicyAdministration(root, { schemaVersion: 1, scopeId: policyScope }, options).catch(() => null) : null;
   const policyTemplate = context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
   // SESSION-RESULT-LIMIT-2026-09-28: unconditional like policyTemplate (nobody was looking at the line-mode/MCP path
   // before this); [] when unwired or every declared profile fits. Read-only, network-free, never blocks doctor.
@@ -171,7 +175,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const startability = context.inspectInstallationStartability ? await context.inspectInstallationStartability(root, { ...options, env: { ...env, DECKENT_LANGUAGE: locale } }) : null;
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, startability, status: startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, startability, status: startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');

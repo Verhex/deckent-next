@@ -3,8 +3,8 @@ import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open, realpath, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { bindingsFileSchema, policyFileSchema, resolvePolicyBindings } from '#domain/index.js';
-import { AuthorityChangeError, PermissionModeError, type AuthorityDocumentStore, type AuthorityLookup, type AuthorityWrite, type PermissionModeBindingsStore,
+import { bindingsFileSchema, policyFileSchema, resolvePolicyBindings, type AdministrationAssurance } from '#domain/index.js';
+import { AuthorityChangeError, PermissionModeError, validateAuthorityWrite, type AuthorityDocumentStore, type AuthorityLookup, type AuthorityWrite, type AuthorityRevision, type PermissionModeBindingsStore,
   type PermissionModeSnapshot, type PolicySource } from '#engine/index.js';
 import { AuthorityArchive, archiveKeyName } from './archive.js';
 const optionsSchema = z.object({ path: z.string().min(1), bindingsPath: z.string().min(1).optional(),
@@ -29,7 +29,7 @@ const sameFile = (left: BigIntStats, right: BigIntStats) => left.dev === right.d
   && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 export class FilePolicySource implements PolicySource, PermissionModeBindingsStore, AuthorityDocumentStore {
   private readonly options: FilePolicyOptions;
-  constructor(input: FilePolicyOptions, private readonly lock: AuthorityWriteLock = work => work()) {
+  constructor(input: FilePolicyOptions, private readonly lock: AuthorityWriteLock = work => work(), private readonly assurance?: AdministrationAssurance) {
     const parsed = optionsSchema.safeParse(input);
     if (!parsed.success || !isAbsolute(parsed.data.path) || [parsed.data.bindingsPath, parsed.data.archivePath].some(path => path !== undefined && !isAbsolute(path))) {
       throw new PolicyFileError('POLICY_FILE_INVALID');
@@ -87,6 +87,16 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
     } catch (error) { throw error instanceof AuthorityChangeError ? new PermissionModeError('PERMISSION_MODE_CONFLICT') : error; }
   }
   identity() { return `authority-document:${this.options.path}+${this.options.bindingsPath ?? ''}`; }
+  async authorityHistory(): Promise<readonly AuthorityRevision[] | null> {
+    const entries = await this.archive()?.history(this.options.maxBytes);
+    if (entries === undefined || entries === null) return null;
+    try { return entries.map(entry => {
+      const before = resolvePolicyBindings(entry.before.policy, entry.before.bindings), after = resolvePolicyBindings(entry.after.policy, entry.after.bindings);
+      if (before.revision !== entry.before.revision || after.revision !== entry.after.revision) throw new Error('AUTHORITY_HISTORY_INVALID');
+      return { key: entry.key, before, after };
+    }); }
+    catch { return null; }
+  }
   private archive() {
     const path = this.options.archivePath;
     return path === undefined ? null : new AuthorityArchive(path, this.options.ownerUid, () => new PolicyFileError('POLICY_FILE_UNSAFE', 'archive'));
@@ -129,6 +139,7 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
     const outcome = work({ policy: policy.data, bindings: read.value });
     const write = outcome.write;
     if (write === null || (write.policy === null && write.bindings === null)) return outcome.result;
+    validateAuthorityWrite({ policy: policy.data, bindings: read.value }, write, this.assurance);
     const bindings = bindingsFileSchema.parse(read.value);
     const files = [
       { resource: 'policy' as const, path: this.options.path, stat: authority.stat, before: policy.data, next: write.policy === null ? null : policyFileSchema.parse(write.policy) },
@@ -143,6 +154,7 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
     const before = side(policy.data, bindings);
     const after = side(files.find(file => file.resource === 'policy')!.next ?? policy.data, files.find(file => file.resource === 'bindings')!.next ?? bindings);
     const entryName = key !== undefined ? archiveKeyName(key) : `r-${createHash('sha256').update(`${before.revision}\0${after.revision}`).digest('hex').slice(0, 32)}.json`;
+    write.beforePublish?.();
     const temporaries = new Map<string, string>();
     try {
       for (const file of files) {

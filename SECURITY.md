@@ -3,7 +3,7 @@
 ## Supported versions
 
 Security fixes target `main` and the current `1.0.0-alpha.N` pre-release line (currently
-`1.0.0-alpha.33`; see [CHANGELOG.md](CHANGELOG.md)). Older alpha snapshots are not maintained
+`1.0.0-alpha.34`; see [CHANGELOG.md](CHANGELOG.md)). Older alpha snapshots are not maintained
 separately; reproduce against current main/current alpha when possible. Pre-release support
 does not imply production or platform acceptance.
 
@@ -41,3 +41,21 @@ turn's process-bound capability. This attests terminal interaction, not human pr
 the same OS account can allocate a PTY or access the owner's files/socket directly. Protect separate
 trust domains with OS identities and enforced sandbox boundaries; no same-account process isolation
 or automation approval exception is claimed by this change.
+
+## Policy administration continuity
+
+All product authority writes share one locked writer. A change that removes the last usable named
+administrator in any previously administered scope is rejected with `POLICY_LAST_ADMIN`: add another
+administrator first. Capability requires `policy.administer/execute` and approval `inspect/decide`,
+with denies, restrictions, separation of duties and available decision assurance applied. MCP actors
+never count as administrators; a permission mode grants no administration authority. Final and
+crash-visible intermediate snapshots are checked before the publication audit and file replacements.
+
+`deckent policy status --scope <id>` (also SDK `inspectPolicyAdministration` and MCP
+`inspect_policy_administration`) observes the same scoped policy snapshot without repairing it.
+Doctor shows one readiness line. Counts describe policy capability, not verified external directory
+activity, human presence or OS custody. Bootstrap and custody transfer remain separate work.
+Current-template rollback requires a complete bounded authority archive chain and removes only
+current-version additions whose content has never changed; custom rules remain in `conflicts`.
+Missing, corrupt or oversized history refuses rollback. Archives retain existing local-owner custody
+and are not a cryptographic provenance guarantee against that host owner.

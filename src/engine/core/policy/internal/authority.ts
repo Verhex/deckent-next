@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, type AuditEvent } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, assertPolicyAdministrationPreserved, resolvePolicyBindings, type AdministrationAssurance, type AuditEvent } from '#domain/index.js';
 import type { PermissionModeSnapshot } from './permission-mode-admin.js';
 
 /**
  * One authority write (POLICY-ADMIN P2): the next policy.json and/or bindings.json document (null = that file does not change) and the
  * order the two renames happen in (I8; the planner verified both intermediate states). A document carries its chained revision.
  */
-export interface AuthorityWrite { readonly policy: unknown | null; readonly bindings: unknown | null; readonly order: 'policy-first' | 'bindings-first' }
+export interface AuthorityWrite { readonly policy: unknown | null; readonly bindings: unknown | null; readonly order: 'policy-first' | 'bindings-first'; readonly beforePublish?: () => void }
 export type AuthorityLookup = { readonly status: 'applied'; readonly version: string } | { readonly status: 'absent' } | null;
 /**
  * The installation's authority documents as one conditional, atomic write target — the single writer of policy.json and bindings.json
@@ -52,4 +52,15 @@ export function authorityRefusalAuditEvent(input: { readonly scopeId: string; re
     policyRevision: input.policyRevision, atMs: input.atMs, subject: { kind: 'authority-refusal', stage: input.stage, code: input.code,
       operation: { id: input.operation.id, version: input.operation.version }, commandId: input.commandId, approvalId: input.approvalId,
       decider: input.decider && { issuer: input.decider.issuer, subject: input.decider.subject } } };
+}
+
+/** One invariant checkpoint used by the authority writer under its read-to-rename lock, including crash-visible intermediate states. */
+export function validateAuthorityWrite(snapshot: PermissionModeSnapshot, write: AuthorityWrite, assurance?: AdministrationAssurance): void {
+  const before = resolvePolicyBindings(snapshot.policy, snapshot.bindings);
+  const after = resolvePolicyBindings(write.policy ?? snapshot.policy, write.bindings ?? snapshot.bindings);
+  assertPolicyAdministrationPreserved(before, after, assurance);
+  if (write.policy !== null && write.bindings !== null) {
+    const intermediate = write.order === 'policy-first' ? resolvePolicyBindings(write.policy, snapshot.bindings) : resolvePolicyBindings(snapshot.policy, write.bindings);
+    assertPolicyAdministrationPreserved(before, intermediate, assurance);
+  }
 }

@@ -82,3 +82,7 @@ export * from '#engine/core/project-instructions/index.js';
 export * from '#engine/core/backup/index.js';
 export * from '#engine/core/run-planner/index.js';
 export * from '#engine/core/resource-observation/index.js';
+
+export { validateAuthorityWrite, PolicyAdministrationInspection, policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/core/policy/index.js';
+
+export type { AuthorityHistorySource, AuthorityRevision } from '#engine/core/policy/index.js';

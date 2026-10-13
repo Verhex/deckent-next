@@ -340,6 +340,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/composition/core/approvals",
         "src/composition/core/monitor",
         "src/adapters/core/local-principal",
         "src/composition/core/scoped-request",
@@ -381,6 +382,7 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
+        "src/domain/core/policy",
         "src/domain/core/primitives",
         "src/engine/core/supervisor",
         "src/engine/core/run-progression",
@@ -618,7 +620,8 @@
     "src/domain/core/policy": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/approval"
       ],
       "plan": "CONTRACT"
     },
@@ -1223,6 +1226,7 @@
     },
     "src/surfaces/core/mcp": {
       "dependencies": [
+        "src/engine/core/policy",
         "src/engine/core/monitor",
         "src/platform/core/validate",
         "src/domain/core/attempt",
@@ -1268,6 +1272,7 @@
     },
     "src/engine/core/installation": {
       "dependencies": [
+        "src/engine/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/policy",
         "src/domain/core/run",
@@ -2045,6 +2050,7 @@
     },
     "src/composition/core/approvals": {
       "dependencies": [
+        "src/engine/core/policy",
         "src/platform/core/errors",
         "src/engine/core/installation",
         "src/platform/core/clock",

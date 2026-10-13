@@ -123,6 +123,7 @@ export const CLI_CATALOG = [
   ] },
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', children: [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', 'independent'),
+    action('status', 'observe', 'cli.help.action.policyStatus', 'cli.help.policyStatus'),
     action('grants', 'approvals', 'cli.help.action.grants', 'cli.help.policy'),
     action('revoke', 'approvals', 'cli.help.action.revoke', 'cli.help.policy'),
     action('upgrade', 'approvals', 'cli.help.action.policyUpgrade', 'cli.help.policy'),

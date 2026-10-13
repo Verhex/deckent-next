@@ -35,7 +35,7 @@ it('publishes the versioned policy action/resource matrix through the SDK', () =
   // WORK-TARGETS (owner 2026-09-30 K2 = A): one configured work target; use at admission/reservation, adopt when its branch moves.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'work-target')!.actions).toEqual(['use', 'adopt']);
   // K5 + batch30 POOL-CAPACITY: controls require installation authority; vocabulary alone grants nothing.
-  expect(getPolicyVocabulary().resources.find(r => r.kind === 'pool')!.actions).toEqual(['use', 'hold', 'resume', 'inspect', 'set-capacity']);
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'pool')!.actions).toEqual(['use', 'hold', 'resume', 'inspect', 'set-capacity', 'release-quota']);
 });
 it('catalog metadata cannot be mutated and never grants authority', () => {
   const catalog = getPolicyVocabulary(); expect(Object.isFrozen(catalog.resources)).toBe(true);

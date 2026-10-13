@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { AuthorityDocumentStore } from '#engine/core/policy/index.js';
 import { firstRunPolicyTemplate, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
@@ -161,10 +162,7 @@ export class PolicyTemplateInstallationApplication {
 }
 
 /** The single conditional writer of policy.json/bindings.json (structurally the policy unit's `AuthorityDocumentStore`; archived, keyed). */
-export interface PolicyTemplateDocumentWriter {
-  updateAuthority<T>(work: (snapshot: { readonly policy: unknown; readonly bindings: unknown }) => { readonly write: { readonly policy: unknown | null;
-    readonly bindings: unknown | null; readonly order: 'policy-first' | 'bindings-first' } | null; readonly result: T }, key?: string): Promise<T>;
-}
+export type PolicyTemplateDocumentWriter = Pick<AuthorityDocumentStore, 'updateAuthority'>;
 type Person = { readonly issuer: string; readonly subject: string };
 export interface PolicyTemplateUpgradeResult {
   readonly schemaVersion: 1;
@@ -194,12 +192,12 @@ export interface PolicyTemplateUpgradeResult {
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /**
- * The first-run older-template → v10 migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
- * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install v10
+ * The first-run older-template → v11 migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
+ * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install v11
  * on a fresh installation today. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
  * call operation, the proposal tool, the `policy.administer` operation and approval decisions — K1 option A) and keeps everything else:
  * hand-added rules, edited first-run rules, modes and bindings; a rule id that exists with other content is kept and named as a conflict. An
- * untouched v4–v9 template becomes exactly the v10 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
+ * untouched v4–v10 template becomes exactly the v11 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
  * takes the same additions only for a person the file owner names explicitly (`person`), who must already be named on an allow rule of this
  * scope (`namedPersonPolicyAdditions`); without `person` the refusal lists the people the policy names. On a template policy `person` replaces
  * the OS identity and the template's read rule must name it. The write goes through the authority documents' one conditional, archived writer
@@ -235,7 +233,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const wireRules = ((current as { grants?: { id: string; resource?: { kind?: string; ids?: unknown } }[] } | null)?.grants ?? [])
       .filter(grant => grant.resource?.kind === 'agent-tool' && Array.isArray(grant.resource.ids) && grant.resource.ids.some(id => typeof id === 'string' && id.startsWith('mcp__')))
       .map(grant => grant.id);
-    // An untouched older template becomes exactly v10 (doctor names it v10).
+    // An untouched older template becomes exactly v11 (doctor names it v11).
     const exact = upgradeFirstRunPolicy(current, template);
     if (exact.status === 'upgrade') {
       const rules = (exact.policy.schemaVersion === 2 ? exact.policy.grants : []).filter(rule => !((current as { grants: { id: string }[] }).grants.some(held => JSON.stringify(held) === JSON.stringify(rule))));
@@ -268,10 +266,10 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     if (revisionOf(snapshot.policy) !== first.revision) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
     const again = plan(snapshot.policy);
     if (again.result.status !== 'preview' || again.next === null) return { write: null, result: again.result };
-    input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
+    const beforePublish = () => input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
       template: { id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, commandId: key,
       inputDigest: digestOf(canonical(again.next as object)), before: first.revision!, after: revisionOf(again.next)!,
       grantsAdded: again.result.rules.length, atMs: input.now() }));
-    return { write: { policy: again.next, bindings: null, order: 'policy-first' }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
+    return { write: { policy: again.next, bindings: null, order: 'policy-first', beforePublish }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
   }, key);
 }

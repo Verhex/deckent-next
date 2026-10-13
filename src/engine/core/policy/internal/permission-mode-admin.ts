@@ -100,8 +100,7 @@ export class PermissionModeApplication {
       const next = bindingsFileSchema.parse({ schemaVersion: 3, revision: chainAuthorityRevision('permission-mode-bindings:1', 'm', bindings.revision, body), ...body });
       const after = permissionModeView(resolvePolicyBindings(snapshot.policy, next), principal, command.scopeId);
       // No record, no change: the audit event is durable before the file is replaced.
-      record(next.revision);
-      return { write: { policy: null, bindings: next, order: 'policy-first' as const }, result: Object.freeze({ ...after, previous: before.mode, changed: true }) };
+      return { write: { beforePublish: () => record(next.revision), policy: null, bindings: next, order: 'policy-first' as const }, result: Object.freeze({ ...after, previous: before.mode, changed: true }) };
     });
   }
 }
