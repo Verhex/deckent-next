@@ -29,6 +29,8 @@
       "requestMaxBytes": 131072,
       "tokenFramingAllowance": 1024
     },
+    "maxCompletionTokens": null,
+    "reasoning": "model-default",
     "schemaVersion": 1,
     "selected": {
       "id": "run-proposal",

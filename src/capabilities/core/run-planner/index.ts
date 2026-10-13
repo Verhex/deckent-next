@@ -6,8 +6,12 @@ import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from
 import templates from './internal/templates.json' with { type: 'json' };
 const selected = z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict();
 const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: z.number().int().min(1).max(1024) }).strict();
+type BrainReasoning = 'model-default' | 'off';
+const reasoning = z.enum(templates.reasoningModes as [BrainReasoning, ...BrainReasoning[]]);
 export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).default(1),
   selected: selected.default(templates.selected), templates: z.array(template).min(1).max(256).default(templates.templates),
+  maxCompletionTokens: z.number().int().positive().safe().nullable().default(templates.maxCompletionTokens),
+  reasoning: reasoning.default(reasoning.parse(templates.reasoning)),
   context: z.object({ maxKinds: z.number().int().positive().safe(), maxModels: z.number().int().positive().safe(),
     maxEvaluators: z.number().int().positive().safe(), maxBytes: z.number().int().positive().safe(),
     requestMaxBytes: z.number().int().positive().safe(), tokenFramingAllowance: z.number().int().nonnegative().safe(),

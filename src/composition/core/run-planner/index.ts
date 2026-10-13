@@ -2,7 +2,7 @@ import { executionRegistrySchema, type BrainPlanCommand,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
 import { BrainPlanApplication, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, isNativeCodingTemplate, nativeCodingTemplateWorker, openSqliteModelCatalogReader } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
@@ -38,6 +38,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       knownSecrets: getConfigKnownSecrets(context.config),
       inspect: query => inspectConfiguredRunProposal(root, query, options), invoke,
       propose: propose ?? (proposal => proposeConfiguredRun(root, proposal, options)), text: extractOpenAiChatTextFromInvocation,
+      stoppedAtLength: openAiChatStoppedAtLength,
       async prepare(command) {
         const registry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
         if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
@@ -64,7 +65,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
           return { kind: row.kind, profile: row.profile, type: template ? 'template' as const : 'prepared' as const, ...(template ? { provider: template.provider } : {}) }; });
         const prompt = prepareBrainRegistryPrompt(command, registry, budget ? { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits } : null,
           context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels });
-        const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference);
+        const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference, prompt.invocationSettings);
         assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
         const measured = await measureConfiguredModel(root, prepared.command, options, signal);
         if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
