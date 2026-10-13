@@ -409,6 +409,7 @@
   "error.SCOPE_UNKNOWN": "This scope is not registered to your company. Name it in the installation policy or ask an administrator to register it.",
   "error.POLICY_APPROVAL_UNSUPPORTED": "This action requires approval, but there is no approval workflow for it yet outside the operation catalog. It is refused, not granted.",
   "error.POLICY_DELEGATION_EXCEEDS": "The change grants or removes more than the deciding person holds ({detail}). Nothing was changed; ask someone who holds this authority to decide it.",
+  "error.POLICY_LAST_ADMIN": "This change would remove the last usable policy administrator. Add another administrator with policy administration and approval inspect/decide permissions first.",
   "error.POLICY_CHANGE_INVALID": "The policy change is not valid for the current policy (a missing or duplicate id, an unknown role, or a result that is not a valid policy). Nothing was changed.",
   "error.POLICY_CHANGE_TOO_LARGE": "The policy change is too large to check against the delegation bound. Split it into smaller changes.",
   "error.POLICY_ADMINISTER_UNSUPPORTED": "This installation's policy (schema version 1) has no role bindings; policy administration needs policy version 2.",
@@ -940,5 +941,19 @@
   "error.CODING_TEMPLATE_IMAGE_REQUIRED": "Configure execution.docker with an immutable image and resource limits before creating a coding template.",
   "error.CODING_TEMPLATE_TOOLCHAIN_REQUIRED": "No unique admitted CLI version and discovery selection exists for this provider and image. Configure an admitted toolchain profile for the selected image first.",
   "error.CODING_TEMPLATE_KIND_CONFLICT": "The kind or generated profile identity already points to different profile data. Select another kind; existing bindings are never replaced.",
-  "error.CODING_TEMPLATE_REGISTRY_INVALID": "The existing admission registry is invalid. Configure valid profiles, kind bindings and evaluators using `deckent config set admission` or `/config` first."
+  "error.CODING_TEMPLATE_REGISTRY_INVALID": "The existing admission registry is invalid. Configure valid profiles, kind bindings and evaluators using `deckent config set admission` or `/config` first.",
+  "cli.policy.status": "Policy administration · {scope}: {count} usable administrators; {template}; revision {revision}",
+  "cli.policy.status.first-run": "first-run v{version}",
+  "cli.policy.status.hand-built": "hand-built policy",
+  "cli.policy.status.drift": "template ancestry not verified / drift",
+  "cli.policy.status.bootstrap": "Bootstrap required: use the installation administrator recovery path.",
+  "cli.policy.status.recovery": "Recovery required: no usable administrator remains.",
+  "cli.policy.status.ready": "Policy administration is available.",
+  "cli.policy.status.unverified": "External identity activity, terminal presence and host custody have not been verified.",
+  "cli.policy.upgrade.conflicts": "Changed rules preserved: {ids}",
+  "doctor.policyAdministration": "Policy administration: {count} usable administrators. {status}",
+  "cli.help.action.policyStatus": "Inspect policy administration readiness",
+  "cli.help.policyStatus": "deckent policy status [--scope <id>] [--json] [--lang en|tr] — read-only administrators, template ancestry, revision and bootstrap/recovery readiness.",
+  "mcp.tool.policyAdministration": "Inspect scoped policy administration readiness, administrators and revision; read-only, no approval decisions.",
+  "doctor.policyAdministration.unavailable": "Policy administration: unavailable or not authorized; readiness is unknown."
 }

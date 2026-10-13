@@ -495,6 +495,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
   POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_EXCEEDS', p, l) }) },
+  POLICY_LAST_ADMIN: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_LAST_ADMIN', p, l) }) },
   POLICY_CHANGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_INVALID', p, l) }) },
   POLICY_CHANGE_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_TOO_LARGE', p, l) }) },
   POLICY_ADMINISTER_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_ADMINISTER_UNSUPPORTED', p, l) }) },

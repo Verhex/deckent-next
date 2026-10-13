@@ -293,3 +293,20 @@ function executionRules(person: Person, scopes: readonly string[]): readonly Pol
     { id: ids.workTargets, kind: 'work-target', actions: ['use'] },
   ].map(({ id, kind, actions }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: [...scopes], principals: [person], resource: { kind, ids: 'all' } }));
 }
+
+/** Current version delta by content: a same-id customization is preserved and reported, never deleted as a template rule. */
+export function firstRunTemplateRollback(current: unknown, person: Person, scopeId?: string): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] } {
+  const policy = policyFileSchema.parse(current);
+  if (policy.schemaVersion !== 2) return { rules: [], conflicts: [] };
+  const read = policy.grants.find(rule => rule.id === 'first-run-read-tools');
+  if (isMcpPrincipal(person)) return { rules: [], conflicts: [] };
+  const scopes = read && read.scopes !== 'all' && namesPerson(read, person) ? read.scopes : scopeId ? [identitySchema.parse(scopeId)] : null;
+  if (!scopes) return { rules: [], conflicts: [] };
+  const expected = executionRules({ issuer: person.issuer, subject: person.subject }, scopes), rules: PolicyGrant[] = [], conflicts: string[] = [];
+  for (const want of expected) {
+    const held = policy.grants.find(rule => rule.id === want.id);
+    if (held && canonicalJson(held) === canonicalJson(want)) rules.push(held);
+    else if (held) conflicts.push(held.id);
+  }
+  return { rules: Object.freeze(rules), conflicts: Object.freeze(conflicts) };
+}

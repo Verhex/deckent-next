@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { AuthorityDocumentStore } from '#engine/core/policy/index.js';
 import { firstRunPolicyTemplate, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
@@ -161,10 +162,7 @@ export class PolicyTemplateInstallationApplication {
 }
 
 /** The single conditional writer of policy.json/bindings.json (structurally the policy unit's `AuthorityDocumentStore`; archived, keyed). */
-export interface PolicyTemplateDocumentWriter {
-  updateAuthority<T>(work: (snapshot: { readonly policy: unknown; readonly bindings: unknown }) => { readonly write: { readonly policy: unknown | null;
-    readonly bindings: unknown | null; readonly order: 'policy-first' | 'bindings-first' } | null; readonly result: T }, key?: string): Promise<T>;
-}
+export type PolicyTemplateDocumentWriter = Pick<AuthorityDocumentStore, 'updateAuthority'>;
 type Person = { readonly issuer: string; readonly subject: string };
 export interface PolicyTemplateUpgradeResult {
   readonly schemaVersion: 1;
@@ -268,10 +266,10 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     if (revisionOf(snapshot.policy) !== first.revision) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
     const again = plan(snapshot.policy);
     if (again.result.status !== 'preview' || again.next === null) return { write: null, result: again.result };
-    input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
+    const beforePublish = () => input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
       template: { id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, commandId: key,
       inputDigest: digestOf(canonical(again.next as object)), before: first.revision!, after: revisionOf(again.next)!,
       grantsAdded: again.result.rules.length, atMs: input.now() }));
-    return { write: { policy: again.next, bindings: null, order: 'policy-first' }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
+    return { write: { policy: again.next, bindings: null, order: 'policy-first', beforePublish }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
   }, key);
 }

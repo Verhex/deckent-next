@@ -175,3 +175,33 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     expect(record.after.bindings).toMatchObject({ schemaVersion: 3 });
   });
 });
+
+it.skipIf(process.platform !== 'linux')('POLITIKA-P0: approve the exact v1/v2 removal card then refuse losing the last effective admin without a write or change audit', async () => {
+  for (const schemaVersion of [1, 2]) {
+    const f = await fixture(() => [], ownerRoot);
+    const input = { schemaVersion, changes: [{ kind: 'binding.remove', id: 'root' }], ...(schemaVersion === 2 ? {
+      profile: { id: 'test:profile', version: 1, digest: '1'.repeat(64), registryDigest: '2'.repeat(64), previewDigest: '3'.repeat(64) }
+    } : {}) };
+    const command = f.command(`last-admin-v${schemaVersion}`, input), before = await f.files();
+    const pending = await f.admin.submit(command);
+    expect(pending.status).toBe('approval-pending');
+    if (pending.status !== 'approval-pending') throw new Error('card required');
+    await f.decide(f.principal, pending.approval.approvalId);
+    await expect(f.admin.submit(command)).rejects.toMatchObject({ code: 'POLICY_LAST_ADMIN' });
+    expect(await f.files()).toEqual(before);
+    expect(f.events().filter(event => event.subject.kind === 'authority-change')).toEqual([]);
+    expect(f.events().filter(event => event.subject.kind === 'authority-refusal')).toMatchObject([{ subject: { code: 'POLICY_LAST_ADMIN', stage: 'settle' } }]);
+    expect((await f.effects.loadEffect('s', command.commandId))?.state).toBe('refused');
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('POLITIKA-P0: two effective admins permit removing one through its approved operation card', async () => {
+  const f = await fixture(() => [], me => [...ownerRoot(me), { id: 'second', principals: [{ issuer: me.issuer, subject: '424242' }], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }]);
+  const command = f.command('remove-one', { schemaVersion: 1, changes: [{ kind: 'binding.remove', id: 'root' }] });
+  const pending = await f.admin.submit(command);
+  expect(pending.status).toBe('approval-pending'); if (pending.status !== 'approval-pending') throw new Error('card required');
+  await f.decide(f.principal, pending.approval.approvalId);
+  expect(await f.admin.submit(command)).toMatchObject({ status: 'settled' });
+  expect((await f.files()).bindings.bindings).toMatchObject([{ id: 'second' }]);
+  expect(f.events().filter(event => event.subject.kind === 'authority-change')).toHaveLength(1);
+});

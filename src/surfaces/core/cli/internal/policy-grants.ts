@@ -10,7 +10,7 @@ export type StandingRevokeHandler = (root: string, input: { readonly scopeId: st
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<{ readonly revoked: boolean; readonly grant: StandingGrantRow | null }>;
 
 /** The governed current first-run upgrade: the engine's result, which the surface only words. */
-export interface PolicyUpgradeView { readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null }
+export interface PolicyUpgradeView { readonly status: string; readonly revision: string; readonly summary: string | null; readonly missing: readonly string[]; readonly reason: string | null; readonly conflicts?: readonly string[] }
 export type PolicyUpgradeHandler = (root: string, scopeId: string, input: { readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string; readonly reason: string },
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<PolicyUpgradeView>;
 
@@ -20,6 +20,7 @@ export type PolicyUpgradeHandler = (root: string, scopeId: string, input: { read
  * Until `/policy` exists (PERSISTENT-APPROVALS G6). A revoke asks `y/N` on a terminal; without one it needs an explicit `--yes`.
  */
 export async function policyGrantsCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+  if (argv[1] === 'status') return policyStatusCommand(argv, context);
   if (argv[1] === 'mcp') return policyMcpCommand(argv, context);
   if (argv[1] === 'upgrade') return policyUpgradeCommand(argv, context);
   const action = argv[1]; let json = false, mine = false, yes = false, scope: string | undefined, language: string | undefined, id: string | undefined;
@@ -100,6 +101,31 @@ async function policyUpgradeCommand(argv: readonly string[], context: CommandCon
       : t('cli.policy.upgrade.unavailable', { reason: view.reason ?? '-' }, locale);
     // A preview that would be refused says so before anything is tried.
     const lacking = missing(view), lack = view.status === 'preview' && lacking.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking] : view.status === 'refused' ? lacking : [];
-    return [head, ...(view.summary ? [view.summary] : []), ...lack].join('\n');
+    return [head, ...(view.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: view.conflicts.join(', ') }, locale)] : []), ...(view.summary ? [view.summary] : []), ...lack].join('\n');
   } });
+}
+
+async function policyStatusCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+  let scope: string | undefined, language: string | undefined, json = false;
+  for (let i = 2; i < argv.length; i++) {
+    const flag = argv[i];
+    if (flag === '--json' && !json) json = true;
+    else if ((flag === '--scope' && scope === undefined) || (flag === '--lang' && language === undefined)) {
+      const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
+      if (flag === '--scope') scope = value; else language = value;
+    } else throw ErrorRegistry.createError('CLI_USAGE');
+  }
+  const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env }, config = await loadConfig(root, options);
+  const locale = resolveLocale(language, env, config.language); context.onLocale?.(locale);
+  const scopeId = scope ?? (config.terminal as { scopeId?: string } | undefined)?.scopeId;
+  if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  if (!context.inspectPolicyAdministration) throw ErrorRegistry.createError('CLI_USAGE');
+  const result = await context.inspectPolicyAdministration(root, { schemaVersion: 1, scopeId }, options);
+  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render: view => [
+    t('cli.policy.status', { scope: view.scopeId, count: view.usableAdminCount, revision: view.revision,
+      template: view.template.kind === 'first-run' ? t('cli.policy.status.first-run', { version: view.template.version ?? '-' }, locale) : view.template.kind === 'drift' ? t('cli.policy.status.drift', {}, locale) : t('cli.policy.status.hand-built', {}, locale) }, locale),
+    ...view.admins.map(person => `${person.issuer}/${person.subject}`),
+    view.bootstrapRequired ? t('cli.policy.status.bootstrap', {}, locale) : view.recoveryRequired ? t('cli.policy.status.recovery', {}, locale) : t('cli.policy.status.ready', {}, locale),
+    t('cli.policy.status.unverified', {}, locale),
+  ].join('\n') });
 }
