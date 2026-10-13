@@ -1,5 +1,8 @@
 import { appendFileSync } from 'node:fs';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { planRun } from '../../../src/index.js';
+import { formatHumanError } from '#platform/index.js';
+import { brainProviderFixture } from '../support/brain-provider.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
@@ -8,10 +11,25 @@ import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 const mounted: ReturnType<typeof mountWorkline>[] = [];
-afterEach(() => { for (const view of mounted.splice(0)) view.instance.unmount(); });
+const cleanups: (() => Promise<void>)[] = [];
+afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount();
+  for (const close of cleanups.splice(0)) await close(); vi.restoreAllMocks(); });
 const words = { planning: 'PLANNING', cancelHint: 'Esc / Ctrl+C cancel', requestHint: 'Write /do <intent>' };
 const run = { schemaVersion: 3, runId: 'r', scopeId: 's', revision: 1, cancellationRequested: false, state: { kind: 'running' },
   tasks: [{ id: 'task', phase: 'pending', taskBrief: { task: 'Purchase readback', model: null }, resultBrief: null }] } as unknown as RunView;
+it.skipIf(process.platform === 'win32').each(['en', 'tr'] as const)('/do displays the real inactive-model refusal in %s before provider or proposal', async locale => {
+  const f = await brainProviderFixture({ model: 'inactive' }); cleanups.push(f.close);
+  let failure: unknown;
+  const view = mountWorkline({ errorText: error => { failure = error; return formatHumanError(error, { locale, noColor: true }); },
+    doPlan: { ...words, lines: result => brainProposalLines(result, locale),
+      plan: (intent, commandId, signal) => planRun(f.project, { schemaVersion: 1, scopeId: 's', commandId, intent }, f.options, signal) } });
+  mounted.push(view); await settle(40); view.stdin.write('/do Prepare purchase\r');
+  await until(() => view.stdout.text.includes('MODEL_NOT_ACTIVATED'), 'typed inactive-model result');
+  expect(failure).toMatchObject({ code: 'MODEL_NOT_ACTIVATED', params: { scope: 's', model: f.reference.modelId } });
+  expect(view.stdout.text).toContain(locale === 'tr' ? 'kapsamında etkin değil' : 'not active in scope');
+  expect(view.stdout.text).toContain('deckent models activate'); expect(f.posts).toBe(0);
+  if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO inactive ${locale}\n${view.stdout.frame}\n`);
+});
 it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval card %s precedes replay and Run navigation', async key => {
   const pending = pendingBrainFixture(), plans: { intent: string; id: string }[] = [], decisions: string[] = [];
   const history: string[] = [];

@@ -496,5 +496,8 @@
   "cli.backup.verified": "Backup verified",
   "cli.backup.restored": "Backup restored",
   "shell.homeCredentialsRefused": "HOME credential protection could not be determined ({detail}; scan bound: {entries} entries). Use a narrower project or repair HOME/credential paths, then retry; the shell was refused before execution.",
-  "shell.homeSubtreesMayBeHidden": "large HOME subtrees that cannot be inspected within the credential scan bound are hidden"
+  "shell.homeSubtreesMayBeHidden": "large HOME subtrees that cannot be inspected within the credential scan bound are hidden",
+  "doctor.modelInvocationDelivery": "Model delivery: profile {profile}, model {model}, scope {scope}, surface {surface}; required {required} bytes, available {available} bytes — increase {setting} or reduce the profile's limits.responseMaxBytes.",
+  "doctor.modelInvocationDelivery.config.runtime-service": "service.responseMaxBytes (runtime service)",
+  "doctor.modelInvocationDelivery.config.mcp": "mcp.responseMaxBytes (MCP surface)"
 }

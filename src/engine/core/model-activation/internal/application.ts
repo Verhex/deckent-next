@@ -5,7 +5,7 @@ import { parseModelActivationCommand, modelActivationActorSchema, modelActivatio
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { parseModelActivationAdmission, sameModelActivationRequest, verifyModelActivationReceipt } from './evidence.js';
-import { ModelActivationStoreError, type ModelActivationResult, type ModelActivationStore } from './port.js';
+import { ModelActivationStoreError, type ModelActivationDeliveryFinding, type ModelActivationResult, type ModelActivationStore } from './port.js';
 
 export interface ModelActivationAuthorizer {
   authorize(action: 'activate' | 'deactivate' | 'inspect', target: { readonly scopeId: string; readonly reference: ModelReference },
@@ -30,7 +30,7 @@ export interface ModelActivationInvocationDelivery {
   readonly profiles: unknown;
   readonly surfaces: readonly (readonly [string, ModelActivationDeliverySurface])[];
   assess(targets: readonly ModelActivationDeliveryTarget[],
-    surfaces: readonly (readonly [string, ModelActivationDeliverySurface])[]): readonly { readonly requiredBytes: number }[];
+    surfaces: readonly (readonly [string, ModelActivationDeliverySurface])[]): readonly ModelActivationDeliveryFinding[];
 }
 function exactReference(left: ModelReference, right: ModelReference): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 export class ModelActivationApplication {
@@ -68,8 +68,9 @@ export class ModelActivationApplication {
           const targets = (configured?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value))
             .filter(profile => profile.scopeId === command.scopeId && exactReference(profile.reference, command.reference))
             .map(profile => ({ profile, definition: observed.definition, catalogRevision: observed.catalogRevision }));
-          if (this.invocationDelivery.assess(targets, this.invocationDelivery.surfaces).length > 0) {
-            throw new ModelActivationStoreError('MODEL_ACTIVATION_DELIVERY_UNFIT');
+          const finding = this.invocationDelivery.assess(targets, this.invocationDelivery.surfaces)[0];
+          if (finding) {
+            throw new ModelActivationStoreError('MODEL_ACTIVATION_DELIVERY_UNFIT', finding);
           }
         }
       }
