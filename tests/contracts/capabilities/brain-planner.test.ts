@@ -23,6 +23,12 @@ it('uses a configured versioned template, actual catalogs and the same proposal 
   expect(user.schema.properties).toHaveProperty('graph'); expect(user.schema.properties).not.toHaveProperty('proposer');
   expect(brainOutputDigest(parseBrainDraft(JSON.stringify(draft)))).toHaveLength(64);
 });
+it('asks for and enforces the current graph version so typed work input is never planned on an older graph', () => {
+  const user = JSON.parse(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {}).messages[1]!.content);
+  expect(user.schema.properties.graph.properties.schemaVersion).toEqual({ type: 'number', const: graph.schemaVersion });
+  expect(() => parseBrainDraft(JSON.stringify({ ...draft, graph: { ...graph, schemaVersion: 3 } })))
+    .toThrow(expect.objectContaining({ code: 'BRAIN_GRAPH_INVALID', params: { rule: 'TASK_GRAPH_VERSION' } }));
+});
 it.each(['missing', 'duplicate'])('refuses %s selected template instead of fallback', kind => {
   const row = { id: 'missing', version: 1, instruction: 'Propose', summaryChars: 200 };
   expect(() => prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'missing', version: 1 }, templates: kind === 'missing' ? [{ ...row, version: 2 }] : [row, row] }))
