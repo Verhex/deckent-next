@@ -31,7 +31,7 @@ import { inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundComm
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
-import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
+import { prepareNativeCodingProfile, configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
@@ -89,7 +89,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
-    inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
+    inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
     planRun: planRuntimeRun,

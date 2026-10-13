@@ -347,7 +347,7 @@ workspace, dispatch ownership and artifact collection. Persisted supervisor conn
 contain paths and bootstrap digest, never credential values. Expired/unavailable credentials fail
 explicitly; subscription refresh and fleet-wide account lifecycle remain open.
 
-Native coding authoring v2 pins the observed CLI version and a versioned discovery choice.
+Native coding authoring v2 pins the observed CLI version and discovery; [template authoring](.deckent/docs/architecture/modules/config-and-cli-help.md#coding-template-authoring) reuses governed config.
 Disabled discovery is the default: Claude uses subscription-compatible safe-mode; unverified
 Codex/Cursor suppression requests fail instead of silently enabling repository discovery.
 Repository discovery is an explicit profile exception for all three providers. Only Claude's

@@ -537,7 +537,7 @@
   "cli.help.modelsAuditSpending": "deckent models audit-spending --input <file|-> [--json] [--lang en|tr]\nRecord a bounded integrity audit for one exact provider-spending checkpoint through the explicitly started local `deckent runtime serve`. Input is schema 1: commandId, scopeId, budgetId, budgetRevision, and expectedCheckpointDigest. It records an immutable audit receipt; it does not correct financial records, verify an invoice, or prove a complete invocation audit.",
   "mcp.tool.inspectProviderSpending": "Inspect one exact scoped provider-spending account snapshot. It returns recorded local reservations, including holds but not hold reasons, and exact settlement with its rounded projection. The settled total may combine local calculations and provider-reported charges; source subtotals are not included. It does not verify a provider invoice or a full spending-history audit.",
   "mcp.tool.auditProviderSpending": "Record one bounded integrity audit for an exact provider-spending checkpoint. It creates or replays an immutable audit receipt; it does not correct financial records, verify a provider invoice, or prove a complete invocation audit.",
-  "cli.coding.help": "deckent coding prepare --input <file|-> [--json] [--lang en|tr]\nPrepare a native coding Docker profile; does not start a worker or change configuration.",
+  "cli.coding.help": "deckent coding prepare --input <file|-> [--json] [--lang en|tr]\nPrepare a native coding Docker profile; does not start a worker or change configuration.\ndeckent coding template --provider <id> --kind <kind> [--image <sha256>] --preview|--apply [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved.",
   "cli.task.resolvedAttempt": "Resolved attempt {attempt} (generation {generation}, layout {layout}) of {run}/{task}.",
   "cli.task.patch.heading": "Task {task}: {count} file changes.",
   "cli.task.patch.notice": "Preview only; source workspace unchanged. This is not task acceptance or permission to apply.",
@@ -1428,5 +1428,10 @@
   "cli.run.inspect.workspaceStartedFromPatch": "Workspace started from accepted patch of {source} (attempt {attempt}, patch digest {digest})",
   "monitor.detail.workspaceStartedFromPatch": "started from accepted patch of {source} (attempt {attempt}, patch digest {digest})",
   "cli.help.action.propose": "Submit a receipted Run proposal",
-  "cli.help.action.inspectProposal": "Inspect a proposal receipt"
+  "cli.help.action.inspectProposal": "Inspect a proposal receipt",
+  "cli.coding.template.help": "deckent coding template --provider <id> --kind <kind> [--image <sha256>] --preview|--apply [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved.",
+  "cli.help.action.codingTemplate": "Preview or add a coding template",
+  "cli.coding.template.preview": "Coding template preview; configuration was not changed.",
+  "cli.coding.template.applied": "Coding template added to the admission registry.",
+  "cli.coding.template.unchanged": "The kind already uses this coding template; configuration was not changed."
 }

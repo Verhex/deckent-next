@@ -52,6 +52,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   previewWorkspacePatch?: TaskPatchHandler;
   renderUnifiedDiff?: (path: string, before: string | null, after: string | null) => string;
   prepareCodingProfile?: CodingProfilePreparationHandler;
+  configureCodingTemplate?: import('./coding.js').CodingTemplateHandler;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;

@@ -76,3 +76,32 @@ This is presentation discovery, not an authorization registry. Source-surface ev
 packaged-binary or cross-platform acceptance; the lane excluded build and full verify by owner direction (batch-27 integration runs full verify).
 
 `deckent task mark-lost` (önce `close-abandoned`) bu dalgadan çıkarıldı (owner 2026-10-06, takip kartına ertelendi); `task` yardımı ve `tests/fixtures/cli-help/commands-{en,tr}.json` golden'ları dalga öncesi hâline döndü (`vitest run <dosya> --update`; `-u <dosya>` biçimi dosya yolunu değer olarak yutar). Yeni config alanları: `installation.machineIdentity.source`, `installation.requireMachineBinding` ([platform-and-layers](platform-and-layers.md)).
+
+## Coding template authoring
+
+`deckent coding template --provider <id> --kind <kind> [--image <sha256>] --preview|--apply`
+adds a reusable native coding template through the existing project config writer. `--json` returns
+profile, kind, proposed registry revision, preimage digest and (on apply) config write receipt.
+`--lang en|tr` selects human output. Preview writes nothing; apply retains old rows, creates a registry
+revision and backs up the previous config. Repeating the same kind/profile is unchanged. A different
+binding is refused rather than overwritten. No model, task prompt or effort is accepted here.
+
+Configure `admission` (registry, poolId, executionSlots, inFlightSlots) through `deckent config set
+admission` or `/config` first. The command does not invent pool capacity or evaluator policy. Configure
+`execution.docker` limits and an immutable image; an optional image must have an admitted provider
+pin. The CLI version and discovery selection come from that pin; absent or ambiguous pins refuse.
+Apply requires the configured service/terminal scope and local config/write authority. Approval-required
+policy returns POLICY_APPROVAL_UNSUPPORTED via the existing allow-only set contract. A stale project
+digest, global registry contribution or changed effective Docker settings refuses publication.
+This source slice is author-verified separately from packaged CLI, independent review and live worker
+acceptance; evidence is in external RUN-HAZIR-KURULUM-2026-10-13/B-SABLON.
+
+`deckent coding template --provider <id> --kind <kind> [--image <sha256>] --preview|--apply`
+authors a reusable `native-coding-template@1` without per-task model, prompt or effort. It requires an
+existing admission registry/pool/slots and effective `execution.docker` limits. CLI version and discovery
+are copied from one unambiguous admitted provider/image pin; no repository-discovery exception is
+invented. Preview and apply use the same validated profile and add-only registry proposal. Existing
+kind bindings refuse a different profile and return unchanged for the same generated profile. Apply
+uses project ConfigApplication.set: config/write allow-only policy, digest CAS, sealed audit and atomic
+backup/publication. A global registry contribution or changed effective resource source refuses the
+write. This command does not launch, build, grant policy or prove image/worker readiness.
