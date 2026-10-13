@@ -32,11 +32,11 @@ async function fixture(source: Variant = 'claude-rate-limit', options: { substit
   const base = fixtureExecution(graph), execution = { ...base, tasks: base.tasks.map(task => ({ ...task, profile: { ...task.profile,
     parameters: { ...task.profile.parameters, nativeSubscription: { schemaVersion: 2, provider, model: pin, modelUsageEvidence: provider === 'claude' ? 'session-events' : 'none' } } } })) };
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 4, inFlightSlots: 4 } });
-  async function create(runId: string, channelId = pin.channelId) {
+  async function create(runId: string, channelId = pin.channelId, poolId = 'p') {
     const frozen = { ...execution, tasks: execution.tasks.map(task => ({ ...task, profile: { ...task.profile, parameters: { ...task.profile.parameters,
       nativeSubscription: { ...task.profile.parameters.nativeSubscription, model: { ...pin, channelId } } } } })) };
     await store.createRun({ commandId: `create-${runId}`, actor, identity: { scopeId: 's', runId, layoutRevision: 'l' }, graph, execution: frozen, now,
-      policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['t'] } });
+      policy: { schemaVersion: 2, poolId, capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['t'] } });
   }
   const reserve = new RunReservationApplication(store, verifier, authorization, authorization, { now: () => now, attemptId: () => `a-${++sequence}` });
   async function reserveRun(runId: string) {
@@ -161,14 +161,108 @@ it.skipIf(process.platform === 'win32')('does not recycle an earlier rejection a
   expect(f.evaluator.evaluate).toHaveBeenCalledOnce();
 });
 
-function release(f: Awaited<ReturnType<typeof fixture>>, scopes: 'all' | string[] = 'all', mcp = false, brokenAudit = false) {
+function release(f: Awaited<ReturnType<typeof fixture>>, scopes: 'all' | string[] = 'all', mcp = false, brokenAudit = false, poolIds = ['p']) {
   const person = mcp ? { ...principal, ...mcpPrincipalRef(principal) } : principal;
   const document = { schemaVersion: 1, revision: 'quota-policy', restrictions: [], grants: [{ id: 'owner-resume', effect: 'allow',
-    actions: ['resume'], scopes, principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p'] } }] };
+    actions: ['resume'], scopes, principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: poolIds } }] };
   return new QuotaReleaseApplication({ async verify() { return person; } }, new PoolControlPolicyAuthorization({ async load() { return document; } }), f.store,
     audit => brokenAudit ? { record() { throw new Error('BROKEN_AUDIT'); } } : new AuditApplication(audit, createHmacIntegrity('quota-test', randomBytes(32))), () => 2000, 'p');
 }
 const releaseCommand = { schemaVersion: 1, scopeId: 's', commandId: 'release-channel', channelId: pin.channelId };
+async function secondWait(f: Awaited<ReturnType<typeof fixture>>, poolId: string) {
+  if (poolId !== 'p') await f.store.createExecutionPool({ schemaVersion: 1, poolId, capacity: { executionSlots: 4, inFlightSlots: 4 } });
+  await f.create('second', pin.channelId, poolId);
+  const identity = (await f.reserveRun('second')).identities[0]!;
+  await f.finish(identity);
+  return identity;
+}
+it.skipIf(process.platform === 'win32').each(['denied', 'allowed', 'audit'] as const)('checks every affected pool and releases atomically: %s', async variant => {
+  const f = await fixture(), second = await secondWait(f, 'q');
+  const beforeP = (await f.evaluate()).snapshot, beforeQ = (await f.evaluate(second)).snapshot;
+  const app = release(f, 'all', false, variant === 'audit', variant === 'denied' ? ['p'] : ['p', 'q']);
+  if (variant === 'allowed') {
+    const receipt = await app.apply(releaseCommand);
+    expect(receipt).toMatchObject({ poolId: 'p', poolIds: ['p', 'q'], released: 2 });
+    for (const [runId, before] of [['r', beforeP], ['second', beforeQ]] as const) {
+      const run = (await f.store.loadRun('s', runId))!;
+      expect(run.revision).toBe(before.revision + 1); expect(run.state).toEqual({ kind: 'running' });
+      expect(run.quotaWaits?.[0]).toMatchObject({ ...before.quotaWaits![0]!, releasedAtMs: 2000 });
+      expect(run.bindings).toEqual([]); expect(run.previousBindings).toEqual(before.bindings);
+    }
+    expect(await app.apply(releaseCommand)).toEqual(receipt);
+    // Replay must authorize the historical affected pools even though the waits have already been released.
+    await expect(release(f).apply(releaseCommand)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  } else {
+    await expect(app.apply({ ...releaseCommand, poolId: 'p' })).rejects.toThrow(variant === 'denied' ? 'POLICY_DENIED' : 'BROKEN_AUDIT');
+    expect(await f.store.loadRun('s', 'r')).toEqual(beforeP); expect(await f.store.loadRun('s', 'second')).toEqual(beforeQ);
+  }
+  const db = new DatabaseSync(f.path, { readOnly: true }); try {
+    const waits = db.prepare('SELECT released_at_ms FROM run_quota_waits ORDER BY run_id').all();
+    expect(waits).toEqual([{ released_at_ms: variant === 'allowed' ? 2000 : null }, { released_at_ms: variant === 'allowed' ? 2000 : null }]);
+    expect(db.prepare('SELECT count(*) n FROM quota_release_receipts').get()!.n).toBe(variant === 'allowed' ? 1 : 0);
+    const events = db.prepare("SELECT record FROM audit_events WHERE kind='quota-release' ORDER BY sequence").all().map(row => JSON.parse(String(row.record)));
+    expect(events).toHaveLength(variant === 'audit' ? 0 : variant === 'allowed' ? 2 : 1);
+    for (const event of events) expect(event).toMatchObject({ mac: expect.any(String), event: { subject: { poolIds: ['p', 'q'] } } });
+    if (variant === 'denied') expect(events[0].event.subject).toMatchObject({ decisionPoolId: 'q', released: null, decision: { effect: 'deny' } });
+  } finally { db.close(); }
+});
+it.skipIf(process.platform === 'win32').each(['p', 'q'])('covers a wait added during authorization only if its pool %s is authorized', async poolId => {
+  const f = await fixture(), second = await secondWait(f, poolId), beforeP = (await f.evaluate()).snapshot;
+  // Publish the second sealed quota result after the advisory read, before the writer's BEGIN IMMEDIATE.
+  const real = new PoolControlPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'quota-policy', restrictions: [], grants: [{
+    id: 'owner-resume', effect: 'allow', actions: ['resume'], scopes: 'all', principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p'] } }] }; } });
+  let added: Awaited<ReturnType<typeof f.evaluate>> | undefined;
+  const authorization = { async decide(...args: Parameters<PoolControlPolicyAuthorization['decide']>) {
+    added = await f.evaluate(second); return real.decide(...args);
+  } };
+  const raced = new QuotaReleaseApplication(verifier, authorization, f.store,
+    audit => new AuditApplication(audit, createHmacIntegrity('quota-race', randomBytes(32))), () => 2000, 'p');
+  if (poolId === 'q') {
+    await expect(raced.apply(releaseCommand)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+    expect(await f.store.loadRun('s', 'r')).toEqual(beforeP);
+    const q = (await f.store.loadRun('s', 'second'))!;
+    expect(q).toEqual(added!.snapshot);
+    expect(q.state.kind).toBe('parked'); expect(q.bindings[0]!.identity).toEqual(second);
+    expect(q.quotaWaits?.[0]?.releasedAtMs).toBeUndefined(); expect(q.previousBindings).toBeUndefined();
+    const db = new DatabaseSync(f.path, { readOnly: true }); try {
+      expect(db.prepare('SELECT count(*) n FROM quota_release_receipts').get()!.n).toBe(0);
+      expect(db.prepare("SELECT count(*) n FROM audit_events WHERE kind='quota-release'").get()!.n).toBe(0);
+      expect(db.prepare('SELECT count(*) n FROM run_quota_waits WHERE released_at_ms IS NOT NULL').get()!.n).toBe(0);
+    } finally { db.close(); }
+  } else {
+    expect(await raced.apply(releaseCommand)).toMatchObject({ poolIds: ['p'], released: 2 });
+    expect((await f.store.loadRun('s', 'r'))!.state.kind).toBe('running');
+    expect((await f.store.loadRun('s', 'second'))!.state.kind).toBe('running');
+  }
+});
+it.skipIf(process.platform === 'win32')('refuses mixed policy revisions before any Run, audit or receipt change', async () => {
+  const f = await fixture(), second = await secondWait(f, 'q');
+  const beforeP = (await f.evaluate()).snapshot, beforeQ = (await f.evaluate(second)).snapshot; let revision = 0;
+  const authorization = new PoolControlPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: `policy-${++revision}`, restrictions: [], grants: [{
+    id: 'owner-resume', effect: 'allow', actions: ['resume'], scopes: 'all', principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'pool', ids: ['p', 'q'] } }] }; } });
+  const app = new QuotaReleaseApplication(verifier, authorization, f.store,
+    audit => new AuditApplication(audit, createHmacIntegrity('quota-revision', randomBytes(32))), () => 2000, 'p');
+  await expect(app.apply(releaseCommand)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+  expect(await f.store.loadRun('s', 'r')).toEqual(beforeP); expect(await f.store.loadRun('s', 'second')).toEqual(beforeQ);
+  const db = new DatabaseSync(f.path, { readOnly: true }); try {
+    expect(db.prepare('SELECT count(*) n FROM quota_release_receipts').get()!.n).toBe(0);
+    expect(db.prepare("SELECT count(*) n FROM audit_events WHERE kind='quota-release'").get()!.n).toBe(0);
+  } finally { db.close(); }
+});
+it.skipIf(process.platform === 'win32')('does not guess historical receipt authority from current waits', async () => {
+  const f = await fixture(); await f.evaluate(); const app = release(f); await app.apply(releaseCommand);
+  const before = await f.store.loadRun('s', 'r'), db = new DatabaseSync(f.path);
+  try {
+    const row = db.prepare('SELECT record FROM quota_release_receipts').get()!, record = JSON.parse(String(row.record));
+    delete record.receipt.poolIds;
+    db.prepare('UPDATE quota_release_receipts SET record=?').run(JSON.stringify(record));
+    const retained = db.prepare('SELECT record FROM quota_release_receipts').get();
+    await expect(app.apply(releaseCommand)).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
+    expect(await f.store.loadRun('s', 'r')).toEqual(before);
+    expect(db.prepare('SELECT record FROM quota_release_receipts').get()).toEqual(retained);
+    expect(db.prepare("SELECT count(*) n FROM audit_events WHERE kind='quota-release'").get()!.n).toBe(1);
+  } finally { db.close(); }
+});
 it.skipIf(process.platform === 'win32').each(['codex-text', 'exit-text', 'unknown', 'bounded'] as const)('does not hold any other Run for weak/invalid signal %s', async variant => {
   const f = await fixture(variant === 'unknown' || variant === 'bounded' ? 'claude-rate-limit' : variant,
     variant === 'unknown' ? { resetsAtMs: null } : variant === 'bounded' ? { resetsAtMs: 50000, maxWaitMs: 10000 } : {});

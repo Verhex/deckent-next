@@ -120,7 +120,7 @@ it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited
   const f = await fixture(), command = { schemaVersion: 1, scopeId: 's', commandId: 'cli-release', channelId: 'subscription-channel' };
   const result = await f.cli('quota-release', '--channel', command.channelId, '--command-id', command.commandId, '--json');
   expect(result.code).toBe(0); expect(JSON.parse(result.stdout)).toEqual(await releaseQuota(f.project, command, f.options));
-  expect(JSON.parse(result.stdout)).toMatchObject({ released: 0, poolId: 'p' });
+  expect(JSON.parse(result.stdout)).toMatchObject({ released: 0, poolId: 'p', poolIds: [] });
   expect((await f.cli('quota-release', '--channel', command.channelId, '--lang', 'tr')).stdout).toContain('serbest bırakıldı');
   expect((await f.cli('quota-release')).code).toBe(2);
   const session = await mcp({ releaseQuota: input => withMcpPrincipal(() => releaseQuota(f.project, input, f.options)) });
