@@ -1,5 +1,5 @@
 import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
-  effectCommandSchema, policyChangeSchema, PolicyChangeError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
+  effectCommandSchema, policyChangeSchema, PolicyChangeError, PolicyLastAdminError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
 import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
@@ -11,7 +11,7 @@ import { verifyApproval } from './integrity.js';
 import { OperationApprovalBroker } from './operation.js';
 
 /** Refusal codes of an authority submission that are audited (transient or unknown-outcome failures are not refusals). */
-const AUDITED_REFUSALS: ReadonlySet<string> = new Set(['POLICY_DELEGATION_EXCEEDS', 'POLICY_DENIED', 'POLICY_CHANGE_INVALID', 'EFFECT_REJECTED',
+const AUDITED_REFUSALS: ReadonlySet<string> = new Set(['POLICY_DELEGATION_EXCEEDS', 'POLICY_DENIED', 'POLICY_CHANGE_INVALID', 'POLICY_LAST_ADMIN', 'EFFECT_REJECTED',
   'EFFECT_PRECONDITION_CHANGED', 'APPROVAL_DENIED', 'APPROVAL_EXPIRED', 'APPROVAL_STALE']);
 /** What the approval gate learned about this submission, for the target that writes inside the store's lock. */
 interface AuthoritySubmission { requester?: VerifiedPrincipal; decider?: ApprovalActor; approvalId?: string; inputDigest?: string }
@@ -49,11 +49,12 @@ export class AuthorityDocumentTarget implements EffectTarget {
         const policy = plan.policy && { ...plan.policy, revision: chainAuthorityRevision('authority-policy:1', 'a', files.policy.revision, plan.policy) };
         const bindings = plan.bindings && { ...plan.bindings, revision: chainAuthorityRevision('authority-bindings:1', 'a', files.bindings.revision, plan.bindings) };
         const after = `${(policy ?? files.policy).revision}+${(bindings ?? files.bindings).revision}`;
-        try { this.hooks.bound(current, plan.touched); this.hooks.audit({ before: current.revision, after, counts: plan.counts }); } catch (error) { return refuse(error); }
-        return { write: { policy, bindings, order: plan.order }, result: { version: after } };
+        try { this.hooks.bound(current, plan.touched); } catch (error) { return refuse(error); }
+        return { write: { policy, bindings, order: plan.order, beforePublish: () => this.hooks.audit({ before: current.revision, after, counts: plan.counts }) }, result: { version: after } };
       }, request.idempotencyKey);
     } catch (error) {
       if (error instanceof EffectTargetError) throw error;
+      if (error instanceof PolicyLastAdminError) return refuse(error);
       // A conflict found before the first rename left nothing behind (a changed precondition); anything later, or any other failure, may
       // have replaced one file: only the keyed archive record decides (C11 lookup), never a blind resend.
       if (error instanceof AuthorityChangeError && error.code === 'POLICY_CONFLICT' && error.detail !== 'partial') throw new EffectTargetError('EFFECT_TARGET_PRECONDITION', { cause: error });
@@ -110,7 +111,10 @@ export class PolicyAdministrationApplication {
     const submission: AuthoritySubmission = {};
     const previous = await deps.effects.loadEffect(command.scopeId, command.commandId);
     try { return await this.run(command, submission, credential); }
-    catch (error) {
+    catch (caught) {
+      const cause = caught instanceof Error ? caught.cause : null;
+      const root = cause instanceof Error ? cause.cause : null;
+      const error = root instanceof PolicyLastAdminError ? root : caught;
       // A replay of a command already refused terminally is the same refusal, not a new event; anything else that stops here is recorded.
       const code = (error as { code?: unknown } | null)?.code;
       if (typeof code === 'string' && AUDITED_REFUSALS.has(code) && previous?.state !== 'refused') {

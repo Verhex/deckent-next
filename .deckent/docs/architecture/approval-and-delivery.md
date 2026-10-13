@@ -836,3 +836,27 @@ Validation: 12 targeted files 106/106; additional bounded composition admission 
 - Kalıcı/geçici ayrım engine `classifyLaunchRefusal`: kalıcı kodlar `EXECUTION_NOT_CONFIGURED`, `EXECUTION_HOST_UNSUPPORTED`, `EXECUTION_PROFILE_INVALID`, `DISPATCH_ARTIFACT_REQUIRED`; geçici retler (örn. `POLICY_DENIED`, credential, daemon, workspace) kayıt yazmaz, runtime `failureBackoffMs` geçerli. Hata yine çağırana fırlatılır.
 - `deckent task mark-lost` takip kartına ertelendi (owner 2026-10-06, Astra 2384): `unknown` gözlem commit'i ile Run projeksiyonu ayrı işlemlerdi; aradaki kesintide geç `finishDispatch` hold'u açabiliyordu. Takip kartı: atomik mark-lost (attempt `unknown` gözlemi ve Run `reconciling/unresolvedEffects` aynı işlemde, ya da terminal projeksiyonun önceki kalıcı `unknown`'ı kaybetmesinin engellenmesi) + KARAR 12 (slot bırakma: tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı). O zamana kadar granted + terminal yok deneme main davranışında: görev `active`, slot tutulur, başarısız sayılmaz (`tests/contracts/composition/unresolved-launch.test.ts`).
 - Monitor: worker anlatısı (başlangıç/bitiş/süre/tur/kapanış nedeni/oturum sonucu) yalnız ledger dispatch terminal kaydı ve mühürlü worker olaylarından; kanıt yoksa parça yazılmaz. `MonitorAttempt` opsiyonel `closeReason|turns|sessionOutcome|failedTests`; `MonitorRun.deliveryOutlook` (`none|patch-not-prepared|awaiting-delivery`, integrate/deliver/adopt makbuzu her zaman öncelikli); `MonitorLedgerDispatch.patchRecorded`; blocker detayı `patch-missing`; `ResultBrief` opsiyonel `failedTests`/`deliveryOutlook` (run inspect ile paylaşılır); `display-limits.json` `maxFailedTests`; düşen testler `scripts/verification-reporter.mjs` `verify-failed-test:` satırlarından read-output kapısı + 8 MiB sınırı altında (worker stdout'u untrusted: yalnız gösterim kanıtı, kabulü etkilemez). PATCH_LIMIT sebebi/değeri/alanı kayıtlı değil; "kayıtlı değil" denir, patch-prepare reddi tipli makbuz kartı açık.
+
+## POLITIKA-P0 author candidate (2026-10-13)
+
+`assertPolicyAdministrationPreserved` is a pure capability invariant; engine `validateAuthorityWrite`
+is its one application checkpoint in the locked `FilePolicySource` writer. It covers v1/v2 change
+inputs, profiles, installer upgrades and permission modes, including role/restriction/SoD/assurance
+changes at the authority port. Each previously administered scope partition retains a named non-MCP
+principal able to execute `policy.administer` and inspect/decide all approval records. Denies and
+restrictions win; SoD needs a different authorized requester. Core authority cards support
+`peer-session`; injected decision-producer availability allows Enterprise assurance without an owner
+role-name bypass. Modes cannot create admin capability. Existing headless policies remain repairable.
+The writer checks final and intermediate snapshots before invoking `AuthorityWrite.beforePublish`
+(the producer's synchronous audit callback), then retains existing conditional writes and archives.
+
+`PolicyAdministrationInspection` shares one read-only scope-inspector/admin contract across CLI
+`policy status`, SDK `inspectPolicyAdministration`, MCP `inspect_policy_administration` and doctor.
+It returns policy-capable principal refs/count, revision, template revision recognition or deviation,
+bootstrap/recovery indicators and explicitly unverified external identity/custody. Template revision
+recognition is metadata, not a guarantee of untampered policy content. No approval decision is exposed
+through MCP. Rollback uses current-version expected content and a bounded complete revision chain
+of committed authority archives; it excludes fresh-install rules and changed-then-restored rules,
+keeps modified rules as conflicts, and refuses unavailable history. The archive read has no healing
+or write side effects and shares the configured policy byte budget. Local-owner archives are not
+signed. Author controls and open acceptance limits live in external POLITIKA-P0 proof; no live claim.

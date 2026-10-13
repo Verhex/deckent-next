@@ -23,6 +23,7 @@ export interface DoctorRenderInput {
   readonly modelInvocationDelivery?: readonly { readonly scopeId: string; readonly profileId: string;
     readonly reference: { readonly providerId: string; readonly providerVersion: number; readonly modelId: string; readonly modelVersion: number };
     readonly surface: 'runtime-service' | 'mcp'; readonly requiredBytes: number; readonly availableBytes: number }[];
+  readonly policyAdministration?: { readonly usableAdminCount: number; readonly bootstrapRequired: boolean; readonly recoveryRequired: boolean } | null;
   readonly startability?: InstallationStartabilityView | null;
   readonly platform: string;
   readonly host: { readonly cpuCores: number; readonly totalMemMB: number; readonly recommendedMaxWorkers: number };
@@ -83,6 +84,8 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
   ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),
+  ...(result.policyAdministration ? [t('doctor.policyAdministration', { count: result.policyAdministration.usableAdminCount,
+    status: result.policyAdministration.bootstrapRequired ? t('cli.policy.status.bootstrap', {}, locale) : result.policyAdministration.recoveryRequired ? t('cli.policy.status.recovery', {}, locale) : t('cli.policy.status.ready', {}, locale) }, locale)] : result.policyAdministration === null ? [t('doctor.policyAdministration.unavailable', {}, locale)] : []),
   ...poolLines,
   ...(result.modelInvocationDelivery ?? []).map(finding => t('doctor.modelInvocationDelivery', { profile: finding.profileId,
     model: `${finding.reference.providerId}@${finding.reference.providerVersion}/${finding.reference.modelId}@${finding.reference.modelVersion}`,

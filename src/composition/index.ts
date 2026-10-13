@@ -37,3 +37,5 @@ export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, ch
 export { planConfiguredRun, planRuntimeRun } from '#composition/core/run-planner/index.js';
 
 export { releaseConfiguredQuota } from '#composition/core/runs/index.js';
+
+export { inspectConfiguredPolicyAdministration } from '#composition/core/approvals/index.js';

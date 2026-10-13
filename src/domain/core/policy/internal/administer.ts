@@ -122,9 +122,6 @@ export function planPolicyChange(policyInput: unknown, bindingsInput: unknown, c
   if (rolesAdded && counts.grantsRemoved) invalid();
   const order = removal && !rolesAdded ? 'bindings-first' as const : 'policy-first' as const;
   validSnapshot(planned(nextPolicy ?? policyBody), planned(nextBindings ?? bindingsBody));
-  // A profile cannot remove the last installation-wide owner root. Existing roles stay immutable.
-  const owner = (binding: PolicyBinding) => binding.roles.includes(INSTALLATION_OWNER_ROLE_ID) && binding.scopes === 'all';
-  if (change.data.schemaVersion === 2 && bindings.bindings.some(owner) && !entries.some(owner)) invalid();
   if (nextPolicy && nextBindings) validSnapshot(planned(order === 'policy-first' ? nextPolicy : policyBody), planned(order === 'policy-first' ? bindingsBody : nextBindings));
   return Object.freeze({ policy: nextPolicy, bindings: nextBindings, order, touched: Object.freeze(touched), counts: Object.freeze(counts) });
 }
