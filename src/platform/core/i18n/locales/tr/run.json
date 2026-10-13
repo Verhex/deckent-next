@@ -413,5 +413,5 @@
   "run.quota.wait": "Abonelik limiti doldu; sıfırlanma zamanı bilinmiyor, {time}'e kadar bekleniyor",
   "run.quota.retryLimit": "Abonelik limiti doldu; otomatik yeniden deneme sınırına ulaşıldı",
   "run.quota.unknown": "Abonelik limiti doldu; sıfırlanma zamanı bilinmiyor",
-  "run.quota.releaseHint": "serbest bırakmak için: deckent pool quota-release --channel <id> --scope <scope>"
+  "run.quota.releaseHint": "serbest bırakmak için: deckent pool quota-release --channel <id> --scope <scope> (pool release-quota yetkisi gerekir)"
 }
