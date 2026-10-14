@@ -23,5 +23,6 @@ export async function inspectTask(values: ReadonlyMap<string, string>, context: 
       ...(data.task.custodyDisposition ? [data.task.custodyDisposition === 'released' ? t('task.custody.released', {}, locale) : t('task.custody.hold-manual', {}, locale)] : []),
       ...(data.task.acceptance ? [renderAcceptanceLine(data.task.acceptance, locale)] : []),
       ...(data.task.handoffs ?? []).map(receipt => (receipt.kind === 'workspace-started-from-patch' ? t('cli.run.inspect.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))),
+      ...(data.task.configExclusions ? [t('cli.run.inspect.configExcluded', { count: data.task.configExclusions.count }, locale), ...data.task.configExclusions.entries.map(entry => t('cli.run.inspect.configExcludedEntry', { path: entry.path, rule: entry.rule, by: entry.by }, locale))] : []),
     ].join('\n') });
 }

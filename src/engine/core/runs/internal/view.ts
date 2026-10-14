@@ -6,6 +6,7 @@ import { taskQuotaHoldSchema } from './pool-observation.js';
 import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
+import { workerTreeExclusionSchema, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
 export const runViewSchema = z.object({
   costReport: workCostReportSchema.optional(),
@@ -25,6 +26,8 @@ export const runViewSchema = z.object({
     acceptance: acceptanceViewSchema.optional(),
     id: identitySchema, kind: identitySchema, dependencies: z.array(identitySchema).readonly(),
     acceptanceCriteria: z.array(identitySchema).readonly(), handoffs: z.array(handoffReceiptViewSchema).readonly().optional(),
+    /** S6 (owner 2026-10-15): hits the operator's `execution.secretGate` lists lifted for this task's attempt (path, rule, lifting entry; never a value). */
+    configExclusions: z.object({ count: counterSchema.positive(), entries: z.array(workerTreeExclusionSchema).readonly() }).strict().readonly().optional(),
     inputs: taskDefinitionSchema.unwrap().shape.inputs,
     profile: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(),
     phase: taskProgressSchema.unwrap().innerType().shape.phase,
@@ -36,7 +39,8 @@ export const runViewSchema = z.object({
   }).strict().readonly()).readonly(),
 }).strict().readonly();
 export type RunView = z.infer<typeof runViewSchema>;
-export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = [], evaluations: readonly Readonly<{ identity: { taskId: string } }>[] = []): RunView {
+export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = [], evaluations: readonly Readonly<{ identity: { taskId: string } }>[] = [],
+  exclusions: readonly WorkerTreeExclusionRecord[] = []): RunView {
   const parsed = runSnapshotSchema.safeParse(input);
   if (!parsed.success) throw new RunStoreError('RUN_STORE_CORRUPT');
   const run = parsed.data; const progress = new Map(run.progress.map(task => [task.taskId, task]));
@@ -59,6 +63,8 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
       ...(progress.get(task.id)!.phase === 'reconciling' ? { custodyDisposition: progress.get(task.id)!.workerCustody?.state === 'released' ? 'released' as const : 'hold-manual' as const } : {}),
       phase: progress.get(task.id)!.phase,
       ...(projectTaskHandoffs(run, task.id, receipts).length ? { handoffs: projectTaskHandoffs(run, task.id, receipts) } : {}),
+      ...(() => { const record = exclusions.find(row => run.bindings.some(binding => binding.identity.taskId === task.id && binding.identity.attemptId === row.identity.attemptId));
+        return record ? { configExclusions: { count: record.count, entries: record.entries } } : {}; })(),
       ...(progress.get(task.id)!.notAcceptedReason ? { notAcceptedReason: progress.get(task.id)!.notAcceptedReason } : {}),
       ...(progress.get(task.id)!.skippedReason ? { skippedReason: progress.get(task.id)!.skippedReason } : {}),
       ...(progress.get(task.id)!.decision ? { decision: progress.get(task.id)!.decision } : {}),

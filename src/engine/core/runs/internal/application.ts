@@ -1,6 +1,7 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { observeRunPool, type RunPoolEvidence } from './pool-observation.js';
 import { readAttemptHandoffEvents, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
+import { readWorkerTreeExclusions, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
 import { projectRunView } from './view.js';
 import { z } from 'zod';
@@ -44,15 +45,17 @@ export class RunInspectionApplication {
     if (!decoded.success) throw new RunStoreError('RUN_STORE_CORRUPT');
     const parsed = decoded.data;
     if (parsed.identity.scopeId !== query.scopeId || parsed.identity.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
-    const receipts: HandoffStartRecord[] = [];
+    const receipts: HandoffStartRecord[] = [], exclusions: WorkerTreeExclusionRecord[] = [];
     if (this.readStore.receipt) for (const binding of parsed.bindings) {
       const receipt = await readAttemptHandoffEvents({ receipt: this.readStore.receipt.bind(this.readStore) }, binding.identity);
       if (receipt) receipts.push(receipt);
+      const excluded = await readWorkerTreeExclusions({ receipt: this.readStore.receipt.bind(this.readStore) }, binding.identity);
+      if (excluded) exclusions.push(excluded);
     }
     const pool = evidence ? observeRunPool(evidence, Date.now(), this.poolConfig?.admission, this.poolConfig?.ceiling) : undefined;
     const evaluations = await this.readStore.loadRunEvaluations?.(parsed) ?? [];
     const channelWaits = evidence?.quotaHolds?.filter(wait => wait.deadline > Date.now());
-    const view = { ...projectRunView(parsed, receipts, evaluations), ...(channelWaits?.length ? { channelWaits } : {}), ...(pool ? { pool } : {}) };
+    const view = { ...projectRunView(parsed, receipts, evaluations, exclusions), ...(channelWaits?.length ? { channelWaits } : {}), ...(pool ? { pool } : {}) };
     if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     return { run: view, snapshot, principal, evaluations };
   }

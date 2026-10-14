@@ -824,7 +824,8 @@
         "src/domain/core/attempt",
         "src/domain/core/primitives",
         "src/domain/core/audit",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/attempts"
       ],
       "plan": "ISOLATION"
     },
@@ -2428,6 +2429,7 @@
     },
     "src/adapters/core/monitor-ledger": {
       "dependencies": [
+        "src/engine/core/workspaces",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/approval",
         "src/domain/core/run",

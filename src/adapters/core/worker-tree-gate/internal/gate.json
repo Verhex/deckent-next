@@ -1,0 +1,15 @@
+{
+  "note": "S6 gate data. archives: content the gate cannot read the way a worker's tools can (decompress/extract) is refused as unscannable, matched by its leading signature (hex at a byte offset).",
+  "archives": [
+    { "kind": "gzip", "offset": 0, "hex": "1f8b" },
+    { "kind": "zip", "offset": 0, "hex": "504b0304" },
+    { "kind": "zip", "offset": 0, "hex": "504b0506" },
+    { "kind": "bzip2", "offset": 0, "hex": "425a68" },
+    { "kind": "xz", "offset": 0, "hex": "fd377a585a00" },
+    { "kind": "zstd", "offset": 0, "hex": "28b52ffd" },
+    { "kind": "7z", "offset": 0, "hex": "377abcaf271c" },
+    { "kind": "rar", "offset": 0, "hex": "526172211a07" },
+    { "kind": "tar", "offset": 257, "hex": "7573746172" }
+  ],
+  "yamlBlockIndicator": "^[|>][+-]?[0-9]?$"
+}

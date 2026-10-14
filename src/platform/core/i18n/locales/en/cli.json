@@ -615,6 +615,8 @@
   "cli.workers.empty": "  No workers.",
   "cli.workers.model": "  Task {task}: {line}",
   "cli.run.inspect.handoffReceived": "  Handoff received from {source} (attempt {attempt}, digest {digest})",
+  "cli.run.inspect.configExcluded": "  Excluded by config: {count} path(s) passed the secret gate only because execution.secretGate lists them (audited)",
+  "cli.run.inspect.configExcludedEntry": "    {path} ({rule}) — lifted by {by}",
   "cli.workers.usage": "  Usage: {turns} turns · {duration}s · tokens {input} in / {output} out · ${cost} · {outcome}",
   "cli.workers.usageRejected": "  Usage unavailable: {reason}",
   "cli.workers.usageEvidence.invalid": "sealed log invalid",

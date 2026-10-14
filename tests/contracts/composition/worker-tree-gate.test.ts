@@ -9,7 +9,10 @@ import { AuditApplication } from '#engine/index.js';
 import { AuditError } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
-import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
+import { createConfiguredRun, inspectConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
+import { inspectMonitor } from '#composition/core/monitor/index.js';
+import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
+import { runCommand } from '#surfaces/core/cli/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { advanceConfiguredRun } from '#composition/core/run-progression/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
@@ -43,15 +46,16 @@ async function fixture(context: TestContext, files: Record<string, string>, secr
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'fixture', restrictions: [], grants: [
     { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
+    { id: 'monitor', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
     { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } },
   ] }), { mode: 0o600 });
   const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 'a', kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
   await createConfiguredRun(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'create', graph }, options);
   const identity = (await reserveConfiguredRunTasks(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve', expectedRevision: 0 }, options)).reservation.identities[0]!;
-  const auditPage = async () => {
+  const auditPage = async (kind = 'worker-tree-refused') => {
     const audit = await openSqliteAuditStore(productResourcePath(opened.layout, 'ledger'), { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' });
-    try { return audit.page('s', 0, 100).map(record => record.event.subject).filter(subject => subject.kind === 'worker-tree-refused'); } finally { audit.close(); }
+    try { return audit.page('s', 0, 100).map(record => record.event.subject).filter(subject => subject.kind === kind); } finally { audit.close(); }
   };
   return { project, options, store, identity, auditPage, workspaces: productResourcePath(opened.layout, 'workspaces') };
 }
@@ -127,6 +131,22 @@ it('passes a tree whose only hits are acknowledged (fixture patterns, a settings
     const capture = vi.spyOn(DockerSupervisor.prototype, 'captureProfile').mockRejectedValue(Object.assign(new Error('reached the supervisor'), { code: 'FIXTURE_REACHED' }));
     await expect(executeConfiguredTask(f.project, f.identity, f.options)).rejects.toBeTruthy();
     expect(capture).toHaveBeenCalledTimes(1); expect(await f.auditPage()).toEqual([]);
+    // Owner 2026-10-15: every lifted hit is audited with the exact config entry that lifted it, and shown on the Run card.
+    const entries = [{ path: '.npmrc', rule: 'deny-path:**/.npmrc', by: 'acknowledgedDenyPaths:.npmrc' },
+      { path: 'tests/fixture.ts', rule: 'pattern:provider-token', by: 'allowPatternPaths:tests/**' }];
+    expect(await f.auditPage('worker-tree-excluded')).toEqual([{ kind: 'worker-tree-excluded', runId: 'r', taskId: 'a', attemptId: f.identity.attemptId, count: 2, entries }]);
+    expect(JSON.stringify(await f.auditPage('worker-tree-excluded'))).not.toContain(PROVIDER_TOKEN);
+    const inspected = await inspectConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options);
+    expect(inspected.run!.tasks[0]!.configExclusions).toEqual({ count: 2, entries });
+    for (const [locale, heading] of [['en', 'Excluded by config: 2 path(s)'], ['tr', 'Yapılandırmayla hariç: 2 yol']] as const) {
+      const output: string[] = [];
+      await runCommand(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', locale], { root: f.project, env: f.options.env, stdout: { write(text: string) { output.push(text); } },
+        inspectRun: inspectConfiguredRun });
+      expect(output.join('')).toContain(heading); expect(output.join('')).toContain('tests/fixture.ts (pattern:provider-token)'); expect(output.join('')).toContain('allowPatternPaths:tests/**');
+    }
+    const monitor = (await loadMonitorSurface()).buildMonitorView(await inspectMonitor(f.project, f.options), 'en', true).tabs.runs
+      .flatMap(block => block.kind === 'table' ? block.rows : []).flatMap(row => row.detail().map(line => line.map(item => item.text).join(''))).join('\n');
+    expect(monitor).toContain('excluded by config: 2 path(s)'); expect(monitor).toContain('.npmrc (deny-path:**/.npmrc) — lifted by acknowledgedDenyPaths:.npmrc');
   } finally { f.store.close(); }
 });
 

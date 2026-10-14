@@ -4,7 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
-import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
+import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
 import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
@@ -140,6 +140,9 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const handoffStart = receipt ? handoffStartRecordSchema.parse(json(receipt.command)) : null;
   if (handoffStart && (!sameAttemptIdentity(handoffStart.identity, binding.identity) || !sameAttemptIdentity((json(receipt!.snapshot) as { identity: AttemptIdentity }).identity, binding.identity))) throw new Error();
   if (sealed && !sameAttemptIdentity(sealed.identity, binding.identity)) throw new Error();
+  const excludedRow = db.prepare('SELECT command FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(scopeId, workerTreeExclusionCommandId(binding.identity));
+  const treeExclusions = excludedRow ? workerTreeExclusionRecordSchema.parse(json(excludedRow.command)) : null;
+  if (treeExclusions && !sameAttemptIdentity(treeExclusions.identity, binding.identity)) throw new Error();
   const terminal = record?.terminal ?? null, pin = readWorkerModelPin(parameters);
   const failed = !!terminal && (terminal.exitCode !== 0 || terminal.signal !== undefined || terminal.interrupted === true);
   files.push(Object.freeze({ identity: binding.identity, patch: record?.patch ?? null, output: record?.output ?? null, events: sealed?.identity.attemptId === attemptId ? sealed.events : null,
@@ -147,7 +150,7 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const evidenceModel = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, evidenceCapability: pin.evidenceCapability, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
   // Selection belongs to the frozen profile, independently of evaluation/usage evidence. Legacy pins remain absent.
   const model = evidenceModel && pin?.reasoningEffort ? Object.freeze({ ...evidenceModel, reasoningEffort: pin.reasoningEffort }) : evidenceModel;
-  return Object.freeze({ attemptId, generation, ...(handoffStart ? { handoffStart } : {}), observedKind: binding.observedKind, observedRevision: binding.observedRevision, evaluationObserved, reservedAtMs,
+  return Object.freeze({ attemptId, generation, ...(handoffStart ? { handoffStart } : {}), ...(treeExclusions ? { treeExclusions } : {}), observedKind: binding.observedKind, observedRevision: binding.observedRevision, evaluationObserved, reservedAtMs,
     provider: evaluated?.provider ?? pin?.provider ?? record?.profile.adapterId ?? null, model,
     sealedAtMs: sealed && sealed.identity.attemptId === attemptId ? sealed.sealedAt : null,
     dispatch: record ? Object.freeze({ launch: record.launch, grantedAtMs: record.grant?.grantedAt ?? null, outputRecorded: !!record.output, patchRecorded: !!record.patch,

@@ -64,13 +64,22 @@ in it can reach the model provider through the worker's one egress. The terminal
   container, connection or claim exists. The text (EN/TR, shared renderer) names up to 16 `path (rule)` pairs and the omitted count; paths
   pass through the record redactor and never carry a value. The `worker-tree-refused` audit subject keeps up to 50 findings, the full
   count and the exhausted bound. No audit, no closure: an audit failure is thrown (transient) and the next turn scans and records again.
+- **config-secret (owner 2026-10-15):** the redaction vocabulary narrowed to config-like files (`.env*`, `.json`, `.yaml/.yml`, `.toml`, `.ini`,
+  `.properties`, `.conf/.cfg`, `.xml`, `docker-compose*`, `*.config`) and non-placeholder literal values (`${VAR}`, `$VAR`, `%VAR%`, `<...>`,
+  `{{...}}`, `changeme`/`example`/`xxx`/`***`, shorter than 6): table data `configSecret` beside the rows. Source files stay out of scope.
+- **Parser parity:** every reading a worker's tools can take is scanned — UTF-8 with BOM, NUL-stripped bytes (ASCII in UTF-16/32 of either
+  byte order), UTF-16 in both alignments, JSON/YAML `\uXXXX`/`\xHH` escapes, CRLF, YAML block scalars; compressed/archived files
+  (signatures in `gate.json`) are `unscannable:archive-<kind>`. Deny forms also strip trailing dots/spaces (Windows-backed binds).
+- **Exclusions (owner 2026-10-15):** a hit lifted by `allowPatternPaths` (globs) or `acknowledgedDenyPaths` (exact) is audited
+  (`worker-tree-excluded`: path, rule, lifting entry), journalled on the attempt before launch and shown on `run inspect`, `task inspect` and
+  the monitor detail ("Excluded by config: N path(s)" + entries). Both lists stay empty by default.
 - **Every view:** besides the checkout, the profile's read-only binds, mounted task inputs, handoff files and the prompt dependency
   context are scanned (`workerTreeViews`), matched by their container path (e.g. `deckent/mounts/shared/.env`).
 - **Sibling paths:** the only launch site is `DispatchApplication.execute` in `executeConfiguredTask` (SDK `executeTask`, MCP/CLI task
   execution, run progression, retries and recorded-workspace restarts all call it); reconcile, cancel, output recovery and release reuse a
   recorded dispatch. `worker-tree-gate-paths.test.ts` fails on a new launch site or a reordering.
-- **Open limits:** Git history (`.git/objects`) is not scanned: a secret removed from the tip but present in history still reaches the
-  worker's `.git` (measured remedy: depth-1 clone at the pinned base). Encodings other than UTF-8/UTF-16, values shorter than six
+- **Open limits:** Git history (`.git/objects`, packs) is not scanned: workers keep full history (owner 2026-10-15 declined a depth-1
+  clone) and a secret removed from the tip but present in history still reaches the worker's `.git`; the history scan is a later card. Encodings other than UTF-8/UTF-16, values shorter than six
   characters and credential shapes outside the gated rows (e.g. a PEM block inside source) are not detected; the time bound is checked
   between entries. No Next surface lists Core audit events yet; a later Run view shows the recorded code only.
   Author proof and the base-tree-only clone measurement: external `proof/S6-SIR-KAPISI-2026-10-14/`.

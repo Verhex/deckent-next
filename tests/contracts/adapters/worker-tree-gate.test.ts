@@ -68,15 +68,18 @@ describe('scanWorkerTree', () => {
       'tests/fixtures/server.key': 'x', 'tests/fixtures/erp.ts': 'erp-hunter2-value', 'src/leak.ts': `'${PROVIDER_TOKEN}'` });
     const scan = await scanWorkerTree(root, { ...options, allowPatternPaths: ['tests/**'] }, known);
     expect(scan).toEqual({ status: 'refused', count: 3, findings: [{ path: 'src/leak.ts', rule: 'pattern:provider-token' },
-      { path: 'tests/fixtures/erp.ts', rule: 'known-secret' }, { path: 'tests/fixtures/server.key', rule: 'deny-path:**/*.key' }] });
+      { path: 'tests/fixtures/erp.ts', rule: 'known-secret' }, { path: 'tests/fixtures/server.key', rule: 'deny-path:**/*.key' }],
+      // Every lifted hit is returned with the exact entry that lifted it (audited and shown on the Run card by the engine).
+      excluded: [{ path: 'tests/deep/nested/jwt.ts', rule: 'pattern:jwt', by: 'allowPatternPaths:tests/**' },
+        { path: 'tests/fixtures/token.ts', rule: 'pattern:provider-token', by: 'allowPatternPaths:tests/**' }] });
   });
   it('reads an exactly acknowledged deny path like any file: a settings-only .npmrc passes, a token in it is still refused', async () => {
     const clean = await tree({ '.npmrc': 'engine-strict=true\n', 'pkg/.npmrc': 'x' });
     await expect(scanWorkerTree(clean, { ...options, acknowledgedDenyPaths: ['.npmrc'] })).resolves.toEqual({ status: 'refused', count: 1,
-      findings: [{ path: 'pkg/.npmrc', rule: 'deny-path:**/.npmrc' }] });
+      findings: [{ path: 'pkg/.npmrc', rule: 'deny-path:**/.npmrc' }], excluded: [{ path: '.npmrc', rule: 'deny-path:**/.npmrc', by: 'acknowledgedDenyPaths:.npmrc' }] });
     const leaking = await tree({ '.npmrc': `//registry.npmjs.org/:_authToken=npm_${'A1b2'.repeat(9)}\n` });
     await expect(scanWorkerTree(leaking, { ...options, acknowledgedDenyPaths: ['.npmrc'] })).resolves.toEqual({ status: 'refused', count: 1,
-      findings: [{ path: '.npmrc', rule: 'pattern:provider-token' }] });
+      findings: [{ path: '.npmrc', rule: 'pattern:provider-token' }], excluded: [{ path: '.npmrc', rule: 'deny-path:**/.npmrc', by: 'acknowledgedDenyPaths:.npmrc' }] });
   });
   it('reads binary and UTF-16 content too: a value hidden behind a NUL byte or in either UTF-16 alignment is refused', async () => {
     const utf16 = Buffer.from(PROVIDER_TOKEN, 'utf16le');
@@ -170,5 +173,48 @@ describe('deny anchoring matches the terminal floor in every position a path can
       .toEqual(['argv pattern:provider-token']);
     await expect(scanWorkerTree(workerTreeViews(workspace, undefined, { inputs: [], handoffInputs: [], dependencyContext: { text: 'x'.repeat(2048) } }), { ...options, maxFileBytes: 1024 }))
       .resolves.toEqual({ status: 'incomplete', limit: 'file-bytes', observed: 2048, bound: 1024 });
+  });
+});
+
+describe('config-secret: the key-value vocabulary narrowed to config-like files and non-placeholder values', () => {
+  const PASSWORD = ['Tr0ub4dor', '3xQz9'].join('&');
+  const scanOf = async (files: Record<string, string | Buffer>) => {
+    const scan = await scanWorkerTree(await tree(files), options);
+    return scan.status === 'refused' ? scan.findings.map(finding => `${finding.path} ${finding.rule}`) : [scan.status];
+  };
+  it('refuses a real-looking value in a customer config; a placeholder passes; source code with `password` is out of scope', async () => {
+    expect(await scanOf({ 'config/database.yml': `production:\n  password: ${PASSWORD}\n`, 'appsettings.json': `{ "ConnectionStrings": { "Db": "Server=db;User Id=sa;Password=${PASSWORD};" } }`,
+      'docker-compose.yml': `services:\n  db:\n    environment:\n      - POSTGRES_PASSWORD=${PASSWORD}\n`, 'web.config': `<add key="ApiKey" value="x"/>\n<apiKey>${PASSWORD}</apiKey>\n`,
+      'settings.ini': `[db]\nDB_PASSWORD = "${PASSWORD}"\n` })).toEqual(['appsettings.json pattern:config-secret', 'config/database.yml pattern:config-secret',
+      'docker-compose.yml pattern:config-secret', 'settings.ini pattern:config-secret', 'web.config pattern:config-secret']);
+    expect(await scanOf({ 'config/a.yml': 'password: ${DB_PASSWORD}\ntoken: <your-token>\napi_key: changeme\nsecret: ""\n', 'b.json': '{ "password": "{{ vault_pw }}", "apiKey": "%API_KEY%", "token": "xxxxxxxx", "secret": null }',
+      'c.properties': 'db.password=$DB_PASS\nauth.token=***\n', 'd.toml': 'token_ttl = 3600\npassword = "short"\n' })).toEqual(['clean']);
+    expect(await scanOf({ 'src/login.ts': `const password = await prompt();\nconst token = createToken('${PASSWORD}');\n`, 'README.md': `password: ${PASSWORD}\n` })).toEqual(['clean']);
+  });
+  it('reads keys and values the way config parsers do: escapes, YAML block scalars, CRLF, BOM, UTF-16/32', async () => {
+    const utf32 = Buffer.alloc(Buffer.byteLength(`password=${PASSWORD}`) * 4); [...`password=${PASSWORD}`].forEach((char, index) => utf32.writeUInt32LE(char.charCodeAt(0), index * 4));
+    expect(await scanOf({ 'escaped.json': `{ "pass\\u0077ord": "${PASSWORD}" }`, 'block.yml': `db:\n  password: |\n    ${PASSWORD}\n`, 'crlf.env.json': `{\r\n"secret":\r\n"${PASSWORD}"\r\n}`,
+      'bom.ini': `\uFEFFpassword=${PASSWORD}\n`, 'wide.properties': Buffer.from(`password=${PASSWORD}`, 'utf16le'), 'wider.conf': utf32,
+      'empty-block.yaml': 'password: >-\n' })).toEqual(['block.yml pattern:config-secret', 'bom.ini pattern:config-secret', 'crlf.env.json pattern:config-secret',
+      'empty-block.yaml pattern:config-secret', 'escaped.json pattern:config-secret', 'wide.properties pattern:config-secret', 'wider.conf pattern:config-secret']);
+    expect(await scanOf({ 'block.yml': 'password: |\n  ${DB_PASSWORD}\n' })).toEqual(['clean']);
+  });
+});
+
+describe('parser parity: what the gate cannot read the way the worker can is refused', () => {
+  it('compressed and archived files are unscannable, liftable only by an audited allowPatternPaths entry', async () => {
+    const { gzipSync } = await import('node:zlib');
+    const root = await tree({ 'data/dump.sql.gz': gzipSync(Buffer.from(`password=${PROVIDER_TOKEN}`)), 'vendor/pkg.zip': Buffer.from('504b030414000000', 'hex'),
+      'fixtures/bundle.tgz': gzipSync(Buffer.from('x')), 'img/logo.png': Buffer.from('89504e470d0a1a0a', 'hex') });
+    await expect(scanWorkerTree(root, { ...options, allowPatternPaths: ['fixtures/**'] })).resolves.toEqual({ status: 'refused', count: 2,
+      findings: [{ path: 'data/dump.sql.gz', rule: 'unscannable:archive-gzip' }, { path: 'vendor/pkg.zip', rule: 'unscannable:archive-zip' }],
+      excluded: [{ path: 'fixtures/bundle.tgz', rule: 'unscannable:archive-gzip', by: 'allowPatternPaths:fixtures/**' }] });
+  });
+  it('a token inside UTF-32 text and a Windows-style trailing dot or space on a deny-listed name are refused', async () => {
+    const utf32 = Buffer.alloc(PROVIDER_TOKEN.length * 4); [...PROVIDER_TOKEN].forEach((char, index) => utf32.writeUInt32BE(char.charCodeAt(0), index * 4));
+    const root = await tree({ 'notes/wide.txt': utf32, 'cfg/.env.': 'x', 'cfg/server.pem ': 'x' });
+    const scan = await scanWorkerTree(root, options);
+    expect(scan.status === 'refused' ? scan.findings : scan).toEqual([{ path: 'cfg/.env.', rule: 'deny-path:**/.env' }, { path: 'cfg/server.pem ', rule: 'deny-path:**/*.pem' },
+      { path: 'notes/wide.txt', rule: 'pattern:provider-token' }]);
   });
 });
