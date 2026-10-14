@@ -372,3 +372,12 @@ it('monitor JSON retains expired approval evidence with a status field derived a
     { approvalId: 'ap-a', status: 'expired', expiresAtMs: NOW }, { approvalId: 'ap-b', status: 'pending' }, { approvalId: 'ap-c', status: 'decided' },
   ]);
 });
+
+ it('projects the payment axis from the frozen worker profile, without using cost guesses', () => {
+  const run = snapshot([{ id: 'a' }]);
+  const task = run.execution.tasks[0]!;
+  const subscribed = { ...run, execution: { ...run.execution, tasks: [{ ...task, profile: { ...task.profile,
+    parameters: { ...task.profile.parameters, nativeSubscription: { schemaVersion: 1, provider: 'codex' } } } }] } };
+  expect(projectMonitorRun(evidence(subscribed)).tasks[0]?.billingAxis).toBe('subscription');
+  expect(projectMonitorRun(evidence(run)).tasks[0]?.billingAxis).toBeNull();
+});

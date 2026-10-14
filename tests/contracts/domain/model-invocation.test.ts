@@ -58,3 +58,17 @@ describe('model invocation domain contract', () => {
     expect(() => parseModelInvocationPurgeCommand(getter)).toThrow('MODEL_INVOCATION_INVALID');
   });
 });
+
+ it('dual-reads v1 without injecting billing, and requires an explicit v2 axis with a separate digest domain', () => {
+  const kept = parseModelInvocationProfile(JSON.parse(JSON.stringify(profile)));
+  expect(JSON.stringify(kept)).toBe(JSON.stringify(profile));
+  expect(kept).not.toHaveProperty('billingAxis');
+  for (const billingAxis of ['subscription', 'metered', 'local']) {
+    const v2 = { ...profile, schemaVersion: 2, billingAxis };
+    expect(parseModelInvocationProfile(v2)).toMatchObject({ schemaVersion: 2, billingAxis });
+    expect(encodeModelInvocationProfile(v2)).toMatch(/^deckent.model-invocation-profile.v2\n/);
+    expect(sha(encodeModelInvocationProfile(v2))).not.toBe(sha(encodeModelInvocationProfile(profile)));
+  }
+  for (const billingAxis of [undefined, 'free', null]) expect(() => parseModelInvocationProfile({ ...profile, schemaVersion: 2, billingAxis })).toThrow('MODEL_INVOCATION_INVALID');
+  expect(() => parseModelInvocationProfile({ ...profile, billingAxis: 'subscription' })).toThrow('MODEL_INVOCATION_INVALID');
+});

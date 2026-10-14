@@ -36,7 +36,8 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 54;
+export const CURRENT_LEDGER_VERSION = 55;
+export const MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION = 55;
 export const RUN_PROPOSAL_LEDGER_VERSION = 53;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
@@ -57,6 +58,11 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  55: `CREATE TABLE model_invocation_plan_usage(scope_id TEXT NOT NULL,invocation_id TEXT NOT NULL,record TEXT NOT NULL,digest TEXT NOT NULL,
+    PRIMARY KEY(scope_id,invocation_id));
+    CREATE TRIGGER model_invocation_plan_usage_no_update BEFORE UPDATE ON model_invocation_plan_usage BEGIN SELECT RAISE(ABORT,'PLAN_USAGE_APPEND_ONLY'); END;
+    CREATE TRIGGER model_invocation_plan_usage_no_delete BEFORE DELETE ON model_invocation_plan_usage BEGIN SELECT RAISE(ABORT,'PLAN_USAGE_APPEND_ONLY'); END;
+    PRAGMA user_version=55;`,
   53: `CREATE TABLE run_proposals(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,proposal_id TEXT NOT NULL,run_id TEXT NOT NULL,
     revision INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id),UNIQUE(scope_id,proposal_id));
     CREATE TABLE run_proposal_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,

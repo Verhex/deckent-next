@@ -1,3 +1,4 @@
+import { recordInvocationPlanUsage } from './plan-usage.js';
 import { readModelAllocationCheckpoint, writeModelAllocation } from './allocation.js';
 import { invocationControl, writeInvocationControl } from './control.js';
 import { reserveInvocationSpend, settleInvocationSpend, verifyInvocationSpendReplay,
@@ -14,7 +15,7 @@ import { parseModelAllocation, type ModelAllocationCheckpoint, ProviderSpendErro
   type ModelInvocationStore, type ProviderSpendMeasurement, verifyModelActivationRecord,
   planModelAllocationSlotRelease, type ModelAllocationSlotRelease, type ModelAllocationSlotReleaseStore, type ModelAllocationStartCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
-import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord, visitAllocationInvocations } from './read.js';
+import { decodeInvocationRecord, invocationCommandRow, invocationRow, loadInvocationRecord, loadInvocationCommandRecord, visitAllocationInvocations } from './read.js';
 
 type Row = Readonly<Record<string, unknown>>;
 const encoded = (value: unknown) => JSON.stringify(value);
@@ -43,8 +44,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     }
   }
   async loadReceipt(scopeInput: string, commandInput: string): Promise<ModelInvocationRecord | null> {
-    try { const scopeId = invocationIdentity(scopeInput), commandId = invocationIdentity(commandInput);
-      return decodeInvocationRecord(invocationCommandRow(this.db, scopeId, commandId), scopeId, commandId, 'command_id'); }
+    try { return loadInvocationCommandRecord(this.db, scopeInput, commandInput); }
     catch (error) { return this.fail(error); }
   }
   async loadInvocation(scopeInput: string, invocationInput: string): Promise<ModelInvocationRecord | null> {
@@ -55,7 +55,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     try {
       const admission = parseModelInvocationAdmission(input), { command, profile } = admission;
       return this.transaction(() => {
-        const prior = decodeInvocationRecord(invocationCommandRow(this.db, command.scopeId, command.commandId), command.scopeId, command.commandId, 'command_id');
+        const prior = loadInvocationCommandRecord(this.db, command.scopeId, command.commandId);
         if (prior) {
           if (!sameModelInvocationRequest(prior.receipt, command, admission.requestDigest, admission.actor)) {
             throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
@@ -131,6 +131,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     if (!allocation || !checkpoint || allocation.inFlight < 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     const outcome = next.receipt.outcome;
     settleInvocationSpend(this.db, next, measurement);
+    recordInvocationPlanUsage(this.db, next);
     // Every outcome, `unknown` included, is recorded after the local send settled with its request closed: the slot is free again.
     // The uncertain record, its spending hold and the lifetime count stay (INFLIGHT-FIX, replacing PROVIDERS/A3A).
     writeModelAllocation(this.db, checkpoint, parseModelAllocation({ ...allocation, inFlight: allocation.inFlight - 1 }));

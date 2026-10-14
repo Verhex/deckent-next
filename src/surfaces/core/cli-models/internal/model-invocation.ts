@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationPurgeCommand, parseModelInvocationQuery, type ModelInvocationCancellationCommand, type ModelInvocationCancellationReceipt, type ModelInvocationControlRecord, type ModelInvocationCommand,
-  type ModelInvocationPurgeCommand, type ModelInvocationPurgeReceipt, type ModelInvocationQuery, type ModelInvocationReceipt } from '#domain/index.js';
+  type ModelInvocationPlanUsage, type ModelInvocationPurgeCommand, type ModelInvocationPurgeReceipt, type ModelInvocationQuery, type ModelInvocationReceipt } from '#domain/index.js';
 import type { ModelInvocationCancellationResult, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationInspection, ProviderSpendReservation } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -71,7 +71,7 @@ function renderSpending(spending: ProviderSpendReservation | null, locale: Local
   return t('models.invocation.spendingSettledLocal', { ...parameters, amount: spending.disposition.amountMinorUnits }, locale);
 }
 function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed?: boolean, purge?: ModelInvocationPurgeReceipt | null,
-  control?: ModelInvocationControlRecord | null, spending?: ProviderSpendReservation | null, historyIntegrity?: 'not-recorded'): string {
+  control?: ModelInvocationControlRecord | null, spending?: ProviderSpendReservation | null, historyIntegrity?: 'not-recorded', planUsage?: ModelInvocationPlanUsage | null): string {
   if (!receipt) return [t('models.invocation.absent', {}, locale),
     ...(historyIntegrity === 'not-recorded' ? [t('models.invocation.historyIntegrityNotRecorded', {}, locale)] : [])].join('\n');
   const state = receipt.outcome === null ? t('models.invocation.claimed', {}, locale)
@@ -80,10 +80,12 @@ function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed
         : receipt.outcome.state === 'unknown' ? (purge ? t('models.invocation.unknownPurged', {}, locale) : t('models.invocation.unknown', {}, locale))
           : t('models.invocation.notSent', { command: receipt.outcome.cancellationCommandId }, locale);
   return [t('models.invocation.receipt', { id: receipt.claim.invocationId, command: receipt.claim.commandId, state }, locale),
+    ...(receipt.profile?.schemaVersion === 2 ? [t('billing.axis', { axis: { subscription: t('billing.subscription', {}, locale), metered: t('billing.metered', {}, locale), local: t('billing.local', {}, locale) }[receipt.profile.billingAxis] }, locale)] : []),
+    ...(planUsage ? [t('models.invocation.planUsage', { counters: planUsage.source === 'provider-reported' ? t('models.invocation.planUsageCounters', {}, locale) : t('proposal.planning.unknown', {}, locale) }, locale)] : []),
     ...(control?.cancellation ? [renderCancellation(control.cancellation, locale)] : []),
     ...(replayed === true ? [t('models.invocation.replayed', {}, locale)] : []),
     ...(purge ? [t('models.invocation.purged', { id: receipt.claim.invocationId }, locale), t('models.invocation.purgeNotice', {}, locale)] : []),
-    ...(spending === undefined ? [] : [renderSpending(spending, locale)]),
+    ...(spending === undefined || planUsage ? [] : [renderSpending(spending, locale)]),
     ...(historyIntegrity === 'not-recorded' ? [t('models.invocation.historyIntegrityNotRecorded', {}, locale)] : []),
     receipt.outcome?.state === 'not-sent' ? t('models.invocation.noticeNotSent', {}, locale)
       : purge ? t('models.invocation.noticePurged', {}, locale) : t('models.invocation.notice', {}, locale)].join('\n');
@@ -106,7 +108,7 @@ export async function modelInvocationCommand(argv: readonly string[], context: M
     if (!context.inspectModelInvocation) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let query; try { query = parseModelInvocationQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
     const result = await context.inspectModelInvocation(root, query, options);
-    emit(result, { ...sinks, json: args.json, render: item => render(item.invocation, locale, undefined, item.purge, item.control, item.spending, item.historyIntegrity) });
+    emit(result, { ...sinks, json: args.json, render: item => render(item.invocation, locale, undefined, item.purge, item.control, item.spending, item.historyIntegrity, item.planUsage) });
   } else if (args.action === 'purge-content') {
     if (!context.purgeModelInvocationContent) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let command; try { command = parseModelInvocationPurgeCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }

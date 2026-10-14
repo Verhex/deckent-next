@@ -42,3 +42,5 @@ export type { InvocationWorkspace, WorkspaceSelectionContext, WorkspaceSelection
 export { ModelInvocableNowApplication, modelInvocabilityRefusal } from './internal/invocable-now.js';
 export type { InvocableModel, InvocableModels, ModelInvocability, ModelInvocabilityReason, ModelInvocabilityReasonKind, ModelInvocableNowChecks } from './internal/invocable-now.js';
 export { modelInvocabilityText, reservationAmountText } from './internal/words.js';
+
+export { createModelInvocationPlanUsage, verifyModelInvocationPlanUsage, modelInvocationPlanUsageDigest } from './internal/plan-usage.js';

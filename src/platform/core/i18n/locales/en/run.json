@@ -422,5 +422,13 @@
   "proposal.planning.provider-reported": "provider-reported",
   "proposal.planning.settled-local": "recorded settlement",
   "proposal.planning.held": "unsettled",
-  "proposal.planning.measured-tariff-upper-bound": "usage × pinned tariff, upper bound"
+  "proposal.planning.measured-tariff-upper-bound": "usage × pinned tariff, upper bound",
+  "billing.axis": "Billing: {axis}.",
+  "billing.subscription": "subscription plan",
+  "billing.metered": "metered API",
+  "billing.local": "local",
+  "proposal.planning.plan-usage": "plan usage; no monetary charge",
+  "proposal.planning.subscription": "Planning: {model}, subscription plan ({evidence}).",
+  "models.invocation.planUsage": "Plan usage recorded; no money reserved or charged. Provider counters: {counters}.",
+  "models.invocation.planUsageCounters": "available"
 }

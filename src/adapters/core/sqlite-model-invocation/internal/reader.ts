@@ -1,10 +1,11 @@
+import { readInvocationPlanUsage } from './plan-usage.js';
 import { readSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { ProviderSpendError, ModelInvocationStoreError, type ModelInvocationStore, type ModelInvocationInspectionReader } from '#engine/index.js';
 import { MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
-import { decodeInvocationRecord, invocationIdentity, invocationRow, invocationCommandRow, loadInvocationRecord } from './read.js';
+import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationCommandRecord, loadInvocationRecord } from './read.js';
 import { decodeInvocationControl } from './control.js';
 
 const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
@@ -13,8 +14,7 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
   constructor(private readonly db: DatabaseSync) {}
   async loadInvocation(scopeId: string, invocationId: string) { return loadInvocationRecord(this.db, scopeId, invocationId); }
   async loadReceipt(scopeInput: string, commandInput: string) {
-    const scopeId = invocationIdentity(scopeInput), commandId = invocationIdentity(commandInput);
-    return decodeInvocationRecord(invocationCommandRow(this.db, scopeId, commandId), scopeId, commandId, 'command_id');
+    return loadInvocationCommandRecord(this.db, scopeInput, commandInput);
   }
   async loadInspection(scopeInput: string, invocationInput: string) {
     const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
@@ -40,7 +40,9 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
           spending = decodeSpendReservation(reservation, record.receipt, checkpoint, this.db);
         }
       }
-      const result = Object.freeze({ record, control: decodeInvocationControl(row, record), spending });
+      const planUsage = readInvocationPlanUsage(this.db, version, record);
+      const result = Object.freeze({ record, control: decodeInvocationControl(row, record), spending,
+        ...(record.receipt.profile.schemaVersion === 2 ? { planUsage } : {}) });
       this.db.exec('COMMIT');
       return result;
     } catch (error) {

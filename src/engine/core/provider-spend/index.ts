@@ -37,3 +37,6 @@ export type { WorkSpending } from './internal/work-spending.js';
 export { providerSpendLocalZeroTariffProfile } from './internal/no-charge.js';
 export { recoverProviderSpendHold } from './internal/recovery.js';
 export type { ProviderSpendRecoveryStore, ProviderSpendRecoveryResult } from './internal/recovery.js';
+
+export { modelInvocationBillingAxis } from './internal/work-spending.js';
+export { workerBillingAxis } from './internal/work-spending.js';

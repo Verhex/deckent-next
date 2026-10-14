@@ -19,7 +19,8 @@
  * checkpoint child rebuilt against it).
  */
 export const PREVIOUS_LEDGER_VERSION = 50;
-export const DOWNGRADE_TO_V53_LEDGER_SQL = `DROP TRIGGER run_quota_waits_insert; DROP TRIGGER run_quota_waits_update; DROP TRIGGER run_quota_waits_delete; DROP TABLE run_quota_waits; DROP TABLE quota_release_receipts; PRAGMA user_version=53;`;
+export const DOWNGRADE_TO_V54_LEDGER_SQL = `DROP TABLE model_invocation_plan_usage; PRAGMA user_version=54;`;
+export const DOWNGRADE_TO_V53_LEDGER_SQL = `${DOWNGRADE_TO_V54_LEDGER_SQL} DROP TRIGGER run_quota_waits_insert; DROP TRIGGER run_quota_waits_update; DROP TRIGGER run_quota_waits_delete; DROP TABLE run_quota_waits; DROP TABLE quota_release_receipts; PRAGMA user_version=53;`;
 export const DOWNGRADE_TO_V52_LEDGER_SQL = `${DOWNGRADE_TO_V53_LEDGER_SQL} DROP TABLE run_proposal_receipts; DROP TABLE run_proposals; PRAGMA user_version=52;`;
 export const DOWNGRADE_TO_V51_LEDGER_SQL = `${DOWNGRADE_TO_V52_LEDGER_SQL} CREATE TABLE approvals_v51(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call','operation','config-change')),
   run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,

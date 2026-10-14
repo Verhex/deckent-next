@@ -61,6 +61,7 @@ export interface MonitorAttempt {
   readonly failedTests?: NonNullable<ResultBrief['failedTests']>;
 }
 export interface MonitorTask {
+  readonly billingAxis?: import('#domain/index.js').ModelInvocationBillingAxis | null;
   readonly acceptance?: AcceptanceView;
   readonly waiting?: import('#engine/core/runs/index.js').PoolWait;
   readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready' | 'needs-input'; readonly question?: string; readonly sinceMs: number; readonly deadlineMs: number };
