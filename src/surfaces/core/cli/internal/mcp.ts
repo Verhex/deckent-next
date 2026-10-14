@@ -9,7 +9,7 @@ type Scope = 'local' | 'project' | 'user';
 export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
-  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] }
+  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined }
   | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string }
   | { readonly verb: 'import'; readonly from: 'claude-code' | 'claude-desktop' | { readonly file: string }; readonly scope?: 'local' | 'user' };
 /** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision; `locale` is this

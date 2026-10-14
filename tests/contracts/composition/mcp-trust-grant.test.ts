@@ -102,6 +102,26 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(await f.run({ verb: 'reset', name: 'fx' })).not.toHaveProperty('grant');
   }, 90_000);
 
+  it('G3: a re-approval that gives no alwaysAsk list (terminal, in-turn) keeps the CLI-set locks of the tools that still exist; only an explicit list replaces them', async () => {
+    const f = await fixture(), other = { name: 'other', description: 'Other', inputSchema: { type: 'object', properties: {} } };
+    f.setTools([echo, other]);
+    await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry });
+    const locks = async () => ((await f.run({ verb: 'get', name: 'fx' })) as { server: { trust: { tools: { name: string; alwaysAsk: boolean }[] } } }).server.trust.tools
+      .filter(tool => tool.alwaysAsk).map(tool => tool.name);
+    expect(await f.run({ verb: 'approve', name: 'fx', alwaysAsk: ['echo'] })).toMatchObject({ approved: true, pinnedTools: 2 });
+    expect(await locks()).toEqual(['echo']);
+    // The terminal sends no list: the lock survives.
+    expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, pinnedTools: 2 });
+    expect(await locks()).toEqual(['echo']);
+    // A tool change (definition drift plus a dropped tool, status `changed`) then a no-list re-approval: the lock stays on the tool that still exists.
+    f.setTools([{ ...echo, description: 'Echo, updated.' }]);
+    expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, pinnedTools: 1 });
+    expect(await locks()).toEqual(['echo']);
+    // An explicit empty list is the owner's deliberate release.
+    expect(await f.run({ verb: 'approve', name: 'fx', alwaysAsk: [] })).toMatchObject({ approved: true });
+    expect(await locks()).toEqual([]);
+  }, 90_000);
+
   it('a user-scope server\'s grant covers every scope of this person', async () => {
     const f = await fixture();
     expect(await f.run({ verb: 'add', scope: 'user', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
