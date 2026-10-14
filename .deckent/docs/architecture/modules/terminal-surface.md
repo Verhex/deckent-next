@@ -146,6 +146,15 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   time left) and the Runs `useRunCompletion` registered (state from the same snapshots; finished rows leave once opened). It owns no
   execution, poll or authority; its clock ticks at the inspection heartbeat. Ctrl+T moves the one input owner to it while no window
   holds input; Enter on /do is the Ctrl+O transfer to its window, Enter on a Run opens the `/run` window via the task-action FIFO.
+  TESLIM-PENCERESI (owner 2026-10-14, author candidate): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
+  window over a `TerminalDeliveryPort` that `cli-terminal/deliver-port.ts` builds from the CLI's own handlers (inventory, patch preview,
+  integration check/prepare) and the composition's `interactiveDeliveryHandlers(answer)` (the TESLIM-GUVENLIK port; installed only by
+  the CLI composition, never SDK/MCP). A tracked Run's accepted work-input task with `deliveryOutlook: awaiting-delivery` opens it once in
+  the background; `/deliver` (fresh /runs read model) and the strip's "awaiting delivery" row open it in the foreground. One window at a
+  time; it yields to cards, pickers and slash windows and replaces the live window. `y` records a one-shot consent of the shown card;
+  the port's answer consumes it only on the same operation, scope, Run, Task, command, file set and base (adoption: branch and commit),
+  otherwise it shows the port's exact card and waits (bounded by `approvals.sessionTtlMs`) for a fresh `y`. Ids are fresh per window
+  opening. No autonomous delivery; an owner-set rule broker would implement the same `EffectConfirmation` port.
   Keys use both `useInput` `isActive` and immediate focus guards; composer submissions only enter the existing FIFO, never approve.
   The Workline output adapter removes ED3 only from Ink's ED2+ED3+HOME resize/overflow clear; the explicit `/clear`
   HOME+ED2+ED3 command is preserved. Pipes and TERM=dumb bypass this adapter and retain the line fallback.

@@ -255,7 +255,7 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),
     failedHints: t('terminal.delivery.failedHints', {}, locale), summaryDelivered: t('terminal.delivery.summaryDelivered', {}, locale),
     summaryAdopted: t('terminal.delivery.summaryAdopted', {}, locale), summaryLeft: t('terminal.delivery.summaryLeft', {}, locale),
-    summaryFailed: t('terminal.delivery.summaryFailed', {}, locale), summaryAdoptFailed: t('terminal.delivery.summaryAdoptFailed', {}, locale), nextDefault: t('terminal.delivery.nextDefault', {}, locale),
+    summaryFailed: t('terminal.delivery.summaryFailed', {}, locale), summaryAdoptFailed: t('terminal.delivery.summaryAdoptFailed', {}, locale), summaryNotAdopted: t('terminal.delivery.summaryNotAdopted', {}, locale), nextDefault: t('terminal.delivery.nextDefault', {}, locale),
     pickerTitle: t('terminal.delivery.pickerTitle', {}, locale), none: t('terminal.delivery.none', {}, locale),
     fallbackTitle: t('terminal.delivery.fallbackTitle', {}, locale),
     next: {

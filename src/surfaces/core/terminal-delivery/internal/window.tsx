@@ -15,7 +15,7 @@ export interface DeliveryWindowLabels {
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
   readonly delivered: string; readonly adoptPrompt: string; readonly adoptTarget: string; readonly adoptHints: string; readonly adopting: string;
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
-  readonly summaryDelivered: string; readonly summaryAdopted: string; readonly summaryLeft: string; readonly summaryFailed: string; readonly summaryAdoptFailed: string;
+  readonly summaryDelivered: string; readonly summaryAdopted: string; readonly summaryLeft: string; readonly summaryFailed: string; readonly summaryAdoptFailed: string; readonly summaryNotAdopted: string;
   readonly next: Readonly<Record<string, string>>; readonly nextDefault: string; readonly pickerTitle: string; readonly none: string; readonly fallbackTitle: string;
 }
 export type DeliveryOpening = 'foreground' | 'background';
@@ -128,6 +128,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const title = humanRecordText(entry.target.title, latest.current.known), stage = entry.stage;
     if (stage.kind === 'failed') latest.current.summary(entry.delivered ? fillTemplate(words.summaryAdoptFailed, { ref: entry.delivered.ref, reason: stage.error.split('\n')[0] ?? '' })
       : fillTemplate(words.summaryFailed, { title, reason: stage.error.split('\n')[0] ?? '' }), 'error');
+    else if (stage.kind === 'delivered' && entry.delivered) latest.current.summary(fillTemplate(words.summaryNotAdopted, { ref: entry.delivered.ref }));
     else if (!entry.delivered) latest.current.summary(fillTemplate(words.summaryLeft, { title }));
     if (stage.kind === 'delivered') entry.settled = true;
     entry.closed = true;

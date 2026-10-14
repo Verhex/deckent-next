@@ -186,6 +186,7 @@ describe('delivery window on the real Workline', () => {
     await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
     await press(h, 'n', 100);
     expect(frame(h)).not.toContain(windowTitle); expect(h.calls.some(call => call.startsWith('adopt:'))).toBe(false);
+    expect(transcript(h)).toContain(`Not adopted into a branch; the delivery stays at ${REF}.`);
     expect(frame(h)).not.toContain(`ORDER-TASK · ${EN.activeWork!.deliveryWaiting}`);
   });
 
