@@ -1,3 +1,4 @@
+import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
 import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { RESOURCE_OBSERVATION_SETTINGS } from './resource-observation.js';
@@ -56,6 +57,7 @@ export const CONFIG_FIELDS = Object.freeze({
     }).strict().default({}),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   approvals: field('config.field.approvals', { state: 'bound', consumers: ['src/composition/core/approvals'] }, 'restart', z.object({
+    assuranceProducers: APPROVAL_ASSURANCE_SELECTION,
     requestTtlMs: z.number().int().positive().safe().default(600000),
     sessionTtlMs: z.number().int().positive().safe().default(60000),
     pageSize: z.number().int().positive().safe().default(100),

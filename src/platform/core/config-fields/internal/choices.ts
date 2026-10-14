@@ -92,6 +92,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'installation.packageMeasurement.maxTotalBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'installation.packageMeasurement.maxDepth': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
   'approvals.requestTtlMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
+  'approvals.assuranceProducers': { kind: 'document' },
   'approvals.sessionTtlMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'approvals.pageSize': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
   'approvals.keyFile': { kind: 'reference', source: 'key-files' },

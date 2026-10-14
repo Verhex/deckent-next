@@ -2047,6 +2047,7 @@
     },
     "src/engine/core/approval": {
       "dependencies": [
+        "src/platform/core/config-fields",
         "src/domain/core/approval",
         "src/domain/core/command",
         "src/domain/core/policy",
@@ -3947,6 +3948,7 @@
       "packageExport": "./extensions",
       "packageImport": "./dist/extensions.js",
       "registrations": [
+        "registerApprovalAssuranceProducer",
         "registerOperationAdapterModule",
         "registerSecretStoreBackend"
       ],

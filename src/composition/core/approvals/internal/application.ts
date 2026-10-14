@@ -1,11 +1,10 @@
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
-  registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities } from '#engine/index.js';
+  resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
 import type { AuditEvent } from '#domain/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-// Declared surface channels are records, never authority.
 for (const id of ['local-terminal-card', 'local-cli', 'local-sdk', 'mcp']) registerApprovalChannel(id);
 /** All surfaces converge here. Peer context is supplied only by the trusted transport; `decisions` is the service's turn capability ring (B1). */
 export async function configuredApproval(projectRoot: string, action: 'list' | 'inspect' | 'decide' | 'renew', input: unknown,
@@ -24,21 +23,21 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
     if (action === 'decide') sessions.requireInteractiveTerminal();
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
     const journal = openSqliteApprovalStore(await context.path(), config.storage.sqlite);
+    let audit: Awaited<ReturnType<typeof openSqliteAuditStore>> | undefined;
     try {
+      if (action === 'decide') audit = await openSqliteAuditStore(await context.path(), config.storage.sqlite, 'forbid');
       const check = (result: unknown) => { if (Buffer.byteLength(JSON.stringify(result)) > (capacity ?? config.service.responseMaxBytes)) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT'); };
-      // General surfaces cannot decide authority-surface approvals; K3 refusal is audited.
       const restriction = action !== 'decide' ? undefined : { catalog: resolveOperationCatalog(readOperationsConfig(config as unknown as Record<string, unknown>)),
-        refused: async (event: AuditEvent) => {
-          const store = await openSqliteAuditStore(await context.path(), config.storage.sqlite, 'forbid');
-          try { new AuditApplication(store, integrity).record(event); } finally { store.close(); }
-        } };
+        refused: (event: AuditEvent) => { new AuditApplication(audit!, integrity).record(event); } };
+      const producers = action !== 'decide' ? [] : resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, decisions,
+        { scopeId: parsed.scopeId, principal, policyRevision: document.revision, atMs: clock.sample().wallMs }, event => { new AuditApplication(audit!, integrity).record(event); });
       const app = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
         { load: async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
           : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access)).document }, integrity, clock,
-        'local-sdk', config.approvals.pageSize, record => check('standing' in parsed ? { record, standing: { scope: 'session', status: 'unconfirmed', reason: 'result-unavailable' } } : record), restriction, { producers: decisions ? [decisions] : [], channels: registeredApprovalChannels(), peerPid: peer?.pid ?? null });
+        'local-sdk', config.approvals.pageSize, record => check('standing' in parsed ? { record, standing: { scope: 'session', status: 'unconfirmed', reason: 'result-unavailable' } } : record), restriction, { producers, channels: registeredApprovalChannels(), peerPid: peer?.pid ?? null });
       const result = action === 'list' ? await app.list(parsed, undefined, view) : action === 'inspect' ? await app.inspect(parsed) : action === 'renew' ? await app.renew(parsed, config.approvals.requestTtlMs) : ('standing' in parsed && parsed.standing === 'session' ? await (answers ?? new SessionApprovalAnswers()).answer(approvalCommandSchema.parse(parsed), principal, peer?.pid ?? null, app) : await app.decide(parsed));
       const answer = action === 'decide' ? parseApprovalAnswer('standing' in parsed, result) : result;
       check(answer); return answer;
-    } finally { journal.close(); }
+    } finally { audit?.close(); journal.close(); }
   } catch (error) { throw queryFailure(error); }
 }

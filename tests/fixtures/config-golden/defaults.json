@@ -2,6 +2,12 @@
   "admission": null,
   "approvals": {
     "approverNoteMaxChars": 500,
+    "assuranceProducers": [
+      {
+        "id": "core.turn-bound",
+        "version": 1
+      }
+    ],
     "keyFile": "authority.key",
     "pageSize": 100,
     "requestTtlMs": 600000,
