@@ -64,6 +64,8 @@ in it can reach the model provider through the worker's one egress. The terminal
   container, connection or claim exists. The text (EN/TR, shared renderer) names up to 16 `path (rule)` pairs and the omitted count; paths
   pass through the record redactor and never carry a value. The `worker-tree-refused` audit subject keeps up to 50 findings, the full
   count and the exhausted bound. No audit, no closure: an audit failure is thrown (transient) and the next turn scans and records again.
+- **Every view:** besides the checkout, the profile's read-only binds, mounted task inputs, handoff files and the prompt dependency
+  context are scanned (`workerTreeViews`), matched by their container path (e.g. `deckent/mounts/shared/.env`).
 - **Sibling paths:** the only launch site is `DispatchApplication.execute` in `executeConfiguredTask` (SDK `executeTask`, MCP/CLI task
   execution, run progression, retries and recorded-workspace restarts all call it); reconcile, cancel, output recovery and release reuse a
   recorded dispatch. `worker-tree-gate-paths.test.ts` fails on a new launch site or a reordering.
