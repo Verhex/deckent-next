@@ -59,7 +59,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a
   try {
     // The service is up while the (gated) build has not finished: readiness never waits for it.
     await until(() => f.builds() === 1); expect(events).toEqual(['started']);
-  } finally { await service.stop().catch(() => undefined); f.release(); await service.done.catch(() => undefined); }
+  } finally { await service.stop().catch(() => undefined); f.release(); await service.done.catch(() => undefined); await service.settled; }
   await until(() => events.length === 2);
   expect(events[1]).toBe('failed:REFRESH_STOPPED'); // stopped before the revision: the registry is untouched
   expect(JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).admission.registry.profiles).toHaveLength(1);
@@ -71,7 +71,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] m
   const service = await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {}, onToolchainRefresh: event => { events.push(event.phase); } }, { env: f.env },
     { toolchainRefresh: { fetcher: f.fetcher, runner: f.runner } });
   try { await new Promise(resolve => setTimeout(resolve, 300)); expect(f.builds()).toBe(0); expect(events).toEqual([]); }
-  finally { await service.stop().catch(() => undefined); f.release(); await service.done.catch(() => undefined); }
+  finally { await service.stop().catch(() => undefined); f.release(); await service.done.catch(() => undefined); await service.settled; }
   // A refused trigger leaves no trace: not even the product's workspaces directory is created (the gate precedes every write).
   expect(existsSync(join(f.project, 'data', 'workspaces'))).toBe(false);
 });

@@ -18,7 +18,7 @@ import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRu
   type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
-import { loadConfiguredInstallationIdentity, registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
 import { sweepConfiguredAttemptCustody } from '#composition/core/runs/index.js';
 import { startToolchainRefresh, type ToolchainRefreshDependencies, type ToolchainRefreshObserver } from '#composition/core/toolchains/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
@@ -111,8 +111,9 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   config: Awaited<ReturnType<typeof loadComposedConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts) {
   await prepareScheduledBackup(projectRoot, options, observer);
   await upgradeLedgerAtStart(config, observer);
-  // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
-  const scopes = await registerConfiguredScopesAtStart(config);
+  // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start). KAPANIS-KIMLIK-YARISI: the
+  // project identity's first publication is awaited here, before the listener: from a background page an incomplete stop's exit could cut it off.
+  const scopes = await registerConfiguredScopesAtStart(config); await loadConfiguredProjectIdentity(projectRoot, options, 'write');
   await interruptAgentTurnsAtStart(config, observer, guard.custodyId, options);
   const custody = await sweepConfiguredAttemptCustody(projectRoot, [...scopes?.pins.keys() ?? []], options); if (custody.length) await observer.onAttemptCustodySwept?.(custody);
   // SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held). The one
@@ -214,7 +215,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   // stops, and the stop waits for what is left (above).
   backupSchedule = startBackupSchedule(projectRoot, options, controller.signal, observer);
   toolchainRefresh = startToolchainRefresh(projectRoot, options, observer, controller.signal, ports.toolchainRefresh).done;
-  let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;
+  let resolveDone!: () => void; let rejectDone!: (error: unknown) => void; let resolveSettled!: () => void; const settled = new Promise<void>(resolve => { resolveSettled = resolve; });
   const done = new Promise<void>((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });
   void done.catch(() => undefined);
   let stopping: Promise<RuntimeServiceDrainResult> | null = null;
@@ -232,12 +233,10 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
       }
       return result;
     });
-    // Finalization shares the grace deadline. The guard remains until admitted work and recovery settle.
-    void lifecycle.whenSettled().then(async () => {
-      await Promise.all([...remoteShutdowns.values(), ...reports]);
-      if (transportFailure) throw transportFailure;
-      resolveDone();
-    }).catch(error => rejectDone(queryFailure(error)));
+    // Finalization shares the grace deadline. The guard remains until admitted work and recovery settle; `settled` reports that end on every outcome.
+    const finished = lifecycle.whenSettled(); void finished.catch(() => undefined).then(() => Promise.allSettled([...remoteShutdowns.values(), ...reports])).then(() => resolveSettled());
+    void finished.then(async () => { await Promise.all([...remoteShutdowns.values(), ...reports]); if (transportFailure) throw transportFailure; resolveDone(); })
+      .catch(error => rejectDone(queryFailure(error)));
     return stopping;
   };
   const finishRemoteShutdown = (admission: ShutdownAdmission) => {
@@ -276,7 +275,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     await observer.onIdleShutdown?.({ afterMs: config.service.idleShutdown.afterMs! });
     await stop();
   }).catch(error => rejectDone(queryFailure(error)));
-  return Object.freeze({ endpoint: server.endpoint, layout: config.productLayout, done, stop });
+  // `done` is the host outcome (rejects at the grace deadline); `settled` never rejects: after a stop, all service work and custody release ended.
+  return Object.freeze({ endpoint: server.endpoint, layout: config.productLayout, done, settled, stop });
 }
 
 /** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport,

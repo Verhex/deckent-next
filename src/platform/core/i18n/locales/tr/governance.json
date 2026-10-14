@@ -6,6 +6,7 @@
   "error.INSTALLATION_IDENTITY_LOCKED": "Başka bir süreç kurulum kimliğini oluşturuyor. Tamamlandıktan sonra yeniden deneyin.",
   "error.INSTALLATION_IDENTITY_UNSUPPORTED": "Bu platformda güvenli kurulum kimliği depolaması desteklenmiyor. Kimlik okunmadı veya oluşturulmadı.",
   "error.PROJECT_IDENTITY_INVALID": "Proje kimlik kaydı eksik veya geçersiz. Özgün kaydı yedekten geri yükleyin; yeni kimlik üretilmedi.",
+  "error.PROJECT_IDENTITY_INCOMPLETE": "Proje kimlik dizini .deckent/project-identity var ama kayıt içermiyor: ilk oluşturma yarıda kesildi ya da kayıt kayboldu. Yeni kimlik üretilmedi. Bu projede hiç iş çalışmadıysa bu boş dizini silip yeniden deneyin; aksi halde kaydı yedekten geri yükleyin.",
   "error.PROJECT_IDENTITY_UNAVAILABLE": "Proje kimliği güvenle okunamadı veya kaydedilemedi. Proje metadata dizinine erişimi kontrol edin.",
   "error.PROJECT_IDENTITY_LOCKED": "Başka bir süreç proje kimliğini oluşturuyor. Tamamlandıktan sonra yeniden deneyin.",
   "acceptance.confirmation.confirmed": "{confirmationId} kabul doğrulaması, kimliği doğrulanmış {surface} yüzeyinde onaylandı.",

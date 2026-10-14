@@ -43,7 +43,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
         return 'status' in binding ? installationIdentitySchema.parse({ schemaVersion: 1, installationId }) : bound(installationId, binding, null);
       },
       isError: (error: unknown) => error instanceof InstallationIdentityError,
-      error: reason => new InstallationIdentityError(({ INVALID: 'INSTALLATION_IDENTITY_INVALID', UNAVAILABLE: 'INSTALLATION_IDENTITY_UNAVAILABLE',
+      error: reason => new InstallationIdentityError(({ INVALID: 'INSTALLATION_IDENTITY_INVALID', INCOMPLETE: 'INSTALLATION_IDENTITY_INVALID', UNAVAILABLE: 'INSTALLATION_IDENTITY_UNAVAILABLE',
         LOCKED: 'INSTALLATION_IDENTITY_LOCKED', UNSUPPORTED: 'INSTALLATION_IDENTITY_UNSUPPORTED', MASKED: 'INSTALLATION_IDENTITY_MASKED' } as const)[reason]),
     }, this.lockTimeoutMs);
   }

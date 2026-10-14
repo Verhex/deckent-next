@@ -158,8 +158,8 @@ cancelled or timed-out run is `unknown` (the result says what it changed is unkn
 refused. Turn cancellation reaches the running command (group killed). Output streams as `tool.output` while the turn channel has
 room (a new channel `room()`); past half of it the display stops with one visible marker, and the streamed display is drained before
 the result is emitted. The result keeps 16 KiB (head + tail, omitted bytes counted), like a read tool. `terminal.shell` configures the
-per-command timeout (default 300 s) and extra environment names. Live use needs owner grants (`agent-tool` `run_shell`, `operation`
-`host.shell.run` execute). The terminal (slice 3c-ii) shows the last three lines of the running call's output under its live line
+per-command timeout (default 300 s), extra environment names and the clock-step tolerance (default 250 ms, see permission-modes).
+Live use needs owner grants (`agent-tool` `run_shell`, `operation` `host.shell.run` execute). The terminal (slice 3c-ii) shows the last three lines of the running call's output under its live line
 and nothing of it afterwards (the finished call stays one line; the output reached the model as the result). Command output is
 untrusted: before display every escape sequence (CSI, OSC — titles, clipboard —, other ESC forms) and every control character but
 newline and tab is removed and carriage returns become line breaks; the live tail keeps 2,048 characters. The same sanitizer

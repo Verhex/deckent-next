@@ -12,7 +12,7 @@ import { clearConfigCache, loadConfig, productResourcePath } from '#platform/ind
 const roots: string[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const observer = { async onPage() {}, async onError() {} };
 afterEach(async () => {
-  for (const service of services.splice(0)) { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  for (const service of services.splice(0)) { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 async function fixture() {

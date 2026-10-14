@@ -93,7 +93,18 @@ it.each(['finished', 'denied'] as const)('refreshes unsealed live sidecars throu
     expect(denied.workers).toBeUndefined();
   } else {
     await worker.finish();
+    // The exited heartbeat is published now: every read that starts from here observes it. The session end and the heartbeat are two
+    // sidecar files, so a read before this point may already show `finished` with the worker still running; that read schedules one more
+    // heartbeat, which observes the exit. The contract: the feed stops on the first settled read that observes the exit — at most one
+    // read after the finish, none after it (CI-KARARLILIK: counting from the `finished` frame raced that last heartbeat).
+    const finishedAt = read.mock.calls.length;
     await until(() => view.stdout.frame.includes('finished'), 'heartbeat reports worker completion');
+    await until(() => {
+      const settled = read.mock.settledResults, last = settled.at(-1);
+      return settled.length === read.mock.calls.length && last?.type === 'fulfilled'
+        && last.value.workers?.sources[0]?.workers[0]?.files?.heartbeat.phase === 'exited';
+    }, 'a settled read observes the exited heartbeat');
+    expect(read.mock.calls.length).toBeLessThanOrEqual(finishedAt + 1);
   }
   const stopped = read.mock.calls.length;
   await settle(350); expect(read).toHaveBeenCalledTimes(stopped);

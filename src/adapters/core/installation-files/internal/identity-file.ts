@@ -6,7 +6,8 @@ import { ManagedFileError, getConfigFieldDefault, inspectProductDirectory, prepa
 type IdentityResource = 'projectIdentity' | 'installationIdentity';
 /** The poll step keeps a concurrent first publication cheap to observe; the bound is the writer-lock timeout. */
 const PUBLICATION_POLL_MS = 10;
-type Failure = 'INVALID' | 'UNAVAILABLE' | 'LOCKED' | 'UNSUPPORTED' | 'MASKED';
+/** INCOMPLETE: the record directory exists without its record — an interrupted first publication or a lost record (KAPANIS-KIMLIK-YARISI). */
+type Failure = 'INVALID' | 'INCOMPLETE' | 'UNAVAILABLE' | 'LOCKED' | 'UNSUPPORTED' | 'MASKED';
 /** Linux `TMPFS_MAGIC` (statfs(2)). */
 const TMPFS_MAGIC = 0x01021994;
 /**
@@ -26,7 +27,7 @@ class IdentityFileError extends Error { constructor(readonly reason: Failure) { 
 interface IdentityCodec<T, P = undefined> { parse(value: unknown): T; prepare?(): Promise<P>; create(prepared: P | undefined): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
 
 /** Shared first-publication mechanism. A retained directory with a missing record means lost or
- * interrupted publication, never a fresh identity. The bounded config lock serializes writers;
+ * interrupted publication (INCOMPLETE, its own recoverable reason), never a fresh identity. The bounded config lock serializes writers;
  * established identities are read without a lock. Failure deliberately retains the directory.
  */
 export class IdentityFile<T, P = undefined> {
@@ -60,7 +61,7 @@ export class IdentityFile<T, P = undefined> {
       const first = await this.read(directory);
       if (!first && await maskedDirectory(directory)) throw new IdentityFileError('MASKED');
       const record = first ?? await this.settled(directory);
-      if (!record) throw new IdentityFileError('INVALID');
+      if (!record) throw new IdentityFileError('INCOMPLETE');
       return record;
     } catch (error) { return this.fail(error); }
   }
@@ -68,7 +69,7 @@ export class IdentityFile<T, P = undefined> {
   /**
    * First publication creates the directory and then the record under the writer lock, so an unlocked reader can see the
    * directory before the record. Re-read without locks or writes for at most the writer-lock bound; a record that is still
-   * missing afterwards is retained loss (INVALID), never a fresh identity.
+   * missing afterwards is retained loss (INCOMPLETE), never a fresh identity.
    */
   private async settled(directory: string): Promise<T | null> {
     // Monotonic, so a wall-clock step neither stretches the wait nor ends it early (Astra 2359 P2).
@@ -90,7 +91,7 @@ export class IdentityFile<T, P = undefined> {
       return await withConfigWriteLock(directory, async () => {
         await inspectProductDirectory(this.layout, this.resource);
         const current = await this.read(directory);
-        if (!current) throw new IdentityFileError('INVALID');
+        if (!current) throw new IdentityFileError('INCOMPLETE');
         const next = await change(current);
         if (next !== current) await writeJsonAtomic(join(directory, 'identity.json'), next);
         return next;
@@ -130,7 +131,7 @@ export class IdentityFile<T, P = undefined> {
           return record;
         }
         const record = await this.read(directory);
-        if (!record) throw new IdentityFileError('INVALID');
+        if (!record) throw new IdentityFileError('INCOMPLETE');
         return record;
       }, this.lockTimeoutMs);
     } catch (error) { return this.fail(error); }

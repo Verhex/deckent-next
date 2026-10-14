@@ -130,8 +130,8 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   it('terminal: chat has registered defaults; other optional sub-objects stay absent and their readers fill documented defaults', () => {
     expect(terminalConfigSchema.parse({})).toEqual({ persistHistory: true, maxTrackedRuns: 128, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
       chat: { schemaVersion: 1, maxCompletionTokens: 16384, historyMessages: 40, readResultMaxBytes: 65536, compactionThresholdTokens: 100000 } });
-    expect(terminalConfigSchema.parse({ shell: { schemaVersion: 1 } }).shell).toEqual({ schemaVersion: 1, timeoutMs: 300_000, realm: 'prefer-sandbox', environment: [] });
-    expect(readTerminalShellConfig({})).toEqual({ realm: 'prefer-sandbox', timeoutMs: 300_000, environment: [] });
+    expect(terminalConfigSchema.parse({ shell: { schemaVersion: 1 } }).shell).toEqual({ schemaVersion: 1, timeoutMs: 300_000, realm: 'prefer-sandbox', environment: [], clockStepToleranceMs: 250 });
+    expect(readTerminalShellConfig({})).toEqual({ realm: 'prefer-sandbox', timeoutMs: 300_000, environment: [], clockStepToleranceMs: 250 });
     expect(readTerminalScratchConfig({})).toEqual({ writeMaxBytes: 1_048_576, sessionMaxBytes: 67_108_864, installationMaxBytes: 536_870_912, retentionDays: 7, sweepIntervalMs: 3_600_000 });
     expect(readTerminalFetchConfig({ terminal: {} })).toEqual({ egress: 'none', allowedHosts: [], maxBytes: 4_194_304, timeoutMs: 30_000, maxRedirects: 3 });
   });

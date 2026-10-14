@@ -5,7 +5,7 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
-  describeSandboxWriteSet, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
+  describeSandboxWriteSetResult, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, createWorkspaceScope, inspectShellRealmSelection, readTerminalShellConfig,
   compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange, protectedPathShellNote, onWriteFloor } from '#adapters/index.js';
@@ -166,20 +166,19 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
       // The call's write posture in a sandbox realm, derived once (`shellWritePosture`); the host realm has no such boundary.
       const posture = shellWritePosture(authority, planned.tier, input.fullAccess === true, planned.realm.writeSets === true && writes !== undefined);
-      // SHELL-OVERLAY: the write set's private directory; where none can be made, the call keeps the read-only posture (said in the result).
-      const root = posture.writeSet ? await input.writeSetRoot?.() ?? null : null;
-      const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32)) : null;
-      const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
-      const unavailable = posture.writeSet && !directory ? `\n${HOST_SHELL_NOTES.writeSetUnavailable}` : '';
-      // Full access requires an enforcing open sandbox, before any effect target exists.
+      // Full access requires an enforcing open sandbox, before any effect target or write-set directory exists.
       const realm = callRealm(planned.realm, posture.open);
       if (!realm.ok) return { status: 'error' as const, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
+      // SHELL-OVERLAY: the write set's private directory (none → read-only posture, said in the result); every exit after it removes it (Astra 2557).
+      const root = posture.writeSet ? await input.writeSetRoot?.() ?? null : null;
+      const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32), input.config.clockStepToleranceMs) : null;
+      const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
+      const unavailable = posture.writeSet && !directory ? `\n${HOST_SHELL_NOTES.writeSetUnavailable}` : '';
       const open = posture.open && realm.opens === true;
       const target = new HostShellTarget(scope.root, { realm, ...(open ? { open: true } : {}), timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
         ...(directory ? { writeSet: { upper: directory.upper, work: directory.work } } : {}),
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
-      // FA-TRACKED-WARN (owner 2026-09-30): a full-access call's effect on git-tracked files is measured around it — shown, told to the model,
-      // audited through `track` (the sealed `tracked-files-changed` event), never blocked.
+      // FA-TRACKED-WARN (owner 2026-09-30): a full-access call's effect on git-tracked files is measured around it — shown, told to the model, audited through `track` (the sealed `tracked-files-changed` event), never blocked.
       const baseline = authority === 'full-access' ? await snapshotTrackedFiles(scope.root) : null;
       // The counts lead the result's first line (`describeHostShellResult`); protocol v18 has no typed field for them (v19 hook, docs-delta).
       const tracked = async (ran: HostShellResult | null): Promise<{ readonly text: string; readonly counts?: { readonly deleted: number; readonly overwritten: number } }> => {
@@ -191,7 +190,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await channel.drained();
         return { text: `\n${line}`, ...(change ? { counts: { deleted: change.deleted.count, overwritten: change.overwritten.count } } : {}) };
       };
-      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
+      const store = await (async () => openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid'))()
+        .catch(async (error: unknown) => { if (directory) await removeSandboxWriteSetDirectory(directory.dir); throw error; });
       try {
         await new EffectApplication({ async resolve(ref) {
           return ref.id === HOST_SHELL_RUN_OPERATION.operation.id && ref.version === HOST_SHELL_RUN_OPERATION.operation.version ? HOST_SHELL_RUN_OPERATION : null;
@@ -212,8 +212,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
           ? protectedPathShellNote(planned.command, ran.output, onWriteFloor(scope.root, input.writeFloor), input.language) : null;
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
-        const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
-          context, peer: input.peer, scopeId, shellCommandId: commandId, signal })) : '';
+        const settled = directory && writes ? describeSandboxWriteSetResult(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
+          context, peer: input.peer, scopeId, shellCommandId: commandId, signal }), input.language) : '';
         return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
           cleanup: ran.cleanup };
       } catch (error) {

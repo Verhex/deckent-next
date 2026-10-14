@@ -9,8 +9,8 @@ export { describeHostShellResult, describeShellEffectRefusal, HOST_SHELL_NOTES, 
 export { buildLandlockRules, gitWorktreeRepository, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';
 export { isVerifiedGitObject, scanGitDirectory, type GitDirectoryScan } from './internal/git-objects.js';
 export { ASYNC_FS_OPS, fsOpsFor, LOCAL_FILESYSTEM_TYPES, SYNC_FS_OPS, type FsOps } from './internal/fs-ops.js';
-export { applySandboxWriteSet, describeSandboxWriteSet, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, SANDBOX_WRITE_SET_BOUNDS, sandboxWriteSetRoot, scanSandboxWriteSet,
-  type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteDecider, type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetDirectory,
+export { applySandboxWriteSet, describeSandboxWriteSet, describeSandboxWriteSetResult, prepareSandboxWriteSetDirectory, readSandboxWriteClock, removeSandboxWriteSetDirectory, SANDBOX_WRITE_SET_BOUNDS, sandboxWriteSetRoot, scanSandboxWriteSet, scanSandboxWriteSetCall, startSandboxWriteClockWatch,
+  type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteClockWatch, type SandboxWriteClockWatcher, type SandboxWriteDecider, type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetDirectory,
   type SandboxWriteSetReport, type SandboxWriteSetScan } from './internal/write-set.js';
 export { compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, TRACKED_FILES_LINE_PATHS, TRACKED_FILES_MAX, type TrackedFilesBaseline,
   LISTING_MAX_BYTES as GIT_LISTING_MAX_BYTES, LISTING_TIMEOUT_MS as GIT_LISTING_TIMEOUT_MS, type TrackedFilesChange, type TrackedFilesList } from './internal/tracked-files.js';

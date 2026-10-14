@@ -38,9 +38,9 @@ async function readIdentity<T>(read: () => Promise<T>) {
     throw error;
   }
 }
-export async function loadConfiguredProjectIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
+export async function loadConfiguredProjectIdentity(projectRoot: string, options: ConfigLoadOptions = {}, access: ScopeAccess = 'read') { // 'write': first-use publication
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
-  return accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), 'read');
+  return accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), access);
 }
 export async function loadConfiguredInstallationIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
