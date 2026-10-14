@@ -958,5 +958,9 @@
   "mcp.tool.policyAdministration": "Inspect scoped policy administration readiness, administrators and revision; read-only, no approval decisions.",
   "doctor.policyAdministration.unavailable": "Policy administration: unavailable or not authorized; readiness is unknown.",
   "error.DELIVERY_INTERACTIVE_REQUIRED": "Delivery/adoption requires a verified human terminal. Run deckent task integration-deliver or integration-adopt in that terminal and answer y/N; SDK/MCP cannot confirm.",
-  "error.DELIVERY_CONFIRMATION_DECLINED": "Delivery/adoption was declined or no answer was received. No reference was written."
+  "error.DELIVERY_CONFIRMATION_DECLINED": "Delivery/adoption was declined or no answer was received. No reference was written.",
+  "error.INITIAL_REGISTRY_EXISTS": "An admission registry already exists; nothing was changed. Use deckent coding template to add a kind, or deckent config to review the existing admission settings.",
+  "error.INITIAL_REGISTRY_CONFIG_CONFLICT": "The selected scope or pool capacity conflicts with the installed configuration; nothing was changed. Inspect deckent config and repeat with the configured scope and capacity.",
+  "error.INITIAL_REGISTRY_CLI_UNAVAILABLE": "The selected native CLI version could not be detected or used. Check the configured Docker executable, local immutable image and supported discovery mode, then repeat --preview. No registry was written.",
+  "error.INITIAL_REGISTRY_PROBE_CLEANUP": "Probe container {container} could not be removed; no registry was written. Inspect and remove it with Docker before repeating --preview."
 }

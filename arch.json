@@ -1294,6 +1294,13 @@
     },
     "src/engine/core/installation": {
       "dependencies": [
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/config",
+        "src/engine/core/toolchain-currency",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/platform/core/integrity",
         "src/engine/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/policy",
@@ -1812,6 +1819,8 @@
     },
     "src/adapters/core/native-coding": {
       "dependencies": [
+        "src/platform/core/config-fields",
+        "src/platform/core/errors",
         "src/domain/core/run",
         "src/adapters/core/docker-supervisor",
         "src/domain/core/primitives",
@@ -1823,16 +1832,12 @@
     },
     "src/composition/core/native-coding": {
       "dependencies": [
+        "src/engine/core/installation",
         "src/domain/core/run",
         "src/adapters/core/native-coding",
         "src/platform/core/errors",
-        "src/engine/core/toolchain-currency",
-        "src/engine/core/config",
         "src/platform/core/config",
-        "src/composition/core/config",
-        "src/platform/core/integrity",
-        "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
+        "src/composition/core/config"
       ],
       "plan": "PROVIDERS"
     },

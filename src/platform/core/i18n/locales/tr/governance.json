@@ -958,5 +958,9 @@
   "mcp.tool.policyAdministration": "Kapsamdaki politika yönetimi hazırlığını, adminleri ve revizyonu incele; salt okunur, onay kararı vermez.",
   "doctor.policyAdministration.unavailable": "Politika yönetimi: erişilemiyor veya yetki yok; hazırlık durumu bilinmiyor.",
   "error.DELIVERY_INTERACTIVE_REQUIRED": "Teslim/benimseme doğrulanmış insan terminali gerektirir. O terminalde deckent task integration-deliver veya integration-adopt çalıştırıp y/N yanıtını verin; SDK/MCP onaylayamaz.",
-  "error.DELIVERY_CONFIRMATION_DECLINED": "Teslim/benimseme reddedildi veya yanıt alınamadı. Referans yazılmadı."
+  "error.DELIVERY_CONFIRMATION_DECLINED": "Teslim/benimseme reddedildi veya yanıt alınamadı. Referans yazılmadı.",
+  "error.INITIAL_REGISTRY_EXISTS": "Admission registry zaten var; hiçbir şey değişmedi. Görev türü eklemek için deckent coding template, mevcut admission ayarlarını incelemek için deckent config kullanın.",
+  "error.INITIAL_REGISTRY_CONFIG_CONFLICT": "Seçilen kapsam veya havuz kapasitesi kurulum config’iyle çelişiyor; hiçbir şey değişmedi. deckent config ile inceleyip yapılandırılmış kapsam ve kapasiteyle yeniden deneyin.",
+  "error.INITIAL_REGISTRY_CLI_UNAVAILABLE": "Seçilen native CLI sürümü tespit edilemedi veya kullanılamadı. Yapılandırılmış Docker programını, yerel immutable imajı ve desteklenen discovery modunu kontrol edip --preview çalıştırın. Registry yazılmadı.",
+  "error.INITIAL_REGISTRY_PROBE_CLEANUP": "Tespit container’ı {container} kaldırılamadı; registry yazılmadı. --preview tekrarlamadan önce Docker ile inceleyip kaldırın."
 }

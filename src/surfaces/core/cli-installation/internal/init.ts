@@ -1,4 +1,5 @@
 import { identityCommand } from './identity.js';
+import { initRegistryCommand } from './registry.js';
 import { isAbsolute } from 'node:path';
 import { ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
@@ -37,6 +38,7 @@ function parsePerson(value: string | undefined): Person {
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
 export async function initCommand(argv: readonly string[], context: InstallationCommandContext): Promise<void> {
+  if (argv[1] === 'registry') return initRegistryCommand(argv, context);
   if (argv[1] === undefined || argv[1]?.startsWith('--preview') || argv[1] === '--lang' || argv[1] === '--no-color') return (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(argv, context);
   if (argv[1] === 'identity') return identityCommand(argv, context);
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
