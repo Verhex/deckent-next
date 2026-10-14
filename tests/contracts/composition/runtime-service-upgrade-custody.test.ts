@@ -12,7 +12,7 @@ import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous
 type Service = Awaited<ReturnType<typeof startConfiguredRuntimeService>>;
 const roots: string[] = [], services: Service[] = [];
 afterEach(async () => {
-  for (const service of services.splice(0)) { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  for (const service of services.splice(0)) { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
   clearConfigCache();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
