@@ -90,7 +90,7 @@ export async function inferenceCommand(argv: readonly string[], context: ModelCo
     return;
   }
   const options: ConfigLoadOptions = { env };
-  const config = await loadConfig(root, options);
+  const config = await loadConfig(root, { ...options, heal: false });
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
   const profile = selectProfile(config as Record<string, unknown>, parsed.profileId, locale);
