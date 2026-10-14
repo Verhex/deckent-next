@@ -2,6 +2,19 @@
 
 Detailed operator behavior behind the product summary in [README.md](../../../README.md). Türkçe: [operator-reference.tr.md](operator-reference.tr.md).
 
+The interactive terminal keeps input and status under the latest output and, once the screen is full, on its bottom
+rows; open windows and live output never push them off the screen. Completed output is printed once and stays in native scrollback. A window opened by your command or selection takes
+focus immediately; Escape closes it back to input. Automatic /do planning, progress and approval cards, model-turn
+approvals and run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
+operation. Ctrl+O switches between input and the top window. Automatic approvals require this focus switch
+before their decision keys work (the waiting card says "Ctrl+O to decide this card"); typing y/n/s/a in input never answers a card. Existing decision, reason and verified-TTY requirements apply in the focused approval.
+Escape closes or declines in a focused window; from input it retains the draft/cancel behavior. Long window
+bodies scroll internally with arrows, PageUp/PageDown and Home/End, with a visible row range. Multiline input
+follows its caret within a height budget. `/watch-stop` closes observation. Above input, an "Active work" strip lists
+this session's running /do (planning, or waiting for you with the approval time left) and the Runs it started, with title,
+state and elapsed time; it never takes input by itself. Ctrl+T selects it (↑↓, Esc back): Enter on /do focuses its window, Enter on a
+Run opens that Run's window; a finished Run leaves the strip once opened. Pipe and line-mode output is unchanged.
+
 ## Installation custody
 
 Installation accepts owned group-writable project and bootstrap journal directories (for example,
@@ -198,3 +211,13 @@ Spending: paid calls reserve the dearest applicable published tier and settle fr
 the pinned tariff (`measured-tariff`). The scope's first budget is created with `deckent models create-budget --scope <id>
 --usd <n>` (or the budget window, the first row of `/provider`), changed with `revise-budget [--unfreeze]`; a held call that never received
 final usage is resolved with `reconcile-spending`. Details: ARCHITECTURE "Spend settlement".
+
+### Delivery confirmation (TESLIM-GUVENLIK author candidate)
+
+`task integration-deliver`, `task integration-adopt` and `task integration-rollback` require one explicit `y` in a verified human terminal (a rollback moves the adopted branch back, so it asks like an adoption; its card shows the branch and current → previous commit). The card shows task title, Run/Task ids, reference/branch, from/to commits and changed files. Empty, `n`, EOF, redirected input/output and SDK/MCP new effects refuse. Prepare/check remain candidate-only. Completed replay and proven crash settlement do not ask again; an unfinished effect needs fresh confirmation. Adoption still requires `execution.adoption.targets`, policy, acceptance and configured verification; with `execution.adoption.verification.required` the terminal delivery window cannot choose the verification Run yet, refuses with `ADOPTION_NOT_VERIFIED` and shows the exact `task integration-adopt … --verification-run <run>` command. No autonomous policy is enabled. Known limit: the verified-terminal witness exists only on Linux (WSL included); on other hosts delivery, adoption and rollback are refused with `DELIVERY_INTERACTIVE_REQUIRED`.
+
+Delivery commits carry the admitted task title, ids and bounded acceptance state; author/committer time comes from the trusted delivery planning clock and is frozen by the intent for replay. Deckent is the default identity; `execution.git.deliveryIdentity` can set `authorName`/`authorEmail`. Preview Git objects are prepared only in the candidate before the answer; refusal writes no source Git object, ref, branch or delivery intent.
+
+### Delivery window in the terminal (TESLIM-PENCERESI author candidate)
+
+When a Task of a Run that this terminal's `/do` admitted reaches "accepted · patch ready, awaiting delivery", a delivery window opens by itself without taking input (Ctrl+O, or "awaiting delivery" in the Active work strip with Ctrl+T and Enter, moves input to it); `/deliver` lists every waiting task of the scope and opens the chosen one with focus. The window shows the task title, Run/Task ids, the integration check of the current source (affected files match the base), the changed files with `patch-preview --stat` counts, that only a dedicated `refs/deckent/deliveries/` reference is written (branches, index and working tree stay unchanged) and, only when `execution.adoption.targets` is configured, the target branches as a later, separate choice. `y` checks, prepares and delivers in one flow through the same applications as `task integration-check|prepare|deliver` and the verified-terminal confirmation above: the window's `y` answers the confirmation only when its card shows exactly the operation, ids, command, file set and base the window showed; otherwise the exact card is shown and needs a fresh `y`. After delivery a configured branch is adopted only with a second `y` (↑↓ chooses the branch); `n`/Esc does nothing. A typing `y` in the input never confirms. A stale base, a missing grant (`scope inspect` for the attempt lookup plus the integration actions) or a non-verified session is refused in plain words with the next step. Delivery never starts by itself; a future owner-set "autonomous by rule" broker would plug into the same confirmation port and is not implemented.

@@ -678,7 +678,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
         const whole = await readFile(join(f.data, files[0]!), 'utf8');
         expect(whole).toContain(`-${before.repeat(count)}`); expect(whole).toContain(`+${after.repeat(count)}`);
         expect(preview.split('\n')[0]).toContain(createHash('sha256').update(whole).digest('hex'));
-        await new Promise(resolve => setTimeout(resolve, 60)); view.stdin.write('y');
+        // TERMINAL-SABIT R2 (owner 2026-10-14): the turn's card keeps the composer focused; Ctrl+O moves to it, then y decides.
+        await new Promise(resolve => setTimeout(resolve, 60)); view.stdin.write('\u000f'); await new Promise(resolve => setTimeout(resolve, 40)); view.stdin.write('y');
         await until(() => view.stdout.text.includes('Written.'), 'turn finished');
       } finally { view.instance.unmount(); }
       expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe(after.repeat(count));

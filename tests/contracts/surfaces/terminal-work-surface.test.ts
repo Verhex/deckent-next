@@ -324,6 +324,7 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
     // The whole preview is in the window; it is longer than the capped body, so it scrolls (End shows the last row).
     expect(view.frame()).toMatch(/rows 1–\d+ of \d+/u); expect(view.frame()).not.toContain('ctx 59');
     expect(view.frame()).toMatch(/What: +A file will be edited: src\/a\.ts/u); expect(view.frame()).toMatch(/File: +src\/a\.ts/u);
+    await view.type('\u000f'); await settle(40); // R2: explicitly focus this automatic card before scrolling/deciding.
     view.stdin.write('\u001B[F'); await until(() => view.frame().includes('ctx 59'), 'scrolled to the end');
     expect(view.frame()).toContain('Bound call: edit_file · src/a.ts · 0123456789ab');
     await view.type('y');
@@ -379,12 +380,14 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
         } };
       const view = mount({ streamTurn, ledger: ledger as never });
       await settle(20); await view.type('go\r');
-      await view.card('FIRST-CARD', 'first card'); await view.type('y');
+      await view.card('FIRST-CARD', 'first card'); await view.type('\u000f'); await settle(40); await view.type('y');
       await view.card('SECOND-CARD', 'second card'); finishDecision();
       await until(() => view.stdout.text.includes(late === 'answers' ? 'A-ALLOWED approval-a' : 'ERR:late failure'), 'late answer shown');
       await settle(40);
       expect(view.frame()).toContain('SECOND-CARD'); expect(view.frame()).toContain(W.deny);
-      await view.type('y');
+      await view.type('y'); await settle(40);
+      expect(decided).toEqual(['approval-a:allow']); // New automatic card cannot inherit the first card's focus.
+      await view.type('\u000f'); await settle(40); await view.type('y');
       await until(() => view.frame().includes('Both done.') && !view.frame().includes(W.title), 'second decided, turn ends');
       expect(decided).toEqual(['approval-a:allow', 'approval-b:allow']);
     });
@@ -426,6 +429,7 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     const view = mount({ streamTurn: scoped(scopes, 'appr-s') as never, ledger: port(calls, answer) as never });
     await settle(20); await view.type('run it\r');
     await view.card(W.title, 'scoped card');
+    await view.type('\u000f'); await settle(40); // R2: scopes still require a focused original card.
     return view;
   };
 
@@ -472,6 +476,7 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     }) as never, ledger: port(calls) as never });
     await settle(20); await view.type('go\r');
     await view.card(W.deny, 'plain card');
+    await view.type('\u000f'); await settle(40);
     expect(view.frame()).toContain(`${W.once} · ${W.deny}`); expect(view.frame()).not.toContain(W.session);
     await view.type('sa'); await settle(60);
     expect(calls).toEqual([]);
@@ -492,6 +497,6 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     // Exact rows break at the cell limit and keep every character: the inner rows joined give the pattern back whole.
     const inner = view.frame().split('\n').filter(row => row.startsWith('│ ')).map(row => row.slice(2, 2 + 220 - 4)).join('');
     expect(inner).toContain(`${W.covers} ${pattern} in this session`);
-    await view.type('n');
+    await view.type('\u000f'); await settle(40); await view.type('n');
   });
 });

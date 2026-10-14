@@ -85,7 +85,7 @@ describe('live shell output in the terminal (T-L4 slice 3c-ii)', () => {
     await until(() => view.stdout.text.includes('READY'), 'ready');
     view.stdin.write('go\r');
     await until(() => view.stdout.text.includes('hidden-preview-line'), 'approval card');
-    await settle(60); view.stdin.write('n');
+    await settle(60); view.stdin.write('\u000f'); await settle(40); view.stdin.write('n'); // R2: focus the same unsafe preview, then deny.
     await until(() => view.stdout.text.includes('done'), 'answer');
     const screen = view.stdout.text;
     for (const shown of ['hidden-target', 'hidden-preview-line', 'shown', 'concealed', 'red']) expect(screen).toContain(shown);

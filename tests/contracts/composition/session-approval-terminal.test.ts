@@ -117,7 +117,9 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
     await settle(40); await type('\r'); await until(() => view.stdout.frame.includes(jobs.clearDetail), 'clear-session confirmation'); await settle(40); await type('y');
   };
   const shown = () => view.stdout.text.replace(/[┃│]/g, ' ').replace(/\s+/g, ' ');
-  return { view, type, events, requests, rows, project, client, host, faults, clearSession, shown };
+  // TERMINAL-SABIT R2 (owner 2026-10-14): a card raised during a model turn keeps the composer focused; Ctrl+O moves to it, then the explicit key decides.
+  const decide = async (keys: string) => { view.stdin.write('\u000f'); await settle(40); await type(keys); };
+  return { view, type, decide, events, requests, rows, project, client, host, faults, clearSession, shown };
 }
 it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s and clear-session: visible %s text, real writes, remembered/used audit and next prompt', async locale => {
   const f = await fixture(locale);
@@ -130,7 +132,11 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   await until(() => f.view.stdout.frame.includes(keys), 'session key on card').catch(error => { throw new Error(String(error) + '\n' + f.view.stdout.frame); });
   expect(f.view.stdout.frame).not.toContain(t('terminal.approval.window.keys.always', {}, locale));
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## real producer approval window (${locale})\n${f.view.stdout.frame}\n`);
-  await settle(60); await f.type('a'); await settle(40);
+  // R2: before Ctrl+O the decision key is typed text in the composer draft, never a decision; the draft is then cleared (Ctrl+U).
+  await settle(60); await f.type('s'); await settle(40);
+  expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0); expect(f.view.stdout.frame).toContain('> s');
+  await f.type('\u0015'); await settle(40);
+  await f.decide('a'); await settle(40);
   expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0);
   await f.type('s');
   // T2 integration: notices name the short approval id (first 8 characters of the UUID); the full id is the detail line of the decision notice.
@@ -151,28 +157,28 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   const command = f.requests.find(r => r.operation === 'decideApproval')!.input;
   expect(await f.client.decideApproval(command)).toMatchObject({ record: { status: 'decided', decision: { decision: 'allow' } }, standing: { status: 'unconfirmed' } });
   await f.type('third\r'); await until(() => f.events.filter(e => e.kind === 'approval.requested').length === 2, 'fresh card after clear');
-  await settle(100); await f.type('N'); await until(() => f.view.stdout.text.includes('Done 3.'), 'denied third call');
+  await settle(100); await f.decide('N'); await until(() => f.view.stdout.text.includes('Done 3.'), 'denied third call');
   expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-3\n');
 }, 20000);
 
 
 it('y stays a plain once record and a second same-key call asks again', async () => {
   const f = await fixture('en'); await settle(100); await f.type('once\r');
-  await until(() => f.events.some(e => e.kind === 'approval.requested'), 'once card'); await settle(100); await f.type('y');
+  await until(() => f.events.some(e => e.kind === 'approval.requested'), 'once card'); await settle(100); await f.decide('y');
   await until(() => f.view.stdout.text.includes('Done 1.'), 'once effect');
   const command = f.requests.find(r => r.operation === 'decideApproval')!.input;
   expect(command).not.toHaveProperty('standing');
   const once = await f.client.decideApproval(command); expect(once).toHaveProperty('status', 'decided'); expect(once).not.toHaveProperty('record');
   await f.type('again\r'); await until(() => f.events.filter(e => e.kind === 'approval.requested').length === 2, 'second once card');
   expect(f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row.record)).event.subject).filter(s => s.kind === 'standing-approval')).toEqual([]);
-  await settle(100); await f.type('N'); await until(() => f.view.stdout.text.includes('Done 2.'), 'denied second');
+  await settle(100); await f.decide('N'); await until(() => f.view.stdout.text.includes('Done 2.'), 'denied second');
 }, 20000);
 
 it('a lost session answer is visibly unconfirmed, never not-saved; its sealed allow and actual effect remain separate', async () => {
   const f = await fixture('en'); f.faults.dropDecision = true;
   await settle(100); await f.type('lost answer\r'); await until(() => f.events.some(e => e.kind === 'approval.requested'), 'loss card');
   const card = f.events.find(e => e.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
-  await settle(100); await f.type('s');
+  await settle(100); await f.decide('s');
   await until(() => f.view.stdout.text.includes('session permission could not be confirmed (transport-unknown)'), 'unknown notice');
   expect(f.view.stdout.text).not.toContain('session answer was not saved'); expect(f.view.stdout.text).not.toContain('permission saved for this conversation');
   await until(() => f.view.stdout.text.includes('Done 1.'), 'effect after lost answer');
@@ -188,13 +194,13 @@ it('own-peer clear while the real remembered audit waits releases the producer b
   f.faults.holdAudit = new Promise<void>(resolve => { release = resolve; }); f.faults.enteredAudit = entered;
   try {
     await settle(100); await f.type('race\r'); await until(() => f.events.some(e => e.kind === 'approval.requested'), 'race card');
-    await settle(100); await f.type('s'); await auditing;
+    await settle(100); await f.decide('s'); await auditing;
     const turn = f.requests.find(r => r.operation === 'chatTurn')!.input as { sessionId: string };
     expect(await f.client.clearSessionStanding({ schemaVersion: 1, scopeId: 'scope', sessionId: turn.sessionId })).toEqual({ schemaVersion: 1, scopeId: 'scope', sessionId: turn.sessionId, cleared: true });
     await until(() => f.view.stdout.text.includes('session answer was not saved (revoked)'), 'confirmed revoke');
     release(); f.faults.holdAudit = null; await until(() => f.view.stdout.text.includes('Done 1.'), 'once effect unchanged by clear');
     await f.type('after clear\r'); await until(() => f.events.filter(e => e.kind === 'approval.requested').length === 2, 'late audit cannot remember');
-    await settle(100); await f.type('N'); await until(() => f.view.stdout.text.includes('Done 2.'), 'race test finish');
+    await settle(100); await f.decide('N'); await until(() => f.view.stdout.text.includes('Done 2.'), 'race test finish');
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-1\n');
   } finally { release(); }
 }, 20000);
@@ -202,7 +208,7 @@ it('own-peer clear while the real remembered audit waits releases the producer b
 
 it('clear-session follows new and resumed conversation identity and leaves another conversation memory alone', async () => {
   const f = await fixture('en'); await settle(100); await f.type('remember\r');
-  await until(() => f.events.some(e => e.kind === 'approval.requested'), 'remember card'); await settle(100); await f.type('s');
+  await until(() => f.events.some(e => e.kind === 'approval.requested'), 'remember card'); await settle(100); await f.decide('s');
   await until(() => f.view.stdout.text.includes('Done 1.'), 'remembered original');
   const original = (f.requests.find(r => r.operation === 'chatTurn')!.input as { sessionId: string }).sessionId;
   const own = SessionStanding.sessionKey('scope', { issuer: hostname(), subject: String(userInfo().uid) }, original), key = 'v1:session:edit-self-source:write_file:directory:src/*';
@@ -226,7 +232,7 @@ it('a static hard-floor card offers neither s nor always and rejects forged sess
   await expect(f.client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: card.approvalId, commandId: 'forged-session', expectedRevision: card.revision,
     decision: 'allow', reason: 'Must refuse', standing: 'session', decisionCapability: card.decisionCapability })).rejects.toMatchObject({ code: 'APPROVAL_INVALID' });
   expect(f.rows('SELECT snapshot FROM approvals').map(row => JSON.parse(String(row.snapshot)).status)).toEqual(['pending']);
-  const sent = f.requests.length; await settle(100); await f.type('sa'); await settle(40); expect(f.requests.length).toBe(sent);
+  const sent = f.requests.length; await settle(100); await f.decide('sa'); await settle(40); expect(f.requests.length).toBe(sent);
   await f.type('N'); await until(() => f.view.stdout.text.includes('Done 1.'), 'floor denied');
   await expect(readFile(join(f.project, 'package.json'))).rejects.toMatchObject({ code: 'ENOENT' });
 }, 20000);
@@ -246,7 +252,7 @@ it('company-required approval that standing cannot lower never offers a session 
   await until(() => f.events.some(e => e.kind === 'approval.requested'), 'company card');
   const card = f.events.find(e => e.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
   expect(card.risk).toBe('edit-self-source'); expect(card.standing).toBeUndefined();
-  await settle(100); await f.type('s'); await settle(40); expect(f.requests.filter(r => r.operation === 'decideApproval')).toEqual([]);
+  await settle(100); await f.decide('s'); await settle(40); expect(f.requests.filter(r => r.operation === 'decideApproval')).toEqual([]);
   await f.type('N'); await until(() => f.view.stdout.text.includes('Done 1.'), 'company denial');
 }, 20000);
 
@@ -257,7 +263,7 @@ it('two authenticated runtime callers join the actual pending remembered audit w
   f.faults.holdAudit = new Promise<void>(resolve => { release = resolve; }); f.faults.enteredAudit = entered;
   try {
     await settle(100); await f.type('duplicate\r'); await until(() => f.events.some(e => e.kind === 'approval.requested'), 'duplicate card');
-    await settle(100); await f.type('s'); await auditing;
+    await settle(100); await f.decide('s'); await auditing;
     const command = f.requests.find(r => r.operation === 'decideApproval')!.input as Record<string, unknown>;
     let completed = false;
     const duplicate = f.client.decideApproval(command).then(result => { completed = true; return result; });
@@ -278,10 +284,10 @@ it('two authenticated runtime callers join the actual pending remembered audit w
 it('a real remembered-audit failure reports not-saved while preserving only the once decision; next call asks again', async () => {
   const f = await fixture('en'); f.faults.failAudit = true;
   await settle(100); await f.type('audit failure\r'); await until(() => f.events.some(e => e.kind === 'approval.requested'), 'audit failure card');
-  await settle(100); await f.type('s'); await until(() => f.view.stdout.text.includes('session answer was not saved (audit-unavailable)'), 'audit failure notice');
+  await settle(100); await f.decide('s'); await until(() => f.view.stdout.text.includes('session answer was not saved (audit-unavailable)'), 'audit failure notice');
   await until(() => f.view.stdout.text.includes('Done 1.'), 'once effect without standing audit');
   expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-1\n');
   f.faults.failAudit = false;
   await f.type('try again\r'); await until(() => f.events.filter(e => e.kind === 'approval.requested').length === 2, 'no memory after audit failure');
-  await settle(100); await f.type('N'); await until(() => f.view.stdout.text.includes('Done 2.'), 'audit test complete');
+  await settle(100); await f.decide('N'); await until(() => f.view.stdout.text.includes('Done 2.'), 'audit test complete');
 }, 20000);

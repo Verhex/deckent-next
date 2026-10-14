@@ -75,7 +75,7 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBloc
   if (task.disposition === 'waiting' || task.disposition === 'blocked') return blocker('waiting-dependency', id, null, task.dependencies[0] ?? null);
   if (task.disposition === 'delayed') return blocker('none', id, null, 'not-before');
   const approval = e.approvals.find(value => value.subjectKind === 'task' && value.runId === e.run.snapshot.identity.runId && value.taskId === id
-    && value.scopeId === e.run.snapshot.identity.scopeId);
+    && value.scopeId === e.run.snapshot.identity.scopeId && (value.status === undefined || value.status === 'pending') && value.expiresAtMs > e.observedAt);
   if (approval) return blocker('awaiting-approval', id, approval.createdAtMs, approval.approvalId);
   if (e.run.admitted === false) return blocker('not-admitted', id, e.run.createdAtMs);
   if (e.run.capacity && !hasRunReservationRoom(e.run.snapshot, e.run.capacity)) return blocker('none', id, null, 'run-capacity');

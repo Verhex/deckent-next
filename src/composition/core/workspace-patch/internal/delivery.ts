@@ -1,11 +1,11 @@
 import { resolve } from 'node:path';
-import { SystemTrustedClock, ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { GitIntegrationTarget, GitIntegrationDelivery, LocalOsSessionAuthority, openSqliteAttemptStore, resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
-import { WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand } from '#engine/index.js';
+import { WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
 /** Local SDK/CLI producer; paths, principal, session and Git options never come from the wire. */
-export async function deliverConfiguredWorkspaceIntegration(root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions = {}) {
+export async function deliverWorkspaceIntegrationWithConfirmation(root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions, confirmation?: EffectConfirmation) {
   try {
     const command = integrationDeliveryCommandSchema.parse(input);
     const c = await workspacePatchContext(root, command.identity, options, false, 'write');
@@ -20,7 +20,8 @@ export async function deliverConfiguredWorkspaceIntegration(root: string, input:
       const patches = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
       const inspection = new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes);
       return await new WorkspaceDeliveryApplication(patches, inspection, target, new GitIntegrationDelivery(git), store,
-        sessions, c.authorization, clock).deliver(command);
+        sessions, c.authorization, clock, confirmation, getConfigKnownSecrets(c.config)).deliver(command);
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }
+export const deliverConfiguredWorkspaceIntegration = (root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions = {}) => deliverWorkspaceIntegrationWithConfirmation(root, input, options);

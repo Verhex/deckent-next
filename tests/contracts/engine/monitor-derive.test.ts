@@ -353,3 +353,22 @@ it('H1 binds title/usage/result to the full attempt identity; another generation
     else expect(human).toMatchObject({ title: 'Düzeltme işi', titleEvidence: 'title', evaluation: 'rejected', transcript: { state: 'sealed' }, patch: { fileCount: 1 } });
   }
 });
+
+it.each([NOW - 1, NOW])('expired task approval at %s cannot block as awaiting human approval', expiresAtMs => {
+  const value = evidence(snapshot([{ id: 'a' }]), [], { approvals: [{ ...approval('a'), expiresAtMs }] });
+  expect(blocker(value)?.code).toBe('none');
+});
+
+it.each(['decided', 'expired'] as const)('recorded %s approval never becomes waiting even with a future expiry', status => {
+  expect(blocker(evidence(snapshot([{ id: 'a' }]), [], { approvals: [{ ...approval('a'), status }] }))?.code).toBe('none');
+});
+it('monitor JSON retains expired approval evidence with a status field derived at observation time', async () => {
+  const app = new MonitorApplication({ now: () => NOW, readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], runs: [], pools: [], diagnostics: [],
+    approvals: [{ ...approval('a'), expiresAtMs: NOW }, approval('b'), { ...approval('c'), status: 'decided' as const }] }),
+    describeService: async () => { throw Object.assign(new Error('offline'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); },
+    observeScope: async () => ({ access: 'admitted', workers: [], workerStatus: 'available', truncated: false, approvals: true }) });
+  const value = await app.inspect([{ id: 'current', path: '/fixture' }]);
+  expect(JSON.parse(JSON.stringify(value)).installs[0].approvals).toMatchObject([
+    { approvalId: 'ap-a', status: 'expired', expiresAtMs: NOW }, { approvalId: 'ap-b', status: 'pending' }, { approvalId: 'ap-c', status: 'decided' },
+  ]);
+});

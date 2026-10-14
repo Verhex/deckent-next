@@ -1,8 +1,8 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { SpanText, cells, fillTemplate, graphemes, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, useRenderGlyphs, wrapCells, wrapSpans, type Span } from '#surfaces/core/terminal-render/index.js';
-import { useWindowLayer, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
+import { useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
 import { useWindowNote } from './window-note.js';
 import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
 
@@ -84,25 +84,33 @@ export interface WindowProps {
   readonly onClose?: () => void;
   /** A body line kept in view (the selected row of a list inside the body); the body scrolls to it when it changes. */
   readonly reveal?: number;
+  /** A decision window: while it is on top but the composer keeps focus, it says how to reach the decision (Ctrl+O). */
+  readonly decision?: boolean;
 }
 
 /**
  * A bounded modal window in the live area (owner 2026-10-07): frame, title left and status right, a body capped to the terminal's rows
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
-export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns }: WindowProps) {
+export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
-  const id = useId(), focused = useWindowLayer(id, interactive, priority), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
+  const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
+  const acceptsInput = useWindowLayerGuard(id);
+  const owner = useFocusOwner();
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
-  const note = useWindowNote(), noteText = note && (focused || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
+  const note = useWindowNote(), noteText = note && (focused || owner.top === id || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
   useEffect(() => { if (noteText === null || !note) return undefined; return () => note.consume(); }, [noteText, note]);
+  // TERMINAL-SABIT R2: a decision card that appeared on its own waits behind the focused composer; its keys do nothing until Ctrl+O, so it says so.
+  const decideHint = useContext(WindowDecideHintContext);
+  const waitingText = decision && interactive && decideHint && owner.composerWindows && owner.top === id && owner.composing ? decideHint : null;
   const width = Math.max(1, columns - FRAME_COLUMNS);
   const { rows, starts } = layoutWindowRows(body, width);
   // Key hints wrap on a narrow terminal instead of losing their last keys.
   const hintRows = wrapCells(hints, width);
-  const room = Math.max(MIN_BODY_ROWS, terminalRows - reserved - FRAME_ROWS - footerRows - (hintRows.length - 1) - (noteText === null ? 0 : 1));
+  const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
+  const room = Math.max(minimum, terminalRows - reserved - FRAME_ROWS - footerRows - (hintRows.length - 1) - (noteText === null ? 0 : 1) - (waitingText === null ? 0 : 1));
   const overflow = rows.length > room, visible = overflow ? Math.max(1, room - 1) : rows.length;
   const [offset, setOffset] = useState(0);
   const revealRow = reveal === undefined ? undefined : starts[reveal];
@@ -114,6 +122,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const latest = useRef({ total: rows.length, visible, onInput, onClose });
   latest.current = { total: rows.length, visible, onInput, onClose };
   useInput((input, key) => {
+    if (!acceptsInput() || (key.ctrl && input === 'o')) return;
     const current = latest.current;
     if (current.onInput?.(input, key) === true) return;
     const scroll = scrollKeyOf(key);
@@ -133,7 +142,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
       {noteText === null ? null : <Text {...palette.warning} wrap="truncate-end">{`! ${noteText}`}</Text>}
       {rows.slice(first, first + visible).map((row, index) => <Text key={first + index} wrap="truncate">{row.length ? <SpanText spans={row} /> : ' '}</Text>)}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
-      {footer ? footer(focused) : null}
+      {footer ? <WindowInputContext.Provider value={acceptsInput}>{footer(focused)}</WindowInputContext.Provider> : null}
+      {waitingText === null ? null : <Text {...palette.accent} wrap="truncate-end">{waitingText}</Text>}
       {hintRows.map((row, index) => <Text key={`hint:${index}`} {...palette.muted} wrap="truncate">{row}</Text>)}
     </Box>
   );

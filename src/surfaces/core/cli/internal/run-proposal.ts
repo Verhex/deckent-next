@@ -1,5 +1,6 @@
+import { planningSpendingLines } from '#surfaces/core/run-planning/index.js';
 import { resolve } from 'node:path';
-import { t, emit, loadConfig, resolveLocale, ErrorRegistry, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { currencyAmountText, t, emit, loadConfig, resolveLocale, ErrorRegistry, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseRunProposal, runProposalQuerySchema, type RunProposalQuery, type RunProposalResult } from '#engine/index.js';
 import type { RunProposal } from '#domain/index.js';
 import { cliUsage } from '#surfaces/core/cli-kit/index.js';
@@ -17,9 +18,10 @@ export function renderRunProposal(data: RunProposalResult, locale: Locale): stri
     ...(r.reason ? [ErrorRegistry.createError(r.reason, { locale }).message] : []),
     ...(r.approval ? [t('proposal.approval', { id: r.approval.approvalId, expiry: r.approval.expiresAt }, locale)] : []),
     ...(data.budgetSemantics === 'not-metered' ? [t('proposal.budget.notMetered', {}, locale)] : [
-      t('proposal.budget', { currency: r.proposal.budgetCeiling.currency, amount: r.proposal.budgetCeiling.limitMinorUnits,
+      t('proposal.budget', { amount: currencyAmountText(r.proposal.budgetCeiling.limitMinorUnits, r.proposal.budgetCeiling.currency, locale),
         status: r.binding.admission ? t('proposal.budget.checked', {}, locale) : t('proposal.budget.unchecked', {}, locale) }, locale),
       t('proposal.budget.notice', {}, locale)]),
+    ...planningSpendingLines(data, locale),
     next[r.status],
   ].join('\n');
 }

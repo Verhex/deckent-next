@@ -11,11 +11,10 @@ kapsamının onayları gizli: görme izniniz yok
 ⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
 dogfood notu: biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
-Sizi bekleyen (3)
-  Konu                                           Bekliyor    Süre sonu             Kurulum
-  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor   current
-  operation: özet görme izniniz yok              10 dk       süresiz               dogfood
-  effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  current
+Sizi bekleyen (2)
+  Konu                                           Bekliyor    Süre sonu            Kurulum
+  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor  current
+  operation: özet görme izniniz yok              10 dk       bilinmiyor           dogfood
 
 Takılı ya da bekleyen, en eskisi önce (12)
   İş kimliği                     Görev  Neden                            Ne zamandır  Kapsam   Kurulum
@@ -43,6 +42,7 @@ Başarısız işler ve ilk hata yeri (2)
   Beklemede (sen bekleniyor)
   run-blocked-approval/lint   Beklemede  ⚠ 1 dk 35 sn (eski)  çalışıyor  ed5a5613  claude/model-alpha-2  current
   Beklemede (sistem bekleniyor)
+Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
 
 ── İşler ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
   İş kimliği                     Durum                      Engel                   Ne zamandır  Süre        Teslim
@@ -134,10 +134,10 @@ yok → bekliyor [canlı, henüz mühürlenmedi]
 Gözetim bırakıldı: konteyner ve deneme dizini kaldırıldı; yama saklandı.
 
 ── Onaylar ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Konu                                           Bekliyor    Süre sonu             Güvence   Kapsam     Kurulum
-  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor   local-os  scope-a    current
-  operation: özet görme izniniz yok              10 dk       süresiz               local-os  scope-dog  dogfood
-  effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  —         scope-a    current
+  Konu                                           Bekliyor    Süre sonu            Güvence   Kapsam     Kurulum
+  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor  local-os  scope-a    current
+  operation: özet görme izniniz yok              10 dk       bilinmiyor           local-os  scope-dog  dogfood
+Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
 
 ── Havuzlar ────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Havuz    Doluluk            Bekletme                   Kurulum

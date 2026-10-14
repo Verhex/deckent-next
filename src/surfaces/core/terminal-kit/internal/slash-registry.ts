@@ -27,6 +27,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'tasks', group: 'work', descriptionKey: 'terminal.slash.tasks' },
   { name: 'run', group: 'work', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
   { name: 'runs', group: 'work', descriptionKey: 'terminal.slash.runs' },
+  // TESLIM-PENCERESI: tasks awaiting delivery; the window checks, prepares and delivers after its own y (verified terminal only).
+  { name: 'deliver', group: 'work', descriptionKey: 'terminal.slash.deliver' },
   { name: 'transcript', group: 'work', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },
   { name: 'approvals', group: 'approvals', descriptionKey: 'terminal.slash.approvals', argumentKey: 'terminal.slash.approvalsArgument' },
   { name: 'cancel', group: 'work', descriptionKey: 'terminal.slash.cancel', argumentKey: 'terminal.slash.cancelArgument' },

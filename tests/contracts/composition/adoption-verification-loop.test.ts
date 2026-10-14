@@ -1,3 +1,4 @@
+import { confirmedDelivery, confirmedAdoption } from '../support/delivery-terminal.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chmod, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
@@ -5,13 +6,14 @@ import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { adoptConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, evaluateTask, prepareConfiguredWorkspaceIntegration } from '../../../src/index.js';
+import { evaluateTask, prepareConfiguredWorkspaceIntegration } from '../../../src/index.js';
 import { createConfiguredDeliveryRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { readyDeliveryFixture, type FixtureTracker } from '../support/workspace-patch-fixture.js';
+import { deliveryTerminalCli } from '../support/delivery-cli-terminal.js';
 
 const exec = promisify(execFile);
 const track: FixtureTracker = { roots: [], cleanup: [] };
@@ -52,7 +54,7 @@ async function loop(verification: unknown = requirement) {
   const f = await readyDeliveryFixture(track, { adoptionTargets: [target], baseFiles });
   await f.policy(['read-output', 'prepare-integration', 'deliver-integration', 'evaluate']);
   await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
-  const delivery = await deliverConfiguredWorkspaceIntegration(f.project,
+  const delivery = await confirmedDelivery(f.project,
     { schemaVersion: 1, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' }, f.options);
   const coding = (await f.runtime.store.loadRun(f.identity.scopeId, f.identity.runId))!;
   await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluation', identity: f.identity, expectedRevision: coding.revision }, f.options);
@@ -85,9 +87,16 @@ async function loop(verification: unknown = requirement) {
   };
   const identityFlags = ['--scope', 's', '--run', f.identity.runId, '--task', f.identity.taskId, '--attempt', f.identity.attemptId,
     '--generation', String(f.identity.generation), '--layout-revision', f.identity.layoutRevision];
-  const adoptCli = (commandId: string, runId?: string, json = true) => cli(['task', 'integration-adopt', ...identityFlags, '--command-id', commandId,
-    '--delivery-command-id', 'delivery', '--target', target, ...(runId ? ['--verification-run', runId] : []), ...(json ? ['--json'] : [])]);
-  const adopt = (commandId: string, verificationRunId?: string, verificationKind = 'verify') => adoptConfiguredWorkspaceIntegration(f.project,
+  const adoptCli = (commandId: string, runId?: string, json = true, answer?: string) => {
+    const args = ['task', 'integration-adopt', ...identityFlags, '--command-id', commandId,
+      '--delivery-command-id', 'delivery', '--target', target, ...(runId ? ['--verification-run', runId] : []), ...(json ? ['--json'] : [])];
+    return answer === undefined ? cli(args) : deliveryTerminalCli(f.project, f.options.env, args, answer);
+  };
+  const rollbackCli = (commandId: string, answer?: string) => {
+    const args = ['task', 'integration-rollback', ...identityFlags, '--command-id', commandId, '--adoption-command-id', 'adopt', '--json'];
+    return answer === undefined ? cli(args) : deliveryTerminalCli(f.project, f.options.env, args, answer);
+  };
+  const adopt = (commandId: string, verificationRunId?: string, verificationKind = 'verify') => confirmedAdoption(f.project,
     { schemaVersion: 2, commandId, identity: f.identity, deliveryCommandId: 'delivery', targetRef: target,
       ...(verificationRunId === undefined ? {} : { verificationRunId, verificationKind }) } as never, f.options);
   /** Delivery-pinned verification Run through the CLI (`run create --delivery-command-id`). */
@@ -124,7 +133,7 @@ async function loop(verification: unknown = requirement) {
     expect(ledger('SELECT command_id FROM workspace_adoptions')).toEqual([]);
   };
   await f.git('branch', 'adopted', f.base);
-  return { ...f, plan: delivery.plan, snapshot, configure, cli, adoptCli, adopt, createCli, settle, ledger, tip, fence, unchanged };
+  return { ...f, plan: delivery.plan, snapshot, configure, cli, adoptCli, rollbackCli, adopt, createCli, settle, ledger, tip, fence, unchanged };
 }
 
 describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('verification precondition and operator loop (B06-2c)', () => {
@@ -148,9 +157,17 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(await exec('/usr/bin/git', ['-C', workspace, 'rev-parse', 'HEAD']).then(result => result.stdout.trim())).toBe(f.plan.commit);
     expect(await exec('/usr/bin/git', ['-C', workspace, 'status', '--porcelain', '--ignored']).then(result => result.stdout)).toBe('');
     expect(await f.snapshot()).toBe(dependenciesBefore);
-    // The operator adopts with the verification Run; the kind comes from the installation's configuration.
-    const adopted = await f.adoptCli('adopt', 'v');
+    // Verification grants no human consent: the same command without a TTY or with n writes nothing.
+    expect(await f.adoptCli('adopt', 'v')).toMatchObject({ exit: 1, code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    await f.unchanged(fenceBefore);
+    expect(await f.adoptCli('adopt', 'v', true, 'n')).toMatchObject({ exit: 1, code: 'DELIVERY_CONFIRMATION_DECLINED' });
+    await f.unchanged(fenceBefore);
+    // The operator approves the actual card, then adopts; the verifying kind still comes from configuration.
+    const adopted = await f.adoptCli('adopt', 'v', true, 'y');
     expect(adopted.exit).toBe(0);
+    expect('output' in adopted ? adopted.output : '').toContain('y/N: ');
+    expect('output' in adopted ? adopted.output : '').toContain(target);
+    expect('output' in adopted ? adopted.output : '').toContain(f.plan.commit);
     const result = JSON.parse(adopted.stdout);
     expect(result).toMatchObject({ schemaVersion: 2, status: 'adopted', targetRef: target, fromCommit: f.base, toCommit: f.plan.commit, sequence: 1,
       basis: 'task-acceptance', verification: { status: 'verified', runId: 'v', taskId: 'check', attemptId: identity.attemptId, kind: 'verify', commit: f.plan.commit } });
@@ -163,6 +180,16 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(human.exit).toBe(0);
     expect(human.stdout).toContain(f.plan.commit); expect(human.stdout).toMatch(/verified/i);
     expect(human.stdout).not.toMatch(/not verification/i);
+    // TESLIM-GUVENLIK: rolling the branch back moves it too — the production CLI asks the same y/N; without a TTY or with n nothing moves.
+    const adoptedFence = await f.fence(), rollbacks = () => f.ledger("SELECT command_id FROM workspace_adoptions WHERE command_id LIKE 'rollback%'");
+    expect(await f.rollbackCli('rollback')).toMatchObject({ exit: 1, code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    expect(await f.rollbackCli('rollback', 'n')).toMatchObject({ exit: 1, code: 'DELIVERY_CONFIRMATION_DECLINED' });
+    expect(await f.tip()).toBe(f.plan.commit); expect(await f.fence()).toBe(adoptedFence); expect(rollbacks()).toEqual([]);
+    const rolled = await f.rollbackCli('rollback', 'y');
+    expect(rolled.exit).toBe(0); expect('output' in rolled ? rolled.output : '').toContain('Roll back an adoption');
+    expect(JSON.parse(rolled.stdout)).toMatchObject({ status: 'rolled-back', targetRef: target, fromCommit: f.plan.commit, toCommit: f.base, sequence: 2 });
+    expect(await f.tip()).toBe(f.base);
+    expect(JSON.parse((await f.rollbackCli('rollback')).stdout)).toEqual(JSON.parse(rolled.stdout)); // completed replay does not ask
   });
 
   it('refuses weaker criteria, another kind and an unconfigured CLI binding; the dependency bind cannot be written', async () => {

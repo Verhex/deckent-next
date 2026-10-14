@@ -21,3 +21,5 @@ export { adoptionVerificationSchema, adoptionVerificationPhaseOutcome, execution
   adoptionCriteriaMeet } from './internal/verification.js';
 export type { AdoptionVerification, AdoptionVerificationPolicy, AdoptionVerificationStore, AdoptionVerificationRequest,
   AdoptionVerificationRequirement, CriterionWithin } from './internal/verification.js';
+
+export type { IntegrationCommitMetadata } from './internal/commit-metadata.js';

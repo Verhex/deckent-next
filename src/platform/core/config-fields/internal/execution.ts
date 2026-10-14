@@ -10,7 +10,8 @@ export const DOCKER_EXECUTION_SETTINGS = z.object({
 }).strict();
 /** outputBytes bounds one Git listing/blob read; the default fits repositories with tens of thousands of tracked paths. */
 export const GIT_EXECUTION_SETTINGS = z.object({ gitExecutable: z.string().min(1),
-  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe().default(4_194_304) }).strict();
+  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe().default(4_194_304),
+  deliveryIdentity: z.object({ authorName: z.string().trim().min(1).max(256).refine(value => ![...value].some(char => char === '<' || char === '>' || char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)), authorEmail: z.string().email().max(256) }).strict().optional(), }).strict();
 /** Branches an operator allows `integration-adopt` to move. Empty (default) refuses every adoption; a listed branch must
  * exist and must not be checked out in any worktree when adopted. Business policy data, not a grant: policy still applies. */
 /** Same bounds as a domain identity (task kinds, evaluator ids): trimmed, no control characters, at most 256 code units. */

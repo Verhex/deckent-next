@@ -16,6 +16,8 @@ export interface RunProposalContext {
   verifySource(proposal: RunProposal, principal: VerifiedPrincipal): Promise<void>;
 }
 export interface RunProposalResult { readonly schemaVersion: 1; readonly proposal: RunProposalRecord; readonly run: RunView | null;
+  readonly planningSpending?: Readonly<{ class: 'metered' | 'not-metered' | 'unknown'; currency: string | null;
+    amountMinorUnits: number | null; evidence: 'measured-tariff' | 'measured-tariff-upper-bound' | 'provider-reported' | 'settled-local' | 'held' | 'unknown' }>;
   readonly budgetSemantics: 'admission-check-only' | 'not-metered'; readonly runtimeTotalSpendEnforced: false }
 const result = (proposal: RunProposalRecord, run: RunView | null = null): RunProposalResult => Object.freeze({ schemaVersion: 1,
   proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false });

@@ -1,5 +1,6 @@
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
 import type { JobWindowLabels } from './job-windows.js';
+import type { ActiveWorkLabels } from './active-work.js';
 import type { LiveWindowKind, LiveWindowLabels, WorkerPanelLabels } from './live-windows.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
 import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
@@ -35,6 +36,8 @@ export interface WorklineActionLabels {
 /** Catalog strings for the work surface (P4). Templates use `{name}` placeholders. */
 export interface WorkSurfaceLabels {
   readonly jobs?: JobWindowLabels;
+  /** TERMINAL-SABIT slice 2: the active work strip above the composer; absent means no strip. */
+  readonly activeWork?: ActiveWorkLabels;
   /** Live windows (`/monitor`, `/watch-*`, `/tasks`); absent means those commands are not offered as windows. */
   readonly live?: LiveWindowLabels;
   readonly workerLine: WorkerLineLabels;

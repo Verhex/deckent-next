@@ -2,6 +2,19 @@
 
 [README.tr.md](../../../README.tr.md) içindeki ürün özetinin arkasındaki ayrıntılı işletim davranışı. English: [operator-reference.md](operator-reference.md).
 
+Etkileşimli terminal giriş alanını ve durum satırını son çıktının altında, ekran dolduğunda da en alt satırlarda tutar;
+açık pencereler ve canlı çıktı onları ekranın dışına itmez. Tamamlanan çıktı bir kez yazılır ve kaydırma geçmişinde kalır. Komutunuzla veya seçiminizle açılan
+pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
+turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
+arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Otomatik onay kartında
+karar tuşları ancak bu odak geçişinden sonra çalışır (bekleyen kart "Bu kartta karar için Ctrl+O" der); girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
+Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut taslak/iptal davranışı sürer. Uzun pencere
+içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
+yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin üstündeki "Aktif iş" şeridi bu
+oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum ve geçen
+süreyle listeler; kendiliğinden odak almaz. Ctrl+T ile seçilir (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
+Enter o Run'ın penceresini açar; biten Run açıldıktan sonra şeritten çıkar. Pipe ve satır modu çıktısı değişmez.
+
 ## Kurulum muhafazası
 
 Kurulum, mevcut kullanıcıya ait ve grupça yazılabilir proje/bootstrap journal dizinlerini
@@ -207,3 +220,13 @@ Harcama: ücretli çağrılar uygulanabilir en pahalı yayımlanmış kademeyi r
 sabitlenmiş tarifenin çarpımından kesinleşir (`measured-tariff`). Kapsamın ilk bütçesi `deckent models create-budget
 --scope <id> --usd <n>` (ya da bütçe penceresi: `/provider`'ın ilk satırı) ile açılır, `revise-budget [--unfreeze]` ile değişir; son kullanımı
 hiç gelmemiş askıdaki çağrı `reconcile-spending` ile çözülür. Ayrıntı: ARCHITECTURE "Spend settlement".
+
+### Teslim onayı (TESLIM-GUVENLIK yazar adayı)
+
+`task integration-deliver`, `task integration-adopt` ve `task integration-rollback`, doğrulanmış insan terminalinde tek açık `y` ister (geri alma, dala alınmış dalı geri taşır; bu yüzden dala alma gibi sorar, kartı dalı ve şimdiki → önceki commit'i gösterir). Kart görev başlığını, Run/Task kimliklerini, referans/dalı, önceki/yeni commit'i ve değişen dosyaları gösterir. Boş yanıt, `n`, EOF, yönlendirilmiş giriş/çıkış ve SDK/MCP yeni etkisi reddedilir. Prepare/check yalnız adaydır. Tamamlanmış replay ve kanıtlanmış yayın sonrası çökme uzlaştırması tekrar sormaz; bitmemiş etki yeni onay ister. Benimsemede `execution.adoption.targets`, politika, kabul ve yapılandırılmış doğrulama koşulları korunur; `execution.adoption.verification.required` açıkken terminal teslim penceresi doğrulama Run'ını henüz seçemez, `ADOPTION_NOT_VERIFIED` ile reddeder ve tam `task integration-adopt … --verification-run <run>` komutunu gösterir. Otonom politika etkin değildir. Bilinen sınır: doğrulanmış terminal tanığı yalnız Linux'ta (WSL dahil) var; diğer sistemlerde teslim, dala alma ve geri alma `DELIVERY_INTERACTIVE_REQUIRED` ile reddedilir.
+
+Teslim commit'i kabul edilmiş görev başlığı, kimlikler ve sınırlı kabul durumu taşır; yazar/committer zamanı trusted clock'tan ilk teslim planında alınır, intent replay için dondurur. Varsayılan kimlik Deckent; `execution.git.deliveryIdentity` ile `authorName`/`authorEmail` ayarlanabilir. Yanıttan önce Git nesneleri yalnız adayda hazırlanır; ret halinde asıl depoda nesne/ref/dal veya teslim intent'i yazılmaz.
+
+### Terminalde teslim penceresi (TESLIM-PENCERESI yazar adayı)
+
+Bu terminalin `/do` ile kabul ettiği bir Run'ın görevi "kabul edildi · yama hazır, teslim bekliyor" durumuna gelince teslim penceresi kendiliğinden, girişin odağını almadan açılır (Ctrl+O ya da Aktif iş şeridindeki "teslim bekliyor" satırı Ctrl+T ve Enter ile odağı ona verir); `/deliver` kapsamdaki bekleyen tüm görevleri listeler ve seçileni odakla açar. Pencere görev başlığını, Run/Görev kimliklerini, güncel kaynağın uyum kontrolünü (etkilenen dosyalar tabanla aynı), değişen dosyaları `patch-preview --stat` sayılarıyla, yalnız ayrı bir `refs/deckent/deliveries/` referansının yazılacağını (dallar, index ve çalışma ağacı değişmez) ve yalnız `execution.adoption.targets` yapılandırılmışsa hedef dalları sonraki ayrı bir seçim olarak gösterir. `y`, `task integration-check|prepare|deliver` ile aynı uygulamalar ve yukarıdaki doğrulanmış terminal onayı üzerinden kontrol, hazırlık ve teslimi tek akışta yapar: pencerenin `y`'si onayı yalnız kart pencerenin gösterdiği işlem, kimlikler, komut, dosya kümesi ve tabanla birebir aynıysa cevaplar; değilse kartın kendisi gösterilir ve yeni bir `y` ister. Teslimden sonra yapılandırılmış dala alma yalnız ikinci bir `y` ile yapılır (↑↓ dalı seçer); `n`/Esc hiçbir şey yapmaz. Girişe yazılan `y` hiçbir zaman onay değildir. Eskimiş taban, eksik izin (attempt araması için `scope inspect` ve entegrasyon eylemleri) veya doğrulanmamış oturum sade sözlerle ve sonraki adımla reddedilir. Teslim kendiliğinden başlamaz; ileride owner'ın koyacağı "kurala göre otonom" aracı aynı onay portuna bağlanır ve uygulanmadı.

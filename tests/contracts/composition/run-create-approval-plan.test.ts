@@ -71,14 +71,14 @@ for (const route of ['cli-do-json', 'mcp-plan', 'mcp-propose'] as const) it.skip
   const records = (await listApprovals(query) as unknown[]).map(record => approvalRecordSchema.parse(record));
   expect(records).toHaveLength(1); const record = records[0]!, summary = record.request.summary;
   expect(summary).toContain('Plan · tasks: 1'); expect(summary).toContain('purchase'); expect(summary).toContain('business');
-  expect(summary).toContain('200 USD'); expect(summary).toContain('only at admission'); expect(summary).toContain('work-class registry');
+  expect(summary).toContain('$2.00'); expect(summary).toContain('only at admission'); expect(summary).toContain('work-class registry');
   expect(await inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: record.request.approvalId })).toEqual(record);
   for (const action of ['list', 'inspect']) {
     const input = action === 'list' ? query : { schemaVersion: 1, scopeId: 's', approvalId: record.request.approvalId };
     expect(await main(['approval', action, '--input', '-', '--json'], { ...cli, stdin: Readable.from([JSON.stringify(input)]) })).toBe(0);
     const displayed = JSON.parse(output.pop()!); expect(action === 'list' ? displayed : [displayed]).toEqual(records);
     const reply = await client.callTool({ name: action === 'list' ? 'list_approvals' : 'inspect_approval', arguments: input });
-    expect(JSON.stringify(reply)).toContain('only at admission'); expect(JSON.stringify(reply)).toContain('200 USD');
+    expect(JSON.stringify(reply)).toContain('only at admission'); expect(JSON.stringify(reply)).toContain('$2.00');
   }
   const ledger = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 10 });
   expect(ledger.approvals[0]!.summary).toBe(summary);

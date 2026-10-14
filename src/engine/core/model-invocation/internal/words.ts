@@ -1,10 +1,8 @@
-import { t, type Locale } from '#platform/index.js';
+import { currencyAmountText, t, type Locale } from '#platform/index.js';
 import type { ModelInvocability } from './invocable-now.js';
 
 export function reservationAmountText(minorUnits: number, currency: string, locale: Locale): string {
-  const tag = locale === 'tr' ? 'tr-TR' : 'en-US';
-  const digits = new Intl.NumberFormat(tag, { style: 'currency', currency }).resolvedOptions().maximumFractionDigits!;
-  return (minorUnits / 10 ** digits).toLocaleString(tag, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return currencyAmountText(minorUnits, currency, locale, false);
 }
 
 /** Shared words for every model-state surface. No readiness decisions live in renderers. */

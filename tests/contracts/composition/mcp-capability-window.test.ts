@@ -141,13 +141,26 @@ describe.skipIf(process.platform !== 'linux')('selection-only MCP capability adm
 
   it('the existing governed template rollback preserves named MCP capability rules and those rules remain revocable', async () => {
     const { f, body, read, preview, apply, audits } = await fixture();
+    // Version-delta rollback (alpha.35 P0) removes only rules an archived template upgrade added, never rules inferred from ids alone:
+    // start from the v10 shape and take the v11 delta through the same governed upgrade, so the archive holds real provenance.
+    const ids = new Set<string>(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS), older = body.grants.filter(grant => !ids.has(grant.id));
+    expect(older).toHaveLength(body.grants.length - ids.size);
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...body, revision: 'first-run-template-v10', grants: older }), { mode: 0o600 });
+    const upgraded = await terminalApplication<{ status: string; rules: { id: string }[] }>(f, 'policy-upgrade', 'scope', { mode: 'apply', reason: 'W5 rollback provenance' });
+    expect(upgraded).toMatchObject({ status: 'upgraded' }); expect(upgraded.rules.map(rule => rule.id)).toEqual([...ids]);
+    const upgradedGrants = (await read()).grants;
+    expect(upgradedGrants.slice(0, older.length)).toEqual(older);
     const plan = await preview(); await apply(plan);
-    expect(await terminalApplication(f, 'policy-upgrade', 'scope', { mode: 'rollback', reason: 'W5 rollback regression' })).toMatchObject({ status: 'rolled-back' });
-    // Rollback removes this version's execution rules; earlier authority and the named MCP rules survive.
-    const ids = new Set<string>(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS);
-    expect((await read()).grants).toEqual([...body.grants.filter(grant => !ids.has(grant.id)), ...plan.rules]);
-    expect(audits()).toHaveLength(2);
+    expect((await read()).grants).toEqual([...upgradedGrants, ...plan.rules]);
+    const baseline = audits().length;
+    expect(await terminalApplication(f, 'policy-upgrade', 'scope', { mode: 'rollback', reason: 'W5 rollback regression' }))
+      .toMatchObject({ status: 'rolled-back', reason: [...ids].join(','), conflicts: [] });
+    // Rollback removes this version's delivery rules; earlier authority and the named MCP rules survive.
+    expect((await read()).grants).toEqual([...older, ...plan.rules]);
+    expect(audits()).toHaveLength(baseline + 1);
+    expect(audits().at(-1).event.subject.counts).toMatchObject({ grantsAdded: 0, grantsRemoved: ids.size });
     expect(await apply(await preview('spend', 'revoke'))).toMatchObject({ status: 'applied' });
-    expect((await read()).grants).toEqual(body.grants.filter(grant => !ids.has(grant.id)));
-  }, 40_000);
+    expect((await read()).grants).toEqual(older);
+    expect(audits()).toHaveLength(baseline + 2);
+  }, 60_000);
 });

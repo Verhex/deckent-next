@@ -401,10 +401,12 @@ notifying on a closed connection, OAuth issuer binding. Implemented: stdio serve
 `input_required`/MRTR, `subscriptions/listen`, Tasks, resources/prompts.
 
 A replacement integration command explicitly names its predecessor and prepares a separate candidate;
-it never adopts the old directory or declares its writer dead. Git delivery has its own policy action
-and live session check. It records intent in ledger v32, builds a deterministic commit from retained
-patch bytes using a private index, and atomically creates a dedicated `refs/deckent/deliveries/` reference
-while verifying source HEAD. Source branch, index and working files are not modified. Exact ref/commit
+it never adopts the old directory or declares its writer dead. Git delivery (TESLIM-GUVENLIK author candidate)
+requires its own policy action, live session and explicit verified-human-terminal confirmation. A private index
+prepares objects only in the candidate; refusal writes no source objects or intent. After consent, ledger v32
+freezes the first trusted-clock commit plan and bounded local plumbing copies that exact tree/commit before
+atomically creating `refs/deckent/deliveries/` while verifying the pinned source base. Patch/snapshot digests
+remain deterministic; clock time intentionally participates in the new commit identity. Source branch, index and working files are not modified. Exact ref/commit
 custody reconciles a crash after Git publication before ledger settlement. Receipt replay is historical
 evidence, not verification of today's ref. Checked-out branch adoption and live-worktree merge remain
 separate operations; `reference-only` delivery does not claim either or accept the Task.
@@ -888,3 +890,7 @@ Rollback targets only content-equal v11 delta rules with proven current-version 
 origin and unchanged archive lineage; fresh-install/modified/changed-then-restored rules
 stay. v10 execution and older administration/observation rules remain. The locked
 last-admin invariant is unchanged. Binary, hosted and live acceptance are separate gates.
+
+## Human delivery confirmation — author candidate 2026-10-14
+
+Owner TESLIM-GUVENLIK admits a shared typed effect confirmation port before new delivery publication, adoption moves and rollback moves (every action that moves a branch asks y/N; rollback's card is `rollback-integration`, branch, current → previous commit, asked before its journal claim and again for a resumed unfinished rollback). CLI composition installs the verified controlling-terminal witness and one y/N card; public SDK/MCP input carries no answer capability. Policy allow and configured adoption targets are necessary but never substitute for that answer. Confirmed effects recheck session, policy and Git custody/CAS. Completed replay and already-published exact-custody settlement remain non-effectful. A pending, unpublished intent needs fresh confirmation. Candidate content digests remain deterministic; trusted-clock commit time is frozen with the first claimed delivery plan. The terminal delivery window (TESLIM-PENCERESI, alpha.36 candidate) is wired to this port: `y` in a focused window records one-use consent bound to the shown operation, ids, command, file set and base; composer keys never confirm. Registry-configured autonomous rules remain future work.

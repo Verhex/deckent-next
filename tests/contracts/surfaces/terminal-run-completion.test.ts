@@ -52,9 +52,9 @@ const completions = () => captured.entries.filter(entry => entry.kind === 'notic
 async function admit(h: ReturnType<typeof harness>) {
   await settle(); h.view.stdin.write('/do process order\r');
   await until(() => h.view.stdout.frame.includes('ADMITTED-PREVIEW'), 'admission preview');
-  h.view.stdin.write('\u001b');
+  h.view.stdin.write('\u000f'); await settle(40); h.view.stdin.write('\u001b'); // R2: focus the automatic /do result before closing.
   await until(() => h.view.stdout.frame.includes(EN.live!.tasksTitle), 'tasks window');
-  h.view.stdin.write('\u001b'); await settle();
+  h.view.stdin.write('\u000f'); await settle(40); h.view.stdin.write('\u001b'); await settle(); // Automatic /tasks keeps the composer focused.
 }
 
 describe('session /do completion and shared /run briefs', () => {

@@ -1,8 +1,9 @@
+import { confirmedDelivery, confirmedAdoption, confirmedRollback } from '../support/delivery-terminal.js';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { adoptConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, evaluateTask, prepareConfiguredWorkspaceIntegration,
+import { evaluateTask, prepareConfiguredWorkspaceIntegration,
   rollbackConfiguredWorkspaceIntegration } from '../../../src/index.js';
 import { GitIntegrationAdoption } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -21,32 +22,35 @@ const actions = ['read-output', 'prepare-integration', 'deliver-integration', 'e
 async function delivered() {
   const f = await readyDeliveryFixture(track, { adoptionTargets: [target] }); await f.policy(actions);
   await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
-  const delivery = await deliverConfiguredWorkspaceIntegration(f.project,
+  const delivery = await confirmedDelivery(f.project,
     { schemaVersion: 1, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' }, f.options);
   const evaluate = async () => {
     const run = (await f.runtime.store.loadRun(f.identity.scopeId, f.identity.runId))!;
     const result = await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluation', identity: f.identity, expectedRevision: run.revision }, f.options);
     expect(result.evaluation.run.tasks[0]!.phase).toBe('accepted');
   };
-  const adopt = (commandId: string, extra: Record<string, unknown> = {}) => adoptConfiguredWorkspaceIntegration(f.project,
+  const adopt = (commandId: string, extra: Record<string, unknown> = {}) => confirmedAdoption(f.project,
     { schemaVersion: 2, commandId, identity: f.identity, deliveryCommandId: 'delivery', targetRef: target, ...extra } as never, f.options);
-  const rollback = (commandId: string, adoptionCommandId: string) => rollbackConfiguredWorkspaceIntegration(f.project,
+  const rollback = (commandId: string, adoptionCommandId: string) => confirmedRollback(f.project,
+    { schemaVersion: 1, commandId, identity: f.identity, adoptionCommandId }, f.options);
+  /** The public SDK producer: no human answer capability. */
+  const rollbackSdk = (commandId: string, adoptionCommandId: string) => rollbackConfiguredWorkspaceIntegration(f.project,
     { schemaVersion: 1, commandId, identity: f.identity, adoptionCommandId }, f.options);
   const tip = () => f.git('rev-parse', target);
   const ledger = (commandId: string) => {
     const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'), { readOnly: true });
     try { return db.prepare('SELECT sequence,settled FROM workspace_adoptions WHERE command_id=?').get(commandId); } finally { db.close(); }
   };
-  return { ...f, plan: delivery.plan, evaluate, adopt, rollback, tip, ledger };
+  return { ...f, plan: delivery.plan, evaluate, adopt, rollback, rollbackSdk, tip, ledger };
 }
 
 describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('verified-delivery branch adoption and rollback', () => {
-  it('adopts through competing SDK/CLI onto a not-checked-out branch, rolls back once, and never touches the live checkout', async () => {
+  it('approves adoption onto a not-checked-out branch, replays through CLI, rolls back once, and never touches the live checkout', async () => {
     const f = await delivered(); await f.evaluate();
     await f.git('branch', 'adopted', f.base);
     const head = await f.git('rev-parse', 'HEAD'), index = await readFile(join(f.project, '.git/index')), status = await f.git('--no-optional-locks', 'status', '--porcelain');
-    const [sdk, cli] = await Promise.all([f.adopt('adopt'), f.cli('integration-adopt',
-      ['--command-id', 'adopt', '--delivery-command-id', 'delivery', '--target', target]) as unknown as ReturnType<typeof f.adopt>]);
+    const sdk = await f.adopt('adopt');
+    const cli = await f.cli('integration-adopt', ['--command-id', 'adopt', '--delivery-command-id', 'delivery', '--target', target]) as unknown as Awaited<ReturnType<typeof f.adopt>>;
     expect(cli).toEqual(sdk);
     expect(sdk).toMatchObject({ schemaVersion: 2, status: 'adopted', targetRef: target, fromCommit: f.base, toCommit: f.plan.commit, sequence: 1,
       basis: 'task-acceptance', verification: { status: 'not-verified' }, application: 'branch-reference' });
@@ -55,6 +59,9 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(await f.git('--no-optional-locks', 'status', '--porcelain')).toBe(status); expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('before\n');
     expect(await f.adopt('adopt')).toEqual(sdk);
 
+    // TESLIM-GUVENLIK: moving the branch back needs the human answer too; the SDK call is refused before any journal claim.
+    await expect(f.rollbackSdk('rollback-sdk', 'adopt')).rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    expect(await f.tip()).toBe(f.plan.commit); expect(f.ledger('rollback-sdk')).toBeUndefined();
     const rolled = await f.rollback('rollback', 'adopt');
     expect(rolled).toMatchObject({ status: 'rolled-back', fromCommit: f.plan.commit, toCommit: f.base, sequence: 2 });
     expect(await f.tip()).toBe(f.base); expect(await f.rollback('rollback', 'adopt')).toEqual(rolled);

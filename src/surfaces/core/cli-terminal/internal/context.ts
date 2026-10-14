@@ -3,6 +3,9 @@ import type { BrainPlanCommand } from '#domain/index.js';
 import type { RunProposalResult } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
+import type { AttemptIdentity } from '#domain/index.js';
+import type { EffectConfirmationView, IntegrationAdoptionCommand, IntegrationCommand, IntegrationDeliveryCommand, PatchScope, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
+  WorkspaceIntegrationApplication, WorkspacePatch } from '#engine/index.js';
 import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunQuery, RunView, SurfaceSnapshotAccess,
   TaskWorkerModel } from '#engine/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink, ProductLayout } from '#platform/index.js';
@@ -58,6 +61,14 @@ export interface ProviderConnectHost {
   discoverModels?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions):
     Promise<readonly Readonly<{ nativeId: string; displayName: string; priced: boolean }>[]>;
 }
+/** TESLIM-PENCERESI: the same handlers as `deckent task integration-check|integration-prepare|patch-preview`, read by the delivery window. */
+export type TerminalIntegrationCheckHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['check']>;
+export type TerminalIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
+export type TerminalPatchPreviewHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ patch: WorkspacePatch; scope: PatchScope }>>;
+/** The trusted composition's verified-terminal delivery and adoption (TESLIM-GUVENLIK port), bound to the answer this terminal supplies. */
+export type TerminalDeliveryHandlers = Readonly<{ assertAvailable(): Promise<void>;
+  deliver(root: string, command: IntegrationDeliveryCommand, options: ConfigLoadOptions): ReturnType<WorkspaceDeliveryApplication['deliver']>;
+  adopt(root: string, command: IntegrationAdoptionCommand, options: ConfigLoadOptions): ReturnType<WorkspaceAdoptionApplication['adopt']> }>;
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
 export type TerminalSecretChange = Readonly<{ schemaVersion: 1; scopeId: string; name: string; action: 'set' | 'delete'; backend: string; removed: boolean | null }>;
@@ -112,6 +123,12 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   describeTerminalChatPlan?: TerminalChatPlanHandler;
   inspectRun?: RunQueryHandler;
   deliverRunCancellation?: RunCancellationDeliveryHandler;
+  checkWorkspaceIntegration?: TerminalIntegrationCheckHandler;
+  prepareWorkspaceIntegration?: TerminalIntegrationPrepareHandler;
+  previewWorkspacePatch?: TerminalPatchPreviewHandler;
+  renderUnifiedDiff?: (path: string, before: string | null, after: string | null) => string;
+  /** Installed only by the trusted CLI composition (never SDK/MCP); the answer is this terminal's delivery window. */
+  interactiveDelivery?: (answer: (view: EffectConfirmationView) => Promise<boolean>) => TerminalDeliveryHandlers;
   inspectWorkerTranscript?: WorkerTranscriptHandler;
   listApprovals?: (input: unknown) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;

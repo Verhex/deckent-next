@@ -58,21 +58,27 @@ function snapshot(path: string) {
       allocations: [...db.prepare('SELECT allocation_id,lifetime_calls,in_flight FROM model_invocation_allocations ORDER BY allocation_id').iterate()] };
   } finally { db.close(); }
 }
+// Handoff files are published by rename: the parent polls them, and a plain writeFile is visible empty between its open and its write (CI run
+// 38503250233 read '' for a claimant that had committed and exited 0). The claim itself, and what each process reports, are unchanged.
 const claimant = String.raw`
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { openSqliteModelInvocationStore } from './dist/adapters/index.js';
 const [path,inputPath] = process.argv.slice(1);
 const store = await openSqliteModelInvocationStore(path,{journalMode:'delete',durability:'full',busyTimeoutMs:2000},'forbid');
-await writeFile(inputPath + '.ready', 'READY');
+const publish = async (suffix, text) => { await writeFile(inputPath + suffix + '.tmp', text); await rename(inputPath + suffix + '.tmp', inputPath + suffix); };
+await publish('.ready', 'READY');
 const deadline = Date.now() + 10000;
 for (;;) {
   try { await readFile(inputPath + '.go'); break; } catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (Date.now() > deadline) throw new Error('CLAIMANT_GATE_TIMEOUT');
   await new Promise(resolve => setTimeout(resolve, 5));
 }
-try { await store.claim(JSON.parse(await readFile(inputPath,'utf8'))); await writeFile(inputPath + '.result','COMMITTED'); }
-catch (error) { await writeFile(inputPath + '.result', String(error?.code ?? error?.message)); }
-finally { store.close(); }
+try {
+  let outcome;
+  try { await store.claim(JSON.parse(await readFile(inputPath,'utf8'))); outcome = 'COMMITTED'; }
+  catch (error) { outcome = String(error?.code ?? error?.message); }
+  await publish('.result', outcome);
+} finally { store.close(); }
 `;
 async function competingClaim(path: string, inputPath: string) {
   const child = spawn(process.execPath, ['--input-type=module', '-e', claimant, path, inputPath],

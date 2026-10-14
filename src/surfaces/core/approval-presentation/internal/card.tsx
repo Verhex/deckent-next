@@ -102,7 +102,7 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
   const reasonRow = reasonLabels && (editing || reason) ? 1 : 0;
   return <Window title={title.spans} {...(status ? { status } : {})} body={[...decisionWarningLines(title.fields, decisionLabels), ...decisionWindowLines(projectedLines, decisionLabels)]}
     hints={(controlledPending ?? pending) ? pendingText : editing && reasonLabels ? reasonLabels.hint : prompt}
-    position={position} priority={priority} onInput={onInput} footerRows={reasonRow}
+    position={position} priority={priority} onInput={onInput} footerRows={reasonRow} decision
     {...(reasonRow ? { footer: () => <ReasonRow label={reasonLabels!.label} text={reason} editing={editing} empty={reasonLabels!.empty} /> } : {})} />;
 }
 

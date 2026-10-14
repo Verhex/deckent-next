@@ -167,6 +167,9 @@ describe('the single approval card', () => {
     expect(frame).toMatch(/Undo: +No — it cannot be undone/u);
     expect(frame.indexOf('Deletes (cannot be undone)')).toBeLessThan(frame.indexOf('line 20'));
     expect(frame).toContain('… 39 more lines'); expect(frame).toMatch(/rows 1–\d+ of \d+/u); expect(frame).toContain('R-TURN-HERE'); expect(frame).toContain(NOTHING_RUNS);
+    // TERMINAL-SABIT R2 (owner 2026-10-14): the turn's card keeps the composer focused; y typed there is draft text, never a decision.
+    view.stdin.write('y'); await settle(40); expect(decided).toEqual([]);
+    view.stdin.write('\u0015'); await settle(20); view.stdin.write('\u000f'); await settle(40); // Clear the draft, then Ctrl+O to the card.
     view.stdin.write('y');
     await until(() => view.stdout.frame.includes('Ran.'), 'turn continues');
     expect(decided).toEqual([expect.objectContaining({ approvalId: 'appr-h', revision: 0, decisionCapability: CAPABILITY, decision: 'allow' })]);
@@ -232,7 +235,7 @@ describe('the single approval card after Sol 2234', () => {
     await until(() => view.stdout.frame.includes(DENY), 'trust card'); await settle(40);
     expect(view.stdout.frame).toMatch(/Risk: +not classified by the tool/u); expect(view.stdout.frame).toMatch(/Undo: +not declared by the tool/u);
     expect(view.stdout.frame).toContain('R-TURN-HERE');
-    view.stdin.write('y');
+    view.stdin.write('\u000f'); await settle(40); view.stdin.write('y'); // R2: focus the turn's card (Ctrl+O), then decide.
     await until(() => view.stdout.frame.includes('Trusted.'), 'turn continues');
     expect(decided).toEqual([expect.objectContaining({ approvalId: 'trust-1', decisionCapability: CAPABILITY, decision: 'allow' })]);
     expect(view.stdout.text).not.toContain(CAPABILITY);
@@ -290,12 +293,14 @@ describe('the single approval card after Sol 2234', () => {
     mounted.push(view.instance);
     await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
     await until(() => view.stdout.frame.includes('package.json'), 'card A'); await settle(40);
-    view.stdin.write('y');
+    view.stdin.write('\u000f'); await settle(40); view.stdin.write('y'); // R2: focus card A (Ctrl+O), then decide.
     await until(() => view.stdout.frame.includes('Makefile') && view.stdout.frame.includes(DENY), 'card B open');
     await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'late refusal of A');
     await settle(60);
     expect(view.stdout.frame).toContain('Makefile'); expect(view.stdout.frame).toContain(DENY); expect(view.stdout.frame).not.toContain('package.json');
-    view.stdin.write('n');
+    // R2: card B is a new self-appearing card; it never inherits card A's focus, so the decision needs Ctrl+O again.
+    view.stdin.write('n'); await settle(40); expect(decided).toEqual(['card-a:allow']);
+    view.stdin.write('\u0015'); await settle(20); view.stdin.write('\u000f'); await settle(40); view.stdin.write('n');
     await until(() => view.stdout.frame.includes('Done.'), 'turn continues');
     expect(decided).toEqual(['card-a:allow', 'card-b:deny']);
   });

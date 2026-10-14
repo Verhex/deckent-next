@@ -7,6 +7,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { pickerChoice, pickerFirstRow, movePicker } from './picker-core.js';
+import { useWindowInputGuard } from '#surfaces/core/terminal-window/index.js';
 import { truncateEnd, useRenderGlyphs, SpanText, sliceSpans, span, type Span } from '#surfaces/core/terminal-render/index.js';
 
 export const ARROW_PICKER_ROWS = 6;
@@ -24,6 +25,7 @@ export function ArrowPicker(props: {
   readonly active?: boolean;
 }): ReactNode {
   const palette = useWorklinePalette();
+  const acceptsInput = useWindowInputGuard();
   const glyphs = useRenderGlyphs();
   const { columns } = useWindowSize();
   const selectedRef = useRef(0);
@@ -33,7 +35,7 @@ export function ArrowPicker(props: {
   const [generation, setGeneration] = useState(0);
 
   useInput((input, key) => {
-    if (closed.current) return;
+    if (closed.current || !acceptsInput()) return;
     const count = latest.current.rows.length;
     const plain = !key.ctrl && !key.meta && !key.shift;
     if (plain && (key.upArrow || key.downArrow)) {

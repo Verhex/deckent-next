@@ -254,7 +254,8 @@
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/monitor",
         "src/surfaces/core/approval-presentation",
-        "src/surfaces/core/project-instructions"
+        "src/surfaces/core/project-instructions",
+        "src/surfaces/core/terminal-delivery"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [

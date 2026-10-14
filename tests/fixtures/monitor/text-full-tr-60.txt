@@ -16,11 +16,10 @@ servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
 dogfood notu: biten işçilerin yalnız en yenileri
 gösteriliyor; 5 eskisi gizli
 
-Sizi bekleyen (3)
+Sizi bekleyen (2)
   Konu                          Bekliyor    Süre sonu
   operation: Push branch lane…  3 sa 12 dk  45 dk sonra dol…
-  operation: özet görme iznin…  10 dk       süresiz
-  effect: Delete stale previe…  4 dk 0 sn   2 dk 0 sn önce …
+  operation: özet görme iznin…  10 dk       bilinmiyor
 
 Takılı ya da bekleyen, en eskisi önce (12)
   İş kimliği             Neden                   Ne zamandır
@@ -48,6 +47,7 @@ Başarısız işler ve ilk hata yeri (2)
   Beklemede (sen bekleniyor)
   run-blocked-approval/li…  Beklemede  ⚠ 1 dk 35…  çalışıyor
   Beklemede (sistem bekleniyor)
+Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
 
 ── İşler ───────────────────────────────────────────────────
   İş kimliği                     Durum
@@ -171,8 +171,8 @@ yama saklandı.
 ── Onaylar ─────────────────────────────────────────────────
   Konu                          Bekliyor    Süre sonu
   operation: Push branch lane…  3 sa 12 dk  45 dk sonra dol…
-  operation: özet görme iznin…  10 dk       süresiz
-  effect: Delete stale previe…  4 dk 0 sn   2 dk 0 sn önce …
+  operation: özet görme iznin…  10 dk       bilinmiyor
+Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
 
 ── Havuzlar ────────────────────────────────────────────────
   Havuz    Doluluk            Bekletme               Kurulum

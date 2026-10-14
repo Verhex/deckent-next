@@ -11,6 +11,7 @@ import { adoptConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegratio
   rollbackConfiguredWorkspaceIntegration,
   startConfiguredRuntimeService } from '../../../src/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
+import { confirmedDelivery, confirmedAdoption } from '../support/delivery-terminal.js';
 import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openConfiguredWorkspaceBroker } from '../../../src/composition/core/workspaces/index.js';
@@ -236,14 +237,19 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     const checked = await checkConfiguredWorkspaceIntegration(f.project, identity, f.options);
     const prepareIntegration = () => prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `candidate-${runId}`, identity, proposal: checked.proposal }, f.options);
     await prepareIntegration();
-    const deliver = () => deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `delivery-${runId}`, identity, integrationCommandId: `candidate-${runId}` }, f.options);
+    const deliveryCommand = { schemaVersion: 1 as const, commandId: `delivery-${runId}`, identity, integrationCommandId: `candidate-${runId}` };
+    const deliver = () => confirmedDelivery(f.project, deliveryCommand, f.options);
+    /** No human confirmation: refused before any intent or Git reference. */
+    const deliverUnconfirmed = () => deliverConfiguredWorkspaceIntegration(f.project, deliveryCommand, f.options);
     const evaluate = async () => {
       const opened = await openConfiguredAttemptStore(f.project, f.options);
       let revision; try { revision = (await opened.store.loadRun('s', runId))!.revision; } finally { opened.store.close(); }
       expect((await evaluateTask(f.project, { schemaVersion: 1, commandId: `evaluation-${runId}`, identity, expectedRevision: revision }, f.options)).evaluation.run.tasks[0]!.phase).toBe('accepted');
     };
-    const adopt = (commandId: string) => adoptConfiguredWorkspaceIntegration(f.project, { schemaVersion: 2, commandId, identity, deliveryCommandId: `delivery-${runId}`, targetRef: BASE }, f.options);
-    return { identity, deliver, evaluate, adopt, prepareIntegration };
+    const adoptCommand = (commandId: string) => ({ schemaVersion: 2 as const, commandId, identity, deliveryCommandId: `delivery-${runId}`, targetRef: BASE });
+    const adopt = (commandId: string) => confirmedAdoption(f.project, adoptCommand(commandId), f.options);
+    const adoptUnconfirmed = (commandId: string) => adoptConfiguredWorkspaceIntegration(f.project, adoptCommand(commandId), f.options);
+    return { identity, deliver, deliverUnconfirmed, evaluate, adopt, adoptUnconfirmed, prepareIntegration };
   }
 
   it('runs a full cycle against the target: live project refs, HEAD, index and config unchanged; adoption advances the base; next Run starts there', async () => {
@@ -264,6 +270,9 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     expect((await previewConfiguredWorkspacePatch(f.project, first.identity, f.options)).patch.changes.length).toBeGreaterThan(0);
     expect(await inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity: first.identity, commandId: 'candidate-r1' }, f.options)).toBeDefined();
     await f.policy(['use', 'adopt']);
+    // No human confirmation: refused with the target's references untouched; the confirmed delivery then proceeds.
+    await expect(first.deliverUnconfirmed()).rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    expect(await git(f.target, 'for-each-ref', '--format=%(refname)', 'refs/deckent/')).toBe('');
     const delivered = await first.deliver();
     expect(delivered).toMatchObject({ status: 'reference-delivered', plan: { baseCommit: f.base } });
     expect(await git(f.target, 'for-each-ref', '--format=%(objectname)', delivered.plan.ref)).toBe(delivered.plan.commit);
@@ -279,6 +288,8 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     await expect(first.adopt('adopt-denied')).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(await git(f.target, 'rev-parse', BASE)).toBe(f.base);
     await f.policy(['use', 'adopt']);
+    await expect(first.adoptUnconfirmed('adopt-unconfirmed')).rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    expect(await git(f.target, 'rev-parse', BASE)).toBe(f.base);
     expect(await first.adopt('adopt')).toMatchObject({ status: 'adopted', targetRef: BASE, fromCommit: f.base, toCommit: delivered.plan.commit });
     expect(await git(f.target, 'rev-parse', BASE)).toBe(delivered.plan.commit);
     await f.policy(['use']);
@@ -328,7 +339,7 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     await expect(run.deliver()).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
     const checked = await checkConfiguredWorkspaceIntegration(f.project, run.identity, f.options);
     await prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'candidate-r1-advanced', identity: run.identity, proposal: checked.proposal }, f.options);
-    const delivered = await deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'delivery-r1-advanced', identity: run.identity,
+    const delivered = await confirmedDelivery(f.project, { schemaVersion: 1, commandId: 'delivery-r1-advanced', identity: run.identity,
       integrationCommandId: 'candidate-r1-advanced' }, f.options);
     expect(delivered.plan).toMatchObject({ schemaVersion: 2, baseCommit: f.base, effectiveBaseCommit: moved });
     expect(await git(f.target, 'rev-parse', delivered.plan.commit + '^')).toBe(moved);
@@ -369,8 +380,10 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target scope mode
     expect((await executeConfiguredTask(f.project, identity, f.options)).execution.terminal?.exitCode).toBe(0);
     const prepareIntegration = (proposal: string) => prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `candidate-${runId}`, identity, proposal }, f.options);
     const inspect = () => inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity, commandId: `candidate-${runId}` }, f.options);
-    const deliver = () => deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `delivery-${runId}`, identity, integrationCommandId: `candidate-${runId}` }, f.options);
-    return { identity, prepareIntegration, inspect, deliver };
+    const deliveryCommand = { schemaVersion: 1 as const, commandId: `delivery-${runId}`, identity, integrationCommandId: `candidate-${runId}` };
+    const deliver = () => confirmedDelivery(f.project, deliveryCommand, f.options);
+    const deliverUnconfirmed = () => deliverConfiguredWorkspaceIntegration(f.project, deliveryCommand, f.options);
+    return { identity, prepareIntegration, inspect, deliver, deliverUnconfirmed };
   }
   const deliveries = (f: Awaited<ReturnType<typeof fixture>>) => git(f.target, 'for-each-ref', '--format=%(refname)', 'refs/deckent/deliveries/');
   /** Delivery intents in the ledger: a refusal before the claim leaves none. */
@@ -395,6 +408,8 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target scope mode
     await expect(run.deliver()).rejects.toMatchObject({ code: 'PATCH_SCOPE_VIOLATION' });
     expect(await deliveries(f)).toBe(''); expect(await deliveryIntents(f)).toBe(0);
     await f.config(target(f.target)); clearConfigCache(); // absent setting = warn
+    await expect(run.deliverUnconfirmed()).rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    expect(await deliveries(f)).toBe('');
     const delivered = await run.deliver();
     expect(await deliveries(f)).toBe(delivered.plan.ref);
   }, 120_000);

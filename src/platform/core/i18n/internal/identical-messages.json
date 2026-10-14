@@ -148,5 +148,8 @@
   "tui.provider.kind.zaiApi",
   "tui.provider.model.field.model",
   "tui.panel.budget.preset",
-  "terminal.info.usage.money"
+  "terminal.info.usage.money",
+  "terminal.activeWork.doTitle",
+  "terminal.delivery.file",
+  "terminal.delivery.adoptTarget"
 ]

@@ -137,8 +137,28 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Bounded windows (TUI2 L1, 2026-10-07; `wave/tui-2`; released with alpha.10, PR #37):** unit `terminal-window` (← terminal-kit, terminal-render)
   owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
-  and the window stack: one input owner, the top layer (approval priority, then newest); the composer, cards and pickers listen through
-  `useInput` `isActive` only while they own input. Ink `useFocus` is deliberately unused (it takes Tab/Shift+Tab/Esc). The stack is a
+  and the window stack: one input owner. TERMINAL-SABIT R2 (owner 2026-10-14, author candidate) focuses user-opened windows
+  immediately. Automatic /do/turn cards and run/worker watches keep composer focus; Ctrl+O transfers it to the top layer
+  (approval priority, then newest) and back. Each new automatic card requires a fresh focus switch, even after a focused card; while it waits behind the composer a decision card shows the catalog line `tui.focus.decide` (Ctrl+O to decide).
+  Standalone windows retain their modal default. Rich Workline bounds (does not fill) the live area to terminal rows minus one: the live part clips its top, the measured
+  footer (status/input) never shrinks; completed records print once through Ink `Static` above it (R3: no live-area transcript replay). Composer draft rows follow the caret.
+  Slice 2 active work strip (`terminal-work/active-work.tsx`): a footer view over the running /do (planning, waiting with approval
+  time left) and the Runs `useRunCompletion` registered (state from the same snapshots; finished rows leave once opened). It owns no
+  execution, poll or authority; its clock ticks at the inspection heartbeat. Ctrl+T moves the one input owner to it while no window
+  holds input; Enter on /do is the Ctrl+O transfer to its window, Enter on a Run opens the `/run` window via the task-action FIFO.
+  TESLIM-PENCERESI (owner 2026-10-14, author candidate): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
+  window over a `TerminalDeliveryPort` that `cli-terminal/deliver-port.ts` builds from the CLI's own handlers (inventory, patch preview,
+  integration check/prepare) and the composition's `interactiveDeliveryHandlers(answer)` (the TESLIM-GUVENLIK port; installed only by
+  the CLI composition, never SDK/MCP). A tracked Run's accepted work-input task with `deliveryOutlook: awaiting-delivery` opens it once in
+  the background; `/deliver` (fresh /runs read model) and the strip's "awaiting delivery" row open it in the foreground. One window at a
+  time; it yields to cards, pickers and slash windows and replaces the live window. `y` records a one-shot consent of the shown card;
+  the port's answer consumes it only on the same operation, scope, Run, Task, command, file set and base (adoption: branch and commit),
+  otherwise it shows the port's exact card and waits (bounded by `approvals.sessionTtlMs`) for a fresh `y`. Ids are fresh per window
+  opening. No autonomous delivery; an owner-set rule broker would implement the same `EffectConfirmation` port.
+  Keys use both `useInput` `isActive` and immediate focus guards; composer submissions only enter the existing FIFO, never approve.
+  The Workline output adapter removes ED3 only from Ink's ED2+ED3+HOME resize/overflow clear; the explicit `/clear`
+  HOME+ED2+ED3 command is preserved. Pipes and TERM=dumb bypass this adapter and retain the line fallback.
+  Ink `useFocus` is deliberately unused (it takes Tab/Shift+Tab/Esc). The stack is a
   view concern; which decision is legal stays with the panel controller. `PanelPresentation` has a generic `{kind:'window'}` (y/N or
   close); `/service-restart` confirms through it. The approval window (`terminal-work/approval-window.ts`) shows nine labelled
   fields from what the producer already sends (tool/target from the call's own `tool.started`, client-side; the sealed binding line

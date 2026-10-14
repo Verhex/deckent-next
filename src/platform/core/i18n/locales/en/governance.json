@@ -955,5 +955,7 @@
   "cli.help.action.policyStatus": "Inspect policy administration readiness",
   "cli.help.policyStatus": "deckent policy status [--scope <id>] [--json] [--lang en|tr] — read-only administrators, template ancestry, revision and bootstrap/recovery readiness.",
   "mcp.tool.policyAdministration": "Inspect scoped policy administration readiness, administrators and revision; read-only, no approval decisions.",
-  "doctor.policyAdministration.unavailable": "Policy administration: unavailable or not authorized; readiness is unknown."
+  "doctor.policyAdministration.unavailable": "Policy administration: unavailable or not authorized; readiness is unknown.",
+  "error.DELIVERY_INTERACTIVE_REQUIRED": "Delivery/adoption requires a verified human terminal. Run deckent task integration-deliver or integration-adopt in that terminal and answer y/N; SDK/MCP cannot confirm.",
+  "error.DELIVERY_CONFIRMATION_DECLINED": "Delivery/adoption was declined or no answer was received. No reference was written."
 }

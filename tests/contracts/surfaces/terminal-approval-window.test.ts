@@ -5,7 +5,7 @@ import { approvalCardLines, diffRows } from '#surfaces/core/terminal-work/index.
 import { workSurfaceLabels, createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
 import { plainText, shortenHomePath, span } from '#surfaces/core/terminal-render/index.js';
 import { layoutWindowLines } from '#surfaces/core/terminal-window/index.js';
-import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { mountWorkline, settle, until, focusWindow, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 /**
  * T-APPROVAL-WINDOW: the labelled approval window per tool kind, EN and TR, from the real catalog; NO_COLOR keeps every meaning in text;
@@ -235,7 +235,7 @@ describe('approval window in the real Workline', () => {
     expect(frame).toMatch(/rows 1–\d+ of \d+/u);
     const live = frame.slice(frame.indexOf('What:') - 400);
     expect(live.split('\n').filter(Boolean).length).toBeLessThanOrEqual(30);
-    view.stdin.write('\u001B'); // Esc denies
+    await focusWindow(view); view.stdin.write('\u001B'); // Focus original card; Esc denies
     await until(() => calls.length === 1, 'decision reached the port'); releaseB();
     await until(() => view.stdout.frame.includes(work.live!.watchHints!), 'the watch window is back after the decision');
   });
@@ -275,7 +275,7 @@ describe('approval window in the real Workline', () => {
       expect(view.stdout.frame).not.toContain('Time is up — nothing ran');
       clock.mockReturnValue(expiresAt + 1);
       await until(() => view.stdout.frame.includes('Time is up — nothing ran'), 'expired window', 400);
-      view.stdin.write('y'); await settle(80); view.stdin.write('\r'); await settle(80);
+      await focusWindow(view); view.stdin.write('y'); await settle(80); view.stdin.write('\r'); await settle(80);
       expect(calls).toEqual([]);
     } finally { release(); clock.mockRestore(); }
   });
@@ -288,7 +288,7 @@ describe('approval window in the real Workline', () => {
     mounted.push(view.instance);
     await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
     await until(() => view.stdout.frame.includes('Tab reason'), 'window'); await settle(40);
-    view.stdin.write('\t'); await until(() => view.stdout.frame.includes('Reason:'), 'reason field');
+    await focusWindow(view); view.stdin.write('\t'); await until(() => view.stdout.frame.includes('Reason:'), 'reason field');
     for (const char of 'yes, the build dir is stale') { view.stdin.write(char); await settle(2); }
     await settle(40);
     expect(calls).toEqual([]);

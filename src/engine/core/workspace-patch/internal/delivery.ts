@@ -2,7 +2,12 @@ import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { identitySchema, attemptIdentitySchema } from '#domain/index.js';
 import { artifactReceiptSchema } from '#capabilities/index.js';
-import type { TrustedClock } from '#platform/index.js';
+import type { RunSnapshot } from '#domain/index.js';
+import type { EffectConfirmation } from '#engine/core/effect/index.js';
+import { unconfirmedEffect } from './confirmation-default.js';
+import type { IntegrationCommitMetadata } from './commit-metadata.js';
+import { deliverySummary } from './effect-summary.js';
+import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot, type TrustedClock } from '#platform/index.js';
 import { authenticateSession, assertSessionActive, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { WorkspacePatchApplication } from './application.js';
@@ -24,21 +29,22 @@ export const integrationDeliveryIntentSchema = z.object({ schemaVersion: z.liter
 export type IntegrationDeliveryIntent = z.infer<typeof integrationDeliveryIntentSchema>;
 export interface IntegrationDeliveryRecord { readonly intent: IntegrationDeliveryIntent; readonly delivered: boolean }
 export interface IntegrationDeliveryStore {
+  loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   loadDelivery(command: IntegrationDeliveryCommand): Promise<IntegrationDeliveryRecord | null>;
   claimDelivery(intent: IntegrationDeliveryIntent): Promise<IntegrationDeliveryRecord>;
   finishDelivery(intent: IntegrationDeliveryIntent): Promise<IntegrationDeliveryRecord>;
 }
 export interface IntegrationDeliveryTarget {
-  plan(command: IntegrationDeliveryCommand, manifest: IntegrationManifest, patch: WorkspacePatch): Promise<IntegrationDeliveryPlan>;
+  plan(command: IntegrationDeliveryCommand, manifest: IntegrationManifest, patch: WorkspacePatch, metadata: IntegrationCommitMetadata): Promise<IntegrationDeliveryPlan>;
   delivered(plan: IntegrationDeliveryPlan): Promise<boolean>;
-  publish(plan: IntegrationDeliveryPlan): Promise<void>;
+  publish(plan: IntegrationDeliveryPlan, manifest: IntegrationManifest, patch: WorkspacePatch): Promise<void>;
 }
 /** Delivers an immutable Git reference. It never updates the live source checkout or accepts a Task. */
 export class WorkspaceDeliveryApplication {
   constructor(private readonly patches: WorkspacePatchApplication, private readonly inspection: WorkspaceIntegrationInspection,
     private readonly candidate: IntegrationTarget, private readonly target: IntegrationDeliveryTarget,
     private readonly store: IntegrationDeliveryStore, private readonly sessions: SessionVerifier & SessionAuthority,
-    private readonly authorization: DispatchIdentityAuthorization, private readonly clock: TrustedClock) {}
+    private readonly authorization: DispatchIdentityAuthorization, private readonly clock: TrustedClock, private readonly confirmation: EffectConfirmation = unconfirmedEffect, private readonly known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS) {}
   private async assertObservation(manifest: IntegrationManifest, patch: WorkspacePatch) {
     const observed = await this.candidate.observe(patch);
     if (observed.head !== (manifest.schemaVersion === 2 ? manifest.effectiveBaseCommit : patch.baseCommit)) throw new WorkspacePatchError('PATCH_BASE_ADVANCED');
@@ -60,6 +66,7 @@ export class WorkspaceDeliveryApplication {
       await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock);
       return result(await this.store.finishDelivery(previous.intent));
     }
+    await this.confirmation.assertAvailable();
     const inspected = await this.inspection.inspect({ schemaVersion: 1, identity: command.identity, commandId: command.integrationCommandId }, credential);
     if (!inspected.manifest || !inspected.receipt) throw new WorkspacePatchError('PATCH_INTEGRATION_PENDING');
     const preview = await this.patches.preview(command.identity, credential);
@@ -67,14 +74,24 @@ export class WorkspaceDeliveryApplication {
     await this.candidate.verify(inspected.manifest, preview.patch);
     if (JSON.stringify(inspected.manifest.patch) !== JSON.stringify(preview.receipt)) throw new WorkspacePatchError('PATCH_CORRUPT');
     await this.assertObservation(inspected.manifest, preview.patch);
-    const plan = integrationDeliveryPlanSchema.parse(await this.target.plan(command, inspected.manifest, preview.patch));
+    const run = await this.store.loadRun(command.identity.scopeId, command.identity.runId);
+    if (!run) throw new WorkspacePatchError('PATCH_CORRUPT');
+    const summary = deliverySummary(run, command.identity, preview.patch, this.known);
+    const plan = previous?.intent.plan ?? integrationDeliveryPlanSchema.parse(await this.target.plan(command, inspected.manifest, preview.patch,
+      { title: summary.title, acceptance: summary.acceptance, deliveredAtMs: this.clock.sample().wallMs }));
+    const confirm = await this.confirmation.confirm({ operation: 'deliver-integration', scopeId: command.identity.scopeId,
+      commandId: command.commandId, actor, resource: plan.ref,
+      from: plan.schemaVersion === 2 ? plan.effectiveBaseCommit : plan.baseCommit, to: plan.commit,
+      runId: command.identity.runId, taskId: command.identity.taskId, ...summary });
+    await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock); await confirm();
     const intent = integrationDeliveryIntentSchema.parse({ schemaVersion: 1, command, manifest: inspected.receipt, patch: preview.receipt, plan, actor });
     const claimed = await this.store.claimDelivery(intent);
     if (claimed.delivered) return result(claimed);
     await this.candidate.verify(inspected.manifest, preview.patch);
     await this.assertObservation(inspected.manifest, preview.patch);
     await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock);
-    await this.target.publish(plan);
+    await confirm();
+    await this.target.publish(plan, inspected.manifest, preview.patch);
     return result(await this.store.finishDelivery(intent));
   }
 }

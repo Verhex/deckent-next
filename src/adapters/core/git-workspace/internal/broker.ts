@@ -39,7 +39,8 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
   constructor(input: GitWorkspaceOptions) {
     const parsed = optionsSchema.safeParse(input);
     if (!parsed.success || ![parsed.data.sourceRoot, parsed.data.workspaceRoot, parsed.data.gitExecutable].every(isAbsolute)) throw new WorkspaceError('WORKSPACE_OPTIONS_INVALID');
-    this.options = parsed.data;
+    // Delivery authorship is metadata, not clone custody; changing it must not invalidate retained workspaces.
+    const { deliveryIdentity, ...workspaceOptions } = parsed.data; void deliveryIdentity; this.options = workspaceOptions;
   }
   private identityTarget(input: unknown) {
     const identity = attemptIdentitySchema.safeParse(input);

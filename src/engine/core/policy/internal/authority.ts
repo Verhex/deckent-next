@@ -5,6 +5,8 @@ import type { PermissionModeSnapshot } from './permission-mode-admin.js';
 /**
  * One authority write (POLICY-ADMIN P2): the next policy.json and/or bindings.json document (null = that file does not change) and the
  * order the two renames happen in (I8; the planner verified both intermediate states). A document carries its chained revision.
+ * `beforePublish` (the change's audit record) runs under the writer's lock after the last-admin check and before any temporary file,
+ * archive record or rename: when it throws, nothing was published and the error propagates unchanged.
  */
 export interface AuthorityWrite { readonly policy: unknown | null; readonly bindings: unknown | null; readonly order: 'policy-first' | 'bindings-first'; readonly beforePublish?: () => void }
 export type AuthorityLookup = { readonly status: 'applied'; readonly version: string } | { readonly status: 'absent' } | null;

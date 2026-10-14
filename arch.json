@@ -291,7 +291,9 @@
         "src/composition/core/project-instructions",
         "src/composition/core/backup",
         "src/engine/core/provider-spend",
-        "src/composition/core/run-planner"
+        "src/composition/core/run-planner",
+        "src/platform/core/i18n",
+        "src/surfaces/core/effect-confirmation"
       ],
       "plan": "SURFACES"
     },
@@ -951,7 +953,8 @@
         "src/surfaces/core/terminal-picker",
         "src/surfaces/core/terminal-panels",
         "src/domain/core/policy",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/surfaces/core/terminal-delivery"
       ],
       "plan": "SURFACES"
     },
@@ -1002,6 +1005,18 @@
       "dependencies": [
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-delivery": {
+      "dependencies": [
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/platform/core/common",
+        "src/domain/core/attempt",
+        "src/engine/core/effect",
+        "src/engine/core/runs",
+        "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
     },
@@ -1085,7 +1100,9 @@
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/project-instructions",
         "src/engine/core/project-instructions",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/surfaces/core/terminal-delivery",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -1220,7 +1237,11 @@
         "src/surfaces/core/project-instructions",
         "src/engine/core/model-invocation",
         "src/surfaces/core/run-planning",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/domain/core/attempt",
+        "src/engine/core/effect",
+        "src/engine/core/workspace-patch",
+        "src/surfaces/core/terminal-delivery"
       ],
       "plan": "SURFACES"
     },
@@ -1834,7 +1855,10 @@
         "src/domain/core/run",
         "src/domain/core/principal",
         "src/domain/core/task-graph",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/engine/core/effect"
       ],
       "plan": "ISOLATION"
     },
@@ -1848,7 +1872,10 @@
         "src/adapters/core/git-workspace",
         "src/adapters/core/docker-supervisor",
         "src/engine/core/handoff-observation",
-        "src/engine/core/task-inputs"
+        "src/engine/core/task-inputs",
+        "src/platform/core/clock",
+        "src/platform/core/i18n",
+        "src/platform/core/redaction"
       ],
       "plan": "ISOLATION"
     },
@@ -1872,7 +1899,8 @@
         "src/platform/core/clock",
         "src/adapters/core/local-principal",
         "src/adapters/core/git-workspace",
-        "src/capabilities/core/evaluation-evidence"
+        "src/capabilities/core/evaluation-evidence",
+        "src/engine/core/effect"
       ],
       "plan": "ISOLATION"
     },
@@ -2883,7 +2911,9 @@
       "dependencies": [
         "src/engine/core/runs",
         "src/platform/core/i18n",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/redaction"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -2929,6 +2959,16 @@
         "src/domain/core/run"
       ],
       "plan": "KAYNAK-KALITE"
+    },
+    "src/surfaces/core/effect-confirmation": {
+      "dependencies": [
+        "src/engine/core/effect",
+        "src/platform/core/errors",
+        "src/platform/core/config-fields",
+        "src/platform/core/i18n",
+        "src/platform/core/redaction"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {
