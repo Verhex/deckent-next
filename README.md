@@ -159,6 +159,36 @@ deckent init policy --scope my-project --apply
   </tr>
 </table>
 
+## Your first coding job
+
+After `init policy`, configure `execution.docker` with your local Docker executable's absolute path,
+an existing immutable worker image ID and its resource limits, and `execution.git` for your repository
+through `deckent config` (see the [operator reference](.deckent/docs/architecture/operator-reference.md)).
+No registry JSON is needed. Select a native CLI installed **in that image** (`claude`, `codex` or `cursor`),
+a task kind, a pool ID and capacities appropriate to your machine. For example:
+
+```sh
+deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
+deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
+deckent init pool --scope my-project --preview
+deckent init pool --scope my-project --apply
+```
+
+The capacities above are examples. Preview detects the chosen CLI's exact version in a temporary,
+network-free container, removes the probe, and shows the proposed versioned profile and kind;
+it writes no config, registry or ledger. Apply repeats detection and writes through config policy,
+revision checks and audit. An existing project or global registry is refused and stays untouched,
+even on a repeated apply; use `deckent coding template --provider codex --kind <another-kind>
+--preview` and then `--apply` to add a kind to it. `repository` explicitly permits the native CLI's
+repository discovery; `disabled` is accepted only when its registered capabilities support it.
+
+This prepares admission, not authentication or execution. Keep the configured image, native
+credential mode, exact model activation and worker preflight ready as described in the operator
+reference. Open `deckent` and ask `/do` for work using the registered kind. Run approval, task
+acceptance, delivery and adoption retain their separate checks; creating a registry proves none of them.
+
 ## In the terminal
 
 These screens come from the real Deckent terminal (alpha.17, 120×36), recorded in a throwaway sample project. The

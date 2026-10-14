@@ -158,6 +158,36 @@ deckent init policy --scope my-project --apply
   </tr>
 </table>
 
+## İlk kodlama işi
+
+`init policy` sonrasında `deckent config` ile `execution.docker` alanına yerel Docker programının mutlak
+yolunu, mevcut immutable worker imajının kimliğini ve kaynak sınırlarını; `execution.git` alanına deponun
+Git ayarlarını seçin ([işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md)).
+Registry JSON yazmanız gerekmez. **O imajda** kurulu native CLI’yi (`claude`, `codex` veya `cursor`),
+görev türünü, havuz kimliğini ve makinenize uygun kapasiteyi seçin. Örneğin:
+
+```sh
+deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
+deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
+deckent init pool --scope my-project --preview
+deckent init pool --scope my-project --apply
+```
+
+Yukarıdaki kapasiteler örnektir. Önizleme seçilen CLI’nin tam sürümünü geçici, ağsız container’da ölçer,
+tespit container’ını kaldırır ve önerilen sürümlü profil ile görev türünü gösterir; config, registry veya
+ledger yazmaz. Apply tespiti tekrarlar ve config policy, revision kontrolü ve audit üzerinden yazar.
+Proje veya global registry varsa tekrar apply dahil tipli ret verilir ve mevcut kayıt korunur. Ona görev
+türü eklemek için `deckent coding template --provider codex --kind <başka-tür> --preview`, ardından
+`--apply` kullanın. `repository`, native CLI’nin depo keşfine açık seçimdir; `disabled` yalnız kayıtlı
+capability’si destekleyen CLI için kabul edilir.
+
+Bu adım admission hazırlığıdır; oturum açma veya yürütme kanıtı değildir. Yapılandırılmış imajı, native
+kimlik bilgisi kipini, tam model aktivasyonunu ve worker preflight koşullarını işletim başvurusuna göre
+hazırlayın. `deckent` açıp `/do` ile kayıtlı türde işi isteyin. Run onayı, görev kabulü, teslim ve benimseme
+ayrı kontrollerini korur; registry oluşturmak bunların gerçekleştiğini göstermez.
+
 ## Terminalde
 
 Bu ekranlar gerçek Deckent terminalinden (alpha.17, 120×36), geçici bir örnek projede çekildi. Model, aynı makinedeki
