@@ -711,7 +711,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 
 
 ### TERMINAL-UX T3 contracts (2026-10-07, on main via PR #42; owner decisions in owner-decisions "Owner kararları — 2026-10-07")
-
+**TERMINAL-SABIT R2 (owner 2026-10-14; author candidate):** bounded main-screen input/status; user-opened windows take focus, automatic /do/turn cards and run/worker watches leave composer focus. Ctrl+O transfers it; automatic approvals require a fresh switch before decisions. Existing FIFO/TTY authority remains. Contract and resize/scrollback details: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md). Slice 2: an active work strip above the composer projects this session's /do and admitted Runs (no new owner or poll; Ctrl+T selects, Enter opens the existing window). Independent/native/live acceptance is separate.
 - **Config change approval (L2, Jev f0214347/9181d2be):** a config write is allowed by the policy `config`/`write` rule for that layer and scope;
   a `require-approval` rule turns `set`/`unset` into a pending approval with subject `config-change` (command, layer, key, redacted before/after,
   previewed layer digest, value digest, `ruleId`; ledger v48 widens the `approvals` CHECK). The same command resubmitted after `allow` applies
@@ -755,7 +755,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 - **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
   `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
-  bounded modal live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
+  bounded live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
   warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
 - **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; alpha.15 `4d6f1582`, PR #46):** in the TTY terminal every
   informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` erases the screen and the terminal's

@@ -496,7 +496,7 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
       // SW-1: /help and /status open information windows; Esc closes each and leaves one framed system summary line before the next step
       // (waited on its text alone: the raw bytes carry colour codes between the label and the text).
       ['Deckent workline', '/help\r'], [words.help, '\u001b'], [words.helpSummary, '/status\r'], [words.status, '\u001b'], [words.statusSummary, 'go\r'],
-      [words.window, 'n'], ['Mode turn done.', '/exit\r']], 100);
+      [words.window, '\u000fn'], ['Mode turn done.', '/exit\r']], 100);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     // Each mark is the output length when a step's awaited text had appeared (before its keys were sent).
@@ -546,7 +546,7 @@ describe.skipIf(process.platform !== 'linux')('the approval window shows the who
     const f = await modeProject('v2', { call: { name: 'run_shell', arguments: { command } }, shell: true });
     await startRuntime(f.projectRoot, f.env);
     // The window is capped to the terminal: the whole command continues below its first page and PgDn scrolls to it.
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Whole command (7 lines)', '\u001b[6~'],
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Whole command (7 lines)', '\u000f\u001b[6~'],
       ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);

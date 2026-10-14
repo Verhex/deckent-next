@@ -52,16 +52,16 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
   expect(history).toEqual(['/do Prepare purchase api_key=[REDACTED]']);
   expect(view.stdout.frame).toContain('no total Run spending limit is enforced');
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO approval ${key}\n${view.stdout.frame}\n`);
-  await settle(40); view.stdin.write(key); // Approve/deny the displayed original card, then assert the effect.
+  await settle(40); view.stdin.write('\u000f'); await settle(40); view.stdin.write(key); // Focus, then approve/deny the displayed original card, then assert the effect.
   await until(() => plans.length === 2 && view.stdout.frame.includes(key === 'y' ? 'Admitted; task outcomes are not yet accepted' : 'Rejected'), 'recorded result window');
   expect(decisions).toEqual([key === 'y' ? 'allow' : 'deny']); expect(plans[1]).toEqual(plans[0]);
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO result ${key}\n${view.stdout.frame}\n`);
-  await settle(40); view.stdin.write('\r');
+  await settle(40); view.stdin.write('\u000f'); await settle(40); view.stdin.write('\r');
   if (key === 'y') await until(() => view.stdout.frame.includes('Watching'), 'tasks observation after result');
   else { await until(() => !view.stdout.frame.includes('Rejected'), 'closed'); view.stdin.write('/do Revised request\r');
     await until(() => plans.length === 3, 'new request'); expect(plans[2]!.id).not.toBe(plans[0]!.id); }
 });
-it('/do planning owns input; Ctrl+C aborts that request before any approval or Run path', async () => {
+it('/do planning keeps composer input; Ctrl+C aborts that request before any approval or Run path', async () => {
   let signal: AbortSignal | undefined, aborts = 0, approvals = 0;
   const view = mountWorkline({ doPlan: { ...words, lines: () => [], plan: async (_intent, _id, received) => {
     signal = received; return new Promise((_resolve, reject) => received.addEventListener('abort', () => { aborts++; reject(new Error('cancelled')); }, { once: true }));

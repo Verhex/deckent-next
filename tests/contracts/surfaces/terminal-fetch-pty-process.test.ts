@@ -165,7 +165,7 @@ describe.skipIf(process.platform !== 'linux')('fetch_url in a real pseudo-termin
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'check the local status page\r'],
-      ['https://localhost/status?probe=1', 'y'],
+      ['https://localhost/status?probe=1', '\u000fy'],
       ['Fetch turn done.', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();

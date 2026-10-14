@@ -5,7 +5,7 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { useWindowLayer, useWindowReserve, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
+import { useWindowLayer, useWindowReserve, useWindowInputGuard, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
 import { fillTemplate, truncateEnd, useRenderGlyphs, wrapCells, modelProviderSpans, spanStyle } from '#surfaces/core/terminal-render/index.js';
 import { ARROW_PICKER_ROWS } from './arrow-picker.js';
 import { PICKER_INITIAL, pickerActionOf, pickerFirstRow, pickerReduce, pickerView, type PickerOutcome, type PickerResult, type PickerState, type PickerTree } from './picker-core.js';
@@ -53,6 +53,7 @@ export function ListPicker(props: {
   const reserved = useWindowReserve() ?? 8;
   const pageSize = Math.max(LIST_PICKER_MIN_ROWS, Math.min(listPickerPageSize(terminalRows, reserved), props.maxRows ?? Number.MAX_SAFE_INTEGER));
   const id = useId();
+  const acceptsInput = useWindowInputGuard();
   const windowed = props.windowed ?? false;
   const owns = useWindowLayer(id, windowed, props.priority ?? WINDOW_PRIORITY.window);
   const closed = useRef(false);
@@ -63,7 +64,7 @@ export function ListPicker(props: {
   stateRef.current = state;
 
   useInput((input, key) => {
-    if (closed.current) return;
+    if (closed.current || !acceptsInput()) return;
     const action = pickerActionOf(input, key, stateRef.current.stage);
     if (!action) return;
     const before = stateRef.current, next = pickerReduce(latest.current.tree, before, action, { pageSize });
