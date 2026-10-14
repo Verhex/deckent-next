@@ -3,8 +3,9 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applySandboxWriteSet, createWorkspaceScope, ensureWorkspaceParents, fileContentVersion, isWriteApprovalFloored, scanSandboxWriteSet, WorkspaceFileTarget,
-  type ShellSandboxLayout } from '#adapters/index.js';
+import { applySandboxWriteSet, createWorkspaceScope, describeSandboxWriteSetResult, EMPTY_DIRECTORY_VERSION, ensureWorkspaceParents, fileContentVersion, isWriteApprovalFloored,
+  prepareSandboxWriteSetDirectory, readTerminalShellConfig, scanSandboxWriteSet, WorkspaceFileTarget, type SandboxWriteChange, type ShellSandboxLayout } from '#adapters/index.js';
+import { sandboxWriteClockVerdict } from '#engine/index.js';
 import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { linuxShellHost, measureTestShellHost } from '../../fixtures/shell-host.js';
 import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
@@ -121,6 +122,81 @@ describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-
     const bounded = await scanSandboxWriteSet(f.writeSet.upper, f.project, f.mark, { maxEntries: 1, maxTotalBytes: 1, maxFileBytes: 1, maxDepth: 32 });
     expect(bounded.ok).toBe(false);
   }, 60_000);
+});
+
+// CI-KARARLILIK (lead 2026-10-14): the conflict check compares wall-clock ctimes with the call directory's ctime. A backward step during the call
+// makes an owner's concurrent change look older than the mark (measured on WSL2: ~0.8 s every ~31 s; an owner's new file was removed). The
+// clocks the call reads are injected here (the seam); the kernel's ctimes cannot be stepped by a test, so the stepped mark is taken after the
+// owner's change — the ordering a backward step produces.
+describe.skipIf(!ready || !WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE)('sandbox write set: a wall clock step keeps the set aside (CI-KARARLILIK)', () => {
+  const tolerance = readTerminalShellConfig({}).clockStepToleranceMs;
+  it('a step back during the call applies nothing: the owner\'s new file in a directory the command removed survives', async () => {
+    const f = await fixture();
+    await mkdir(join(f.project, 'src', 'empty'));
+    const atMark = { wallMs: 1_000_000, monotonicMs: 5_000, lagMs: 0 };
+    // The call directory keeps the reading taken at its mark (the production seam: `prepareSandboxWriteSetDirectory`'s clock).
+    await mkdir(join(f.root, 'calls'), { mode: 0o700 });
+    expect((await prepareSandboxWriteSetDirectory(join(f.root, 'calls'), 'call', tolerance, () => atMark))).toMatchObject({ clock: atMark, clockStepToleranceMs: tolerance });
+    // The command removes the empty directory in its overlay; the owner then adds a file to it in the project.
+    expect(await f.run('d=empty; rm -d src/$d')).toMatchObject({ status: 'exited', exitCode: 0 });
+    await writeFile(join(f.project, 'src', 'empty', 'theirs.txt'), 'theirs\n');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    await chmod(join(f.root, 'state'), 0o700);
+    const stepped = (await lstat(join(f.root, 'state'), { bigint: true })).ctimeNs;
+    const scan = await scanSandboxWriteSet(f.writeSet.upper, f.project, stepped);
+    // The ctime check alone sees nothing: it would remove the owner's file with the directory.
+    expect(scan.ok && scan.conflicts).toEqual([]);
+    expect(scan.ok && scan.changes.map(change => `${change.kind}:${change.rel}`)).toEqual(['delete:src/empty/theirs.txt', 'rmdir:src/empty']);
+    // 800 ms of the call passed; the wall clock was stepped back 800 ms meanwhile.
+    const scanned = { wallMs: atMark.wallMs, monotonicMs: atMark.monotonicMs + 800, lagMs: 800 };
+    const target = new WorkspaceFileTarget(f.scope, join(f.root, 'journal'), { writeSet: { upper: f.writeSet.upper } });
+    const executed: string[] = [];
+    const report = await applySandboxWriteSet({ scan, clock: sandboxWriteClockVerdict(atMark, scanned, tolerance), signal: new AbortController().signal,
+      ensureParents: async () => true, classify: () => 'edit', decider: { async decide() { return { ok: true, gate: { async admit() {} } }; } },
+      async execute(change: SandboxWriteChange) {
+        executed.push(`${change.kind}:${change.rel}`);
+        await target.apply({ operation: { id: 'workspace.file.write', version: 1 }, target: { kind: 'workspace-file', id: change.rel }, idempotencyKey: fileContentVersion(Buffer.from(change.rel)),
+          input: { writeSet: change.kind === 'write' ? { change: 'write', digest: change.digest, mode: change.mode } : { change: change.kind } },
+          expectedVersion: change.kind === 'rmdir' ? EMPTY_DIRECTORY_VERSION : change.lowerVersion } as never);
+      } });
+    expect(await readFile(join(f.project, 'src', 'empty', 'theirs.txt'), 'utf8')).toBe('theirs\n');
+    expect(executed).toEqual([]);
+    expect(report).toMatchObject({ clock: 'during', applied: [] });
+    expect(describeSandboxWriteSetResult(report)).toBe('[deckent] write set: nothing was applied — the system clock went back during the call, so changes to the project could not be '
+      + 'ruled out; what the command changed was kept aside.');
+    expect(describeSandboxWriteSetResult(report, 'tr')).toContain('çağrı sırasında sistem saati geri gitti');
+  }, 60_000);
+});
+
+describe('write-set clock verdict (CI-KARARLILIK)', () => {
+  const mark = { wallMs: 1_000_000, monotonicMs: 5_000, lagMs: 0 }, tolerance = readTerminalShellConfig({}).clockStepToleranceMs;
+  it('names a step back during the call, a step back just before it, and nothing for a forward step or a slew within the tolerance', () => {
+    expect(tolerance).toBe(250);
+    expect(sandboxWriteClockVerdict(mark, { wallMs: mark.wallMs + 1_000 - 800, monotonicMs: mark.monotonicMs + 1_000, lagMs: 0 }, tolerance)).toBe('during');
+    expect(sandboxWriteClockVerdict(mark, { wallMs: mark.wallMs + 1_000 - tolerance, monotonicMs: mark.monotonicMs + 1_000, lagMs: 0 }, tolerance)).toBeNull();
+    expect(sandboxWriteClockVerdict(mark, { wallMs: mark.wallMs + 3_000, monotonicMs: mark.monotonicMs + 1_000, lagMs: 0 }, tolerance)).toBeNull();
+    expect(sandboxWriteClockVerdict({ ...mark, lagMs: 800 }, { wallMs: mark.wallMs + 1_000, monotonicMs: mark.monotonicMs + 1_000, lagMs: 0 }, tolerance)).toBe('before');
+    expect(sandboxWriteClockVerdict({ ...mark, lagMs: tolerance }, { wallMs: mark.wallMs + 1_000, monotonicMs: mark.monotonicMs + 1_000, lagMs: 0 }, tolerance)).toBeNull();
+    // The configured tolerance is the one used: a larger one tolerates the same step.
+    expect(sandboxWriteClockVerdict(mark, { wallMs: mark.wallMs + 1_000 - 800, monotonicMs: mark.monotonicMs + 1_000, lagMs: 0 },
+      readTerminalShellConfig({ terminal: { shell: { schemaVersion: 1, clockStepToleranceMs: 1_000 } } }).clockStepToleranceMs)).toBeNull();
+  });
+  it('a conflict after a step just before the call applies nothing and does not claim the owner changed the files', async () => {
+    const scan = { ok: true as const, refused: [], conflicts: ['src/a.ts'], emptyDirectories: [], directoryModes: new Map<string, number>(), newDirectories: new Set<string>(),
+      changes: [{ kind: 'write' as const, rel: 'src/a.ts', digest: '0'.repeat(64), size: 1, mode: 0o644, lowerVersion: 'absent' }] };
+    const executed: string[] = [];
+    const run = (clock: 'before' | null) => applySandboxWriteSet({ scan, clock, signal: new AbortController().signal, ensureParents: async () => true, classify: () => 'edit',
+      decider: { async decide() { return { ok: true, gate: { async admit() {} } }; } }, async execute(change) { executed.push(change.rel); } });
+    const before = await run('before');
+    expect(before).toMatchObject({ clock: 'before', conflicts: ['src/a.ts'], applied: [] });
+    expect(describeSandboxWriteSetResult(before)).toBe('[deckent] write set: nothing was applied — the system clock moved just before the call, so it cannot be told whether these '
+      + 'paths changed during it: src/a.ts.');
+    expect(describeSandboxWriteSetResult(before)).not.toContain('the project changed during the call');
+    expect(describeSandboxWriteSetResult(before, 'tr')).toContain('sistem saati çağrıdan hemen önce oynadı');
+    // Without a step the same conflict is the project's own change, worded as before.
+    expect(describeSandboxWriteSetResult(await run(null))).toBe('[deckent] write set: nothing was applied — the project changed during the call: src/a.ts.');
+    expect(executed).toEqual([]);
+  });
 });
 
 describe('write-set entries at the file target (SHELL-OVERLAY)', () => {

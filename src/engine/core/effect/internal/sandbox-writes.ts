@@ -24,6 +24,21 @@ export type SandboxWriteSetScan = {
   readonly newDirectories: ReadonlySet<string>;
 } | { readonly ok: false; readonly reason: string };
 
+/** One reading of the clocks the conflict check depends on: the wall clock (the kernel's ctime clock), the monotonic clock, and how far the
+ * wall clock reads behind the highest wall time the process already handed out (a backward step it has not caught up with yet). */
+export type SandboxWriteClockReading = { readonly wallMs: number; readonly monotonicMs: number; readonly lagMs: number };
+/**
+ * Whether the start mark can order the project's changes (CI-KARARLILIK, lead 2026-10-14). The conflict check compares lower ctimes with the
+ * call directory's ctime, both on the wall clock: a backward step during the call can hide an owner's change (it would be overwritten or
+ * removed), one just before the call can make older changes look new. `during`: the wall clock advanced less than the monotonic clock by more
+ * than the tolerance between the mark and the scan — nothing is applied. `before`: at the mark the wall clock read behind a time already
+ * handed out by more than the tolerance — a conflict is then not the owner's change for certain. `null`: the mark orders changes.
+ */
+export function sandboxWriteClockVerdict(mark: SandboxWriteClockReading, scanned: SandboxWriteClockReading, toleranceMs: number): 'during' | 'before' | null {
+  if (scanned.wallMs - mark.wallMs < scanned.monotonicMs - mark.monotonicMs - toleranceMs) return 'during';
+  return mark.lagMs > toleranceMs ? 'before' : null;
+}
+
 /** The edit cell a write-set entry is decided under (the same three an edit tool call can be), or a path the edit rules deny. */
 export type SandboxWriteCell = 'edit' | 'edit-floor' | 'edit-authority' | 'edit-self-source';
 export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
@@ -37,6 +52,8 @@ export interface SandboxWriteSetReport {
   readonly notApplied: readonly { readonly rel: string; readonly reason: string }[];
   /** The project changed under the call: nothing was applied. */
   readonly conflicts: readonly string[];
+  /** The wall clock stepped (`sandboxWriteClockVerdict`): `during` — nothing was applied; `before` — the conflicts above may be the clock's. */
+  readonly clock: 'during' | 'before' | null;
   /** Entries whose outcome is unknown: read the file to see its state. */
   readonly unknown: readonly string[];
   readonly emptyDirectories: readonly string[];
@@ -53,10 +70,12 @@ const REASONS: Readonly<Record<string, string>> = {
   'parent-refused': 'its directory could not be created', 'not-empty': 'something beneath it was not applied, so it is not empty', rejected: 'the write was refused', conflict: 'changed during the apply (conflict)',
 };
 const list = (items: readonly string[], max = 20) => items.length <= max ? items.join(', ') : `${items.slice(0, max).join(', ')}, … (${items.length - max} more)`;
-/** The result lines (trusted metadata, bounded): what the project received from the call and what it did not, and why. */
+/** The result lines (trusted metadata, bounded): what the project received from the call and what it did not, and why. A stepped clock's own
+ * line is added by the host shell's `describeSandboxWriteSetResult` (localized). */
 export function describeSandboxWriteSet(report: SandboxWriteSetReport): string {
   if (report.refused !== null) return `[deckent] write set: nothing was applied (${report.refused}); the project is unchanged.`;
-  return [report.conflicts.length ? `[deckent] write set: nothing was applied — the project changed during the call: ${list(report.conflicts)}.` : '',
+  // With a stepped clock the conflicts are not claimed as the project's changes; the caller names the step (`describeSandboxWriteSetResult`).
+  return [report.conflicts.length && report.clock === null ? `[deckent] write set: nothing was applied — the project changed during the call: ${list(report.conflicts)}.` : '',
     report.applied.length ? `[deckent] write set: applied ${report.applied.length} (${list(report.applied)}).` : '',
     report.notApplied.length ? `[deckent] write set: not applied: ${list(report.notApplied.map(entry => `${entry.rel} (${REASONS[entry.reason] ?? entry.reason})`), 12)}.` : '',
     report.unknown.length ? `[deckent] write set: outcome unknown (read the file to see its state): ${list(report.unknown)}.` : '',
@@ -80,13 +99,17 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
   readonly classify: (rel: string, kind: SandboxWriteChange['kind'] | 'mkdir') => SandboxWriteCell | 'denied';
   /** Makes the missing directories above `rel`, only those `admit` names (the decided ones); false when any other would be needed. */
   readonly ensureParents: (rel: string, modeOf: (directory: string) => number, admit: (directory: string) => boolean) => Promise<boolean>;
-  readonly execute: (change: SandboxWriteChange, gate: EffectApprovalGate) => Promise<void>; readonly signal: AbortSignal }): Promise<SandboxWriteSetReport> {
-  const { scan } = input;
+  readonly execute: (change: SandboxWriteChange, gate: EffectApprovalGate) => Promise<void>; readonly signal: AbortSignal;
+  /** `sandboxWriteClockVerdict` of the call (absent: the mark orders changes). */
+  readonly clock?: 'during' | 'before' | null }): Promise<SandboxWriteSetReport> {
+  const { scan } = input, clock = input.clock ?? null;
   const report = { refused: null, applied: [] as string[], notApplied: [] as { rel: string; reason: string }[], conflicts: [] as readonly string[], unknown: [] as string[],
-    emptyDirectories: [] as readonly string[], createdDirectories: [] as string[], stopped: false };
+    emptyDirectories: [] as readonly string[], createdDirectories: [] as string[], stopped: false, clock: null as 'during' | 'before' | null };
   if (!scan.ok) return { ...report, refused: scan.reason };
   report.notApplied.push(...scan.refused);
-  if (scan.conflicts.length) return { ...report, conflicts: scan.conflicts };
+  // A backward step during the call: a concurrent change may be invisible to the ctime check, so nothing is applied (kept aside like a conflict).
+  if (clock === 'during') return { ...report, conflicts: scan.conflicts, clock };
+  if (scan.conflicts.length) return { ...report, conflicts: scan.conflicts, clock };
   report.emptyDirectories = scan.emptyDirectories;
   const shown = (change: SandboxWriteChange) => change.kind === 'rmdir' ? `${change.rel}/` : change.rel;
   // Astra 2180 R1: a directory removal is an entry like any other (classified, decided, its own effect, reported); it is held back when
