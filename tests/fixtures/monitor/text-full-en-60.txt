@@ -18,11 +18,10 @@ them
 dogfood note: only the most recent finished workers are
 shown; 5 older ones are hidden
 
-Waiting for you (3)
+Waiting for you (2)
   Subject                       Waiting     Expires
   operation: Push branch lane…  3 h 12 min  expires in 45 m…
-  operation: you may not see …  10 min      no expiry
-  effect: Delete stale previe…  4 min 0 s   expired 2 min 0…
+  operation: you may not see …  10 min      unknown
 
 Stuck or waiting, oldest first (12)
   Run                     Why                     Stuck for
@@ -50,6 +49,7 @@ Workers running now (2)
   On hold (you)
   run-blocked-approval/lint   On hold  ⚠ 1 min 35 …  running
   On hold (system)
+Expired approvals: 1 (history; no decision available).
 
 ── Runs ────────────────────────────────────────────────────
   Run                            State
@@ -170,8 +170,8 @@ are gone; the patch was retained.
 ── Approvals ───────────────────────────────────────────────
   Subject                       Waiting     Expires
   operation: Push branch lane…  3 h 12 min  expires in 45 m…
-  operation: you may not see …  10 min      no expiry
-  effect: Delete stale previe…  4 min 0 s   expired 2 min 0…
+  operation: you may not see …  10 min      unknown
+Expired approvals: 1 (history; no decision available).
 
 ── Pools ───────────────────────────────────────────────────
   Pool     Usage                 Hold                Install

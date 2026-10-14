@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MESSAGE_REGISTRY, resolveLocale, t } from '../../../src/platform/index.js';
+import { currencyAmountText, MESSAGE_REGISTRY, resolveLocale, t } from '../../../src/platform/index.js';
 
 describe('kernel/i18n contract', () => {
   it('interpolates named placeholders', () => {
@@ -27,4 +27,18 @@ describe('kernel/i18n contract', () => {
     expect(t('cli.init.policyUpgrade.notOwner', { scope: 'scope' }, locale)).toContain('--template current --scope scope --preview');
     expect(t('cli.policy.upgrade.reason', {}, locale)).toContain(locale === 'en' ? 'current first-run' : 'güncel ilk kurulum');
   });
+});
+
+it.each([['USD', 5000, '$50.00', '50,00 $'], ['JPY', 5000, '¥5,000', '5.000 ¥'], ['KWD', 5000, 'KWD\u00a05.000', '5,000 KWD']] as const)(
+  'currency formatter uses currency precision instead of assuming cents: %s', (currency, amount, en, tr) => {
+    expect(currencyAmountText(amount, currency, 'en')).toBe(en); expect(currencyAmountText(amount, currency, 'tr')).toBe(tr);
+  });
+
+it('shared decimal reservation mode retains numeric wording without a symbol', () => {
+  expect(currencyAmountText(5000, 'USD', 'en', false)).toBe('50.00');
+  expect(currencyAmountText(5000, 'USD', 'tr', false)).toBe('50,00');
+});
+it('preserves every minor unit at the safe-integer money boundary', () => {
+  expect(currencyAmountText(Number.MAX_SAFE_INTEGER, 'USD', 'en')).toBe('$90,071,992,547,409.91');
+  expect(currencyAmountText(Number.MAX_SAFE_INTEGER, 'USD', 'tr')).toBe('90.071.992.547.409,91 $');
 });

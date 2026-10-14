@@ -127,7 +127,7 @@ it('a verified MCP proposer produces the same durable plan for the authorized hu
   const approval = await f.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: pending.proposal.approval!.approvalId });
   expect(approval!.request.requester).toEqual(input.proposer);
   expect(approval!.request.summary).toContain('business-process'); expect(approval!.request.summary).toContain('business');
-  expect(approval!.request.summary).toContain('task / execute / task'); expect(approval!.request.summary).toContain('200 USD');
+  expect(approval!.request.summary).toContain('task / execute / task'); expect(approval!.request.summary).toContain('$2.00');
   expect(approval!.request.summary).toContain('only at admission');
 });
 it('policy deny seals a denial and never persists an executable proposal or Run', async () => {

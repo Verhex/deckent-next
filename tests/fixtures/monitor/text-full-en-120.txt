@@ -12,11 +12,10 @@ approvals of scope scope-dog are hidden: you may not see them
 (LOCAL_RUNTIME_DENIED)
 dogfood note: only the most recent finished workers are shown; 5 older ones are hidden
 
-Waiting for you (3)
-  Subject                                        Waiting     Expires                Install
-  operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min      current
-  operation: you may not see the summary         10 min      no expiry              dogfood
-  effect: Delete stale preview environment       4 min 0 s   expired 2 min 0 s ago  current
+Waiting for you (2)
+  Subject                                        Waiting     Expires            Install
+  operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min  current
+  operation: you may not see the summary         10 min      unknown            dogfood
 
 Stuck or waiting, oldest first (12)
   Run                            Task   Why                                Stuck for   Scope    Install
@@ -44,6 +43,7 @@ Workers running now (2)
   On hold (you)
   run-blocked-approval/lint   On hold  ⚠ 1 min 35 s (stale)  running  ed5a5613  claude/model-alpha-2  current
   On hold (system)
+Expired approvals: 1 (history; no decision available).
 
 ── Runs ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Run                            State               Blocker                         Stuck for   Duration    Delivery
@@ -133,10 +133,10 @@ Workspace /srv/deckent/workspaces/pack
 Custody released: the container and the attempt directory are gone; the patch was retained.
 
 ── Approvals ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Subject                                        Waiting     Expires                Assurance  Scope      Install
-  operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min      local-os   scope-a    current
-  operation: you may not see the summary         10 min      no expiry              local-os   scope-dog  dogfood
-  effect: Delete stale preview environment       4 min 0 s   expired 2 min 0 s ago  —          scope-a    current
+  Subject                                        Waiting     Expires            Assurance  Scope      Install
+  operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min  local-os   scope-a    current
+  operation: you may not see the summary         10 min      unknown            local-os   scope-dog  dogfood
+Expired approvals: 1 (history; no decision available).
 
 ── Pools ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Pool     Usage                 Hold                   Install

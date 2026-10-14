@@ -60,6 +60,7 @@ export interface MonitorLedgerRun {
   readonly deliveryOutputPermitted?: boolean;
 }
 export interface MonitorLedgerApproval {
+  readonly status?: 'pending' | 'expired' | 'decided';
   readonly scopeId: string; readonly approvalId: string; readonly subjectKind: string; readonly runId: string | null; readonly taskId: string | null;
   readonly summary: string; readonly createdAtMs: number; readonly expiresAtMs: number;
 }

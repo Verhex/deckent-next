@@ -1,8 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { planRun, inspectRun, configuredApproval } from '../../../src/index.js';
+import { planRun, inspectRun, inspectRunProposal, configuredApproval } from '../../../src/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { completeTerminalChatTurn } from '#composition/core/terminal-chat/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
@@ -65,6 +65,8 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
   it('records a masked contribution and charged invocation; replay reads the same pending proposal without POST or Run', async () => {
     const f = await fixture(), input = { ...command, intent: command.intent + ' api_key=sk-fixture-do-not-send' };
     const first = await planRun(f.project, input, f.options);
+    expect(first.planningSpending).toMatchObject({ class: 'metered', currency: 'USD', evidence: 'measured-tariff' });
+    expect(first.planningSpending!.amountMinorUnits).toBeGreaterThan(0);
     expect(first.proposal.status).toBe('pending'); expect(first.run).toBeNull(); expect(f.posts).toBe(1);
     const source = first.proposal.proposal.source;
     expect(source).toMatchObject({ kind: 'model', receipt: { reference: f.reference }, contribution: { schemaVersion: 1, activationRevision: 1,
@@ -129,6 +131,7 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
   it.each([null, 0, 1000])('local zero-tariff planning with subscription workers passes budget %s and enters the same Run approval chain', async budget => {
     const f = await fixture({ budget, noCharge: true, subscription: true }), first = await planRun(f.project, command, f.options);
     expect(first).toMatchObject({ budgetSemantics: 'not-metered', proposal: { status: 'pending', binding: { admission: { budget: null } } } });
+    expect(first.planningSpending).toMatchObject({ class: 'not-metered', amountMinorUnits: null, evidence: 'unknown' });
     expect(first.proposal.approval).not.toBeNull(); expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
     const inspected = await inspectConfiguredProviderSpendAccount(f.project, { schemaVersion: 1, scopeId: 's', current: true }, f.options);
     expect(inspected.checkpoint).toBeNull();
@@ -158,4 +161,25 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(f.posts).toBe(0); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
   });
 
+});
+
+it('paid planning with subscription workers projects its own settled cost and read-only inspection reuses it', async () => {
+  const f = await fixture({ subscription: true }), first = await planRun(f.project, command, f.options);
+  expect(first).toMatchObject({ budgetSemantics: 'not-metered', planningSpending: { class: 'metered', currency: 'USD', evidence: 'measured-tariff' } });
+  expect(first.planningSpending!.amountMinorUnits).toBeGreaterThan(0);
+  const query = { schemaVersion: 1 as const, scopeId: 's', runId: first.proposal.proposal.runId, commandId: command.commandId };
+  expect((await inspectRunProposal(f.project, query, f.options))!.planningSpending).toEqual(first.planningSpending);
+  expect(await planRun(f.project, command, f.options)).toEqual(first); expect(f.posts).toBe(1);
+});
+
+it('proposal inspection with denied invocation inspection withholds spending and sends no model request', async () => {
+  const f = await fixture({ subscription: true }), first = await planRun(f.project, command, f.options);
+  // First establish the fixture's admitted card, then remove only the spending observation grant.
+  const path = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(path, 'utf8'));
+  policy.revision = 'observation-denied';
+  policy.grants = policy.grants.map((row: { id: string; actions: string[] }) => row.id === 'invocation' ? { ...row, actions: ['invoke'] } : row);
+  await writeFile(path, JSON.stringify(policy), { mode: 0o600 });
+  const inspected = await inspectRunProposal(f.project, { schemaVersion: 1, scopeId: 's', runId: first.proposal.proposal.runId, commandId: command.commandId }, f.options);
+  expect(inspected!.planningSpending).toEqual({ class: 'unknown', currency: null, amountMinorUnits: null, evidence: 'unknown' });
+  expect(first.planningSpending!.amountMinorUnits).toBeGreaterThan(0); expect(f.posts).toBe(1);
 });

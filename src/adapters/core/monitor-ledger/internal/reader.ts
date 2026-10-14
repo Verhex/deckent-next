@@ -105,7 +105,7 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
       files.push(...found);
     } catch (error) { recordOnly(error); diagnostics.push('run-corrupt:' + key); }
   }
-  const approvals = version >= APPROVAL_LEDGER_VERSION ? pendingApprovals(db, maxRuns, diagnostics) : [];
+  const approvals = version >= APPROVAL_LEDGER_VERSION ? currentApprovals(db, maxRuns, diagnostics) : [];
   const scopes = new Set(db.prepare('SELECT DISTINCT scope_id FROM runs ORDER BY scope_id').all().map(row => String(row.scope_id)));
   for (const approval of approvals) scopes.add(approval.scopeId);
   return Object.freeze({ ledgerVersion: version, scopeIds: Object.freeze([...scopes].sort()), runs: Object.freeze(runs), approvals: Object.freeze(approvals),
@@ -154,16 +154,18 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
       terminal: record.terminal ? Object.freeze({ ...(record.terminal.container ? { container: record.terminal.container } : {}), exitCode: record.terminal.exitCode, signal: record.terminal.signal ?? null, interrupted: record.terminal.interrupted }) : null }) : null });
 }
 
-/** Current pending approvals (status inside the sealed snapshot; the MAC is not verified here, so the summary is display data only). */
-function pendingApprovals(db: DatabaseSync, limit: number, diagnostics: string[]): MonitorLedgerApproval[] {
+/** Current approvals retain decided/expired history. Pending requests and newest expiry lead the bounded page;
+ * status is inside the sealed snapshot (the MAC is not verified here, so summary is display data only). */
+function currentApprovals(db: DatabaseSync, limit: number, diagnostics: string[]): MonitorLedgerApproval[] {
   const rows = db.prepare(`SELECT scope_id,approval_id,snapshot FROM approvals WHERE current=1
-    AND (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.status') ELSE 'pending' END)='pending' ORDER BY scope_id,approval_id LIMIT ?`).all(limit + 1);
+    ORDER BY (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.status')='pending' ELSE 1 END) DESC,
+    (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.request.expiresAt') END) DESC,scope_id,approval_id LIMIT ?`).all(limit + 1);
   if (rows.length > limit) diagnostics.push('info:approvals-truncated');
   return rows.slice(0, limit).flatMap(row => {
     try {
       const record = approvalRecordSchema.parse(json(row.snapshot)), request = record.request, subject = approvalSubject(request);
       if (request.scopeId !== row.scope_id || request.approvalId !== row.approval_id) throw new Error();
-      return [Object.freeze({ scopeId: request.scopeId, approvalId: request.approvalId, subjectKind: subject.kind, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : null,
+      return [Object.freeze({ status: record.status, scopeId: request.scopeId, approvalId: request.approvalId, subjectKind: subject.kind, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : null,
         taskId: subject.kind === 'task' ? subject.taskId : null, summary: request.summary, createdAtMs: request.createdAt, expiresAtMs: request.expiresAt })];
     } catch (error) { recordOnly(error); diagnostics.push(`approval-corrupt:${row.scope_id}/${row.approval_id}`); return []; }
   });

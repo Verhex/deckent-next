@@ -15,7 +15,7 @@ for (const locale of ['en', 'tr'] as const) it(`${locale}: durable summary uses 
   const text = renderRunCreateApprovalSummary(command, create, verdict, locale);
   expect(text).toContain(locale === 'tr' ? 'Plan · görevler: 1' : 'Plan · tasks: 1');
   expect(text).toContain('task'); expect(text).toContain('purchase'); expect(text).toContain('small');
-  expect(text).toContain('task / execute / purchase'); expect(text).toContain('200 USD'); expect(text).toContain('owner-purchase');
+  expect(text).toContain('task / execute / purchase'); expect(text).toContain(locale === 'tr' ? '2,00 $' : '$2.00'); expect(text).toContain('owner-purchase');
   expect(text).toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
   expect(text).toContain('APPROVAL_REQUIRED'); expect(text).toContain('run-business');
 });
@@ -25,7 +25,7 @@ it('raw create reports undeclared permissions/ceiling/class; a registry gate is 
   const noRule = { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason };
   const text = renderRunCreateApprovalSummary({ ...raw, graph }, { ...create, graph }, noRule);
   expect(text).toContain('work class: not declared'); expect(text).toContain('Declared permissions: not declared');
-  expect(text).toContain('Declared budget ceiling (minor units): not declared'); expect(text).toContain('work-class registry');
+  expect(text).toContain('Declared budget ceiling: not declared'); expect(text).toContain('work-class registry');
 });
 it('redacts complete fields before cutting and again after ANSI/control reconstruction, including known secrets', () => {
   const task = command.graph.tasks[0]!;
@@ -53,7 +53,7 @@ it('bounds many long tasks and permissions while preserving totals, omissions, b
   for (const locale of ['tr', 'en'] as const) {
     const text = renderRunCreateApprovalSummary({ ...command, graph, proposal: { ...command.proposal!, requiredPermissions: permissions } }, { ...create, graph }, verdict, locale);
     expect(text.length).toBeLessThanOrEqual(2048); expect(text).toContain('60'); expect(text).not.toContain('task-5-');
-    expect(text).not.toContain('resource-3-'); expect(text).toContain('55'); expect(text).toContain('57'); expect(text).toContain('200 USD');
+    expect(text).not.toContain('resource-3-'); expect(text).toContain('55'); expect(text).toContain('57'); expect(text).toContain(locale === 'tr' ? '2,00 $' : '$2.00');
     expect(text).toContain('owner-purchase'); expect(text).toContain('…');
   }
 });
@@ -62,7 +62,7 @@ it.each(['en', 'tr'] as const)('subscription approval summary declares budget ex
   const value = { ...command, proposal: { ...command.proposal!, admission: { registryRevision: 'r', registryDigest: 'b'.repeat(64),
     standingAdmission: false, budgetSemantics: 'not-metered' as const, budget: null } } };
   const text = renderRunCreateApprovalSummary(value, create, verdict, locale);
-  expect(text).toContain(locale === 'tr' ? 'Abonelik/ücretsiz model — bütçe kontrolü uygulanmaz' : 'Subscription/free model — budget check does not apply');
+  expect(text).toContain(locale === 'tr' ? 'Worker’lar: abonelik/ücretsiz model — bütçe kontrolü uygulanmaz' : 'Workers: subscription/free model — budget check does not apply');
   expect(text).toContain('owner-purchase'); expect(text).toContain('run-business');
   expect(text).not.toContain(locale === 'tr' ? 'yalnız kabul anında' : 'only at admission');
 });
@@ -75,6 +75,6 @@ it('proposer-authored long titles cannot push declared permissions off the card;
     expect(text.length).toBeLessThanOrEqual(2048);
     for (const row of ['operation / execute / erp-write-invoice', 'secret / switch / live-key', 'config / write / policy']) expect(text).toContain(row);
     expect(text).toContain(locale === 'tr' ? 'yine politikayla yetkilendirilir' : 'still authorized by policy');
-    expect(text).toContain('200 USD'); expect(text).toContain('owner-purchase');
+    expect(text).toContain(locale === 'tr' ? '2,00 $' : '$2.00'); expect(text).toContain('owner-purchase');
   }
 });
