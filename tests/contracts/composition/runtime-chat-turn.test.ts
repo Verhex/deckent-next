@@ -863,9 +863,9 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     // A descendant that left the process group (setsid) holds the pipes: they are released after the bounded drain.
     let escaped: number | null = null;
     try {
-      const unverified = await run('turn-shell-escaped', "setsid sh -c 'echo $$ > escaped.pid; echo ready; exec sleep 5' & sleep 0.2; exit 0");
+      const unverified = await run('turn-shell-escaped', "setsid sh -c 'echo $$ > escaped.pid; echo ready; exec sleep 20' & sleep 0.2; exit 0");
       escaped = Number((await readFile(join(f.project, 'escaped.pid'), 'utf8')).trim());
-      expect(unverified.ms).toBeLessThan(4_000);
+      expect(unverified.ms).toBeLessThan(10_000); // bounded drain (1 s), never the 20 s descendant; margin for loaded hosted runners
       expect(unverified.events.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'ok', cleanup: 'unverified' });
       expect(toolUnitOf(unverified.events)).toMatchObject({ name: 'run_shell', status: 'ok', cleanup: 'unverified' });
       const text = toolText(unverified.events);
@@ -879,10 +879,10 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
         .toContain('[deckent] cleanup unverified:');
     } finally { if (escaped) try { process.kill(-escaped, 'SIGKILL'); } catch { /* already gone */ } }
     // A background member of the group still alive when the shell exits is ended; the group is then observed empty.
-    const ended = await run('turn-shell-group-ended', 'sleep 5 & echo started');
-    expect(ended.ms).toBeLessThan(4_000);
+    const ended = await run('turn-shell-group-ended', 'sleep 20 & echo started');
+    expect(ended.ms).toBeLessThan(10_000); // the member is ended, not waited for (20 s)
     const endedText = toolText(ended.events);
-    expect(endedText).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(sleep 5 & echo started\)\nstarted\n/u);
+    expect(endedText).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(sleep 20 & echo started\)\nstarted\n/u);
     expect(endedText).toContain('[deckent] cleanup: processes the command left running in its process group were ended');
     expect(endedText).not.toContain('cleanup unverified');
     expect(ended.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok', cleanup: 'group-ended' });
