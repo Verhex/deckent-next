@@ -33,7 +33,7 @@ async function fixture(beforeCommit?: (record: ApprovalRecord) => void) {
     createdAt: time.wallMs, expiresAt: time.wallMs + 30000, facts: agentToolApprovalFacts(policy, 'scope', 'edit-self-source') });
   const command = approvalCommandSchema.parse({ schemaVersion: 1, scopeId: 'scope', approvalId: record.request.approvalId, commandId: 'answer', expectedRevision: 0, decision: 'allow', reason: 'Reviewed', standing: 'session' });
   const app = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'test', 20,
-    beforeCommit, undefined, { producers: [{ level: 'turn-bound', rank: 1, attests: () => true }], peerPid: process.pid });
+    beforeCommit, undefined, { ...({ producers: [{ level: 'turn-bound', rank: 1, attests: () => true }], peerPid: process.pid }), interactive: async () => true });
   const session = SessionStanding.sessionKey('scope', principal, 'conversation'), key = 'self-source-key';
   const register = (remember: Parameters<SessionApprovalAnswers['register']>[0]['remember']) => answers.register({ record, principal, peerPid: process.pid, session, key, clock,
     signal: controller.signal, started: { ...time }, remember })!;

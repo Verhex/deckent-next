@@ -1,4 +1,4 @@
-import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema, principalPermissionMode,
+import { isAiPrincipal, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema, principalPermissionMode,
   standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 import { agentToolPolicyResource } from './agent-tool.js';
 
@@ -121,6 +121,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
     return Object.freeze({ decision: 'deny' as const, revision, relaxation: null });
   const done = (decision: AgentToolCallDecision['decision'], relaxation: PermissionModeRelaxation | null = null, standing?: StandingApproval, fullAccess?: FullAccessDecision) =>
     Object.freeze({ decision, revision, relaxation, ...(standing ? { standing } : {}), ...(fullAccess ? { fullAccess: Object.freeze(fullAccess) } : {}) });
+  if (isAiPrincipal(request.principal) && ['edit-authority', 'edit-floor', 'mcp-floor'].includes(request.cell)) return done('deny');
   // A deny is never lowered, in any mode (full access included).
   if (decided.some(entry => entry.decision.decision === 'deny')) return done('deny');
   const strict = decided.every(entry => entry.decision.decision === 'allow') ? 'allow' : 'require-approval';

@@ -381,7 +381,7 @@
   "proposal.status.accepted": "Run kabul edildi; görev sonuçları henüz kabul edilmedi",
   "proposal.status.rejected": "Reddedildi",
   "proposal.status.parked": "Park edildi; yeni Run kabulü yok",
-  "proposal.approval": "Onay {id}; bitiş {expiry}. Bu Run oluşturma kartını doğrulanmış insan terminalinde inceleyin. MCP onay kararı veremez.",
+  "proposal.approval": "Onay {id}; bitiş {expiry}. Bu Run oluşturma kartını etkileşimli terminalnde inceleyin. MCP onay kararı veremez.",
   "proposal.budget": "Beyan tavanı: {amount}; {status}.",
   "proposal.budget.checked": "kabul anında kontrol edildi",
   "proposal.budget.unchecked": "kontrol edilmedi",

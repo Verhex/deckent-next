@@ -21,6 +21,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof PolicyLastAdminError || error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
     || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return registeredFailure(error.code);
   if (error instanceof WorkspacePatchError) return registeredFailure(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
+  if (error instanceof RunLifecycleError && error.approvalId) return registeredFailure(error.code, { params: { approvalId: error.approvalId } });
   if (error instanceof RunProgressionFailure) return queryFailure(error.cause);
   if (error instanceof DeckentError) return error.code === 'QUERY_UNEXPECTED_FAILURE' ? sanitizeQueryFailure(error) : ErrorRegistry.has(error.code) ? error : registeredFailure(error.code);
   if (error instanceof HandoffError || error instanceof NativeConnectionError) return registeredFailure(error.code);

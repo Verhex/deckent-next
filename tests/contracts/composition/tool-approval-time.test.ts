@@ -34,7 +34,7 @@ async function fixture() {
     const policy = { schemaVersion: 1, revision: 'policy', restrictions: [], grants: [
       { id: 'approval', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } }] };
     return new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
-      { load: async () => { onPolicy(); return policy; } }, integrity, clock, 'cli', 20, undefined, undefined, assurance);
+      { load: async () => { onPolicy(); return policy; } }, integrity, clock, 'cli', 20, undefined, undefined, { ...(assurance), interactive: async () => true });
   };
   return { journal, record, command, application };
 }

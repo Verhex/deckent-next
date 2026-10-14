@@ -910,3 +910,15 @@ Owner TESLIM-GUVENLIK admits a shared typed effect confirmation port before new 
   legacy sealed approvals and audit records keep their bytes. Public SDK exports and approval wire versions stay unchanged.
   No new user surface. Host PTY/service/distribution replay, independent review and live acceptance are separate; external proof
   `proof/ONAY-URETICI-D1-2026-10-15/` contains the author checks and remaining host commands.
+
+## Policy-governed AI decisions — MCP-AI-AKTOR (owner 2026-10-15, author candidate)
+
+MCP is always AI, including legacy os-user identity projections. A human-step cell is a named actor plus an explicit action on task-decision (accept/reject/answer) or run-decision (resume/close). Deny/restriction/require-approval still win; evaluate/reserve and wildcard actions do not delegate that step. Holding an already parked Run preserves its reason, timing, failureCode and deadline; a versioned operatorHold subrecord retains the extra operator wait. Authorized resume removes that overlay first, returning to the original reason. Answer/quota release keeps the operator wait after clearing the underlying cause; automatic quota reset cannot bypass it.
+
+Noninteractive accept/reject opens a shared task-subject approval, whose digest binds the full command, actor and expected revision. Its producer facts name the exact decision action. Pending/denied/expired/stale cards change no Task; a decided card admits only that same command, and the Run CAS, receipt and sealed audit remain atomic. A committed replay verifies consumed custody rather than opening another request. An AI decider needs both scoped approval decision permission and the exact task-decision cell. Terminal y/N remains the human decision surface.
+
+Y4 v1 is versioned code: AI may not write authority policy, widen permission mode, read/switch secret values, restore authority through backup, change security configuration or approve edit-floor/edit-authority/mcp-floor/authority-surface cards. Policy allow, standing approval and full access cannot open this floor. Public MCP tool inventory is unchanged; policy delegation is enforced by the shared SDK/runtime ingress.
+
+Approval decision v4 seals deciderClass (human-tty / ai-policy / system); AI assurance is ai-policy. Lifecycle writes carry a versioned decision-evidence subrecord, and their sealed audit carries class and rule/approval identity. Existing unversioned/v2/v3 approvals and older lifecycle/audit records remain readable without payload rewriting or re-sealing; historical class is unknown. There is no table/schema migration or old-MAC normalization. TTY witness means interactive terminal, never human proven; stronger Enterprise producers still register their own assurance levels. Older strict clients refuse unknown v4 decision records; they must upgrade to read new decisions.
+
+Author proof lives in external MCP-AI-AKTOR-2026-10-15. Targeted checks, real SQLite fixtures and simulated witnesses are separate from host PTY/socket/process acceptance, independent review, packaged binary and live/N1 acceptance.

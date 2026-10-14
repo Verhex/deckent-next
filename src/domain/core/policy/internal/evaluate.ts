@@ -1,3 +1,4 @@
+import { aiAuthorityFloor } from './ai-floor.js';
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { verifiedPrincipalSchema, isMcpPrincipal } from '#domain/core/principal/index.js';
@@ -8,7 +9,7 @@ export type { Policy } from './schema.js';
 export const policyRequestSchema = z.object({ principal: verifiedPrincipalSchema, scopeId: identitySchema, action: identitySchema,
   resource: z.object({ kind: identitySchema, id: identitySchema }).strict().readonly() }).strict().readonly();
 export type PolicyRequest = z.infer<typeof policyRequestSchema>;
-export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny' | 'require-approval'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE' | 'APPROVAL_REQUIRED'; ruleId?: string }>;
+export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny' | 'require-approval'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE' | 'APPROVAL_REQUIRED' | 'AI_NON_DELEGABLE'; ruleId?: string }>;
 function matches(rule: PolicyRule, request: PolicyRequest) {
   return includes(rule.actions, request.action) && includes(rule.scopes, request.scopeId) && rule.resource.kind === request.resource.kind
     && includes(rule.resource.ids, request.resource.id) && (rule.principals === 'all' ? !('effect' in rule && rule.effect === 'allow' && isMcpPrincipal(request.principal)) : rule.principals.some(principal =>
@@ -20,6 +21,7 @@ export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDec
   if (!parsed.success || !checked.success) throw new PolicyError();
   const policy = parsed.data; const request = checked.data;
   if (!request.principal.scopeIds.includes(request.scopeId)) return Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'SCOPE' });
+  if (aiAuthorityFloor(request.principal, request.resource, request.action)) return Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'AI_NON_DELEGABLE' });
   const grants = principalGrants(policy, request.principal);
   const denied = grants.find(rule => rule.effect === 'deny' && matches(rule, request)) ?? policy.restrictions.find(rule => matches(rule, request));
   if (denied) return Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'DENIED', ruleId: denied.id });

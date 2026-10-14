@@ -859,7 +859,7 @@
   "terminal.approval.card.onExpiry": "Süre dolana kadar karar verilmezse hiçbir şey çalışmaz.",
   "terminal.approval.card.assuranceTurnHere": "Bu kartı yalnız turu başlatan bu terminal onaylayabilir.",
   "terminal.approval.card.assuranceTurnElsewhere": "Bu kartı yalnız turu başlatan terminal onaylayabilir; burada yalnız reddedebilirsiniz.",
-  "terminal.approval.card.assurancePeer": "Bunu kendi canlı oturumunuzdan onaylayabilirsiniz.",
+  "terminal.approval.card.assurancePeer": "Etkileşimli terminal; insan kimliği kanıtlanmaz.",
   "terminal.approval.card.assuranceOther": "Onay için daha güçlü bir kanıt ({level}) gerekiyor; o olmadan bu kart yalnız reddedilebilir.",
   "terminal.approval.prompt": "y onayla · n reddet · Enter/Esc reddet (varsayılan). Her öğe ayrı karara bağlanır; hiçbir karar hatırlanmaz.",
   "terminal.approval.pending": "Karar kaydediliyor…",

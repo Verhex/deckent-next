@@ -381,7 +381,7 @@
   "proposal.status.accepted": "Admitted; task outcomes are not yet accepted",
   "proposal.status.rejected": "Rejected",
   "proposal.status.parked": "Parked; no new Run admission",
-  "proposal.approval": "Approval {id}; expires at {expiry}. Review this exact Run-create card in a verified human terminal. MCP cannot decide approvals.",
+  "proposal.approval": "Approval {id}; expires at {expiry}. Review this exact Run-create card in an interactive terminal. MCP cannot decide approvals.",
   "proposal.budget": "Declared ceiling: {amount}; {status}.",
   "proposal.budget.checked": "checked at admission",
   "proposal.budget.unchecked": "not checked",

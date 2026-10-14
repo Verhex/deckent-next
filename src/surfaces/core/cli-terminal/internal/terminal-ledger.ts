@@ -2,7 +2,7 @@ import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, 
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { shortId, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
+import { approvalDecisionClass, approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
 import type { StandingScope } from '#surfaces/core/terminal/index.js';
 import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecycleHandler, RunQueryHandler } from './context.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
@@ -15,12 +15,20 @@ const approvalPageSchema = z.array(approvalRecordSchema);
 /** The card's risk and undo words from the producer's facts (B1 single card); a v1/v2 record declared none (`null`, shown as not declared). */
 const riskWord = (risk: ApprovalFacts['risk']) => !risk ? null : risk.source === 'cell' ? risk.cell : `${risk.effectClass}${risk.authority ? ' · authority' : ''}`;
 const undoWord = (undo: ApprovalFacts['reversibility']) => !undo ? null : undo.kind === 'compensation' ? `${undo.operation.id}@${undo.operation.version}` : undo.kind;
-function approvalView(record: ApprovalRecord): WorklineApproval {
+function approvalDeciderLabel(record: ApprovalRecord, locale?: Locale): string {
+  const kind = record.decision ? approvalDecisionClass(record.decision) : 'unknown';
+  if (kind === 'human-tty') return t('approval.decider.human-tty', {}, locale);
+  if (kind === 'ai-policy') return t('approval.decider.ai-policy', {}, locale);
+  if (kind === 'system') return t('approval.decider.system', {}, locale);
+  return t('approval.decider.unknown', {}, locale);
+}
+function approvalView(record: ApprovalRecord, locale?: Locale): WorklineApproval {
   const { request } = record, subject = approvalSubject(request), facts = approvalFacts(request);
   // A tool-call approval (C12) has no run or task: its summary names the tool, resource and argument digest.
   return Object.freeze({ approvalId: request.approvalId, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : '-', taskId: subject.kind === 'task' ? subject.taskId : '-', summary: request.summary,
     requester: request.requester.id, revision: record.revision, status: record.status, decision: record.decision?.decision ?? null, expiresAt: request.expiresAt,
     risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}),
+    ...(record.decision ? { deciderLabel: approvalDeciderLabel(record, locale) } : {}),
     createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}),
     ...(subject.kind === 'config-change' ? { config: { action: subject.action, layer: subject.layer, keyPath: subject.keyPath, ruleId: subject.ruleId } } : {}) });
 }
@@ -91,7 +99,7 @@ export function createWorklineLedgerPorts(input: {
     ...(listApprovals && decideApproval ? {
       async listApprovalPage(afterId: string | null) {
         const records = approvalPageSchema.parse(await listApprovals({ schemaVersion: 1, scopeId, afterId, limit: pageSize }));
-        const items = records.map(approvalView);
+        const items = records.map(record => approvalView(record, locale));
         return Object.freeze({ items: Object.freeze(items), nextAfter: items.length >= pageSize ? items.at(-1)!.approvalId : null });
       },
       // B1: the card declares itself and forwards its turn's one-time capability when it has one (the same single y; nothing else to type).
@@ -107,10 +115,10 @@ export function createWorklineLedgerPorts(input: {
           ...(own ? { approverNote: true } : {}) });
         if (standing === 'session') {
           const answer = sessionApprovalResultSchema.parse(result);
-          return { ...approvalView(answer.record), standing: answer.standing };
+          return { ...approvalView(answer.record, locale), standing: answer.standing };
         }
         const record = approvalRecordSchema.parse(result);
-        return standing ? { ...approvalView(record), standing: { scope: standing, saved: false, reason: 'protocol' } } : approvalView(record);
+        return standing ? { ...approvalView(record, locale), standing: { scope: standing, saved: false, reason: 'protocol' } } : approvalView(record, locale);
       },
     } : {}),
     // Same governed cancellation as `deckent run cancel`, against the revision the operator confirmed.

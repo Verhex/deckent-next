@@ -523,7 +523,8 @@
         "src/adapters/core/contract",
         "src/engine/core/provider-spend",
         "src/composition/core/root",
-        "src/composition/core/resource-observation"
+        "src/composition/core/resource-observation",
+        "src/adapters/core/local-principal"
       ],
       "plan": "EXECUTION"
     },
@@ -765,7 +766,8 @@
         "src/platform/core/redaction",
         "src/platform/core/i18n",
         "src/domain/core/work-cost",
-        "src/engine/core/resource-observation"
+        "src/engine/core/resource-observation",
+        "src/domain/core/approval"
       ],
       "plan": "CONTRACT"
     },

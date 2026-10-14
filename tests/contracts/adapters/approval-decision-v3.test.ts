@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -5,7 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteApprovalStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { approvalDecisionAssurance, approvalRecordSchema, approvalRequestSchema } from '#domain/index.js';
+import { approvalDecisionClass, approvalDecisionAssurance, approvalRecordSchema, approvalRequestSchema } from '#domain/index.js';
 import { agentToolApprovalNote, sealApproval, verifyApproval } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 
@@ -61,4 +62,35 @@ describe('approval decision v2 / v3 (APPROVER-NOTE)', () => {
       expect(notes).toEqual(['use b.ts', null]);
     } finally { journal.close(); }
   });
+});
+
+it('D0 dual reader preserves real stored legacy/v2/v3 MAC bytes and reads classified v4 without re-sealing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-approval-d0-')); roots.push(root);
+  const path = join(root, 'ledger.db'); openSqliteLedger(path, options).close();
+  const journal = openSqliteApprovalStore(path, options);
+  try {
+    const legacy: Record<string, unknown> = { ...base }; delete legacy['assurance'];
+    const versions = [
+      { ...legacy, reason: 'old record' }, { schemaVersion: 2, ...base, reason: 'v2' },
+      { schemaVersion: 3, ...base, reason: 'v3 own words', approverNote: true },
+      { schemaVersion: 4, ...base, reason: 'terminal', deciderClass: 'human-tty' },
+      { schemaVersion: 4, ...base, assurance: 'ai-policy', reason: 'policy', deciderClass: 'ai-policy', approverNote: true },
+      { schemaVersion: 4, ...base, reason: 'system', deciderClass: 'system' },
+    ];
+    const stored: string[] = [];
+    for (const [index, decision] of versions.entries()) {
+      const created = journal.store.create(pending(100 + index)), record = decide(100 + index, decision);
+      journal.store.transition(created, record); stored.push(JSON.stringify(record));
+    }
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      const before = db.prepare('SELECT snapshot FROM approvals ORDER BY approval_id').all();
+      const classes = journal.store.list('scope', null, 20).map(record => approvalDecisionClass(verifyApproval(record, integrity).decision!));
+      expect(classes).toEqual(['unknown', 'unknown', 'unknown', 'human-tty', 'ai-policy', 'system']);
+      expect(db.prepare('SELECT snapshot FROM approvals ORDER BY approval_id').all()).toEqual(before);
+      expect(before.map(row => row.snapshot)).toEqual(stored);
+      const record = journal.store.load('scope', 'tool-103')!;
+      expect(() => verifyApproval({ ...record, decision: { ...record.decision, deciderClass: 'ai-policy' } }, integrity)).toThrow('APPROVAL_INTEGRITY');
+    } finally { db.close(); }
+  } finally { journal.close(); }
 });

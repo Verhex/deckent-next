@@ -24,7 +24,7 @@ async function fixture() {
   ] };
   const integrity = createHmacIntegrity('key', randomBytes(32));
   const make = (channel: string, options: { beforeCommit?: (record: ApprovalRecord) => void; assurance?: ApprovalAssuranceOptions } = {}) =>
-    new ApprovalApplication(journal.store, verifier, session, { load: async () => policy }, integrity, time, channel, 20, options.beforeCommit, undefined, options.assurance);
+    new ApprovalApplication(journal.store, verifier, session, { load: async () => policy }, integrity, time, channel, 20, options.beforeCommit, undefined, { ...(options.assurance), interactive: async () => true });
   const actor = evidence.session.principalRef;
   const record = requestTaskApproval(journal.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'task', requester: actor,
     actionDigest: 'a'.repeat(64), policyRevision: 'policy', summary: 'Execute task', createdAt: 1000, expiresAt: 1100 });

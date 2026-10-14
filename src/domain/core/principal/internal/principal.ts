@@ -13,3 +13,7 @@ export type VerifiedPrincipal = z.infer<typeof verifiedPrincipalSchema>;
 export const mcpPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
   Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/mcp`), subject: identitySchema.parse(owner.subject) });
 export const isMcpPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/mcp');
+
+/** Transport identity dominates assurance: a forged legacy MCP os-user is still AI. */
+export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) =>
+  isMcpPrincipal(actor) || actor.assurance !== 'os-user';

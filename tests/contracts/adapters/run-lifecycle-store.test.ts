@@ -135,3 +135,13 @@ it('lists only scopes registered to the installation company; foreign and unregi
   // Without a company filter discovery is unchanged.
   expect((await f.store.listRunProgression(f.lookup)).items).toHaveLength(1);
 });
+
+it('dual reader replays an old lifecycle receipt without adding decision evidence or rewriting historical bytes', async () => {
+  const f = await fixture(), write = f.write('hold', { holdReason: 'legacy hold' });
+  const original = await f.store.commitRunLifecycle(write, () => undefined);
+  const before = JSON.stringify(await f.store.loadRunReceipt('s', write.commandId));
+  const replay = await f.store.commitRunLifecycle({ ...write, decision: { schemaVersion: 1, deciderClass: 'human-tty', policyRevision: 'policy' } }, () => { throw new Error('REPLAY_MUST_NOT_AUDIT'); });
+  expect(replay).toEqual(original);
+  expect(JSON.stringify(await f.store.loadRunReceipt('s', write.commandId))).toBe(before);
+  await expect(f.store.commitRunLifecycle({ ...write, holdReason: 'different command' }, () => undefined)).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
+});

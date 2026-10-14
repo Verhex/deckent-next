@@ -6,7 +6,6 @@ import type { AuditEvent } from '#domain/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 for (const id of ['local-terminal-card', 'local-cli', 'local-sdk', 'mcp']) registerApprovalChannel(id);
-/** All surfaces converge here. Peer context is supplied only by the trusted transport; `decisions` is the service's turn capability ring (B1). */
 export async function configuredApproval(projectRoot: string, action: 'list' | 'inspect' | 'decide' | 'renew', input: unknown,
   options: ConfigLoadOptions = {}, peer?: LocalPeerIdentity, capacity?: number, view: { readonly excludeSubjects?: readonly ApprovalSubjectKind[] } = {}, decisions?: TurnDecisionCapabilities, answers?: SessionApprovalAnswers) {
   try {
@@ -15,12 +14,12 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
     const context = peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
       : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access);
     const { config, layout, document, principal } = context; const id = 'approvalId' in parsed ? parsed.approvalId : parsed.scopeId;
-    if (action === 'decide' && !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
+    if (action === 'decide' && ApprovalApplication.requiresInteractiveTerminal(principal) && !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
     authorizeApproval(document, action === 'renew' ? 'renew' : action === 'decide' ? 'decide' : 'inspect', parsed.scopeId, id, principal);
     const clock = new SystemTrustedClock();
     const sessions = peer ? await createLocalPeerSession(peer, principal.scopeIds, config.approvals.sessionTtlMs, clock)
       : await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
-    if (action === 'decide') sessions.requireInteractiveTerminal();
+    if (action === 'decide' && ApprovalApplication.requiresInteractiveTerminal(principal)) sessions.requireInteractiveTerminal();
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
     const journal = openSqliteApprovalStore(await context.path(), config.storage.sqlite);
     let audit: Awaited<ReturnType<typeof openSqliteAuditStore>> | undefined;
@@ -34,7 +33,7 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
       const app = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
         { load: async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
           : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access)).document }, integrity, clock,
-        'local-sdk', config.approvals.pageSize, record => check('standing' in parsed ? { record, standing: { scope: 'session', status: 'unconfirmed', reason: 'result-unavailable' } } : record), restriction, { producers, channels: registeredApprovalChannels(), peerPid: peer?.pid ?? null });
+        'local-sdk', config.approvals.pageSize, record => check('standing' in parsed ? { record, standing: { scope: 'session', status: 'unconfirmed', reason: 'result-unavailable' } } : record), restriction, { producers, channels: registeredApprovalChannels(), peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });
       const result = action === 'list' ? await app.list(parsed, undefined, view) : action === 'inspect' ? await app.inspect(parsed) : action === 'renew' ? await app.renew(parsed, config.approvals.requestTtlMs) : ('standing' in parsed && parsed.standing === 'session' ? await (answers ?? new SessionApprovalAnswers()).answer(approvalCommandSchema.parse(parsed), principal, peer?.pid ?? null, app) : await app.decide(parsed));
       const answer = action === 'decide' ? parseApprovalAnswer('standing' in parsed, result) : result;
       check(answer); return answer;

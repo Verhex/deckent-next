@@ -160,7 +160,7 @@ it.each(['hold', 'close', 'resume', 'cancel'] as const)('refuses admitted public
   const verifier = { async verify() { return custodyPrincipal; } }, authorization = { async authorize() {} };
   const command = { schemaVersion: 1, commandId: f.commandId, scopeId: 's', runId: 'run', expectedRevision: f.run.revision, action, ...(action === 'hold' ? { holdReason: 'operator hold' } : {}) };
   const operation = action === 'cancel' ? new RunApplication(f.store, verifier, authorization).execute(command)
-    : new RunLifecycleApplication(f.store, verifier, authorization, { async authorize() {} }, target => new AuditApplication(target, integrity), () => 10, 1000, 'fixture-policy').execute(command);
+    : new RunLifecycleApplication(f.store, verifier, authorization, { async authorize() {} }, target => new AuditApplication(target, integrity), () => 10, 1000, 'fixture-policy', { async authorize() { return { schemaVersion: 1, deciderClass: 'human-tty', policyRevision: 'fixture-policy' }; } }).execute(command);
   await expect(operation).rejects.toMatchObject({ code: 'COMMAND_ID_RESERVED' });
   await unchanged(f);
 });

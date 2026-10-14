@@ -16,7 +16,7 @@ import { assertEvaluationDigests, readEvaluationDigests, bindOperationEvidenceUs
 import type { RunWorkspaceCustody } from '#engine/index.js';
 import { quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
+import { matchRunLifecycleCommand, proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 // Shared reads have no writer timing dependency and expose no mutation path.
 function decodeRunSnapshot(snapshot: unknown, scopeId: string, runId: string) {
   try {
@@ -181,17 +181,10 @@ export class SqliteRunJournal {
   async commitRunLifecycle(input: RunLifecycleWrite, audit?: (store: AuditStore, snapshot: import('#domain/index.js').RunSnapshot) => void): Promise<RunReceipt> {
     const parsed = runLifecycleWriteSchema.parse(input), command = JSON.stringify({ operation: 'run-lifecycle', ...parsed });
     const { scopeId, runId, commandId, expectedRevision, now } = parsed;
-    const fingerprint = (encoded: string) => {
-      const source = JSON.parse(encoded) as Record<string, unknown>;
-      if (source.operation !== 'run-lifecycle') throw new RunStoreError('RUN_COMMAND_CONFLICT');
-      delete source.operation;
-      const data = { ...runLifecycleWriteSchema.parse(source) }; delete (data as Partial<RunLifecycleWrite>).now;
-      delete (data as Partial<RunLifecycleWrite>).timeoutMs; return JSON.stringify(data);
-    };
-    if ((['accept', 'reject', 'answer'].includes(parsed.action) && parsed.actor.assurance !== 'os-user')
-      || (['accept', 'reject', 'answer', 'hold', 'park-progression'].includes(parsed.action) && !audit)) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+    const matches = (prior: string) => matchRunLifecycleCommand(prior, command);
+    if (['accept', 'reject', 'answer', 'hold', 'park-progression', 'close', 'resume'].includes(parsed.action) && !audit) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     if (parsed.action === 'expire') {
-      const replay = this.receipt(scopeId, runId, commandId, command, prior => fingerprint(prior) === fingerprint(command));
+      const replay = this.receipt(scopeId, runId, commandId, command, matches);
       if (replay) return replay;
       const current = await this.loadRun(scopeId, runId);
       if (!current || current.revision !== expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -200,7 +193,7 @@ export class SqliteRunJournal {
     }
     return this.transaction(() => {
       const replay = this.receipt(scopeId, runId, commandId, command, prior => {
-        try { return fingerprint(prior) === fingerprint(command); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+        try { return matches(prior); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       }); if (replay) return replay;
       const row = this.db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
       if (!row || row.revision !== expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');

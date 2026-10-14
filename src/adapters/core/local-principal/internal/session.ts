@@ -37,7 +37,7 @@ export class LocalOsSessionAuthority implements SessionAuthority, SessionVerifie
       if (!Number.isFinite(issued.monotonicMs) || issued.monotonicMs < 0) throw new Error('clock');
       const principal = verifiedPrincipalSchema.parse({ ...identity, scopeIds });
       const session = verifiedSessionSchema.parse({ schemaVersion: 1, sessionId: randomUUID(), authorityRef: randomUUID(),
-        kind: 'os-user', principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, scopeIds,
+        kind: principal.assurance, principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, scopeIds,
         authenticatedAt: issued.wallMs, expiresAt: issued.wallMs + lifetimeMs });
       return new LocalOsSessionAuthority(principal, session, clock, issued, source.pid, evidence, source.connection, source.isConnectionActive);
     } catch { throw new SessionAuthenticationError('SESSION_REQUIRED'); }
