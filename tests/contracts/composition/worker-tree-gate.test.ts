@@ -11,6 +11,7 @@ import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
+import { advanceConfiguredRun } from '#composition/core/run-progression/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
 // S6 (owner 2026-10-14): the pre-dispatch secret gate on the real execution path (Git clone, predecessor patches, Docker dispatch).
@@ -79,6 +80,17 @@ it('refuses a committed .env, *.pem and a key-shaped string before any dispatch:
     // Permanent: the closed attempt is never started again and nothing is rewritten.
     await expect(executeConfiguredTask(f.project, f.identity, f.options)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
     expect(capture).not.toHaveBeenCalled(); expect(await f.auditPage()).toHaveLength(1);
+  } finally { f.store.close(); }
+});
+
+it('run progression (the autonomous path) is refused the same way: one attempt, no container, task failed', async context => {
+  const f = await fixture(context, COMMITTED_SECRETS);
+  try {
+    const capture = vi.spyOn(DockerSupervisor.prototype, 'captureProfile'), signal = new AbortController().signal, query = { schemaVersion: 1 as const, scopeId: 's', runId: 'r' };
+    const codes: string[] = [];
+    for (let turn = 0; turn < 3; turn++) await advanceConfiguredRun(f.project, query, signal, f.options).catch((error: { code?: string }) => { codes.push(error.code ?? 'unknown'); });
+    expect(codes).toEqual(['WORKER_TREE_SECRET_REFUSED']); expect(capture).not.toHaveBeenCalled(); expect(await readdir(f.workspaces)).toEqual([]);
+    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'failed' }); expect(await f.auditPage()).toHaveLength(1);
   } finally { f.store.close(); }
 });
 

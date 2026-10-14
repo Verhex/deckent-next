@@ -1,6 +1,5 @@
-import GATE from './gate.json' with { type: 'json' };
 import { constants } from 'node:fs';
-import { open, readdir } from 'node:fs/promises';
+import { lstat, open, readdir, readlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { EMPTY_KNOWN_SECRETS, REDACTION_PATTERNS, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { WorkerTreeFinding, WorkerTreeLimit, WorkerTreeScan } from '#engine/index.js';
@@ -15,59 +14,69 @@ export interface WorkerTreeGateOptions {
 export const WORKER_TREE_DENY: readonly string[] = CREDENTIAL_WORKSPACE_DENY;
 /** The content rules are the redaction table's rows marked `gate` (versioned registry data); `source` is the table's precise expression. */
 export const WORKER_TREE_PATTERN_RULES = Object.freeze(REDACTION_PATTERNS.filter(row => row.gate === true));
-/** Git's own heuristic: a NUL byte in the first 8000 bytes marks a binary file, whose content is not pattern-scanned (its path still is). */
-const BINARY_PROBE_BYTES = GATE.binaryProbeBytes;
 const FILE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+/** The clone's object store (history) and its index (the tree's own paths again) are the only entries not read; see the S6 report. */
+const UNREAD_GIT_ENTRIES: ReadonlySet<string> = new Set(['.git/objects', '.git/index']);
 
 class Incomplete extends Error { constructor(readonly limit: WorkerTreeLimit, readonly observed: number, readonly bound: number) { super(limit); } }
-/** A path as the person and the audit see it: control characters escaped, and a credential-shaped name redacted like any record text. */
-const shownPath = (rel: string) => redactForRecord(rel.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`));
 
 /**
- * The pre-dispatch scan of the exact tree a worker would receive (the prepared checkout, predecessor patches applied), excluding only the
- * clone's top-level `.git` (history is out of scope, see the S6 report). Refused: a deny-listed path (files and directories, never read;
- * an exact `acknowledgedDenyPaths` entry is read and scanned like any file),
- * a configured secret value anywhere in a text file, or a `gate` pattern outside `allowPatternPaths`. Symlinks are path-checked, never
- * followed. Files, single-file bytes, total bytes and time are bounded; an exhausted bound returns `incomplete`, never a partial `clean`.
+ * The pre-dispatch scan of exactly what the worker's container receives: the whole prepared checkout (predecessor patches applied),
+ * including the clone's `.git` metadata (config, refs, logs), except `.git/objects` — the history the owner deferred to a later scan — and
+ * `.git/index`. Fail closed throughout:
+ * - a deny-listed path (case-insensitive, so `KEY.PEM` and `.ENV` match too; files and directories, never read or descended) unless an exact
+ *   `acknowledgedDenyPaths` entry, which is then read and scanned like any file;
+ * - every regular file's full content, binary files included (UTF-8, plus UTF-16 in both byte alignments when it holds NUL bytes), and every
+ *   symlink's target text: a configured secret value anywhere, or a `gate` pattern outside `allowPatternPaths`; symlinks are never followed;
+ * - an entry that is neither file, directory nor symlink (FIFO, socket, device) is refused as unscannable;
+ * - files, single-file bytes, total bytes and time are bounded and return `incomplete`; any I/O error rejects (no dispatch either way).
+ * Shown paths have control characters escaped and pass the record redactor with the configured values, so no path carries a value.
  */
 export async function scanWorkerTree(root: string, options: WorkerTreeGateOptions, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS,
   now: () => number = Date.now): Promise<WorkerTreeScan> {
-  const deny = WORKER_TREE_DENY.map(pattern => ({ pattern, match: createGlobMatcher(pattern) }));
+  const deny = WORKER_TREE_DENY.map(pattern => ({ pattern, match: createGlobMatcher(pattern.toLowerCase()) }));
   const allowed = options.allowPatternPaths.map(createGlobMatcher), rules = WORKER_TREE_PATTERN_RULES.map(row => ({ id: row.id, expression: new RegExp(row.source, row.flags.replace('g', '')) }));
   const findings: WorkerTreeFinding[] = [], started = now(), deadline = started + options.timeoutMs;
   let files = 0, total = 0;
-  const acknowledged = new Set(options.acknowledgedDenyPaths), denied = (rel: string) => acknowledged.has(rel) ? undefined : deny.find(entry => entry.match(rel))?.pattern;
-  const content = async (path: string): Promise<string | null> => {
+  const acknowledged = new Set(options.acknowledgedDenyPaths);
+  const denied = (rel: string) => acknowledged.has(rel) ? undefined : deny.find(entry => entry.match(rel.toLowerCase()))?.pattern;
+  const shown = (rel: string) => redactForRecord(rel.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`), known);
+  const time = () => { if (now() >= deadline) throw new Incomplete('time', now() - started, options.timeoutMs); };
+  const read = async (path: string): Promise<Buffer> => {
     const handle = await open(path, FILE_FLAGS);
     try {
       const info = await handle.stat();
-      if (!info.isFile()) return null;
-      const probe = Buffer.alloc(Math.min(BINARY_PROBE_BYTES, info.size)), head = await handle.read(probe, 0, probe.length, 0);
-      if (probe.subarray(0, head.bytesRead).includes(0)) return null;
+      if (!info.isFile()) throw new Error('WORKER_TREE_ENTRY_CHANGED');
       if (info.size > options.maxFileBytes) throw new Incomplete('file-bytes', info.size, options.maxFileBytes);
       if ((total += info.size) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes);
       const bytes = Buffer.alloc(info.size); let offset = 0;
-      while (offset < bytes.length) { const read = await handle.read(bytes, offset, bytes.length - offset, offset); if (!read.bytesRead) break; offset += read.bytesRead; }
-      return bytes.subarray(0, offset).toString('utf8');
+      while (offset < bytes.length) { const chunk = await handle.read(bytes, offset, bytes.length - offset, offset); if (!chunk.bytesRead) break; offset += chunk.bytesRead; }
+      if (offset !== info.size) throw new Error('WORKER_TREE_ENTRY_CHANGED');
+      return bytes;
     } finally { await handle.close(); }
+  };
+  const texts = (bytes: Buffer) => bytes.includes(0) ? [bytes.toString('utf8'), bytes.toString('utf16le'), bytes.subarray(1).toString('utf16le')] : [bytes.toString('utf8')];
+  const inspect = (rel: string, candidates: readonly string[]) => {
+    if (candidates.some(text => known.spans(text).length)) { findings.push({ path: shown(rel), rule: 'known-secret' }); return; }
+    if (allowed.some(match => match(rel))) return;
+    const rule = rules.find(row => candidates.some(text => row.expression.test(text)));
+    if (rule) findings.push({ path: shown(rel), rule: `pattern:${rule.id}` });
   };
   const visit = async (directory: string, prefix: string): Promise<void> => {
     const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
     for (const entry of entries) {
-      const rel = prefix + entry.name;
-      if (rel === '.git') continue;
+      const rel = prefix + entry.name, path = join(directory, entry.name);
+      if (UNREAD_GIT_ENTRIES.has(rel)) continue;
       if (++files > options.maxFiles) throw new Incomplete('files', files, options.maxFiles);
-      if (now() >= deadline) throw new Incomplete('time', now() - started, options.timeoutMs);
+      time();
       const pattern = denied(rel);
-      if (pattern !== undefined) { findings.push({ path: shownPath(rel), rule: `deny-path:${pattern}` }); continue; }
-      if (entry.isDirectory()) { await visit(join(directory, entry.name), rel + '/'); continue; }
-      if (!entry.isFile()) continue;
-      const text = await content(join(directory, entry.name));
-      if (text === null) continue;
-      if (known.spans(text).length) { findings.push({ path: shownPath(rel), rule: 'known-secret' }); continue; }
-      if (allowed.some(match => match(rel))) continue;
-      const rule = rules.find(row => row.expression.test(text));
-      if (rule) findings.push({ path: shownPath(rel), rule: `pattern:${rule.id}` });
+      if (pattern !== undefined) { findings.push({ path: shown(rel), rule: `deny-path:${pattern}` }); continue; }
+      // A directory entry type is a hint; an unknown type (DT_UNKNOWN) is resolved without following a link.
+      const info = entry.isDirectory() || entry.isFile() || entry.isSymbolicLink() ? entry : await lstat(path);
+      if (info.isDirectory()) await visit(path, rel + '/');
+      else if (info.isSymbolicLink()) inspect(rel, [await readlink(path)]);
+      else if (info.isFile()) { inspect(rel, texts(await read(path))); time(); }
+      else findings.push({ path: shown(rel), rule: 'unscannable:special-file' });
     }
   };
   try { await visit(root, ''); }

@@ -50,11 +50,13 @@ in it can reach the model provider through the worker's one egress. The terminal
   native connection, the Docker profile capture and the dispatch claim. The scan is the adapter `worker-tree-gate` (`scanWorkerTree`); the
   decision, audit event and typed refusal are the engine's `enforceWorkerTreeGate`.
 - **Rules (one source each):** deny paths are `CREDENTIAL_WORKSPACE_DENY`, the terminal read floor without repository internals (the same
-  list the full-access deny view and the shell hard floor use); a deny-listed directory is reported, never descended, and a symlink is
-  checked by its path, never followed. Content is matched against the installation's configured secret values (`known-secret`, never
-  liftable) and against the canonical redaction table rows marked `"gate": true` (row `source`, the precise expression). `key-value` is
-  `"gate": false`: it matches ordinary code (`token = identifier`) and refused 44 non-test source files of this repository. Binary files
-  (NUL within the first 8000 bytes) are path-checked only. The clone's own `.git` (history) is not scanned.
+  list the full-access deny view and the shell hard floor use), matched case-insensitively; a deny-listed directory is reported, never
+  descended. Content is matched against the installation's configured secret values (`known-secret`, never liftable) and against the
+  canonical redaction table rows marked `"gate": true` (row `source`, the precise expression). `key-value` is `"gate": false`: it matches
+  ordinary code (`token = identifier`) and refused 44 non-test source files of this repository. Every regular file is read whole, binary
+  included (UTF-8, and both UTF-16 alignments when it holds NUL bytes); a symlink's target text is scanned, never followed; a FIFO, socket or
+  device is refused as unscannable; an I/O error rejects. The scanned set is the whole checkout including the clone's `.git` metadata
+  (config, refs, logs) except `.git/objects` (history, owner-deferred) and `.git/index`.
 - **Acknowledgements (`execution.secretGate`, v1, empty by default):** `allowPatternPaths` (≤ 64 globs) lifts content-pattern hits only;
   `acknowledgedDenyPaths` (≤ 64 exact paths) lifts the deny-path rule for a settings-only file such as `.npmrc`, whose content is still
   scanned. Bounds `maxFiles`, `maxFileBytes`, `maxTotalBytes`, `timeoutMs` fail closed as `WORKER_TREE_SCAN_INCOMPLETE` naming the setting.
@@ -62,7 +64,11 @@ in it can reach the model provider through the worker's one egress. The terminal
   container, connection or claim exists. The text (EN/TR, shared renderer) names up to 16 `path (rule)` pairs and the omitted count; paths
   pass through the record redactor and never carry a value. The `worker-tree-refused` audit subject keeps up to 50 findings, the full
   count and the exhausted bound. No audit, no closure: an audit failure is thrown (transient) and the next turn scans and records again.
-- **Open limits:** Git history is not scanned (a secret removed from the tip but present in history still reaches the worker's `.git`);
-  binary and non-UTF-8 content, values shorter than six characters and credential shapes outside the gated rows are not detected; the
-  time bound is checked between entries. No Next surface lists Core audit events yet; a later Run view shows the recorded code only.
+- **Sibling paths:** the only launch site is `DispatchApplication.execute` in `executeConfiguredTask` (SDK `executeTask`, MCP/CLI task
+  execution, run progression, retries and recorded-workspace restarts all call it); reconcile, cancel, output recovery and release reuse a
+  recorded dispatch. `worker-tree-gate-paths.test.ts` fails on a new launch site or a reordering.
+- **Open limits:** Git history (`.git/objects`) is not scanned: a secret removed from the tip but present in history still reaches the
+  worker's `.git` (measured remedy: depth-1 clone at the pinned base). Encodings other than UTF-8/UTF-16, values shorter than six
+  characters and credential shapes outside the gated rows (e.g. a PEM block inside source) are not detected; the time bound is checked
+  between entries. No Next surface lists Core audit events yet; a later Run view shows the recorded code only.
   Author proof and the base-tree-only clone measurement: external `proof/S6-SIR-KAPISI-2026-10-14/`.

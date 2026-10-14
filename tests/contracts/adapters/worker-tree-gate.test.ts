@@ -1,4 +1,6 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +9,7 @@ import { REDACTION_PATTERNS, resolveProductLayout, snapshotKnownSecrets } from '
 
 // S6 (owner 2026-10-14): the pre-dispatch secret gate over the tree a worker receives. Risky inputs stay in the tests; values are built at
 // run time so this file is not itself a credential carrier.
-const roots: string[] = [];
+const roots: string[] = [], exec = promisify(execFile);
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const PROVIDER_TOKEN = ['sk', 'ant', 'api03', 'Zx9'.repeat(12)].join('-');
 const options = { allowPatternPaths: [] as string[], acknowledgedDenyPaths: [] as string[], maxFiles: 1000, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, timeoutMs: 60_000 };
@@ -37,9 +39,12 @@ describe('one deny list and one pattern table', () => {
 });
 
 describe('scanWorkerTree', () => {
-  it('passes a clean tree unchanged and never reads the clone history', async () => {
-    const root = await tree({ 'src/index.ts': 'export const answer = 42;\n', 'README.md': '# project\n', '.git/config': `[remote]\n url = https://u:${PROVIDER_TOKEN}@example.invalid\n` });
+  it('passes a clean tree unchanged; the clone metadata is scanned, only its object store (history, owner-deferred) and index are not read', async () => {
+    const root = await tree({ 'src/index.ts': 'export const answer = 42;\n', 'README.md': '# project\n', '.git/HEAD': 'ref: refs/heads/main\n',
+      '.git/objects/ab/cdef': `${PROVIDER_TOKEN}`, '.git/index': `${PROVIDER_TOKEN}` });
     await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'clean' });
+    await writeFile(join(root, '.git/config'), `[remote "x"]\n url = https://u:${PROVIDER_TOKEN}@example.invalid\n`);
+    await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: 1, findings: [{ path: '.git/config', rule: 'pattern:provider-token' }] });
   });
   it('refuses deny-listed paths, configured secret values and gated patterns, naming paths and rules but never a value', async () => {
     const known = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value: 'erp-hunter2-value' }]);
@@ -73,14 +78,33 @@ describe('scanWorkerTree', () => {
     await expect(scanWorkerTree(leaking, { ...options, acknowledgedDenyPaths: ['.npmrc'] })).resolves.toEqual({ status: 'refused', count: 1,
       findings: [{ path: '.npmrc', rule: 'pattern:provider-token' }] });
   });
-  it('skips the content of a binary file (NUL in the probe) but still checks its path', async () => {
-    const root = await tree({ 'assets/logo.bin': Buffer.concat([Buffer.from([0, 1, 2]), Buffer.from(PROVIDER_TOKEN)]), 'assets/key.pem': Buffer.from([0, 0]) });
-    await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: 1, findings: [{ path: 'assets/key.pem', rule: 'deny-path:**/*.pem' }] });
+  it('reads binary and UTF-16 content too: a value hidden behind a NUL byte or in either UTF-16 alignment is refused', async () => {
+    const utf16 = Buffer.from(PROVIDER_TOKEN, 'utf16le');
+    const root = await tree({ 'assets/logo.bin': Buffer.concat([Buffer.from([0, 1, 2]), Buffer.from(PROVIDER_TOKEN)]), 'assets/key.pem': Buffer.from([0, 0]),
+      'notes/le.txt': utf16, 'notes/be.txt': Buffer.concat([Buffer.from([0]), utf16]), 'notes/plain.bin': Buffer.from([0, 1, 2, 3]) });
+    await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: 4, findings: [{ path: 'assets/key.pem', rule: 'deny-path:**/*.pem' },
+      { path: 'assets/logo.bin', rule: 'pattern:provider-token' }, { path: 'notes/be.txt', rule: 'pattern:provider-token' }, { path: 'notes/le.txt', rule: 'pattern:provider-token' }] });
   });
-  it('names a credential-shaped path redacted, not verbatim', async () => {
-    const root = await tree({ [`fixtures/${PROVIDER_TOKEN}.txt`]: `${PROVIDER_TOKEN}` });
-    const scan = await scanWorkerTree(root, options);
-    expect(scan).toEqual({ status: 'refused', count: 1, findings: [{ path: 'fixtures/[REDACTED].txt', rule: 'pattern:provider-token' }] });
+  it('matches deny paths case-insensitively, refuses special files and scans symlink target text', async () => {
+    const root = await tree({ 'certs/SERVER.PEM': 'x', '.ENV': 'x', 'ok.txt': 'fine' });
+    await symlink(`/run/${PROVIDER_TOKEN}`, join(root, 'link'));
+    await exec('mkfifo', [join(root, 'pipe')]);
+    await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: 4, findings: [{ path: '.ENV', rule: 'deny-path:.env' },
+      { path: 'certs/SERVER.PEM', rule: 'deny-path:**/*.pem' }, { path: 'link', rule: 'pattern:provider-token' }, { path: 'pipe', rule: 'unscannable:special-file' }] });
+  });
+  it('rejects (never passes) when an entry cannot be read', async () => {
+    const root = await tree({ 'secret.txt': `${PROVIDER_TOKEN}` });
+    await chmod(join(root, 'secret.txt'), 0o000);
+    await expect(scanWorkerTree(root, options)).rejects.toMatchObject({ code: 'EACCES' });
+    await chmod(join(root, 'secret.txt'), 0o600);
+  });
+  it('names a credential-shaped or configured-value path redacted, not verbatim', async () => {
+    const known = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value: 'erp-hunter2-value' }]);
+    const root = await tree({ [`fixtures/${PROVIDER_TOKEN}.txt`]: `${PROVIDER_TOKEN}`, 'dumps/erp-hunter2-value.csv': 'erp-hunter2-value' });
+    const scan = await scanWorkerTree(root, options, known);
+    expect(scan).toEqual({ status: 'refused', count: 2, findings: [{ path: 'dumps/‹secret:ERP_PASSWORD›.csv', rule: 'known-secret' },
+      { path: 'fixtures/[REDACTED].txt', rule: 'pattern:provider-token' }] });
+    expect(JSON.stringify(scan)).not.toContain('hunter2'); expect(JSON.stringify(scan)).not.toContain(PROVIDER_TOKEN);
   });
   it('fails closed with the exhausted bound: one huge text file, too many files, total bytes, time', async () => {
     const big = await tree({ 'data/dump.sql': 'x'.repeat(4096), 'a.txt': 'a' });
@@ -90,8 +114,8 @@ describe('scanWorkerTree', () => {
     await expect(scanWorkerTree(many, { ...options, maxFiles: 10 })).resolves.toMatchObject({ status: 'incomplete', limit: 'files', bound: 10 });
     let clock = 0; const now = () => (clock += 400);
     await expect(scanWorkerTree(many, { ...options, timeoutMs: 1000 }, undefined, now)).resolves.toMatchObject({ status: 'incomplete', limit: 'time', bound: 1000 });
-    // A huge binary file is not a content bound: only its probe is read.
+    // A huge binary file is content too: it is bounded like text, never skipped.
     const binary = await tree({ 'model.bin': Buffer.concat([Buffer.from([0]), Buffer.alloc(8192, 1)]) });
-    await expect(scanWorkerTree(binary, { ...options, maxFileBytes: 1024, maxTotalBytes: 1024 })).resolves.toEqual({ status: 'clean' });
+    await expect(scanWorkerTree(binary, { ...options, maxFileBytes: 1024 })).resolves.toEqual({ status: 'incomplete', limit: 'file-bytes', observed: 8193, bound: 1024 });
   });
 });
