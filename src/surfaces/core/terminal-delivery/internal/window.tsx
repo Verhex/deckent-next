@@ -214,9 +214,16 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     rows.push(...stage.error.split('\n').map(value => line(value, { role: 'error' })));
     // A next step may name the exact command for this attempt, delivery and selected branch (ADOPTION_NOT_VERIFIED: the CLI with --verification-run).
     const next = (stage.code ? labels.next[stage.code] : undefined) ?? labels.nextDefault, id = preview?.identity;
-    rows.push(line(preview && id ? fillTemplate(next, { scope: id.scopeId, run: id.runId, task: id.taskId, attempt: id.attemptId, generation: id.generation,
-      layout: id.layoutRevision, delivery: delivered?.commandId ?? '<delivery>', target: preview.adoptionTargets[entry.selected] ?? '<branch>' }) : next, { role: 'accent' }));
+    // Identities admit spaces, quotes, $() and ; — every value placed into the suggested command is one POSIX shell word (Astra 2543 P1).
+    const arg = shellWord, target = preview?.adoptionTargets[entry.selected];
+    rows.push(line(preview && id ? fillTemplate(next, { scope: arg(id.scopeId), run: arg(id.runId), task: arg(id.taskId), attempt: arg(id.attemptId),
+      generation: arg(String(id.generation)), layout: arg(id.layoutRevision), delivery: delivered ? arg(delivered.commandId) : '<delivery>',
+      target: target === undefined ? '<branch>' : arg(target) }) : next, { role: 'accent' }));
   }
   return rows;
+}
+/** One POSIX shell word: safe characters stay as they are; anything else is single-quoted with embedded quotes closed and escaped. */
+export function shellWord(value: string): string {
+  return /^[A-Za-z0-9._/:@%+=,-]+$/u.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 export type DeliveryWindows = ReturnType<typeof useDeliveryWindows>;

@@ -1,7 +1,11 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EffectConfirmationView, RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, consentMatches, deliveryLines, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
+import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -200,6 +204,25 @@ describe('delivery window on the real Workline', () => {
         files: [], added: 0, removed: 0, source: 'S', base: BASE, proposal: 'P'.repeat(20), outOfScope: [] } as never }, WORDS);
     expect(rows.at(-1)!.spans.map(part => part.text).join('')).toContain('`deckent task integration-adopt --scope s --run r --task task --attempt a --generation 1'
       + ' --layout-revision l --command-id <new-id> --delivery-command-id terminal-delivery-1 --target refs/heads/main --verification-run <run>`');
+  });
+
+  it('the suggested command keeps every hostile identity one shell word and runs no side command (Astra 2543 P1)', () => {
+    const marker = join(mkdtempSync(join(tmpdir(), 'deckent-shell-word-')), 'MARKER');
+    const hostile = { scope: "s 1", run: `r;touch ${marker}`, task: `task$(touch ${marker})`, attempt: "a'b", layout: 'l`touch ' + marker + '`', target: 'refs/heads/feat x' };
+    const rows = deliveryLines({ target: { key: 'k', scopeId: hostile.scope, runId: hostile.run, taskId: hostile.task, title: 'ORDER-TASK' } as never,
+      stage: { kind: 'failed', error: 'ERR', code: 'ADOPTION_NOT_VERIFIED' }, selected: 0, adopted: null,
+      delivered: { ref: REF, commit: COMMIT, commandId: "d'1 $(x)" },
+      preview: { identity: { scopeId: hostile.scope, runId: hostile.run, taskId: hostile.task, attemptId: hostile.attempt, layoutRevision: hostile.layout, generation: 1 },
+        adoptionTargets: [hostile.target], files: [], added: 0, removed: 0, source: 'S', base: BASE, proposal: 'P'.repeat(20), outOfScope: [] } as never }, WORDS);
+    const text = rows.at(-1)!.spans.map(part => part.text).join(''), start = text.indexOf('deckent task integration-adopt'), command = text.slice(start, text.lastIndexOf('`'));
+    // The person fills the two placeholders and pastes the line into a POSIX shell; here printf stands in for deckent and prints argv.
+    const filled = command.replace('<new-id>', 'adopt-1').replace('<run>', 'v-1').replace(/^deckent /u, "printf '%s\\n' ");
+    const argv = execFileSync('sh', ['-c', filled], { encoding: 'utf8' }).trimEnd().split('\n');
+    expect(argv).toEqual(['task', 'integration-adopt', '--scope', hostile.scope, '--run', hostile.run, '--task', hostile.task, '--attempt', hostile.attempt,
+      '--generation', '1', '--layout-revision', hostile.layout, '--command-id', 'adopt-1', '--delivery-command-id', "d'1 $(x)", '--target', hostile.target,
+      '--verification-run', 'v-1']);
+    expect(existsSync(marker)).toBe(false);
+    expect(shellWord('refs/heads/main')).toBe('refs/heads/main'); expect(shellWord("a'b")).toBe(`'a'\\''b'`);
   });
 
   it('n after delivery finishes without adopting; the branch is never moved', async () => {
