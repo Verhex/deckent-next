@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { globalStateRoot } from '#platform/index.js';
@@ -20,6 +20,20 @@ const GRANTS = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approva
   rule('write-op', 'operation', ['workspace.file.write'], 'allow')];
 const runtime = (mode: 'full-auto' | 'auto-edit' = 'full-auto', grants = GRANTS, shell: Record<string, unknown> = {}) =>
   modeRuntime({ grants, mode, shell: { schemaVersion: 1, realm: 'require-sandbox', ...shell } });
+/**
+ * CI-KARARLILIK: waits (20 ms polls, 10 s bound) until a running call's private directory holds `rel`, the observable point an owner's
+ * concurrent write must follow. `work`: the start mark is taken (the directory's ctime once `upper` and `work` exist). `upper/<path>`: the
+ * sandboxed command already wrote or removed that path (a removal is a whiteout there). A fixed wait after the directory appeared raced
+ * the sandbox's setup on a loaded runner: the owner's file landed before the command's `rm -d`, which then failed, so nothing conflicted.
+ */
+async function callReached(f: { readonly data: string }, rel: string) {
+  const writes = join(f.data, 'state', 'file-effects', 'sandbox-writes');
+  for (let tries = 0; tries < 500; tries++) {
+    for (const call of await readdir(writes).catch(() => [] as string[])) if (await lstat(join(writes, call, rel)).then(() => true, () => false)) return;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  throw new Error(`no running call's write-set directory holds ${rel}`);
+}
 
 describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () => {
   it('a new floor name is not written; ordinary changes, file copies/removals and a new directory are applied, each audited like an edit', async () => {
@@ -67,10 +81,8 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
   it('the project changing under the call applies nothing; a stopped run applies nothing', async () => {
     const f = await runtime();
     const running = f.call('run_shell', { command: 'f=a; sleep 1; echo mine >> src/$f.ts; echo new >> src/y.ts' });
-    // Once the call's private directory exists the mark is taken; the owner's editor then writes the same file.
-    const writes = join(f.data, 'state', 'file-effects', 'sandbox-writes');
-    for (let tries = 0; tries < 200 && (await readdir(writes).catch(() => [])).length === 0; tries++) await new Promise(resolve => setTimeout(resolve, 20));
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Once the call's private directory holds `work` the mark is taken; the owner's editor then writes the same file (the command sleeps first).
+    await callReached(f, 'work');
     await writeFile(join(f.project, 'src', 'a.ts'), 'theirs\n');
     const result = await running;
     expect(result.text).toContain('nothing was applied — the project changed during the call: src/a.ts');
@@ -181,9 +193,8 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
       const f = await runtime();
       await mkdir(join(f.project, 'src', 'empty'));
       const running = f.call('run_shell', { command: 'd=empty; rm -d src/$d; echo new >> src/other.ts; sleep 1' });
-      const writes = join(f.data, 'state', 'file-effects', 'sandbox-writes');
-      for (let tries = 0; tries < 200 && (await readdir(writes).catch(() => [])).length === 0; tries++) await new Promise(resolve => setTimeout(resolve, 20));
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // The command removed the empty directory (its whiteout is in the call's upper); the owner then adds a file to it while the command sleeps.
+      await callReached(f, join('upper', 'src', 'empty'));
       await writeFile(join(f.project, 'src', 'empty', 'theirs.txt'), 'theirs\n');
       const result = await running;
       expect(result.text).toContain('nothing was applied — the project changed during the call: src/empty');
