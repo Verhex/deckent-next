@@ -17,6 +17,7 @@ export type TurnDecisionCapabilities = ReturnType<typeof createTurnDecisionCapab
 /** The decision path's registry: the peer-session baseline plus the given producers (Core's turn ring; Enterprise's own). */
 export const approvalAssuranceRegistry = (producers: readonly ApprovalAssuranceProducer[] = []) => new ApprovalAssuranceRegistry(PEER, producers);
 /** Core's levels, for ranking a minimum where no service registry is at hand (a producer filling a card's facts). */
+export const coreApprovalAssuranceInventory = () => CORE_LEVELS.inventory();
 const CORE_LEVELS = approvalAssuranceRegistry([createTurnDecisionCapabilities()]);
 
 type Risk = ApprovalFacts['risk'];

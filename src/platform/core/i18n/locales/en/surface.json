@@ -708,5 +708,6 @@
   "resource.recommendation.axis.wall": "wall time",
   "resource.recommendation.axis.api": "measured API money",
   "resource.recommendation.axis.subscription": "observed subscription time",
-  "monitor.approval.expiredCount": "Expired approvals: {count} (history; no decision available)."
+  "monitor.approval.expiredCount": "Expired approvals: {count} (history; no decision available).",
+  "doctor.auditIntegrity": "Audit integrity: {status} ({reason})"
 }

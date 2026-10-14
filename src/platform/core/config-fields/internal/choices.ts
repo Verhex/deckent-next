@@ -9,7 +9,12 @@ export type ConfigChoiceDeclaration = Readonly<
   | { kind: 'reference'; source: ConfigChoiceSource; multiple?: boolean }
   | { kind: 'entry'; format: 'host' | 'url'; presets: readonly string[]; multiple?: boolean }>;
 export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclaration>> = Object.freeze({
-  'resourceObservation.recommendation.axis': { kind: 'schema' },
+  'audit.schemaVersion': { kind: 'schema' },
+  'audit.checkpointIntervalMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 10000, 60000, 300000] },
+  'audit.pageSize': { kind: 'numeric', unit: 'count', step: 1, presets: [10, 100, 1000] },
+  'audit.maxRecords': { kind: 'numeric', unit: 'count', step: 1000, presets: [10000, 100000, 1000000] },
+  'audit.maxScopes': { kind: 'numeric', unit: 'count', step: 1, presets: [64, 1024, 10000] },
+  'resourceObservation.recommendation.axis' : { kind: 'schema' },
   'resourceObservation.recommendation.maxCandidates': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32] },
   'resourceObservation.recommendation.minPairs': { kind: 'numeric', unit: 'count', step: 1, presets: [30, 100, 500, 1000] },
   'resourceObservation.recommendation.maxEvidenceEntries': { kind: 'numeric', unit: 'count', step: 1, presets: [64, 2048, 8192] },

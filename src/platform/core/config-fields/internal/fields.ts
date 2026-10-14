@@ -55,6 +55,11 @@ export const CONFIG_FIELDS = Object.freeze({
       maxDepth: z.number().int().positive().safe().default(32),
     }).strict().default({}),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  audit: field('config.field.audit', { state: 'bound', consumers: ['src/composition/core/audit'] }, 'restart', z.object({
+    schemaVersion: z.literal(1).default(1), checkpointIntervalMs: z.number().int().min(1000).max(2147483647).default(60000),
+    pageSize: z.number().int().positive().max(1000).default(100), maxRecords: z.number().int().positive().safe().default(100000),
+    maxScopes: z.number().int().positive().safe().default(1024),
+  }).strict().default({})),
   approvals: field('config.field.approvals', { state: 'bound', consumers: ['src/composition/core/approvals'] }, 'restart', z.object({
     requestTtlMs: z.number().int().positive().safe().default(600000),
     sessionTtlMs: z.number().int().positive().safe().default(60000),

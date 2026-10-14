@@ -1,3 +1,4 @@
+import { migrateAuditCheckpoints } from './migration-v55.js';
 import { migrateQuotaWaits } from './migration-v54.js';
 import { migrateRunCreateApprovals } from './migration-v52.js';
 import { migrateMeasuredTariffSpend } from './migration-v49.js';
@@ -36,7 +37,7 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 54;
+export const CURRENT_LEDGER_VERSION = 55;
 export const RUN_PROPOSAL_LEDGER_VERSION = 53;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
@@ -328,6 +329,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
       db.exec(`PRAGMA user_version=${POOL_CAPACITY_LEDGER_VERSION};`);
       continue;
     }
+    if (next === 55) { migrateAuditCheckpoints(db); continue; }
     if (next === 54) { migrateQuotaWaits(db); continue; }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');

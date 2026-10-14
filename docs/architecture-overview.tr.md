@@ -149,3 +149,15 @@ Enterprise SSO/toplu kurulum yönetimi ve microVM yalıtımı gelecek işlerdir.
 filo ölçeğinde performansı veya denenmemiş platformdaki üretim desteğini kanıtlamaz.
 Benimsemeden önce seçili sağlayıcı, işlem ve yalıtım ayarlarının gerçek başarı, ret,
 iptal ve kurtarma yollarını değerlendirin.
+
+## Audit bütünlüğü ve pull witness
+
+`deckent audit verify --scope <id> --json` saklanan olay mühürlerini, sıra sürekliliğini, checkpoint zincirini ve audit başlarını tutarlı bir okuma snapshotında doğrular. SDK `verifyAudit(root, {schemaVersion: 1, scopeId}, options)` ve salt okunur MCP `verify_audit` aynı policy kontrollü okumayı kullanır; scope için approval `inspect` izni gerekir. Doctor ve servisin `audit-integrity` raporu bozulmayı gösterir. Aynı OS hesabından çalışan ajanın yerel dosyaları değiştirmesini önlemez; saklanan kanıta göre değişimi tespit eder.
+
+`deckent audit verify --scope <id> --export-checkpoint` son kayıtlı checkpointi stdout üzerinde JSON olarak verir; yoksa `null`. Ayrı cihaz özgün çıktıyı bağımsız saklamalıdır. Sonradan `--checkpoint <dosya>` veya stdin için `--checkpoint -` ile karşılaştırılır; SDK/MCP aynı nesneyi `witness` alanında alır. Servise çıktı yolu veya witness ağ adresi verilmez.
+
+Sürüm-1 çıktı `{schemaVersion: 1, kind: "deckent-audit-checkpoint", checkpoint, digest}` biçimindedir. Strict checkpoint alanları `schemaVersion`, `installationId`, `scopeId`, `sequence`, `atMs`, `head: {sequence, digest}`, `policyDigest`, `producersDigest`, `previousDigest`, `keyId`, `mac`tır. Digest/MAC küçük harf SHA-256 hex biçimindedir; çıktı digest'i canonical mühürlü checkpointten hesaplanır. Audit başı scope bağlı boş baştan başlayarak tam mühürlü olayları sıra ile bağlar. Checkpoint HMAC'i unsigned canonical projeksiyonu, predecessor digest önceki mühürlü checkpointi bağlar. Özgün kurulum anahtarı erişilebilir kalmalıdır; sır veya policy içeriği dışa aktarılmaz.
+
+Sonuçlar `match`, `truncated`, `policy-changed`, `producers-changed`, `chain-broken`, `unknown` ayrımını korur. Özgün anahtar yoksa, witness başka kuruluma/scope'a aitse veya config tarama sınırı aşılmışsa bilinmiyor kalır; eski ledger için `no-checkpoint-yet` döner. Yerel audit ve checkpoint geçmişi birlikte silindiyse dış cihazdaki özgün witness gerekir. Checkpointler arasındaki son bölüm henüz sabitlenmemiştir; tüm yerel kanıtın silinmesi veya eski sürüme döndürülmesi yalnız yerel kanıtla dışlanamaz. Revision etiketi değişmeden policy içeriği değişirse de tespit edilir. Normal yönetilen policy değişimi de açık baseline uzlaştırması gerektirir; bu dilim otomatik sıfırlama sunmaz.
+
+Checkpointi servis başlangıçta ve config aralığında üretir. Tarama `audit.pageSize`, `audit.maxRecords` (olay ve checkpoint), `audit.maxScopes` ile sınırlıdır; sınıra ulaşınca tam doğrulandı demez. Okumalar yazma, migration, healing veya eksik anahtar/kimlik üretimi yapmaz. Ayrı pull cihazı uygulaması beta sonrasıdır; FIDO2 imzalı policy paketi ilk beta sonrası iştir. Kaynak testleri canlı veya bağımsız kabul değildir.

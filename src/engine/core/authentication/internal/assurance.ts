@@ -31,6 +31,11 @@ export class ApprovalAssuranceRegistry {
   constructor(private readonly baseline: { readonly level: string; readonly rank: number }, producers: readonly ApprovalAssuranceProducer[] = []) {
     this.producers = [...producers].sort((a, b) => b.rank - a.rank);
   }
+  /** Public metadata of exactly the installed baseline and producers, never capabilities or credentials. */
+  inventory(): readonly { readonly level: string; readonly rank: number }[] {
+    return Object.freeze([this.baseline, ...this.producers.map(({ level, rank }) => ({ level, rank }))]
+      .map(value => Object.freeze({ ...value })).sort((a, b) => (a.level < b.level ? -1 : a.level > b.level ? 1 : 0) || a.rank - b.rank));
+  }
   /** Rank of a level; a level no producer here can attest is unsatisfiable (`Infinity`), so a minimum naming it fails closed. */
   rank(level: string): number {
     if (level === this.baseline.level) return this.baseline.rank;

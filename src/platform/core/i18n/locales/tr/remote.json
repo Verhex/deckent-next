@@ -215,5 +215,6 @@
   "voice.reply_lang_forced": "SADECE {language} dilinde yanıtla. Dilleri karıştırma.",
   "voice.reply_lang_mirror": "Kullanıcının kullandığı dilde yanıtla. Dilleri karıştırma.",
   "voice.transcribe.error": "[ses: transkripsiyon mevcut değil — ses notu metin olarak gönderildi]",
-  "voice.wrapper_unreachable": "⚠️ Ses yapılandırıldı (sağlayıcı={provider}) ancak arka uç {url} adresine ulaşılamıyor — ses yanıtları metin olarak gönderilecek. {detail}"
+  "voice.wrapper_unreachable": "⚠️ Ses yapılandırıldı (sağlayıcı={provider}) ancak arka uç {url} adresine ulaşılamıyor — ses yanıtları metin olarak gönderilecek. {detail}",
+  "mcp.tool.verifyAudit": "Scope audit geçmişini ve kayıtlı checkpointleri salt okunur doğrular; saklanan pull-witness çıktısı ile karşılaştırabilir. Son-silme ve policy değişimini tespit eder; karar yetkisi vermez."
 }

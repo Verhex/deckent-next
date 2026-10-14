@@ -1,3 +1,8 @@
+export { AuditCheckpointCycleError, AuditCheckpointMonitor, auditServiceStatus } from './internal/service.js';
+export type { AuditServiceStatus } from './internal/service.js';
+export { AuditCheckpointApplication, auditCheckpointDigest, exportAuditCheckpoint, auditPolicyDigest, auditProducersDigest } from './internal/checkpoint.js';
+export type { AuditCheckpointContext, AuditVerificationLimits } from './internal/checkpoint.js';
+export type { AuditCheckpointStore } from './internal/checkpoint-store.js';
 export type { AuditStore } from './internal/store.js';
 export { sealAuditRecord, verifyAuditRecord } from './internal/integrity.js';
 export { AuditApplication } from './internal/application.js';

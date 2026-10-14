@@ -3,6 +3,8 @@ import type { IntegrityAuthority } from '#platform/index.js';
 import { sealAuditRecord, verifyAuditRecord } from './integrity.js';
 import type { AuditStore } from './store.js';
 const MAX_PAGE = 1_000;
+export { MAX_PAGE as AUDIT_PAGE_MAX };
+
 /**
  * The one writer and reader of Core audit events. Contract "no audit, no effect": `record` returns the sealed record only after
  * the store persisted it; every failure is a typed `AuditError` the caller must treat as "do not apply the effect". Time is the
