@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { OAuthConnectionError } from '#engine/index.js';
 import { SIWC_PROTOCOL, SIWC_LIMITS } from './registry.js';
@@ -24,6 +25,7 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
   });
   server.maxConnections = SIWC_LIMITS.callbackMaxConnections;
   const abort = () => { reject(new OAuthConnectionError('OAUTH_CONNECTION_CANCELLED')); server.close(); server.closeAllConnections(); };
+  let loginTimer: ReturnType<typeof setTimeout> | undefined;
   signal.addEventListener('abort', abort, { once: true });
   try {
     if (signal.aborted) throw new OAuthConnectionError('OAUTH_CONNECTION_CANCELLED');
@@ -31,6 +33,8 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
       server.listen(0, '127.0.0.1', yes); });
     const address = server.address();
     if (!address || typeof address === 'string' || signal.aborted) throw new OAuthConnectionError('OAUTH_CONNECTION_CANCELLED');
+    // One deadline for the whole login attempt; rejected callbacks never renew it.
+    loginTimer = setTimeout(() => { reject(new OAuthConnectionError('OAUTH_CONNECTION_TIMEOUT')); server.close(); server.closeAllConnections(); }, SIWC_LIMITS.loginWindowMs);
     redirectUri = `http://127.0.0.1:${address.port}${SIWC_PROTOCOL.callbackPath}`;
     const url = makeUrl(redirectUri), parsed = new URL(url);
     expectedState = parsed.searchParams.getAll('state').length === 1 ? parsed.searchParams.get('state')! : '';
@@ -44,6 +48,7 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
     signal.addEventListener('abort', stopBrowser, { once: true });
     try { return await result; } finally { signal.removeEventListener('abort', stopBrowser); browser.kill(); }
   } finally {
+    clearTimeout(loginTimer);
     signal.removeEventListener('abort', abort); server.close(); server.closeAllConnections();
   }
 }
@@ -51,5 +56,7 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
 function matchesState(raw: string, expected: string) {
   if (!expected) return false;
   const query = new URLSearchParams(raw.slice(raw.indexOf('?') + 1)), states = query.getAll('state');
-  return states.length === 1 && states[0] === expected && query.getAll('code').length + query.getAll('error').length === 1;
+  if (states.length !== 1 || query.getAll('code').length + query.getAll('error').length !== 1) return false;
+  const received = Buffer.from(states[0]!), wanted = Buffer.from(expected);
+  return received.length === wanted.length && timingSafeEqual(received, wanted);
 }
