@@ -44,7 +44,8 @@ export interface LiveWindowData {
   readonly workers: readonly WorkLedgerWorkerEntry[];
   readonly runs: readonly WorkLedgerRunEntry[];
 }
-export type TaskWindowAction = Readonly<{ action: 'transcript' | 'cancel'; target: WorkLedgerWorkerEntry | WorkLedgerRunEntry }>;
+/** `run` (active work strip): open the selected Run's existing detail window. */
+export type TaskWindowAction = Readonly<{ action: 'transcript' | 'cancel' | 'run'; target: WorkLedgerWorkerEntry | WorkLedgerRunEntry }>;
 export interface LiveWindowRenderLabels {
   readonly live: LiveWindowLabels; readonly panel: WorkerPanelLabels; readonly workerLine: WorkerLineLabels; readonly jobs?: JobWindowLabels | undefined;
 }

@@ -1018,5 +1018,14 @@
   "terminal.jobs.deliveryCounts": "Teslim: gerekmiyor {none}{patch}, bekliyor {awaiting}, bilinmiyor {unknown}",
   "terminal.jobs.deliveryPatch": ", yama hazır değil {patch}",
   "tui.focus.composer": "Giriş odakta · Ctrl+O pencereye geç · Enter mesajı sıraya alır",
-  "tui.focus.window": "Pencere odakta · Ctrl+O girişe dön · Esc kapatır/reddeder"
+  "tui.focus.window": "Pencere odakta · Ctrl+O girişe dön · Esc kapatır/reddeder",
+  "terminal.activeWork.title": "Aktif iş · Ctrl+T seç",
+  "terminal.activeWork.focused": "Aktif iş · ↑↓ seç · Enter aç · Esc girişe dön",
+  "terminal.activeWork.doTitle": "/do {title}",
+  "terminal.activeWork.planning": "planlanıyor",
+  "terminal.activeWork.waiting": "seni bekliyor · {remaining} kaldı",
+  "terminal.activeWork.expired": "onay süresi doldu",
+  "terminal.activeWork.evaluating": "değerlendiriliyor",
+  "terminal.activeWork.needsYou": "girdini bekliyor",
+  "terminal.activeWork.more": "+{count} daha"
 }

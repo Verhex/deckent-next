@@ -14,7 +14,7 @@ export const WINDOW_PRIORITY = Object.freeze({ window: 0, approval: 100 } as con
 
 type Layer = Readonly<{ id: string; priority: number; sequence: number }>;
 type Stack = Readonly<{ register: (id: string, priority: number, foreground: boolean) => () => void; top: string | null; open: number; reservedRows: number | undefined;
-  composing: boolean; composerWindows: boolean; accepts: (id: string | null) => boolean }>;
+  composing: boolean; composerWindows: boolean; accepts: (id: string | null) => boolean; focusTop: () => boolean }>;
 
 const WindowStackContext = createContext<Stack | null>(null);
 /** A window's opening cause, independent of its priority or authority. User-opened windows are the default. */
@@ -56,8 +56,14 @@ export function WindowStackProvider({ children, reservedRows, composerDefault = 
     const owner = topWindowLayer(currentLayers.current)?.id ?? null;
     return id === null ? owner === null || !focus.current : owner === id && focus.current;
   }, []);
+  /** The same explicit transfer as Ctrl+O, from another person-driven key (the active work strip's Enter); never a decision. */
+  const focusTop = useCallback(() => {
+    if (!composerDefault || currentLayers.current.length === 0) return false;
+    focus.current = true; setWindowFocused(true); return true;
+  }, [composerDefault]);
   const composing = top === null || !windowFocused;
-  const value = useMemo<Stack>(() => ({ register, top, open: layers.length, reservedRows, composing, composerWindows: composerDefault, accepts }), [register, top, layers.length, reservedRows, composing, composerDefault, accepts]);
+  const value = useMemo<Stack>(() => ({ register, top, open: layers.length, reservedRows, composing, composerWindows: composerDefault, accepts, focusTop }),
+    [register, top, layers.length, reservedRows, composing, composerDefault, accepts, focusTop]);
   return <WindowStackContext.Provider value={value}>{children}</WindowStackContext.Provider>;
 }
 
@@ -90,7 +96,8 @@ export function useWindowReserve(): number | undefined {
 }
 
 /** One input owner: the composer listens when no window exists or the person has returned focus to it. */
-export function useFocusOwner(): Readonly<{ idle: boolean; top: string | null; composing: boolean; composerWindows: boolean; inputAllowed: () => boolean }> {
+export function useFocusOwner(): Readonly<{ idle: boolean; top: string | null; composing: boolean; composerWindows: boolean; inputAllowed: () => boolean; focusTop: () => boolean }> {
   const stack = useContext(WindowStackContext);
-  return { idle: !stack || stack.open === 0, top: stack?.top ?? null, composing: stack?.composing ?? true, composerWindows: stack?.composerWindows ?? false, inputAllowed: () => stack?.accepts(null) ?? true };
+  return { idle: !stack || stack.open === 0, top: stack?.top ?? null, composing: stack?.composing ?? true, composerWindows: stack?.composerWindows ?? false,
+    inputAllowed: () => stack?.accepts(null) ?? true, focusTop: () => stack?.focusTop() ?? false };
 }

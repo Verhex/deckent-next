@@ -12,4 +12,5 @@ export { JobWindow, openingWorkText, runDetailLines, runJobWindow, type JobWindo
 export { dispatchWorkCommand } from './internal/job-command.js';
 export { openTaskAction } from './internal/task-actions.js';
 
-export { useRunCompletion, runCompletionText } from './internal/run-completion.js';
+export { useRunCompletion, runCompletionText, type TrackedRun } from './internal/run-completion.js';
+export { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, type ActiveWorkLabels } from './internal/active-work.js';

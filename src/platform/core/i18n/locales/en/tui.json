@@ -1018,5 +1018,14 @@
   "terminal.jobs.deliveryCounts": "Delivery: none {none}{patch}, awaiting delivery {awaiting}, unknown {unknown}",
   "terminal.jobs.deliveryPatch": ", patch not prepared {patch}",
   "tui.focus.composer": "Input focused · Ctrl+O focus window · Enter queues a message",
-  "tui.focus.window": "Window focused · Ctrl+O return to input · Esc closes/declines"
+  "tui.focus.window": "Window focused · Ctrl+O return to input · Esc closes/declines",
+  "terminal.activeWork.title": "Active work · Ctrl+T select",
+  "terminal.activeWork.focused": "Active work · ↑↓ choose · Enter open · Esc back to input",
+  "terminal.activeWork.doTitle": "/do {title}",
+  "terminal.activeWork.planning": "planning",
+  "terminal.activeWork.waiting": "waiting for you · {remaining} left",
+  "terminal.activeWork.expired": "approval time is up",
+  "terminal.activeWork.evaluating": "evaluating",
+  "terminal.activeWork.needsYou": "needs your input",
+  "terminal.activeWork.more": "+{count} more"
 }

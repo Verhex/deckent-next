@@ -2,7 +2,8 @@ import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
-import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
+import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
+  ActiveWorkStrip, activeWorkItems, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
@@ -132,9 +133,10 @@ export interface WorklineProps {
 
 
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
-function StackComposer(props: ComponentProps<typeof Composer>) {
+function StackComposer({ elsewhere, ...props }: ComponentProps<typeof Composer> & { readonly elsewhere?: () => boolean }) {
   const owner = useFocusOwner();
-  return <Composer {...props} active={(props.active ?? true) && owner.composing} acceptsInput={owner.inputAllowed} />;
+  // `elsewhere`: the active work strip holds input (TERMINAL-SABIT slice 2); checked synchronously as well as through `active`.
+  return <Composer {...props} active={(props.active ?? true) && owner.composing} acceptsInput={() => owner.inputAllowed() && !elsewhere?.()} />;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -169,6 +171,9 @@ export function WorklineApp(props: WorklineProps) {
   const [turnRunning, setTurnRunning] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [doRunning, setDoRunning] = useState(false);
+  // TERMINAL-SABIT slice 2: the running /do as the strip shows it (title, phase, approval expiry); the panel runs one line at a time.
+  const [activeDo, setActiveDo] = useState<ActiveDo | null>(null);
+  const [stripFocused, setStripFocused] = useState(false), stripFocus = useRef(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const usages = useRef(new Map<string, SessionUsageView>());
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
@@ -369,17 +374,21 @@ export function WorklineApp(props: WorklineProps) {
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
       const commandId = globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined);
       setDoRunning(true); setPlanning(true);
+      setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
         let result = await plan();
         if (result.run) completion.register(result.run);
         setPlanning(false);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
         if (result.proposal.status === 'pending' && result.proposal.approval) {
+          const expiresAtMs = result.proposal.approval.expiresAt;
+          setActiveDo(current => current && { ...current, phase: 'waiting', expiresAtMs });
           await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, props.doPlan.lines(result).join('\n'));
           if (execution.signal.aborted) return true;
           result = await plan();
           if (result.run) completion.register(result.run);
         }
+        setActiveDo(null);
         await show(props.doPlan.lines(result));
         if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
       } catch (error) {
@@ -387,7 +396,7 @@ export function WorklineApp(props: WorklineProps) {
         if (!execution.signal.aborted) await show([errorText(error)]);
         else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }
-      finally { setPlanning(false); setDoRunning(false); }
+      finally { setPlanning(false); setDoRunning(false); setActiveDo(null); }
       return true;
     }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
@@ -524,6 +533,18 @@ export function WorklineApp(props: WorklineProps) {
   };
 
   const localWindowOpen = slot.open;
+  // TERMINAL-SABIT slice 2: the strip is a view over this session's /do and completion records; its clock ticks at the inspection cadence.
+  const activeLabels = labels.work?.activeWork, jobLabels = labels.work?.jobs;
+  const stripTicking = activeDo !== null || completion.tracked.some(item => item.run.state.kind !== 'terminal');
+  const stripNow = useActiveWorkClock(stripTicking, pollMs, `${activeDo?.phase ?? ''}:${completion.tracked.length}`);
+  const stripItems = activeLabels && jobLabels && labels.work ? activeWorkItems({ active: activeDo, runs: completion.tracked, nowMs: stripNow, labels: activeLabels, jobs: jobLabels, duration: labels.work.workerLine }) : [];
+  const focusStrip = useCallback((focused: boolean) => { stripFocus.current = focused; setStripFocused(focused); }, []);
+  const openActive = (item: ActiveWorkItem) => {
+    if (item.target.kind !== 'run') return;
+    // A person's selection: the existing /run window through the out-of-band task action (foreground, FIFO behind a running line).
+    taskActionRef.current({ action: 'run', target: liveRunEntry(item.target.run, 'active-work') });
+    if (item.target.run.state.kind === 'terminal') completion.dismiss(item.target.run.runId);
+  };
   const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   // A window a slash command opened waits for the person, so the status row says Ready, not Working (an approval card during a turn keeps Working).
@@ -547,7 +568,8 @@ export function WorklineApp(props: WorklineProps) {
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
         selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
       {fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null}
-      <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
+      {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} /> : null}
+      <StackComposer elsewhere={() => stripFocus.current} active={!stripFocused} prompt={labels.prompt} labels={{ ...labels.composer,
         slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
         busy={busy} historyText={bareSlash} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
