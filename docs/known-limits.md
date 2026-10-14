@@ -48,6 +48,14 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   re-use interact with human-only choices. *Workaround:* keep MCP grants minimal (the default is observation only) and
   review `/policy`.
 
+- **An AI agent running on your own operating-system account is not contained by Deckent's approvals.** Approval and
+  audit records are sealed with a key stored in your account, the interactive-terminal check proves a terminal rather than
+  a person, and your account can write the policy file. Where your account can use Docker or sudo, such an agent can in
+  practice do anything. *Impact:* approvals and policy hold against Deckent's own sandboxed workers, not against other
+  agents you run as yourself. Before beta, an audit checkpoint lets a separate device detect a changed policy or a cut
+  audit trail; hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
+  separate account without Docker or sudo, and keep Deckent's workers in their sandbox.
+
 ## Providers and subscriptions
 
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. A subscription-backed Brain (the planner

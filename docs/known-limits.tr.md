@@ -48,6 +48,15 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yalnız insanın yapabileceği seçimlerle nasıl etkileştiğini sıkılaştırırlar. *Yol:* MCP izinlerini asgaride tutun
   (varsayılan yalnız gözlemdir) ve `/policy`'yi gözden geçirin.
 
+- **Kendi işletim sistemi hesabınızla çalışan bir yapay zekâ ajanı Deckent onaylarıyla sınırlanmaz.** Onay ve denetim
+  kayıtları hesabınızda duran bir anahtarla mühürlenir, etkileşimli terminal denetimi bir insanı değil bir terminali
+  kanıtlar ve policy dosyasını hesabınız yazabilir. Hesabınız Docker ya da sudo kullanabiliyorsa böyle bir ajan pratikte
+  her şeyi yapabilir. *Etkisi:* onaylar ve policy Deckent'in kendi kum havuzundaki işçilerine karşı korur, sizin adınıza
+  çalıştırdığınız başka ajanlara karşı korumaz. Beta öncesi bir denetim kontrol noktası, değişen policy'yi ya da kesilen
+  denetim kaydını ayrı bir cihazın fark etmesini sağlar; donanım anahtarıyla imzalı policy ve onaylar beta sonrası gelir.
+  *Çözüm:* başka yapay zekâ ajanlarını Docker ya da sudo yetkisi olmayan ayrı bir hesapta çalıştırın, Deckent işçilerini
+  kum havuzunda tutun.
+
 ## Sağlayıcılar ve abonelikler
 
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. Abonelikli Brain (`/do`'nun arkasındaki planlayıcı)
