@@ -1,3 +1,4 @@
+import { confirmedDelivery } from '../support/delivery-terminal.js';
 import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -254,13 +255,13 @@ async function pausedWriter(f: Awaited<ReturnType<typeof readyDeliveryFixture>>,
   const script = join(f.root, mode + '-writer.mjs');
   const method = mode === 'candidate' ? 'verify' : 'publish';
   const type = mode === 'candidate' ? 'GitIntegrationTarget' : 'GitIntegrationDelivery';
-  const call = mode === 'candidate' ? 'prepareConfiguredWorkspaceIntegration' : 'deliverConfiguredWorkspaceIntegration';
+  const call = mode === 'candidate' ? 'prepareConfiguredWorkspaceIntegration' : 'deliverWorkspaceIntegrationWithConfirmation';
   await writeFile(script, `import { ${type} } from ${JSON.stringify(resolve('dist/adapters/index.js'))};
-import { ${call} } from ${JSON.stringify(resolve('dist/index.js'))};
+import { ${call} } from ${JSON.stringify(resolve(mode === 'candidate' ? 'dist/index.js' : 'dist/composition/core/workspace-patch/internal/delivery.js'))};
 import { writeFile } from 'node:fs/promises';
 const original = ${type}.prototype.${method};
 ${type}.prototype.${method} = async function(...args) { await original.apply(this,args); await writeFile(${JSON.stringify(marker)},JSON.stringify(args[0])); await new Promise(()=>{setInterval(()=>{},1000);}); };
-await ${call}(${JSON.stringify(f.project)},${JSON.stringify(command)},${JSON.stringify(f.options)});`);
+await ${call}(${JSON.stringify(f.project)},${JSON.stringify(command)},${JSON.stringify(f.options)}${mode === 'delivery' ? ', { async assertAvailable() {}, async confirm(card) { if (!card.resource || !card.to) throw Error("invalid card"); return async () => {}; } }' : ''});`);
   const child = spawn(process.execPath, [script], { cwd: f.project, env: { ...process.env, ...f.options.env }, stdio: 'ignore' });
   const closed = new Promise(resolve => child.once('close', resolve));
   const stop = async () => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); await closed; };
@@ -274,15 +275,15 @@ await ${call}(${JSON.stringify(f.project)},${JSON.stringify(command)},${JSON.str
   } catch (error) { await stop(); throw error; }
 }
 describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('safe Git reference delivery and replacement', () => {
-  it('delivers an exact commit through competing SDK/CLI with source HEAD/index/WIP unchanged', async () => {
+  it('approves the exact delivery card and replays through SDK/CLI with source HEAD/index/WIP unchanged', async () => {
     const f = await readyDeliveryFixture();
     const candidate = await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
     await writeFile(join(f.project, 'unrelated.txt'), 'staged-owner\n'); await f.git('add', 'unrelated.txt');
     await writeFile(join(f.project, 'unrelated.txt'), 'unstaged-owner\n');
     const index = await readFile(join(f.project, '.git/index'));
     const command = { schemaVersion: 1 as const, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' };
-    const [sdk, cli] = await Promise.all([deliverConfiguredWorkspaceIntegration(f.project, command, f.options),
-      f.cli('integration-deliver', ['--command-id', 'delivery', '--candidate-command-id', 'candidate'])]);
+    const sdk = await confirmedDelivery(f.project, command, f.options);
+    const cli = await f.cli('integration-deliver', ['--command-id', 'delivery', '--candidate-command-id', 'candidate']);
     expect(cli).toEqual(sdk); expect(sdk.application).toBe('reference-only');
     expect(await f.git('show', sdk.plan.ref + ':note.txt')).toBe('after');
     expect(await f.git('show', sdk.plan.ref + ':added.txt')).toBe('new');
@@ -319,7 +320,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'));
     expect(db.prepare('SELECT delivered FROM workspace_deliveries WHERE command_id=?').get(command.commandId)?.delivered).toBe(0); db.close();
     await f.git('commit', '--allow-empty', '-m', 'owner moves after publication'); const head = await f.git('rev-parse', 'HEAD');
-    const result = await deliverConfiguredWorkspaceIntegration(f.project, command, f.options);
+    const result = await confirmedDelivery(f.project, command, f.options);
     expect(result.plan).toEqual(paused.marker); expect(await f.git('rev-parse', 'HEAD')).toBe(head);
     expect(await f.git('rev-parse', result.plan.ref)).toBe(result.plan.commit);
     expect(await deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).toEqual(result);
@@ -328,13 +329,13 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const f = await readyDeliveryFixture(); const candidate = await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
     const command = { schemaVersion: 1 as const, commandId: 'guarded', identity: f.identity, integrationCommandId: 'candidate' };
     await writeFile(join(candidate.manifest.workspace, 'note.txt'), 'drift\n');
-    await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    await expect(confirmedDelivery(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
     await writeFile(join(candidate.manifest.workspace, 'note.txt'), 'after\n');
     const publish = GitIntegrationDelivery.prototype.publish;
-    const spy = vi.spyOn(GitIntegrationDelivery.prototype, 'publish').mockImplementationOnce(async function(plan) {
-      await f.git('commit', '--allow-empty', '-m', 'owner wins'); await publish.call(this, plan);
+    const spy = vi.spyOn(GitIntegrationDelivery.prototype, 'publish').mockImplementationOnce(async function(plan, manifest, patch) {
+      await f.git('commit', '--allow-empty', '-m', 'owner wins'); await publish.call(this, plan, manifest, patch);
     });
-    try { await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' }); }
+    try { await expect(confirmedDelivery(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' }); }
     finally { spy.mockRestore(); }
     expect(await f.git('for-each-ref', '--format=%(refname)', 'refs/deckent/deliveries')).toBe('');
     expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('before\n');

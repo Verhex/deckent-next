@@ -9,6 +9,7 @@ import { executeConfiguredTask } from '../../../src/composition/core/execution/i
 import { DockerSupervisor, type SqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { readyDeliveryFixture, type FixtureTracker } from '../support/workspace-patch-fixture.js';
+import { deliveryTerminalCli } from '../support/delivery-cli-terminal.js';
 
 const track: FixtureTracker = { roots: [], cleanup: [] };
 afterEach(async () => {
@@ -25,8 +26,18 @@ const verifyGraph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 'che
 async function delivered(runIds = ['r', 'v', 'w']) {
   const f = await readyDeliveryFixture(track);
   await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
-  const delivery = await deliverConfiguredWorkspaceIntegration(f.project,
-    { schemaVersion: 1, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' }, f.options);
+  const command = { schemaVersion: 1 as const, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' };
+  const refsBefore = await f.git('for-each-ref', '--format=%(refname) %(objectname)');
+  await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+  expect(await f.git('for-each-ref', '--format=%(refname) %(objectname)')).toBe(refsBefore);
+  expect(await f.runtime.store.loadDelivery(command)).toBeNull();
+  const delivered = await deliveryTerminalCli(f.project, f.options.env, ['task', 'integration-deliver', '--scope', f.identity.scopeId,
+    '--run', f.identity.runId, '--task', f.identity.taskId, '--attempt', f.identity.attemptId, '--generation', String(f.identity.generation),
+    '--layout-revision', f.identity.layoutRevision, '--command-id', command.commandId, '--candidate-command-id', command.integrationCommandId, '--json'], 'y');
+  expect(delivered.exit, delivered.output).toBe(0);
+  expect(delivered.output).toContain('y/N: '); expect(delivered.output).toContain(f.base); expect(delivered.output).toContain('note.txt');
+  const delivery = JSON.parse(delivered.stdout) as Awaited<ReturnType<typeof deliverConfiguredWorkspaceIntegration>>;
+  expect(delivered.output).toContain(delivery.plan.ref);
   // Settle the coding attempt so the single-slot pool admits the next Run's attempt.
   await f.policy(['read-output', 'evaluate']);
   const coding = (await f.runtime.store.loadRun(f.identity.scopeId, f.identity.runId))!;

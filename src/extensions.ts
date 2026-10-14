@@ -14,6 +14,7 @@ export type { AdapterModuleManifest, EffectTargetRef, OperationDescriptor } from
 export { EffectTargetError, SECRET_STORE_ID_PATTERN } from '#engine/index.js';
 export type { AdapterModuleRegistration, TargetAdapterFactory, TargetAdapterOptions, EffectTarget, EffectApplyRequest, SecretStore, SecretStoreContext,
   SecretStoreDescriptor, SecretStoreFactory, SecretStoreInspection } from '#engine/index.js';
+export type { EffectConfirmation, EffectConfirmationView } from '#engine/index.js';
 export type { StandardSchemaV1 } from '#platform/index.js';
 
 /** Runs the Core command line in this process after the caller's registrations, so a distribution's own executable (Core plus its

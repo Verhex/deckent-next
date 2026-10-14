@@ -207,3 +207,9 @@ Harcama: ücretli çağrılar uygulanabilir en pahalı yayımlanmış kademeyi r
 sabitlenmiş tarifenin çarpımından kesinleşir (`measured-tariff`). Kapsamın ilk bütçesi `deckent models create-budget
 --scope <id> --usd <n>` (ya da bütçe penceresi: `/provider`'ın ilk satırı) ile açılır, `revise-budget [--unfreeze]` ile değişir; son kullanımı
 hiç gelmemiş askıdaki çağrı `reconcile-spending` ile çözülür. Ayrıntı: ARCHITECTURE "Spend settlement".
+
+### Teslim onayı (TESLIM-GUVENLIK yazar adayı)
+
+`task integration-deliver` ve `task integration-adopt`, doğrulanmış insan terminalinde tek açık `y` ister. Kart görev başlığını, Run/Task kimliklerini, referans/dalı, önceki/yeni commit'i ve değişen dosyaları gösterir. Boş yanıt, `n`, EOF, yönlendirilmiş giriş/çıkış ve SDK/MCP yeni etkisi reddedilir. Prepare/check yalnız adaydır. Tamamlanmış replay ve kanıtlanmış yayın sonrası çökme uzlaştırması tekrar sormaz; bitmemiş etki yeni onay ister. Benimsemede `execution.adoption.targets`, politika, kabul ve yapılandırılmış doğrulama koşulları korunur. Otonom politika etkin değildir.
+
+Teslim commit'i kabul edilmiş görev başlığı, kimlikler ve sınırlı kabul durumu taşır; yazar/committer zamanı trusted clock'tan ilk teslim planında alınır, intent replay için dondurur. Varsayılan kimlik Deckent; `execution.git.deliveryIdentity` ile `authorName`/`authorEmail` ayarlanabilir. Yanıttan önce Git nesneleri yalnız adayda hazırlanır; ret halinde asıl depoda nesne/ref/dal veya teslim intent'i yazılmaz.

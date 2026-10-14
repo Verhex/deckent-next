@@ -1443,5 +1443,8 @@
   "cli.init.pool.conflict": "Havuz {pool} değiştirilmedi: kayıtlı slotlar {storedExecution}/{storedInFlight}, yapılandırılan slotlar {execution}/{inFlight}. Yapılandırmayı inceleyin; kapasite değişikliği için deckent pool set-capacity kullanın, ardından /do komutunu yeniden çalıştırın.",
   "cli.init.pool.notOwner": "Havuz {pool} değiştirilmedi. Yalnız policy ve bindings dosyalarının sahibi havuzu kurabilir. Kurulum sahibinden deckent init pool --scope {scope} --preview çalıştırmasını isteyin.",
   "cli.init.pool.ledgerVersion": "Havuz {pool} değiştirilmedi: ledger sürümü {version} güncel sürüm değil. Kurulum yükseltme yolunu kullanın, ardından deckent init pool --scope {scope} --preview çalıştırın.",
-  "cli.init.pool.unavailable": "Havuz {pool} kullanılamıyor ({reason}); hiçbir şey yazılmadı. admission yapılandırmasını ve mevcut kurulum ledger kaydını kontrol edin, ardından deckent init pool --scope {scope} --preview çalıştırın."
+  "cli.init.pool.unavailable": "Havuz {pool} kullanılamıyor ({reason}); hiçbir şey yazılmadı. admission yapılandırmasını ve mevcut kurulum ledger kaydını kontrol edin, ardından deckent init pool --scope {scope} --preview çalıştırın.",
+  "cli.task.delivery.card": "{operation}: {title}\nKoşum {run} · Görev {task}\n{ref}\n{from} → {to}\n{count} dosya; +{added} / -{removed} satır\n{files}\nGösterilmeyen ek dosya: {omitted}",
+  "cli.task.delivery.prompt": "Bu referans yazılsın mı? y/N: ",
+  "git.delivery.message": "{title}\n\nKoşum: {run}\nGörev: {task}\nKabul: Görev {phase}{unverified}; kriter {criteria}; koşum revision {revision}\n"
 }

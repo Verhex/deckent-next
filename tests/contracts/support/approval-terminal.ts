@@ -9,6 +9,8 @@ import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 const DRIVER = String.raw`
 import json, os, pty, select, sys, time
 argv, mode = json.loads(sys.argv[1]), sys.argv[2]
+answer = sys.argv[4] if len(sys.argv) > 4 else ''
+answered = False
 if len(sys.argv) > 3 and sys.argv[3]: os.chdir(sys.argv[3])
 pid, fd = pty.fork()
 if pid == 0:
@@ -23,6 +25,9 @@ while time.monotonic() < end:
         except OSError: break
         if not chunk: break
         out += chunk
+        if answer and not answered and b'y/N: ' in out:
+            answered = True
+            os.write(fd, b'\x04' if answer == 'EOF' else (answer + '\n').encode())
 else:
     os.kill(pid, 9)
 _, status = os.waitpid(pid, 0)
@@ -44,8 +49,8 @@ async function driveTerminal(argv: string[], env: NodeJS.ProcessEnv, mode = 'tty
   if (!line) throw new Error(result.output);
   return JSON.parse(line) as { response: { ok: boolean; result?: unknown; error?: { code: string; params?: Record<string, unknown> } }; events: unknown[]; decisions: unknown[] };
 }
-export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cwd?: string, mode = 'tty') {
-  const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(argv), mode, cwd ?? ''],
+export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cwd?: string, mode = 'tty', answer = '') {
+  const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(argv), mode, cwd ?? '', answer],
     { env: { ...process.env, ...env }, timeout: 30_000, maxBuffer: 1_000_000 });
   const result = JSON.parse(stdout) as { status: number; output: string };
   return result;
