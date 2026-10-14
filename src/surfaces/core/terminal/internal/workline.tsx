@@ -160,7 +160,9 @@ export function WorklineApp(props: WorklineProps) {
   const { exit } = useApp();
   const { buffer, push, reset } = useLedgerBuffer();
   const stdout = useStdout();
-  const size = useWindowSize(), pinned = stdout.stdout.isTTY === true && props.clearScreen !== false && size.rows > 0 && size.columns > 0;
+  // The layout mode is resolved once at mount: a real stream does not change TTY-ness, and flipping it would remount the composer and windows.
+  const [pinnedMode] = useState(() => stdout.stdout.isTTY === true && props.clearScreen !== false);
+  const size = useWindowSize(), pinned = pinnedMode && size.rows > 0 && size.columns > 0;
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
   // A chat turn is running: Esc cancels it now (TL-A D5).
@@ -538,7 +540,7 @@ export function WorklineApp(props: WorklineProps) {
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
-      <PinnedWorkline enabled={pinned} history={buffer.tail.slice(-Math.max(1, size.rows)).map((entry, index) => <LedgerEntryRow key={index} entry={entry} labels={ledgerLabels} />)} footer={<>
+      <PinnedWorkline enabled={pinnedMode} footer={<>
       {!pinned || size.rows >= 8 ? <Text {...palette.accent} wrap="truncate-end">{labels.banner}</Text> : null}
       <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
         state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}

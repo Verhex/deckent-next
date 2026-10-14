@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mainScreenOutput, preserveMainScreenScrollback } from '#surfaces/core/terminal-window/index.js';
+import { mainScreenOutput, preserveMainScreenScrollback, PinnedWorkline } from '#surfaces/core/terminal-window/index.js';
+import { createElement } from 'react';
+import { render, Text } from 'ink';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -17,30 +19,59 @@ function mount(props: Parameters<typeof mountWorkline>[0] = {}, columns = 80, ro
   const view = mountWorkline({ ...props, labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, ...props.labels } }, columns, { rows, debug });
   mounted.push(view); return view;
 }
+/** A real PTY turns Ink's LF into CR LF (termios ONLCR); the in-memory TTY does not, so the replay applies it. */
+const onlcr = (text: string) => text.replaceAll('\n', '\r\n');
 function lines(view: ReturnType<typeof mountWorkline>) { return view.stdout.frame.replace(/\n$/u, '').split('\n'); }
-function assertPinned(view: ReturnType<typeof mountWorkline>, rows: number, columns: number, replay = false) {
-  // Debug Ink prepends its full Static replay. Actual cursor bytes instead prove the physical viewport's bottom rows.
-  const frame = replay ? terminalScreen(view.stdout.text, columns, rows).split('\n').slice(-(rows - 1)) : lines(view);
-  expect(frame).toHaveLength(rows - 1);
+function assertPinned(view: ReturnType<typeof mountWorkline>, rows: number, columns: number, replay: false | 'full' | 'fresh' = false) {
+  // R3 (bounded, not filled): the live area is at most rows−1 rows (Ink's trailing newline keeps the last row, so its ED3 overflow path is
+  // never taken); the focus hint is its last row, status and caret are in it, every row fits the width. Debug Ink prepends its full Static
+  // replay, so the physical screen is read from the actual cursor bytes (fake VT viewport) instead.
+  const screen = replay ? terminalScreen(onlcr(view.stdout.text), columns, rows).split('\n') : lines(view);
+  const frame = screen.slice(-(rows - 1));
+  expect(frame.length).toBeLessThanOrEqual(rows - 1);
   expect(frame.at(-1)).toMatch(/HINT|INPUT-FOCUS|WINDOW-FOCUS/u);
   expect(frame.some(row => row.includes('READY') || row.includes('BUSY'))).toBe(true);
   expect(frame.some(row => row.includes('|'))).toBe(true);
   expect(frame.every(row => cells(row) <= columns)).toBe(true);
+  // Once content fills the screen the composer is on its bottom rows; a fresh screen keeps it under the content (nothing pushed away).
+  if (replay === 'full') expect(screen.length).toBeGreaterThanOrEqual(rows - 1);
+  if (replay === 'fresh') expect(screen.length).toBeLessThan(rows - 1);
 }
 describe('pinned Workline terminal', () => {
   it('keeps the caret and status at the bottom through long output, multiline draft and resize in NO_COLOR', async () => {
     const reply = Array.from({ length: 80 }, (_, i) => `output-row-${i}`).join('\n');
     const view = mount({ completeTurn: async () => reply }, 80, 24, false); await settle(100);
-    assertPinned(view, 24, 80, true);
+    assertPinned(view, 24, 80, 'fresh');
     view.stdin.write('hello\r'); await until(() => view.stdout.text.includes('output-row-79'), 'full completed output');
     view.stdin.write('taslak Türkçe 漢字 '.repeat(50)); await settle(100);
-    assertPinned(view, 24, 80, true);
-    expect(view.stdout.text).toContain('output-row-0'); expect(terminalScreen(view.stdout.text, 80, 24)).toContain('output-row-79');
+    assertPinned(view, 24, 80, 'full');
+    expect(view.stdout.text).toContain('output-row-0'); expect(terminalScreen(onlcr(view.stdout.text), 80, 24)).toContain('output-row-79');
     for (const [rows, columns] of [[14, 32], [30, 100], [10, 20]]) {
       Object.assign(view.stdout, { rows, columns }); view.stdout.emit('resize'); await settle(120);
-      assertPinned(view, rows!, columns!, true);
+      assertPinned(view, rows!, columns!, 'full');
     }
     expect(view.stdout.text.split('\u001b[').slice(1).some(sequence => /^[\d;]*m/u.test(sequence))).toBe(false);
+  });
+
+  it('shows each completed record once on screen and in the scrollback (no live-area replay of the transcript)', async () => {
+    const view = mount({ completeTurn: async () => 'UNIQUE-ANSWER' }, 80, 24, false); await settle(100);
+    view.stdin.write('UNIQUE-QUESTION\r'); await until(() => view.stdout.text.includes('UNIQUE-ANSWER'), 'answer'); await settle(100);
+    const screen = terminalScreen(onlcr(view.stdout.text), 80, 24);
+    expect(screen.match(/UNIQUE-ANSWER/gu)).toHaveLength(1); expect(screen.match(/UNIQUE-QUESTION/gu)).toHaveLength(1);
+    assertPinned(view, 24, 80, 'fresh');
+  });
+
+  it('clips an over-tall live part at rows−1 and keeps the footer whole (the bound does not depend on each window capping itself)', async () => {
+    class Tty extends Writable { isTTY = true; rows = 12; columns = 40; frame = ''; override _write(chunk: Buffer, _e: string, done: () => void) { const text = chunk.toString('utf8'); if (text.includes('FOOTER')) this.frame = text; done(); } }
+    const stdout = new Tty();
+    const tall = Array.from({ length: 50 }, (_, i) => createElement(Text, { key: i }, `live-${i}`));
+    const instance = render(createElement(PinnedWorkline, { footer: createElement(Text, null, 'FOOTER'), children: tall }),
+      { stdout: stdout as unknown as NodeJS.WriteStream, debug: true, patchConsole: false });
+    try {
+      await settle(60);
+      const rows = stdout.frame.replace(/\n$/u, '').split('\n');
+      expect(rows).toHaveLength(11); expect(rows.at(-1)).toBe('FOOTER'); expect(rows.at(-2)).toBe('live-49'); expect(stdout.frame).not.toContain('live-0\n');
+    } finally { instance.unmount(); }
   });
 
   it('keeps an information window open while typing and queues submit until the focused window is closed', async () => {

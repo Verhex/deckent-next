@@ -173,7 +173,9 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'keep notes in scratch\r'],
-      ['touch "$TMPDIR/from-shell.txt"', 'y'],
+      // TERMINAL-SABIT R2 (owner 2026-10-14): the shell card arrives during the model turn and leaves the composer focused; Ctrl+O moves
+      // focus to that same card, then y approves it (a y typed in the composer would decide nothing).
+      ['touch "$TMPDIR/from-shell.txt"', '\u000fy'],
       // SLASH-WINDOWS: `/scratch` is a list window (no `path` / `clear` arguments): the folder and the files show, Enter on a file names its path,
       // the last row clears after a y.
       ['Scratch turn done.', '/scratch\r'],
