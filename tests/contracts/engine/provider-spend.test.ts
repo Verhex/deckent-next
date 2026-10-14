@@ -99,9 +99,12 @@ it.each([true, false])('a verified zero tariff never passes a frozen account (fr
 it('exempts only a literal zero tariff whose every declared endpoint is a literal loopback IP (PROVIDER-LOCALITY)', () => {
   const free = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
   const zero = { ...descriptor('zero', 0).quote, pricing: { id: 'operator-static-tariff', version: 1, definition: free, digest: providerSpendEvidenceDigest(free) } };
-  const profile = (definition: Record<string, unknown>) => ({ adapter: { id: 'openai-chat-http', version: 4, definition } }) as never;
+  const profile = (definition: Record<string, unknown>) => ({ schemaVersion: 1, adapter: { id: 'openai-chat-http', version: 4, definition } }) as never;
   for (const endpoint of ['http://127.0.0.1:8000/v1/chat/completions', 'http://[::1]:11434/v1/chat/completions']) {
     expect(providerSpendLocalZeroTariff(profile({ endpoint }), zero)).toBe(true);
+    expect(providerSpendLocalZeroTariff({ schemaVersion: 2, adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint } }, billingAxis: 'local' } as never, zero)).toBe(true);
+    expect(providerSpendLocalZeroTariff({ schemaVersion: 2, adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint } }, billingAxis: 'metered' } as never, zero)).toBe(false);
+    expect(providerSpendLocalZeroTariff({ schemaVersion: 2, adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint } }, billingAxis: 'subscription' } as never, zero)).toBe(false);
     expect(providerSpendLocalZeroTariff(profile({ endpoint, tokenizeEndpoint: endpoint.replace('v1/chat/completions', 'tokenize') }), zero)).toBe(true);
   }
   for (const endpoint of ['http://localhost:8000/v1/chat/completions', 'http://192.168.1.20:8000/v1/chat/completions', 'http://172.28.160.1:8000/v1/chat/completions',

@@ -1,6 +1,7 @@
+import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, modelConnectCommandSchema, parseProviderCatalog, type AuditEvent, type JsonObject,
+import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, modelConnectCommandSchema, parseProviderCatalog, parseModelInvocationProfile, type AuditEvent, type JsonObject,
   type ModelActivationRecord, type ModelBindingDefinition, type ModelConnectCommand, type ModelConnectResult, type ModelConnectStepState, type ModelReference,
   type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
 
@@ -147,10 +148,15 @@ export class ModelConnectApplication {
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 3. The scope's invocation profile: endpoint preset, the key NAME, tariff, limits, binding digest.
     const profileId = [command.connection, target.reference.providerId, target.reference.modelId, String(target.reference.modelVersion)].join('.');
-    const build = (version: number, responseMaxBytes: number, shaped: typeof adapter, contextWindow: unknown) => ({ schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
+    const build = (version: number, responseMaxBytes: number, shaped: typeof adapter, contextWindow: unknown, known: Record<string, unknown> | undefined) => {
+      const value = { schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
       bindingDigest: binding.binding.digest, protocol: shaped.protocol, adapter: shaped.adapter, allocation: { id: profileId, maxCalls: null, maxInFlight: ports.defaults.maxInFlight },
       limits: { requestMaxBytes: ports.defaults.requestMaxBytes, responseMaxBytes, timeoutMs: ports.defaults.timeoutMs },
-      ...(contextWindow === null || contextWindow === undefined ? {} : { contextWindowTokens: contextWindow }) });
+      ...(contextWindow === null || contextWindow === undefined ? {} : { contextWindowTokens: contextWindow }) };
+      // Reconnect preserves authored v1 and an explicit v2 path; new profiles take the validated transport's actual axis.
+      return known?.['schemaVersion'] === 1 ? value : { ...value, schemaVersion: 2,
+        billingAxis: modelInvocationBillingAxis(parseModelInvocationProfile(known ?? value)) };
+    };
     const authored = { global: layers.global['provider_invocation_profiles'] !== undefined, project: layers.project['provider_invocation_profiles'] !== undefined };
     const targets: ModelConnectLayer[] = authored.global && authored.project ? ['global', 'project'] : authored.global ? ['global'] : ['project'];
     const mine = (item: Record<string, unknown>) => item['scopeId'] === scopeId && (item['id'] === profileId || isDeepStrictEqual(item['reference'], target.reference));
@@ -166,9 +172,9 @@ export class ModelConnectApplication {
       const previous = (known?.['adapter'] as { definition?: unknown } | undefined)?.definition;
       const shaped = known ? ports.adapter(kind.id, { ...adapterInput, existing: previous && typeof previous === 'object' ? previous as JsonObject : {} }) : adapter;
       // Sized on the profile as this layer writes it (its kept definition, its next version), with the registry's headroom left over.
-      const responseMaxBytes = this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped, contextWindow), binding, ports.defaults.deliveryHeadroomBytes));
-      if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped, contextWindow))) continue;
-      const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles: [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped, contextWindow)] },
+      const responseMaxBytes = this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped, contextWindow, known), binding, ports.defaults.deliveryHeadroomBytes));
+      if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped, contextWindow, known))) continue;
+      const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles: [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped, contextWindow, known)] },
         layer, step(command.commandId, 'profile', layer));
       if (stopped) return stopped;
       steps.profile = 'written';

@@ -119,3 +119,14 @@ it.each(['en', 'tr'] as const)('returned durable Run identity leads the summary 
   expect(lines.join('\n')).toContain('fixture-api/fixture-model');
   expect(brainProposalLines(pending, locale)[0]).not.toBe(lines[0]);
 });
+
+it.each(['en', 'tr'] as const)('shows subscription planning as plan usage without a monetary zero or API label (%s)', locale => {
+  const value = pendingBrainFixture();
+  const proposal = { ...value.proposal.proposal, source: { kind: 'model' as const, receipt: { commandId: 'plan', invocationId: 'inv',
+    reference: { providerId: 'fixture', providerVersion: 1, modelId: 'plan-model', modelVersion: 1 }, responseDigest: 'a'.repeat(64) } } };
+  const lines = brainProposalLines({ ...value, budgetSemantics: 'not-metered', proposal: { ...value.proposal, proposal },
+    planningSpending: { class: 'not-metered', billingAxis: 'subscription', currency: null, amountMinorUnits: null, evidence: 'plan-usage' } }, locale).join('\n');
+  expect(lines).toContain(locale === 'tr' ? 'abonelik planı' : 'subscription plan');
+  expect(lines).toContain(locale === 'tr' ? 'plan kullanımı; parasal ücret yok' : 'plan usage; no monetary charge');
+  expect(lines).not.toContain('$0'); expect(lines).not.toContain(locale === 'tr' ? 'ücretli API' : 'paid API');
+});

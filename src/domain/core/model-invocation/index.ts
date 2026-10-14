@@ -26,3 +26,8 @@ export { OpenAiChatHttpError, OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOLS, OPEN
 export { openAiChatWireObjectSchema, openAiChatUsageSchema, parseOpenAiChatHttpLimits, type OpenAiChatHttpLimits } from './internal/chat-request.js';
 export { OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY } from './internal/chat-request.js';
 export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDialect } from './internal/chat-request.js';
+
+export { modelInvocationBillingAxisSchema } from './internal/contract.js';
+export type { ModelInvocationBillingAxis } from './internal/contract.js';
+export { modelInvocationPlanUsageSchema } from './internal/plan-usage.js';
+export type { ModelInvocationPlanUsage } from './internal/plan-usage.js';

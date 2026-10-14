@@ -30,6 +30,8 @@ export interface ModelInvocationProfileSource {
   resolve(scopeId: string, reference: ModelReference): Promise<ModelInvocationProfile | null>;
 }
 export interface ModelInvocationNativePort {
+  /** Trusted transport capability. Absent means metered/local tariff transport; profile input cannot grant subscription billing. */
+  readonly billingAxis?: 'subscription';
   /** Pure validation/serialization only: no network, credential lookup or other external effect. */
   prepare(profile: ModelInvocationProfile, definition: ModelBindingDefinition, nativeRequest: JsonObject, signal?: AbortSignal): Promise<unknown>;
   /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
@@ -153,6 +155,8 @@ export class ModelInvocationApplication {
         && protocol.version === profile.protocol.version)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
     const native = preparedNative ?? this.natives.resolve(profile);
     if (!native) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    if ((profile.schemaVersion === 2 && profile.billingAxis === 'subscription') !== (native.billingAxis === 'subscription'))
+      throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
     return { binding, activation, profile, native };
   }
 
@@ -168,7 +172,7 @@ export class ModelInvocationApplication {
     const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
     const spending = await authorizeModelInvocationSpending(this.spending, { command, requestDigest: modelInvocationRequestDigest(command), profile,
       profileDigest: modelInvocationProfileDigest(profile), definition: binding.definition, prepared }, signal);
-    await this.spending?.checkCapacity?.(spending);
+    if (spending.quote) await this.spending?.checkCapacity?.(spending);
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke', { scopeId: command.scopeId, reference: command.reference }, principal));
     const fresh = await this.admittedTarget(command, checks ? 'invocable-now' : true, native);
@@ -178,7 +182,7 @@ export class ModelInvocationApplication {
       const currentSpending = await authorizeModelInvocationSpending(this.spending, { command, requestDigest: modelInvocationRequestDigest(command), profile: fresh.profile,
         profileDigest: modelInvocationProfileDigest(fresh.profile), definition: fresh.binding.definition, prepared }, signal);
       if (!isDeepStrictEqual(currentSpending, spending)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-      await this.spending?.checkCapacity?.(currentSpending);
+      if (currentSpending.quote) await this.spending?.checkCapacity?.(currentSpending);
     }
     return Object.freeze({ activation: fresh.activation, refreshRequired: fresh.activation.catalogRevision !== binding.catalogRevision });
   }
@@ -223,7 +227,7 @@ export class ModelInvocationApplication {
         return checkInvocationResultDelivery(publicResult(true, prior), delivery);
       }
       const { binding, activation, profile, native } = await this.admittedTarget(command);
-      if (!this.spending) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+      if (!this.spending && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription')) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
       await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
       const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
       if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');

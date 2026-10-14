@@ -59,7 +59,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const config = await f.config();
     expect(config['provider_catalog'].providers.map((provider: { id: string }) => provider.id)).toEqual(['local-openai', 'openai-api']);
     const profile = config['provider_invocation_profiles'].profiles.find((item: { reference: unknown }) => JSON.stringify(item.reference) === JSON.stringify(reference));
-    expect(profile).toMatchObject({ id: 'vendor-one.openai-api.gpt-6-luna.1', scopeId: 'scope', protocol: { family: 'openai-chat-completions', version: 'v1' },
+    expect(profile).toMatchObject({ schemaVersion: 2, billingAxis: 'local', id: 'vendor-one.openai-api.gpt-6-luna.1', scopeId: 'scope', protocol: { family: 'openai-chat-completions', version: 'v1' },
       adapter: { id: 'openai-chat-http', version: 5, definition: { endpoint: `${f.base}/v1/chat/completions`, maxOutputTokens: 128000, authentication: { type: 'none' } } },
       contextWindowTokens: 1050000 });
     // The ledger has the seed's channel; every step wrote its own record and the connection one more.
@@ -204,4 +204,22 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const done = await connectConfiguredModel(f.project, asked, f.options, { registry: localRegistry });
     expect(done).toMatchObject({ status: 'connected', steps: { declaration: 'present', profile: 'written', activation: 'written' } });
   }, 60_000);
+});
+
+it('preserves an authored v1 invocation profile on reconnect instead of silently rewriting its billing path', async () => {
+  const f = await harness([], true);
+  const command = { schemaVersion: 1, commandId: 'billing-v1', scopeId: 'scope', connection: 'vendor-one', endpoint: f.base, model: { nativeId: 'gpt-6-luna' } };
+  await connectConfiguredModel(f.project, command, f.options, { registry: localRegistry });
+  const config = await f.config(), current = config.provider_invocation_profiles.profiles.find(row => String(row['id']).startsWith('vendor-one.'))!;
+  const { billingAxis: axis, ...legacy } = current;
+  expect(axis).toBe('local');
+  const v1 = { ...legacy, schemaVersion: 1 };
+  config.provider_invocation_profiles.profiles = config.provider_invocation_profiles.profiles.map(row => row === current ? v1 : row);
+  await writeFile(f.path, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
+  await connectConfiguredModel(f.project, { ...command, commandId: 'billing-reconnect' }, f.options, { registry: localRegistry });
+  const kept = (await f.config()).provider_invocation_profiles.profiles.find(row => row['id'] === current['id'])!;
+  expect(kept['schemaVersion']).toBe(1); expect(kept).not.toHaveProperty('billingAxis'); expect(kept.adapter).toEqual(v1.adapter);
+  // The v1 frame may resize after converting this synthetic v2 fixture; the next exact reconnect is stable.
+  await connectConfiguredModel(f.project, { ...command, commandId: 'billing-stable' }, f.options, { registry: localRegistry });
+  expect((await f.config()).provider_invocation_profiles.profiles.find(row => row['id'] === current['id'])).toEqual(kept);
 });

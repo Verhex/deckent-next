@@ -63,7 +63,7 @@ function literalLoopback(value: unknown): boolean {
 /** Budget exemption (owner 2026-10-09, Jev 3f877ac4): a literal zero tariff AND every declared endpoint (`endpoint`, `tokenizeEndpoint`, …)
  * on a literal loopback address. A zero tariff declared for any other host is only a claim: it keeps the budget gate and a 0 reservation. */
 export function providerSpendLocalZeroTariff(profile: ModelInvocationProfile, quote: ProviderSpendQuote): boolean {
-  return providerSpendHasZeroTariff(quote) && localEndpoints(profile);
+  return (profile.schemaVersion === 1 || profile.billingAxis === 'local') && providerSpendHasZeroTariff(quote) && localEndpoints(profile);
 }
 function localEndpoints(profile: ModelInvocationProfile): boolean {
   const endpoints = Object.entries(profile.adapter.definition).filter(([key]) => /endpoint$/iu.test(key));

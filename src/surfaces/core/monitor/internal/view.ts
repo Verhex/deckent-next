@@ -210,6 +210,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.waiting ? [[span(t('monitor.detail.poolWait', { reason: blockerLabel(task.waiting.code, locale), pool: task.waiting.poolId, execution: task.waiting.occupancy.execution, inFlight: task.waiting.occupancy.inFlight, executionSlots: task.waiting.effectiveCapacity.executionSlots, inFlightSlots: task.waiting.effectiveCapacity.inFlightSlots }, locale), 'warning')]] : []),
       ...(task.decision ? [[span(`    ${blockerLabel(task.decision.reason === 'needs-input' ? 'awaiting-decision' : task.decision.reason, locale)} ${sep} ${expiryText(now, task.decision.deadlineMs, locale)}`, 'warning')]] : []),
       ...(task.decision?.question ? [[span(t('cli.run.lifecycle.question', { question: task.decision.question }, locale), 'warning')]] : []),
+      ...(task.billingAxis !== undefined ? [[span(t('billing.axis', { axis: task.billingAxis ? { subscription: t('billing.subscription', {}, locale), local: t('billing.local', {}, locale), metered: t('billing.metered', {}, locale) }[task.billingAxis] : t('proposal.planning.unknown', {}, locale) }, locale))]] : []),
       ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],

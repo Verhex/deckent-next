@@ -10,6 +10,10 @@ function requiredTransaction(db: DatabaseSync) {
 export function reserveInvocationSpend(db: DatabaseSync, admission: ModelInvocationAdmission): void {
   requiredTransaction(db);
   // A budget-less (local zero-tariff) claim reserves nothing, but an integrity freeze of the scope account blocks every new call.
+  if (admission.profile.schemaVersion === 2 && admission.profile.billingAxis === 'subscription') {
+    if (admission.spending) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+    return;
+  }
   if (!admission.spending) { if (readSpendCheckpoint(db, admission.command.scopeId)?.account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN'); return; }
   const { budget, quote } = admission.spending;
   const current = readSpendCheckpoint(db, admission.command.scopeId), account = current?.account ?? createProviderSpendAccount(budget);

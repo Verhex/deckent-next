@@ -1,3 +1,5 @@
+import { readInvocationPlanUsage } from './plan-usage.js';
+import { MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationControl, invocationControlSelect } from './control.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema } from '#domain/index.js';
@@ -55,7 +57,26 @@ export function visitAllocationInvocations(db: DatabaseSync, scopeId: string, al
     visit(decodeInvocationRecord(row as InvocationRow, scopeId, invocationIdentity(row['invocation_id']), 'invocation_id')!);
   }
 }
+/** A receipt and its additive usage record must come from one snapshot, including during concurrent settlement/purge. */
+function readSnapshot<T>(db: DatabaseSync, read: () => T): T {
+  if (db.isTransaction) return read();
+  db.exec('BEGIN');
+  try { const value = read(); db.exec('COMMIT'); return value; }
+  catch (error) { if (db.isTransaction) db.exec('ROLLBACK'); throw error; }
+}
 export function loadInvocationRecord(db: DatabaseSync, scopeInput: unknown, invocationInput: unknown): ModelInvocationRecord | null {
-  const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
-  return decodeInvocationRecord(invocationRow(db, scopeId, invocationId), scopeId, invocationId, 'invocation_id');
+  return readSnapshot(db, () => {
+    const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
+    const record = decodeInvocationRecord(invocationRow(db, scopeId, invocationId), scopeId, invocationId, 'invocation_id');
+    if (record?.receipt.profile.schemaVersion === 2) readInvocationPlanUsage(db, requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION), record);
+    return record;
+  });
+}
+export function loadInvocationCommandRecord(db: DatabaseSync, scopeInput: string, commandInput: string): ModelInvocationRecord | null {
+  return readSnapshot(db, () => {
+    const scopeId = invocationIdentity(scopeInput), commandId = invocationIdentity(commandInput);
+    const record = decodeInvocationRecord(invocationCommandRow(db, scopeId, commandId), scopeId, commandId, 'command_id');
+    if (record?.receipt.profile.schemaVersion === 2) readInvocationPlanUsage(db, requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION), record);
+    return record;
+  });
 }

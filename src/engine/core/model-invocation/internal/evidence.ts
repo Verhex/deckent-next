@@ -1,3 +1,4 @@
+import { providerSpendLocalZeroTariffProfile } from '#engine/core/provider-spend/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition, encodeModelInvocationProfile, encodeModelInvocationRequest,
@@ -40,6 +41,9 @@ export function parseModelInvocationAdmission(input: unknown): ModelInvocationAd
   let activation;
   try { activation = verifyModelActivationRecord(parseModelActivationRecord(parsed.data.activation)); }
   catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
+  if (parsed.data.profile.schemaVersion === 2 && (parsed.data.profile.billingAxis === 'metered' ? !parsed.data.spending
+    : parsed.data.spending !== undefined || (parsed.data.profile.billingAxis === 'local' && !providerSpendLocalZeroTariffProfile(parsed.data.profile))))
+    throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   if (parsed.data.requestDigest !== modelInvocationRequestDigest(command) || parsed.data.profileDigest !== profileDigest
     || definitionDigest !== command.expectedBinding.digest || activation.scopeId !== command.scopeId
     || activation.state !== 'active' || activation.catalogRevision !== command.catalogRevision

@@ -28,8 +28,11 @@ export function planningSpendingLines(result: RunProposalResult, locale: Locale)
   const spending = result.planningSpending, unknown = t('proposal.planning.unknown', {}, locale);
   const classes = { metered: t('proposal.planning.metered', {}, locale), 'not-metered': t('proposal.planning.notMetered', {}, locale), unknown };
   const evidence = { 'measured-tariff-upper-bound': t('proposal.planning.measured-tariff-upper-bound', {}, locale), 'measured-tariff': t('proposal.planning.measured-tariff', {}, locale), 'provider-reported': t('proposal.planning.provider-reported', {}, locale),
-    'settled-local': t('proposal.planning.settled-local', {}, locale), held: t('proposal.planning.held', {}, locale), unknown };
-  return [t('proposal.planning', { model: terminalSafeText(redactForRecord(`${source.receipt.reference.providerId}/${source.receipt.reference.modelId}`)),
+    'settled-local': t('proposal.planning.settled-local', {}, locale), 'plan-usage': t('proposal.planning.plan-usage', {}, locale), held: t('proposal.planning.held', {}, locale), unknown };
+  const axis = spending?.billingAxis;
+  if (axis === 'subscription') return [t('proposal.planning.subscription', { model: terminalSafeText(redactForRecord(`${source.receipt.reference.providerId}/${source.receipt.reference.modelId}`)),
+    evidence: evidence[spending?.evidence ?? 'unknown'] }, locale)];
+  return [...(axis ? [t('billing.axis', { axis: { subscription: t('billing.subscription', {}, locale), local: t('billing.local', {}, locale), metered: t('billing.metered', {}, locale) }[axis] }, locale)] : []), t('proposal.planning', { model: terminalSafeText(redactForRecord(`${source.receipt.reference.providerId}/${source.receipt.reference.modelId}`)),
     class: classes[spending?.class ?? 'unknown'],
     cost: spending?.amountMinorUnits != null && spending.currency ? `≈${currencyAmountText(spending.amountMinorUnits, spending.currency, locale)}` : unknown,
     evidence: evidence[spending?.evidence ?? 'unknown'] }, locale)];
