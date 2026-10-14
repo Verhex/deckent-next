@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { projectApprovalDecisionText } from '#surfaces/core/approval-presentation/index.js';
+import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
 import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
 import { Window, useWindowReserve, WINDOW_RESERVED_ROWS, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { LIST_PICKER_MIN_ROWS } from '#surfaces/core/terminal-picker/index.js';
@@ -24,7 +25,7 @@ export function LinesWindow({ title, lines, hints, position, onClose }: { readon
 }
 
 /**
- * A question window: `y` answers yes, `n` no; Esc, Enter and Ctrl+C give no answer (null) — for a trust question nothing is recorded then.
+ * A question window: a single typed `y` answers yes, `n` no (Ctrl/Alt+y and pasted keys answer nothing); Esc, Enter and Ctrl+C give no answer (null) — for a trust question nothing is recorded then.
  * One answer only; later keys are ignored. Arrows and page keys scroll a long body.
  */
 export function QuestionWindow({ title, lines, hints, position, onAnswer }: { readonly title: string; readonly lines: readonly PanelLine[]; readonly hints: string;
@@ -33,10 +34,12 @@ export function QuestionWindow({ title, lines, hints, position, onAnswer }: { re
   const answer = (value: boolean | null) => { if (answered.current) return; answered.current = true; onAnswer(value); };
   return <Window title={[span(title)]} body={panelWindowLines(lines, known)} hints={hints} position={position} onClose={() => answer(null)}
     onInput={(input, key) => {
-      if (input === 'y' || input === 'Y') { answer(true); return true; }
-      if (input === 'n' || input === 'N') { answer(false); return true; }
       if (key.return || (key.ctrl && input === 'c')) { answer(null); return true; }
-      return false;
+      if (key.escape) return false; // the window's close gives no answer
+      // The decision-card rule: Ctrl/Alt+y, pasted or coalesced keys are not a yes (or a no).
+      const decision = decisionKey(input, key);
+      if (decision === null) return false;
+      answer(decision === 'yes'); return true;
     }} />;
 }
 

@@ -257,6 +257,31 @@ describe('delivery window on the real Workline', () => {
     expect(h.calls).toEqual(['preview:r', 'available', 'prepare', 'publish']);
   });
 
+  it('Ctrl+Y, Alt+y and a coalesced Ctrl+O y never deliver, confirm or adopt; only a single typed y does (TERMINAL-UX)', async () => {
+    const CTRL_Y = '\u0019', ALT_Y = `${ESC}y`, COALESCED = `${CTRL_O}y`;
+    const h = harness({ targets: ['refs/heads/main'], viewFiles: ['note.txt', 'unexpected.txt'] }); await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await press(h, CTRL_O); expect(frame(h)).toContain('WINDOW-FOCUS');
+    // ready → deliver
+    for (const keys of [CTRL_Y, ALT_Y, COALESCED]) { await press(h, keys, 120); expect(h.calls).toEqual(['preview:r']); }
+    expect(frame(h)).toContain(windowTitle);
+    await press(h, '\r', 120); expect(h.calls).toEqual(['preview:r']); expect(frame(h)).toContain(windowTitle); // Enter decides nothing either
+    await press(h, 'y', 120);
+    // confirm (a port card that differs from what was shown)
+    await until(() => frame(h).includes(WORDS.confirmBody), 'exact port card');
+    for (const keys of [CTRL_Y, ALT_Y]) { await press(h, keys, 120); expect(h.calls).toEqual(['preview:r', 'available', 'prepare']); }
+    expect(frame(h)).toContain(WORDS.confirmBody);
+    await press(h, 'y', 120);
+    // delivered → adopt
+    await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
+    expect(h.calls).toEqual(['preview:r', 'available', 'prepare', 'publish']);
+    for (const keys of [CTRL_Y, ALT_Y, '\r']) { await press(h, keys, 120); expect(h.calls.some(call => call.startsWith('adopt:'))).toBe(false); }
+    expect(frame(h)).toContain(WORDS.adoptHints);
+    await press(h, 'y', 120);
+    await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted by the typed y');
+    expect(h.calls.filter(call => call.startsWith('adopt:'))).toHaveLength(1);
+  });
+
   it('/deliver lists the scope\'s waiting tasks; the chosen window opens in the foreground', async () => {
     const h = harness({ scopeRuns: [awaiting('r1', 'FIRST-TASK'), awaiting('r2', 'SECOND-TASK'), run(COMPLETED, 'accepted', 'none', 'r3', 'NOTHING-TASK')] });
     await settle(80); await press(h, '/deliver\r', 150);

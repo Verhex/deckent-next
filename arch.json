@@ -1011,6 +1011,7 @@
     "src/surfaces/core/terminal-delivery": {
       "dependencies": [
         "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-window",
         "src/platform/core/common",
         "src/domain/core/attempt",

@@ -39,7 +39,9 @@ function mount(node: ReactElement, columns = 100, rows = 40, ascii = false) {
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, createElement(WindowStackProvider, null, node)) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
-  return { frame: () => stdout.frame, all: () => stdout.all, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); } };
+  return { frame: () => stdout.frame, all: () => stdout.all, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
+    /** One stdin chunk, as a terminal sends a modified or coalesced key. */
+    raw: async (keys: string, ms?: number) => { stdin.write(keys); await settle(ms); } };
 }
 type Calls = { notices: PanelNotice[]; errors: unknown[]; closed: number; approvals: string[] };
 function panel(kind: 'model' | 'provider', ports: Parameters<typeof SettingsPanel>[0]['ports'], locale: 'en' | 'tr' = 'en') {
@@ -295,6 +297,9 @@ describe('/provider window', () => {
     await view.press('n', 60);
     expect(removed).toEqual([]);
     await view.press(`${ENTER}${DOWN}${ENTER}`, 60); // back on the same kind
+    // TERMINAL-UX: Ctrl+Y, Alt+y and a coalesced Ctrl+O y are not a typed y (nor a no): the question keeps waiting.
+    for (const keys of ['\u0019', `${ESC}y`, '\u000fy']) { await view.raw(keys, 60); expect(removed).toEqual([]); }
+    expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
     await view.press('y', 100);
     expect(removed).toEqual(['local-openai']);
     // The answer is shown in the window, not in scrollback.
