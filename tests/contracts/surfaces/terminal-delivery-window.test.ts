@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EffectConfirmationView, RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, consentMatches, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
+import { awaitingDeliveryTargets, consentMatches, deliveryLines, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -26,7 +26,7 @@ function run(state: RunView['state'], phase: string, outlook?: string, id = 'r',
 const RUNNING = { kind: 'running' } as const, COMPLETED = { kind: 'terminal', outcome: 'completed', reason: 'completed' } as const;
 const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 'awaiting-delivery', id, title);
 
-type PortOptions = { targets?: readonly string[]; failFirst?: { code: string; message: string }; viewFiles?: readonly string[] };
+type PortOptions = { targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[] };
 /** Records every step; `answer` is asked where the production port asks it, with the card the engine would build. */
 function recordingPort(options: PortOptions = {}) {
   const calls: string[] = [], views: EffectConfirmationView[] = [];
@@ -52,6 +52,8 @@ function recordingPort(options: PortOptions = {}) {
     },
     async adopt(preview, delivery, targetRef, commandId, answer) {
       calls.push('available');
+      // As the engine: a required verification is checked before the branch card is asked (no answer, no move).
+      if (options.failAdopt) throw Object.assign(new Error(options.failAdopt.message), { code: options.failAdopt.code });
       await ask(answer, card(preview, commandId, { operation: 'adopt-integration', resource: targetRef, from: BASE, to: delivery.commit, files: [] }));
       calls.push(`adopt:${targetRef}`);
       return { targetRef, fromCommit: BASE, toCommit: delivery.commit };
@@ -178,6 +180,26 @@ describe('delivery window on the real Workline', () => {
     await until(() => frame(h).includes(`Adopted: refs/heads/release ${BASE} → ${COMMIT}`), 'adopted');
     expect(h.calls.at(-1)).toBe('adopt:refs/heads/release'); expect(h.views.map(view => view.operation)).toEqual(['deliver-integration', 'adopt-integration']);
     expect(transcript(h)).toContain(`Adopted into refs/heads/release: ${BASE.slice(0, 12)} → ${COMMIT.slice(0, 12)}.`);
+  });
+
+  it('a required verification refuses adoption here with the exact command-line next step; the branch is never moved', async () => {
+    const h = harness({ targets: ['refs/heads/main'], failAdopt: { code: 'ADOPTION_NOT_VERIFIED', message: 'This installation requires a verification Run for adoption.' } });
+    await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await press(h, CTRL_O); await press(h, 'y', 120);
+    await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
+    await press(h, 'y', 120);
+    await until(() => frame(h).includes('ERR:This installation requires a verification Run'), 'refusal');
+    expect(frame(h)).toContain(WORDS.next['ADOPTION_NOT_VERIFIED']!.slice(0, 40));
+    expect(h.calls.some(call => call.startsWith('adopt:'))).toBe(false); expect(h.views.map(view => view.operation)).toEqual(['deliver-integration']);
+    // The next step names this attempt, its delivery command and the chosen branch, ready to add --verification-run.
+    const rows = deliveryLines({ target: { key: 's:r:task', scopeId: 's', runId: 'r', taskId: 'task', title: 'ORDER-TASK' } as never,
+      stage: { kind: 'failed', error: 'ERR', code: 'ADOPTION_NOT_VERIFIED' }, selected: 0, adopted: null,
+      delivered: { ref: REF, commit: COMMIT, commandId: 'terminal-delivery-1' },
+      preview: { identity: { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 }, adoptionTargets: ['refs/heads/main'],
+        files: [], added: 0, removed: 0, source: 'S', base: BASE, proposal: 'P'.repeat(20), outOfScope: [] } as never }, WORDS);
+    expect(rows.at(-1)!.spans.map(part => part.text).join('')).toContain('deckent task integration-adopt --scope s --run r --task task --attempt a --generation 1'
+      + ' --layout-revision l --command-id <new-id> --delivery-command-id terminal-delivery-1 --target refs/heads/main --verification-run <run>');
   });
 
   it('n after delivery finishes without adopting; the branch is never moved', async () => {

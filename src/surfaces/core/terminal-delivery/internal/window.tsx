@@ -212,7 +212,10 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   if (adopted) rows.push(exact(fillTemplate(labels.adopted, { target: adopted.targetRef, from: adopted.fromCommit, to: adopted.toCommit }), { role: 'success' }));
   if (stage.kind === 'failed') {
     rows.push(...stage.error.split('\n').map(value => line(value, { role: 'error' })));
-    rows.push(line((stage.code ? labels.next[stage.code] : undefined) ?? labels.nextDefault, { role: 'accent' }));
+    // A next step may name the exact command for this attempt, delivery and selected branch (ADOPTION_NOT_VERIFIED: the CLI with --verification-run).
+    const next = (stage.code ? labels.next[stage.code] : undefined) ?? labels.nextDefault, id = preview?.identity;
+    rows.push(line(preview && id ? fillTemplate(next, { scope: id.scopeId, run: id.runId, task: id.taskId, attempt: id.attemptId, generation: id.generation,
+      layout: id.layoutRevision, delivery: delivered?.commandId ?? '<delivery>', target: preview.adoptionTargets[entry.selected] ?? '<branch>' }) : next, { role: 'accent' }));
   }
   return rows;
 }

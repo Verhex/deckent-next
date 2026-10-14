@@ -1066,6 +1066,7 @@
   "terminal.delivery.next.DELIVERY_INTERACTIVE_REQUIRED": "Sonraki adım: Deckent'i bu makinede gerçek bir etkileşimli terminalde aç (giriş ve çıkış aynı TTY'de) ve /deliver'ı orada kullan; MCP, SDK ve yönlendirilmiş oturumlar onaylayamaz.",
   "terminal.delivery.next.DELIVERY_CONFIRMATION_DECLINED": "Hiçbir şey yazılmadı. Görev hâlâ teslim bekliyor; /deliver yeniden açar.",
   "terminal.delivery.next.ADOPTION_TARGET_DENIED": "Sonraki adım: teslim kendi referansında kalır. Burada dala almak için dalı execution.adoption.targets'a ekle (/config).",
+  "terminal.delivery.next.ADOPTION_NOT_VERIFIED": "Sonraki adım: teslim kendi referansında kalır, dal taşınmadı. Bu kurulum dalı yalnız teslim commit'inin kabul edilmiş bir doğrulama Run'ı ile taşır; bu pencere o Run'ı henüz seçemez. Komut satırından dala al: deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>",
   "terminal.delivery.nextDefault": "Başka bir şey yazılmadı. /deliver yeniden açar; /run işi gösterir.",
   "terminal.delivery.pickerTitle": "/deliver · teslim bekleyen görevler",
   "terminal.delivery.none": "Teslim bekleyen görev yok.",
