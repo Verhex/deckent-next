@@ -39,5 +39,5 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
   clearConfigCache();
   const service = await startConfiguredRuntimeService(project, observer, { env });
   try { expect((await lstat(endpoint)).isSocket()).toBe(true); }
-  finally { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  finally { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
 });

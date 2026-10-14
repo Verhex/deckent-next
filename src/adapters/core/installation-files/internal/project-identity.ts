@@ -19,7 +19,7 @@ export class FileProjectIdentityStore implements ProjectIdentityStore {
       const file = new IdentityFile(resolveProductLayout({ projectRoot: this.projectRoot }), 'projectIdentity', {
         parse: value => projectIdentitySchema.parse(value),
         create: () => projectIdentitySchema.parse({ schemaVersion: 1, projectId: randomUUID() }),
-        error: reason => new ProjectIdentityError(({ INVALID: 'PROJECT_IDENTITY_INVALID', UNAVAILABLE: 'PROJECT_IDENTITY_UNAVAILABLE',
+        error: reason => new ProjectIdentityError(({ INVALID: 'PROJECT_IDENTITY_INVALID', INCOMPLETE: 'PROJECT_IDENTITY_INCOMPLETE', UNAVAILABLE: 'PROJECT_IDENTITY_UNAVAILABLE',
           LOCKED: 'PROJECT_IDENTITY_LOCKED', UNSUPPORTED: 'PROJECT_IDENTITY_UNAVAILABLE', MASKED: 'PROJECT_IDENTITY_MASKED' } as const)[reason]),
       }, this.lockTimeoutMs);
       return await (create ? file.loadOrCreate() : file.load());

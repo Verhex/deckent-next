@@ -95,6 +95,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
   PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
   PROJECT_IDENTITY_MASKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_MASKED', p, l) }) },
+  PROJECT_IDENTITY_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INCOMPLETE', p, l) }) },
   PROJECT_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_LOCKED', p, l) }) },
 
   CONFIG_SECRET_SECTION_REFUSED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECRET_SECTION_REFUSED', p, l) }) },

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
 import { projectIdentitySchema } from '#domain/index.js';
-import { withConfigWriteLock } from '#platform/index.js';
+import { ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -52,10 +52,16 @@ describe.skipIf(process.platform === 'win32')('durable project identity', () => 
   it('refuses a lost record and an interrupted first publication instead of generating a new identity', async () => {
     const f = await fixture(); const store = new FileProjectIdentityStore(f.root); await store.loadOrCreate();
     await unlink(f.path);
-    await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'PROJECT_IDENTITY_INVALID' });
+    await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'PROJECT_IDENTITY_INCOMPLETE' });
     await expect(readFile(f.path)).rejects.toMatchObject({ code: 'ENOENT' });
     const other = await fixture(); await mkdir(other.directory, { recursive: true, mode: 0o700 });
-    await expect(new FileProjectIdentityStore(other.root).loadOrCreate()).rejects.toMatchObject({ code: 'PROJECT_IDENTITY_INVALID' });
+    await expect(new FileProjectIdentityStore(other.root).loadOrCreate()).rejects.toMatchObject({ code: 'PROJECT_IDENTITY_INCOMPLETE' });
+    await expect(readFile(other.path)).rejects.toMatchObject({ code: 'ENOENT' });
+    // KAPANIS-KIMLIK-YARISI: a defined, recoverable state that names the directory and both ways out, in both catalogs.
+    for (const [locale, words] of [['en', ['.deckent/project-identity', 'never run work', 'backup']], ['tr', ['.deckent/project-identity', 'hiç iş çalışmadıysa', 'yedekten']]] as const) {
+      const message = ErrorRegistry.get('PROJECT_IDENTITY_INCOMPLETE', locale)?.message ?? '';
+      for (const word of words) expect(message).toContain(word);
+    }
   });
   it('does not follow a substituted identity record', async () => {
     const f = await fixture(); const store = new FileProjectIdentityStore(f.root); await store.loadOrCreate();
@@ -84,7 +90,7 @@ describe.skipIf(process.platform === 'win32')('durable project identity', () => 
   it('a directory whose record never appears within the writer-lock bound stays retained loss', async () => {
     const f = await fixture(); await mkdir(f.directory, { recursive: true, mode: 0o700 });
     const started = Date.now();
-    await expect(new FileProjectIdentityStore(f.root, 60).read()).rejects.toMatchObject({ code: 'PROJECT_IDENTITY_INVALID' });
+    await expect(new FileProjectIdentityStore(f.root, 60).read()).rejects.toMatchObject({ code: 'PROJECT_IDENTITY_INCOMPLETE' });
     expect(Date.now() - started).toBeLessThan(1_000);
     await expect(readFile(f.path)).rejects.toMatchObject({ code: 'ENOENT' });
   });

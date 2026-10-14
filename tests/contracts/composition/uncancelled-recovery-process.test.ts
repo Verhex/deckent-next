@@ -6,8 +6,8 @@ import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { createRun, executeTask, inspectRun, reserveRunTasks } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { clearConfigCache } from '#platform/index.js';
-import { identifyDockerRequest } from '#adapters/index.js';
+import { clearConfigCache, getConfigFieldDefault } from '#platform/index.js';
+import { identifyDockerRequest, openSqliteInventoryReader } from '#adapters/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
@@ -54,7 +54,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
   const env = { ...process.env, HOME: join(root, 'h') }; const options = { env };
   const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
-  opened.store.close();
+  opened.store.close(); const ledgerPath = opened.path;
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants: [
     { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals,
@@ -74,14 +74,17 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
     { cwd: process.cwd(), env, stdio: ['ignore', 'pipe', 'pipe'] }) as Child;
   const controllerClosed = closed(controller); let handle: string | undefined; let endpoint: string | undefined;
   try {
+    // The controller process is the writer while it runs. Observe through the read-only reader: a writer open (BEGIN IMMEDIATE +
+    // migration check) competes for the ledger write lock and is refused ATTEMPT_STORE_BUSY within the default busy timeout whenever a
+    // controller commit outlasts it on a loaded host (hosted node 26, 2026-10-14), and it would equally make the controller's own writes wait.
     const record = await poll(async () => {
-      const store = await openConfiguredAttemptStore(project, options);
+      const store = await openSqliteInventoryReader(ledgerPath, { busyTimeoutMs: getConfigFieldDefault('storage').sqlite.busyTimeoutMs });
       try {
-        const current = await store.store.loadBoundDispatch(identity);
+        const current = await store.loadBoundDispatch(identity);
         if (current?.launch !== 'granted') return undefined;
         try { return await readFile(join(current.request.workspace, 'ready'), 'utf8') === 'yes' ? current : undefined; }
         catch { return undefined; }
-      } finally { store.store.close(); }
+      } finally { store.close(); }
     }, 'WORKER_READY_TIMEOUT');
     endpoint = (record.profile.parameters as { endpoint: string }).endpoint;
     handle = identifyDockerRequest(record.request, { ...docker, workspaceRoot: resolve(data, 'workspaces'),

@@ -161,6 +161,9 @@ export class FileBackupStorage implements BackupStoragePort {
       for (const resource of BACKUP_RESOURCES) {
         const from = productResourcePath(staged, resource);
         if (!await lstat(from).catch(() => null)) {
+          // A set taken before the project identity existed carries no record: publish nothing, so the target keeps its own identity or stays
+          // not-created; an empty directory would read as a lost record and refuse every scoped operation (CI-KARARLILIK 2026-10-14).
+          if (resource === 'projectIdentity') continue;
           if (directoryResources.has(resource)) await privateDirectory(from); else return refuse('BACKUP_SET_INVALID');
         }
         await publish(from, productResourcePath(layout, resource));

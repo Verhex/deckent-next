@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { ServiceShutdownApplication } from '#engine/index.js';
+import { FileProjectIdentityStore } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -110,8 +111,38 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] p
     const db = new DatabaseSync(f.ledgerPath, { readOnly: true });
     try { expect(JSON.parse(String((db.prepare('SELECT record FROM service_shutdown_outcomes').get() as { record: string }).record))).toMatchObject({ state: 'incomplete' }); }
     finally { db.close(); }
-  } finally { held?.destroy(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  } finally { held?.destroy(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
 }, 3000);
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] publishes the project identity before the listener opens and settles all service work after an incomplete stop', async () => {
+  const f = await fixture();
+  const configPath = join(f.project, '.deckent/config.json');
+  const config = JSON.parse(await readFile(configPath, 'utf8')) as { service: { shutdownGraceMs: number } };
+  config.service.shutdownGraceMs = 25; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
+  const record = join(f.project, '.deckent/project-identity/identity.json'), original = FileProjectIdentityStore.prototype.loadOrCreate;
+  // Timing seam: a slow first publication (a loaded host). Published by a background recovery page instead, it was still in flight
+  // when an incomplete stop rejected `done` (where the CLI exits), leaving an empty identity directory (KAPANIS-KIMLIK-YARISI).
+  const spy = vi.spyOn(FileProjectIdentityStore.prototype, 'loadOrCreate').mockImplementation(async function (this: FileProjectIdentityStore) {
+    await new Promise(resolve => setTimeout(resolve, 200)); return original.call(this);
+  });
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); let held: ReturnType<typeof createConnection> | undefined;
+  try {
+    expect(spy).toHaveBeenCalledTimes(1);
+    const published = JSON.parse(await readFile(record, 'utf8')) as { projectId: string };
+    const client = createConfiguredRuntimeClient(f.project, { env: f.env }); const descriptor = await client.describeService();
+    held = createConnection(service.endpoint); held.on('error', () => undefined);
+    await new Promise<void>((resolve, reject) => { held!.once('connect', resolve); held!.once('error', reject); });
+    held.write(Buffer.from([0, 0]));
+    await client.shutdownService(command(descriptor.instanceId));
+    await expect(service.done).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE' });
+    expect(JSON.parse(await readFile(record, 'utf8'))).toEqual(published);
+    held.destroy(); await service.settled;
+    // `settled` covers custody release: the same ledger and endpoint start again at once, with the same identity and no new publication.
+    const next = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
+    try { expect(spy).toHaveBeenCalledTimes(1); expect(JSON.parse(await readFile(record, 'utf8'))).toEqual(published); }
+    finally { await next.stop(); await next.done; await next.settled; }
+  } finally { spy.mockRestore(); held?.destroy(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
+}, 5000);
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] keeps durable admission but rejects host completion when outcome audit persistence fails', async () => {
   const f = await fixture(); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
@@ -124,7 +155,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] k
     const proof = await openConfiguredAttemptStore(f.project, { env: f.env });
     try { expect(await proof.store.readServiceShutdown({ scopeId: 'service-scope', serviceId: 'runtime', commandId: 'shutdown-1' })).toMatchObject({ outcome: null }); }
     finally { proof.store.close(); }
-  } finally { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  } finally { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
 });
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] persists outcomes for simultaneous distinct durable shutdown admissions', async () => {
@@ -144,7 +175,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] p
     const db = new DatabaseSync(f.ledgerPath, { readOnly: true });
     try { expect(db.prepare('SELECT COUNT(*) AS count FROM service_shutdown_outcomes').get()!.count).toBe(2); }
     finally { db.close(); }
-  } finally { gate.release(); spy.mockRestore(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  } finally { gate.release(); spy.mockRestore(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
 });
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] waits for a durable outcome when explicit host stop races after admission before response handoff', async () => {
@@ -161,5 +192,5 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] w
     const db = new DatabaseSync(f.ledgerPath, { readOnly: true });
     try { expect(db.prepare('SELECT COUNT(*) AS count FROM service_shutdown_outcomes').get()!.count).toBe(1); }
     finally { db.close(); }
-  } finally { gate.release(); spy.mockRestore(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  } finally { gate.release(); spy.mockRestore(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); await service.settled; }
 });
