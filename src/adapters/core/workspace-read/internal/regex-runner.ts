@@ -3,8 +3,10 @@ import { Worker } from 'node:worker_threads';
 // A model or user regular expression can backtrack for minutes (`^(a+)+$`); run on the service thread it would stall every
 // other request and ignore cancellation (Astra 2072 R2). Matching therefore runs in one worker thread per tool call, which is
 // terminated on cancel. Compilation stays on the caller (it cannot backtrack) so an invalid pattern is reported at once.
+// The eval'd source loads its module through `process.getBuiltinModule`, so it runs whether the host process parses eval input as CommonJS
+// or as ESM (`--input-type=module` is inherited by the worker; `require` would not exist there — S6 gate in an SDK one-shot process).
 const WORKER_SOURCE = `
-const { parentPort } = require('node:worker_threads');
+const { parentPort } = process.getBuiltinModule('node:worker_threads');
 parentPort.on('message', ({ id, source, flags, lines }) => {
   const re = new RegExp(source, flags), hits = [];
   for (let i = 0; i < lines.length; i++) if (re.test(lines[i])) hits.push(i);

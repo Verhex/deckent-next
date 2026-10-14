@@ -217,6 +217,8 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.custodyDisposition ? [[span(task.custodyDisposition === 'released' ? t('task.custody.released', {}, locale) : t('task.custody.hold-manual', {}, locale), 'warning')]] : []),
       ...(task.acceptance ? [[span(renderAcceptanceLine(task.acceptance, locale), 'muted')]] : []),
       ...(task.handoffs ?? []).map(receipt => [span(`    ${(receipt.kind === 'workspace-started-from-patch' ? t('monitor.detail.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('monitor.detail.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))}`, 'success')]),
+      ...(task.configExclusions ? [[span(`    ${t('monitor.detail.configExcluded', { count: task.configExclusions.count }, locale)}`, 'warning')],
+        ...task.configExclusions.entries.map(entry => [span(t('monitor.detail.configExcludedEntry', { path: entry.path, rule: entry.rule, by: entry.by }, locale), 'muted')])] : []),
       ...(task.evaluation.reason ? [[span(`    ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')]] : []),
       ...(task.dependencies.length ? [[span(`    ${t('monitor.detail.dependencies', { list: task.dependencies.join(', ') }, locale)}`, 'muted')]] : []),
     ]; }),

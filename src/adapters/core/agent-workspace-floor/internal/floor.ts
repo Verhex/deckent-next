@@ -1,7 +1,7 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { globalStateRoot, productResourcePath, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
-import { createGlobMatcher, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
+import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { MCP_PROJECT_REGISTRY_PATH } from '#adapters/core/mcp-client/index.js';
@@ -23,7 +23,7 @@ export const AGENT_READABLE_PRODUCT_RESOURCES: readonly ProductResource[] = Obje
  */
 export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout, fullAccess = false): readonly string[] {
   // MODES-3: a full-access turn opens only the repository internals (`.git`: commit, branch, push); credentials and product state stay closed.
-  const base = fullAccess ? DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)) : DEFAULT_WORKSPACE_READ_DENY;
+  const base = fullAccess ? CREDENTIAL_WORKSPACE_DENY : DEFAULT_WORKSPACE_READ_DENY;
   // MCP-CLIENT: the project's MCP registry widens authority; the agent never reads or writes it (nor a writer's temporary beside it).
   return Object.freeze([...base, ...agentProductStateDeny(projectRoot, layout), `${MCP_PROJECT_REGISTRY_PATH}*`,
     MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
@@ -50,7 +50,7 @@ export function agentShellHardFloor(projectRoot: string, layout: ProductLayout, 
     const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
     roots.push(...resolved ? [resolved] : [], ...conventional && conventional !== resolved && existsSync(conventional) ? [conventional] : []);
   }
-  const credentials = DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)).map(createGlobMatcher);
+  const credentials = CREDENTIAL_WORKSPACE_DENY.map(createGlobMatcher);
   const inProject = (path: string) => relative(projectRoot, path).split(sep).join('/'), resources = Object.keys(layout.resources) as ProductResource[];
   const products = [...[layout, resolveProductLayout({ projectRoot })].flatMap(each => resources.map(resource => inProject(productResourcePath(each, resource)))),
     inProject(layout.root), inProject(layout.bootstrapConfigPath), MCP_PROJECT_REGISTRY_PATH, ...DEFAULT_WORKSPACE_READ_DENY.filter(pattern => pattern.startsWith(`${dirname(MCP_PROJECT_REGISTRY_PATH)}/`)).map(pattern => pattern.split('/*')[0]!)];

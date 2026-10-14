@@ -328,7 +328,11 @@
         "src/adapters/core/worker-observation",
         "src/adapters/core/git-patch",
         "src/engine/core/handoff-observation",
-        "src/composition/core/resource-observation"
+        "src/composition/core/resource-observation",
+        "src/adapters/core/worker-tree-gate",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/engine/core/audit"
       ],
       "plan": "EXECUTION"
     },
@@ -829,7 +833,10 @@
     "src/engine/core/workspaces": {
       "dependencies": [
         "src/domain/core/attempt",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/audit",
+        "src/platform/core/errors",
+        "src/engine/core/attempts"
       ],
       "plan": "ISOLATION"
     },
@@ -1988,6 +1995,15 @@
       ],
       "plan": "SURFACES"
     },
+    "src/adapters/core/worker-tree-gate": {
+      "dependencies": [
+        "src/adapters/core/workspace-read",
+        "src/engine/core/workspaces",
+        "src/platform/core/common",
+        "src/platform/core/redaction"
+      ],
+      "plan": "ISOLATION"
+    },
     "src/adapters/core/worker-observation": {
       "dependencies": [
         "src/domain/core/attempt",
@@ -2436,6 +2452,7 @@
     },
     "src/adapters/core/monitor-ledger": {
       "dependencies": [
+        "src/engine/core/workspaces",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/approval",
         "src/domain/core/run",

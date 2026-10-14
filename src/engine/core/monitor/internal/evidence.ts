@@ -22,6 +22,8 @@ export interface MonitorLedgerDispatch {
 export interface MonitorLedgerAttempt {
   readonly content?: MonitorWorkerContent;
   readonly attemptId: string; readonly generation: number; readonly handoffStart?: HandoffStartRecord | null;
+  /** S6: the attempt's config exclusions (`execution.secretGate` lifted hits), journalled before its launch. */
+  readonly treeExclusions?: import('#engine/core/workspaces/index.js').WorkerTreeExclusionRecord | null;
   /** The Run binding's last projected observation. */
   readonly observedKind: RunSnapshot['bindings'][number]['observedKind']; readonly observedRevision: number | null;
   readonly dispatch: MonitorLedgerDispatch | null;
