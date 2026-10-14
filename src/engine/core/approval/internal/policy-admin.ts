@@ -50,7 +50,10 @@ export class AuthorityDocumentTarget implements EffectTarget {
         const bindings = plan.bindings && { ...plan.bindings, revision: chainAuthorityRevision('authority-bindings:1', 'a', files.bindings.revision, plan.bindings) };
         const after = `${(policy ?? files.policy).revision}+${(bindings ?? files.bindings).revision}`;
         try { this.hooks.bound(current, plan.touched); } catch (error) { return refuse(error); }
-        return { write: { policy, bindings, order: plan.order, beforePublish: () => this.hooks.audit({ before: current.revision, after, counts: plan.counts }) }, result: { version: after } };
+        // The audit runs after the writer's invariant check and before any temporary file, archive record or rename: its failure leaves
+        // nothing behind, so it is a clean refusal (no record, no change), never an unknown outcome.
+        const beforePublish = () => { try { this.hooks.audit({ before: current.revision, after, counts: plan.counts }); } catch (error) { refuse(error); } };
+        return { write: { policy, bindings, order: plan.order, beforePublish }, result: { version: after } };
       }, request.idempotencyKey);
     } catch (error) {
       if (error instanceof EffectTargetError) throw error;
