@@ -1459,6 +1459,8 @@
   "cli.audit.service": "Service audit integrity: {status}",
   "cli.audit.service.ready": "ready",
   "cli.audit.service.degraded": "degraded",
+  "cli.audit.service.degradedReason": "Service audit integrity: {status} ({reason})",
+  "cli.audit.reason.not-verified": "not verified yet",
   "cli.audit.status.match": "match",
   "cli.audit.status.truncated": "truncated",
   "cli.audit.status.possible-wipe": "possible wipe",

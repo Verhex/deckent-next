@@ -77,3 +77,16 @@ it.skipIf(process.platform !== 'win32')('unsupported Windows policy custody refu
     .rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
   expect(await readdir(data)).toEqual([]);
 });
+
+it('a throwing verifier, an unverified scope and an unavailable result are never healthy: doctor degraded with the reason, audit verify non-zero', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-audit-failopen-')); roots.push(root); await mkdir(join(root, '.deckent'));
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, terminal: { scopeId: 's' } }));
+  const env = { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: join(root, 'home/.deckent') }, quiet = { write() {} };
+  const result = (reason: 'no-checkpoint-yet' | 'unavailable') => ({ schemaVersion: 1 as const, scopeId: 's', status: 'unknown' as const, reason, head: null, checkpoint: null });
+  const verifiers = { throws: async () => { throw new TypeError('verifier bug'); }, unverified: async () => result('no-checkpoint-yet'), unavailable: async () => result('unavailable') };
+  for (const [name, verifyAudit] of Object.entries(verifiers)) {
+    expect(await main(['audit', 'verify', '--scope', 's', '--json'], { root, env, verifyAudit, stdout: quiet, stderr: quiet }), name).not.toBe(0);
+    let json = ''; await runKernelCommand(['doctor', '--json'], { root, env, verifyAudit, stdout: { write: value => { json += value; } }, stderr: quiet });
+    expect(JSON.parse(json), name).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: name === 'unverified' ? 'no-checkpoint-yet' : 'unavailable' } });
+  }
+});

@@ -1459,6 +1459,8 @@
   "cli.audit.service": "Servis audit bütünlüğü: {status}",
   "cli.audit.service.ready": "hazır",
   "cli.audit.service.degraded": "bozulmuş",
+  "cli.audit.service.degradedReason": "Servis audit bütünlüğü: {status} ({reason})",
+  "cli.audit.reason.not-verified": "henüz doğrulanmadı",
   "cli.audit.status.match": "eşleşiyor",
   "cli.audit.status.truncated": "sondan silinmiş",
   "cli.audit.status.possible-wipe": "olası silme",

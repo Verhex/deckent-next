@@ -1,3 +1,4 @@
+import { renderAuditReason } from '#surfaces/core/doctor/index.js';
 import { ErrorRegistry, emit, formatDuration, loadConfig, resolveLocale, t, type DeckentError, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
@@ -126,7 +127,9 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
     onIdleShutdown: async event => { output({ schemaVersion: 1, event: 'idle-shutdown', ...event },
       () => t('cli.runtime.idleShutdown', { duration: formatDuration(event.afterMs) }, locale)); },
     onAuditIntegrity: async status => { output({ schemaVersion: 1, event: 'audit-integrity', ...status },
-      () => t('cli.audit.service', { status: status.status === 'ready' ? t('cli.audit.service.ready', {}, locale) : t('cli.audit.service.degraded', {}, locale) }, locale)); },
+      () => status.status === 'ready' ? t('cli.audit.service', { status: t('cli.audit.service.ready', {}, locale) }, locale)
+        : t('cli.audit.service.degradedReason', { status: t('cli.audit.service.degraded', {}, locale), reason: status.reason === 'not-verified' ? t('cli.audit.reason.not-verified', {}, locale)
+          : renderAuditReason(status.reason ?? status.verifications.find(value => value.status !== 'match')?.reason ?? 'unavailable', locale) }, locale)); },
     onLedgerUpgraded: async upgrade => { output({ schemaVersion: 1, event: 'ledger-upgraded', ...upgrade },
       () => t('cli.runtime.ledgerUpgraded', { from: upgrade.from, to: upgrade.to, backup: upgrade.backupPath }, locale)); },
     // WORKER-AUTO-REFRESH: the background refresh reports its typed events here; none of them delays or fails readiness.

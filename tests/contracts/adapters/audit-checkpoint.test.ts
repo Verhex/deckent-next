@@ -7,6 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { type AuditEvent } from '#domain/index.js';
 import { AuditApplication, sealAuditRecord, AuditCheckpointApplication, AuditCheckpointMonitor, auditPolicyDigest, auditProducersDigest } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
+import { CORE_SCHEMA } from '#platform/core/config/index.js';
 import { SqliteAuditStore, openReadOnlyAuditStore } from '#adapters/core/audit-store/index.js';
 import { openSqliteLedger, upgradeExistingLedger, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
@@ -251,4 +252,17 @@ it('detects replacement by a validly sealed record through the retained canonica
     expect(f.audit.list('s', 0, 1)).toEqual([replacement]);
     expect(f.app.verify('s', context)).toMatchObject({ status: 'chain-broken', reason: 'integrity' });
   } finally { f.store.close(); }
+});
+
+it('a service monitor that has not run, or verified no scope, is never ready', async () => {
+  const idle = new AuditCheckpointMonitor(async () => [], () => undefined);
+  expect(idle.status).toEqual({ status: 'degraded', reason: 'not-verified', verifications: [] });
+  await idle.check(); expect(idle.status).toEqual({ status: 'degraded', reason: 'not-verified', verifications: [] });
+  const throwing = new AuditCheckpointMonitor(async () => { throw new TypeError('verifier bug'); }, () => undefined);
+  await throwing.check(); expect(throwing.status).toMatchObject({ status: 'degraded', reason: 'unavailable' });
+});
+
+it('checkpoints cannot be disabled or skipped by configuration', () => {
+  for (const checkpointIntervalMs of [0, -1, 999, null, false]) expect(CORE_SCHEMA.safeParse({ audit: { checkpointIntervalMs } }).success, String(checkpointIntervalMs)).toBe(false);
+  for (const limit of [{ maxRecords: 0 }, { maxScopes: 0 }, { pageSize: 0 }, { enabled: false }, { skip: true }]) expect(CORE_SCHEMA.safeParse({ audit: limit }).success, JSON.stringify(limit)).toBe(false);
 });

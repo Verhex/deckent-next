@@ -1,10 +1,12 @@
 import type { AuditVerification } from '#domain/index.js';
-export interface AuditServiceStatus { readonly status: 'ready' | 'degraded'; readonly reason?: 'unavailable' | 'limit'; readonly verifications: readonly AuditVerification[] }
+export interface AuditServiceStatus { readonly status: 'ready' | 'degraded'; readonly reason?: 'unavailable' | 'limit' | 'not-verified'; readonly verifications: readonly AuditVerification[] }
 export class AuditCheckpointCycleError extends Error {
   constructor(readonly reason: 'unavailable' | 'limit') { super('AUDIT_CHECKPOINT_CYCLE'); this.name = 'AuditCheckpointCycleError'; }
 }
-export const auditServiceStatus = (verifications: readonly AuditVerification[]): AuditServiceStatus => Object.freeze({
-  status: verifications.some(value => value.status !== 'match') ? 'degraded' : 'ready', verifications: Object.freeze([...verifications]) });
+/** Ready only when at least one scope was verified and every verification matched; nothing verified (not yet run, empty ledger) is never ready. */
+export const auditServiceStatus = (verifications: readonly AuditVerification[]): AuditServiceStatus => Object.freeze(!verifications.length
+  ? { status: 'degraded' as const, reason: 'not-verified' as const, verifications: Object.freeze([]) }
+  : { status: verifications.some(value => value.status !== 'match') ? 'degraded' as const : 'ready' as const, verifications: Object.freeze([...verifications]) });
 /** Service-owned, non-overlapping schedule. A failed cycle is reported; no retries or rebaseline. Stop drains the in-flight cycle. */
 export class AuditCheckpointMonitor {
   private current: AuditServiceStatus = auditServiceStatus([]);
