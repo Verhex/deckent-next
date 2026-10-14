@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { agentWorkspaceDeny, createGlobMatcher, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, scanWorkerTree, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/index.js';
+import { agentWorkspaceDeny, createGlobMatcher, workerTreeViews, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, scanWorkerTree, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/index.js';
 import { REDACTION_PATTERNS, resolveProductLayout, snapshotKnownSecrets } from '#platform/index.js';
 
 // S6 (owner 2026-10-14): the pre-dispatch secret gate over the tree a worker receives. Risky inputs stay in the tests; values are built at
@@ -91,6 +91,18 @@ describe('scanWorkerTree', () => {
     await exec('mkfifo', [join(root, 'pipe')]);
     await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: 4, findings: [{ path: '.ENV', rule: 'deny-path:.env' },
       { path: 'certs/SERVER.PEM', rule: 'deny-path:**/*.pem' }, { path: 'link', rule: 'pattern:provider-token' }, { path: 'pipe', rule: 'unscannable:special-file' }] });
+  });
+  it('scans every view the worker receives: profile binds, mounted inputs, handoff files and the prompt dependency context', async () => {
+    const known = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value: 'erp-hunter2-value' }]);
+    const workspace = await tree({ 'src/a.ts': 'ok' }), bind = await tree({ '.env': 'x', 'docs/readme.md': 'fine' }), files = await tree({ report: `${PROVIDER_TOKEN}`, note: 'fine' });
+    const views = workerTreeViews(workspace, [{ source: bind, target: '/deckent/mounts/shared' }], { inputs: [{ name: 'report', path: join(files, 'report') }],
+      handoffInputs: [{ target: '/deckent/inputs/_shared.json', path: join(files, 'note') }], dependencyContext: { text: 'use erp-hunter2-value to log in' } });
+    expect(views.map(view => view.label)).toEqual(['', '/deckent/mounts/shared', '/deckent/inputs/report', '/deckent/inputs/_shared.json', 'prompt:dependency-context']);
+    const scan = await scanWorkerTree(views, options, known);
+    expect(scan).toEqual({ status: 'refused', count: 3, findings: [{ path: 'deckent/mounts/shared/.env', rule: 'deny-path:**/.env' },
+      { path: 'deckent/inputs/report', rule: 'pattern:provider-token' }, { path: 'prompt:dependency-context', rule: 'known-secret' }] });
+    expect(JSON.stringify(scan)).not.toContain('hunter2');
+    await expect(scanWorkerTree(workerTreeViews(workspace, undefined, { inputs: [], handoffInputs: [] }), options, known)).resolves.toEqual({ status: 'clean' });
   });
   it('rejects (never passes) when an entry cannot be read', async () => {
     const root = await tree({ 'secret.txt': `${PROVIDER_TOKEN}` });

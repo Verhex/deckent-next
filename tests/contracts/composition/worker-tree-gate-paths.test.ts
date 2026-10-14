@@ -33,8 +33,10 @@ it('has exactly one production launch site, and it is the gated one', () => {
 
 it('scans after the tree is final and before any connection, supervisor or claim in the gated path', () => {
   const text = files.find(file => file.path === TASK)!.text, at = (needle: string) => { const index = text.indexOf(needle); expect(index, needle).toBeGreaterThan(-1); return index; };
-  const gate = at('await enforceWorkerTreeGate(await scanWorkerTree(lease.workspace');
+  const gate = at('await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start)');
   expect(text.indexOf('enforceWorkerTreeGate(')).toBe(text.lastIndexOf('enforceWorkerTreeGate('));
-  expect(at('.acquire(identity)')).toBeLessThan(gate); expect(at('applyAcceptedPredecessorPatches(lease')).toBeLessThan(gate);
+  expect(at('.acquire(identity)')).toBeLessThan(gate); expect(at('const readOnlyMounts =')).toBeLessThan(gate); expect(at('start = await prepareTaskStart(')).toBeLessThan(gate); expect(at('applyAcceptedPredecessorPatches(lease')).toBeLessThan(gate);
+  // Parity: every host source the container or the prompt receives is a view of the same scan (checkout, binds, inputs, handoff files, context).
+  for (const source of ['inputs: start.inputs', 'handoffInputs: start.handoffInputs', '{ readOnlyMounts }', 'dependencyContext: start.dependencyContext', 'workspace: lease.workspace']) at(source);
   for (const later of ['recordAttemptHandoffStart(store', 'openNativeConnection({', 'new DockerSupervisor(', 'app.execute(request)', 'dispatching = true']) expect(at(later)).toBeGreaterThan(gate);
 });

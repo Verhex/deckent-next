@@ -18,6 +18,20 @@ const FILE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBL
 /** The clone's object store (history) and its index (the tree's own paths again) are the only entries not read; see the S6 report. */
 const UNREAD_GIT_ENTRIES: ReadonlySet<string> = new Set(['.git/objects', '.git/index']);
 
+/**
+ * One thing the worker receives, named as the worker sees it: the checkout (`label` ''), a profile read-only bind or a mounted task/handoff
+ * input (`label` its container target), or text delivered in the prompt (`text`, e.g. the dependency context). Every view is scanned.
+ */
+export type WorkerTreeView = Readonly<{ source: string; label: string }> | Readonly<{ text: string; label: string }>;
+/** Everything `executeConfiguredTask` hands to a worker besides its own profile: the one list the gate scans (S6 sibling-path parity). */
+export function workerTreeViews(workspace: string, readOnlyMounts: readonly Readonly<{ source: string; target: string }>[] | undefined, start: Readonly<{
+  inputs: readonly Readonly<{ name: string; path: string }>[]; handoffInputs: readonly Readonly<{ target: string; path: string }>[];
+  dependencyContext?: Readonly<{ text: string }> }>): readonly WorkerTreeView[] {
+  return Object.freeze([{ source: workspace, label: '' }, ...(readOnlyMounts ?? []).map(mount => ({ source: mount.source, label: mount.target })),
+    ...start.inputs.map(input => ({ source: input.path, label: `/deckent/inputs/${input.name}` })), ...start.handoffInputs.map(input => ({ source: input.path, label: input.target })),
+    ...(start.dependencyContext ? [{ text: start.dependencyContext.text, label: 'prompt:dependency-context' }] : [])]);
+}
+
 class Incomplete extends Error { constructor(readonly limit: WorkerTreeLimit, readonly observed: number, readonly bound: number) { super(limit); } }
 
 /**
@@ -32,7 +46,7 @@ class Incomplete extends Error { constructor(readonly limit: WorkerTreeLimit, re
  * - files, single-file bytes, total bytes and time are bounded and return `incomplete`; any I/O error rejects (no dispatch either way).
  * Shown paths have control characters escaped and pass the record redactor with the configured values, so no path carries a value.
  */
-export async function scanWorkerTree(root: string, options: WorkerTreeGateOptions, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS,
+export async function scanWorkerTree(input: string | readonly WorkerTreeView[], options: WorkerTreeGateOptions, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS,
   now: () => number = Date.now): Promise<WorkerTreeScan> {
   const deny = WORKER_TREE_DENY.map(pattern => ({ pattern, match: createGlobMatcher(pattern.toLowerCase()) }));
   const allowed = options.allowPatternPaths.map(createGlobMatcher), rules = WORKER_TREE_PATTERN_RULES.map(row => ({ id: row.id, expression: new RegExp(row.source, row.flags.replace('g', '')) }));
@@ -62,24 +76,32 @@ export async function scanWorkerTree(root: string, options: WorkerTreeGateOption
     const rule = rules.find(row => candidates.some(text => row.expression.test(text)));
     if (rule) findings.push({ path: shown(rel), rule: `pattern:${rule.id}` });
   };
-  const visit = async (directory: string, prefix: string): Promise<void> => {
-    const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    for (const entry of entries) {
-      const rel = prefix + entry.name, path = join(directory, entry.name);
-      if (UNREAD_GIT_ENTRIES.has(rel)) continue;
-      if (++files > options.maxFiles) throw new Incomplete('files', files, options.maxFiles);
-      time();
-      const pattern = denied(rel);
-      if (pattern !== undefined) { findings.push({ path: shown(rel), rule: `deny-path:${pattern}` }); continue; }
-      // A directory entry type is a hint; an unknown type (DT_UNKNOWN) is resolved without following a link.
-      const info = entry.isDirectory() || entry.isFile() || entry.isSymbolicLink() ? entry : await lstat(path);
-      if (info.isDirectory()) await visit(path, rel + '/');
-      else if (info.isSymbolicLink()) inspect(rel, [await readlink(path)]);
-      else if (info.isFile()) { inspect(rel, texts(await read(path))); time(); }
-      else findings.push({ path: shown(rel), rule: 'unscannable:special-file' });
-    }
+  /** `display` is the path as the worker sees it, without a leading slash (the checkout's own paths are unchanged); rules match on it. */
+  const entry = async (path: string, display: string, inner: string): Promise<void> => {
+    if (UNREAD_GIT_ENTRIES.has(inner)) return;
+    if (++files > options.maxFiles) throw new Incomplete('files', files, options.maxFiles);
+    time();
+    const pattern = denied(display);
+    if (pattern !== undefined) { findings.push({ path: shown(display), rule: `deny-path:${pattern}` }); return; }
+    const info = await lstat(path);
+    if (info.isDirectory()) await visit(path, display + '/', inner === '' ? '' : inner + '/');
+    else if (info.isSymbolicLink()) inspect(display, [await readlink(path)]);
+    else if (info.isFile()) { inspect(display, texts(await read(path))); time(); }
+    else findings.push({ path: shown(display), rule: 'unscannable:special-file' });
   };
-  try { await visit(root, ''); }
+  const visit = async (directory: string, prefix: string, innerPrefix = prefix): Promise<void> => {
+    const names = (await readdir(directory)).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+    for (const name of names) await entry(join(directory, name), prefix + name, innerPrefix + name);
+  };
+  const views: readonly WorkerTreeView[] = typeof input === 'string' ? [{ source: input, label: '' }] : input;
+  try {
+    for (const view of views) {
+      const label = view.label.replace(/^\/+/u, '');
+      if ('text' in view) { time(); if ((total += Buffer.byteLength(view.text)) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes); inspect(label, [view.text]); }
+      else if (label === '') await visit(view.source, '');
+      else await entry(view.source, label, '');
+    }
+  }
   catch (error) { if (error instanceof Incomplete) return Object.freeze({ status: 'incomplete', limit: error.limit, observed: error.observed, bound: error.bound }); throw error; }
   return findings.length ? Object.freeze({ status: 'refused', findings: Object.freeze(findings), count: findings.length }) : Object.freeze({ status: 'clean' });
 }

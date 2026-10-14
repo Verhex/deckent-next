@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, openSqliteAuditStore, openLocalIntegrityAuthority,
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, AuditApplication, enforceWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
@@ -43,8 +43,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot }, broker = new GitWorkspaceBroker(git);
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches);
-      // S6: the worker's exact tree is scanned before any container, connection or claim; a refusal is audited (paths, rules) and its checkout released.
-      await enforceWorkerTreeGate(await scanWorkerTree(lease.workspace, config.execution.secretGate, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now },
+      // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim; a refusal is audited (paths, rules) and its checkout released.
+      await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start), config.execution.secretGate, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now },
         async event => { const audit = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(audit, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { audit.close(); } },
         () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
       await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
