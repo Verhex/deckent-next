@@ -6,7 +6,7 @@ type Scope = 'local' | 'project' | 'user';
 export type McpPanelRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
-  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] }
+  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined }
   | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string };
 /** The host's MCP registry command (`McpCommandHandler`): `ask` answers one trust card (yes, no, or null: no answer, nothing recorded). */
 export type McpPanelRun = (root: string, request: McpPanelRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>, locale?: Locale) => Promise<unknown>;
@@ -106,7 +106,7 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
     },
     async revoke(name) { await call({ verb: 'revoke', name }); return [t('terminal.mcp.revoked', { name }, locale)]; },
     async approve(name, ask) {
-      const result = (await call({ verb: 'approve', name, alwaysAsk: [] }, asking(ask))) as { approved?: boolean; pinnedTools?: number };
+      const result = (await call({ verb: 'approve', name }, asking(ask))) as { approved?: boolean; pinnedTools?: number };
       return [result.approved ? t('tui.panel.mcp.approved', { name, tools: toolsWord(result.pinnedTools ?? 0, locale) }, locale) : t('tui.panel.mcp.notApproved', { name }, locale)];
     },
     async reconnect(name) { await call({ verb: 'reconnect', name }); return [t('terminal.mcp.reconnect', { name }, locale)]; },

@@ -374,6 +374,10 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
     const floored = await auto.call('mcp__fx__drop', {});
     expect(floored).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
+    // G3: a re-approval that gives no alwaysAsk list (the terminal's) keeps the owner's lock: the floor cell still asks.
+    await runConfiguredMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env }, async () => true);
+    expect(await auto.call('mcp__fx__drop', {})).toMatchObject({ card: true, status: 'denied' });
+    expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     const ask = await modeRuntime({ grants: both('require-approval', true), mode: 'ask' });
     registry(ask.project, { fx: m.entry() }); await approve(ask.project, env);
     expect(await ask.call('mcp__fx__echo', { text: 'ask' })).toMatchObject({ card: true, status: 'denied' });
