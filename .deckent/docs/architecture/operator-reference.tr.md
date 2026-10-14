@@ -7,7 +7,7 @@ açık pencereler ve canlı çıktı onları ekranın dışına itmez. Tamamlana
 pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
 turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
 arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Otomatik onay kartında
-karar tuşları ancak bu odak geçişinden sonra çalışır; girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
+karar tuşları ancak bu odak geçişinden sonra çalışır (bekleyen kart "Bu kartta karar için Ctrl+O" der); girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
 Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut taslak/iptal davranışı sürer. Uzun pencere
 içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
 yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin üstündeki "Aktif iş" şeridi bu

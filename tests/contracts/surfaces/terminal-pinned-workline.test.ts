@@ -14,7 +14,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 const mounted: ReturnType<typeof mountWorkline>[] = [];
 afterEach(() => { for (const view of mounted.splice(0)) view.instance.unmount(); });
-const focus = { composer: 'INPUT-FOCUS Ctrl+O', window: 'WINDOW-FOCUS Ctrl+O' }, SWITCH = '\u000f';
+const focus = { composer: 'INPUT-FOCUS Ctrl+O', window: 'WINDOW-FOCUS Ctrl+O', decide: 'DECIDE-HERE Ctrl+O' }, SWITCH = '\u000f';
 function mount(props: Parameters<typeof mountWorkline>[0] = {}, columns = 80, rows = 24, debug = true) {
   const view = mountWorkline({ ...props, labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, ...props.labels } }, columns, { rows, debug });
   mounted.push(view); return view;
@@ -102,12 +102,14 @@ describe('pinned Workline terminal', () => {
         plan: async () => { plans++; if (!decided) return pending; created++;
           return { ...pending, run: admitted, proposal: { ...pending.proposal, status: 'accepted', approval: null } }; } } }, 160, 60);
     await settle(80); view.stdin.write('/do original\r'); await until(() => view.stdout.frame.includes('Create proposed Run'), 'actual approval card');
+    // The self-appearing card says on itself how to reach its decision while the composer keeps focus; focused, it shows its keys only.
+    expect(view.stdout.frame).toContain('DECIDE-HERE Ctrl+O');
     view.stdin.write('ynsa'); await settle(60); expect(view.stdout.frame).toContain('ynsa'); expect(decisions).toEqual([]); expect(created).toBe(0);
     view.stdin.write('\r'); await settle(60); expect(decisions).toEqual([]); expect(plans).toBe(1);
-    view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('WINDOW-FOCUS');
+    view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('WINDOW-FOCUS'); expect(view.stdout.frame).not.toContain('DECIDE-HERE');
     // Ink treats this coalesced control+letter as an ambiguous input, never an explicit decision or focus switch.
     view.stdin.write(`${SWITCH}y`); await settle(60); expect(decisions).toEqual([]); expect(view.stdout.frame).toContain('WINDOW-FOCUS');
-    view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('INPUT-FOCUS');
+    view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('INPUT-FOCUS'); expect(view.stdout.frame).toContain('DECIDE-HERE Ctrl+O');
     view.stdin.write('n'); await settle(60); expect(decisions).toEqual([]); expect(created).toBe(0);
     view.stdin.write(SWITCH); await settle(60); view.stdin.write('y');
     await until(() => decisions.length === 1, 'approve the original visible card');

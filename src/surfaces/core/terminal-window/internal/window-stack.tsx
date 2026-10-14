@@ -19,6 +19,8 @@ type Stack = Readonly<{ register: (id: string, priority: number, foreground: boo
 const WindowStackContext = createContext<Stack | null>(null);
 /** A window's opening cause, independent of its priority or authority. User-opened windows are the default. */
 export const WindowOpeningContext = createContext<'foreground' | 'background'>('foreground');
+/** The catalog sentence a decision window shows while it waits behind the focused composer: how to reach the decision (Ctrl+O). */
+export const WindowDecideHintContext = createContext<string | undefined>(undefined);
 
 /** The owning layer: highest priority wins; among equals the newest. */
 export function topWindowLayer(layers: readonly Layer[]): Layer | null {

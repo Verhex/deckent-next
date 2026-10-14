@@ -1019,6 +1019,7 @@
   "terminal.jobs.deliveryPatch": ", yama hazır değil {patch}",
   "tui.focus.composer": "Giriş odakta · Ctrl+O pencereye geç · Enter mesajı sıraya alır",
   "tui.focus.window": "Pencere odakta · Ctrl+O girişe dön · Esc kapatır/reddeder",
+  "tui.focus.decide": "Bu kartta karar için Ctrl+O · o zamana kadar tuşların girişte kalır",
   "terminal.activeWork.title": "Aktif iş · Ctrl+T seç",
   "terminal.activeWork.focused": "Aktif iş · ↑↓ seç · Enter aç · Esc girişe dön",
   "terminal.activeWork.doTitle": "/do {title}",

@@ -1019,6 +1019,7 @@
   "terminal.jobs.deliveryPatch": ", patch not prepared {patch}",
   "tui.focus.composer": "Input focused · Ctrl+O focus window · Enter queues a message",
   "tui.focus.window": "Window focused · Ctrl+O return to input · Esc closes/declines",
+  "tui.focus.decide": "Ctrl+O to decide this card · until then your keys stay in the input",
   "terminal.activeWork.title": "Active work · Ctrl+T select",
   "terminal.activeWork.focused": "Active work · ↑↓ choose · Enter open · Esc back to input",
   "terminal.activeWork.doTitle": "/do {title}",

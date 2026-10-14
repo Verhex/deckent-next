@@ -17,7 +17,7 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from './workline-history.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -41,7 +41,7 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly statusCancelling: string;
   readonly selfSourceFloor?: string;
   readonly hint: string;
-  readonly focus?: { readonly composer: string; readonly window: string };
+  readonly focus?: { readonly composer: string; readonly window: string; readonly decide?: string };
   readonly roleUser: string;
   readonly roleAssistant: string;
   readonly runCard: string;
@@ -590,12 +590,14 @@ export function WorklineApp(props: WorklineProps) {
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
     <WindowNoteContext.Provider value={argumentNote}>
+    <WindowDecideHintContext.Provider value={labels.focus?.decide}>
     <Box flexDirection="column">
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
       <PinnedWorkline enabled={pinnedMode} footer={<>
-      {!pinned || size.rows >= 8 ? <Text {...palette.accent} wrap="truncate-end">{labels.banner}</Text> : null}
+      {/* The banner wraps (never truncates): on a narrow terminal it still says how to quit; the footer's height is measured, not fixed. */}
+      {!pinned || size.rows >= 8 ? <Text {...palette.accent}>{labels.banner}</Text> : null}
       <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
         state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
@@ -635,6 +637,7 @@ export function WorklineApp(props: WorklineProps) {
       </WindowOpeningContext.Provider>
       </PinnedWorkline>
     </Box>
+    </WindowDecideHintContext.Provider>
     </WindowNoteContext.Provider>
     </HumanTextContext.Provider>
   );

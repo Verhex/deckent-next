@@ -139,7 +139,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
   and the window stack: one input owner. TERMINAL-SABIT R2 (owner 2026-10-14, author candidate) focuses user-opened windows
   immediately. Automatic /do/turn cards and run/worker watches keep composer focus; Ctrl+O transfers it to the top layer
-  (approval priority, then newest) and back. Each new automatic card requires a fresh focus switch, even after a focused card.
+  (approval priority, then newest) and back. Each new automatic card requires a fresh focus switch, even after a focused card; while it waits behind the composer a decision card shows the catalog line `tui.focus.decide` (Ctrl+O to decide).
   Standalone windows retain their modal default. Rich Workline bounds (does not fill) the live area to terminal rows minus one: the live part clips its top, the measured
   footer (status/input) never shrinks; completed records print once through Ink `Static` above it (R3: no live-area transcript replay). Composer draft rows follow the caret.
   Slice 2 active work strip (`terminal-work/active-work.tsx`): a footer view over the running /do (planning, waiting with approval
