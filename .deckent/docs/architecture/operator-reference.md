@@ -198,3 +198,9 @@ Spending: paid calls reserve the dearest applicable published tier and settle fr
 the pinned tariff (`measured-tariff`). The scope's first budget is created with `deckent models create-budget --scope <id>
 --usd <n>` (or the budget window, the first row of `/provider`), changed with `revise-budget [--unfreeze]`; a held call that never received
 final usage is resolved with `reconcile-spending`. Details: ARCHITECTURE "Spend settlement".
+
+### Delivery confirmation (TESLIM-GUVENLIK author candidate)
+
+`task integration-deliver` and `task integration-adopt` require one explicit `y` in a verified human terminal. The card shows task title, Run/Task ids, reference/branch, from/to commits and changed files. Empty, `n`, EOF, redirected input/output and SDK/MCP new effects refuse. Prepare/check remain candidate-only. Completed replay and proven crash settlement do not ask again; an unfinished effect needs fresh confirmation. Adoption still requires `execution.adoption.targets`, policy, acceptance and configured verification. No autonomous policy is enabled.
+
+Delivery commits carry the admitted task title, ids and bounded acceptance state; author/committer time comes from the trusted delivery planning clock and is frozen by the intent for replay. Deckent is the default identity; `execution.git.deliveryIdentity` can set `authorName`/`authorEmail`. Preview Git objects are prepared only in the candidate before the answer; refusal writes no source Git object, ref, branch or delivery intent.
