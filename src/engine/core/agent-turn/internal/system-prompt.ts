@@ -2,16 +2,19 @@ import { isAbsolute, relative, sep } from 'node:path';
 import type { AgentToolSpec, AgentTurnMessage, ShellRealm } from '#domain/index.js';
 import { PACKAGE_VERSION, type ProductLayout } from '#platform/index.js';
 import { AGENT_CONTEXT_CARRY_VERSION, AGENT_CONTEXT_RENDER_VERSION } from './carry.js';
+import { renderAgentSessionContext, type AgentSessionSnapshot } from './session-context.js';
 
 /**
  * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access; v4 TERM-FEEDBACK-1: the running
  * model's identity, and Deckent's own state named as protected instead of pointed at; v5 LANG-CRASH: the reply language of the person's
  * locale, first and last; v6 PROMPT-POSTURE: the shell's posture for the turn, apart from fetch_url; v7 TRUNCATED-TOOLCALL: the per-answer
- * output limit and writing large content in parts, when an edit tool is offered; v8 TC-1: pin the turn-local carry/render contract). The text is protocol, like tool
+ * output limit and writing large content in parts, when an edit tool is offered; v8 TC-1: pin the turn-local carry/render contract; v10 NATIVE-BAGLAM:
+ * the descriptive session context — mode, thinking, model capabilities, each offered tool's effect now, surfaces, rules — and the answer holds
+ * no reasoning). The text is protocol, like tool
  * descriptions: English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the
  * rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 9;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 10;
 /**
  * v6 PROMPT-POSTURE (live 2026-09-30: a full-access model refused `curl` "by policy" because v5 said "Network access: none" whenever fetch_url
  * was absent): where this turn's shell commands run, as composition resolved it from the realm the turn's shell calls take (the same
@@ -85,8 +88,10 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
    * resolved (no shell tool): the shell note stays neutral and, without fetch_url, the prompt says there is no network access. */
   readonly shell?: AgentTurnShellPosture | null;
   /** v7 TRUNCATED-TOOLCALL: the completion limit every round requests (`terminal.chat.maxCompletionTokens`); absent = not named. */
-  readonly outputLimitTokens?: number | null }): string {
-  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens } = input;
+  readonly outputLimitTokens?: number | null;
+  /** v10 NATIVE-BAGLAM: the turn's descriptive session snapshot (absent: no session block — a caller without one keeps the rest unchanged). */
+  readonly session?: AgentSessionSnapshot | null }): string {
+  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens, session } = input;
   const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
   const data = shown(projectRoot, layout.root);
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
@@ -133,6 +138,7 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
         + ' from the start again. Narrow a large search with its path or glob.',
       '- A read repeated with the same arguments returns a reference to the earlier result, not new content.');
   }
+  if (session) lines.push('', renderAgentSessionContext(session));
   const offers = (name: string) => tools.some(tool => tool.name === name);
   lines.push('', 'Working style:',
     ...(tools.length ? ['- Between tool rounds, write one short line to the user: what you found or what you will do next.'] : []),
@@ -142,6 +148,8 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       + ` next part with edit_file (old_string = the current last lines)${offers('scratch_write') && offers('run_shell') ? ', or write the parts with scratch_write and'
       + ' join them with one run_shell command' : ''}.`] : []),
     '- Base your answer on what you have seen; say what you did not check.',
+    // v10: a live answer once carried the model's English reasoning (owner 2026-10-14); the answer is only what the person should read.
+    '- Keep your reasoning out of the answer: think in your reasoning channel, and write only what the person should read.',
     `- Write every reply to the user in ${AGENT_TURN_REPLY_LANGUAGES[language]}.`);
   return lines.join('\n');
 }
