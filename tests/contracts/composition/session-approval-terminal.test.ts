@@ -77,7 +77,10 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   const events: AgentTurnStreamEvent[] = [], requests: RuntimeServiceRequest[] = [];
   const faults = { dropDecision: false, failAudit: false, holdAudit: null as Promise<void> | null, enteredAudit: () => undefined as void };
   const openAudit = adapters.openSqliteAuditStore;
-  vi.spyOn(adapters, 'openSqliteAuditStore').mockImplementation(async (...args) => { faults.enteredAudit(); await faults.holdAudit; if (faults.failAudit) throw new Error('injected-audit-failure'); return openAudit(...args); });
+  // Faults target the remembered (standing) audit only; ONAY-URETICI D1's producer-inventory audit opened by the decision itself is not the subject here.
+  vi.spyOn(adapters, 'openSqliteAuditStore').mockImplementation(async (...args) => {
+    if (/approvals[\\/]internal[\\/]application/u.test(new Error().stack ?? '')) return openAudit(...args);
+    faults.enteredAudit(); await faults.holdAudit; if (faults.failAudit) throw new Error('injected-audit-failure'); return openAudit(...args); });
   // In-process transport routes through the same typed operation handlers, with a real OS peer. No socket or provider is opened.
   vi.spyOn(adapters, 'requestLocalRuntime').mockImplementation(async (_options, input) => {
     const request = runtimeServiceRequestSchema.parse(input); requests.push(request);
@@ -141,9 +144,9 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   await f.type('s');
   // T2 integration: notices name the short approval id (first 8 characters of the UUID); the full id is the detail line of the decision notice.
   const saved = t('terminal.approval.standing.savedSession', { id: first.approvalId.slice(0, 8) }, locale);
-  await until(() => f.view.stdout.text.replace(/\s+/g, ' ').includes(saved), 'visible saved notice').catch(error => { throw new Error(String(error) + '\n' + f.view.stdout.frame); });
+  await until(() => f.shown().includes(saved), 'visible saved notice').catch(error => { throw new Error(String(error) + '\n' + f.view.stdout.frame); });
   await until(() => f.view.stdout.text.includes('Done 1.'), 'first completed turn');
-  expect(f.view.stdout.text.replace(/\s+/g, ' ')).not.toContain(t('terminal.approval.standing.savedSession', { id: first.approvalId }, locale).replace(/\s+/g, ' '));
+  expect(f.shown()).not.toContain(t('terminal.approval.standing.savedSession', { id: first.approvalId }, locale).replace(/\s+/g, ' '));
   expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-1\n');
   await settle(50); await f.type('second\r'); await until(() => f.view.stdout.text.includes('Done 2.'), 'second completed without asking');
   expect(f.events.filter(e => e.kind === 'approval.requested')).toHaveLength(1);
@@ -179,8 +182,8 @@ it('a lost session answer is visibly unconfirmed, never not-saved; its sealed al
   await settle(100); await f.type('lost answer\r'); await until(() => f.events.some(e => e.kind === 'approval.requested'), 'loss card');
   const card = f.events.find(e => e.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
   await settle(100); await f.decide('s');
-  await until(() => f.view.stdout.text.includes('session permission could not be confirmed (transport-unknown)'), 'unknown notice');
-  expect(f.view.stdout.text).not.toContain('session answer was not saved'); expect(f.view.stdout.text).not.toContain('permission saved for this conversation');
+  await until(() => f.shown().includes('session permission could not be confirmed (transport-unknown)'), 'unknown notice');
+  expect(f.shown()).not.toContain('session answer was not saved'); expect(f.shown()).not.toContain('permission saved for this conversation');
   await until(() => f.view.stdout.text.includes('Done 1.'), 'effect after lost answer');
   expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-1\n');
   f.faults.dropDecision = false;
@@ -197,7 +200,7 @@ it('own-peer clear while the real remembered audit waits releases the producer b
     await settle(100); await f.decide('s'); await auditing;
     const turn = f.requests.find(r => r.operation === 'chatTurn')!.input as { sessionId: string };
     expect(await f.client.clearSessionStanding({ schemaVersion: 1, scopeId: 'scope', sessionId: turn.sessionId })).toEqual({ schemaVersion: 1, scopeId: 'scope', sessionId: turn.sessionId, cleared: true });
-    await until(() => f.view.stdout.text.includes('session answer was not saved (revoked)'), 'confirmed revoke');
+    await until(() => f.shown().includes('session answer was not saved (revoked)'), 'confirmed revoke');
     release(); f.faults.holdAudit = null; await until(() => f.view.stdout.text.includes('Done 1.'), 'once effect unchanged by clear');
     await f.type('after clear\r'); await until(() => f.events.filter(e => e.kind === 'approval.requested').length === 2, 'late audit cannot remember');
     await settle(100); await f.decide('N'); await until(() => f.view.stdout.text.includes('Done 2.'), 'race test finish');
@@ -273,7 +276,7 @@ it('two authenticated runtime callers join the actual pending remembered audit w
     expect(f.rows('SELECT record FROM audit_events')).toHaveLength(0);
     release(); f.faults.holdAudit = null;
     expect(await duplicate).toMatchObject({ standing: { scope: 'session', status: 'saved' } });
-    await until(() => f.view.stdout.text.includes('permission saved for this conversation'), 'duplicate saved');
+    await until(() => f.shown().includes('permission saved for this conversation'), 'duplicate saved');
     await until(() => f.view.stdout.text.includes('Done 1.'), 'barrier releases effect');
     const subjects = f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row.record)).event.subject);
     expect(subjects.filter(s => s.kind === 'standing-approval' && s.phase === 'remembered')).toHaveLength(1);
@@ -284,7 +287,7 @@ it('two authenticated runtime callers join the actual pending remembered audit w
 it('a real remembered-audit failure reports not-saved while preserving only the once decision; next call asks again', async () => {
   const f = await fixture('en'); f.faults.failAudit = true;
   await settle(100); await f.type('audit failure\r'); await until(() => f.events.some(e => e.kind === 'approval.requested'), 'audit failure card');
-  await settle(100); await f.decide('s'); await until(() => f.view.stdout.text.includes('session answer was not saved (audit-unavailable)'), 'audit failure notice');
+  await settle(100); await f.decide('s'); await until(() => f.shown().includes('session answer was not saved (audit-unavailable)'), 'audit failure notice');
   await until(() => f.view.stdout.text.includes('Done 1.'), 'once effect without standing audit');
   expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-1\n');
   f.faults.failAudit = false;

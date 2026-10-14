@@ -246,7 +246,7 @@ export async function installedScenario(mode: string, observed: { root?: string;
       const shutdownDescriptor = await runtimeClient.describeService();
       const mcpShutdown = await client.callTool({ name: 'shutdown_runtime_service', arguments: { schemaVersion: 1, commandId: 'mcp-shutdown', serviceId: 'service-1',
         instanceId: shutdownDescriptor.instanceId, reason: 'no MCP grant' } });
-      expect(mcpShutdown.isError).toBe(true); expect(JSON.stringify(mcpShutdown.content)).toContain('POLICY_DENIED');
+      expect(mcpShutdown.isError).toBe(true); expect(JSON.stringify(mcpShutdown.content)).toContain('AUTHENTICATION_REQUIRED'); // MCP-AI-AKTOR: workload-verified MCP fails os-user service authentication before policy
       const mcpDecision = await client.callTool({ name: 'decide_approval', arguments: command });
       expect(mcpDecision.isError).toBe(true); expect(JSON.stringify(mcpDecision.content)).toContain('MCP_TOOL_UNKNOWN');
       // W3-AUTHORITY: a headless CLI decision (pipes, no controlling terminal) is refused and decides nothing; the same command from a real PTY decides.

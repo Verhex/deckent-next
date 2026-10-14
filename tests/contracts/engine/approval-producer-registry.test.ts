@@ -94,7 +94,7 @@ it('approve-card-then-assert: config-selected ERP producer uses the one decision
       createdAt: 100, expiresAt: 10000, facts: agentToolApprovalFacts(policy, 'scope', 'shell-destructive') });
     const command = { schemaVersion: 1, scopeId: 'scope', approvalId: card.request.approvalId, commandId: 'allow', expectedRevision: 0, decision: 'allow', reason: 'Reviewed risky input' };
     const app = (producers: ReturnType<typeof registry.resolve>) => new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
-      { load: async () => policy }, integrity, clock, 'local-sdk', 10, undefined, undefined, { producers });
+      { load: async () => policy }, integrity, clock, 'local-sdk', 10, undefined, undefined, { producers, interactive: async () => true }); // MCP-AI-AKTOR: a witnessed human terminal
     for (const producers of [[], registry.resolve([], undefined, () => undefined), registry.resolve([reference], undefined, () => undefined)]) {
       await expect(app(producers).decide(command)).rejects.toMatchObject({ code: 'APPROVAL_ASSURANCE_INSUFFICIENT' });
       expect(journal.store.load('scope', card.request.approvalId)?.status).toBe('pending'); expect(journal.store.receipt('scope', 'allow')).toBeNull();

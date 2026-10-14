@@ -17,6 +17,8 @@ function unsigned(cp: AuditCheckpoint): Omit<AuditCheckpoint, 'mac'> {
     head: cp.head, policyDigest: cp.policyDigest, producersDigest: cp.producersDigest, previousDigest: cp.previousDigest, keyId: cp.keyId };
 }
 const projection = (checkpoint: Omit<AuditCheckpoint, 'mac'>) => encodeCommandProjection('audit-checkpoint:1', checkpoint);
+/** Whether a scope has any retained audit evidence (an event or a checkpoint row); nothing recorded needs no key to report no-checkpoint-yet. */
+export const auditScopeRecorded = (store: AuditCheckpointStore, scopeId: string): boolean => store.page(scopeId, 0, 1).length > 0 || store.checkpointPage(scopeId, 0, 1).length > 0;
 /** No cache/projection is integrity authority. Every read verifies sealed events and historical checkpoint heads. */
 export class AuditCheckpointApplication {
   private readonly audit: AuditApplication;

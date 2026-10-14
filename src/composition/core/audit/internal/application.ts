@@ -1,6 +1,6 @@
 import { hostname, userInfo } from 'node:os';
 import { auditVerifyQuerySchema, type AuditVerification } from '#domain/index.js';
-import { AuditCheckpointCycleError, AuditCheckpointApplication, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
+import { AuditCheckpointCycleError, AuditCheckpointApplication, auditScopeRecorded, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
 import { openReadOnlyAuditStore, openSqliteAuditStore, openLocalIntegrityAuthority, LOCAL_AUTHENTICATOR_INVENTORY } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -17,10 +17,14 @@ export async function verifyConfiguredAudit(root: string, input: unknown, option
     authorizeApproval(context.document, 'inspect', query.scopeId, query.scopeId, context.principal);
     if (!context.installationId) return unavailable(query.scopeId);
     try {
-      const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile), store = await openReadOnlyAuditStore(await context.path(), context.config.storage.sqlite);
-      try { return new AuditCheckpointApplication(store, integrity, context.config.audit).verify(query.scopeId,
-        { installationId: context.installationId, policyDigest: auditPolicyDigest(context.document), producersDigest: producersDigest() }, query.witness); }
-      finally { store.close(); }
+      const store = await openReadOnlyAuditStore(await context.path(), context.config.storage.sqlite);
+      try {
+        // Nothing recorded yet (fresh install: no events, no checkpoint, possibly no key): honest no-checkpoint-yet, never a key read.
+        if (!auditScopeRecorded(store, query.scopeId)) return unavailable(query.scopeId, 'no-checkpoint-yet');
+        const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile);
+        return new AuditCheckpointApplication(store, integrity, context.config.audit).verify(query.scopeId,
+        { installationId: context.installationId, policyDigest: auditPolicyDigest(context.document), producersDigest: producersDigest() }, query.witness);
+      } finally { store.close(); }
     } catch { return unavailable(query.scopeId); }
   } catch (error) { throw queryFailure(error); }
 }
@@ -30,11 +34,12 @@ export async function checkpointConfiguredAudit(root: string, installationId: st
   try {
     const config = await loadComposedConfig(root, { ...options, heal: false });
     if (!installationId) throw new AuditCheckpointCycleError('unavailable');
-    const document = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load();
-    const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile);
     store = await openSqliteAuditStore(await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite);
     const scopes = store.scopeIds(config.audit.maxScopes);
     if (scopes.length > config.audit.maxScopes) throw new AuditCheckpointCycleError('limit');
+    if (!scopes.length) return []; // no event and no checkpoint anywhere: nothing to anchor, and no key is required yet
+    const document = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load();
+    const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile);
     const app = new AuditCheckpointApplication(store, integrity, config.audit), context = { installationId,
       policyDigest: auditPolicyDigest(document), producersDigest: producersDigest() };
     // The service's own OS principal authors each checkpoint's sealed wipe marker under the policy revision in force.
