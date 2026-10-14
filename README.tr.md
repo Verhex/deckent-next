@@ -14,7 +14,7 @@ sandbox içindeki araçlar ve MCP’yi, policy kontrollü onayları ve insan ile
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-[English](README.md) · [Deckent nedir](#deckent-nedir) · [Bir istek nasıl akar](#bir-istek-nasıl-akar) · [İlk oturum](#adım-adım-ilk-oturum) · [Terminalde](#terminalde) · [Güvenlik](#güvenlik-modeli) · [Başlarken](#başlarken)
+[English](README.md) · [Deckent nedir](#deckent-nedir) · [Bir istek nasıl akar](#bir-istek-nasıl-akar) · [İlk oturum](#adım-adım-ilk-oturum) · [İlk iş](#adım-adım-ilk-işiniz) · [Terminalde](#terminalde) · [Güvenlik](#güvenlik-modeli) · [Başlarken](#başlarken)
 
 <img src=".github/assets/screenshots/tr/01-acilis.png" alt="Açılıştaki Deckent terminali: logo, sürüm, proje, model ve mod" width="880">
 
@@ -51,7 +51,7 @@ entegrasyonları ve filo yönetimi planlanan yeteneklerdir.
 
 | | |
 |---|---|
-| 🗼 **Yönetir** | İnsanlar ve yapay zekâ ajanları için tek kimlik, kapsam ve policy modeli. Bir iş onay isterse pencere neyin onaylandığını tam gösterir: tam komut, nerede çalışacağı, kimin adına, risk, geri alınıp alınamayacağı ve süre. Persona ya da model tavsiyesi asla yetki vermez. |
+| 🗼 **Yönetir** | İnsanlar ve yapay zekâ ajanları için tek kimlik, kapsam ve policy modeli. Bir iş onay isterse pencere neyin onaylandığını tam gösterir: tam komut, nerede çalışacağı, kimin adına, risk, geri alınıp alınamayacağı ve süre. İş sistemi operasyonlarında kart operasyonu, hedefi ve kısa bir girdi özetini adlandırır; yazılacak alanlar henüz gösterilmez ([bilinen sınırlar](docs/known-limits.tr.md)). Persona ya da model tavsiyesi asla yetki vermez. |
 | 🛫 **Yürütür** | İşler (Run), görevler ve işçiler sizin makinelerinizde kabul edilir, sıralanır ve kurtarılır. Ajanın kabuk komutları ve MCP sunucuları sandbox içinde (bubblewrap, Landlock), işçiler Docker'da çalışır. Anthropic, OpenAI, DeepSeek, Z.ai (GLM), yerel sunucu veya fiyatı yayımlanmış OpenAI uyumlu uç noktalar ve OpenRouter model bağlantılarıyla (ücretli çağrı için fiyat ve yönlendirme doğrulanmalı); Claude Code, Codex ve Cursor işçileriyle çalışır. |
 | 📜 **Kanıtlar** | Her karar ve etki kalıcı bir defter ve denetim izine yazılır. Onaylar mühürlenir, yamalar saklanır ve değişiklikler teslimden önce yalıtılmış bir adayda birleştirilir. |
 
@@ -125,7 +125,7 @@ deckent init policy --scope my-project --apply
    `/v1/models` listesinden birebir model kimliğini seçersiniz. Deckent bu kimliği aynen saklar. Bu makinedeki
    yerel modeller ücretsiz ölçülür; yayımlanmış fiyatı doğrulanmamış uzak model, nedeni ve sonraki adımıyla
    kilitli görünür (Zhipu GLM Çin, fiyatları CNY olduğu için kilitli kalır). OpenRouter model bağlantıları
-   sunar; ücretli çağrı için fiyat ve yönlendirme yine doğrulanmalıdır. Aynısı komut satırından: `deckent secret
+   sunar; ücretli çağrı için fiyat ve yönlendirme yine doğrulanmalıdır. Bugün abonelikler: Claude Code işçisi kendi Claude girişinizle çalışır; abonelikli Brain hazırlanıyor (henüz yok); Claude aboneliğiyle terminal sohbeti şu an desteklenmiyor, sohbet için Anthropic API anahtarı kullanın. ChatGPT ile giriş `/provider`'da henüz kullanılamıyor olarak görünür. Aynısı komut satırından: `deckent secret
    set <AD>` ve `deckent models connect --scope <id> --connection <tür> --command-id <id> --model <birebir
    kimlik>`.
 4. **Bütçe belirleyin.** Her model turu, kapsamın tek ve ortak USD bütçesinden pay ayırır; bütçe yoksa her tur
@@ -157,6 +157,134 @@ deckent init policy --scope my-project --apply
     <td width="50%"><img src=".github/assets/screenshots/tr/13-kullanim.png" alt="Bir sohbet turundan sonra /usage penceresi"><br><sub><b>/usage.</b> Bu konuşmanın ölçtüğü token'lar ve kapsamın bütçeleri. Fatura değil, ölçümdür.</sub></td>
   </tr>
 </table>
+
+## Adım adım ilk işiniz
+
+"Adım adım ilk oturum" yönetilen bir sohbetle biter. Bu yol gerçek bir işe devam eder: Deckent planlar, planı siz onaylarsınız,
+bir kodlama işçisi Docker içinde yapar ve değişiklik Git'e teslim edilir. 1 ile 4 arası adımlar bir kez yapılan operatör
+kurulumudur ve bir kısmı (ilk kabul kaydı, yani registry) bugün elle yazılır; yolun tamamının temiz bir makinede provası
+henüz yapılmadı ([bilinen sınırlar](docs/known-limits.tr.md)). Aşağıdaki komutlar ve mesajlar güncel kaynaktan ve mesaj
+kataloglarından gelir; kimlikler, yollar ve saatler örnektir.
+
+```mermaid
+flowchart LR
+  W["1 · İşçi imajı<br/><sub>npm run worker:image</sub>"] --> E["2 · İşin çalışacağı yer<br/><sub>config set execution</sub>"]
+  E --> A["3 · Havuz ve iş türleri<br/><sub>config set admission · init pool</sub>"]
+  A --> R["4 · Servisi yeniden başlat"]
+  R --> D["5 · /do<br/><sub>plan · onay kartı</sub>"]
+  D --> T["6 · İzle<br/><sub>/tasks</sub>"]
+  T --> L["7 · /deliver"]
+  L --> B["8 · Bir dala al"]
+  B --> U["9 · Geri al<br/><sub>komut satırı</sub>"]
+```
+
+Başlamadan önce: Docker çalışıyor; proje en az bir commit'i olan bir Git deposu; işçi olarak istediğiniz kodlama CLI'ı
+(Claude Code ya da Codex) bu makinede kendi girişiyle açık; kurulumunuzda güncel ilk kurulum policy'si var (yeni bir
+`deckent init policy --scope <id> --apply` bunu kurar; eski kurulum `deckent init policy --scope <id> --upgrade --preview`,
+ardından `--apply --expect <revizyon>` ile yükseltilir).
+
+1. **İşçi imajını bir kez derleyin**, Deckent kaynak dizininde (Docker ister ve yeni bir makbuz dosyası yazar):
+
+   ```sh
+   npm run worker:image -- /abs/path/worker-images/r4-20260930.json
+   ```
+
+   Değişmez imaj kimliğiyle tek satır JSON basar, örneğin
+   `{"imageId":"sha256:f296…5250","tag":"deckent/worker:r4-20260930","imageVersion":"r4-20260930","receipt":"…","activation":"not-activated"}`.
+   Hiçbir şey etkinleştirilmez; imajı bir sonraki adım adlandırır.
+2. **Deckent'e işin nerede çalışacağını söyleyin.** 1. adımdaki `imageId` değerini kullanın (diğer değerler canlı
+   kurulumda kullanılan sınırlardır):
+
+   ```sh
+   deckent config set execution '{"docker":{"executable":"/usr/bin/docker","imageId":"sha256:<1. adımdan>","memoryBytes":2147483648,"pids":512,"cpus":1,"logMaxSizeKiB":2048,"logMaxFiles":2,"tmpBytes":1073741824,"deadlineMs":1200000,"controlTimeoutMs":15000,"outputBytes":1048576},"git":{"gitExecutable":"/usr/bin/git","timeoutMs":180000,"outputBytes":8388608}}'
+   ```
+
+   ```text
+   execution, proje katmanına kaydedildi. Uygulama: yeniden. Yedek: …/.deckent/config.json.bak.2026-10-13T12-03-51.222Z.…
+   Yeniden başlatma gerekli: çalışan servis önceki yapılandırmayla başladı. `deckent runtime restart` ile (terminalde /service-restart) yeniden başlatın.
+   ```
+3. **Havuzu ve iş türlerini tanımlayın.** Kabul (admission) için bir havuz (`poolId`, `executionSlots`, `inFlightSlots`,
+   `ordering: "input-order"`) ve en az bir işçi profili, bir görev türü ve bir değerlendirici içeren bir registry gerekir:
+
+   ```sh
+   deckent config set admission '{"poolId":"my-pool","executionSlots":2,"inFlightSlots":2,"ordering":"input-order","registry":{"schemaVersion":1,"revision":"first-registry","profiles":[ … ],"kinds":[{"kind":"coding","profile":{"id":"…","version":1}}],"evaluators":[{"id":"process-exit","version":1,"implementation":{"id":"process-exit","version":1}}]}}'
+   deckent config explain admission      # açıklama, şema ve geçerli değer
+   ```
+
+   Deckent ilk registry'yi sizin için henüz yazmaz. İşçi profilini `deckent coding prepare` ile hazırlayın
+   ([işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#native-coding-profilleri));
+   bir registry varsa `deckent coding template --provider <id> --kind <tür> --preview|--apply` ona yeni şablonlar ekler.
+   Sonra havuzu ledger'da oluşturun:
+
+   ```sh
+   deckent init pool --scope my-project --preview
+   deckent init pool --scope my-project --apply
+   ```
+
+   ```text
+   Havuz my-pool: yürütme slotu 2, işlemdeki slot 2; hiçbir şey yazılmadı. Uygulamak için: deckent init pool --scope my-project --apply. Ardından /do komutunu yeniden çalıştırın.
+   Havuz my-pool oluşturuldu: yürütme slotu 2, işlemdeki slot 2. /do komutunu yeniden çalıştırın.
+   ```
+4. **Servisi yeniden başlatın**, yeni yapılandırmayı okusun: `deckent runtime restart` (terminalde `/service-restart`).
+   Şunu söyler: `Runtime servisi yeniden başlatıldı (pid 494385, örnek 8b1e2392-…).`
+5. **İşi isteyin.** Terminalde `/do` yazıp isteğinizi sade sözlerle yazın (komut satırında aynısı
+   `deckent do --request "<metin>"`). Bağlı ve etkin bir model planlar, Deckent planı basar:
+
+   ```text
+   Run <run-id> için plan · <durum>
+   Görev t1: <görevin yaptığı iş> · tür coding · iş sınıfı <sınıf>
+     Kabul: <sonucun karşılaması gereken ölçüt>
+   Gereken izinler: <bu Run'ın izinleri>
+   TTY onayınız bekleniyor: <onay-kimliği>, son tarih <saat>. Model bu işe yetki veremez.
+   ```
+
+   Run'ı oluşturmayı onaylamanızı isteyen bir kart açılır. Bugün Risk ve Geri alma satırları "araç sınıflandırmadı" ve
+   "araç bildirmedi" der; planı ve kabul satırını değerlendirin. Kart 10 dakika sonra sona erer
+   (`approvals.requestTtlMs`). Onaylamak için bir kez `y`; model sizin yerinize onaylayamaz. Sonra:
+   `Run <run-id> kabul edildi. /tasks veya /monitor ile izleyin.` Burada "kabul edildi" işin başladığı demektir;
+   sonucunun kabul edildiği demek değildir.
+6. **İzleyin**: `/tasks` ile (ya da `/monitor`; terminal dışında `deckent monitor`). İşçinin sonucu kabul edilince
+   görev teslimi bekler.
+7. **Teslim edin**: `/deliver` ile; seçici "/deliver · teslim bekleyen görevler" başlığını taşır. Pencere yamayı güncel
+   kaynakla karşılaştırır ve değişen dosyaları listeler. Yazmak için `y`; yalnız `refs/deckent/deliveries/` altında ayrı
+   bir referans yazar, hiçbir dala, index'e ya da çalışma ağacınıza dokunmaz:
+
+   ```text
+   Teslim edildi: commit <commit> → refs/deckent/deliveries/<özet>
+   ```
+8. **Bir dala alın** (isteğe bağlı, kendi `y`'si ile). Dala alma yalnız kimsenin checkout etmediği bir dalı
+   ilerletir; bu yüzden `main` burada checkout edilmişken sunulmaz. Bir dal açın ve bir kez izin verin:
+
+   ```sh
+   git branch deckent/first-job HEAD
+   deckent config set execution.adoption.targets '["refs/heads/deckent/first-job"]'
+   ```
+
+   Pencere o zaman `<commit> commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.` diye sorar ve
+   `Dala alındı: refs/heads/deckent/first-job <önce> → <sonra>` ile biter. Checkout'unuz, index'iniz ve çalışma
+   dosyalarınız değişmez; sonucu `git log deckent/first-job` ile görün ve birleştirmeyi kendiniz yapın.
+9. **Dala almayı geri alın**, komut satırından (terminalde henüz geri alma penceresi yok). Geri alma, dala almayı komut
+   kimliğiyle adlandırır; terminaldeki dala alma kendi ürettiği kimliği göstermez. Kendi yazabileceğiniz bir geri alma
+   için teslimi ve dala almayı seçtiğiniz kimliklerle komut satırından yapın. `<run>`, `<task>`, `<attempt>`,
+   `<generation>` ve `<layout-revision>` değerleri `deckent inventory --scope my-project --json` çıktısından gelir; bu
+   komutların her biri doğrulanmış bir insan terminalinde bir `y` ister:
+
+   ```sh
+   S="--scope my-project --run <run> --task <task> --attempt <attempt> --generation <generation> --layout-revision <layout-revision>"
+   deckent task integration-check $S
+   deckent task integration-prepare $S --command-id prep-1 --proposal <kontrol satırındaki öneri>
+   deckent task integration-deliver $S --command-id deliver-1 --candidate-command-id prep-1
+   deckent task integration-adopt $S --command-id adopt-1 --delivery-command-id deliver-1 --target refs/heads/deckent/first-job
+   deckent task integration-rollback $S --command-id undo-1 --adoption-command-id adopt-1
+   ```
+
+   ```text
+   Kaynak <kaynak> · etkilenen dosyalar base ile aynı · öneri <öneri>
+   Aday hazır: <yol>
+   Commit <commit>, <ref> referansına teslim edildi. Kaynak HEAD, index ve çalışma dosyaları değişmedi.
+   Benimsendi: <ref>, <önce> → <sonra> taşındı (sıra 1). Dayanak: kayıtlı Task kabulü, doğrulama değil; checkout, index ve çalışma dosyaları değişmedi.
+   Geri alındı: <ref>, <sonra> → <önce> taşındı (sıra 2). Checkout, index ve çalışma dosyaları değişmedi.
+   ```
 
 ## Terminalde
 
@@ -307,6 +435,10 @@ flowchart LR
   izin modları, MCP araçları, konuşma sıkıştırma, Türkçe ve İngilizce.
 - **İşleri yönetin**: yürütme (Run), görev (Task) ve deneme (Attempt) kabul edin, bağımlılıkları sıralayın, kapasite ayırın, iptal edin ve
   kurtarın; hepsi kalıcı bir SQLite defterine yazılır.
+- **İşi sade sözlerle isteyin**: `/do <istek>` (ya da `deckent do --request "<metin>"`) isteği kabul ölçütlü bir plana çevirir,
+  onayınız için bir kart gösterir ve işi bir kodlama işçisinde yürütür; `/deliver` sonucu bir Git referansına yazar ve
+  yalnız siz seçerseniz bir dala alır. Bir kez yapılan kurulum için
+  [Adım adım ilk işiniz](#adım-adım-ilk-işiniz) bölümüne bakın.
 - **Kodlama işçileri kullanın**: Git tabanlı çalışma kopyaları ve Claude Code, Codex, Cursor ile Docker işçileri;
   yamalar saklanır, yalıtılmış bir adayda birleştirilir, sonra teslim edilir ya da yayınlanır.
 - **Yönetişim**: yerel kimlik, şirket kapsamlı policy, denetim ve her yüzey için tek onay aracısı; doğrulanmamış
@@ -324,13 +456,16 @@ flowchart LR
   İlk ücretli OpenRouter çağrısından önce https://openrouter.ai/settings/plugins sayfasında hiçbir eklentinin
   "Prevent overrides" ile açık olmadığını kontrol edin ve OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak
   şekilde ayarlayın; Deckent bu iki ayarı göremez.
-- **Yedekleyin ve geri yükleyin**: `deckent backup create|verify|restore` şifreli, doğrulanabilir kurtarma kümeleri yazar;
-  isterseniz zamanlayarak ve saklama süresiyle; geri yükleme yalnızca servis durmuşken çalışır.
+- **Yedekleyin ve geri yükleyin**: `deckent backup create|verify|restore` doğrulanabilir kurtarma kümeleri yazar;
+  isterseniz zamanlayarak ve saklama süresiyle; geri yükleme yalnızca servis durmuşken çalışır. Kümenin içindeki yalnız
+  yetki anahtarı parolanızla şifrelenir; ledger ve durum arşivi düz dosyadır, kümeleri güvendiğiniz bir depoda saklayın
+  (kümenin tamamının şifrelenmesi henüz yok).
 - **İşletin**: tüm kurulumlar için salt okunur `deckent monitor`, sağlık için `deckent doctor`, ayarlar için
   `deckent config`, her yerde iki dilli yardım.
 
-Henüz yok: otonom iş süreci koordinasyonu (Mission/`do`), Enterprise SSO ve filo yönetimi, uzak HTTP API, masaüstü ve
-web paneli. Docker işçisi host çekirdeğini paylaşır; sanal makine değildir.
+Henüz yok: çok adımlı iş süreçlerinin Mission düzeyinde koordinasyonu, Enterprise SSO ve filo yönetimi, uzak HTTP API,
+masaüstü ve web paneli. Docker işçisi host çekirdeğini paylaşır; sanal makine değildir. Açık ya da denenmemiş olanların
+sade listesi [Bilinen sınırlar](docs/known-limits.tr.md) sayfasındadır.
 
 ## Yol haritası
 
@@ -361,9 +496,17 @@ npm run build
 npm link
 ```
 
-Sonraki build için yeni bir `--out` dizini kullanın. Build `bubblewrap=ABSENT` diyorsa yalıtım gerektiren
-işe geçmeyin; `deckent doctor` ile yalıtım durumunu inceleyin. Ön koşullar ve sağlayıcı anahtarı
+Sonraki build için yeni bir `--out` dizini kullanın. Build `bubblewrap=present` ya da `bubblewrap=staged from …` ile biter.
+Linux'ta kilitli bubblewrap yerleştirilemezse build bitmez, `BUBBLEWRAP_BUILD_REQUIRED` ile durur; Docker'ı başlatıp
+yeniden çalıştırın. Yalnız Linux dışında `bubblewrap=absent (not Linux)` basar; bu bubblewrap sandbox'ının olmadığı
+demektir; yalıtım durumunu `deckent doctor` ile inceleyin. Ön koşullar ve sağlayıcı anahtarı
 gerektirmeyen tek test için [katkıcı hızlı başlangıcına (EN)](CONTRIBUTING.md#a-30-minute-quickstart) bakın.
+
+**Ubuntu 24.04 ve sonrası.** Çekirdek, bubblewrap'ın ihtiyaç duyduğu ayrıcalıksız kullanıcı ad alanlarını kısıtlayabilir.
+`sysctl kernel.apparmor_restrict_unprivileged_userns` ile bakın: `1` kısıtlı demektir. Deckent o zaman kısıtı bildirir,
+görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder; çünkü onlar açık bubblewrap sandbox'ı ister.
+Bir yönetici, bubblewrap'ı root sahipli `/usr/local/bin/bwrap` olarak, ona `userns` izni veren bir AppArmor profiliyle
+kurabilir.
 
 Bağladıktan sonra Deckent kaynak dizininin dışındaki kendi proje klasörünüze geçin.
 Uzun ve boşluklu yollar çalışır: yerel soket, kuruluma özel kısa ve 0700 izinli dizini kullanır.
@@ -389,6 +532,7 @@ deckent --help                            # tüm komutlar; ayrıntı için decke
 
 - [Mimariye genel bakış](docs/architecture-overview.tr.md): katmanlar, güvenlik, eklentiler ve bugünkü sınırlar
 - [Sözlük](docs/glossary.tr.md): kapsam, yürütme ortamı, iş yaşam döngüsü, onay ve harcama
+- [Bilinen sınırlar](docs/known-limits.tr.md): denenmemiş, yapılmamış ya da hâlâ açık olanlar; etkisi ve varsa yolu
 - [ARCHITECTURE.md](ARCHITECTURE.md): ayrıntılı mühendislik sözleşmeleri ve uygulama notları (EN/TR)
 - [İşletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md): işçi araç sürümleri, işçi imajları, kodlama
   profilleri, yama muhafazası ve kurulum muhafaza kuralları

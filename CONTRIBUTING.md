@@ -51,8 +51,9 @@ If installation reports a lockfile mismatch, include the error in your issue.
 The bubblewrap recipe and hashes live in [packaging/bwrap/bwrap.lock.json](packaging/bwrap/bwrap.lock.json).
 The explicit staging step supplies the sandbox to source-mode tests and the subsequent build.
 Do not use `--record` to bypass a hash mismatch. For another build, choose a new `--out` path.
-A build reporting `bubblewrap=ABSENT` has not supplied the sandbox; it can still exit successfully
-in the current source revision. Fix staging before testing sandbox behavior.
+A successful build ends with `bubblewrap=present` or `bubblewrap=staged from …`. On Linux a build that cannot stage the locked
+bubblewrap stops with `BUBBLEWRAP_BUILD_REQUIRED`; only off Linux does it print `bubblewrap=absent (not Linux)`, which means no
+sandbox was supplied. Fix staging before testing sandbox behavior.
 
 Check the compiled entry without linking a global executable:
 
