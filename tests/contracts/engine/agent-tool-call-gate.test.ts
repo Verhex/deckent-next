@@ -33,7 +33,7 @@ async function fixture() {
   const time = { wallMs: 1_000, monotonicMs: 1_000 };
   const clock = { sample: () => ({ ...time }) };
   const sessions = await LocalOsSessionAuthority.create(['scope'], 600_000, clock); const { principal } = await sessions.verifySession(undefined);
-  const decisions = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10);
+  const decisions = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10, undefined, undefined, { interactive: async () => true });
   const requester = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
   /** Opens the stored request of one call as the turn does, at the current time. */
   const request = (subject: ToolCallSubject, ttlMs = 60_000) => {

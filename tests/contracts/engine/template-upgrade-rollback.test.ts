@@ -40,7 +40,7 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
   const approve = (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => {
     cards++;
     expect(journal.store.list('s', null, 10)).toHaveLength(cards);
-    return new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, source, integrity, clock, 'local-runtime', 10)
+    return new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, source, integrity, clock, 'local-runtime', 10, undefined, undefined, { interactive: async () => true })
       .decide({ schemaVersion: 1, scopeId: 's', approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
   };
   const upgrade = new PolicyTemplateUpgrade({ administration, approve, policy: source }, names);

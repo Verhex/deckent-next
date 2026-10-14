@@ -7,7 +7,7 @@ export const authorityDecisionSubjectSchema = z.object({ kind: z.literal('author
   envelope: commandEnvelopeSchema, action: identitySchema, resource: z.object({ kind: identitySchema, id: identitySchema }).strict(),
   inputDigest: digest, basisDigest: digest.nullable(), policyDigest: digest,
   verdict: z.object({ decision: z.enum(['allow', 'deny', 'require-approval']), revision: identitySchema,
-    reason: z.enum(['GRANTED', 'NO_GRANT', 'DENIED', 'SCOPE', 'APPROVAL_REQUIRED']), ruleId: identitySchema.optional() }).strict(),
+    reason: z.enum(['GRANTED', 'NO_GRANT', 'DENIED', 'SCOPE', 'APPROVAL_REQUIRED', 'AI_NON_DELEGABLE']), ruleId: identitySchema.optional() }).strict(),
 }).strict().readonly();
 export const authorityDecisionReferenceSchema = z.object({ eventId: identitySchema, sequence: counterSchema.positive() }).strict().readonly();
 /** The effect pins both the immutable decision and the exact approval receipt it consumed, if required. */

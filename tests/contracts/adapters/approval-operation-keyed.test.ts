@@ -100,7 +100,7 @@ it('[requires Linux live OS session /proc identity] stores an operation approval
     const sessions = await LocalOsSessionAuthority.create(['scope'], 60_000, clock); const { principal } = await sessions.verifySession(undefined);
     const policy = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
       { id: 'decide', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } }] };
-    const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10);
+    const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10, undefined, undefined, { interactive: async () => true });
     const denied = await approvals.decide({ schemaVersion: 1, scopeId: 'scope', approvalId: otherCommand.request.approvalId, commandId: 'deny-op',
       expectedRevision: 0, decision: 'deny', reason: 'Not this one' });
     await expect(approvals.renew({ schemaVersion: 1, scopeId: 'scope', approvalId: denied.request.approvalId, commandId: 'renew-op',
@@ -157,7 +157,7 @@ it('[requires Linux live OS session /proc identity] stores an agent tool-call ap
     const sessions = await LocalOsSessionAuthority.create(['scope'], 60_000, clock); const { principal } = await sessions.verifySession(undefined);
     const policy = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
       { id: 'decide', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } }] };
-    const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10);
+    const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10, undefined, undefined, { interactive: async () => true });
     const decided = await approvals.decide({ schemaVersion: 1, scopeId: 'scope', approvalId: first.request.approvalId, commandId: 'allow-edit',
       expectedRevision: 0, decision: 'allow', reason: 'Reviewed diff' });
     expect(decided).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });

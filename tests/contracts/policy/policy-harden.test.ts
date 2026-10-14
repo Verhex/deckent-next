@@ -51,7 +51,7 @@ async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Ac
   const restriction = (surface?: 'authority') => ({ catalog, ...(surface ? { surface } : {}), refused: (event: AuditEvent) => { audit.record(event); } });
   /** A general surface (SDK/CLI/MCP/terminal card) or, with `surface`, the authority decider (the future `/policy`). */
   const decideOn = (decider: VerifiedPrincipal, approvalId: string, decision: 'allow' | 'deny' = 'allow', surface?: 'authority') => new ApprovalApplication(journal.store,
-    { verify: async () => decider }, witness(decider) as typeof sessions, source, integrity, clock, 'terminal', 10, undefined, restriction(surface))
+    { verify: async () => decider }, witness(decider) as typeof sessions, source, integrity, clock, 'terminal', 10, undefined, restriction(surface), { interactive: async () => true })
     .decide({ schemaVersion: 1, scopeId: 's', approvalId, commandId: `decide-${decision}-${approvalId}`, expectedRevision: 0, decision, reason: 'Reviewed' });
   const decide = (decider: VerifiedPrincipal, approvalId: string) => decideOn(decider, approvalId, 'allow', 'authority');
   const command = (commandId: string, input: unknown, expectedVersion = 'p1+b1'): EffectCommand => ({ schemaVersion: 1, commandId, scopeId: 's',

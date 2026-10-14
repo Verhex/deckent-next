@@ -46,6 +46,10 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
       : tasks.some(task => task.phase === 'failed' || task.skippedReason === 'dependency-failed') ? 'dependency-failed' : 'dependency-cancelled';
     state = run.state.kind === 'parked' ? { ...run.state, reason } : { kind: 'parked', reason, since: now, deadline: deadlineAt(now, timeoutMs) };
   }
+  if (run.state.kind === 'parked' && run.state.operatorHold && state.kind !== 'terminal') {
+    state = state.kind === 'parked' ? { ...state, operatorHold: run.state.operatorHold } : { kind: 'parked', reason: 'operator-hold',
+      note: run.state.operatorHold.note, since: run.state.since, deadline: run.state.deadline };
+  }
   return runSnapshotSchema.parse({ ...run, progress: tasks, state });
 }
 function incrementIfChanged(run: RunSnapshot, next: RunSnapshot) {
@@ -87,6 +91,10 @@ export function closeParkedRun(input: unknown, expectedRevision: number, now: nu
 export function resumeParkedRun(input: unknown, expectedRevision: number, now: number, timeoutMs: number): RunSnapshot {
   const run = checkedRun(input, expectedRevision);
   if (run.state.kind !== 'parked') throw new RunError('RUN_NOT_PARKED');
+  if (run.state.operatorHold && run.state.deadline > now) {
+    const state = { ...run.state }; delete state.operatorHold;
+    return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state });
+  }
   if (['operator-hold', 'progression-failed'].includes(run.state.reason) && run.state.deadline > now) {
     return reconcileRunLifecycle({ ...run, revision: run.revision + 1, state: { kind: 'running' } }, now, timeoutMs);
   }
@@ -116,8 +124,8 @@ export function holdRun(input: unknown, expectedRevision: number, note: string, 
   const run = checkedRun(input, expectedRevision);
   if (run.cancelRequested || run.state.kind === 'terminal') throw new RunError('RUN_TERMINAL');
   if (run.state.kind === 'parked' && run.state.reason === 'operator-hold') throw new RunError('RUN_PARKED');
-  const timing = run.state.kind === 'parked' ? run.state : { since: now, deadline: deadlineAt(now, timeoutMs) };
-  return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state: { kind: 'parked', reason: 'operator-hold', note, since: timing.since, deadline: timing.deadline } });
+  const state = run.state.kind === 'parked' ? { ...run.state, operatorHold: { schemaVersion: 1 as const, note } } : { kind: 'parked' as const, reason: 'operator-hold' as const, note, since: now, deadline: deadlineAt(now, timeoutMs) };
+  return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state });
 }
 
 /** An answer creates eligibility for a NEW attempt. The old attempt and its receipts remain immutable. */
@@ -128,7 +136,8 @@ export function answerTaskInput(input: unknown, expectedRevision: number, taskId
     || binding.observedKind !== 'exited' || task.unresolvedEffects || run.cancelRequested || run.state.kind === 'terminal') throw new RunError('RUN_DECISION_NOT_READY');
   if (task.decision.deadline <= now || (run.state.kind === 'parked' && run.state.deadline <= now)) throw new RunError('RUN_DECISION_EXPIRED');
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1,
-    state: run.state.kind === 'parked' && run.state.reason === 'operator-hold' ? run.state : { kind: 'running' },
+    state: run.state.kind === 'parked' && run.state.reason === 'operator-hold' ? run.state
+      : run.state.kind === 'parked' && run.state.operatorHold ? { kind: 'parked', reason: 'operator-hold', note: run.state.operatorHold.note, since: run.state.since, deadline: run.state.deadline } : { kind: 'running' },
     previousBindings: [...run.previousBindings ?? [], binding],
     bindings: run.bindings.filter(value => value !== binding), progress: run.progress.map(value => value === task ? { ...value,
       phase: 'pending', decision: undefined, eligibility: { kind: 'immediate' }, inputAnswer: { schemaVersion: 1, source: binding.identity, question: task.decision!.question!, answer } } : value) }, now, timeoutMs);

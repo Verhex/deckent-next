@@ -857,7 +857,7 @@
   "terminal.approval.card.onExpiry": "If nobody decides in time, nothing runs.",
   "terminal.approval.card.assuranceTurnHere": "Only this terminal, which started the turn, can approve this card.",
   "terminal.approval.card.assuranceTurnElsewhere": "Only the terminal that started this turn can approve this card; here you can only deny it.",
-  "terminal.approval.card.assurancePeer": "You can approve this from your own live session.",
+  "terminal.approval.card.assurancePeer": "Interactive terminal; human identity is not proven.",
   "terminal.approval.card.assuranceOther": "Approving needs a stronger proof ({level}); without it this card can only be denied.",
   "terminal.approval.prompt": "y approve · n deny · Enter/Esc deny (default). Each item is decided on its own; nothing is remembered.",
   "terminal.approval.pending": "Recording the decision…",

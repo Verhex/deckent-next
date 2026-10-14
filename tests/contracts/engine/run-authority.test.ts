@@ -35,7 +35,7 @@ async function fixture(effect: 'allow' | 'deny' | 'require-approval' = 'require-
     principalRef: { id: actor.id, issuer: actor.issuer, subject: actor.subject }, scopeIds: ['s'], authenticatedAt: 0, expiresAt: 10000 } }),
     isSessionActive: async () => true, revoke: async () => {} };
   const approval = (principal: VerifiedPrincipal = actor) => new ApprovalApplication(f.approvals, { verify: async () => principal }, sessions, source,
-    f.integrity, f.clock, 'local-terminal-card', 100);
+    f.integrity, f.clock, 'local-terminal-card', 100, undefined, undefined, { interactive: async () => true });
   const decide = async (decision: 'allow' | 'deny' = 'allow') => {
     const pending = f.approvals.findRunCreate('s', 'create')!;
     return approval().decide({ schemaVersion: 1, scopeId: 's', approvalId: pending.request.approvalId, commandId: `decide-${decision}`,

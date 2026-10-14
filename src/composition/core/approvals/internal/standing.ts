@@ -7,13 +7,11 @@ import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAutho
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-
 type Person = Awaited<ReturnType<typeof loadConfiguredScopeContext>>['principal'];
 /** The caller's own standing approvals for `deckent policy grants --mine` / `revoke` (G6): local OS person; a revoke is the governed `policy.administer@1` change, `confirm` is the person's own answer. */
 function withStanding<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write', use: (standing: PersistentStanding, person: Person) => Promise<T>): Promise<T> {
   return withPolicyAdministration(root, scopeId, options, access, (deps, person) => use(new PersistentStanding(deps), person));
 }
-/** The local OS person's governed `policy.administer@1` chain (read: a policy source only; write: the administration, and the approval decided as that person). */
 export async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
   use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore }, person: Person) => Promise<T>): Promise<T> {
   try {
@@ -33,7 +31,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
         if (!await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
         sessions.requireInteractiveTerminal();
         return new ApprovalApplication(journal.store,
-        { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize)
+        { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) })
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
       };
       return await use({ administration, approve, policy: source, effects }, principal);
@@ -73,7 +71,6 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
       ? new McpToolGrants(deps).inspect({ scopeId, principal: person, server }) : Promise.resolve({ status: 'none' as const })),
   };
 }
-
 /**
  * `deckent policy upgrade --template current`: current first-run additions for this local person through the governed chain. Preview reads
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
@@ -85,7 +82,6 @@ export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, o
       policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID })
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }) }));
 }
-
 /** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */
 export function inspectConfiguredPolicyAdministration(root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions = {}): Promise<PolicyAdministrationStatus> {
   return withPolicyAdministration(root, query.scopeId, options, 'read', (deps, person) => new PolicyAdministrationInspection(deps.policy).inspect(person, query));

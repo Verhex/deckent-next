@@ -34,7 +34,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
     const command = { schemaVersion: 1, scopeId: 'scope', runId: 'run', expectedRevision: 0, commandId: 'reserve-before' };
     const first = await app.reserve(command); expect(first.identities.map(v => v.taskId)).toEqual(['b']);
     const pending = journal.store.list('scope', null, 10); expect(pending).toHaveLength(1); expect(pending[0]!.request.taskId).toBe('a');
-    const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'sdk', 10);
+    const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'sdk', 10, undefined, undefined, { interactive: async () => true });
     await approvals.decide({ schemaVersion: 1, scopeId: 'scope', approvalId: pending[0]!.request.approvalId,
       commandId: 'approve-a', expectedRevision: 0, decision: 'allow', reason: 'Reviewed action' });
     const changedPolicy = { ...policy, grants: [...policy.grants, { ...policy.grants[0]!, id: 'another-task', resource: { kind: 'task', ids: ['unrelated'] } }] };

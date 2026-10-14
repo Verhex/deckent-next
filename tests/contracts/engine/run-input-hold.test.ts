@@ -4,17 +4,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
-import { DockerSupervisor, validateDockerTaskProfile, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { DockerSupervisor, validateDockerTaskProfile, openSqliteApprovalStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { DispatchApplication, resolveExecutionRegistry, AuditApplication, RunLifecycleApplication, RunReservationApplication, TaskEvaluationApplication, RunProgressionTurn,
-  RunPolicyAuthorization, DispatchPolicyAuthorization, prepareTaskStart, projectRunView, type RunLifecycleCommand } from '#engine/index.js';
+  RunDecisionApprovalBroker, RunPolicyAuthorization, DispatchPolicyAuthorization, prepareTaskStart, projectRunView, type RunLifecycleCommand } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { policySchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { fixtureExecution, fixtureDockerRegistry } from '../support/execution-registry.js';
 import { custodyOrDockerProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
+const approvalClosers: (() => void)[] = [];
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
-afterEach(async () => { stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { approvalClosers.splice(0).forEach(close => close()); stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const human: VerifiedPrincipal = { id: 'human', issuer: 'host', subject: '1000', assurance: 'os-user', scopeIds: ['s'] };
 const actor = { id: human.id, issuer: human.issuer, subject: human.subject };
 const graph = { schemaVersion: 2, revision: 1, tasks: ['task', 'other'].map(id => ({ id, kind: 'fixture', dependencies: [], acceptanceCriteria: ['ok'] })),
@@ -37,7 +38,9 @@ async function fixture(docker = false) {
   const verifier = { async verify() { return principal; } }, runPolicy = new RunPolicyAuthorization(policy), attemptPolicy = new DispatchPolicyAuthorization(policy);
   const authorization = { authorize: (identity: AttemptIdentity, value: VerifiedPrincipal) => attemptPolicy.authorizeIdentity('evaluate', identity, value) };
   const integrity = createHmacIntegrity('audit', new Uint8Array(32).fill(1));
-  const lifecycle = new RunLifecycleApplication(store, verifier, runPolicy, authorization, audit => new AuditApplication(audit, integrity), () => now, 1000, 'policy');
+  const approvals = openSqliteApprovalStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }); approvalClosers.push(() => approvals.close());
+  const decisions = new RunDecisionApprovalBroker(approvals.store, integrity, policy, async () => principal.assurance === 'os-user', () => now, 1000, 1000, 'en');
+  const lifecycle = new RunLifecycleApplication(store, verifier, runPolicy, authorization, audit => new AuditApplication(audit, integrity), () => now, 1000, 'policy', decisions);
   const data = new Map<string, Uint8Array>();
   const artifacts = {
     async put(scopeId: string, bytes: Uint8Array): Promise<ArtifactReceipt> {

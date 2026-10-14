@@ -48,7 +48,7 @@ async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Ac
     verifySession: async () => ({ principal: decider, session: { schemaVersion: 1 as const, sessionId: `session-${decider.subject}`, authorityRef: `authority-${decider.subject}`,
       kind: 'os-user' as const, principalRef: { id: decider.id, issuer: decider.issuer, subject: decider.subject }, scopeIds: ['s'], authenticatedAt: 1_000, expiresAt: 10_000_000 } }) };
   const decide = (decider: VerifiedPrincipal, approvalId: string) => new ApprovalApplication(journal.store, { verify: async () => decider }, witness(decider) as typeof sessions, source, integrity, clock,
-    'terminal', 10).decide({ schemaVersion: 1, scopeId: 's', approvalId, commandId: `decide-${approvalId}`, expectedRevision: 0, decision: 'allow', reason: 'Reviewed' });
+    'terminal', 10, undefined, undefined, { interactive: async () => true }).decide({ schemaVersion: 1, scopeId: 's', approvalId, commandId: `decide-${approvalId}`, expectedRevision: 0, decision: 'allow', reason: 'Reviewed' });
   const command = (commandId: string, input: unknown, expectedVersion = 'p1+b1'): EffectCommand => ({ schemaVersion: 1, commandId, scopeId: 's',
     operation: POLICY_ADMINISTER_OPERATION.operation, target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input, expectedVersion });
   const files = async () => ({ policy: JSON.parse(await readFile(policyPath, 'utf8')), bindings: JSON.parse(await readFile(bindingsPath, 'utf8')) });

@@ -28,7 +28,7 @@ async function fixture(admitWithinMs = 30_000) {
   const time = { wallMs: 1_000 };
   const clock = { sample: () => ({ wallMs: time.wallMs, monotonicMs: time.wallMs }) };
   const sessions = await LocalOsSessionAuthority.create(['scope'], 600_000, clock); const { principal } = await sessions.verifySession(undefined);
-  const decisions = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10);
+  const decisions = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10, undefined, undefined, { interactive: async () => true });
   const broker = new OperationApprovalBroker(journal.store, integrity, { load: async () => policy }, clock, { requestTtlMs: 60_000, defaultAdmitWithinMs: admitWithinMs });
   const decide = (approvalId: string, decision: 'allow' | 'deny', commandId = `decide-${approvalId}`) => decisions.decide({ schemaVersion: 1, scopeId: 'scope', approvalId, commandId,
     expectedRevision: 0, decision, reason: 'Reviewed' });

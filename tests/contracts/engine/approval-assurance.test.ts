@@ -29,7 +29,7 @@ async function fixture(policy: unknown = policyWith(), wallMs = 1000) {
   const integrity = createHmacIntegrity('key', randomBytes(32));
   const ring = createTurnDecisionCapabilities();
   const app = (peerPid: number | null = process.pid) => new ApprovalApplication(journal.store, { verify: async () => evidence.principal }, session, { load: async () => policy },
-    integrity, clock, 'local-sdk', 20, () => undefined, undefined, { producers: [ring], channels: CHANNELS, peerPid });
+    integrity, clock, 'local-sdk', 20, () => undefined, undefined, { ...({ producers: [ring], channels: CHANNELS, peerPid }), interactive: async () => true });
   const self = evidence.session.principalRef;
   let calls = 0;
   const toolCall = (cell: string | null, tool = 'write_file') => requestAgentToolApproval(journal.store, integrity, { scopeId: 'scope',
@@ -61,7 +61,7 @@ describe('B1 attested assurance on the one approval decision path', () => {
       await expect(f.app().decide(f.command(card, 'lying-allow', 'allow', { channel: 'local-terminal-card' }))).rejects.toMatchObject({ code: 'APPROVAL_ASSURANCE_INSUFFICIENT' });
       const capability = f.mint(card);
       const decided = await f.app().decide(f.command(card, 'card-allow', 'allow', { channel: 'local-terminal-card', decisionCapability: capability }));
-      expect(decided).toMatchObject({ status: 'decided', decision: { schemaVersion: 2, decision: 'allow', channel: 'local-terminal-card', assurance: 'turn-bound' } });
+      expect(decided).toMatchObject({ status: 'decided', decision: { schemaVersion: 4, deciderClass: 'human-tty', decision: 'allow', channel: 'local-terminal-card', assurance: 'turn-bound' } });
       expect(approvalDecisionAssurance(decided.decision!)).toBe(APPROVAL_ASSURANCE.turnBound);
       // The deny path stays open to every surface: withdrawing grants nothing.
       const other = f.toolCall('shell-destructive', 'run_shell');

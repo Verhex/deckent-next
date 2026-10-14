@@ -159,7 +159,7 @@ it('carries unknown through real ledger to the shared human SDK and CLI decision
   const waiting = await evaluator.execute(command);
   const integrity = createHmacIntegrity('audit', new Uint8Array(32).fill(1));
   const human = new RunLifecycleApplication(f.store, { async verify() { return principal; } }, { async authorize() {} }, f.authorization,
-    audit => new AuditApplication(audit, integrity), () => 200, 1000, 'policy');
+    audit => new AuditApplication(audit, integrity), () => 200, 1000, 'policy', { async authorize() { return { schemaVersion: 1, deciderClass: 'human-tty', policyRevision: 'policy' }; } });
   let text = '', received: unknown;
   const layout = resolveProductPaths('/fixture/project', { env: { HOME: '/fixture/home' } });
   const context = { env: { NO_COLOR: '1' }, stdout: { write(value: string) { text += value; } },

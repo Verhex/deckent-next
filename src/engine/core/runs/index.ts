@@ -30,7 +30,7 @@ export { assertDockerResourceCeiling, assertTaskGraphLimits, taskGraphLimitField
 export type { TaskGraphLimits } from './internal/resource-ceilings.js';
 
 export { RunLifecycleApplication, RunLifecycleError, runLifecycleCommandSchema, runLifecycleWriteSchema } from './internal/lifecycle.js';
-export type { RunLifecycleCommand, RunLifecycleWrite, RunLifecycleStore, RunLifecycleAuditRecorder } from './internal/lifecycle.js';
+export type { RunLifecycleCommand, RunLifecycleWrite, RunLifecycleStore, RunLifecycleAuditRecorder, RunDecisionAuthorization, RunDecisionEvidence } from './internal/lifecycle.js';
 
 export { poolWaitSchema, poolDriftSchema, runPoolObservationSchema, observeRunPool, hasRunReservationRoom, derivePoolWait, poolCapacityDrift } from './internal/pool-observation.js';
 export type { PoolWait, PoolDrift, RunPoolEvidence } from './internal/pool-observation.js';
@@ -42,7 +42,7 @@ export type { WorkerEffortCompiler } from './internal/worker-effort.js';
 export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from './internal/brief.js';
 export type { TaskBrief, ResultBrief } from './internal/brief.js';
 export { recordAttemptClosure, classifyLaunchRefusal } from './internal/closure.js';
-export { runControlCommandSchema, runProgressionParkCommandSchema, proposeRunLifecycleWrite } from './internal/lifecycle.js';
+export { runControlCommandSchema, runProgressionParkCommandSchema, proposeRunLifecycleWrite, matchRunLifecycleCommand } from './internal/lifecycle.js';
 export { RunCreationAuthority } from './internal/authority.js';
 export { renderRunCreateApprovalSummary } from './internal/approval-summary.js';
 
@@ -58,3 +58,4 @@ export type { TaskQuotaHold } from './internal/pool-observation.js';
 
 export { QuotaReleaseApplication, quotaReleaseCommandSchema, quotaReleaseReceiptSchema } from './internal/quota-control.js';
 export type { QuotaReleaseCommand, QuotaReleaseReceipt, QuotaReleaseWrite, QuotaReleaseStore } from './internal/quota-control.js';
+export { RunDecisionApprovalBroker } from './internal/decision-approval.js';

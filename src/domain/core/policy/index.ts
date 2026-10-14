@@ -28,3 +28,6 @@ export { mcpCapabilityGroupSchema, mcpCapabilityRules, sameMcpCapabilityRule } f
 export type { McpCapabilityGroup, McpCapabilityAction, McpCapabilitySelection, McpCapabilityRequest, McpCapabilityState, McpCapabilityView, McpCapabilityPreview } from './internal/mcp-capabilities.js';
 
 export { assertPolicyAdministrationPreserved, usablePolicyAdmins, PolicyLastAdminError, type AdministrationAssurance } from './internal/administration.js';
+
+export { aiAuthorityFloor } from './internal/ai-floor.js';
+export { explicitDecisionGrant } from './internal/decision-step.js';

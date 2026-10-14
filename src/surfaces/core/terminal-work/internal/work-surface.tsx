@@ -132,6 +132,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       setApprovalStatus(remaining > 0 ? fillTemplate(work!.approvalMore, { count: remaining }) : '');
       const decision = record.decision ?? (yes ? 'allow' : 'deny');
       result.push(identified(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, record.approvalId));
+      if (record.deciderLabel) result.push(record.deciderLabel);
       if (standing && work!.approvalStanding) result.push(standingAnswerNotice(shortId(record.approvalId), standing, record.standing, work!.approvalStanding).text);
       if (remaining > 0) result.push(fillTemplate(work!.approvalMore, { count: remaining }));
       output(result.join(' · '));
