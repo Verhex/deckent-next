@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { EffectConfirmationView, RunView } from '#engine/index.js';
 import { shortId, type KnownSecretSnapshot } from '#platform/index.js';
 import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/core/terminal-render/index.js';
+import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
 import { Window, WindowOpeningContext, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { awaitingDeliveryTargets, consentMatches, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
   type DeliveryTarget, type TerminalDeliveryPort } from './contract.js';
@@ -142,17 +143,20 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
       body={deliveryLines(visible, labels, input.known)} hints={hintsOf(visible, labels)} position={input.position} decision
       onInput={(text, key) => {
-        const stage = visible.stage, lower = text.toLowerCase();
+        // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
+        const stage = visible.stage, decision = decisionKey(text, key);
         if (stage.kind === 'confirm') {
-          if (lower === 'y') stage.waiting.resolve(true); else if (lower === 'n' || key.escape) stage.waiting.resolve(false);
-          return lower === 'y' || lower === 'n' || key.escape;
+          if (decision !== null) stage.waiting.resolve(decision === 'yes');
+          return decision !== null;
         }
         if (stage.kind === 'delivered' && (key.upArrow || key.downArrow) && visible.preview) {
           const count = visible.preview.adoptionTargets.length;
           visible.selected = (visible.selected + (key.upArrow ? count - 1 : 1)) % count; changed(); return true;
         }
-        if (lower === 'y') { if (stage.kind === 'ready') deliver(visible); else if (stage.kind === 'delivered') adopt(visible); return true; }
-        if (lower === 'n' || key.escape || (key.return && (stage.kind === 'done' || stage.kind === 'failed'))) { close(visible); return true; }
+        // Enter only closes a finished window; on a pending step it neither confirms nor declines.
+        if (key.return) { if (stage.kind === 'done' || stage.kind === 'failed') { close(visible); return true; } return false; }
+        if (decision === 'yes') { if (stage.kind === 'ready') deliver(visible); else if (stage.kind === 'delivered') adopt(visible); return true; }
+        if (decision === 'no') { close(visible); return true; }
         return false;
       }} />
   </WindowOpeningContext.Provider> : null;

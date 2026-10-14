@@ -31,7 +31,8 @@ it('binds the ERP fixture launcher to its company and refuses the unrelated help
 type Fixture = Awaited<ReturnType<typeof testErpFixture>>;
 const opened: { name: string; fixture: Fixture }[] = [];
 afterEach(async () => { for (const f of opened.splice(0).reverse()) await f.fixture.close(f.name); });
-describe.each(['sdk', 'runtime'] as const)('one purchase-order Run through %s admission and acceptance', surface => {
+// The runtime surface starts real service processes (and restarts them); 30 s is too tight on loaded 2-vCPU hosted runners.
+describe.each(['sdk', 'runtime'] as const)('one purchase-order Run through %s admission and acceptance', { timeout: 90_000 }, surface => {
   let availability: FixtureAvailability;
   beforeAll(async () => {
     availability = await checkFixtureAvailability();

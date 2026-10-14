@@ -569,11 +569,11 @@ for (const locale of ['en', 'tr'] as const) it(`config inspection failure leaves
     expect(view.stdout.frame).toContain(t('monitor.observed', { time: new Date(observedAt).toISOString().slice(0, 19).replace('T', ' ') + 'Z' }, locale));
     expect(view.stdout.frame).not.toContain('Refresh failed');
     await view.press('8');
-    expect(view.stdout.frame).toContain('[CONFIG_METADATA_MISSING]');
+    await until(() => view.stdout.frame.includes('[CONFIG_METADATA_MISSING]'), 'config failure shown'); // the panel renders on a loaded runner
     expect(view.stdout.frame).toContain(t('config.surface.unavailable', {}, locale));
     expect(view.stdout.frame).not.toContain('private-transport-token');
     failed = false; observedAt += 1000; await view.press('r');
-    expect(view.stdout.frame).toContain('max_workers');
+    await until(() => view.stdout.frame.includes('max_workers'), 'config recovered');
     expect(view.stdout.frame).not.toContain('CONFIG_METADATA_MISSING');
     failed = true; observedAt += 1000; await view.press('r');
     expect(view.stdout.frame).toContain('[CONFIG_METADATA_MISSING]');
