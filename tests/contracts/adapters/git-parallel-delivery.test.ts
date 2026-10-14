@@ -13,6 +13,9 @@ import type { RunSnapshot } from '#domain/index.js';
 const exec = promisify(execFile), roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const limits = { maxBytes: 65536, maxEntries: 1000, maxDepth: 32, maxPathBytes: 1024 };
+const confirmation = { async assertAvailable() {}, async confirm(card: import('#engine/index.js').EffectConfirmationView) {
+  expect(card.resource).toMatch(/^refs\//); expect(card.to).toMatch(/^[a-f0-9]{40,64}$/); return async () => {};
+} };
 const actor = { id: 'owner', issuer: 'test', subject: 'owner' };
 async function fixture(refOnly: boolean, format = 'sha1') {
   const root = await mkdtemp(join(tmpdir(), 'deckent-parallel-delivery-')); roots.push(root);
@@ -46,13 +49,13 @@ async function fixture(refOnly: boolean, format = 'sha1') {
     const { manifest, receipt } = candidate ?? await prepare(p);
     const command = { schemaVersion: 1 as const, commandId: p.identity.runId, identity: p.identity, integrationCommandId: manifest.command.commandId };
     let record: IntegrationDeliveryRecord | null = null;
-    const store: IntegrationDeliveryStore = { async loadDelivery() { return record; },
+    const store: IntegrationDeliveryStore = { async loadRun() { return { revision: 1, graph: { tasks: [{ id: p.identity.taskId, acceptanceCriteria: ['exit'] }] }, progress: [{ taskId: p.identity.taskId, phase: 'accepted' }] } as RunSnapshot; }, async loadDelivery() { return record; },
       async claimDelivery(intent) { return record = { intent, delivered: false }; }, async finishDelivery(intent) { return record = { intent, delivered: true }; } };
     const clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, sessions = await LocalOsSessionAuthority.create(['s'], 10000, clock);
     const patches = { async preview() { return { patch: p, receipt, scope: { status: 'unscoped' } }; }, assertScope() {} };
     const inspection = { async inspect() { return { manifest, receipt }; } };
     const app = new WorkspaceDeliveryApplication(patches as never, inspection as never, target, delivery, store, sessions,
-      { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock);
+      { async authorizeIdentity(action, identity) { expect(action).toBe('deliver-integration'); expect(identity).toEqual(p.identity); } }, clock, confirmation);
     const result = await app.deliver(command), plan = result.plan;
     expect(result.status).toBe('reference-delivered'); expect(await delivery.delivered(plan)).toBe(true);
     expect(record!.delivered).toBe(true);
@@ -63,7 +66,7 @@ async function fixture(refOnly: boolean, format = 'sha1') {
     let held: IntegrationAdoptionRecord | null = null;
     // The application ports supply accepted Task evidence; all Git preparation, publication and adoption effects are real.
     const store: IntegrationAdoptionStore = { async findDelivery() { return record; }, async loadAdoption() { return held; },
-      async loadRun() { return { revision: 1, progress: [{ taskId: identity.taskId, phase: 'accepted' }], bindings: [{ identity }] } as RunSnapshot; },
+      async loadRun() { return { graph: { tasks: [{ id: identity.taskId, acceptanceCriteria: ['exit'] }] }, revision: 1, progress: [{ taskId: identity.taskId, phase: 'accepted' }], bindings: [{ identity }] } as RunSnapshot; },
       async loadRunWorkspaceCustody() { return null; },
       async claimAdoption(intent) { return held = { intent, sequence: (observation.fence?.sequence ?? 0) + 1, settled: false }; },
       async finishAdoption(intent) { return held = { intent, sequence: held!.sequence, settled: true }; } };
@@ -71,7 +74,7 @@ async function fixture(refOnly: boolean, format = 'sha1') {
     const source = new GitRunWorkspaceProvider(new GitWorkspaceBroker(options));
     const app = new WorkspaceAdoptionApplication(store, delivery, adoption, [targetRef], sessions,
       { async authorizeIdentity(action, authorized) { expect(action).toBe('adopt-integration'); expect(authorized).toEqual(identity); } }, clock,
-      { requirement: null, criterionWithin: () => false, async authorizeRun() {}, registry: null, source });
+      { requirement: null, criterionWithin: () => false, async authorizeRun() {}, registry: null, source }, confirmation);
     return app.adopt({ schemaVersion: 2, commandId: 'adopt-' + identity.runId, identity, deliveryCommandId: record.intent.command.commandId, targetRef });
   };
   const advance = async (commit: string) => {
@@ -158,7 +161,7 @@ describe.skipIf(process.platform !== 'linux').each([false, true])('parallel deli
     const f = await fixture(refOnly), p = f.patch('p', 'a.txt', 'a before\n', 'after\n'), candidate = await f.prepare(p);
     const plan = await f.delivery.plan({ schemaVersion: 1, commandId: 'p', identity: p.identity, integrationCommandId: 'p' }, candidate.manifest, p);
     const moved = await f.git('commit-tree', `${f.base}^{tree}`, '-p', f.base, '-m', 'racing advance'); await f.advance(moved);
-    const before = await f.state(); await expect(f.delivery.publish(plan)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    const before = await f.state(); await expect(f.delivery.publish(plan, candidate.manifest, p)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
     expect(await f.state()).toEqual(before); expect(await f.delivery.delivered(plan)).toBe(false);
   });
   it('refuses an already prepared candidate after a safe advance before claiming delivery', async () => {
@@ -175,7 +178,7 @@ describe.skipIf(process.platform !== 'linux').each([false, true])('parallel deli
     const plan = await f.delivery.plan({ schemaVersion: 1, commandId: 'legacy', identity: p.identity, integrationCommandId: 'p' }, legacy, p);
     const { effectiveBaseCommit: _parent, ...oldPlan } = plan as Extract<typeof plan, { schemaVersion: 2 }>; void _parent;
     const parsed = integrationDeliveryPlanSchema.parse({ ...oldPlan, schemaVersion: 1 });
-    await f.delivery.publish(parsed); expect(await f.delivery.delivered(parsed)).toBe(true);
+    await f.delivery.publish(parsed, legacy, p); expect(await f.delivery.delivered(parsed)).toBe(true);
   });
 });
 

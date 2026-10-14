@@ -1,8 +1,9 @@
+import { confirmedDelivery, confirmedAdoption } from '../support/delivery-terminal.js';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, userInfo } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { adoptConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, evaluateTask, prepareConfiguredWorkspaceIntegration,
+import { evaluateTask, prepareConfiguredWorkspaceIntegration,
   rollbackConfiguredWorkspaceIntegration } from '../../../src/index.js';
 import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
@@ -28,7 +29,7 @@ async function delivered() {
   const f = await readyDeliveryFixture(track, { adoptionTargets: [target] });
   await f.policy(['read-output', 'prepare-integration', 'deliver-integration', 'evaluate']);
   await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
-  const delivery = await deliverConfiguredWorkspaceIntegration(f.project,
+  const delivery = await confirmedDelivery(f.project,
     { schemaVersion: 1, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' }, f.options);
   const coding = (await f.runtime.store.loadRun(f.identity.scopeId, f.identity.runId))!;
   await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluation', identity: f.identity, expectedRevision: coding.revision }, f.options);
@@ -71,7 +72,7 @@ async function delivered() {
   const verified = async (runId: string, kindName = 'verify', exitCode = 0) => {
     await pinned(runId, kindName); const identity = await reserve(runId); await execute(identity, exitCode); return evaluate(identity);
   };
-  const adopt = (commandId: string, verificationRunId?: string, verificationKind = 'verify') => adoptConfiguredWorkspaceIntegration(f.project,
+  const adopt = (commandId: string, verificationRunId?: string, verificationKind = 'verify') => confirmedAdoption(f.project,
     { schemaVersion: 2, commandId, identity: f.identity, deliveryCommandId: 'delivery', targetRef: target,
       ...(verificationRunId === undefined ? {} : { verificationRunId, verificationKind }) } as never, f.options);
   const ledger = (sql: string, ...args: string[]) => {

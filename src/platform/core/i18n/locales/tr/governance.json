@@ -955,5 +955,7 @@
   "cli.help.action.policyStatus": "Politika yönetimi hazırlığını incele",
   "cli.help.policyStatus": "deckent policy status [--scope <id>] [--json] [--lang en|tr] — admin, şablon soyu, revizyon ve bootstrap/kurtarma hazırlığı; salt okunur.",
   "mcp.tool.policyAdministration": "Kapsamdaki politika yönetimi hazırlığını, adminleri ve revizyonu incele; salt okunur, onay kararı vermez.",
-  "doctor.policyAdministration.unavailable": "Politika yönetimi: erişilemiyor veya yetki yok; hazırlık durumu bilinmiyor."
+  "doctor.policyAdministration.unavailable": "Politika yönetimi: erişilemiyor veya yetki yok; hazırlık durumu bilinmiyor.",
+  "error.DELIVERY_INTERACTIVE_REQUIRED": "Teslim/benimseme doğrulanmış insan terminali gerektirir. O terminalde deckent task integration-deliver veya integration-adopt çalıştırıp y/N yanıtını verin; SDK/MCP onaylayamaz.",
+  "error.DELIVERY_CONFIRMATION_DECLINED": "Teslim/benimseme reddedildi veya yanıt alınamadı. Referans yazılmadı."
 }

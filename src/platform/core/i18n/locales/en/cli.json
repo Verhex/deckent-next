@@ -1443,5 +1443,8 @@
   "cli.init.pool.conflict": "Pool {pool} was not changed: stored slots {storedExecution}/{storedInFlight}, configured slots {execution}/{inFlight}. Review the configuration; use deckent pool set-capacity for capacity changes before re-running /do.",
   "cli.init.pool.notOwner": "Pool {pool} was not changed. Only the owner of both policy and bindings files may provision it. Ask the installation owner to run deckent init pool --scope {scope} --preview.",
   "cli.init.pool.ledgerVersion": "Pool {pool} was not changed: ledger version {version} is not the current version. Use the installation upgrade path, then run deckent init pool --scope {scope} --preview.",
-  "cli.init.pool.unavailable": "Pool {pool} is unavailable ({reason}); nothing was written. Check admission configuration and the existing installation ledger, then run deckent init pool --scope {scope} --preview."
+  "cli.init.pool.unavailable": "Pool {pool} is unavailable ({reason}); nothing was written. Check admission configuration and the existing installation ledger, then run deckent init pool --scope {scope} --preview.",
+  "cli.task.delivery.card": "{operation}: {title}\nRun {run} · Task {task}\n{ref}\n{from} → {to}\n{count} files; +{added} / -{removed} lines\n{files}\nAdditional files omitted: {omitted}",
+  "cli.task.delivery.prompt": "Write this reference? y/N: ",
+  "git.delivery.message": "{title}\n\nRun: {run}\nTask: {task}\nAcceptance: Task {phase}{unverified}; criteria {criteria}; run revision {revision}\n"
 }

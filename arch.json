@@ -291,7 +291,9 @@
         "src/composition/core/project-instructions",
         "src/composition/core/backup",
         "src/engine/core/provider-spend",
-        "src/composition/core/run-planner"
+        "src/composition/core/run-planner",
+        "src/platform/core/i18n",
+        "src/surfaces/core/effect-confirmation"
       ],
       "plan": "SURFACES"
     },
@@ -1834,7 +1836,10 @@
         "src/domain/core/run",
         "src/domain/core/principal",
         "src/domain/core/task-graph",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/engine/core/effect"
       ],
       "plan": "ISOLATION"
     },
@@ -1848,7 +1853,10 @@
         "src/adapters/core/git-workspace",
         "src/adapters/core/docker-supervisor",
         "src/engine/core/handoff-observation",
-        "src/engine/core/task-inputs"
+        "src/engine/core/task-inputs",
+        "src/platform/core/clock",
+        "src/platform/core/i18n",
+        "src/platform/core/redaction"
       ],
       "plan": "ISOLATION"
     },
@@ -1872,7 +1880,8 @@
         "src/platform/core/clock",
         "src/adapters/core/local-principal",
         "src/adapters/core/git-workspace",
-        "src/capabilities/core/evaluation-evidence"
+        "src/capabilities/core/evaluation-evidence",
+        "src/engine/core/effect"
       ],
       "plan": "ISOLATION"
     },
@@ -2929,6 +2938,16 @@
         "src/domain/core/run"
       ],
       "plan": "KAYNAK-KALITE"
+    },
+    "src/surfaces/core/effect-confirmation": {
+      "dependencies": [
+        "src/engine/core/effect",
+        "src/platform/core/errors",
+        "src/platform/core/config-fields",
+        "src/platform/core/i18n",
+        "src/platform/core/redaction"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

@@ -1,0 +1,1 @@
+export interface IntegrationCommitMetadata { readonly title: string; readonly acceptance: Readonly<{ phase: string; criteria: number; runRevision: number; modelUnverified: boolean }>; readonly deliveredAtMs: number }

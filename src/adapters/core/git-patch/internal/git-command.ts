@@ -1,3 +1,4 @@
+import { SystemTrustedClock } from '#platform/index.js';
 import { execFile } from 'node:child_process';
 import { lstat, realpath } from 'node:fs/promises';
 import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
@@ -9,14 +10,16 @@ import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
  * The fixed author/committer identity also names reflog entries. */
 export class GitCommand {
   constructor(private readonly options: GitWorkspaceOptions) {}
-  run(args: string[], input = '', index?: string, deadline = Date.now() + this.options.timeoutMs) {
+  run(args: string[], input = '', index?: string, deadline = Date.now() + this.options.timeoutMs, deliveredAtMs = new SystemTrustedClock().sample().wallMs) {
     // The remaining budget is spent before Git starts: report the configured bound like the snapshot scan does (Astra 2367 P2).
     if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time', { observed: this.options.timeoutMs + Math.max(0, Date.now() - deadline), limit: this.options.timeoutMs });
+    const date = new Date(deliveredAtMs).toISOString();
+    const identity = this.options.deliveryIdentity ?? format;
     return new Promise<string>((resolve, reject) => {
       const child = execFile(this.options.gitExecutable, localGitArgs(this.options.sourceRoot, args), {
         env: { ...GIT_LOCAL_ENV,
-          ...(index ? { GIT_INDEX_FILE: index } : {}), GIT_AUTHOR_NAME: format.authorName, GIT_AUTHOR_EMAIL: format.authorEmail,
-          GIT_COMMITTER_NAME: format.authorName, GIT_COMMITTER_EMAIL: format.authorEmail, GIT_AUTHOR_DATE: format.date, GIT_COMMITTER_DATE: format.date },
+          ...(index ? { GIT_INDEX_FILE: index } : {}), GIT_AUTHOR_NAME: identity.authorName, GIT_AUTHOR_EMAIL: identity.authorEmail,
+          GIT_COMMITTER_NAME: identity.authorName, GIT_COMMITTER_EMAIL: identity.authorEmail, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
         timeout: Math.max(1, deadline - Date.now()), maxBuffer: this.options.outputBytes, encoding: 'utf8',
       }, (error, stdout) => error ? reject(gitFailure(error)) : resolve(stdout.trim()));
       child.stdin?.on('error', () => undefined); child.stdin?.end(input);
