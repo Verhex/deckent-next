@@ -4,3 +4,5 @@ export { BASELINE_IGNORED_DIRS, createGlobMatcher, createWorkspaceScope, globLit
 export type { WorkspaceScope, ResolvedPath, WorkspacePathError } from './internal/scope.js';
 export { createRuntimeWorkspaceFileHost, indexWorkspaceFiles, rankWorkspacePaths, readWorkspaceAttachment, workspacePathRank, WORKSPACE_INDEX_MAX_FILES } from './internal/mentions.js';
 export type { RuntimeWorkspaceFileHost, WorkspaceAttachmentRead, WorkspaceFileIndex } from './internal/mentions.js';
+export { createRegexRunner, RegexCancelled } from './internal/regex-runner.js';
+export type { RegexRunner } from './internal/regex-runner.js';

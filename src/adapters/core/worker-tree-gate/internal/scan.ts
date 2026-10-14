@@ -4,7 +4,7 @@ import { join, posix } from 'node:path';
 import { EMPTY_KNOWN_SECRETS, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { WorkerTreeExclusion, WorkerTreeFinding, WorkerTreeLimit, WorkerTreeScan } from '#engine/index.js';
 import { archiveKind, contentRule, decodedTexts } from './content.js';
-import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY } from '#adapters/core/workspace-read/index.js';
+import { createGlobMatcher, createRegexRunner, CREDENTIAL_WORKSPACE_DENY, RegexCancelled } from '#adapters/core/workspace-read/index.js';
 
 /** Bounds and the operator acknowledgement (`execution.secretGate`); every bound fails closed as an incomplete scan. */
 export interface WorkerTreeGateOptions {
@@ -88,9 +88,13 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
     const by = allowed.find(entry => entry.match(rel));
     if (by) excluded.push({ path: shown(rel), rule, by: `allowPatternPaths:${by.glob}` }); else findings.push({ path: shown(rel), rule });
   };
-  const inspect = (rel: string, texts: readonly string[], bytes?: Buffer) => {
+  // Pattern rows run in a terminable worker bound to the scan deadline: a backtracking expression ends the scan as `incomplete` (time).
+  const deadlineSignal = AbortSignal.timeout(Math.max(1, deadline - now())), runner = createRegexRunner(deadlineSignal);
+  // The regex worker is unref'd; a one-shot process (CLI execute) must not exit while the gate waits for it, so the scan holds a ref'd timer.
+  const keepAlive = setInterval(() => undefined, options.timeoutMs);
+  const inspect = async (rel: string, texts: readonly string[], bytes?: Buffer) => {
     if (texts.some(text => known.spans(text).length)) { findings.push({ path: shown(rel), rule: 'known-secret' }); return; }
-    const rule = contentRule(rel, texts), archive = bytes ? archiveKind(bytes) : null;
+    const rule = await contentRule(runner, rel, texts), archive = bytes ? archiveKind(bytes) : null;
     if (rule !== null) liftable(rel, `pattern:${rule}`); else if (archive !== null) liftable(rel, `unscannable:archive-${archive}`);
   };
   /** `display` is the path as the worker sees it, without a leading slash (the checkout's own paths are unchanged); rules match on it. */
@@ -108,9 +112,9 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
     else if (info.isSymbolicLink()) {
       // The link's target path is a path the worker can open: deny rules apply to it (relative to the link, and as written), never lifted.
       const target = await readlink(path), hit = target.startsWith('/') ? denyHit(target) : denyHit(posix.join(posix.dirname(display), target), posix.join(posix.dirname(inner), target));
-      if (hit !== undefined) findings.push({ path: shown(display), rule: `deny-path:${hit}` }); else inspect(display, decodedTexts(Buffer.from(target)));
+      if (hit !== undefined) findings.push({ path: shown(display), rule: `deny-path:${hit}` }); else await inspect(display, decodedTexts(Buffer.from(target)));
     }
-    else if (info.isFile()) { const bytes = await read(path); inspect(display, decodedTexts(bytes), bytes); time(); }
+    else if (info.isFile()) { const bytes = await read(path); await inspect(display, decodedTexts(bytes), bytes); time(); }
     else findings.push({ path: shown(display), rule: 'unscannable:special-file' });
   };
   const visit = async (directory: string, prefix: string, innerPrefix = prefix): Promise<void> => {
@@ -125,13 +129,17 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
         const bytes = Buffer.byteLength(view.text); time();
         if (bytes > options.maxFileBytes) throw new Incomplete('file-bytes', bytes, options.maxFileBytes);
         if ((total += bytes) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes);
-        inspect(label, decodedTexts(Buffer.from(view.text)));
+        await inspect(label, decodedTexts(Buffer.from(view.text)));
       }
       else if (label === '') await visit(view.source, '');
       else await entry(view.source, label, '');
     }
   }
-  catch (error) { if (error instanceof Incomplete) return Object.freeze({ status: 'incomplete', limit: error.limit, observed: error.observed, bound: error.bound }); throw error; }
+  catch (error) {
+    if (error instanceof RegexCancelled && deadlineSignal.aborted) return Object.freeze({ status: 'incomplete', limit: 'time', observed: now() - started, bound: options.timeoutMs });
+    if (error instanceof Incomplete) return Object.freeze({ status: 'incomplete', limit: error.limit, observed: error.observed, bound: error.bound });
+    throw error;
+  } finally { clearInterval(keepAlive); await runner.close(); }
   const lifted = excluded.length ? { excluded: Object.freeze(excluded) } : {};
   return findings.length ? Object.freeze({ status: 'refused', findings: Object.freeze(findings), count: findings.length, ...lifted }) : Object.freeze({ status: 'clean', ...lifted });
 }

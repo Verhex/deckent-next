@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { agentWorkspaceDeny, createGlobMatcher, workerTreeViews, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, scanWorkerTree, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/index.js';
-import { REDACTION_PATTERNS, resolveProductLayout, snapshotKnownSecrets } from '#platform/index.js';
+import { REDACTION_CONFIG_SECRET, REDACTION_PATTERNS, resolveProductLayout, snapshotKnownSecrets } from '#platform/index.js';
 
 // S6 (owner 2026-10-14): the pre-dispatch secret gate over the tree a worker receives. Risky inputs stay in the tests; values are built at
 // run time so this file is not itself a credential carrier.
@@ -34,7 +34,8 @@ describe('one deny list and one pattern table', () => {
     expect(REDACTION_PATTERNS.every(row => typeof row.gate === 'boolean')).toBe(true);
     // key-value is off: it matches ordinary code (`token = identifier`) — 44 non-test source files of this repository (S6 report).
     expect(Object.fromEntries(REDACTION_PATTERNS.map(row => [row.id, row.gate]))).toEqual({ 'provider-token': true, 'bearer-token': true, 'url-userinfo': true, 'key-value': false, jwt: true });
-    expect(WORKER_TREE_PATTERN_RULES.map(row => row.id)).toEqual(['provider-token', 'bearer-token', 'url-userinfo', 'jwt']);
+    expect(WORKER_TREE_PATTERN_RULES.map(row => row.id)).toEqual(['provider-token', 'bearer-token', 'url-userinfo', 'jwt', 'private-key-block', 'gitlab-token',
+      'aws-temporary-key', 'aws-secret-key', 'stripe-key', 'slack-token', 'pypi-token', 'azure-account-key']);
   });
 });
 
@@ -216,5 +217,63 @@ describe('parser parity: what the gate cannot read the way the worker can is ref
     const scan = await scanWorkerTree(root, options);
     expect(scan.status === 'refused' ? scan.findings : scan).toEqual([{ path: 'cfg/.env.', rule: 'deny-path:**/.env' }, { path: 'cfg/server.pem ', rule: 'deny-path:**/*.pem' },
       { path: 'notes/wide.txt', rule: 'pattern:provider-token' }]);
+  });
+});
+
+describe('credential families, regex semantics and name matching (security review of the data files)', () => {
+  const join2 = (...parts: string[]) => parts.join('');
+  const hits = async (files: Record<string, string | Buffer>, extra: Partial<typeof options> = {}) => {
+    const scan = await scanWorkerTree(await tree(files), { ...options, ...extra });
+    return scan.status === 'refused' ? Object.fromEntries(scan.findings.map(finding => [finding.path, finding.rule])) : scan;
+  };
+  it('refuses every listed provider and token family (fixtures built at run time)', async () => {
+    const tail = 'Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2Yz3';
+    expect(await hits({
+      'a/openai.ts': join2('const k = "sk', '-proj-', tail, '";'), 'a/anthropic.ts': join2('sk', '-ant-api03-', tail), 'a/github.ts': join2('gh', 'o_', tail),
+      'a/ghs.ts': join2('gh', 's_', tail), 'a/pat.ts': join2('github', '_pat_', tail), 'a/gitlab.ts': join2('gl', 'pat-', tail),
+      'a/aws.ts': join2('AK', 'IA', 'ABCDEFGHIJKLMNOP'), 'a/sts.ts': join2('AS', 'IA', 'ABCDEFGHIJKLMNOP'),
+      'a/aws-pair.ts': join2('const aws_secret', '_access_key = "', 'abcdEFGH1234/+abcdEFGH1234abcdEFGH12345', 'x"'),
+      'a/stripe.ts': join2('sk', '_live_', tail), 'a/stripe-rk.ts': join2('rk', '_test_', tail), 'a/slack.ts': join2('xo', 'xe-', tail), 'a/slack-app.ts': join2('xa', 'pp-', tail),
+      'a/jwt.ts': join2('ey', 'JhbGciOiJIUzI1NiJ9.', 'eyJzdWIiOiIxIn0.', 'c2lnbmF0dXJl'), 'a/rsa.ts': join2('-----BEGIN RSA ', 'PRIVATE KEY-----'),
+      'a/openssh.md': join2('-----BEGIN OPENSSH ', 'PRIVATE KEY-----'), 'a/gcp.ts': join2('{"type":"service_account","private_key":"-----BEGIN ', 'PRIVATE KEY-----\\nMII"}'),
+      'a/azure.ts': join2('DefaultEndpointsProtocol=https;AccountName=x;Account', 'Key=', 'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0NTY3ODk=;'),
+      'a/pg.ts': join2('postgres://app:', 'S3cret-Pw', '@db/app'), 'a/mongo.ts': join2('mongodb+srv://app:', 'S3cret-Pw', '@cluster0/x'),
+      'a/mysql.ts': join2('mysql://root:', 'S3cret-Pw', '@db/x'), 'a/redis.ts': join2('redis://default:', 'S3cret-Pw', '@cache:6379'), 'a/amqp.ts': join2('amqp://u:', 'S3cret-Pw', '@mq/vhost'),
+      'a/npm.ts': join2('np', 'm_', tail), 'a/pypi.ts': join2('py', 'pi-', 'AgEIcHlwaS5vcmcCJGFiY2RlZjEyLTM0NTYtNzg5MC1hYmNkLWVmMTIzNDU2Nzg5MAACJXsicGVybWlzc2lvbnMi'),
+      'b/cert.p12': Buffer.from([0x30, 0x82, 1, 2]) })).toEqual({
+      'a/amqp.ts': 'pattern:url-userinfo', 'a/anthropic.ts': 'pattern:provider-token', 'a/aws-pair.ts': 'pattern:aws-secret-key', 'a/aws.ts': 'pattern:provider-token',
+      'a/azure.ts': 'pattern:azure-account-key', 'a/gcp.ts': 'pattern:private-key-block', 'a/ghs.ts': 'pattern:provider-token', 'a/github.ts': 'pattern:provider-token',
+      'a/gitlab.ts': 'pattern:gitlab-token', 'a/jwt.ts': 'pattern:jwt', 'a/mongo.ts': 'pattern:url-userinfo', 'a/mysql.ts': 'pattern:url-userinfo', 'a/npm.ts': 'pattern:provider-token',
+      'a/openai.ts': 'pattern:provider-token', 'a/openssh.md': 'pattern:private-key-block', 'a/pat.ts': 'pattern:provider-token', 'a/pg.ts': 'pattern:url-userinfo',
+      'a/pypi.ts': 'pattern:pypi-token', 'a/redis.ts': 'pattern:url-userinfo', 'a/rsa.ts': 'pattern:private-key-block', 'a/slack-app.ts': 'pattern:slack-token',
+      'a/slack.ts': 'pattern:slack-token', 'a/sts.ts': 'pattern:aws-temporary-key', 'a/stripe-rk.ts': 'pattern:stripe-key', 'a/stripe.ts': 'pattern:stripe-key',
+      // PKCS12 is binary ASN.1 without a reliable content signature: it is refused by name (deny list), documented as name-only.
+      'b/cert.p12': 'deny-path:**/*.p12' });
+  });
+  it('regex semantics: one JS flavour, fixed flags, case-insensitive keys; a backtracking input ends the scan as incomplete, never as a pass', async () => {
+    for (const row of WORKER_TREE_PATTERN_RULES) expect(row.flags, row.id).toMatch(/^i?$/u);
+    expect(REDACTION_CONFIG_SECRET.flags).toBe('gi');
+    expect(await hits({ 'a.yml': 'Password: Tr0ub4dor-3xQz9\n', 'b.env.json': '{"DB_PASSWORD":"Tr0ub4dor-3xQz9"}' })).toEqual({ 'a.yml': 'pattern:config-secret', 'b.env.json': 'pattern:config-secret' });
+    // `eyJ-` repeated has no dots: every start backtracks over the rest of the run (quadratic) — the worker is terminated at the deadline.
+    const started = Date.now();
+    await expect(scanWorkerTree(await tree({ 'big.txt': 'eyJ-'.repeat(250_000) }), { ...options, maxFileBytes: 1 << 21, timeoutMs: 500 }))
+      .resolves.toMatchObject({ status: 'incomplete', limit: 'time', bound: 500 });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    // The config expressions are linear by construction: a hostile XML/YAML shape finishes well inside the bound.
+    await expect(scanWorkerTree(await tree({ 'x.xml': '<password '.repeat(200_000), 'y.yml': 'password: ${A}\n'.repeat(200_000) }), { ...options, maxFileBytes: 1 << 22, timeoutMs: 20_000 }))
+      .resolves.toMatchObject({ status: 'clean' });
+  });
+  it('config parsing parity: YAML indentation/chomping order, aliases, env defaults and template literals', async () => {
+    expect(await hits({ 'a.yml': 'db:\n  password: |2-\n    Tr0ub4dor-3xQz9\n', 'b.yml': 'pw: &pw Tr0ub4dor-3xQz9\ndb:\n  password: *pw\n',
+      'docker-compose.override.yml': 'services:\n  db:\n    environment:\n      DB_PASSWORD: ${DB_PASSWORD:-Tr0ub4dor-3xQz9}\n', 'c.json': '{"password": "{{ \'Tr0ub4dor-3xQz9\' }}"}' }))
+      .toEqual({ 'a.yml': 'pattern:config-secret', 'b.yml': 'pattern:config-secret', 'c.json': 'pattern:config-secret', 'docker-compose.override.yml': 'pattern:config-secret' });
+    expect(await hits({ 'a.yml': 'password: ${DB_PASSWORD:-}\ntoken: ${API_TOKEN:?set it}\nsecret: "{{ vault_secret }}"\n' })).toEqual({ status: 'clean' });
+  });
+  it('name matching between data and scanner: multi-dot, compound and Windows/Unicode forms', async () => {
+    const value = 'password = "Tr0ub4dor-3xQz9"\n';
+    expect(await hits({ '.env.production.local': 'x', 'app.config.json': value, 'docker-compose.override.yml': value, 'cfg/ｓｅｔｔｉｎｇｓ.ｊｓｏｎ': value,
+      'cfg/settings.json.': value, 'cfg/Web.Config': value, 'src/notes.txt': value })).toEqual({ '.env.production.local': 'deny-path:.env.*', 'app.config.json': 'pattern:config-secret',
+      'cfg/Web.Config': 'pattern:config-secret', 'cfg/settings.json.': 'pattern:config-secret', 'cfg/ｓｅｔｔｉｎｇｓ.ｊｓｏｎ': 'pattern:config-secret',
+      'docker-compose.override.yml': 'pattern:config-secret' });
   });
 });

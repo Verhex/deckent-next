@@ -67,6 +67,12 @@ in it can reach the model provider through the worker's one egress. The terminal
 - **config-secret (owner 2026-10-15):** the redaction vocabulary narrowed to config-like files (`.env*`, `.json`, `.yaml/.yml`, `.toml`, `.ini`,
   `.properties`, `.conf/.cfg`, `.xml`, `docker-compose*`, `*.config`) and non-placeholder literal values (`${VAR}`, `$VAR`, `%VAR%`, `<...>`,
   `{{...}}`, `changeme`/`example`/`xxx`/`***`, shorter than 6): table data `configSecret` beside the rows. Source files stay out of scope.
+- **Credential families and regex semantics (security review):** gate-only table rows `gatePatterns` add PEM/OpenSSH private-key
+  blocks, GitLab, AWS temporary keys and secret-key assignments, Stripe, Slack (`xox*`/`xapp`), PyPI and Azure account/shared-access keys;
+  PKCS12 stays name-only (binary ASN.1). All rows use one JS (V8 irregexp) flavour with flags `''`/`i` only and run in the terminable regex
+  worker bound to the scan deadline, so a backtracking input ends the scan as `incomplete`, never as a pass; the config expressions are
+  linear by construction. config-file names match in case/NFC/NFD/NFKC/trailing-dot forms (`.env.production.local`, `*.config.json`,
+  `docker-compose.override.yml`); YAML `|2-`, aliases, `${VAR:-default}` and `{{ 'literal' }}` are read as their parsers do.
 - **Parser parity:** every reading a worker's tools can take is scanned — UTF-8 with BOM, NUL-stripped bytes (ASCII in UTF-16/32 of either
   byte order), UTF-16 in both alignments, JSON/YAML `\uXXXX`/`\xHH` escapes, CRLF, YAML block scalars; compressed/archived files
   (signatures in `gate.json`) are `unscannable:archive-<kind>`. Deny forms also strip trailing dots/spaces (Windows-backed binds).

@@ -90,6 +90,8 @@ export const EMPTY_KNOWN_SECRETS = snapshotKnownSecrets([]);
 export const REDACTION_PATTERNS = Object.freeze(REDACTION_TABLE.patterns.map(row => Object.freeze({ ...row })));
 /** S6 gate-only row of the same table: the key-value vocabulary narrowed to config-like files and non-placeholder values (redaction ignores it). */
 export const REDACTION_CONFIG_SECRET = Object.freeze(REDACTION_TABLE.configSecret);
+/** S6 gate-only rows of the same table (credential families the record redactor does not mask yet; redaction ignores them). */
+export const REDACTION_GATE_PATTERNS = Object.freeze(REDACTION_TABLE.gatePatterns.map(row => Object.freeze({ ...row })));
 const patterns = (text: string) => Object.freeze(REDACTION_PATTERNS.map(row => ({ kind: row.id, count: [...text.matchAll(new RegExp(row.source, row.flags))].length })).filter(row => row.count > 0).map(row => Object.freeze(row)));
 /** Derived record text only: recordSource preserves legacy record coverage; counters/standing use source.
  * Merge original-text coverage before replacing. This snapshot's generated labels retain attribution without
