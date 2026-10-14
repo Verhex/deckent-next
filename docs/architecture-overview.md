@@ -143,11 +143,13 @@ boundaries, not verified available connectors.
 The supported execution path today is Linux and Windows WSL2. macOS and native Windows have
 separate platform verification and incomplete execution/security support. The locked bubblewrap
 bundle currently ships x86_64; an arm64 build check alone is not arm64 runtime proof. Source
-builds require explicit bubblewrap preparation; they can otherwise finish with `bubblewrap=ABSENT`.
+builds stage the locked bubblewrap (the build ends with `bubblewrap=present` or `bubblewrap=staged from …`); on Linux a build that cannot
+stage it stops with `BUBBLEWRAP_BUILD_REQUIRED`, and only off Linux does it print `bubblewrap=absent (not Linux)`.
 See the [contributor quickstart](../CONTRIBUTING.md#a-30-minute-quickstart).
 
-Mission/business-process coordination, natural-language `do` admission, a remote HTTP API,
+Mission-level coordination of multi-step business processes, a remote HTTP API,
 Desktop, Dashboard, Enterprise SSO/fleet management and microVM isolation remain future work.
 Local checks do not establish fleet-scale performance or a supported production deployment on
 an untested platform. Evaluate a selected provider, operation and isolation configuration with
-its actual success, refusal, cancellation and recovery paths before adopting it.
+its actual success, refusal, cancellation and recovery paths before adopting it. [Known limits](known-limits.md) lists in plain
+words what is untried, not built or still open.

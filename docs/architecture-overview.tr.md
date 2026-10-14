@@ -141,11 +141,13 @@ bağlayıcılar değildir.
 Bugünkü desteklenen yürütme yolu Linux ve Windows WSL2'dir. macOS ve native Windows ayrı
 platform doğrulamasına sahiptir; yürütme/güvenlik desteği tamamlanmamıştır. Kilitli bubblewrap
 paketi bugün x86_64 sunar; arm64 derleme kontrolü arm64 yürütme kanıtı değildir. Kaynaktan
-build açık bubblewrap hazırlığı ister; hazırlık olmadan `bubblewrap=ABSENT` ile tamamlanabilir.
+build kilitli bubblewrap'ı yerleştirir (build `bubblewrap=present` ya da `bubblewrap=staged from …` ile biter); Linux'ta yerleştiremezse
+`BUBBLEWRAP_BUILD_REQUIRED` ile durur, yalnız Linux dışında `bubblewrap=absent (not Linux)` basar.
 [Katkıcı hızlı başlangıcına (EN)](../CONTRIBUTING.md#a-30-minute-quickstart) bakın.
 
-Mission/iş süreci koordinasyonu, doğal dilden `do` kabulü, uzak HTTP API, Desktop, Dashboard,
+Çok adımlı iş süreçlerinin Mission düzeyinde koordinasyonu, uzak HTTP API, Desktop, Dashboard,
 Enterprise SSO/toplu kurulum yönetimi ve microVM yalıtımı gelecek işlerdir. Yerel kontroller
 filo ölçeğinde performansı veya denenmemiş platformdaki üretim desteğini kanıtlamaz.
 Benimsemeden önce seçili sağlayıcı, işlem ve yalıtım ayarlarının gerçek başarı, ret,
-iptal ve kurtarma yollarını değerlendirin.
+iptal ve kurtarma yollarını değerlendirin. Denenmemiş, yapılmamış ya da hâlâ açık olanların sade listesi
+[Bilinen sınırlar](known-limits.tr.md) sayfasındadır.

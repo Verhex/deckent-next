@@ -1,5 +1,12 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.36–38 — 2026-10-14 (PR #85, #86, #87; PLAN satırlarının kapanışı)
+
+- **alpha.36 — canlıya + terminal teslim penceresi:** TERMINAL-SABIT R2 (sabit giriş alanı, odak kuralı, aktif iş şeridi), terminal `/deliver` penceresi, TESLIM-GUVENLIK (doğrulanmış insan y/N + anlamlı commit), KUCUK-DUZELTMELER; commit `c9b36b7c`, canlı + N1 2026-10-14 09:38Z.
+- **alpha.37 — Ctrl+Y hotfix:** Ctrl+Y/Alt+y/birleşik tuşlar teslim ve soru pencerelerinde onay sayılmaz; commit `efb2a5b9`, canlı + N1 2026-10-14 12:18Z (owner'ın tek seferlik hosted-CI istisnasıyla).
+- **alpha.38 — CI-KARARLILIK:** servis kimliği bağlantı kabulünden önce yayımlanır, geri yükleme ve saat izlemeli kabuk yazma kümeleri; PR #87 ile main yeşil (hosted CI kapısı yeniden katı); commit `7eba8b1f`, canlı + N1 2026-10-14 17:03Z.
+- **Kapı 5 (main hosted CI yeşil):** 2026-10-14, `7eba8b1f` (CI-DEBT/CI-KARARLILIK satırı kapandı; node 26 MCP zaman aşımı açık sınır olarak CHANGELOG alpha.30/38'de).
+
 ## alpha.24 — Unreleased (`wave/batch-e`, main'de: PR #67, merge `3e47aeab`)
 
 - **Aday içerik (batch E, lead bütçe bölünmesi 2026-10-10):** MCP-TURN-TRUST-CARD-I18N dilim 1 (dogfood benimsemesi `8208517a` → `0606d74c`: `describeMcpTrustCard` EN/TR katalogdan, EN baytları korunur; ilk dogfood işi, Codex worker, 2026-10-10), FLAKY-CLOCK-FIX, MAIN-RED-FIX, CONNECT-LOCALITY, SWITCH-TOOLING. Kalan hatlar batch E2'de (PLAN NEXT-PACKAGE-2026-10-10).
