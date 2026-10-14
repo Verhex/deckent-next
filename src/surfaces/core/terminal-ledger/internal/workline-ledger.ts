@@ -29,7 +29,12 @@ export interface WorklineLedgerPorts {
   readonly decideApproval?: (approval: Pick<WorklineApproval, 'approvalId' | 'revision' | 'decisionCapability'>, decision: 'allow' | 'deny', standing?: StandingScope, reason?: string) => Promise<WorklineApproval>;
   /** Governed run cancellation (`run cancel`) against the inspected revision; returns the rendered typed outcome. */
   readonly cancelRun?: (runId: string, expectedRevision: number) => Promise<string>;
+  /** Y1 (owner 2026-10-14): the governed Run controls of `run hold|resume|close` against the inspected revision; returns the rendered typed outcome.
+   * `reason` is a hold's note (the person's own words from the card; absent: the surface's default sentence). Policy decides on every call. */
+  readonly controlRun?: (runId: string, action: RunControlAction, expectedRevision: number, reason?: string) => Promise<string>;
 }
+/** The human Run controls the terminal offers; `answer`, `accept` and `reject` are separate decisions and are not here. */
+export type RunControlAction = 'hold' | 'resume' | 'close';
 
 export async function loadRunViewsForWatch(ports: WorklineLedgerPorts): Promise<RunView[]> {
   if (!ports.listRunIds) return [];

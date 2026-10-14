@@ -6,7 +6,7 @@ import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/c
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
 import { Window, WindowOpeningContext, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { awaitingDeliveryTargets, consentMatches, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
-  type DeliveryTarget, type TerminalDeliveryPort } from './contract.js';
+  type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from './contract.js';
 import WINDOW from './window.json' with { type: 'json' };
 
 /** Catalog words of the delivery window (terminal.delivery.*); `next` maps a typed error code to its next-step sentence. */
@@ -18,16 +18,28 @@ export interface DeliveryWindowLabels {
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
   readonly summaryDelivered: string; readonly summaryAdopted: string; readonly summaryLeft: string; readonly summaryFailed: string; readonly summaryAdoptFailed: string; readonly summaryNotAdopted: string;
   readonly next: Readonly<Record<string, string>>; readonly nextDefault: string; readonly pickerTitle: string; readonly none: string; readonly fallbackTitle: string;
+  /** Y1: choosing the verification Run of an adoption (`execution.adoption.verification`), and how an adoption names its verification. */
+  readonly verifyTitle: string; readonly verifyRow: string; readonly verifyWithout: string; readonly verifyLoading: string; readonly verifyNone: string;
+  readonly verifyHow: string; readonly verifyCheck: string; readonly verifyHints: string; readonly verifyNoneHints: string;
+  readonly verifiedBy: string; readonly notVerified: string;
 }
 export type DeliveryOpening = 'foreground' | 'background';
 type Waiting = Readonly<{ view: EffectConfirmationView; resolve: (yes: boolean) => void }>;
 type Stage = Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
-  | Readonly<{ kind: 'delivered' }> | Readonly<{ kind: 'done' }> | Readonly<{ kind: 'failed'; error: string; code: string | null }>;
+  | Readonly<{ kind: 'delivered' }> | Readonly<{ kind: 'verify' }> | Readonly<{ kind: 'done' }> | Readonly<{ kind: 'failed'; error: string; code: string | null }>;
+/** The verification choice of the selected branch: the candidates (null while read), the selected row and the last refusal or read failure. */
+type Verify = { runs: readonly VerificationCandidate[] | null; selected: number; status: string };
+/** The choices a verification step offers: each accepted candidate, and adopting without verification only when the installation allows it. */
+const verifyOptions = (preview: DeliveryPreview, verify: Verify): readonly (string | null)[] =>
+  [...(verify.runs ?? []).map(run => run.runId), ...(verify.runs && !preview.verification?.required ? [null] : [])];
+/** Typed refusals that mean "choose another verification" rather than "the adoption is over" (the window returns to the choice). */
+const VERIFY_RETRY = new Set(['ADOPTION_NOT_VERIFIED', 'ADOPTION_VERIFICATION_MISMATCH', 'ADOPTION_VERIFICATION_CRITERIA_WEAKER', 'ADOPTION_VERIFICATION_FAILED',
+  'ADOPTION_VERIFICATION_PENDING', 'ADOPTION_VERIFICATION_UNSETTLED', 'ADOPTION_VERIFICATION_CANCELLED']);
 interface Entry {
   readonly target: DeliveryTarget; readonly sinceMs: number;
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
-  selected: number; closed: boolean; settled: boolean;
+  selected: number; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -66,7 +78,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     let entry = entries.current.get(target.key);
     if (!entry) {
       entry = { target, sinceMs: Date.now(), opening, generation: 0, stage: { kind: 'loading' }, preview: null, consent: null, ids: ids(), delivered: null, adopted: null,
-        selected: 0, closed: false, settled: false };
+        selected: 0, closed: false, settled: false, verify: null };
       entries.current.set(target.key, entry); load(entry);
     } else if (entry.closed && !entry.delivered) load(entry);
     entry.closed = false; entry.opening = opening; entry.generation++;
@@ -104,23 +116,43 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       entry.delivered = outcome; entry.consent = null;
       entry.stage = { kind: preview.adoptionTargets.length ? 'delivered' : 'done' };
       if (!preview.adoptionTargets.length) entry.settled = true;
-      latest.current.summary(fillTemplate(words.summaryDelivered, { title: humanRecordText(entry.target.title, latest.current.known), commit: outcome.commit.slice(0, 12), ref: outcome.ref }));
+      latest.current.summary(fillTemplate(words.summaryDelivered, { title: humanRecordText(entry.target.title, latest.current.known), commit: outcome.commit.slice(0, 12), ref: outcome.ref,
+        command: outcome.commandId }));
       changed();
     }, error => { entry.consent = null; fail(entry, error); });
   }, [answer, changed, fail]);
-  const adopt = useCallback((entry: Entry) => {
+  // Y1: the candidates of the configured verification kind, read again on `r`; a failed read is the step's status (nothing is chosen for the person).
+  const readVerification = useCallback((entry: Entry) => {
+    const current = latest.current.port, preview = entry.preview; if (!current || !preview) return;
+    const verify: Verify = { runs: null, selected: 0, status: entry.verify?.status ?? '' }; entry.verify = verify; changed();
+    current.verificationRuns(preview).then(runs => { if (entry.verify === verify) { verify.runs = runs; changed(); } },
+      error => { if (entry.verify === verify) { verify.runs = []; verify.status = latest.current.errorText(error); changed(); } });
+  }, [changed]);
+  const adopt = useCallback((entry: Entry, verificationRunId?: string) => {
     const current = latest.current.port, preview = entry.preview, delivered = entry.delivered, words = latest.current.labels!;
     const targetRef = preview?.adoptionTargets[entry.selected];
-    if (!current || !preview || !delivered || !targetRef || entry.stage.kind !== 'delivered') return;
+    if (!current || !preview || !delivered || !targetRef || (entry.stage.kind !== 'delivered' && entry.stage.kind !== 'verify')) return;
     entry.consent = { operation: 'adopt-integration', scopeId: preview.identity.scopeId, runId: preview.identity.runId, taskId: preview.identity.taskId,
       commandId: entry.ids.adopt, resource: targetRef, to: delivered.commit };
     entry.stage = { kind: 'adopting' }; changed();
-    current.adopt(preview, delivered, targetRef, entry.ids.adopt, answer(entry)).then(outcome => {
+    current.adopt(preview, delivered, targetRef, entry.ids.adopt, answer(entry), verificationRunId).then(outcome => {
       entry.adopted = outcome; entry.consent = null; entry.stage = { kind: 'done' }; entry.settled = true;
-      latest.current.summary(fillTemplate(words.summaryAdopted, { target: outcome.targetRef, from: outcome.fromCommit.slice(0, 12), to: outcome.toCommit.slice(0, 12) }));
+      // The adoption and delivery command ids are what `deckent task integration-rollback` and `integration-adopt` name (BETA-BELGE rollback gap).
+      latest.current.summary(fillTemplate(words.summaryAdopted, { target: outcome.targetRef, from: outcome.fromCommit.slice(0, 12), to: outcome.toCommit.slice(0, 12),
+        verification: outcome.verifiedBy ? fillTemplate(words.verifiedBy, { run: outcome.verifiedBy }) : words.notVerified, command: outcome.commandId, delivery: delivered.commandId }));
       changed();
-    }, error => { entry.consent = null; entry.settled = true; fail(entry, error); });
-  }, [answer, changed, fail]);
+    }, error => {
+      entry.consent = null;
+      // A verification refusal moved nothing: back to the choice with the reason; a retry is a new adoption command.
+      if (preview.verification && VERIFY_RETRY.has(codeOf(error) ?? '')) {
+        entry.ids = { ...entry.ids, adopt: ids().adopt }; entry.stage = { kind: 'verify' };
+        entry.verify = { runs: entry.verify?.runs ?? null, selected: entry.verify?.selected ?? 0, status: latest.current.errorText(error) };
+        if (entry.verify.runs === null) readVerification(entry); else changed();
+        return;
+      }
+      entry.settled = true; fail(entry, error);
+    });
+  }, [answer, changed, fail, readVerification]);
   const close = useCallback((entry: Entry) => {
     const words = latest.current.labels!;
     if (entry.stage.kind === 'working' || entry.stage.kind === 'adopting') return;
@@ -153,9 +185,25 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           const count = visible.preview.adoptionTargets.length;
           visible.selected = (visible.selected + (key.upArrow ? count - 1 : 1)) % count; changed(); return true;
         }
+        if (stage.kind === 'verify' && visible.preview && visible.verify) {
+          // The verification step: ↑↓ choose, a single typed y adopts with the chosen row, r reads the candidates again, n/Esc/Ctrl+C go back.
+          const options = verifyOptions(visible.preview, visible.verify), verify = visible.verify;
+          if ((key.upArrow || key.downArrow) && options.length) { verify.selected = (verify.selected + (key.upArrow ? options.length - 1 : 1)) % options.length; changed(); return true; }
+          if (key.return) return false;
+          if (decision === 'yes') { const chosen = options[verify.selected]; if (chosen !== undefined) adopt(visible, chosen ?? undefined); return true; }
+          if (decision === 'no') { visible.stage = { kind: 'delivered' }; visible.verify = null; changed(); return true; }
+          if (text === 'r' && !key.ctrl && !key.meta) { readVerification(visible); return true; }
+          return false;
+        }
         // Enter only closes a finished window; on a pending step it neither confirms nor declines.
         if (key.return) { if (stage.kind === 'done' || stage.kind === 'failed') { close(visible); return true; } return false; }
-        if (decision === 'yes') { if (stage.kind === 'ready') deliver(visible); else if (stage.kind === 'delivered') adopt(visible); return true; }
+        if (decision === 'yes') {
+          if (stage.kind === 'ready') deliver(visible);
+          // With a configured verification bar the branch's y opens the verification choice first (the CLI's --verification-run).
+          else if (stage.kind === 'delivered' && visible.preview?.verification) { visible.stage = { kind: 'verify' }; visible.verify = null; readVerification(visible); }
+          else if (stage.kind === 'delivered') adopt(visible);
+          return true;
+        }
         if (decision === 'no') { close(visible); return true; }
         return false;
       }} />
@@ -174,6 +222,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels): string {
     case 'ready': return labels.hints;
     case 'confirm': return labels.confirmHints;
     case 'delivered': return labels.adoptHints;
+    case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
     case 'failed': return labels.failedHints;
     default: return '';
@@ -181,7 +230,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels): string {
 }
 
 /** Body rows: ids, the check of the current source, the changed files with their stat, where it writes, and the stage's own lines. */
-export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
+export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
@@ -207,13 +256,15 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     }
   }
   if (stage.kind === 'working' || stage.kind === 'adopting') rows.push(line(stage.kind === 'working' ? labels.working : labels.adopting, { role: 'accent' }));
-  if (delivered) rows.push(exact(fillTemplate(labels.delivered, { commit: delivered.commit, ref: delivered.ref }), { role: 'success' }));
+  if (delivered) rows.push(exact(fillTemplate(labels.delivered, { commit: delivered.commit, ref: delivered.ref, command: delivered.commandId }), { role: 'success' }));
   if (stage.kind === 'delivered' && preview && delivered) {
     rows.push(line(fillTemplate(labels.adoptPrompt, { commit: delivered.commit.slice(0, 12) }), { bold: true }));
     preview.adoptionTargets.forEach((targetRef, index) => rows.push(exact(fillTemplate(labels.adoptTarget, { mark: index === entry.selected ? '›' : ' ', target: targetRef, commit: delivered.commit.slice(0, 12) }),
       index === entry.selected ? { role: 'accent', bold: true } : {})));
   }
-  if (adopted) rows.push(exact(fillTemplate(labels.adopted, { target: adopted.targetRef, from: adopted.fromCommit, to: adopted.toCommit }), { role: 'success' }));
+  if (stage.kind === 'verify' && preview?.verification && delivered) rows.push(...verifyLines(entry.verify ?? null, preview, delivered, preview.adoptionTargets[entry.selected] ?? '', labels, text));
+  if (adopted) rows.push(exact(fillTemplate(labels.adopted, { target: adopted.targetRef, from: adopted.fromCommit, to: adopted.toCommit, command: adopted.commandId,
+    verification: adopted.verifiedBy ? fillTemplate(labels.verifiedBy, { run: adopted.verifiedBy }) : labels.notVerified }), { role: 'success' }));
   if (stage.kind === 'failed') {
     rows.push(...stage.error.split('\n').map(value => line(value, { role: 'error' })));
     // A next step may name the exact command for this attempt, delivery and selected branch (ADOPTION_NOT_VERIFIED: the CLI with --verification-run).
@@ -224,6 +275,25 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
       generation: arg(String(id.generation)), layout: arg(id.layoutRevision), delivery: delivered ? arg(delivered.commandId) : '<delivery>',
       target: target === undefined ? '<branch>' : arg(target) }) : next, { role: 'accent' }));
   }
+  return rows;
+}
+/** The verification step's rows: what is chosen for which branch, the candidates (or why there is none and how to make one), and what the adoption checks. */
+function verifyLines(verify: Verify | null, preview: DeliveryPreview, delivered: DeliveryOutcome, target: string, labels: DeliveryWindowLabels, text: (value: string) => string): WindowLine[] {
+  const kind = preview.verification!.kind, line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
+  const rows: WindowLine[] = [line(fillTemplate(labels.verifyTitle, { target, kind }), { bold: true })];
+  if (!verify?.runs) return [...rows, line(labels.verifyLoading, { role: 'muted' })];
+  const options = verifyOptions(preview, verify);
+  options.forEach((runId, index) => {
+    const mark = index === verify.selected ? '›' : ' ', style: SpanStyle = index === verify.selected ? { role: 'accent', bold: true } : {};
+    const candidate = verify.runs!.find(run => run.runId === runId);
+    rows.push({ spans: [span(text(runId === null ? fillTemplate(labels.verifyWithout, { mark }) : fillTemplate(labels.verifyRow, { mark, run: runId, task: candidate?.taskId ?? '' })), style)], exact: true });
+  });
+  if (!verify.runs.length) {
+    rows.push(line(fillTemplate(labels.verifyNone, { kind }), { role: 'warning' }));
+    rows.push({ spans: [span(text(fillTemplate(labels.verifyHow, { scope: shellWord(preview.identity.scopeId), kind, delivery: shellWord(delivered.commandId) })), { role: 'accent' })], exact: true });
+  }
+  if (verify.status) rows.push(...verify.status.split('\n').map(value => line(value, { role: 'error' })));
+  rows.push(line(labels.verifyCheck, { role: 'muted' }));
   return rows;
 }
 /** One POSIX shell word: safe characters stay as they are; anything else is single-quoted with embedded quotes closed and escaped. */

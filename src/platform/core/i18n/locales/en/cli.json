@@ -651,7 +651,7 @@
   "terminal.slash.status": "Show whether Deckent is running, its version and the model",
   "terminal.slash.workers": "List the workers and what each is doing",
   "terminal.slash.run": "Show one run in detail",
-  "terminal.slash.runs": "List every run of this scope",
+  "terminal.slash.runs": "Every run of this scope; h hold, r resume, c close a parked run (each after its own y)",
   "terminal.slash.runUsage": "Usage: /run <runId>",
   "terminal.slash.exit": "Leave the terminal",
   "terminal.slash.help": "List the commands by group",

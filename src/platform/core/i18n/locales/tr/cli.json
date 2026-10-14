@@ -651,7 +651,7 @@
   "terminal.slash.status": "Deckent'in çalışıp çalışmadığını, sürümü ve modeli göster",
   "terminal.slash.workers": "İşçileri ve her birinin ne yaptığını listele",
   "terminal.slash.run": "Bir işi ayrıntılı göster",
-  "terminal.slash.runs": "Bu kapsamdaki tüm işleri listele",
+  "terminal.slash.runs": "Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat (her biri kendi y'siyle)",
   "terminal.slash.runUsage": "Kullanım: /run <runId>",
   "terminal.slash.exit": "Terminalden çık",
   "terminal.slash.help": "Komutları gruplara göre listele",

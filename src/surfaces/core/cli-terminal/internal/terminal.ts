@@ -397,6 +397,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.clearSessionStanding ? { clearSessionStanding: context.clearSessionStanding } : {}),
     ...(context.decideApproval ? { decideApproval: context.decideApproval } : {}),
     ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}),
+    ...(context.applyRunLifecycle ? { applyRunLifecycle: context.applyRunLifecycle } : {}),
     ...(context.inspectSurfaceAccess ? { inspectSurfaceAccess: () => context.inspectSurfaceAccess!(root, scopeId, options) } : {}),
     ...(context.inspectSurfaceRunIds ? { inspectSurfaceRunIds: () => context.inspectSurfaceRunIds!(root, scopeId, options) } : {}),
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
