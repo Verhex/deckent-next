@@ -2174,6 +2174,8 @@
       "dependencies": [
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
         "src/platform/core/host",
         "src/domain/core/model-invocation",
         "src/platform/core/i18n",
@@ -3254,6 +3256,46 @@
           "docker"
         ],
         "reason": "The existing native-coding-template@1 wire contract requires the docker parameter key; it is an adapter-owned protocol field, not a provider choice or mutable policy."
+      },
+      {
+        "file": "src/engine/core/agent-turn/internal/session-context.ts",
+        "symbol": "MAX_PROTOCOLS",
+        "values": [
+          4
+        ],
+        "reason": "NATIVE-BAGLAM session context v1 (AGENT_SESSION_CONTEXT_VERSION 1) format bound: at most four catalog protocols are named, so the per-turn block stays small and cache-stable; changes only with that version, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/engine/core/agent-turn/internal/session-context.ts",
+        "symbol": "MAX_CAPABILITIES",
+        "values": [
+          16
+        ],
+        "reason": "NATIVE-BAGLAM session context v1 format bound: at most sixteen supported capability ids per protocol are named; versioned with AGENT_SESSION_CONTEXT_VERSION 1, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/engine/core/agent-turn/internal/session-context.ts",
+        "symbol": "MAX_MCP_NAMED",
+        "values": [
+          16
+        ],
+        "reason": "NATIVE-BAGLAM session context v1 format bound: past sixteen names a tool group is counted, not listed; versioned with AGENT_SESSION_CONTEXT_VERSION 1, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/surfaces/core/terminal-work/internal/active-work-note.ts",
+        "symbol": "MAX_ROWS",
+        "values": [
+          8
+        ],
+        "reason": "NATIVE-BAGLAM active-work note v1 format bound: at most eight strip rows reach the model, the rest is counted (/runs lists all); a model-facing format invariant, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/surfaces/core/terminal-work/internal/active-work-note.ts",
+        "symbol": "MAX_TITLE",
+        "values": [
+          80
+        ],
+        "reason": "NATIVE-BAGLAM active-work note v1 format bound: a /do or Run title is cut at eighty characters in the model note; a model-facing format invariant, not an operator policy (2026-10-14)."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

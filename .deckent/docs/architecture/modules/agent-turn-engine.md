@@ -159,7 +159,7 @@ verified records: open calls of ended service owners settle `unknown` (above); t
 `onModelAllocationSlotsReleased({ allocations, released, settled, inconsistent })`, called when anything was released, settled or
 reported. No ledger schema or version change. Cost: O(retained rows) of the allocation, only when a slot is held or a row is open.
 
-**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 9; W2 adds the running binary version/channel),
+**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 10; W2 adds the running binary version/channel),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
 Deckent data root (workspace-relative when inside the project, else marked unreadable; v4 names Deckent's own state protected),
 the configuration path, protected places, the declared tools by class (read / edit / shell), that policy and the permission mode
@@ -191,6 +191,27 @@ only by an owner-approved call (Astra 2192 R9, historical; superseded by W3 on 2
 shell has no network. Every turn's request digest changes again.
 System prompt **v7** (TRUNCATED-TOOLCALL, 2026-09-30): when an edit tool is offered it names the per-answer output limit
 (`terminal.chat.maxCompletionTokens`) and the write-in-parts recipe; every turn's request digest changes again.
+System prompt **v10** (NATIVE-BAGLAM, owner 2026-10-14, beta gate 3; live finding: "hangi moddayız" was answered by reading
+`.deckent/config.json`, one answer carried English reasoning): after the tools the segment carries the **session context v1**
+(`engine/core/agent-turn/session-context.ts`, `AGENT_SESSION_CONTEXT_VERSION`): Deckent version, scope, session id, the permission mode as
+the decision reads it (`principalPermissionMode`; a stored full-access start mode without a launched full-access turn reads standart;
+`askEdits` named) with a one-line meaning, thinking (`on` / `off` from `chatTurn.reasoning` / `model-default` when the catalog declares no
+`chat-template-enable-thinking`), the binding's supported catalog capabilities per protocol (≤ 4 protocols, ≤ 16 ids), each offered tool's
+effect now (runs / asks / refused) for its representative cells (edit: ordinary file, protected path; shell: read-only, narrow change,
+destructive in the turn's realm; fetch: listed / other host; MCP call), decided by the turn's own `decideAgentToolCall` over ONE fresh policy
+snapshot (`createAgentCallDecisions().probe`: nothing kept, audited or applied), the slash surfaces the person can open (pinned against
+`WORKLINE_SLASH_COMMANDS`) and the hard rules (descriptive only; models never decide approvals or grant authority; MCP cannot decide
+approvals; do not read ledger/policy/config to learn the mode). Volatile run state is NOT in the segment (it would break the request digest on
+replay and the prefix cache): the workline appends a bounded active-work note (≤ 8 rows, titles ≤ 80 chars, marker
+`--- deckent session note: active work`) from the active work strip's records to the person's latest message only; resume and fresh-context
+displays strip it like attachments. A new read tool **`session_state`** returns the same snapshot as JSON, recomputed at call time; it is
+decided like every tool (`agent-tool`/`invoke`) and offered only when that decision is `allow` at turn start — the first-run template does
+**not** grant it (a default grant would be a template v12 and change the v11 rollback delta: owner decision). Working style adds "keep your
+reasoning out of the answer". **Inline reasoning:** the loop routes a LEADING `<think>…</think>` block of the answer text (a model served
+without a reasoning parser) to `reasoning` events (the thought line) and keeps it out of the answer and history; the streamed and settled
+splits agree (`createInlineReasoningRouter` / `splitInlineReasoning`); provider reasoning fields stay the adapters' (OpenAI chat
+`reasoning`/`reasoning_content`, Responses reasoning summaries, Anthropic thinking blocks). The measured block is ≈ 1.9–2.5 KB
+(≈ 480–630 tokens at 4 chars/token; proof `NATIVE-BAGLAM-2026-10-14/measure/`). Every turn's request digest changes again.
 **Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and
 shell path classification, the bubblewrap and Landlock deny views, `@file`) deny the Core floor plus every product resource of the
 layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for
