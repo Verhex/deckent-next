@@ -427,7 +427,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
-      ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }), delivery: deliveryWindowLabels(locale) },
+      ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale), delivery: deliveryWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
     target, model: chat?.reference?.modelId ?? chatTarget(chat, locale),
     ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
@@ -480,7 +480,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
     } } : {}),
     palette: resolveWorklinePalette(theme.tier, theme.theme), ascii, startup,
-    ...(ledger ? { ledger } : {}), ...(deliveryPort ? { delivery: { port: deliveryPort, confirmTimeoutMs: config.approvals.sessionTtlMs } } : {}),
+    ...(ledger ? { ledger } : {}), ...(deliveryPort && !pickerNeedsTextFallback(env, true) ? { delivery: { port: deliveryPort, confirmTimeoutMs: config.approvals.sessionTtlMs } } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),
     ...(context.signal ? { signal: context.signal } : {}),

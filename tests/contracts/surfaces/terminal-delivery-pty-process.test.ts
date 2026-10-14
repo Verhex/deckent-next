@@ -72,6 +72,7 @@ async function inPty(project: string, env: NodeJS.ProcessEnv, mode: string, step
 }
 const CTRL_O = '\u000f', ESC = '\u001b';
 const WINDOW = 'Delivery · Ship useful change', READY_HINT = 'y check, prepare and deliver';
+const CONFIRM_BODY = 'The confirmation card differs from what was shown';
 /** /do admits the fixture Run; its result window is closed explicitly; the delivery window then appears by itself (composer keeps focus). */
 const opening: ReadonlyArray<readonly [string, string]> = [['READY', '/do ship it\r'], ['PLAN-RESULT', CTRL_O], ['WINDOW-FOCUS', ESC]];
 
@@ -103,6 +104,8 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(result.output).toContain(WINDOW); expect(result.output).toContain('Integration check: affected files match base');
     expect(result.output).toContain('note.txt | +1 -1'); expect(result.output).toContain('Writes only a dedicated reference under refs/deckent/deliveries/');
     expect(result.output).not.toContain('y adopt into the selected branch'); // no execution.adoption.targets: no branch choice
+    // DECISIONS §1 on real data: the port's card (Git-described file set, effective base) matched the shown one, so one y sufficed.
+    expect(result.output).not.toContain(CONFIRM_BODY);
     const [line] = await f.deliveries(); expect(line).toBeDefined();
     const [ref, commit] = line!.split(' ');
     expect(result.output).toContain(`Delivered: commit ${commit} → ${ref}`);
@@ -144,6 +147,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
       const [line] = await f.deliveries(); const commit = line!.split(' ')[1]!;
       expect(await f.git('rev-parse', 'refs/heads/adopted')).toBe(answer === 'y' ? commit : f.base);
       if (answer === 'y') expect(result.output).toContain(`Adopted: refs/heads/adopted ${f.base} → ${commit}`);
+      expect(result.output).not.toContain(CONFIRM_BODY); // both port cards matched the window's shown consent
       expect((await f.source()).head).toBe(source.head); expect((await f.source()).status).toBe(source.status);
       for (const close of track.cleanup.splice(0).reverse()) await close();
     }
