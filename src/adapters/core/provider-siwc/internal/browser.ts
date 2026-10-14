@@ -6,7 +6,7 @@ import { SIWC_PROTOCOL, SIWC_LIMITS } from './registry.js';
 export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) => string, signal: AbortSignal): Promise<{ callback: string; redirectUri: string }> {
   if (process.platform !== 'linux') throw new OAuthConnectionError('OAUTH_CONNECTION_PLATFORM_UNSUPPORTED');
   if (!process.stdin.isTTY || !process.stdout.isTTY) throw new OAuthConnectionError('OAUTH_CONNECTION_INTERACTIVE_REQUIRED');
-  let redirectUri = '';
+  let redirectUri = '', expectedState = '';
   let resolve: (value: { callback: string; redirectUri: string }) => void, reject: (error: OAuthConnectionError) => void;
   const result = new Promise<{ callback: string; redirectUri: string }>((yes, no) => { resolve = yes; reject = no; });
   // Attach rejection before listen/open so abort/error cannot create an unhandled rejection.
@@ -16,7 +16,7 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
     response.setHeader('Cache-Control', 'no-store'); response.setHeader('Content-Security-Policy', "default-src 'none'");
     const raw = request.url ?? '';
     if (request.method !== 'GET' || Buffer.byteLength(raw) > SIWC_LIMITS.callbackMaxBytes || !raw.startsWith(`${SIWC_PROTOCOL.callbackPath}?`)
-      || request.headers.host !== new URL(redirectUri).host) { response.writeHead(400); response.end(); return; }
+      || request.headers.host !== new URL(redirectUri).host || !matchesState(raw, expectedState)) { response.writeHead(400); response.end(); return; }
     // The application verifies state before any code exchange. HTTP success alone never means sign-in success.
     response.setHeader('Connection', 'close');
     response.once('finish', () => resolve({ callback: `${new URL(redirectUri).origin}${raw}`, redirectUri }));
@@ -33,9 +33,10 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
     if (!address || typeof address === 'string' || signal.aborted) throw new OAuthConnectionError('OAUTH_CONNECTION_CANCELLED');
     redirectUri = `http://127.0.0.1:${address.port}${SIWC_PROTOCOL.callbackPath}`;
     const url = makeUrl(redirectUri), parsed = new URL(url);
+    expectedState = parsed.searchParams.getAll('state').length === 1 ? parsed.searchParams.get('state')! : '';
     if (parsed.username || parsed.password || parsed.hash || parsed.origin !== new URL(SIWC_PROTOCOL.authorizationEndpoint).origin
       || parsed.pathname !== new URL(SIWC_PROTOCOL.authorizationEndpoint).pathname
-      || ['id_token_hint', 'access_token', 'refresh_token', 'code'].some(key => parsed.searchParams.has(key))) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
+      || !expectedState || ['id_token_hint', 'access_token', 'refresh_token', 'code'].some(key => parsed.searchParams.has(key))) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
     const browser = spawn('xdg-open', [url], { stdio: 'ignore', shell: false });
     browser.once('error', () => reject(new OAuthConnectionError('OAUTH_CONNECTION_UNAVAILABLE')));
     browser.once('exit', code => { if (code !== 0) reject(new OAuthConnectionError('OAUTH_CONNECTION_UNAVAILABLE')); });
@@ -45,4 +46,10 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
   } finally {
     signal.removeEventListener('abort', abort); server.close(); server.closeAllConnections();
   }
+}
+/** Only the one callback carrying this attempt's single state may consume the listener; anything else is 400 and listening continues. */
+function matchesState(raw: string, expected: string) {
+  if (!expected) return false;
+  const query = new URLSearchParams(raw.slice(raw.indexOf('?') + 1)), states = query.getAll('state');
+  return states.length === 1 && states[0] === expected && query.getAll('code').length + query.getAll('error').length === 1;
 }

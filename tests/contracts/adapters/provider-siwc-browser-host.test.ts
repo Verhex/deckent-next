@@ -44,7 +44,7 @@ describe.skipIf(process.platform !== 'linux')('SIWC loopback/browser adapter hos
     expect(mocked.spawn).toHaveBeenCalledTimes(1); expect(fake.kill).toHaveBeenCalled();
     await expect(fetch(redirect)).rejects.toThrow();
   });
-  it('rejects another path and host before accepting the exact callback', async () => {
+  it('rejects another path, host, state or duplicated parameter before accepting the exact callback', async () => {
     let statuses!: Promise<number[]>;
     mocked.spawn.mockImplementation((_command: string, args: string[]) => {
       const redirect = new URL(args[0]!).searchParams.get('redirect_uri')!, base = new URL(redirect);
@@ -54,13 +54,18 @@ describe.skipIf(process.platform !== 'linux')('SIWC loopback/browser adapter hos
         const wrongHost = await new Promise<{ status: number }>((done, fail) => {
           get(`${redirect}?code=fixture`, { headers: { host: 'localhost' } }, response => { response.resume(); done({ status: response.statusCode ?? 0 }); }).once('error', fail);
         });
+        const noState = await fetch(`${redirect}?code=attacker-code`);
+        const wrongState = await fetch(`${redirect}?state=other-state&code=attacker-code`);
+        const twoStates = await fetch(`${redirect}?state=fixture-state&state=other-state&code=attacker-code`);
+        const twoCodes = await fetch(`${redirect}?state=fixture-state&code=attacker-code&code=fixture-code`);
         const correct = await fetch(`${redirect}?state=fixture-state&code=fixture-code&client_id=oaiapp_fixture`);
-        return [wrongPath.status, wrongHost.status, correct.status];
+        return [wrongPath.status, wrongHost.status, noState.status, wrongState.status, twoStates.status, twoCodes.status, correct.status];
       })();
       return child();
     });
-    await siwcBrowserAuthorization(make, abort.signal);
-    expect(await statuses).toEqual([400, 400, 204]);
+    const result = await siwcBrowserAuthorization(make, abort.signal);
+    expect(await statuses).toEqual([400, 400, 400, 400, 400, 400, 204]);
+    expect(new URL(result.callback).searchParams.get('code')).toBe('fixture-code');
   });
   it('cancellation closes the pending listener and never exposes the authorization URL in an error', async () => {
     let redirect = '';
