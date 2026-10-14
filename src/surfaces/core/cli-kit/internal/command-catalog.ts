@@ -41,6 +41,7 @@ export const CLI_CATALOG = [
     action('identity', 'start', 'cli.help.action.identity', 'cli.help.identity'),
     action('policy', 'start', 'cli.help.action.policy', 'cli.help.initPreview'),
     action('pool', 'start', 'cli.help.action.init.pool', 'cli.help.initPreview'),
+    action('registry', 'start', 'cli.help.action.init.registry', 'cli.init.registry.help'),
   ] },
   { name: 'monitor', group: 'observe', summary: 'cli.help.summary.monitor', detail: 'cli.monitor.help' },
   { name: 'workers', group: 'observe', summary: 'cli.help.summary.workers', detail: 'cli.workers.help', children: [

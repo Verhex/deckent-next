@@ -162,15 +162,14 @@ deckent init policy --scope my-project --apply
 ## Get your first job done
 
 "Your first session" ends with a governed chat. This path goes on to a real job: Deckent plans it, you approve the plan,
-a coding worker does it in Docker, and the change is delivered to Git. Steps 1 to 4 are one-time operator setup and part
-of it (the first admission registry) is still written by hand; a clean-machine rehearsal of the whole path has not been
+a coding worker does it in Docker, and the change is delivered to Git. Steps 1 to 4 are one-time operator setup; a clean-machine rehearsal of the whole path has not been
 done yet ([known limits](docs/known-limits.md)). Commands and messages below come from the current source and its message
 catalogs; ids, paths and times are examples.
 
 ```mermaid
 flowchart LR
   W["1 · Worker image<br/><sub>npm run worker:image</sub>"] --> E["2 · Where work runs<br/><sub>config set execution</sub>"]
-  E --> A["3 · Pool and kinds<br/><sub>config set admission · init pool</sub>"]
+  E --> A["3 · Pool and kinds<br/><sub>init registry · init pool</sub>"]
   A --> R["4 · Restart service"]
   R --> D["5 · /do<br/><sub>plan · approval card</sub>"]
   D --> T["6 · Watch<br/><sub>/tasks</sub>"]
@@ -204,28 +203,24 @@ first-run policy (a fresh `deckent init policy --scope <id> --apply` does; an ol
    Saved execution in project. Apply: restart. Backup: …/.deckent/config.json.bak.2026-10-13T12-03-51.222Z.…
    Restart required: the running service started with the previous configuration. Restart it with `deckent runtime restart` (or /service-restart in the terminal).
    ```
-3. **Declare the pool and the work kinds.** Admission needs a pool (`poolId`, `executionSlots`, `inFlightSlots`,
-   `ordering: "input-order"`) and a registry with at least one worker profile, one task kind and one evaluator:
+3. **Declare the pool and the first work kind.** `deckent init registry` writes the first admission registry and pool
+   settings for you from the coding CLI it detects; choose the provider, task kind, pool id and capacities for your
+   machine (the values below are examples):
 
    ```sh
-   deckent config set admission '{"poolId":"my-pool","executionSlots":2,"inFlightSlots":2,"ordering":"input-order","registry":{"schemaVersion":1,"revision":"first-registry","profiles":[ … ],"kinds":[{"kind":"coding","profile":{"id":"…","version":1}}],"evaluators":[{"id":"process-exit","version":1,"implementation":{"id":"process-exit","version":1}}]}}'
-   deckent config explain admission      # description, schema and current value
-   ```
-
-   Deckent does not write the first registry for you yet. Author the worker profile with `deckent coding prepare` (see
-   the [operator reference](.deckent/docs/architecture/operator-reference.md#native-coding-profiles)); once a registry
-   exists, `deckent coding template --provider <id> --kind <kind> --preview|--apply` adds further templates to it.
-   Then create the pool in the ledger:
-
-   ```sh
+   deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+     --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
+   deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+     --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
    deckent init pool --scope my-project --preview
    deckent init pool --scope my-project --apply
    ```
 
-   ```text
-   Pool my-pool: execution slots 2, in-flight slots 2; nothing was written. Apply: deckent init pool --scope my-project --apply. Then re-run /do.
-   Created pool my-pool: execution slots 2, in-flight slots 2. Re-run /do.
-   ```
+   Preview detects the CLI's exact version in a temporary, network-free container and shows the proposed versioned
+   profile and kind without writing anything; apply repeats the detection and writes through config policy, revision
+   checks and audit. An existing registry is never overwritten (typed refusal); add another kind to it with
+   `deckent coding template --provider <id> --kind <kind> --preview|--apply`. `deckent config explain admission` shows
+   the result.
 4. **Restart the service** so it reads the new configuration: `deckent runtime restart` (or `/service-restart` in the
    terminal). It answers `Runtime service restarted (pid 494385, instance 8b1e2392-…).`
 5. **Ask for the job.** In the terminal type `/do` and your request in plain words (`deckent do --request "<text>"` is the

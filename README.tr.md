@@ -162,14 +162,14 @@ deckent init policy --scope my-project --apply
 
 "Adım adım ilk oturum" yönetilen bir sohbetle biter. Bu yol gerçek bir işe devam eder: Deckent planlar, planı siz onaylarsınız,
 bir kodlama işçisi Docker içinde yapar ve değişiklik Git'e teslim edilir. 1 ile 4 arası adımlar bir kez yapılan operatör
-kurulumudur ve bir kısmı (ilk kabul kaydı, yani registry) bugün elle yazılır; yolun tamamının temiz bir makinede provası
+kurulumudur; yolun tamamının temiz bir makinede provası
 henüz yapılmadı ([bilinen sınırlar](docs/known-limits.tr.md)). Aşağıdaki komutlar ve mesajlar güncel kaynaktan ve mesaj
 kataloglarından gelir; kimlikler, yollar ve saatler örnektir.
 
 ```mermaid
 flowchart LR
   W["1 · İşçi imajı<br/><sub>npm run worker:image</sub>"] --> E["2 · İşin çalışacağı yer<br/><sub>config set execution</sub>"]
-  E --> A["3 · Havuz ve iş türleri<br/><sub>config set admission · init pool</sub>"]
+  E --> A["3 · Havuz ve iş türleri<br/><sub>init registry · init pool</sub>"]
   A --> R["4 · Servisi yeniden başlat"]
   R --> D["5 · /do<br/><sub>plan · onay kartı</sub>"]
   D --> T["6 · İzle<br/><sub>/tasks</sub>"]
@@ -203,28 +203,24 @@ ardından `--apply --expect <revizyon>` ile yükseltilir).
    execution, proje katmanına kaydedildi. Uygulama: yeniden. Yedek: …/.deckent/config.json.bak.2026-10-13T12-03-51.222Z.…
    Yeniden başlatma gerekli: çalışan servis önceki yapılandırmayla başladı. `deckent runtime restart` ile (terminalde /service-restart) yeniden başlatın.
    ```
-3. **Havuzu ve iş türlerini tanımlayın.** Kabul (admission) için bir havuz (`poolId`, `executionSlots`, `inFlightSlots`,
-   `ordering: "input-order"`) ve en az bir işçi profili, bir görev türü ve bir değerlendirici içeren bir registry gerekir:
+3. **Havuzu ve ilk iş türünü tanımlayın.** `deckent init registry`, bulduğu kodlama CLI'sından ilk kabul kaydını (registry)
+   ve havuz ayarlarını sizin için yazar; sağlayıcıyı, görev türünü, havuz kimliğini ve makinenize uygun kapasiteleri
+   seçin (aşağıdaki değerler örnektir):
 
    ```sh
-   deckent config set admission '{"poolId":"my-pool","executionSlots":2,"inFlightSlots":2,"ordering":"input-order","registry":{"schemaVersion":1,"revision":"first-registry","profiles":[ … ],"kinds":[{"kind":"coding","profile":{"id":"…","version":1}}],"evaluators":[{"id":"process-exit","version":1,"implementation":{"id":"process-exit","version":1}}]}}'
-   deckent config explain admission      # açıklama, şema ve geçerli değer
-   ```
-
-   Deckent ilk registry'yi sizin için henüz yazmaz. İşçi profilini `deckent coding prepare` ile hazırlayın
-   ([işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#native-coding-profilleri));
-   bir registry varsa `deckent coding template --provider <id> --kind <tür> --preview|--apply` ona yeni şablonlar ekler.
-   Sonra havuzu ledger'da oluşturun:
-
-   ```sh
+   deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+     --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
+   deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+     --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
    deckent init pool --scope my-project --preview
    deckent init pool --scope my-project --apply
    ```
 
-   ```text
-   Havuz my-pool: yürütme slotu 2, işlemdeki slot 2; hiçbir şey yazılmadı. Uygulamak için: deckent init pool --scope my-project --apply. Ardından /do komutunu yeniden çalıştırın.
-   Havuz my-pool oluşturuldu: yürütme slotu 2, işlemdeki slot 2. /do komutunu yeniden çalıştırın.
-   ```
+   Önizleme CLI'nin tam sürümünü geçici ve ağsız bir container'da ölçer, önerilen sürümlü profili ve görev türünü
+   gösterir, hiçbir şey yazmaz; apply ölçümü tekrarlar ve config policy, revizyon kontrolü ve denetim üzerinden yazar.
+   Var olan bir kaydın üzerine asla yazılmaz (tipli ret); ona başka bir tür eklemek için
+   `deckent coding template --provider <id> --kind <tür> --preview|--apply` kullanın. Sonucu
+   `deckent config explain admission` gösterir.
 4. **Servisi yeniden başlatın**, yeni yapılandırmayı okusun: `deckent runtime restart` (terminalde `/service-restart`).
    Şunu söyler: `Runtime servisi yeniden başlatıldı (pid 494385, örnek 8b1e2392-…).`
 5. **İşi isteyin.** Terminalde `/do` yazıp isteğinizi sade sözlerle yazın (komut satırında aynısı

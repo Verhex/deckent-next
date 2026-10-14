@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "ordering": "input-order",
+  "evaluators": [{ "id": "process-exit", "version": 1, "implementation": { "id": "process-exit", "version": 1 } }]
+}
