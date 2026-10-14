@@ -14,7 +14,7 @@ Eski 88 satırlı "Aktif iş alanları" tablosu, eski Şimdi ve P0/P1 maddeleri 
 |---|---|---|---|
 | alpha.36 canlıya + terminal kabulü | Kapı 1: owner terminali kabul etmeden beta yok | Aday `wave/alpha36-2026-10-14` (PR #85 taslak): TESLIM-GUVENLIK (doğrulanmış insan y/N + anlamlı commit), TERMINAL-SABIT R2 (sabit giriş, odak kuralı, aktif iş şeridi), terminal teslim penceresi, KUCUK-DUZELTMELER (onay expiry, para, Brain maliye satırı) | Astra PASS + hosted CI → canlı/N1 geçişi → owner terminal kabulü |
 | S6 sır kapısı | Kapı 2: sır dispatch'ten önce kapıda durmalı | Karar var, kod yok | Kart aç, yazar lane; canlı-eşzamanlılık dilim 1–2 ile paralel |
-| NATIVE-BAGLAM | Kapı 3: modelin çalışma bağlamı native çalışsın | Karar var, kod yok | S6 sonrası ya da paralel; ayrı kart |
+| NATIVE-BAGLAM | Kapı 3: modelin çalışma bağlamı native çalışsın | Aday `feat/native-baglam-2026-10-14`: istem v10 oturum bağlamı (mod/düşünme/model/araç etkisi/yüzeyler/kurallar), `session_state` (politika izin verirse), aktif iş notu, satır içi `<think>` yönlendirme | Astra incelemesi; owner kararı: `session_state` için şablon v12 varsayılan izni |
 | Temiz makine kurulum provası | Kapı 4: init → /do → teslim lead yardımsız | Başlamadı | WSL/Docker temiz kurulum senaryosu; BATCH-D-KALAN (Gelen kutusu) girdisi |
 | Main hosted CI yeşil | Kapı 5: ubuntu node24+26 zorunlu hücreler | CI-DEBT (CI-ONARIM CARD-2) yazar adayı: açık MCP fixture izinleri, tipli hata/devir beklentileri; node 26 MCP bağlantı zaman aşımı nedeni bilinmiyor | alpha.36 hosted koşusu; CI değişikliği başına bir hosted deneme + bir düzeltme (owner 2026-10-06) |
 | Bilinen sınırlar sayfası | Kapı 6: dürüst kapsam beyanı | Başlamadı | Gelen kutusu + açık P1 listesinden derle; README/docs bağı |

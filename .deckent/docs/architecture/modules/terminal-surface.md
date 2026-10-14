@@ -146,6 +146,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   time left) and the Runs `useRunCompletion` registered (state from the same snapshots; finished rows leave once opened). It owns no
   execution, poll or authority; its clock ticks at the inspection heartbeat. Ctrl+T moves the one input owner to it while no window
   holds input; Enter on /do is the Ctrl+O transfer to its window, Enter on a Run opens the `/run` window via the task-action FIFO.
+  NATIVE-BAGLAM (2026-10-14): the strip's records (/do, waiting deliveries, admitted Runs) also reach the model as a bounded note on the
+  latest sent message only (`terminal-work/active-work-note.ts`, English protocol text, marker stripped from resume/fresh-context displays);
+  the strip itself is unchanged and the note grants nothing.
   TESLIM-PENCERESI (owner 2026-10-14, author candidate): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
   window over a `TerminalDeliveryPort` that `cli-terminal/deliver-port.ts` builds from the CLI's own handlers (inventory, patch preview,
   integration check/prepare) and the composition's `interactiveDeliveryHandlers(answer)` (the TESLIM-GUVENLIK port; installed only by
