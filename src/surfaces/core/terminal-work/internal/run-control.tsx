@@ -32,14 +32,15 @@ export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunVie
 const KEYS: Readonly<Record<string, RunControlAction>> = Object.freeze({ h: 'hold', r: 'resume', c: 'close' });
 /**
  * The keys a Run's observed state offers (display only: the service re-checks state and policy at the confirmed revision). Hold: a Run
- * that is not finished, not cancelling and not already held; close: a parked Run; resume: a Run parked by an operator hold or a failed
+ * that is not finished, not cancelling and not already held; close: a parked Run; resume: a Run parked by an operator hold (its own park or,
+ * MCP-AI-AKTOR, an `operatorHold` overlay kept over another park — resume removes the overlay and the original reason stays) or a failed
  * progression — the only parks resume lifts (a question, a decision or a quota wait survives resume, so it is not offered there).
  */
 export function runControlActions(run: RunView): readonly RunControlAction[] {
   if (run.state.kind === 'terminal' || run.cancellationRequested) return [];
   if (run.state.kind !== 'parked') return ['hold'];
-  const resumable = run.state.reason === 'operator-hold' || run.state.reason === 'progression-failed';
-  return [...(run.state.reason === 'operator-hold' ? [] : ['hold' as const]), ...(resumable ? ['resume' as const] : []), 'close'];
+  const held = run.state.reason === 'operator-hold' || run.state.operatorHold !== undefined;
+  return [...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' ? ['resume' as const] : []), 'close'];
 }
 /** One typed letter selects a key; Ctrl/Alt chords, pasted or coalesced text never do (the decision-key rule for an opening key). */
 export function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunControlAction | null {

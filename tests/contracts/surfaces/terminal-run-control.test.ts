@@ -123,6 +123,9 @@ describe('offered keys by observed state (display only; the service decides)', (
     [{ kind: 'parked', reason: 'operator-hold' }, false, ['resume', 'close']], [{ kind: 'parked', reason: 'progression-failed' }, false, ['hold', 'resume', 'close']],
     // Resume does not lift a question, a decision wait or a quota wait (domain resumeParkedRun): no `r` there, so no "resumed" line can mislead.
     [{ kind: 'parked', reason: 'needs-input' }, false, ['hold', 'close']], [{ kind: 'parked', reason: 'quota-exhausted' }, false, ['hold', 'close']],
+    // MCP-AI-AKTOR: a hold over another park keeps that reason with an `operatorHold` overlay; `r` removes the overlay, `h` is not offered twice.
+    [{ kind: 'parked', reason: 'needs-input', operatorHold: { schemaVersion: 1, note: 'wait' } }, false, ['resume', 'close']],
+    [{ kind: 'parked', reason: 'progression-failed', operatorHold: { schemaVersion: 1, note: 'wait' } }, false, ['resume', 'close']],
   ] as const)('%j cancelling=%s → %j', (state, cancelling, keys) => {
     expect(runControlActions({ ...runs[RUNNING]!, state: { since: 1, deadline: 2, ...state } as never, cancellationRequested: cancelling })).toEqual(keys);
   });
