@@ -64,6 +64,8 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'execution.git.gitExecutable': { kind: 'reference', source: 'git-executables' },
   'execution.git.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'execution.git.outputBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
+  // Delivery commit author (name + email): an operator record set in the config file, shown read-only — never a hand-typed picker value.
+  'execution.git.deliveryIdentity': { kind: 'document' },
   'execution.adoption.targets': { kind: 'reference', source: 'branches', multiple: true },
   'execution.adoption.verification.kind': { kind: 'reference', source: 'task-kinds' },
   'execution.adoption.verification.required': { kind: 'schema' },
