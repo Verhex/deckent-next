@@ -99,7 +99,7 @@ describe('scanWorkerTree', () => {
       handoffInputs: [{ target: '/deckent/inputs/_shared.json', path: join(files, 'note') }], dependencyContext: { text: 'use erp-hunter2-value to log in' } });
     expect(views.map(view => view.label)).toEqual(['', '/deckent/mounts/shared', '/deckent/inputs/report', '/deckent/inputs/_shared.json', 'prompt:dependency-context']);
     const scan = await scanWorkerTree(views, options, known);
-    expect(scan).toEqual({ status: 'refused', count: 3, findings: [{ path: 'deckent/mounts/shared/.env', rule: 'deny-path:**/.env' },
+    expect(scan).toEqual({ status: 'refused', count: 3, findings: [{ path: 'deckent/mounts/shared/.env', rule: 'deny-path:.env' },
       { path: 'deckent/inputs/report', rule: 'pattern:provider-token' }, { path: 'prompt:dependency-context', rule: 'known-secret' }] });
     expect(JSON.stringify(scan)).not.toContain('hunter2');
     await expect(scanWorkerTree(workerTreeViews(workspace, undefined, { inputs: [], handoffInputs: [] }), options, known)).resolves.toEqual({ status: 'clean' });
@@ -129,5 +129,46 @@ describe('scanWorkerTree', () => {
     // A huge binary file is content too: it is bounded like text, never skipped.
     const binary = await tree({ 'model.bin': Buffer.concat([Buffer.from([0]), Buffer.alloc(8192, 1)]) });
     await expect(scanWorkerTree(binary, { ...options, maxFileBytes: 1024 })).resolves.toEqual({ status: 'incomplete', limit: 'file-bytes', observed: 8193, bound: 1024 });
+  });
+});
+
+describe('deny anchoring matches the terminal floor in every position a path can appear', () => {
+  const refusedPaths = async (views: Parameters<typeof scanWorkerTree>[0]) => {
+    const scan = await scanWorkerTree(views, options);
+    return scan.status === 'refused' ? scan.findings.map(finding => `${finding.path} ${finding.rule}`) : [scan.status];
+  };
+  it('nested occurrences, case and directory entries in the checkout', async () => {
+    const root = await tree({ 'sub/dir/.env': 'x', 'a/b/key.pem': 'x', 'pkg/.NpmRc': 'x', 'home/.aws/config': 'x', 'ok.ts': 'ok' });
+    expect(await refusedPaths(root)).toEqual(['a/b/key.pem deny-path:**/*.pem', 'home/.aws deny-path:**/.aws', 'pkg/.NpmRc deny-path:**/.npmrc', 'sub/dir/.env deny-path:**/.env']);
+  });
+  it('unicode forms: an NFD directory name and a compatibility (fullwidth) file name', async () => {
+    const root = await tree({ ['cafe\u0301/.env']: 'x', 'cfg/\uff53\uff45\uff43\uff52\uff45\uff54\uff53.json': 'x' });
+    expect(await refusedPaths(root)).toEqual(['cafe\u0301/.env deny-path:**/.env', 'cfg/\uff53\uff45\uff43\uff52\uff45\uff54\uff53.json deny-path:**/secrets.json']);
+  });
+  it('.git metadata is held to the same rules', async () => {
+    const root = await tree({ '.git/credentials': 'x', '.git/config': '[core]\n' });
+    expect(await refusedPaths(root)).toEqual(['.git/credentials deny-path:**/credentials']);
+  });
+  it('a bind is anchored at its own root like a checkout (root-anchored rules), and labels are normalized', async () => {
+    const workspace = await tree({ 'ok.ts': 'ok' }), bind = await tree({ '.deckent/host/token.txt': 'x', 'docs/a.md': 'ok' });
+    const views = workerTreeViews(workspace, [{ source: bind, target: './deckent/mounts/shared/' }], { inputs: [], handoffInputs: [] });
+    expect(await refusedPaths(views)).toEqual(['deckent/mounts/shared/.deckent/host/token.txt deny-path:.deckent/host/**']);
+  });
+  it('a single mounted input is matched by its container path and its basename', async () => {
+    const workspace = await tree({ 'ok.ts': 'ok' }), files = await tree({ blob: 'x', key: 'x' });
+    const views = workerTreeViews(workspace, undefined, { inputs: [{ name: '.env', path: join(files, 'blob') }, { name: 'server.pem', path: join(files, 'key') }], handoffInputs: [] });
+    expect(await refusedPaths(views)).toEqual(['deckent/inputs/.env deny-path:.env', 'deckent/inputs/server.pem deny-path:**/*.pem']);
+  });
+  it('a symlink whose target path is deny-listed is refused, relative or absolute, and is never followed', async () => {
+    const root = await tree({ 'docs/readme.md': 'ok' });
+    await symlink('../.env', join(root, 'docs/settings')); await symlink('/home/someone/.aws/credentials', join(root, 'creds'));
+    expect(await refusedPaths(root)).toEqual(['creds deny-path:**/.aws/**', 'docs/settings deny-path:.env']);
+  });
+  it('the worker argv and an oversized prompt context are views too; a size bound never passes a partial view', async () => {
+    const workspace = await tree({ 'ok.ts': 'ok' });
+    expect(await refusedPaths(workerTreeViews(workspace, undefined, { inputs: [], handoffInputs: [] }, ['node', 'task.js', `--key=${PROVIDER_TOKEN}`])))
+      .toEqual(['argv pattern:provider-token']);
+    await expect(scanWorkerTree(workerTreeViews(workspace, undefined, { inputs: [], handoffInputs: [], dependencyContext: { text: 'x'.repeat(2048) } }), { ...options, maxFileBytes: 1024 }))
+      .resolves.toEqual({ status: 'incomplete', limit: 'file-bytes', observed: 2048, bound: 1024 });
   });
 });

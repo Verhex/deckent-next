@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { lstat, open, readdir, readlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { EMPTY_KNOWN_SECRETS, REDACTION_PATTERNS, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { WorkerTreeFinding, WorkerTreeLimit, WorkerTreeScan } from '#engine/index.js';
 import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY } from '#adapters/core/workspace-read/index.js';
@@ -26,10 +26,17 @@ export type WorkerTreeView = Readonly<{ source: string; label: string }> | Reado
 /** Everything `executeConfiguredTask` hands to a worker besides its own profile: the one list the gate scans (S6 sibling-path parity). */
 export function workerTreeViews(workspace: string, readOnlyMounts: readonly Readonly<{ source: string; target: string }>[] | undefined, start: Readonly<{
   inputs: readonly Readonly<{ name: string; path: string }>[]; handoffInputs: readonly Readonly<{ target: string; path: string }>[];
-  dependencyContext?: Readonly<{ text: string }> }>): readonly WorkerTreeView[] {
+  dependencyContext?: Readonly<{ text: string }> }>, argv: readonly string[] = []): readonly WorkerTreeView[] {
   return Object.freeze([{ source: workspace, label: '' }, ...(readOnlyMounts ?? []).map(mount => ({ source: mount.source, label: mount.target })),
     ...start.inputs.map(input => ({ source: input.path, label: `/deckent/inputs/${input.name}` })), ...start.handoffInputs.map(input => ({ source: input.path, label: input.target })),
-    ...(start.dependencyContext ? [{ text: start.dependencyContext.text, label: 'prompt:dependency-context' }] : [])]);
+    ...(start.dependencyContext ? [{ text: start.dependencyContext.text, label: 'prompt:dependency-context' }] : []),
+    ...(argv.length ? [{ text: argv.join('\n'), label: 'argv' }] : [])]);
+}
+
+/** A path as a deny rule sees it: POSIX-normalized, no leading `/` or `./`, no trailing `/`, lower case; plus its NFKC form. */
+function denyForms(path: string): readonly string[] {
+  const normal = posix.normalize(path.replace(/\\/gu, '/')).replace(/^(?:\.?\/)+/u, '').replace(/\/+$/u, '').toLowerCase();
+  return normal === '' || normal === '.' ? [] : [...new Set([normal, normal.normalize('NFKC'), normal.normalize('NFC'), normal.normalize('NFD')])];
 }
 
 class Incomplete extends Error { constructor(readonly limit: WorkerTreeLimit, readonly observed: number, readonly bound: number) { super(limit); } }
@@ -38,8 +45,9 @@ class Incomplete extends Error { constructor(readonly limit: WorkerTreeLimit, re
  * The pre-dispatch scan of exactly what the worker's container receives: the whole prepared checkout (predecessor patches applied),
  * including the clone's `.git` metadata (config, refs, logs), except `.git/objects` — the history the owner deferred to a later scan — and
  * `.git/index`. Fail closed throughout:
- * - a deny-listed path (case-insensitive, so `KEY.PEM` and `.ENV` match too; files and directories, never read or descended) unless an exact
- *   `acknowledgedDenyPaths` entry, which is then read and scanned like any file;
+ * - a deny-listed path — matched relative to its view's root (as the terminal floor does) and as the container path, normalized (no `./`,
+ *   no trailing `/`), case-insensitive and in NFC/NFD/NFKC form; a symlink's target path too; files and directories are never read or
+ *   descended — unless an exact `acknowledgedDenyPaths` entry, which is then read and scanned like any file;
  * - every regular file's full content, binary files included (UTF-8, plus UTF-16 in both byte alignments when it holds NUL bytes), and every
  *   symlink's target text: a configured secret value anywhere, or a `gate` pattern outside `allowPatternPaths`; symlinks are never followed;
  * - an entry that is neither file, directory nor symlink (FIFO, socket, device) is refused as unscannable;
@@ -53,7 +61,10 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const findings: WorkerTreeFinding[] = [], started = now(), deadline = started + options.timeoutMs;
   let files = 0, total = 0;
   const acknowledged = new Set(options.acknowledgedDenyPaths);
-  const denied = (rel: string) => acknowledged.has(rel) ? undefined : deny.find(entry => entry.match(rel.toLowerCase()))?.pattern;
+  /** Anchored like the terminal floor (relative to the view's own root) and as the worker sees it (container path), plus the basename for a
+   * single mounted file: a match in any form refuses. Only an exact acknowledged checkout path skips the rule. */
+  const denied = (...paths: readonly string[]) => acknowledged.has(paths[0]!) ? undefined
+    : deny.find(entry => paths.flatMap(denyForms).some(form => entry.match(form)))?.pattern;
   const shown = (rel: string) => redactForRecord(rel.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`), known);
   const time = () => { if (now() >= deadline) throw new Incomplete('time', now() - started, options.timeoutMs); };
   const read = async (path: string): Promise<Buffer> => {
@@ -65,7 +76,9 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
       if ((total += info.size) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes);
       const bytes = Buffer.alloc(info.size); let offset = 0;
       while (offset < bytes.length) { const chunk = await handle.read(bytes, offset, bytes.length - offset, offset); if (!chunk.bytesRead) break; offset += chunk.bytesRead; }
-      if (offset !== info.size) throw new Error('WORKER_TREE_ENTRY_CHANGED');
+      const after = await handle.stat();
+      // A file that grew, shrank or changed while it was read is never passed on a partial view.
+      if (offset !== info.size || after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs) throw new Error('WORKER_TREE_ENTRY_CHANGED');
       return bytes;
     } finally { await handle.close(); }
   };
@@ -81,11 +94,15 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
     if (UNREAD_GIT_ENTRIES.has(inner)) return;
     if (++files > options.maxFiles) throw new Incomplete('files', files, options.maxFiles);
     time();
-    const pattern = denied(display);
+    const pattern = inner === '' && display !== '' ? denied(display, posix.basename(display)) : denied(display, inner);
     if (pattern !== undefined) { findings.push({ path: shown(display), rule: `deny-path:${pattern}` }); return; }
     const info = await lstat(path);
     if (info.isDirectory()) await visit(path, display + '/', inner === '' ? '' : inner + '/');
-    else if (info.isSymbolicLink()) inspect(display, [await readlink(path)]);
+    else if (info.isSymbolicLink()) {
+      // The link's target path is a path the worker can open: deny rules apply to it (relative to the link, and as written).
+      const target = await readlink(path), hit = target.startsWith('/') ? denied(target) : denied(posix.join(posix.dirname(display), target), posix.join(posix.dirname(inner), target));
+      if (hit !== undefined) findings.push({ path: shown(display), rule: `deny-path:${hit}` }); else inspect(display, [target]);
+    }
     else if (info.isFile()) { inspect(display, texts(await read(path))); time(); }
     else findings.push({ path: shown(display), rule: 'unscannable:special-file' });
   };
@@ -96,8 +113,13 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const views: readonly WorkerTreeView[] = typeof input === 'string' ? [{ source: input, label: '' }] : input;
   try {
     for (const view of views) {
-      const label = view.label.replace(/^\/+/u, '');
-      if ('text' in view) { time(); if ((total += Buffer.byteLength(view.text)) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes); inspect(label, [view.text]); }
+      const label = view.label === '' ? '' : posix.normalize(view.label).replace(/^(?:\.?\/)+/u, '').replace(/\/+$/u, '');
+      if ('text' in view) {
+        const bytes = Buffer.byteLength(view.text); time();
+        if (bytes > options.maxFileBytes) throw new Incomplete('file-bytes', bytes, options.maxFileBytes);
+        if ((total += bytes) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes);
+        inspect(label, [view.text]);
+      }
       else if (label === '') await visit(view.source, '');
       else await entry(view.source, label, '');
     }

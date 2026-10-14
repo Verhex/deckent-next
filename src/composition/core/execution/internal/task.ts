@@ -44,7 +44,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches);
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim; a refusal is audited (paths, rules) and its checkout released.
-      await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start), config.execution.secretGate, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now },
+      await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv), config.execution.secretGate, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now },
         async event => { const audit = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(audit, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { audit.close(); } },
         () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
       await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
