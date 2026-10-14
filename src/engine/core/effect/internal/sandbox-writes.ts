@@ -27,15 +27,20 @@ export type SandboxWriteSetScan = {
 /** One reading of the clocks the conflict check depends on: the wall clock (the kernel's ctime clock), the monotonic clock, and how far the
  * wall clock reads behind the highest wall time the process already handed out (a backward step it has not caught up with yet). */
 export type SandboxWriteClockReading = { readonly wallMs: number; readonly monotonicMs: number; readonly lagMs: number };
+/** What the kernel reported about the realtime clock over the whole call (armed before the mark, read after the scan): `stepped` — it was set
+ * at least once (a step back and a step forward that cancel out included); `unavailable` — the watch did not arm or did not answer. */
+export type SandboxWriteClockWatch = 'steady' | 'stepped' | 'unavailable';
 /**
  * Whether the start mark can order the project's changes (CI-KARARLILIK, lead 2026-10-14). The conflict check compares lower ctimes with the
  * call directory's ctime, both on the wall clock: a backward step during the call can hide an owner's change (it would be overwritten or
- * removed), one just before the call can make older changes look new. `during`: the wall clock advanced less than the monotonic clock by more
- * than the tolerance between the mark and the scan — nothing is applied. `before`: at the mark the wall clock read behind a time already
- * handed out by more than the tolerance — a conflict is then not the owner's change for certain. `null`: the mark orders changes.
+ * removed), one just before the call can make older changes look new. `during`: the clock was set during the call or the watch could not
+ * tell (Astra 2555 R1: the readings at the two ends cannot see a step back undone by a step forward), or the wall clock advanced less than
+ * the monotonic clock by more than the tolerance (a slew) — nothing is applied. `before`: at the mark the wall clock read behind a time
+ * already handed out by more than the tolerance — a conflict is then not the owner's change for certain. `null`: the mark orders changes.
  */
-export function sandboxWriteClockVerdict(mark: SandboxWriteClockReading, scanned: SandboxWriteClockReading, toleranceMs: number): 'during' | 'before' | null {
-  if (scanned.wallMs - mark.wallMs < scanned.monotonicMs - mark.monotonicMs - toleranceMs) return 'during';
+export function sandboxWriteClockVerdict(mark: SandboxWriteClockReading, scanned: SandboxWriteClockReading, toleranceMs: number,
+  watched: SandboxWriteClockWatch): 'during' | 'before' | null {
+  if (watched !== 'steady' || scanned.wallMs - mark.wallMs < scanned.monotonicMs - mark.monotonicMs - toleranceMs) return 'during';
   return mark.lagMs > toleranceMs ? 'before' : null;
 }
 
@@ -52,7 +57,8 @@ export interface SandboxWriteSetReport {
   readonly notApplied: readonly { readonly rel: string; readonly reason: string }[];
   /** The project changed under the call: nothing was applied. */
   readonly conflicts: readonly string[];
-  /** The wall clock stepped (`sandboxWriteClockVerdict`): `during` — nothing was applied; `before` — the conflicts above may be the clock's. */
+  /** The wall clock stepped (`sandboxWriteClockVerdict`): `during` — nothing was applied (or the clock could not be verified); `before` — the
+   * conflicts above may be the clock's. */
   readonly clock: 'during' | 'before' | null;
   /** Entries whose outcome is unknown: read the file to see its state. */
   readonly unknown: readonly string[];

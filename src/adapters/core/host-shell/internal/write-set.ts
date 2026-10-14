@@ -1,12 +1,12 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describeSandboxWriteSet, sandboxWriteClockVerdict, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteRefusal, type SandboxWriteSetReport,
-  type SandboxWriteSetScan } from '#engine/index.js';
-export { applySandboxWriteSet, describeSandboxWriteSet, type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteDecider,
+import { describeSandboxWriteSet, sandboxWriteClockVerdict, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteClockWatch, type SandboxWriteRefusal,
+  type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
+export { applySandboxWriteSet, describeSandboxWriteSet, type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteClockReading, type SandboxWriteClockWatch, type SandboxWriteDecider,
   type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetReport, type SandboxWriteSetScan } from '#engine/index.js';
 import { normalizeGlobalScopePlatform, prepareProductDirectory, processWallLagMs, t, type Locale, productResourcePath, resolveGlobalScopePaths, resolveProductLayout, type ProductLayout } from '#platform/index.js';
 
@@ -17,6 +17,37 @@ import { normalizeGlobalScopePlatform, prepareProductDirectory, processWallLagMs
 export const SANDBOX_WRITE_SET_BOUNDS = Object.freeze({ maxEntries: 2_000, maxTotalBytes: 64 * 1024 * 1024, maxFileBytes: 16 * 1024 * 1024, maxDepth: 32 });
 const HELPER = fileURLToPath(new URL('../native/build/Release/shell-overlay-scan', import.meta.url));
 const HELPER_TIMEOUT_MS = 10_000;
+const CLOCK_WATCH = fileURLToPath(new URL('../native/build/Release/shell-clock-watch', import.meta.url));
+
+/** A running realtime clock watch (`shell-clock-watch`): `result` ends it and reads its answer; `stop` ends it unread. */
+export interface SandboxWriteClockWatcher { result(): Promise<SandboxWriteClockWatch>; stop(): void }
+/** Starts the clock watch and resolves once the kernel timer is armed; null when it cannot be armed (the call's set is then never applied). */
+export function startSandboxWriteClockWatch(): Promise<SandboxWriteClockWatcher | null> {
+  return new Promise(resolve => {
+    const child = spawn(CLOCK_WATCH, [], { stdio: ['pipe', 'pipe', 'ignore'], env: {} });
+    let out = '', armed = false;
+    const closed = new Promise<number | null>(done => child.once('close', code => done(code)));
+    const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(null); }, HELPER_TIMEOUT_MS);
+    const watcher: SandboxWriteClockWatcher = {
+      async result() {
+        const answer = setTimeout(() => child.kill('SIGKILL'), HELPER_TIMEOUT_MS);
+        child.stdin.end();
+        const code = await closed.finally(() => clearTimeout(answer));
+        return code !== 0 ? 'unavailable' : out === 'armed\nsteady\n' ? 'steady' : out === 'armed\nstepped\n' ? 'stepped' : 'unavailable';
+      },
+      stop() { child.kill('SIGKILL'); },
+    };
+    child.once('error', () => { clearTimeout(timer); resolve(null); });
+    child.stdin.on('error', () => undefined);
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      out += chunk;
+      if (!armed && out.startsWith('armed\n')) { armed = true; clearTimeout(timer); resolve(watcher); }
+    });
+    void closed.then(() => { if (!armed) { clearTimeout(timer); resolve(null); } });
+  });
+}
+/** The watches of this process's open call directories, ended by the scan or by the directory's removal. */
+const clockWatches = new Map<string, SandboxWriteClockWatcher>();
 
 interface UpperEntry { readonly type: string; readonly mode: number; readonly nlink: number; readonly size: number; readonly rdev: readonly [number, number];
   readonly flags: string; readonly rel: string }
@@ -189,11 +220,15 @@ export function describeSandboxWriteSetResult(report: SandboxWriteSetReport, lan
   return [step, describeSandboxWriteSet(report)].filter(Boolean).join('\n');
 }
 
-/** Scans a finished call's write set and judges its clocks: the reading is taken after the scan's last lower lstat, so a backward wall step
- * anywhere between the mark and here (which could hide a change from the ctime check) is seen. */
+/** Scans a finished call's write set and judges its clocks: the reading and the watch's answer are taken after the scan's last lower lstat,
+ * so a clock set anywhere between the mark and here (which could hide a change from the ctime check) is seen, also one undone by a later
+ * set (Astra 2555 R1); a directory without a watch is never applied. */
 export async function scanSandboxWriteSetCall(directory: SandboxWriteSetDirectory, lower: string, readClock: () => SandboxWriteClockReading = readSandboxWriteClock) {
   const scan = await scanSandboxWriteSet(directory.upper, lower, directory.mark);
-  return { scan, clock: sandboxWriteClockVerdict(directory.clock, readClock(), directory.clockStepToleranceMs) };
+  const scanned = readClock(), watch = clockWatches.get(directory.dir);
+  clockWatches.delete(directory.dir);
+  const watched = watch ? await watch.result() : 'unavailable';
+  return { scan, clock: sandboxWriteClockVerdict(directory.clock, scanned, directory.clockStepToleranceMs, watched) };
 }
 
 /** A call's private directory: `upper` and `work` for the overlay and the start mark (the directory's own ctime, the kernel clock), with the
@@ -205,8 +240,10 @@ export interface SandboxWriteSetDirectory { readonly dir: string; readonly upper
  * highest wall time the process already handed out. */
 export const readSandboxWriteClock = (): SandboxWriteClockReading => ({ wallMs: Date.now(), monotonicMs: performance.now(), lagMs: processWallLagMs() });
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
-/** Removes a call directory (the kernel may leave `work/work` without permissions). */
+/** Removes a call directory (the kernel may leave `work/work` without permissions) and ends its clock watch if no scan did. */
 export async function removeSandboxWriteSetDirectory(dir: string): Promise<void> {
+  clockWatches.get(dir)?.stop();
+  clockWatches.delete(dir);
   await rm(dir, { recursive: true, force: true }).catch(async () => {
     await chmod(join(dir, 'work', 'work'), 0o700).catch(() => undefined);
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
@@ -217,20 +254,27 @@ export async function removeSandboxWriteSetDirectory(dir: string): Promise<void>
  * directories whose service process is gone — a crash before their set was applied: nothing of them is ever applied late (design §3).
  */
 export async function prepareSandboxWriteSetDirectory(root: string, callKey: string, clockStepToleranceMs: number,
-  readClock: () => SandboxWriteClockReading = readSandboxWriteClock): Promise<SandboxWriteSetDirectory | null> {
+  readClock: () => SandboxWriteClockReading = readSandboxWriteClock, watchClock: () => Promise<SandboxWriteClockWatcher | null> = startSandboxWriteClockWatch): Promise<SandboxWriteSetDirectory | null> {
   for (const entry of await readdir(root).catch(() => [] as string[])) {
     const owner = await readFile(join(root, entry, 'owner.json'), 'utf8').then(text => Number(JSON.parse(text).pid)).catch(() => null);
     if (owner !== null && owner !== process.pid && !alive(owner)) await removeSandboxWriteSetDirectory(join(root, entry));
   }
   const dir = join(root, callKey);
+  // Armed before the reading and the mark: a clock set from here until the scan's answer is reported. Not armed → kept unwatched (never applied).
+  const watch = await watchClock();
   try {
     // Read before the mark: a step between this reading and the mark shows as a step during the call (the safe side).
     const clock = readClock();
     await mkdir(dir, { mode: 0o700 });
+    if (watch) clockWatches.set(dir, watch);
     await writeFile(join(dir, 'owner.json'), JSON.stringify({ pid: process.pid }), { mode: 0o600, flag: 'wx' });
     await mkdir(join(dir, 'upper'), { mode: 0o700 }); await mkdir(join(dir, 'work'), { mode: 0o700 });
     return { dir, upper: join(dir, 'upper'), work: join(dir, 'work'), mark: (await lstat(dir, { bigint: true })).ctimeNs, clock, clockStepToleranceMs };
-  } catch { return null; }
+  } catch {
+    watch?.stop();
+    if (clockWatches.get(dir) === watch) clockWatches.delete(dir);
+    return null;
+  }
 }
 
 /**
