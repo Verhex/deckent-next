@@ -3094,6 +3094,8 @@
       "docs/glossary.tr.md",
       "docs/architecture-overview.md",
       "docs/secret-helpers.md",
+      "docs/known-limits.md",
+      "docs/known-limits.tr.md",
       "docs/architecture-overview.tr.md",
       "CODE_OF_CONDUCT.md",
       "SECURITY.md",
