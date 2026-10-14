@@ -149,5 +149,7 @@
   "tui.provider.model.field.model",
   "tui.panel.budget.preset",
   "terminal.info.usage.money",
-  "terminal.activeWork.doTitle"
+  "terminal.activeWork.doTitle",
+  "terminal.delivery.file",
+  "terminal.delivery.adoptTarget"
 ]

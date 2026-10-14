@@ -42,7 +42,7 @@ export function interactiveDeliveryHandlers(answer: (view: EffectConfirmationVie
       };
     },
   });
-  return {
+  return { assertAvailable: witness.assertAvailable, // TESLIM-PENCERESI: the terminal window refuses a non-verified session before preparing a candidate.
     deliver: (root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions) =>
       deliverWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
     adopt: (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions) =>

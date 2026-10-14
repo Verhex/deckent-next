@@ -1,6 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkSurfaceLabels, LedgerCardLabels } from '#surfaces/core/terminal/index.js';
 import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
+import type { DeliveryWindowLabels } from '#surfaces/core/terminal-delivery/index.js';
 import { phaseLabel, processLabel } from '#surfaces/core/monitor/index.js';
 
 // Kept apart from `terminal.ts`: that module reaches Ink/React through the terminal barrel and is loaded only when a terminal opens
@@ -99,7 +100,8 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       restartKept: t('terminal.window.restartKept', {}, locale) },
     activeWork: { title: t('terminal.activeWork.title', {}, locale), focused: t('terminal.activeWork.focused', {}, locale), doTitle: t('terminal.activeWork.doTitle', {}, locale),
       planning: t('terminal.activeWork.planning', {}, locale), waiting: t('terminal.activeWork.waiting', {}, locale), expired: t('terminal.activeWork.expired', {}, locale),
-      evaluating: t('terminal.activeWork.evaluating', {}, locale), needsYou: t('terminal.activeWork.needsYou', {}, locale), more: t('terminal.activeWork.more', {}, locale) },
+      evaluating: t('terminal.activeWork.evaluating', {}, locale), needsYou: t('terminal.activeWork.needsYou', {}, locale), more: t('terminal.activeWork.more', {}, locale),
+      deliveryWaiting: t('terminal.activeWork.deliveryWaiting', {}, locale) },
     live: { monitorTitle: t('terminal.live.monitorTitle', {}, locale), runsTitle: t('terminal.live.runsTitle', {}, locale), tasksTitle: t('terminal.live.tasksTitle', {}, locale),
       hints: t('terminal.live.hints', {}, locale), tasksHints: t('terminal.live.tasksHints', {}, locale), watchHints: t('terminal.live.watchHints', {}, locale), monitorHints: t('terminal.live.monitorHints', {}, locale), statusWorkers: t('terminal.live.statusWorkers', {}, locale),
       statusRuns: t('terminal.live.statusRuns', {}, locale), statusTasks: t('terminal.live.statusTasks', {}, locale), empty: t('terminal.live.empty', {}, locale),
@@ -237,4 +239,30 @@ export function pickerLabels(locale: Locale): PickerLabels {
   return { hintList: t('tui.picker.hint_pick', {}, locale), hintFilter: t('tui.picker.hint_filter_esc', {}, locale), hintScope: t('tui.picker.hint_scope', {}, locale),
     filter: t('tui.picker.hint_filter', {}, locale), noMatches: t('tui.picker.no_matches', {}, locale), empty: t('tui.picker.empty', {}, locale),
     blocked: t('tui.picker.state.blocked', {}, locale), position: t('tui.picker.position', {}, locale) };
+}
+
+/** TESLIM-PENCERESI: the words of the terminal delivery window; `next` names the next step of the typed refusals it explains (others: `nextDefault`). */
+export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
+  return {
+    title: t('terminal.delivery.title', {}, locale), ids: t('terminal.delivery.ids', {}, locale), loading: t('terminal.delivery.loading', {}, locale),
+    check: t('terminal.delivery.check', {}, locale), outOfScope: t('terminal.delivery.outOfScope', {}, locale), summary: t('terminal.delivery.summary', {}, locale),
+    file: t('terminal.delivery.file', {}, locale), moreFiles: t('terminal.delivery.moreFiles', {}, locale), where: t('terminal.delivery.where', {}, locale),
+    adoptionLater: t('terminal.delivery.adoptionLater', {}, locale), hints: t('terminal.delivery.hints', {}, locale),
+    working: t('terminal.delivery.working', {}, locale), confirmBody: t('terminal.delivery.confirmBody', {}, locale),
+    confirmRef: t('terminal.delivery.confirmRef', {}, locale), confirmHints: t('terminal.delivery.confirmHints', {}, locale),
+    delivered: t('terminal.delivery.delivered', {}, locale), adoptPrompt: t('terminal.delivery.adoptPrompt', {}, locale),
+    adoptTarget: t('terminal.delivery.adoptTarget', {}, locale), adoptHints: t('terminal.delivery.adoptHints', {}, locale),
+    adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),
+    failedHints: t('terminal.delivery.failedHints', {}, locale), summaryDelivered: t('terminal.delivery.summaryDelivered', {}, locale),
+    summaryAdopted: t('terminal.delivery.summaryAdopted', {}, locale), summaryLeft: t('terminal.delivery.summaryLeft', {}, locale),
+    summaryFailed: t('terminal.delivery.summaryFailed', {}, locale), summaryAdoptFailed: t('terminal.delivery.summaryAdoptFailed', {}, locale), nextDefault: t('terminal.delivery.nextDefault', {}, locale),
+    pickerTitle: t('terminal.delivery.pickerTitle', {}, locale), none: t('terminal.delivery.none', {}, locale),
+    fallbackTitle: t('terminal.delivery.fallbackTitle', {}, locale),
+    next: {
+      PATCH_BASE_ADVANCED: t('terminal.delivery.next.PATCH_BASE_ADVANCED', {}, locale),
+      PATCH_CONFLICT: t('terminal.delivery.next.PATCH_CONFLICT', {}, locale),
+      POLICY_DENIED: t('terminal.delivery.next.POLICY_DENIED', {}, locale),
+      DELIVERY_INTERACTIVE_REQUIRED: t('terminal.delivery.next.DELIVERY_INTERACTIVE_REQUIRED', {}, locale),
+      DELIVERY_CONFIRMATION_DECLINED: t('terminal.delivery.next.DELIVERY_CONFIRMATION_DECLINED', {}, locale),
+      ADOPTION_TARGET_DENIED: t('terminal.delivery.next.ADOPTION_TARGET_DENIED', {}, locale) } };
 }

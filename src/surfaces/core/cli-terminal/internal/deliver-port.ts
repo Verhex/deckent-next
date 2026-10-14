@@ -1,0 +1,70 @@
+import { loadConfig, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import type { AttemptIdentity } from '#domain/index.js';
+import type { WorkspacePatch } from '#engine/index.js';
+import type { InventoryQueryHandler } from '#surfaces/core/monitor/index.js';
+import type { DeliveryFileStat, TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
+import type { TerminalLaunchContext } from './context.js';
+
+/** The newest recorded attempt of a Run's task (the identity `deckent task … --run --task` resolves); never guessed from a Run view. */
+export async function resolveLatestAttempt(inspectInventory: InventoryQueryHandler, root: string, scopeId: string, runId: string, taskId: string,
+  options: ConfigLoadOptions): Promise<AttemptIdentity> {
+  let best: AttemptIdentity | undefined, after: string | null = null;
+  do {
+    const { page } = await inspectInventory(root, { schemaVersion: 1, scopeId, after }, options);
+    for (const { identity } of page.entries) if (identity.runId === runId && identity.taskId === taskId && (!best || identity.generation > best.generation)) best = identity;
+    after = page.nextAfter;
+  } while (after !== null);
+  if (!best) throw ErrorRegistry.createError('ATTEMPT_NOT_FOUND', { params: { run: runId, task: taskId } });
+  return best;
+}
+
+/** `deckent task patch-preview --stat`: per-file added/removed lines from the same unified diff the CLI prints (no source read here). */
+export function patchStat(changes: WorkspacePatch['changes'], render: (path: string, before: string | null, after: string | null) => string):
+  Readonly<{ files: readonly DeliveryFileStat[]; added: number; removed: number }> {
+  let added = 0, removed = 0;
+  const files = changes.map(change => {
+    let before = change.before?.text ?? null, after = change.after?.text ?? null;
+    // A trailing newline is not a phantom empty line, unless it is the only difference.
+    if ((before === null || before.endsWith('\n')) && (after === null || after.endsWith('\n'))) { before = before?.slice(0, -1) ?? null; after = after?.slice(0, -1) ?? null; }
+    const body = change.before && change.after && change.before.text === change.after.text ? '' : render(change.path, before, after);
+    const lines = body.split('\n').slice(2).filter(line => !line.startsWith('@@'));
+    const plus = lines.filter(line => line.startsWith('+')).length, minus = lines.filter(line => line.startsWith('-')).length;
+    added += plus; removed += minus;
+    return Object.freeze({ path: change.path, added: plus, removed: minus });
+  });
+  return Object.freeze({ files: Object.freeze(files), added, removed });
+}
+
+/**
+ * TESLIM-PENCERESI: the delivery window's port over the CLI's own handlers — inventory, patch preview, integration check and prepare, and
+ * the trusted composition's verified-terminal delivery/adoption. Absent (no `/deliver`, no window) unless every handler is bound.
+ */
+export function terminalDeliveryPort(root: string, context: TerminalLaunchContext, options: ConfigLoadOptions): TerminalDeliveryPort | undefined {
+  const { inspectInventory, previewWorkspacePatch, checkWorkspaceIntegration, prepareWorkspaceIntegration, renderUnifiedDiff, interactiveDelivery } = context;
+  if (!inspectInventory || !previewWorkspacePatch || !checkWorkspaceIntegration || !prepareWorkspaceIntegration || !renderUnifiedDiff || !interactiveDelivery) return undefined;
+  return {
+    async preview(target) {
+      const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
+      const preview = await previewWorkspacePatch(root, identity, options);
+      // Read-only: the integration check observes the affected files of the current source; a changed base is its typed refusal.
+      const checked = await checkWorkspaceIntegration(root, identity, options);
+      const config = await loadConfig(root, options), stat = patchStat(preview.patch.changes, renderUnifiedDiff);
+      return Object.freeze({ target, identity, ...stat, source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
+        outOfScope: checked.scope.status === 'out-of-scope' ? checked.scope.outOfScope : [], adoptionTargets: Object.freeze([...config.execution?.adoption.targets ?? []]) });
+    },
+    async deliver(preview, ids, answer) {
+      const handlers = interactiveDelivery(answer);
+      // A session that is not a verified human terminal is refused before any candidate is prepared.
+      await handlers.assertAvailable();
+      await prepareWorkspaceIntegration(root, { schemaVersion: 1, commandId: ids.candidate, identity: preview.identity, proposal: preview.proposal }, options);
+      const delivered = await handlers.deliver(root, { schemaVersion: 1, commandId: ids.delivery, identity: preview.identity, integrationCommandId: ids.candidate }, options);
+      return Object.freeze({ ref: delivered.plan.ref, commit: delivered.plan.commit, commandId: ids.delivery });
+    },
+    async adopt(preview, delivery, targetRef, commandId, answer) {
+      const handlers = interactiveDelivery(answer);
+      await handlers.assertAvailable();
+      const adopted = await handlers.adopt(root, { schemaVersion: 2, commandId, identity: preview.identity, deliveryCommandId: delivery.commandId, targetRef }, options);
+      return Object.freeze({ targetRef: adopted.targetRef, fromCommit: adopted.fromCommit, toCommit: adopted.toCommit });
+    },
+  };
+}

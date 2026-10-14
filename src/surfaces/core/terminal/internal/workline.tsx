@@ -30,6 +30,8 @@ import { CLEAR_SCREEN_AND_SCROLLBACK, writeStartup, type WorklineStartup } from 
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
 import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/terminal-panels/index.js';
 import { openTaskAction, type TaskWindowAction } from '#surfaces/core/terminal-work/index.js';
+import { useDeliveryWindows, type DeliveryWindowLabels, type TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
+import { shortId } from '#platform/index.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -60,6 +62,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly scratch?: WorklineScratchLabels;
   /** SLASH-WINDOWS (owner 2026-10-08): the words of the `/reasoning`, `/scratch` and unknown-command windows. Present = the rich terminal takes no typed slash arguments. */
   readonly windows?: SlashWindowLabels;
+  /** TESLIM-PENCERESI: the delivery window's words (terminal.delivery.*); without them (or without the port) `/deliver` is unavailable. */
+  readonly delivery?: DeliveryWindowLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -128,6 +132,9 @@ export interface WorklineProps {
   /** `/clear` erases the screen and the terminal's scrollback; false where escape sequences must not be sent (TERM=dumb, NO_COLOR — owner
    *  2026-10-08). A non-TTY output is never cleared. */
   readonly clearScreen?: boolean;
+  /** TESLIM-PENCERESI: check → prepare → deliver (and adopt) through the trusted composition's verified-terminal confirmation port.
+   *  `confirmTimeoutMs`: how long the port's exact card waits for a fresh y (the session approval time). */
+  readonly delivery?: { readonly port: TerminalDeliveryPort; readonly confirmTimeoutMs: number };
 }
 
 
@@ -195,6 +202,10 @@ export function WorklineApp(props: WorklineProps) {
   const announced = useRef(new Set<string>()), openingTold = useRef(false);
   const [completionRefused, setCompletionRefused] = useState(false);
   const completion = useRunCompletion({ limit: props.maxTrackedRuns, labels: labels.work?.jobs, ledger, pollMs, refused: completionRefused, push, errorText });
+  // TESLIM-PENCERESI: delivery windows over this session's admitted Runs (self-appearing in the background) and `/deliver` (foreground).
+  const trackedRuns = useMemo(() => completion.tracked.map(item => item.run), [completion.tracked]);
+  const deliveries = useDeliveryWindows({ port: props.delivery?.port, labels: labels.delivery, runs: trackedRuns, summary: (text, level) => push([systemSummaryEntry(text, level)]),
+    errorText, position: labels.work?.window.position ?? '{from}-{to}/{total}', known: props.knownSecrets, confirmTimeoutMs: props.delivery?.confirmTimeoutMs ?? 0 });
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied' || step.status === 'not-initialized') setCompletionRefused(true);
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
@@ -399,6 +410,23 @@ export function WorklineApp(props: WorklineProps) {
       finally { setPlanning(false); setDoRunning(false); setActiveDo(null); }
       return true;
     }
+    if (slash.command === 'deliver') {
+      // TESLIM-PENCERESI: a picker of tasks awaiting delivery (fresh /runs read model plus this session's Runs); the chosen window takes focus.
+      const words = labels.delivery;
+      if (!deliveries.available || !words || !ledger) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
+      try {
+        const targets = deliveries.candidates([...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)]);
+        if (!targets.length) {
+          await panel.pick(execution, { kind: 'window', title: words.pickerTitle, body: [words.none], hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
+          push([systemSummaryEntry(words.none)]); return true;
+        }
+        const picked = targets.length === 1 ? '0' : await panel.pick(execution, { kind: 'job-picker', title: words.pickerTitle, rows: targets.map(target =>
+          [span(projectHumanPickerText(target.title, props.knownSecrets).label, { bold: true }), span(` · ${shortId(target.runId)} · ${target.taskId}`, { role: 'muted' })]) },
+        targets.map((_, index) => String(index)));
+        if (picked !== null && !execution.signal.aborted) deliveries.open(targets[Number(picked)]!, 'foreground');
+      } catch (error) { push([notice('error', errorText(error))]); }
+      return true;
+    }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
     const rich = labels.windows;
     if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
@@ -483,7 +511,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, props.doPlan, sessionModel, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel, completion.register]);
+  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, props.doPlan, sessionModel, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel, completion.register, completion.tracked, deliveries, props.knownSecrets]);
   // SLASH-WINDOWS I-1 (owner 2026-10-08, Jev b1e8286f): with window words a slash command typed with an argument runs bare — every host
   // (information/list slot, panel controller) opens its window as usual — and that window says once that the terminal takes no typed
   // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.
@@ -533,13 +561,18 @@ export function WorklineApp(props: WorklineProps) {
   };
 
   const localWindowOpen = slot.open;
+  const othersOpen = planning || work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || localWindowOpen;
+  const deliveryShown = !othersOpen && deliveries.visible;
   // TERMINAL-SABIT slice 2: the strip is a view over this session's /do and completion records; its clock ticks at the inspection cadence.
   const activeLabels = labels.work?.activeWork, jobLabels = labels.work?.jobs;
-  const stripTicking = activeDo !== null || completion.tracked.some(item => item.run.state.kind !== 'terminal');
-  const stripNow = useActiveWorkClock(stripTicking, pollMs, `${activeDo?.phase ?? ''}:${completion.tracked.length}`);
-  const stripItems = activeLabels && jobLabels && labels.work ? activeWorkItems({ active: activeDo, runs: completion.tracked, nowMs: stripNow, labels: activeLabels, jobs: jobLabels, duration: labels.work.workerLine }) : [];
+  const stripTicking = activeDo !== null || deliveries.pending.length > 0 || completion.tracked.some(item => item.run.state.kind !== 'terminal');
+  const stripNow = useActiveWorkClock(stripTicking, pollMs, `${activeDo?.phase ?? ''}:${completion.tracked.length}:${deliveries.pending.length}`);
+  const stripItems = activeLabels && jobLabels && labels.work ? activeWorkItems({ active: activeDo, runs: completion.tracked, deliveries: deliveries.pending, nowMs: stripNow,
+    labels: activeLabels, jobs: jobLabels, duration: labels.work.workerLine }) : [];
   const focusStrip = useCallback((focused: boolean) => { stripFocus.current = focused; setStripFocused(focused); }, []);
   const openActive = (item: ActiveWorkItem) => {
+    // A waiting delivery: the person's selection opens its window in the foreground (it never answers it).
+    if (item.target.kind === 'delivery') { const target = deliveries.target(item.target.key); if (target) deliveries.open(target, 'foreground'); return; }
     if (item.target.kind !== 'run') return;
     // A person's selection: the existing /run window through the out-of-band task action (foreground, FIFO behind a running line).
     taskActionRef.current({ action: 'run', target: liveRunEntry(item.target.run, 'active-work') });
@@ -587,7 +620,9 @@ export function WorklineApp(props: WorklineProps) {
         position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
       </WindowOpeningContext.Provider>
       {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
-      {planning || work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || localWindowOpen ? null : liveWin.element}
+      {othersOpen || deliveryShown ? null : liveWin.element}
+      {/* TESLIM-PENCERESI: the delivery window gives way to every card, picker and slash window and returns after it; it takes the live window's place. */}
+      {deliveryShown ? deliveries.element : null}
       {resumePicker && !work.modalOpen && !work.pickerOpen
         ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
           position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}

@@ -23,21 +23,16 @@ function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) 
     ? [t('cli.task.patch.scope.enforced', {}, locale)] : [])].join('\n');
 }
 import type { CommandContext } from './kernel-commands.js';
+import { patchStat, resolveLatestAttempt } from '#surfaces/core/cli-terminal/index.js';
 import { renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
 export type TaskEvaluationHandler = (root: string, command: TaskEvaluationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
-async function resolveLatestAttempt(context: CommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
-  let best: AttemptIdentity | undefined, after: string | null = null;
-  do {
-    const { page } = await context.inspectInventory!(context.root ?? process.cwd(), { schemaVersion: 1, scopeId, after }, { env: context.env ?? process.env });
-    for (const { identity } of page.entries) if (identity.runId === runId && identity.taskId === taskId && (!best || identity.generation > best.generation)) best = identity;
-    after = page.nextAfter;
-  } while (after !== null);
-  if (!best) throw ErrorRegistry.createError('ATTEMPT_NOT_FOUND', { params: { run: runId, task: taskId } });
-  return best;
+/** Same resolution as the terminal delivery window (`resolveLatestAttempt` in cli-terminal). */
+async function latestAttempt(context: CommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
+  return resolveLatestAttempt(context.inspectInventory!, context.root ?? process.cwd(), scopeId, runId, taskId, { env: context.env ?? process.env });
 }
 async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<string, string>, context: CommandContext, json: boolean, usage: (flag?: string) => Error) {
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
@@ -106,7 +101,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   if (resolveLatest) {
     if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
     if (!context.inspectInventory) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-    identity = await resolveLatestAttempt(context, scopeId, runId, taskId);
+    identity = await latestAttempt(context, scopeId, runId, taskId);
     resolvedNotice = { attempt: identity.attemptId, generation: identity.generation, layout: identity.layoutRevision, run: runId, task: taskId };
   } else {
     if (!scopeId || !runId || !taskId || !attemptId || !layoutRevision || !generation || !/^[1-9][0-9]*$/.test(generation)
@@ -190,6 +185,12 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     if (!context.renderUnifiedDiff) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const render = context.renderUnifiedDiff;
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
+      if (stat) {
+        // The same per-file count the terminal delivery window shows (TESLIM-PENCERESI).
+        const counted = patchStat(data.patch.changes, render);
+        return [heading(data), scopeLine(data.scope, locale), ...counted.files.map(file => `${file.path} | +${file.added} -${file.removed}`),
+          t('cli.task.patch.stat.summary', { count: counted.files.length, added: counted.added, removed: counted.removed }, locale), notice].join('\n');
+      }
       const sections = data.patch.changes.map(change => {
         let before = change.before?.text ?? null, after = change.after?.text ?? null;
         // A trailing newline is not a phantom empty line, unless it is the only difference.
@@ -199,17 +200,9 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
         const modeChanged = change.before && change.after && change.before.mode !== change.after.mode;
         const body = change.before && change.after && change.before.text === change.after.text ? '' : render(change.path, before, after);
         const mode = modeChanged ? `mode ${change.before!.mode} -> ${change.after!.mode} ${change.path}` : '';
-        return { path: change.path, body, mode };
+        return { body, mode };
       });
-      if (!stat) return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [section.body, section.mode].filter(Boolean)), notice].join('\n');
-      let totalAdded = 0, totalRemoved = 0;
-      const lines = sections.map(section => {
-        const body = section.body.split('\n').slice(2).filter(line => !line.startsWith('@@'));
-        const added = body.filter(line => line.startsWith('+')).length, removed = body.filter(line => line.startsWith('-')).length;
-        totalAdded += added; totalRemoved += removed;
-        return `${section.path} | +${added} -${removed}`;
-      });
-      return [heading(data), scopeLine(data.scope, locale), ...lines, t('cli.task.patch.stat.summary', { count: sections.length, added: totalAdded, removed: totalRemoved }, locale), notice].join('\n');
+      return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [section.body, section.mode].filter(Boolean)), notice].join('\n');
     } }); return;
   }
   if (action === 'execute') {

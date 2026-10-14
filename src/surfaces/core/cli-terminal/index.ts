@@ -1,8 +1,10 @@
 export { launchTerminal } from './internal/lazy.js';
 export { createWorklineLedgerPorts } from './internal/terminal-ledger.js';
+export { patchStat, resolveLatestAttempt, terminalDeliveryPort } from './internal/deliver-port.js';
 export type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunQueryHandler, RuntimeServiceReadinessView, TerminalLaunchContext,
   TerminalLaunchPorts, ProviderConnectHost, ProviderConnectKindView, ProviderConnectProbeView, TerminalSecretChange, TerminalSecretDeleteHandler,
-  TerminalSecretNamesHandler, TerminalSecretSetHandler, TerminalProfileCachePlan } from './internal/context.js';
+  TerminalSecretNamesHandler, TerminalSecretSetHandler, TerminalProfileCachePlan, TerminalDeliveryHandlers, TerminalIntegrationCheckHandler,
+  TerminalIntegrationPrepareHandler, TerminalPatchPreviewHandler } from './internal/context.js';
 export type { TerminalChatMessage, TerminalChatPlanHandler, TerminalChatPlanView, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler,
   TerminalMentionFindHandler, TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler,
   TerminalScratchInspectHandler } from './internal/terminal-chat.js';

@@ -11,7 +11,8 @@ import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolv
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
-import { pickerLabels, runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { terminalDeliveryPort } from './deliver-port.js';
+import { deliveryWindowLabels, pickerLabels, runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
 import { mcpPanelPort } from './mcp-panel.js';
 import { modelPanelSource } from './model-panel.js';
@@ -279,7 +280,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const tty = ttyState(context);
   const options: ConfigLoadOptions = { env };
   const config = await loadConfig(root, options) as Record<string, unknown> & { language?: string; inspection: { workers: { heartbeatMs: number } };
-    approvals: { pageSize: number } };
+    approvals: { pageSize: number; sessionTtlMs: number } };
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
   const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
@@ -399,6 +400,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.inspectSurfaceAccess ? { inspectSurfaceAccess: () => context.inspectSurfaceAccess!(root, scopeId, options) } : {}),
     ...(context.inspectSurfaceRunIds ? { inspectSurfaceRunIds: () => context.inspectSurfaceRunIds!(root, scopeId, options) } : {}),
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
+  // TESLIM-PENCERESI: the delivery window's port over the CLI's own task handlers and the composition's verified-terminal confirmation.
+  const deliveryPort = terminalDeliveryPort(root, context, options);
   const target = scopeId;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
@@ -424,7 +427,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
-      ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
+      ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }), delivery: deliveryWindowLabels(locale) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
     target, model: chat?.reference?.modelId ?? chatTarget(chat, locale),
     ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
@@ -477,7 +480,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
     } } : {}),
     palette: resolveWorklinePalette(theme.tier, theme.theme), ascii, startup,
-    ...(ledger ? { ledger } : {}),
+    ...(ledger ? { ledger } : {}), ...(deliveryPort ? { delivery: { port: deliveryPort, confirmTimeoutMs: config.approvals.sessionTtlMs } } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),
     ...(context.signal ? { signal: context.signal } : {}),

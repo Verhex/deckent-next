@@ -51,7 +51,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
     deliverWorkspaceIntegration: delivery.deliver,
-    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: rollbackConfiguredWorkspaceIntegration,
+    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: rollbackConfiguredWorkspaceIntegration, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
     inspectWorkerTranscript: inspectConfiguredWorkerTranscript, executeOperation: executeConfiguredOperation, compensateOperation: compensateConfiguredOperation, inspectOperation: inspectConfiguredOperation,
     inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration,
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,

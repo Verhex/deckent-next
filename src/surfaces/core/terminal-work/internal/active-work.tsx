@@ -18,10 +18,14 @@ export interface ActiveWorkLabels {
   readonly title: string; readonly focused: string;
   readonly doTitle: string; readonly planning: string; readonly waiting: string; readonly expired: string;
   readonly evaluating: string; readonly needsYou: string; readonly more: string;
+  /** TESLIM-PENCERESI: an accepted task whose patch awaits the person's delivery decision (its window opens on Enter). */
+  readonly deliveryWaiting?: string;
 }
 /** The one `/do` this session is running (the panel runs one line at a time). `expiresAtMs`: its run-create approval's expiry. */
 export type ActiveDo = Readonly<{ title: string; phase: 'planning' | 'waiting'; sinceMs: number; expiresAtMs?: number | undefined }>;
-export type ActiveWorkTarget = Readonly<{ kind: 'do' }> | Readonly<{ kind: 'run'; run: RunView }>;
+export type ActiveWorkTarget = Readonly<{ kind: 'do' }> | Readonly<{ kind: 'run'; run: RunView }> | Readonly<{ kind: 'delivery'; key: string }>;
+/** A delivery waiting for the person in this session (TESLIM-PENCERESI); `sinceMs`: when this session first saw it. */
+export type ActiveDelivery = Readonly<{ key: string; title: string; sinceMs: number }>;
 export type ActiveWorkItem = Readonly<{ key: string; title: string; state: string; role: SpanRole; elapsed: string; target: ActiveWorkTarget }>;
 
 /** Display rank: a Run that needs the person first, then running, parked, finished. Not a policy: only the order of rows. */
@@ -40,7 +44,7 @@ function runState(run: RunView, labels: ActiveWorkLabels, jobs: JobWindowLabels)
 }
 
 /** Pure projection: rows in display order. Runs come from this session's admissions only (never another session's Runs). */
-export function activeWorkItems(input: { readonly active: ActiveDo | null; readonly runs: readonly TrackedRun[]; readonly nowMs: number;
+export function activeWorkItems(input: { readonly active: ActiveDo | null; readonly runs: readonly TrackedRun[]; readonly nowMs: number; readonly deliveries?: readonly ActiveDelivery[];
   readonly labels: ActiveWorkLabels; readonly jobs: JobWindowLabels; readonly duration: Pick<WorkerLineLabels, 'durationSeconds' | 'durationMinutes' | 'durationHours'> }): readonly ActiveWorkItem[] {
   const { active, labels, jobs, nowMs } = input, elapsed = (sinceMs: number) => formatDuration(Math.max(0, nowMs - sinceMs), input.duration);
   const items: ActiveWorkItem[] = [];
@@ -51,6 +55,9 @@ export function activeWorkItems(input: { readonly active: ActiveDo | null; reado
     items.push({ key: 'do', title: fillTemplate(labels.doTitle, { title: active.title }), state, role: active.phase === 'planning' ? 'accent' : 'warning',
       elapsed: elapsed(active.sinceMs), target: { kind: 'do' } });
   }
+  // A waiting delivery needs the person: it is listed right after the running /do, before the Runs.
+  for (const delivery of labels.deliveryWaiting ? input.deliveries ?? [] : [])
+    items.push({ key: `delivery:${delivery.key}`, title: delivery.title, state: labels.deliveryWaiting!, role: 'warning', elapsed: elapsed(delivery.sinceMs), target: { kind: 'delivery', key: delivery.key } });
   const runs = [...input.runs].sort((a, b) => runRank(a.run) - runRank(b.run) || b.sinceMs - a.sinceMs);
   for (const { run, sinceMs } of runs) {
     const state = runState(run, labels, jobs);
