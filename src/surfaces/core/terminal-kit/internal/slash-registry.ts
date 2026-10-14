@@ -26,8 +26,10 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   // T3 L5: one window over the observed workers and runs (read-only; stopping a Run stays `/cancel`'s confirmation window).
   { name: 'tasks', group: 'work', descriptionKey: 'terminal.slash.tasks' },
   { name: 'run', group: 'work', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
+  // Y1 (owner 2026-10-14): the Runs window carries h hold / r resume / c close (parked) keys, each after its own y/N card (policy decides).
   { name: 'runs', group: 'work', descriptionKey: 'terminal.slash.runs' },
-  // TESLIM-PENCERESI: tasks awaiting delivery; the window checks, prepares and delivers after its own y (verified terminal only).
+  // TESLIM-PENCERESI: tasks awaiting delivery; the window checks, prepares and delivers after its own y (verified terminal only); Y1: adoption
+  // chooses an accepted verification Run when the installation configures one.
   { name: 'deliver', group: 'work', descriptionKey: 'terminal.slash.deliver' },
   { name: 'transcript', group: 'work', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },
   { name: 'approvals', group: 'approvals', descriptionKey: 'terminal.slash.approvals', argumentKey: 'terminal.slash.approvalsArgument' },

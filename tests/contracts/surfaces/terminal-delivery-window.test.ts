@@ -1,12 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EffectConfirmationView, RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
+import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort,
+  type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
@@ -30,10 +32,13 @@ function run(state: RunView['state'], phase: string, outlook?: string, id = 'r',
 const RUNNING = { kind: 'running' } as const, COMPLETED = { kind: 'terminal', outcome: 'completed', reason: 'completed' } as const;
 const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 'awaiting-delivery', id, title);
 
-type PortOptions = { targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[] };
+type PortOptions = { targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
+  /** Y1: the installation's verification bar, the candidates each read returns (in order; the last repeats), and refusals by verification Run. */
+  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>> };
 /** Records every step; `answer` is asked where the production port asks it, with the card the engine would build. */
 function recordingPort(options: PortOptions = {}) {
-  const calls: string[] = [], views: EffectConfirmationView[] = [];
+  const calls: string[] = [], views: EffectConfirmationView[] = [], adoptions: { commandId: string; verificationRunId: string | undefined }[] = [];
+  let reads = 0;
   const card = (preview: DeliveryPreview, commandId: string, extra: Partial<EffectConfirmationView>): EffectConfirmationView => ({ operation: 'deliver-integration',
     scopeId: preview.identity.scopeId, commandId, actor: { id: 'owner', issuer: 'host', subject: '1000' }, resource: REF, from: BASE, to: COMMIT,
     runId: preview.identity.runId, taskId: preview.identity.taskId, title: 'Ship order', files: options.viewFiles ?? ['note.txt'], added: 1, removed: 1, ...extra });
@@ -46,7 +51,7 @@ function recordingPort(options: PortOptions = {}) {
       calls.push(`preview:${target.runId}`);
       return { target, identity: { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: 'a', layoutRevision: 'l', generation: 1 },
         files: [{ path: 'note.txt', added: 1, removed: 1 }], added: 1, removed: 1, source: 'SOURCE-FINGERPRINT', base: BASE, proposal: 'P'.repeat(20), outOfScope: [],
-        adoptionTargets: options.targets ?? [] };
+        adoptionTargets: options.targets ?? [], verification: options.verification ?? null };
     },
     async deliver(preview, ids, answer) {
       calls.push('available');
@@ -54,16 +59,24 @@ function recordingPort(options: PortOptions = {}) {
       calls.push('prepare'); await ask(answer, card(preview, ids.delivery, {})); calls.push('publish');
       return { ref: REF, commit: COMMIT, commandId: ids.delivery };
     },
-    async adopt(preview, delivery, targetRef, commandId, answer) {
-      calls.push('available');
+    async adopt(preview, delivery, targetRef, commandId, answer, verificationRunId) {
+      calls.push('available'); adoptions.push({ commandId, verificationRunId });
+      // As the engine: a named verification Run is checked (kind, commit, bar, phase) before the branch card is asked.
+      const refused = verificationRunId === undefined ? undefined : options.refuseRun?.[verificationRunId];
+      if (refused) throw Object.assign(new Error(`verification ${verificationRunId} refused`), { code: refused });
+      if (options.verification?.required && verificationRunId === undefined) throw Object.assign(new Error('verification required'), { code: 'ADOPTION_NOT_VERIFIED' });
       // As the engine: a required verification is checked before the branch card is asked (no answer, no move).
       if (options.failAdopt) throw Object.assign(new Error(options.failAdopt.message), { code: options.failAdopt.code });
       await ask(answer, card(preview, commandId, { operation: 'adopt-integration', resource: targetRef, from: BASE, to: delivery.commit, files: [] }));
       calls.push(`adopt:${targetRef}`);
-      return { targetRef, fromCommit: BASE, toCommit: delivery.commit };
+      return { targetRef, fromCommit: BASE, toCommit: delivery.commit, commandId, verifiedBy: verificationRunId ?? null };
+    },
+    async verificationRuns() {
+      calls.push('verification-runs'); const all = options.candidates ?? [[]];
+      return all[Math.min(reads++, all.length - 1)]!;
     },
   };
-  return { port, calls, views };
+  return { port, calls, views, adoptions };
 }
 
 /** A real Workline whose /do admits one Run (no approval); the Run then reaches acceptance with a patch awaiting delivery. */
@@ -83,6 +96,8 @@ function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly R
 type Harness = ReturnType<typeof harness>;
 const frame = (h: Harness) => h.view.stdout.frame;
 const transcript = (h: Harness) => h.view.stdout.text;
+/** Window rows hard-wrap long exact lines at the frame width: compare without whitespace and frame borders. */
+const squeeze = (text: string) => text.replace(/[│┃\s]+/gu, '');
 const press = async (h: Harness, keys: string, ms = 60) => { h.view.stdin.write(keys); await settle(ms); };
 /** /do admits the Run; its automatic result and /tasks windows are closed explicitly, as a person would. */
 async function admit(h: Harness) {
@@ -110,6 +125,50 @@ describe('delivery window — pure rules', () => {
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/main', files: [] })).toBe(true);
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/other', files: [] })).toBe(false);
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/main', to: 'f'.repeat(40), files: [] })).toBe(false);
+  });
+});
+
+describe('verification candidates (cli-terminal port, read-only)', () => {
+  const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 };
+  const preview = { identity } as unknown as DeliveryPreview;
+  const task = (kind: string, phase: string, id = 'check') => ({ id, kind, phase });
+  function project(verification: unknown) {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-verify-candidates-')); mkdirSync(join(root, '.deckent'));
+    writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2, logMaxSizeKiB: 1024, logMaxFiles: 2,
+      tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: ['refs/heads/main'], ...(verification ? { verification } : {}) } } }));
+    return root;
+  }
+  const bar = { kind: 'verify', required: true, criteria: [{ evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+  function port(root: string, pages: readonly (readonly string[])[], views: Readonly<Record<string, readonly ReturnType<typeof task>[]>>, reader = true) {
+    const inventoryCalls: (string | null)[] = [], inspected: string[] = [];
+    const handlers = { inspectInventory: async (_root: string, query: { after: string | null }) => {
+      inventoryCalls.push(query.after); const index = query.after === null ? 0 : Number(query.after);
+      return { schemaVersion: 1, layout: {}, page: { entries: (pages[index] ?? []).map(runId => ({ identity: { ...identity, runId } })), nextAfter: index + 1 < pages.length ? String(index + 1) : null } };
+    }, previewWorkspacePatch: async () => ({}), checkWorkspaceIntegration: async () => ({}), prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: () => '',
+      interactiveDelivery: () => ({}), ...(reader ? { inspectRun: async (_root: string, query: { runId: string }) => {
+        inspected.push(query.runId); return { schemaVersion: 1, layout: {}, run: views[query.runId] ? { runId: query.runId, tasks: views[query.runId] } : null };
+      } } : {}) };
+    return { port: terminalDeliveryPort(root, handlers as never, { env: { HOME: join(root, 'home') } })!, inventoryCalls, inspected };
+  }
+
+  it('lists only accepted one-task Runs of the configured kind; never the delivering Run, another kind, two tasks or an unfinished/failed task', async () => {
+    const { port: subject, inspected } = port(project(bar), [['r', 'v-ok', 'v-two', 'v-kind'], ['v-failed', 'v-evaluating', 'v-ok', 'v-missing']], {
+      r: [task('verify', 'accepted')], 'v-ok': [task('verify', 'accepted')], 'v-two': [task('verify', 'accepted'), task('verify', 'accepted', 'second')],
+      'v-kind': [task('coding', 'accepted')], 'v-failed': [task('verify', 'failed')], 'v-evaluating': [task('verify', 'evaluating')] });
+    expect(await subject.verificationRuns(preview)).toEqual([{ runId: 'v-ok', taskId: 'check' }]);
+    expect(inspected).not.toContain('r'); expect(inspected.filter(id => id === 'v-ok')).toHaveLength(1); // the delivering Run is never read; each Run once
+  });
+
+  it('stops reading the inventory at the scan bound', async () => {
+    const ids = Array.from({ length: 450 }, (_, index) => `v-${index}`), pages = [ids.slice(0, 150), ids.slice(150, 300), ids.slice(300)];
+    const { port: subject, inventoryCalls, inspected } = port(project(bar), pages, Object.fromEntries(ids.map(id => [id, [task('verify', 'accepted')]])));
+    expect(await subject.verificationRuns(preview)).toHaveLength(200);
+    expect(inventoryCalls).toEqual([null, '1']); expect(inspected).toHaveLength(200);
+  });
+
+  it('says why instead of "none exists": no configured kind, or no Run reader in this terminal', async () => {
+    await expect(port(project(null), [['v-ok']], { 'v-ok': [task('verify', 'accepted')] }).port.verificationRuns(preview)).rejects.toMatchObject({ code: 'ADOPTION_VERIFICATION_NOT_CONFIGURED' });
+    await expect(port(project(bar), [['v-ok']], {}, false).port.verificationRuns(preview)).rejects.toMatchObject({ code: 'INVENTORY_UNAVAILABLE' });
   });
 });
 
@@ -183,7 +242,12 @@ describe('delivery window on the real Workline', () => {
     await press(h, 'y', 120);
     await until(() => frame(h).includes(`Adopted: refs/heads/release ${BASE} → ${COMMIT}`), 'adopted');
     expect(h.calls.at(-1)).toBe('adopt:refs/heads/release'); expect(h.views.map(view => view.operation)).toEqual(['deliver-integration', 'adopt-integration']);
-    expect(transcript(h)).toContain(`Adopted into refs/heads/release: ${BASE.slice(0, 12)} → ${COMMIT.slice(0, 12)}.`);
+    // BETA-BELGE: the adoption and delivery command ids are on the result line, so the person can roll back with the CLI.
+    const [adoption] = h.adoptions;
+    expect(adoption!.commandId).toMatch(/^terminal-adopt-/u); expect(adoption!.verificationRunId).toBeUndefined();
+    expect(squeeze(frame(h))).toContain(squeeze(`not verified · adoption command ${adoption!.commandId}`));
+    expect(squeeze(transcript(h))).toContain(squeeze(`Adopted into refs/heads/release: ${BASE.slice(0, 12)} → ${COMMIT.slice(0, 12)} (not verified). Adoption command ${adoption!.commandId}`));
+    expect(squeeze(transcript(h))).toMatch(/deliverycommandterminal-delivery-[0-9a-f-]{36}\./u);
   });
 
   it('a required verification refuses adoption here with the exact command-line next step; the branch is never moved', async () => {
@@ -280,6 +344,83 @@ describe('delivery window on the real Workline', () => {
     await press(h, 'y', 120);
     await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted by the typed y');
     expect(h.calls.filter(call => call.startsWith('adopt:'))).toHaveLength(1);
+  });
+
+  // Y1 (owner 2026-10-14): adoption with a verification Run from this window, as `task integration-adopt --verification-run` does.
+  const REQUIRED = { kind: 'verify', required: true } as const, V1 = { runId: 'verify-run-1', taskId: 'check' }, V2 = { runId: 'verify-run-2', taskId: 'check' };
+  async function toVerification(h: Harness) {
+    await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await press(h, CTRL_O); await press(h, 'y', 120);
+    await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
+    await press(h, 'y', 120);
+    await until(() => frame(h).includes('Verification for refs/heads/main: choose an accepted Run of kind verify'), 'verification step');
+  }
+
+  it('a configured verification: the branch y opens the choice; Ctrl+Y, Alt+y, a coalesced key and Enter never adopt; y adopts with the chosen Run', async () => {
+    const CTRL_Y = '\u0019', ALT_Y = `${ESC}y`, COALESCED = `${CTRL_O}y`, UP = '\u001b[A';
+    const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED, candidates: [[V1, V2]] }); await toVerification(h);
+    await until(() => frame(h).includes('Run verify-run-2 · task check · accepted'), 'candidates');
+    expect(frame(h)).toContain(WORDS.verifyHints); expect(frame(h)).not.toContain('Adopt without verification'); // required: no unverified row
+    expect(frame(h)).toMatch(/› Run verify-run-1/u);
+    for (const keys of [CTRL_Y, ALT_Y, COALESCED, '\r']) { await press(h, keys, 120); expect(h.adoptions).toEqual([]); }
+    expect(frame(h)).toContain(WORDS.verifyHints);
+    await press(h, DOWN); expect(frame(h)).toMatch(/› Run verify-run-2/u); await press(h, UP); await press(h, DOWN);
+    await press(h, 'y', 150);
+    await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted');
+    expect(h.adoptions).toHaveLength(1); expect(h.adoptions[0]!.verificationRunId).toBe('verify-run-2');
+    await until(() => squeeze(frame(h)).includes(squeeze(`verified by Run verify-run-2 · adoption command ${h.adoptions[0]!.commandId}`)), 'result line with the command');
+    expect(squeeze(transcript(h))).toContain(squeeze(`(verified by Run verify-run-2). Adoption command ${h.adoptions[0]!.commandId}`));
+  });
+
+  it('no accepted verification Run: says so and how to make one for this delivery; y does nothing; r reads again and then y adopts', async () => {
+    const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED, candidates: [[], [V1]] }); await toVerification(h);
+    await until(() => frame(h).includes(WORDS.verifyNoneHints), 'none hints');
+    expect(frame(h)).toContain('No accepted Run of kind verify exists in this scope yet.');
+    const flat = squeeze(frame(h));
+    expect(flat).toMatch(/--delivery-command-idterminal-delivery-[0-9a-f-]{36};/u); expect(flat).toContain('deckentruncreate--scopes');
+    await press(h, 'y', 120); expect(h.adoptions).toEqual([]);
+    await press(h, 'r', 120);
+    await until(() => frame(h).includes('Run verify-run-1 · task check · accepted'), 'read again');
+    expect(h.calls.filter(call => call === 'verification-runs')).toHaveLength(2);
+    await press(h, 'y', 150);
+    await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted');
+    expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-1']);
+  });
+
+  it('an optional verification also offers adopting without one, recorded as not verified', async () => {
+    const h = harness({ targets: ['refs/heads/main'], verification: { kind: 'verify', required: false }, candidates: [[V1]] }); await toVerification(h);
+    await until(() => frame(h).includes('Adopt without verification'), 'unverified row');
+    await press(h, DOWN); expect(frame(h)).toMatch(/› Adopt without verification/u);
+    await press(h, 'y', 150);
+    await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted');
+    expect(h.adoptions.map(item => item.verificationRunId)).toEqual([undefined]);
+    await until(() => squeeze(frame(h)).includes('notverified·adoptioncommand'), 'not verified result');
+  });
+
+  it('a refused verification Run returns to the choice with the typed reason; nothing moved; a retry is a new adoption command', async () => {
+    const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED, candidates: [[V1, V2]], refuseRun: { 'verify-run-1': 'ADOPTION_VERIFICATION_MISMATCH' } });
+    await toVerification(h);
+    await until(() => frame(h).includes('Run verify-run-1 · task check · accepted'), 'candidates');
+    await press(h, 'y', 150);
+    await until(() => frame(h).includes('ERR:verification verify-run-1 refused'), 'typed refusal in the step');
+    expect(frame(h)).toContain(WORDS.verifyHints); expect(h.calls.some(call => call.startsWith('adopt:'))).toBe(false);
+    expect(h.views.map(view => view.operation)).toEqual(['deliver-integration']);
+    await press(h, DOWN); await press(h, 'y', 150);
+    await until(() => h.calls.at(-1) === 'adopt:refs/heads/main', 'adopted with the second Run');
+    expect(h.adoptions.map(item => item.verificationRunId)).toEqual(['verify-run-1', 'verify-run-2']);
+    expect(h.adoptions[1]!.commandId).not.toBe(h.adoptions[0]!.commandId);
+  });
+
+  it('n, Esc and Ctrl+C in the verification step go back to the branch choice; the branch is never moved', async () => {
+    for (const key of ['n', ESC, '\u0003']) {
+      const h = harness({ targets: ['refs/heads/main'], verification: REQUIRED, candidates: [[V1]] }); await toVerification(h);
+      await until(() => frame(h).includes('Run verify-run-1'), 'candidates');
+      await press(h, key, 150);
+      await until(() => frame(h).includes(WORDS.adoptHints), 'back at the branch choice');
+      expect(h.adoptions).toEqual([]); expect(frame(h)).toContain(windowTitle);
+      for (const view of mounted.splice(0)) view.unmount();
+    }
   });
 
   it('/deliver lists the scope\'s waiting tasks; the chosen window opens in the foreground', async () => {

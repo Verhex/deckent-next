@@ -9,18 +9,27 @@ import type { EffectConfirmationView, RunView } from '#engine/index.js';
 export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string }>;
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
 /** What the window shows before the person's `y`; `base`/`source`/`proposal` come from the integration check of the current source. */
+/** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; added: number; removed: number;
-  source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[] }>;
+  source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
+  verification: Readonly<{ kind: string; required: boolean }> | null }>;
 export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;
-export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string }>;
+/** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
+export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
+/** An accepted Run of the configured verification kind with one task (the bar's shape). Whether it ran on this delivered commit and meets the
+ * criteria is decided by the adoption application, never by this list. */
+export type VerificationCandidate = Readonly<{ runId: string; taskId: string }>;
 /** The answer the confirmation port asks for; only the window that showed the card supplies it (never a command field, model or SDK). */
 export type DeliveryAnswer = (view: EffectConfirmationView) => Promise<boolean>;
 export interface TerminalDeliveryPort {
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */
   deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer): Promise<DeliveryOutcome>;
-  /** Moves one configured adoption target to the delivered commit, after its own explicit `y`. */
-  adopt(preview: DeliveryPreview, delivery: DeliveryOutcome, targetRef: string, commandId: string, answer: DeliveryAnswer): Promise<AdoptionOutcome>;
+  /** Moves one configured adoption target to the delivered commit, after its own explicit `y`. A verification Run is named like the CLI's
+   * `--verification-run`; its kind is read from the configuration at that moment, never from the window. */
+  adopt(preview: DeliveryPreview, delivery: DeliveryOutcome, targetRef: string, commandId: string, answer: DeliveryAnswer, verificationRunId?: string): Promise<AdoptionOutcome>;
+  /** Y1: the scope's accepted Runs of the configured verification kind (read-only); empty when none exists yet. */
+  verificationRuns(preview: DeliveryPreview): Promise<readonly VerificationCandidate[]>;
 }
 
 /**

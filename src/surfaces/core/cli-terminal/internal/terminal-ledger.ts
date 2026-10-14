@@ -1,10 +1,10 @@
-import { type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance } from '#engine/index.js';
+import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance, runLifecycleCommandSchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { shortId, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
 import type { StandingScope } from '#surfaces/core/terminal/index.js';
-import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunQueryHandler } from './context.js';
+import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecycleHandler, RunQueryHandler } from './context.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 
@@ -25,6 +25,19 @@ function approvalView(record: ApprovalRecord): WorklineApproval {
     ...(subject.kind === 'config-change' ? { config: { action: subject.action, layer: subject.layer, keyPath: subject.keyPath, ruleId: subject.ruleId } } : {}) });
 }
 
+/** The Run state a control left, in the session language (the Runs list's own state words). */
+function runStateWord(state: RunView['state'], locale: Locale): string {
+  if (state.kind === 'running') return t('terminal.jobs.state.running', {}, locale);
+  if (state.kind === 'parked') return t('terminal.jobs.state.parked', {}, locale);
+  switch (state.outcome) {
+    case 'completed': return t('terminal.jobs.state.completed', {}, locale);
+    case 'incomplete': return t('terminal.jobs.state.incomplete', {}, locale);
+    case 'failed': return t('terminal.jobs.state.failed', {}, locale);
+    case 'cancelled': return t('terminal.jobs.state.cancelled', {}, locale);
+    default: return t('terminal.jobs.state.unknown', {}, locale);
+  }
+}
+
 /** Terminal ports over the same handlers as the CLI commands (`workers`, `run`, `inventory`, `approvals`, `task transcript`, `run cancel`). */
 export function createWorklineLedgerPorts(input: {
   readonly root: string; readonly scopeId: string; readonly options: ConfigLoadOptions; readonly locale?: Locale; readonly workerHeartbeatMs?: number;
@@ -40,12 +53,14 @@ export function createWorklineLedgerPorts(input: {
   readonly inspectSurfaceAccess?: () => Promise<SurfaceSnapshotAccess | null>;
   readonly inspectSurfaceRunIds?: () => Promise<readonly string[]>;
   readonly deliverRunCancellation?: RunCancellationDeliveryHandler;
+  /** `deckent run hold|resume|close`'s own lifecycle application (Y1); absent: the Runs window offers no control keys. */
+  readonly applyRunLifecycle?: RunLifecycleHandler;
   /** The host's cancellation text (CLI `run cancel`), given as a port. */
   readonly renderRunCancellation: RunCancellationRenderer;
 }): WorklineLedgerPorts | undefined {
   if (!input.inspectWorkers || !input.inspectRun) return undefined;
   const { root, scopeId, options, inspectWorkers, inspectRun, inspectInventory, workerHeartbeatMs, inspectWorkerTranscript, listApprovals, decideApproval,
-    deliverRunCancellation, renderRunCancellation, followEvents } = input;
+    deliverRunCancellation, renderRunCancellation, followEvents, applyRunLifecycle } = input;
   const locale = input.locale ?? 'en', pageSize = input.approvalPageSize ?? 100;
   return withSurfaceSnapshot({
     scopeId,
@@ -104,6 +119,20 @@ export function createWorklineLedgerPorts(input: {
         const commandId = `terminal-cancel-${randomUUID()}`;
         const result = await deliverRunCancellation(root, { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision }, options);
         return renderRunCancellation(result, commandId, scopeId, runId, locale);
+      },
+    } : {}),
+    // Y1: the same lifecycle command as `deckent run hold|resume|close` against the revision the person confirmed; policy and the
+    // service's state rules decide (a refusal is the typed error, rendered by the window). Nothing here pre-decides eligibility.
+    ...(applyRunLifecycle ? {
+      async controlRun(runId: string, action: 'hold' | 'resume' | 'close', expectedRevision: number, typed?: string) {
+        const commandId = `terminal-run-${action}-${randomUUID()}`, own = typed?.trim();
+        const command = runLifecycleCommandSchema.parse(action === 'hold'
+          ? { schemaVersion: 1, commandId, scopeId, runId, action, holdReason: own || t('terminal.runControl.reasonDefault', {}, locale), expectedRevision }
+          : { schemaVersion: 1, commandId, scopeId, runId, action, expectedRevision });
+        const result = await applyRunLifecycle(root, command, options), run = result?.lifecycle.run;
+        const params = { run: shortId(runId), command: commandId, revision: run?.revision ?? '—', state: run ? runStateWord(run.state, locale) : '—' };
+        return action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
+          : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale);
       },
     } : {}),
   }, input.inspectSurfaceAccess);

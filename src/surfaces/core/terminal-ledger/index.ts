@@ -8,7 +8,7 @@ export { assistantLedgerEntries, streamStepEntries } from './internal/ledger-uni
 export { freshRunCards, newRunLedgerEntries, runWatchFingerprint } from './internal/run-watch.js';
 export { newWorkerTaskIds } from './internal/worker-watch.js';
 export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, EMPTY_APPROVAL_WATCH, scanPendingApprovals, type WorklineApproval, type WorklineApprovalPage } from './internal/approval-watch.js';
-export { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun, loadRunViewsForWatch, type WorklineLedgerPorts, type WorklineSurfaceSnapshot } from './internal/workline-ledger.js';
+export { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun, loadRunViewsForWatch, type RunControlAction, type WorklineLedgerPorts, type WorklineSurfaceSnapshot } from './internal/workline-ledger.js';
 export {
   WORKLINE_BRIDGE_SCHEMA_VERSION,
   buildWorklineBridgeSnapshot,
