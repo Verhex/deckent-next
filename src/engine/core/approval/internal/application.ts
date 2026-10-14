@@ -64,7 +64,8 @@ export class ApprovalApplication {
     const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
     if (!interactive) {
       const risk = facts?.risk;
-      if (decision === 'allow' && (risk?.source === 'cell' && ['edit-floor', 'edit-authority', 'mcp-floor'].includes(risk.cell)
+      // A legacy request (no facts) cannot prove its risk: it is never read as an ordinary card, only a witnessed human allows it.
+      if (decision === 'allow' && (facts === null || risk?.source === 'cell' && ['edit-floor', 'edit-authority', 'mcp-floor'].includes(risk.cell)
         || risk?.source === 'effect-class' && risk.authority || subject.kind === 'agent-tool-call' && !risk
         || subject.kind === 'config-change' && aiAuthorityFloor({ ...principal, assurance: 'workload-verified' }, { kind: 'config', id: `${subject.layer}:${subject.keyPath}` }, 'write')))
         throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
@@ -151,6 +152,8 @@ export class ApprovalApplication {
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     const ai = isAiPrincipal(principal);
     const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
+    // AI never answers "this session" (a standing approval widens its own authority) and never allows a legacy card of unknown risk.
+    if (ai && ('standing' in command || command.decision === 'allow' && facts === null)) throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
     if (ai && command.decision === 'allow' && (facts?.risk?.source === 'cell' && ['edit-floor', 'edit-authority', 'mcp-floor'].includes(facts.risk.cell)
       || facts?.risk?.source === 'effect-class' && facts.risk.authority || subject.kind === 'agent-tool-call' && facts?.risk === null))
       throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');

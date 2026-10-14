@@ -7,7 +7,7 @@ import { openSqliteAttemptStore, openSqliteApprovalStore, readLocalOsIdentity, w
 import { createRun, holdRun, parkRunProgression, policySchema, evaluatePolicy, explicitDecisionGrant, approvalDecisionClass,
   POLICY_ADMINISTER_OPERATION, AUTHORITY_DOCUMENT_TARGET_KIND, verifiedSessionSchema, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
 import { RunLifecycleApplication, RunDecisionApprovalBroker, RunPolicyAuthorization, DispatchPolicyAuthorization, AuditApplication,
-  OperationApprovalBroker, OperationPolicyAuthorization, requestAgentToolApproval, ApprovalApplication, decideAgentToolCall } from '#engine/index.js';
+  OperationApprovalBroker, OperationPolicyAuthorization, requestAgentToolApproval, requestTaskApproval, ApprovalApplication, decideAgentToolCall } from '#engine/index.js';
 import { sha256, createHmacIntegrity } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
@@ -200,4 +200,28 @@ it('approve-card-then-assert: a witnessed policy card still cannot grant AI auth
   expect(await broker.admit(POLICY_ADMINISTER_OPERATION, 'require-approval', risky, ai, context)).toHaveProperty('approval');
   await expect(new OperationPolicyAuthorization(f.source).authorize('execute', 's', risky.operation, ai)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   expect(f.approvals.store.load('s', card.request.approvalId)).toEqual(card);
+});
+
+it('a legacy-shaped card (no facts, no class) is never read as human: AI and unwitnessed callers cannot allow it, a witnessed human can', async () => {
+  for (const [person, tty, expected] of [[ai, true, 'AI_AUTHORITY_NON_DELEGABLE'], [human, false, 'AI_AUTHORITY_NON_DELEGABLE'], [human, true, null]] as const) {
+    const f = await fixture(baseRun(), [], person, tty);
+    const legacy = requestTaskApproval(f.approvals.store, f.integrity, { scopeId: 's', runId: 'r', taskId: 't', requester: { id: 'old', issuer: 'host', subject: '1000' },
+      actionDigest: sha256('legacy-task-decision'), policyRevision: 'p', summary: 'legacy accept', createdAt: 100, expiresAt: 900 });
+    expect(legacy.request.schemaVersion).toBe(1);
+    const decide = () => f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: legacy.request.approvalId, commandId: `legacy-${person.id}-${tty}`,
+      expectedRevision: 0, decision: 'allow', reason: 'legacy' });
+    if (expected) {
+      await expect(decide()).rejects.toMatchObject({ code: expected });
+      expect(f.approvals.store.load('s', legacy.request.approvalId)?.status).toBe('pending');
+    } else expect((await decide()).decision).toMatchObject({ deciderClass: 'human-tty' });
+  }
+});
+
+it('AI never records a session standing approval (self-widening), even with an approval decide grant', async () => {
+  const f = await fixture(baseRun());
+  const record = requestAgentToolApproval(f.approvals.store, f.integrity, { scopeId: 's', requester: { id: ai.id, issuer: ai.issuer, subject: ai.subject },
+    subject: { kind: 'agent-tool-call', turnId: 'turn', round: 1, index: 0, tool: 'shell', toolVersion: 1, resource: 'ls', argsDigest: 'b'.repeat(64) },
+    policyRevision: 'p', summary: 'shell', createdAt: 100, expiresAt: 900, facts: { risk: { source: 'cell', cell: 'shell-read-low' }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' } });
+  await expect(f.approvalApp.decide({ schemaVersion: 1, scopeId: 's', approvalId: record.request.approvalId, commandId: 'standing', expectedRevision: 0,
+    decision: 'allow', standing: 'session', reason: 'remember' })).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
 });
