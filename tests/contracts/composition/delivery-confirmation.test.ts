@@ -1,7 +1,7 @@
 import { verifiedDeliveryConfirmation } from '#composition/core/workspace-patch/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -35,10 +35,11 @@ async function fixture() {
     command: { schemaVersion: 1, commandId: 'delivery', identity, integrationCommandId: 'candidate' },
     run: { revision: 7, graph: { tasks: [{ id: 't', acceptanceCriteria: ['exit'], workInput: { title: 'Ship useful change' } }] },
       progress: [{ taskId: 't', phase: 'accepted' }], bindings: [{ identity: patch.identity }] } }));
+  // The child runs the compiled engine (same path on Node 24 and 26); source-type flags differ between majors.
+  await access(resolve('dist/composition/core/workspace-patch/index.js')).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
   const refs = async () => JSON.stringify({ refs: await git('for-each-ref', '--format=%(refname) %(objectname)'), objects: await git('count-objects', '-v') });
   const execute = async (mode = 'deliver', answer = 'y', tty = 'tty') => {
-    const result = await terminalProgram([process.execPath, '--experimental-transform-types', '--import', resolve('tests/fixtures/delivery-source-loader.mjs'),
-      resolve('tests/fixtures/delivery-confirmation-application.mjs'), root, mode], {}, root, tty, answer);
+    const result = await terminalProgram([process.execPath, resolve('tests/fixtures/delivery-confirmation-application.mjs'), root, mode], {}, root, tty, answer);
     const line = result.output.split(/\r?\n/u).find(line => line.startsWith('{"response":'));
     if (!line) throw new Error(result.output);
     return { ...JSON.parse(line).response, output: result.output };

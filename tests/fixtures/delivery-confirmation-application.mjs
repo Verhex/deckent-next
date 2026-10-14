@@ -1,10 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { LocalOsSessionAuthority, GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, withMcpPrincipal } from '../../src/adapters/index.ts';
-import { WorkspaceDeliveryApplication, WorkspaceAdoptionApplication } from '../../src/engine/index.ts';
-import { SystemTrustedClock, snapshotKnownSecrets, ErrorRegistry } from '../../src/platform/index.ts';
-import { verifiedDeliveryConfirmation } from '../../src/composition/core/workspace-patch/index.ts';
-import { askDeliveryConfirmation } from '../../src/surfaces/core/effect-confirmation/index.ts';
+import { LocalOsSessionAuthority, GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, withMcpPrincipal } from '../../dist/adapters/index.js';
+import { WorkspaceDeliveryApplication, WorkspaceAdoptionApplication } from '../../dist/engine/index.js';
+import { SystemTrustedClock, snapshotKnownSecrets, ErrorRegistry } from '../../dist/platform/index.js';
+import { verifiedDeliveryConfirmation } from '../../dist/composition/core/workspace-patch/index.js';
+import { askDeliveryConfirmation } from '../../dist/surfaces/core/effect-confirmation/index.js';
 const [root, mode] = process.argv.slice(2);
 const data = JSON.parse(await readFile(join(root, 'input.json'), 'utf8'));
 const clock = new SystemTrustedClock(() => data.time), sessions = await LocalOsSessionAuthority.create(['s'], 60000, clock);
