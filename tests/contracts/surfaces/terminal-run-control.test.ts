@@ -3,6 +3,7 @@ import { runLifecycleCommandSchema, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { createWorklineLedgerPorts } from '#surfaces/core/cli-terminal/index.js';
+import { runControlActions } from '#surfaces/core/terminal-work/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 // Y1 (owner 2026-10-14): the Runs window's hold / resume / close keys. Each key opens a y/N card; only a single typed y sends the command to
@@ -78,8 +79,8 @@ describe('Runs window control keys', () => {
     await press(h, DOWN); await press(h, 'r', 120); await until(() => h.stdout.frame.includes('Resume run 7a1b2c3d: Ship invoices?'), 'resume card');
     await press(h, 'y', 150); await until(() => control.mock.calls.length === 2, 'resume sent');
     expect(control).toHaveBeenLastCalledWith(HELD, 'resume', 4, undefined);
-    await until(() => h.stdout.frame.includes('› Fix checkout'), 'list again');
-    await press(h, DOWN); await press(h, 'c', 120); await until(() => h.stdout.frame.includes('Close parked run 7a1b2c3d'), 'close card');
+    await until(() => h.stdout.frame.includes('› Ship invoices'), 'list again, the acted-on run still selected');
+    await press(h, 'c', 120); await until(() => h.stdout.frame.includes('Close parked run 7a1b2c3d'), 'close card');
     expect(h.stdout.frame).toContain(EN.runControl!.closeDetail.slice(0, 40));
     await press(h, 'y', 150); await until(() => control.mock.calls.length === 3, 'close sent');
     expect(control).toHaveBeenLastCalledWith(HELD, 'close', 4, undefined);
@@ -116,6 +117,17 @@ describe('Runs window control keys', () => {
   });
 });
 
+describe('offered keys by observed state (display only; the service decides)', () => {
+  it.each([
+    [{ kind: 'running' }, false, ['hold']], [{ kind: 'running' }, true, []], [{ kind: 'terminal', outcome: 'completed', reason: 'completed' }, false, []],
+    [{ kind: 'parked', reason: 'operator-hold' }, false, ['resume', 'close']], [{ kind: 'parked', reason: 'progression-failed' }, false, ['hold', 'resume', 'close']],
+    // Resume does not lift a question, a decision wait or a quota wait (domain resumeParkedRun): no `r` there, so no "resumed" line can mislead.
+    [{ kind: 'parked', reason: 'needs-input' }, false, ['hold', 'close']], [{ kind: 'parked', reason: 'quota-exhausted' }, false, ['hold', 'close']],
+  ] as const)('%j cancelling=%s → %j', (state, cancelling, keys) => {
+    expect(runControlActions({ ...runs[RUNNING]!, state: { since: 1, deadline: 2, ...state } as never, cancellationRequested: cancelling })).toEqual(keys);
+  });
+});
+
 describe('terminal lifecycle port over the CLI handler', () => {
   const lifecycle = () => ({ schemaVersion: 1 as const, layout: {} as never,
     lifecycle: { schemaVersion: 1 as const, commandId: 'x', run: { ...runs[RUNNING]!, revision: 8 } } });
@@ -129,7 +141,7 @@ describe('terminal lifecycle port over the CLI handler', () => {
     expect(root).toBe('/project'); expect(runLifecycleCommandSchema.parse(command)).toEqual(command);
     expect(command).toMatchObject({ schemaVersion: 1, scopeId: 'scope-a', runId: RUNNING, action: 'hold', expectedRevision: 7, holdReason: 'Held by the person in the Deckent terminal.' });
     expect(String(command['commandId'])).toMatch(/^terminal-run-hold-[0-9a-f-]{36}$/u);
-    expect(held).toBe(`Run 3f2a9c1e held (revision 8): no new task starts; running work continues. Command ${String(command['commandId'])}`);
+    expect(held).toBe(`Run 3f2a9c1e hold recorded, now running (revision 8): no new task starts; running work continues. Command ${String(command['commandId'])}`);
     await port.controlRun!(RUNNING, 'hold', 7, '  release window  ');
     expect(apply.mock.calls[1]![1]).toMatchObject({ holdReason: 'release window' });
     for (const action of ['resume', 'close'] as const) {
@@ -137,7 +149,7 @@ describe('terminal lifecycle port over the CLI handler', () => {
       const sent = apply.mock.calls.at(-1)![1] as Record<string, unknown>;
       expect(sent).toEqual({ schemaVersion: 1, commandId: sent['commandId'], scopeId: 'scope-a', runId: HELD, action, expectedRevision: 4 });
     }
-    expect(await make(vi.fn<(root: string, command: unknown) => Promise<ReturnType<typeof lifecycle>>>(async () => lifecycle()), 'tr').controlRun!(RUNNING, 'resume', 7)).toMatch(/^3f2a9c1e işi sürdürüldü \(revizyon 8\)\. Komut terminal-run-resume-/u);
+    expect(await make(vi.fn<(root: string, command: unknown) => Promise<ReturnType<typeof lifecycle>>>(async () => lifecycle()), 'tr').controlRun!(RUNNING, 'resume', 7)).toMatch(/^3f2a9c1e işi için sürdürme kaydedildi, şimdi çalışıyor \(revizyon 8\)\. Komut terminal-run-resume-/u);
   });
 
   it('a refusal is the application\'s typed error, unchanged; without the handler there is no port', async () => {

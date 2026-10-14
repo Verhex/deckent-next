@@ -26,18 +26,20 @@ export interface RunControlLabels {
   readonly reason: Readonly<{ label: string; hint: string; empty: string }>;
 }
 export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ spans: readonly Span[]; actions: readonly RunControlAction[] }>[]; status: string;
-  empty: string }>;
+  empty: string; selected: number }>;
 export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunView; action: RunControlAction }>;
 
 const KEYS: Readonly<Record<string, RunControlAction>> = Object.freeze({ h: 'hold', r: 'resume', c: 'close' });
 /**
  * The keys a Run's observed state offers (display only: the service re-checks state and policy at the confirmed revision). Hold: a Run
- * that is not finished, not cancelling and not already held; resume and close: a parked Run.
+ * that is not finished, not cancelling and not already held; close: a parked Run; resume: a Run parked by an operator hold or a failed
+ * progression — the only parks resume lifts (a question, a decision or a quota wait survives resume, so it is not offered there).
  */
 export function runControlActions(run: RunView): readonly RunControlAction[] {
   if (run.state.kind === 'terminal' || run.cancellationRequested) return [];
   if (run.state.kind !== 'parked') return ['hold'];
-  return run.state.reason === 'operator-hold' ? ['resume', 'close'] : ['hold', 'resume', 'close'];
+  const resumable = run.state.reason === 'operator-hold' || run.state.reason === 'progression-failed';
+  return [...(run.state.reason === 'operator-hold' ? [] : ['hold' as const]), ...(resumable ? ['resume' as const] : []), 'close'];
 }
 /** One typed letter selects a key; Ctrl/Alt chords, pasted or coalesced text never do (the decision-key rule for an opening key). */
 export function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunControlAction | null {
@@ -51,7 +53,7 @@ function runsHints(labels: RunControlLabels, actions: readonly RunControlAction[
 /** The Runs list with a selection; `h`/`r`/`c` answer `<action>:<row>` when the selected row offers it, Esc closes (`null`). */
 export function RunsControlWindow({ value, labels, position, onAnswer }: { readonly value: RunsWindowPresentation; readonly labels: RunControlLabels; readonly position: string;
   readonly onAnswer: (choice: string | null) => void }) {
-  const known = useHumanTextSecrets(), [selected, setSelected] = useState(0);
+  const known = useHumanTextSecrets(), [selected, setSelected] = useState(() => Math.min(value.selected, Math.max(0, value.rows.length - 1)));
   const project = (spans: readonly Span[]) => spans.flatMap(item => projectHumanPickerText(item.text, known).spans.map(part => ({ ...item, ...part })));
   const count = value.rows.length, row = value.rows[Math.min(selected, Math.max(0, count - 1))];
   // The last result (or typed refusal, possibly several lines) stays above the list until the next key's result replaces it.
@@ -88,17 +90,17 @@ export function RunControlDecisionCard({ value, work, labels, pending, onDecide 
 export async function runRunsControl(panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels,
   errorText: (error: unknown) => string, reason: () => string | undefined): Promise<string> {
   const words = work.runControl!, jobs = work.jobs!, title = work.live!.runsTitle, results: string[] = [];
-  let status = '';
+  let status = '', selected = 0;
   while (!execution.signal.aborted) {
     const runs = await loadRunViewsForWatch(ledger);
     if (execution.signal.aborted) break;
     const rows = runs.map(run => ({ actions: runControlActions(run), spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
       span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
     const choices = ['close', ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
-    const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty }, choices);
+    const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty, selected }, choices);
     if (choice === null || choice === 'close' || execution.signal.aborted) break;
     const [action, index] = choice.split(':') as [RunControlAction, string];
-    const chosen = runs[Number(index)]!, fresh = await ledger.inspectRun(chosen.runId);
+    const chosen = runs[Number(index)]!, fresh = await ledger.inspectRun(chosen.runId); selected = Number(index);
     if (execution.signal.aborted) break;
     if (!fresh) { status = fillTemplate(words.gone, { run: shortId(chosen.runId) }); results.push(status); continue; }
     const answer = await panel.pick(execution, { kind: 'run-control', run: fresh, action }, ['allow', 'deny']);

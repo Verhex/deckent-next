@@ -78,7 +78,9 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       // Read-only: the scope's Runs seen in the inventory (newest attempts first as the inventory pages them), bounded by `scanRuns`; a Run
       // qualifies when it has one task of the configured kind and that task is accepted. Commit, profile and criteria are the adoption's checks.
       const kind = (await loadConfig(root, options)).execution?.adoption.verification?.kind;
-      if (kind === undefined || !inspectRun) return Object.freeze([]);
+      // Without a configured kind or a Run reader there is nothing to choose from: say why, never "none exists".
+      if (kind === undefined) throw ErrorRegistry.createError('ADOPTION_VERIFICATION_NOT_CONFIGURED');
+      if (!inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
       const runIds = new Set<string>(), found: VerificationCandidate[] = [];
       let after: string | null = null;
       do {

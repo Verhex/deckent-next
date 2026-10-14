@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.j
 import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort,
   type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
@@ -124,6 +125,50 @@ describe('delivery window — pure rules', () => {
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/main', files: [] })).toBe(true);
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/other', files: [] })).toBe(false);
     expect(consentMatches(adopt, { ...view, operation: 'adopt-integration', commandId: 'a', resource: 'refs/heads/main', to: 'f'.repeat(40), files: [] })).toBe(false);
+  });
+});
+
+describe('verification candidates (cli-terminal port, read-only)', () => {
+  const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 };
+  const preview = { identity } as unknown as DeliveryPreview;
+  const task = (kind: string, phase: string, id = 'check') => ({ id, kind, phase });
+  function project(verification: unknown) {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-verify-candidates-')); mkdirSync(join(root, '.deckent'));
+    writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2, logMaxSizeKiB: 1024, logMaxFiles: 2,
+      tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: ['refs/heads/main'], ...(verification ? { verification } : {}) } } }));
+    return root;
+  }
+  const bar = { kind: 'verify', required: true, criteria: [{ evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+  function port(root: string, pages: readonly (readonly string[])[], views: Readonly<Record<string, readonly ReturnType<typeof task>[]>>, reader = true) {
+    const inventoryCalls: (string | null)[] = [], inspected: string[] = [];
+    const handlers = { inspectInventory: async (_root: string, query: { after: string | null }) => {
+      inventoryCalls.push(query.after); const index = query.after === null ? 0 : Number(query.after);
+      return { schemaVersion: 1, layout: {}, page: { entries: (pages[index] ?? []).map(runId => ({ identity: { ...identity, runId } })), nextAfter: index + 1 < pages.length ? String(index + 1) : null } };
+    }, previewWorkspacePatch: async () => ({}), checkWorkspaceIntegration: async () => ({}), prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: () => '',
+      interactiveDelivery: () => ({}), ...(reader ? { inspectRun: async (_root: string, query: { runId: string }) => {
+        inspected.push(query.runId); return { schemaVersion: 1, layout: {}, run: views[query.runId] ? { runId: query.runId, tasks: views[query.runId] } : null };
+      } } : {}) };
+    return { port: terminalDeliveryPort(root, handlers as never, { env: { HOME: join(root, 'home') } })!, inventoryCalls, inspected };
+  }
+
+  it('lists only accepted one-task Runs of the configured kind; never the delivering Run, another kind, two tasks or an unfinished/failed task', async () => {
+    const { port: subject, inspected } = port(project(bar), [['r', 'v-ok', 'v-two', 'v-kind'], ['v-failed', 'v-evaluating', 'v-ok', 'v-missing']], {
+      r: [task('verify', 'accepted')], 'v-ok': [task('verify', 'accepted')], 'v-two': [task('verify', 'accepted'), task('verify', 'accepted', 'second')],
+      'v-kind': [task('coding', 'accepted')], 'v-failed': [task('verify', 'failed')], 'v-evaluating': [task('verify', 'evaluating')] });
+    expect(await subject.verificationRuns(preview)).toEqual([{ runId: 'v-ok', taskId: 'check' }]);
+    expect(inspected).not.toContain('r'); expect(inspected.filter(id => id === 'v-ok')).toHaveLength(1); // the delivering Run is never read; each Run once
+  });
+
+  it('stops reading the inventory at the scan bound', async () => {
+    const ids = Array.from({ length: 450 }, (_, index) => `v-${index}`), pages = [ids.slice(0, 150), ids.slice(150, 300), ids.slice(300)];
+    const { port: subject, inventoryCalls, inspected } = port(project(bar), pages, Object.fromEntries(ids.map(id => [id, [task('verify', 'accepted')]])));
+    expect(await subject.verificationRuns(preview)).toHaveLength(200);
+    expect(inventoryCalls).toEqual([null, '1']); expect(inspected).toHaveLength(200);
+  });
+
+  it('says why instead of "none exists": no configured kind, or no Run reader in this terminal', async () => {
+    await expect(port(project(null), [['v-ok']], { 'v-ok': [task('verify', 'accepted')] }).port.verificationRuns(preview)).rejects.toMatchObject({ code: 'ADOPTION_VERIFICATION_NOT_CONFIGURED' });
+    await expect(port(project(bar), [['v-ok']], {}, false).port.verificationRuns(preview)).rejects.toMatchObject({ code: 'INVENTORY_UNAVAILABLE' });
   });
 });
 

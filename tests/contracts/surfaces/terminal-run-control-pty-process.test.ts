@@ -36,15 +36,15 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const f = await workspacePatchFixture(track); await f.run(); await grant(f, ['create', 'reserve', 'inspect', 'cancel']);
     const before = (await f.runtime.store.loadRun('s', 'r'))!;
     expect(before.state.kind).toBe('running');
-    const steps: Step[] = [['READY', '/runs\r'], ['h hold', 'h'], ['Hold run', 'y'], ['held (revision', 'c'], ['Close parked run', 'y'], ['(code: RUN_DECISION_NOT_READY)', 'r'],
-      ['Resume run', 'y'], ['resumed (revision', '']];
+    const steps: Step[] = [['READY', '/runs\r'], ['h hold', 'h'], ['Hold run', 'y'], ['hold recorded, now parked (revision', 'c'], ['Close parked run', 'y'], ['(code: RUN_DECISION_NOT_READY)', 'r'],
+      ['Resume run', 'y'], ['resume recorded, now running (revision', '']];
     const result = await inPty(program, f.project, f.options.env, 'en', steps); await capture('runs-hold-close-resume-en.txt', result.output);
     const after = (await f.runtime.store.loadRun('s', 'r'))!;
     expect(after.state.kind).toBe('running'); expect(after.revision).toBe(before.revision + 2); // hold + resume; the refused close wrote nothing
     const output = plain(result.output), ids = [...output.matchAll(/Command (terminal-run-(?:hold|resume)-[0-9a-f-]{36})/gu)].map(match => match[1]!);
     expect(new Set(ids).size).toBe(2);
     for (const commandId of ids) expect(await f.runtime.store.loadRunReceipt!('s', commandId)).not.toBeNull();
-    expect(squeeze(result.output)).toContain(squeeze('Run r held (revision'));
+    expect(squeeze(result.output)).toContain(squeeze('Run r hold recorded, now parked (revision'));
   });
 
   it('without the run cancel grant the hold is refused by policy, in Turkish in a TR session; nothing changes', async () => {
@@ -55,6 +55,6 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const after = (await f.runtime.store.loadRun('s', 'r'))!;
     expect(after.revision).toBe(before.revision); expect(after.state.kind).toBe('running');
     const code = /\(kod: ([A-Z_]+)\)/u.exec(plain(result.output))?.[1];
-    expect(code).toMatch(/DENIED|POLICY|AUTHORIZ/u);
+    expect(code).toBe('POLICY_DENIED');
   });
 });

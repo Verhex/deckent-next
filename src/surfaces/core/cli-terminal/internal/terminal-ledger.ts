@@ -1,4 +1,4 @@
-import { type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance, runLifecycleCommandSchema } from '#engine/index.js';
+import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance, runLifecycleCommandSchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { shortId, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
@@ -23,6 +23,19 @@ function approvalView(record: ApprovalRecord): WorklineApproval {
     risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}),
     createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}),
     ...(subject.kind === 'config-change' ? { config: { action: subject.action, layer: subject.layer, keyPath: subject.keyPath, ruleId: subject.ruleId } } : {}) });
+}
+
+/** The Run state a control left, in the session language (the Runs list's own state words). */
+function runStateWord(state: RunView['state'], locale: Locale): string {
+  if (state.kind === 'running') return t('terminal.jobs.state.running', {}, locale);
+  if (state.kind === 'parked') return t('terminal.jobs.state.parked', {}, locale);
+  switch (state.outcome) {
+    case 'completed': return t('terminal.jobs.state.completed', {}, locale);
+    case 'incomplete': return t('terminal.jobs.state.incomplete', {}, locale);
+    case 'failed': return t('terminal.jobs.state.failed', {}, locale);
+    case 'cancelled': return t('terminal.jobs.state.cancelled', {}, locale);
+    default: return t('terminal.jobs.state.unknown', {}, locale);
+  }
 }
 
 /** Terminal ports over the same handlers as the CLI commands (`workers`, `run`, `inventory`, `approvals`, `task transcript`, `run cancel`). */
@@ -117,7 +130,7 @@ export function createWorklineLedgerPorts(input: {
           ? { schemaVersion: 1, commandId, scopeId, runId, action, holdReason: own || t('terminal.runControl.reasonDefault', {}, locale), expectedRevision }
           : { schemaVersion: 1, commandId, scopeId, runId, action, expectedRevision });
         const result = await applyRunLifecycle(root, command, options), run = result?.lifecycle.run;
-        const params = { run: shortId(runId), command: commandId, revision: run?.revision ?? '—' };
+        const params = { run: shortId(runId), command: commandId, revision: run?.revision ?? '—', state: run ? runStateWord(run.state, locale) : '—' };
         return action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
           : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale);
       },
