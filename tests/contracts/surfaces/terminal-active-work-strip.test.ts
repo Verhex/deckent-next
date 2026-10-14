@@ -4,7 +4,7 @@ import { render } from 'ink';
 import { Writable } from 'node:stream';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { ActiveWorkStrip, activeWorkItems, activeWorkWindow } from '#surfaces/core/terminal-work/index.js';
+import { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow } from '#surfaces/core/terminal-work/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
@@ -45,7 +45,8 @@ describe('active work items (pure projection)', () => {
     expect(activeWorkWindow(3, 0, 6)).toEqual({ first: 0, shown: 3, more: 0 });
     expect(activeWorkWindow(10, 0, 4)).toEqual({ first: 0, shown: 2, more: 8 });
     expect(activeWorkWindow(10, 9, 4)).toEqual({ first: 8, shown: 2, more: 8 });
-    expect(activeWorkWindow(10, 0, 1)).toEqual({ first: 0, shown: 1, more: 9 });
+    expect(activeWorkWindow(10, 0, activeWorkRows(4))).toEqual({ first: 0, shown: 1, more: 9 }); // the floor: header, one row, "+9 more" = 3 rows
+    expect(activeWorkRows(4)).toBe(3); expect(activeWorkRows(40)).toBe(10);
   });
 
   it('renders bounded, width-fitting rows at a narrow terminal and nothing when empty', async () => {

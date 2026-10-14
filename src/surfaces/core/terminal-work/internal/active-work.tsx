@@ -66,9 +66,9 @@ export function activeWorkWindow(count: number, selected: number, rows: number):
   return { first, shown, more: count - shown };
 }
 
-/** The strip takes a quarter of the screen at most (header included), and never less than the header and one row. */
-const SCREEN_SHARE = 4;
-export function activeWorkRows(screenRows: number): number { return Math.max(2, Math.floor(screenRows / SCREEN_SHARE)); }
+/** The strip takes a quarter of the screen at most (header and "+N more" included), and never less than header, one row and "+N more". */
+const SCREEN_SHARE = 4, FLOOR_ROWS = 3;
+export function activeWorkRows(screenRows: number): number { return Math.max(FLOOR_ROWS, Math.floor(screenRows / SCREEN_SHARE)); }
 
 /** Elapsed and remaining times refresh on the session's inspection cadence (inspection.workers.heartbeatMs), never faster; a new
  * item or phase (`resetKey`) reads the clock once at that change, so a new row never shows a stale time. */
