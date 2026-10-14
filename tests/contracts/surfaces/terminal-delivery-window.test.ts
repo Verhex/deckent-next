@@ -198,8 +198,8 @@ describe('delivery window on the real Workline', () => {
       delivered: { ref: REF, commit: COMMIT, commandId: 'terminal-delivery-1' },
       preview: { identity: { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 }, adoptionTargets: ['refs/heads/main'],
         files: [], added: 0, removed: 0, source: 'S', base: BASE, proposal: 'P'.repeat(20), outOfScope: [] } as never }, WORDS);
-    expect(rows.at(-1)!.spans.map(part => part.text).join('')).toContain('deckent task integration-adopt --scope s --run r --task task --attempt a --generation 1'
-      + ' --layout-revision l --command-id <new-id> --delivery-command-id terminal-delivery-1 --target refs/heads/main --verification-run <run>');
+    expect(rows.at(-1)!.spans.map(part => part.text).join('')).toContain('`deckent task integration-adopt --scope s --run r --task task --attempt a --generation 1'
+      + ' --layout-revision l --command-id <new-id> --delivery-command-id terminal-delivery-1 --target refs/heads/main --verification-run <run>`');
   });
 
   it('n after delivery finishes without adopting; the branch is never moved', async () => {
