@@ -140,7 +140,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const visible = order.current.map(key => entries.current.get(key)).find((entry): entry is Entry => Boolean(entry && !entry.closed)) ?? null;
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
-      body={deliveryLines(visible, labels, input.known)} hints={hintsOf(visible, labels)} position={input.position}
+      body={deliveryLines(visible, labels, input.known)} hints={hintsOf(visible, labels)} position={input.position} decision
       onInput={(text, key) => {
         const stage = visible.stage, lower = text.toLowerCase();
         if (stage.kind === 'confirm') {

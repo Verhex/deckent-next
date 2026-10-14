@@ -11,7 +11,7 @@ import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 // The real Workline on an in-memory TTY with a recording port that calls the window's answer exactly where the production confirmation port
 // does (after preparation, before the reference is written). The real port, Git and a real controlling PTY are in terminal-delivery-pty-process.
 const EN = workSurfaceLabels('en'), WORDS = deliveryWindowLabels('en');
-const focus = { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS' }, CTRL_O = '\u000f', CTRL_T = '\u0014', ESC = '\u001b', CTRL_U = '\u0015', DOWN = '\u001b[B';
+const focus = { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS', decide: 'DECIDE-HINT' }, CTRL_O = '\u000f', CTRL_T = '\u0014', ESC = '\u001b', CTRL_U = '\u0015', DOWN = '\u001b[B';
 const BASE = 'b'.repeat(40), COMMIT = 'c'.repeat(40), REF = `refs/deckent/deliveries/${'d'.repeat(64)}`;
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const view of mounted.splice(0)) view.unmount(); });
@@ -115,9 +115,10 @@ describe('delivery window on the real Workline', () => {
     expect(frame(h)).toContain('INPUT-FOCUS'); expect(frame(h)).toContain(`ORDER-TASK · ${EN.activeWork!.deliveryWaiting}`);
     expect(frame(h)).toContain(`affected files match base ${BASE.slice(0, 12)}`); expect(frame(h)).toContain('refs/deckent/deliveries/');
     expect(frame(h)).toContain(WORDS.hints); expect(h.calls).toEqual(['preview:r']);
+    expect(frame(h)).toContain('DECIDE-HINT'); // the waiting decision window says how to reach it
     // A composer keystroke is typing, never a confirmation.
     await press(h, 'y'); await press(h, 'es-draft'); expect(frame(h)).toContain('yes-draft'); expect(h.calls).toEqual(['preview:r']); await press(h, CTRL_U);
-    await press(h, CTRL_O); expect(frame(h)).toContain('WINDOW-FOCUS');
+    await press(h, CTRL_O); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(frame(h)).not.toContain('DECIDE-HINT');
     await press(h, 'y', 120);
     await until(() => frame(h).includes(`Delivered: commit ${COMMIT}`), 'delivered result line');
     expect(h.calls).toEqual(['preview:r', 'available', 'prepare', 'publish']);
