@@ -45,6 +45,18 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
 }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
+  OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
+  OAUTH_CONNECTION_PLATFORM_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED', p, l) }) },
+  OAUTH_CONNECTION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INVALID', p, l) }) },
+  OAUTH_CONNECTION_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_DENIED', p, l) }) },
+  OAUTH_CONNECTION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_UNAVAILABLE', p, l) }) },
+  OAUTH_CONNECTION_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_CANCELLED', p, l) }) },
+  OAUTH_CONNECTION_TIMEOUT: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_TIMEOUT', p, l) }) },
+  OAUTH_CONNECTION_IDENTITY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_IDENTITY_INVALID', p, l) }) },
+  OAUTH_CONNECTION_STORE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_STORE_REQUIRED', p, l) }) },
+  OAUTH_CONNECTION_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_CHANGED', p, l) }) },
+  OAUTH_CONNECTION_REAUTHORIZE: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_REAUTHORIZE', p, l) }) },
   BACKUP_STATE_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_STATE_CHANGED', p, l) }) },
   BACKUP_TARGET_IDENTITY_MISMATCH: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_TARGET_IDENTITY_MISMATCH', p, l) }) },
   BACKUP_RESTORE_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_RESTORE_INCOMPLETE', p, l) }) },

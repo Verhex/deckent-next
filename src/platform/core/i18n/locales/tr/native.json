@@ -194,5 +194,17 @@
   "native_permission.round_item_denied": "(politika tarafından reddedildi)",
   "native_permission.round_item_floor": "(her seferinde sorar)",
   "native_permission.round_more": "… {n} çağrı daha listelenmedi",
-  "native_permission.round_title": "Bu turda {count} araç çağrısı öneriliyor"
+  "native_permission.round_title": "Bu turda {count} araç çağrısı öneriliyor",
+  "error.OAUTH_CONNECTION_INVALID": "ChatGPT bağlantısı doğrulanamadı. Girişi yeniden başlatın.",
+  "error.OAUTH_CONNECTION_DENIED": "ChatGPT bağlantısı reddedildi veya bu kapsamda izinli değil.",
+  "error.OAUTH_CONNECTION_UNAVAILABLE": "ChatGPT bağlantısı kullanılamıyor. Sonucu belirsiz yenilemede tekrar giriş gerekir.",
+  "error.OAUTH_CONNECTION_CANCELLED": "ChatGPT bağlantı işlemi iptal edildi. Devam etmeden önce durumunu inceleyin.",
+  "error.OAUTH_CONNECTION_TIMEOUT": "ChatGPT girişinin süresi doldu. Yeni bir giriş denemesi başlatın.",
+  "error.OAUTH_CONNECTION_IDENTITY_INVALID": "ChatGPT kimliği doğrulanamadı. Hiçbir hesap etkinleştirilmedi.",
+  "error.OAUTH_CONNECTION_STORE_REQUIRED": "ChatGPT bağlantısından önce şifreli sır deposunu seçin.",
+  "error.OAUTH_CONNECTION_CHANGED": "Bağlantı veya sır deposu değişti. Devam etmeden önce durumunu inceleyin.",
+  "error.OAUTH_CONNECTION_REAUTHORIZE": "Bu ChatGPT oturumu için tekrar giriş gerekir.",
+  "error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED": "ChatGPT girişini etkileşimli terminalden başlatın. Giriş URL adresi yazdırılmaz.",
+  "error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED": "Bu uygulamada ChatGPT tarayıcı girişi yalnız Linux/WSL üzerinde desteklenir.",
+  "error.SECRET_STORE_PROTECTION_REQUIRED": "Yenilenebilir kimlik bilgileri şifreli saklanmalıdır. Bu sır deposu bunları kabul edemez."
 }

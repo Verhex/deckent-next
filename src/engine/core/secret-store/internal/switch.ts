@@ -3,6 +3,7 @@ import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type Audit
 import { ErrorRegistry } from '#platform/index.js';
 import type { SecretCustody, SecretStore } from './port.js';
 import type { SecretChangeAudit, SecretChangeDecision } from './administration.js';
+import { assertSecretStorageProtection } from './protection.js';
 
 /** The policy resource id of a store switch: one installation store, so one fixed id; a rule for every secret name (`all`) covers it. */
 export const SECRET_STORE_SWITCH_RESOURCE_ID = 'secret-store';
@@ -97,6 +98,7 @@ export class SecretStoreSwitch {
     }
     // The environment backend (and any store that cannot list) has nothing Deckent can move: only the selection changes.
     const names = source.descriptor.enumerable ? [...await source.listNames()] : [];
+    for (const name of names) assertSecretStorageProtection(name, target.descriptor);
     const downgrade = isSecretStoreDowngrade(from, request.to);
     if (downgrade && !request.confirmDowngrade) throw ErrorRegistry.createError('SECRET_STORE_DOWNGRADE_UNCONFIRMED', { params: { from, to: request.to } });
     if (names.length && !target.descriptor.writable) throw ErrorRegistry.createError('SECRET_STORE_READ_ONLY', { params: { backend: request.to } });
@@ -130,6 +132,7 @@ export class SecretStoreSwitch {
       scopeId: request.scopeId, status: 'current', from: selected, to: selected, entries: 0, downgrade: false, cleaned });
     // A selection Deckent cannot list (the environment) proves no copy elsewhere redundant: nothing is cleaned against it.
     if (!target.descriptor.enumerable) return result(true);
+    for (const name of await target.listNames()) assertSecretStorageProtection(name, target.descriptor);
     let cleaned = true;
     const candidates: { readonly store: SecretStore; readonly name: string }[] = [];
     for (const other of Object.keys(CORE_STORE_RANK)) {

@@ -1,9 +1,7 @@
 import type { ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { AuditApplication, ModelConnectApplication, ModelConnectError, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService,
-  type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName,
-  providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
+import { AuditApplication, ModelConnectApplication, ModelConnectError, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
+import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -12,18 +10,9 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
-
-/** Code-only host ports (never config or environment): the secret names (to report the key's presence), the service describe (restart state), and a
- * registry document in place of the shipped one (tests, an Enterprise overlay through the same schema). */
-export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ registry?: ProviderConnectRegistry;
-  listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
-
-/**
- * `models.connect` (T4-B D2) as the CLI, SDK, MCP and the terminal call it: the engine's `ModelConnectApplication` over the configured governed
- * owners — the `/config` writer (policy, approval, audit), the ledger catalog register, the chat activation, the audit log — and the
- * provider-connect registry (kinds, seeds, adapters). Seedless discovery resolves the configured key behind its HTTPS reader;
- * the engine and the command/result never receive a key value.
- */
+/** Code-only host ports: secret names, service status and a validated registry overlay; never config/env. */
+export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
+/** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
   try {
     const registry = host.registry ?? PROVIDER_CONNECT_REGISTRY, scopeId = (input as { scopeId?: unknown } | null)?.scopeId;
@@ -31,8 +20,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const config = createConfiguredConfigApplication(projectRoot, options);
     const principal = typeof scopeId === 'string' ? () => resolveConfiguredConfigPrincipal(projectRoot, scopeId, options) : () => { throw new ModelConnectError('MODEL_CONNECT_INVALID'); };
     const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
-    // The merged configuration of the last layer read: its result frames bound a connected profile's answer.
-    let effective: Record<string, unknown> = {};
+        let effective: Record<string, unknown> = {};
     const app = new ModelConnectApplication({
       kind: id => { const kind = kindOf(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: kind.key?.required ?? false, connect: kind.connect }; },
       defaults: registry.profileDefaults,
@@ -59,8 +47,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async activation(reference) { return (await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), reference }, options)).activation; },
       async activate(value) {
         await admitConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
-          expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options);
-      },
+          expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options); },
       delivers: (profile, binding, spare) => assessModelInvocationProfileDeliveries([{ profile: profile as never, definition: binding.definition, catalogRevision: binding.catalogRevision }],
         configuredModelInvocationDeliverySurfaces(effective as never).map(([surface, frame]) => [surface, { maxResultBytes: frame.maxResultBytes - spare }] as const)).length === 0,
       async audit(event) {
@@ -77,9 +64,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     throw error instanceof DeckentError ? error : queryFailure(error);
   }
 }
-
-/** CACHE-SLICE1: the scope's existing profiles the adapter offers the 5-minute prompt cache for, and the per-layer writes (read fresh; nothing written
- * here — the caller sends each write through the governed `/config` writer, so policy, approval and audit stay that writer's). */
+/** Read-only cache preview; every resulting change goes through the governed config writer. */
 export async function planConfiguredProfileCache(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileCachePlan> {
   const snapshot = await snapshotConfiguredConfig(projectRoot, options);
   return planProfileCache({ global: snapshot.global as Record<string, unknown>, project: snapshot.project as Record<string, unknown> }, scopeId, providerProfileCacheOffer);

@@ -77,7 +77,7 @@ function sealedCodec(root: string, fail: (code: SecretStoreErrorCode) => Deckent
  * A missing key beside an existing store, a wrong key or any changed byte is `SECRET_STORE_CORRUPT`; nothing is re-keyed or repaired.
  */
 export function createEncryptedFileSecretStore(options: FileSecretStoreOptions): SecretStore {
-  return createFileSecretStore(options, { id: ENCRYPTED_FILE_SECRET_STORE_ID, fileName: ENCRYPTED_FILE_SECRET_STORE_NAME, codec: sealedCodec });
+  return createFileSecretStore(options, { id: ENCRYPTED_FILE_SECRET_STORE_ID, fileName: ENCRYPTED_FILE_SECRET_STORE_NAME, codec: sealedCodec, encryptedAtRest: true });
 }
 export const encryptedFileSecretStoreFactory: SecretStoreFactory = Object.freeze({ id: ENCRYPTED_FILE_SECRET_STORE_ID,
   create: (context: SecretStoreContext) => createEncryptedFileSecretStore({ root: context.root, platform: context.platform }) });

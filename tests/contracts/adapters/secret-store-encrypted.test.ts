@@ -23,7 +23,7 @@ const windows = process.platform === 'win32';
 
 it.skipIf(windows)('requires POSIX private file secret store — encrypted backend: round trip; no value, name-value pair or plaintext document on disk', async () => {
   const f = await root(), s = store(f.global);
-  expect(s.descriptor).toEqual({ id: 'core.secret-store.encrypted-file@1', writable: true, enumerable: true });
+  expect(s.descriptor).toEqual({ id: 'core.secret-store.encrypted-file@1', writable: true, enumerable: true, encryptedAtRest: true });
   expect(await s.get('PROVIDER_TOKEN')).toBeUndefined();
   // Nothing is created by a read: no key, no store.
   expect(await readdir(f.global)).toEqual([]);

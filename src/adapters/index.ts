@@ -96,3 +96,4 @@ export * from '#adapters/core/resource-trace/index.js';
 export { sampleDockerResources } from '#adapters/core/docker-supervisor/index.js';
 
 export { openInstallationPoolStore } from '#adapters/core/installation-pool-store/index.js';
+export * from '#adapters/core/provider-siwc/index.js';

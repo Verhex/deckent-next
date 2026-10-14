@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { DeckentError, ErrorRegistry, serializeJsonDocument, withConfigWriteLock, writeTextAtomic } from '#platform/index.js';
 import { SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue, type SecretStore, type SecretStoreErrorCode, type SecretStoreFactory,
   type SecretStoreContext, type SecretStoreInspection } from '#engine/index.js';
+import { assertSecretStorageProtection } from '#engine/index.js';
 
 export const FILE_SECRET_STORE_ID = 'core.secret-store.file@1';
 export const FILE_SECRET_STORE_NAME = 'secrets.json';
@@ -33,6 +34,7 @@ export interface SecretDocumentCodec {
 export interface PrivateSecretDocumentSpec {
   readonly id: string;
   readonly fileName: string;
+  readonly encryptedAtRest?: true;
   /** The codec for one opened store; `root` is the private store directory, `fail` types a refusal under this backend's id. */
   readonly codec?: (root: string, fail: (code: SecretStoreErrorCode) => DeckentError) => SecretDocumentCodec;
 }
@@ -57,6 +59,8 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
   const root = options.root, path = root === null ? null : join(root, spec.fileName);
   const codec = root === null || !spec.codec ? null : spec.codec(root, code => fail(code));
   const maxFileBytes = codec?.maxFileBytes ?? FILE_SECRET_STORE_MAX_BYTES;
+  const descriptor = Object.freeze({ id: spec.id, writable: true, enumerable: true, ...(spec.encryptedAtRest ? { encryptedAtRest: true as const } : {}) });
+  if (spec.encryptedAtRest && !spec.codec) throw fail('SECRET_STORE_PROTECTION_REQUIRED');
   const uid = (): number => {
     if (options.platform === 'win32' || root === null || typeof process.getuid !== 'function') throw fail('SECRET_STORE_UNAVAILABLE');
     return process.getuid();
@@ -127,7 +131,7 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
     }, options.lockTimeoutMs ?? 2_000);
   }
   return Object.freeze({
-    descriptor: Object.freeze({ id: spec.id, writable: true, enumerable: true }),
+    descriptor,
     async get(name: string) {
       const owner = uid();
       // A name outside the grammar can never have been stored.
@@ -137,6 +141,7 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
     async set(name: string, value: string) {
       if (!isSecretName(name)) throw fail('SECRET_NAME_INVALID');
       if (!isSecretValue(value)) throw fail('SECRET_VALUE_INVALID');
+      assertSecretStorageProtection(name, descriptor);
       await write(secrets => { secrets[name] = value; return { write: true, result: undefined }; });
     },
     async delete(name: string) {
