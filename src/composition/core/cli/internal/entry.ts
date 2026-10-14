@@ -17,7 +17,7 @@ import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains, inspect
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
-import { interactiveDeliveryHandlers, rollbackConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
+import { interactiveDeliveryHandlers, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { connectConfiguredModel, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
@@ -39,7 +39,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
   const languageAt = argv.indexOf('--lang');
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
-  const handlesSignals = isRuntimeServe || argv[0] === 'do' || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask') || (argv[0] === 'task' && ['integration-deliver', 'integration-adopt'].includes(argv[1] ?? ''));
+  const handlesSignals = isRuntimeServe || argv[0] === 'do' || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask') || (argv[0] === 'task' && ['integration-deliver', 'integration-adopt', 'integration-rollback'].includes(argv[1] ?? ''));
   const controller = new AbortController();
   const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view,
     resolveLocale(languageAt >= 0 ? argv[languageAt + 1] : await loadConfigLanguage(root)), process.stdin, process.stderr,
@@ -51,7 +51,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
     deliverWorkspaceIntegration: delivery.deliver,
-    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: rollbackConfiguredWorkspaceIntegration, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
+    adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
     inspectWorkerTranscript: inspectConfiguredWorkerTranscript, executeOperation: executeConfiguredOperation, compensateOperation: compensateConfiguredOperation, inspectOperation: inspectConfiguredOperation,
     inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration,
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,

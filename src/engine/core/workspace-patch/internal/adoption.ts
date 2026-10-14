@@ -125,7 +125,12 @@ export class WorkspaceAdoptionApplication {
     await this.ready(adopted.intent.targetRef, adopted.intent.toCommit, 'ADOPTION_TARGET_MOVED');
     const intent = integrationAdoptionIntentSchema.parse({ schemaVersion: 1, kind: 'rollback', command, targetRef: adopted.intent.targetRef,
       fromCommit: adopted.intent.toCommit, toCommit: adopted.intent.fromCommit, actor: verified.session.principalRef });
-    return this.apply(await this.store.claimAdoption(intent), settle);
+    if (intent.kind !== 'rollback') throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
+    // TESLIM-GUVENLIK: moving the branch back is a branch move too — the same verified human y/N as adoption, before the journal claim.
+    const confirm = await this.confirmRollback(intent);
+    await settle(); await confirm();
+    await this.ready(intent.targetRef, intent.fromCommit, 'ADOPTION_TARGET_MOVED');
+    return this.apply(await this.store.claimAdoption(intent), settle, confirm);
   }
 
   /** Replay or crash settlement of an existing command, decided by exact fence ownership (see apply). */
@@ -154,8 +159,9 @@ export class WorkspaceAdoptionApplication {
       if (observed.checkedOut) throw new WorkspaceAdoptionError('ADOPTION_TARGET_CHECKED_OUT');
       const previous = observed.fence === null ? record.sequence === 1 : observed.fence.sequence === record.sequence - 1;
       if (!previous || observed.tip !== intent.fromCommit) throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
-      const confirm = intent.kind === 'adopt' ? confirmed ?? await this.confirmAdoption(intent, await this.accepted(intent.command)) : undefined;
-      await settle(); if (confirm) { await confirm(); if (intent.kind === 'adopt') await this.accepted(intent.command); }
+      // Every new branch move (adoption or rollback, also a resumed unfinished one) needs its own human answer.
+      const confirm = confirmed ?? (intent.kind === 'adopt' ? await this.confirmAdoption(intent, await this.accepted(intent.command)) : await this.confirmRollback(intent));
+      await settle(); await confirm(); if (intent.kind === 'adopt') await this.accepted(intent.command);
       // Human think time may have changed target custody; re-observe through the existing fenced CAS.
       await this.ready(intent.targetRef, intent.fromCommit, 'ADOPTION_CONFLICT');
       await this.target.move(intent.targetRef, intent.fromCommit, intent.toCommit, observed.fence, mine);
@@ -169,6 +175,15 @@ export class WorkspaceAdoptionApplication {
     return this.confirmation.confirm({ operation: 'adopt-integration', scopeId: intent.command.identity.scopeId,
       commandId: intent.command.commandId, actor: intent.actor, resource: intent.targetRef, from: intent.fromCommit, to: intent.toCommit,
       runId: intent.command.identity.runId, taskId: intent.command.identity.taskId, ...deliverySummary(run, intent.command.identity, undefined, this.known) });
+  }
+
+  private async confirmRollback(intent: Extract<IntegrationAdoptionIntent, { kind: 'rollback' }>) {
+    await this.confirmation.assertAvailable();
+    const { identity } = intent.command, run = await this.store.loadRun(identity.scopeId, identity.runId);
+    if (!run) throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
+    return this.confirmation.confirm({ operation: 'rollback-integration', scopeId: identity.scopeId, commandId: intent.command.commandId,
+      actor: intent.actor, resource: intent.targetRef, from: intent.fromCommit, to: intent.toCommit, runId: identity.runId, taskId: identity.taskId,
+      ...deliverySummary(run, identity, undefined, this.known) });
   }
 
   private async accepted(command: IntegrationAdoptionCommand): Promise<RunSnapshot> {

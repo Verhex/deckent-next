@@ -34,8 +34,9 @@ export async function adoptWorkspaceIntegrationWithConfirmation(root: string, in
   let command; try { command = integrationAdoptionCommandSchema.parse(input); } catch (error) { throw queryFailure(error); }
   return withAdoption(root, command.identity, options, 'adopt-integration', application => application.adopt(command), confirmation);
 }
-export async function rollbackConfiguredWorkspaceIntegration(root: string, input: IntegrationRollbackCommand, options: ConfigLoadOptions = {}) {
+export async function rollbackWorkspaceIntegrationWithConfirmation(root: string, input: IntegrationRollbackCommand, options: ConfigLoadOptions, confirmation?: EffectConfirmation) {
   let command; try { command = integrationRollbackCommandSchema.parse(input); } catch (error) { throw queryFailure(error); }
-  return withAdoption(root, command.identity, options, 'rollback-integration', application => application.rollback(command));
+  return withAdoption(root, command.identity, options, 'rollback-integration', application => application.rollback(command), confirmation);
 }
+export const rollbackConfiguredWorkspaceIntegration = (root: string, input: IntegrationRollbackCommand, options: ConfigLoadOptions = {}) => rollbackWorkspaceIntegrationWithConfirmation(root, input, options); // SDK: no answer, refused like adoption
 export const adoptConfiguredWorkspaceIntegration = (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions = {}) => adoptWorkspaceIntegrationWithConfirmation(root, input, options);

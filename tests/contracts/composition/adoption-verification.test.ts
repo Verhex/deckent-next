@@ -1,10 +1,9 @@
-import { confirmedDelivery, confirmedAdoption } from '../support/delivery-terminal.js';
+import { confirmedDelivery, confirmedAdoption, confirmedRollback } from '../support/delivery-terminal.js';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, userInfo } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { evaluateTask, prepareConfiguredWorkspaceIntegration,
-  rollbackConfiguredWorkspaceIntegration } from '../../../src/index.js';
+import { evaluateTask, prepareConfiguredWorkspaceIntegration } from '../../../src/index.js';
 import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
@@ -109,7 +108,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await expect(f.adopt('adopt', 'nope')).rejects.toMatchObject({ code: 'ADOPTION_CONFLICT' });
     await expect(f.adopt('adopt', 'v', 'verify-fail')).rejects.toMatchObject({ code: 'ADOPTION_CONFLICT' });
     await expect(f.adopt('adopt')).rejects.toMatchObject({ code: 'ADOPTION_CONFLICT' });
-    const rolled = await rollbackConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: 'rollback', identity: f.identity, adoptionCommandId: 'adopt' }, f.options);
+    const rolled = await confirmedRollback(f.project, { schemaVersion: 1, commandId: 'rollback', identity: f.identity, adoptionCommandId: 'adopt' }, f.options);
     expect(rolled).toMatchObject({ schemaVersion: 2, status: 'rolled-back', toCommit: f.base, sequence: 2, verification: { status: 'not-verified' } });
     expect(await f.tip()).toBe(f.base);
     // Adoption without a verification Run stays possible and says so.

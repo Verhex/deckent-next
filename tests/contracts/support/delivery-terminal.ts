@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import type { EffectConfirmation, IntegrationDeliveryCommand, IntegrationAdoptionCommand } from '#engine/index.js';
-import { deliverWorkspaceIntegrationWithConfirmation, adoptWorkspaceIntegrationWithConfirmation } from '#composition/core/workspace-patch/index.js';
+import type { EffectConfirmation, IntegrationDeliveryCommand, IntegrationAdoptionCommand, IntegrationRollbackCommand } from '#engine/index.js';
+import { deliverWorkspaceIntegrationWithConfirmation, adoptWorkspaceIntegrationWithConfirmation, rollbackWorkspaceIntegrationWithConfirmation } from '#composition/core/workspace-patch/index.js';
 /** Explicit test broker: approve the actual card then assert the effect. Never claims a TTY witness.
  * Kept in-process so crash/race spies still exercise the original production adapters. */
 const approvedCard: EffectConfirmation = { async assertAvailable() {}, async confirm(card) {
@@ -12,3 +12,6 @@ export const confirmedDelivery = (root: string, input: IntegrationDeliveryComman
   deliverWorkspaceIntegrationWithConfirmation(root, input, options, approvedCard);
 export const confirmedAdoption = (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions = {}) =>
   adoptWorkspaceIntegrationWithConfirmation(root, input, options, approvedCard);
+/** TESLIM-GUVENLIK: a rollback moves the branch back, so it carries the same approved card (the bare SDK call is refused). */
+export const confirmedRollback = (root: string, input: IntegrationRollbackCommand, options: ConfigLoadOptions = {}) =>
+  rollbackWorkspaceIntegrationWithConfirmation(root, input, options, approvedCard);

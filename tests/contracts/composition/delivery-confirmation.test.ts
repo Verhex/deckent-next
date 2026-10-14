@@ -121,6 +121,46 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
     const f = await fixture(); expect((await f.execute()).ok).toBe(true); const before = await f.refs();
     expect(await f.execute(mode)).toMatchObject({ ok: false, error: { code: 'DELIVERY_INTERACTIVE_REQUIRED' } }); expect(await f.refs()).toBe(before);
   });
+  // TESLIM-GUVENLIK (owner): every action that moves a branch asks the person y/N — a rollback moves the adopted branch back.
+  async function adopted() {
+    const f = await fixture(), delivered = await f.execute(); expect(delivered.ok, delivered.output).toBe(true);
+    const adoption = await f.execute('adopt', 'y'); expect(adoption.ok, adoption.output).toBe(true);
+    expect(await f.git('rev-parse', f.target)).toBe(delivered.result.plan.commit);
+    return { f, commit: delivered.result.plan.commit as string };
+  }
+  it.each(['n', 'EOF'])('rollback %s after the shown card keeps the branch, its fence and the journal unchanged', async answer => {
+    const { f, commit } = await adopted(), before = await f.refs(), result = await f.execute('rollback', answer);
+    expect(result).toMatchObject({ ok: false, error: { code: 'DELIVERY_CONFIRMATION_DECLINED' } });
+    expect(result.output).toContain('Roll back an adoption: Ship useful change'); expect(result.output).toContain(`${commit} → ${f.base}`);
+    expect(await f.git('rev-parse', f.target)).toBe(commit); expect(await f.refs()).toBe(before);
+    await expect(readFile(join(f.root, 'rollback.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it.each([['rollback', 'piped-input'], ['rollback-sdk', 'tty'], ['rollback-mcp', 'tty']])('%s (%s) is refused before any journal claim; the branch stays adopted', async (mode, tty) => {
+    const { f, commit } = await adopted(), before = await f.refs(), result = await f.execute(mode, 'y', tty);
+    expect(result).toMatchObject({ ok: false, error: { code: 'DELIVERY_INTERACTIVE_REQUIRED' } }); expect(result.output).not.toContain('y/N: ');
+    expect(await f.git('rev-parse', f.target)).toBe(commit); expect(await f.refs()).toBe(before);
+    await expect(readFile(join(f.root, 'rollback.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('rollback y moves the branch back once after the shown card; replay returns the same result without asking', async () => {
+    const { f, commit } = await adopted(), result = await f.execute('rollback', 'y');
+    expect(result.ok, result.output).toBe(true); expect(result.output).toContain('Roll back an adoption: Ship useful change');
+    expect(result.result).toMatchObject({ status: 'rolled-back', targetRef: f.target, fromCommit: commit, toCommit: f.base, sequence: 2 });
+    expect(await f.git('rev-parse', f.target)).toBe(f.base);
+    const replay = await f.execute('rollback-sdk', '', 'piped-input'); expect(replay.result).toEqual(result.result); expect(replay.output).not.toContain('y/N: ');
+  });
+  it('a claimed but unmoved rollback needs a fresh answer; a moved but unsettled one settles without asking', async () => {
+    const { f, commit } = await adopted(), adoption = JSON.parse(await readFile(join(f.root, 'adoption.json'), 'utf8'));
+    const intent = { schemaVersion: 1, kind: 'rollback', command: { schemaVersion: 1, commandId: 'rollback', identity: adoption.intent.command.identity, adoptionCommandId: 'adopt' },
+      targetRef: f.target, fromCommit: commit, toCommit: f.base, actor: adoption.intent.actor };
+    await writeFile(join(f.root, 'rollback.json'), JSON.stringify({ intent, sequence: 2, settled: false }));
+    const before = await f.refs();
+    expect(await f.execute('rollback-sdk', '', 'piped-input')).toMatchObject({ ok: false, error: { code: 'DELIVERY_INTERACTIVE_REQUIRED' } });
+    expect(await f.refs()).toBe(before); expect(await f.git('rev-parse', f.target)).toBe(commit);
+    const resumed = await f.execute('rollback', 'y'); expect(resumed.ok, resumed.output).toBe(true); expect(resumed.output).toContain('Roll back an adoption');
+    expect(await f.git('rev-parse', f.target)).toBe(f.base);
+    await writeFile(join(f.root, 'rollback.json'), JSON.stringify({ intent, sequence: 2, settled: false }));
+    const settled = await f.execute('rollback-sdk', '', 'piped-input'); expect(settled.ok, settled.output).toBe(true); expect(settled.result).toEqual(resumed.result);
+  });
 });
 
 it.skipIf(process.platform === 'linux')('refuses the unavailable verified-terminal capability before effects on other platforms', async () => {

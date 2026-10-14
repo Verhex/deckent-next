@@ -92,6 +92,10 @@ async function loop(verification: unknown = requirement) {
       '--delivery-command-id', 'delivery', '--target', target, ...(runId ? ['--verification-run', runId] : []), ...(json ? ['--json'] : [])];
     return answer === undefined ? cli(args) : deliveryTerminalCli(f.project, f.options.env, args, answer);
   };
+  const rollbackCli = (commandId: string, answer?: string) => {
+    const args = ['task', 'integration-rollback', ...identityFlags, '--command-id', commandId, '--adoption-command-id', 'adopt', '--json'];
+    return answer === undefined ? cli(args) : deliveryTerminalCli(f.project, f.options.env, args, answer);
+  };
   const adopt = (commandId: string, verificationRunId?: string, verificationKind = 'verify') => confirmedAdoption(f.project,
     { schemaVersion: 2, commandId, identity: f.identity, deliveryCommandId: 'delivery', targetRef: target,
       ...(verificationRunId === undefined ? {} : { verificationRunId, verificationKind }) } as never, f.options);
@@ -129,7 +133,7 @@ async function loop(verification: unknown = requirement) {
     expect(ledger('SELECT command_id FROM workspace_adoptions')).toEqual([]);
   };
   await f.git('branch', 'adopted', f.base);
-  return { ...f, plan: delivery.plan, snapshot, configure, cli, adoptCli, adopt, createCli, settle, ledger, tip, fence, unchanged };
+  return { ...f, plan: delivery.plan, snapshot, configure, cli, adoptCli, rollbackCli, adopt, createCli, settle, ledger, tip, fence, unchanged };
 }
 
 describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('verification precondition and operator loop (B06-2c)', () => {
@@ -176,6 +180,16 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(human.exit).toBe(0);
     expect(human.stdout).toContain(f.plan.commit); expect(human.stdout).toMatch(/verified/i);
     expect(human.stdout).not.toMatch(/not verification/i);
+    // TESLIM-GUVENLIK: rolling the branch back moves it too — the production CLI asks the same y/N; without a TTY or with n nothing moves.
+    const adoptedFence = await f.fence(), rollbacks = () => f.ledger("SELECT command_id FROM workspace_adoptions WHERE command_id LIKE 'rollback%'");
+    expect(await f.rollbackCli('rollback')).toMatchObject({ exit: 1, code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    expect(await f.rollbackCli('rollback', 'n')).toMatchObject({ exit: 1, code: 'DELIVERY_CONFIRMATION_DECLINED' });
+    expect(await f.tip()).toBe(f.plan.commit); expect(await f.fence()).toBe(adoptedFence); expect(rollbacks()).toEqual([]);
+    const rolled = await f.rollbackCli('rollback', 'y');
+    expect(rolled.exit).toBe(0); expect('output' in rolled ? rolled.output : '').toContain('Roll back an adoption');
+    expect(JSON.parse(rolled.stdout)).toMatchObject({ status: 'rolled-back', targetRef: target, fromCommit: f.plan.commit, toCommit: f.base, sequence: 2 });
+    expect(await f.tip()).toBe(f.base);
+    expect(JSON.parse((await f.rollbackCli('rollback')).stdout)).toEqual(JSON.parse(rolled.stdout)); // completed replay does not ask
   });
 
   it('refuses weaker criteria, another kind and an unconfigured CLI binding; the dependency bind cannot be written', async () => {

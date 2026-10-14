@@ -1,4 +1,4 @@
-import { confirmedDelivery, confirmedAdoption } from '../support/delivery-terminal.js';
+import { confirmedDelivery, confirmedAdoption, confirmedRollback } from '../support/delivery-terminal.js';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -31,14 +31,17 @@ async function delivered() {
   };
   const adopt = (commandId: string, extra: Record<string, unknown> = {}) => confirmedAdoption(f.project,
     { schemaVersion: 2, commandId, identity: f.identity, deliveryCommandId: 'delivery', targetRef: target, ...extra } as never, f.options);
-  const rollback = (commandId: string, adoptionCommandId: string) => rollbackConfiguredWorkspaceIntegration(f.project,
+  const rollback = (commandId: string, adoptionCommandId: string) => confirmedRollback(f.project,
+    { schemaVersion: 1, commandId, identity: f.identity, adoptionCommandId }, f.options);
+  /** The public SDK producer: no human answer capability. */
+  const rollbackSdk = (commandId: string, adoptionCommandId: string) => rollbackConfiguredWorkspaceIntegration(f.project,
     { schemaVersion: 1, commandId, identity: f.identity, adoptionCommandId }, f.options);
   const tip = () => f.git('rev-parse', target);
   const ledger = (commandId: string) => {
     const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'), { readOnly: true });
     try { return db.prepare('SELECT sequence,settled FROM workspace_adoptions WHERE command_id=?').get(commandId); } finally { db.close(); }
   };
-  return { ...f, plan: delivery.plan, evaluate, adopt, rollback, tip, ledger };
+  return { ...f, plan: delivery.plan, evaluate, adopt, rollback, rollbackSdk, tip, ledger };
 }
 
 describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('verified-delivery branch adoption and rollback', () => {
@@ -56,6 +59,9 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(await f.git('--no-optional-locks', 'status', '--porcelain')).toBe(status); expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('before\n');
     expect(await f.adopt('adopt')).toEqual(sdk);
 
+    // TESLIM-GUVENLIK: moving the branch back needs the human answer too; the SDK call is refused before any journal claim.
+    await expect(f.rollbackSdk('rollback-sdk', 'adopt')).rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+    expect(await f.tip()).toBe(f.plan.commit); expect(f.ledger('rollback-sdk')).toBeUndefined();
     const rolled = await f.rollback('rollback', 'adopt');
     expect(rolled).toMatchObject({ status: 'rolled-back', fromCommit: f.plan.commit, toCommit: f.base, sequence: 2 });
     expect(await f.tip()).toBe(f.base); expect(await f.rollback('rollback', 'adopt')).toEqual(rolled);

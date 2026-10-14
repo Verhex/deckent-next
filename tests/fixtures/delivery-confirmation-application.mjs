@@ -15,12 +15,13 @@ const store = {
   async loadDelivery() { return load('delivery.json'); }, async findDelivery() { return load('delivery.json'); },
   async claimDelivery(intent) { return save('delivery.json', { intent, delivered: false }); },
   async finishDelivery(intent) { return save('delivery.json', { intent, delivered: true }); },
-  async loadAdoption() { return load('adoption.json'); },
-  async claimAdoption(intent) { return save('adoption.json', { intent, sequence: 1, settled: false }); },
-  async finishAdoption(intent) { return save('adoption.json', { intent, sequence: 1, settled: true }); },
+  // One adoption (`adopt`, sequence 1) and one rollback of it (`rollback`, sequence 2) on the one configured target.
+  async loadAdoption(_scope, commandId) { return load(commandId === 'rollback' ? 'rollback.json' : 'adoption.json'); },
+  async claimAdoption(intent) { return save(`${intent.kind === 'rollback' ? 'rollback' : 'adoption'}.json`, { intent, sequence: intent.kind === 'rollback' ? 2 : 1, settled: false }); },
+  async finishAdoption(intent) { return save(`${intent.kind === 'rollback' ? 'rollback' : 'adoption'}.json`, { intent, sequence: intent.kind === 'rollback' ? 2 : 1, settled: true }); },
 };
 let revoked = false;
-const authorization = { async authorizeIdentity(action, identity) { if (revoked) throw ErrorRegistry.createError('POLICY_DENIED'); if (!['deliver-integration', 'adopt-integration'].includes(action) || JSON.stringify(identity) !== JSON.stringify(data.patch.identity)) throw Error('unexpected authority'); } };
+const authorization = { async authorizeIdentity(action, identity) { if (revoked) throw ErrorRegistry.createError('POLICY_DENIED'); if (!['deliver-integration', 'adopt-integration', 'rollback-integration'].includes(action) || JSON.stringify(identity) !== JSON.stringify(data.patch.identity)) throw Error('unexpected authority'); } };
 const patches = { async preview() { return { patch: data.patch, receipt: data.receipt, scope: { status: 'unscoped' } }; }, assertScope() {} };
 const inspection = { async inspect() { return { manifest: data.manifest, receipt: data.receipt }; } };
 const target = new GitIntegrationTarget(data.options, data.limits), delivery = new GitIntegrationDelivery(data.options);
@@ -35,7 +36,8 @@ const app = new WorkspaceDeliveryApplication(patches, inspection, target, delive
 const adopt = new WorkspaceAdoptionApplication(store, delivery, new GitIntegrationAdoption(data.options), [data.target], sessions, authorization, clock,
   { requirement: null, registry: null, criterionWithin: () => false, async authorizeRun() {}, source: {} }, port, snapshotKnownSecrets([{ name: 'FIXTURE_PRIVATE', value: 'fixture-private-title-secret' }]));
 try {
-  const work = () => mode.startsWith('adopt') ? adopt.adopt({ schemaVersion: 2, commandId: 'adopt', identity: data.patch.identity, deliveryCommandId: 'delivery', targetRef: data.target }) : app.deliver(data.command);
+  const work = () => mode.startsWith('adopt') ? adopt.adopt({ schemaVersion: 2, commandId: 'adopt', identity: data.patch.identity, deliveryCommandId: 'delivery', targetRef: data.target })
+    : mode.startsWith('rollback') ? adopt.rollback({ schemaVersion: 1, commandId: 'rollback', identity: data.patch.identity, adoptionCommandId: 'adopt' }) : app.deliver(data.command);
   const result = mode.includes('mcp') ? await withMcpPrincipal(work) : await work();
   process.stderr.write('\n' + JSON.stringify({ response: { ok: true, result } }) + '\n');
 } catch (error) {
