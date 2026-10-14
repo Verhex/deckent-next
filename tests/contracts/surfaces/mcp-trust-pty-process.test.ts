@@ -31,7 +31,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 
-/** python3 `pty` driver (as in terminal-mode-pty-process). */
+/** python3 `pty` driver (as in terminal-mode-pty-process); a `fresh` step waits for its text after the previous step's keys only. */
 const DRIVER = String.raw`
 import fcntl, json, os, pty, select, struct, sys, termios, time
 argv, steps, columns = json.loads(sys.argv[1]), json.loads(sys.argv[2]), int(sys.argv[3])
@@ -40,6 +40,7 @@ if pid == 0:
     os.execvp(argv[0], argv)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 50, columns, 0, 0))
 out = b''
+sent_at = 0
 def read_for(seconds):
     global out
     end = time.time() + seconds
@@ -51,14 +52,17 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
-for wait, send in steps:
+for step in steps:
+    wait, send = step[0], step[1]
+    since = sent_at if len(step) > 2 else 0
     deadline = time.time() + 25
-    while wait.encode() not in out:
+    while wait.encode() not in out[since:]:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.5)
     for char in send:
         os.write(fd, char.encode()); time.sleep(0.01)
+    sent_at = len(out)
 deadline = time.time() + 25
 status = None
 while status is None and time.time() < deadline:
@@ -70,7 +74,13 @@ if status is None:
 read_for(0.2)
 sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace')}))
 `;
-async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string]>, columns = 160) {
+/**
+ * TERMINAL-SABIT R2: Ctrl+O and the decision key are separate steps; the key waits for the window's focus label after this Ctrl+O. Written
+ * back to back, a loaded host reads both bytes in one chunk, which Ink 7.1.1 parses as one text input (`\x0fy`, not Ctrl+O) and the y lands
+ * in the composer (CI run 38503250233; ALPHA36-CI2 DECISIONS).
+ */
+const FOCUSED = 'Window focused · Ctrl+O return to input';
+async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string] | readonly [string, string, 'fresh']>, columns = 160) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps), String(columns)],
     { cwd, env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
   return JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
@@ -163,8 +173,8 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'hello\r'],
       // TERMINAL-SABIT R2 (owner 2026-10-14): trust cards raised during the turn keep the composer focused; Ctrl+O moves to each card, then y.
-      ['mcp_trust · mcp:fx · launch', '\u000fy'],
-      ['mcp_trust · mcp:fx · tools', '\u000fy'],
+      ['mcp_trust · mcp:fx · launch', '\u000f'], [FOCUSED, 'y', 'fresh'],
+      ['mcp_trust · mcp:fx · tools', '\u000f'], [FOCUSED, 'y', 'fresh'],
       // SLASH-WINDOWS I-1 (owner 2026-10-08): in the terminal a typed `/mcp list` opens the /mcp window with the one-time note (the CLI keeps `list`).
       ['Trusted turn done.', '/mcp list\r'],
       ['Typed arguments are not used in the terminal', '\u001b'],

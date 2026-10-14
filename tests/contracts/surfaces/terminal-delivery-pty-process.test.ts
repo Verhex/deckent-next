@@ -19,7 +19,12 @@ afterEach(async () => {
   clearConfigCache(); for (const root of track.roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-/** python3 `pty` driver: each step waits for a text in the output so far, then types its keys 10 ms apart; the view is stopped after the last step. */
+/**
+ * python3 `pty` driver: each step waits for a text in the output so far, then types its keys 10 ms apart; the view is stopped after the last step.
+ * A step marked `fresh` waits for its text in the output after the previous step's keys only (a focus label shown earlier does not count).
+ * Ctrl+O and the decision key are separate steps: written back to back, a loaded host can read both bytes in one chunk, which Ink 7.1.1 parses
+ * as one text input (`\x0fy`, not Ctrl+O) — the key then lands in the composer (CI run 38503250233; ALPHA36-CI2 DECISIONS).
+ */
 const DRIVER = String.raw`
 import fcntl, json, os, pty, select, signal, struct, sys, termios, time
 argv, steps, mode = json.loads(sys.argv[1]), json.loads(sys.argv[2]), sys.argv[3]
@@ -29,6 +34,7 @@ if pid == 0:
     os.execvp(argv[0], argv)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 160, 0, 0))
 out = b''
+sent_at = 0
 def read_for(seconds):
     global out
     end = time.time() + seconds
@@ -40,15 +46,18 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
-for wait, send in steps:
+for step in steps:
+    wait, send = step[0], step[1]
+    since = sent_at if len(step) > 2 else 0
     deadline = time.time() + 40
-    while wait.encode() not in out:
+    while wait.encode() not in out[since:]:
         if time.time() > deadline or not read_for(0.1):
             os.kill(pid, 9); os.waitpid(pid, 0)
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(0)
     read_for(0.4)
     for char in send:
         os.write(fd, char.encode()); time.sleep(0.01)
+    sent_at = len(out)
 status = None
 deadline = time.time() + 2
 while status is None and time.time() < deadline:
@@ -63,7 +72,8 @@ if status is None:
 read_for(0.2)
 sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace')}))
 `;
-async function inPty(project: string, env: NodeJS.ProcessEnv, mode: string, steps: ReadonlyArray<readonly [string, string]>, stdin = 'tty') {
+type Step = readonly [wait: string, keys: string] | readonly [wait: string, keys: string, fresh: 'fresh'];
+async function inPty(project: string, env: NodeJS.ProcessEnv, mode: string, steps: readonly Step[], stdin = 'tty') {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, program, mode]), JSON.stringify(steps), stdin],
     { cwd: project, env: { ...process.env, ...env }, timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
   const result = JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
@@ -74,7 +84,10 @@ const CTRL_O = '\u000f', ESC = '\u001b';
 const WINDOW = 'Delivery · Ship useful change', READY_HINT = 'y check, prepare and deliver';
 const CONFIRM_BODY = 'The confirmation card differs from what was shown';
 /** /do admits the fixture Run; its result window is closed explicitly; the delivery window then appears by itself (composer keeps focus). */
-const opening: ReadonlyArray<readonly [string, string]> = [['READY', '/do ship it\r'], ['PLAN-RESULT', CTRL_O], ['WINDOW-FOCUS', ESC]];
+const opening: readonly Step[] = [['READY', '/do ship it\r'], ['PLAN-RESULT', CTRL_O], ['WINDOW-FOCUS', ESC]];
+
+/** Ctrl+O moves focus to the waiting window; the decision key is typed only once the window owns the keyboard (`fresh`: after this Ctrl+O). */
+const decide = (key: string, after = READY_HINT): readonly Step[] => [[after, CTRL_O], ['WINDOW-FOCUS', key, 'fresh']];
 
 /** The fixture's grants plus `inspect` on the scope: the window resolves the newest attempt through the inventory, as `deckent task … --run --task` does. */
 async function grant(f: Awaited<ReturnType<typeof readyDeliveryFixture>>, attempt: readonly string[]) {
@@ -100,7 +113,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
   it('appears by itself; Ctrl+O then y checks, prepares and delivers one dedicated ref; source HEAD, index and worktree unchanged', async () => {
     const f = await fixture(), before = await f.source();
     expect(await f.deliveries()).toEqual([]);
-    const result = await inPty(f.project, f.options.env, 'window', [...opening, [READY_HINT, `${CTRL_O}y`], ['branches and working tree unchanged.', '']]);
+    const result = await inPty(f.project, f.options.env, 'window', [...opening, ...decide('y'), ['branches and working tree unchanged.', '']]);
     expect(result.output).toContain(WINDOW); expect(result.output).toContain('Integration check: affected files match base');
     expect(result.output).toContain('note.txt | +1 -1'); expect(result.output).toContain('Writes only a dedicated reference under refs/deckent/deliveries/');
     expect(result.output).not.toContain('y adopt into the selected branch'); // no execution.adoption.targets: no branch choice
@@ -116,7 +129,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
 
   it('n writes nothing: no candidate, no reference, no object', async () => {
     const f = await fixture(), before = await f.refs(), source = await f.source();
-    const result = await inPty(f.project, f.options.env, 'window', [...opening, [READY_HINT, `${CTRL_O}n`], ['Delivery left waiting: Ship useful change', '']]);
+    const result = await inPty(f.project, f.options.env, 'window', [...opening, ...decide('n'), ['Delivery left waiting: Ship useful change', '']]);
     expect(result.output).toContain(WINDOW);
     expect(await f.refs()).toEqual(before); expect(await f.source()).toEqual(source);
   });
@@ -126,7 +139,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     // The owner commits a change to an affected file after the patch was made: the base the patch was made on is no longer the source.
     await writeFile(join(f.project, 'note.txt'), 'changed by the owner\n'); await f.git('-c', 'core.hooksPath=/dev/null', 'commit', '-qam', 'moved base');
     const before = await f.refs();
-    const result = await inPty(f.project, f.options.env, 'window', [...opening, [WINDOW, ''], ['Next: ', `${CTRL_O}y`], ['Enter/Esc close', '']]);
+    const result = await inPty(f.project, f.options.env, 'window', [...opening, [WINDOW, ''], ...decide('y', 'Next: '), ['Enter/Esc close', '']]);
     expect(result.output).toMatch(/ERR PATCH_(?:BASE_ADVANCED|CONFLICT)/u);
     expect(await f.refs()).toEqual(before); expect(await f.deliveries()).toEqual([]);
   });
@@ -140,7 +153,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
       await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluation', identity: f.identity, expectedRevision: (await f.runtime.store.loadRun('s', 'r'))!.revision }, f.options);
       await grant(f, ['read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration']);
       const source = await f.source();
-      const steps: Array<readonly [string, string]> = [...opening, [READY_HINT, `${CTRL_O}y`], ['y adopt into the selected branch', answer]];
+      const steps: Step[] = [...opening, ...decide('y'), ['y adopt into the selected branch', answer]];
       steps.push(answer === 'y' ? ['Adopted into refs/heads/adopted', ''] : ['Not adopted into a branch; the delivery stays at', '']);
       const result = await inPty(f.project, f.options.env, 'window', steps);
       expect(result.output).toContain('After delivery, adopting into a branch is a separate choice: refs/heads/adopted');
