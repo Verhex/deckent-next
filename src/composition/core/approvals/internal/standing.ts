@@ -1,6 +1,6 @@
 import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { ApprovalApplication, AuditApplication, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
+import { ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyAdministrationInspection, PolicyTemplateUpgrade, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
@@ -17,7 +17,7 @@ function withStanding<T>(root: string, scopeId: string, options: ConfigLoadOptio
 export async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
   use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore }, person: Person) => Promise<T>): Promise<T> {
   try {
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(root, scopeId, options, access);
+    const { config, layout, principal, path, document } = await loadConfiguredScopeContext(root, scopeId, options, access);
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
     const denied = () => Promise.reject(new Error('read-only'));
     if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied }, principal);
@@ -32,8 +32,10 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
       const approve = async (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => {
         if (!await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
         sessions.requireInteractiveTerminal();
+        const producers = resolveAuditedApprovalAssurance(config.approvals.assuranceProducers, undefined,
+          { scopeId, principal, policyRevision: document.revision, atMs: clock.sample().wallMs }, event => { audit.record(event); });
         return new ApprovalApplication(journal.store,
-        { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize)
+        { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { producers, peerPid: peer?.pid ?? null })
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
       };
       return await use({ administration, approve, policy: source, effects }, principal);

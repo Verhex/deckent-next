@@ -16,8 +16,8 @@ const memoryBackend = (id: string) => ({ id, create: () => {
 
 it('exports exactly the declared extension surface; the SDK entry exports none of its registrations', () => {
   expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_STORE_ID_PATTERN', 'createSecretHelperFactory',
-    'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'runCli', 'runMcp']);
-  expect(['registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
+    'registerApprovalAssuranceProducer', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'runCli', 'runMcp']);
+  expect(['registerApprovalAssuranceProducer', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
 });
 
 it('the distribution MCP runner preserves Core argument validation', async () => {
@@ -35,11 +35,14 @@ it('registers a non-Core secret backend before the composition root seals, and r
   extensions.registerMcpCapabilityGroup(capability);
   const certification = { vendor: 'overlay.erp-llm', endpoints: ['https://llm.erp.example/v1/chat/completions'], statuses: [400, 429], source: 'https://erp.example/docs/errors', retrievedAt: '2026-10-10' };
   extensions.registerProviderSpendNoChargeCertification(certification);
+  const producer = { manifest: { schemaVersion: 1 as const, id: 'overlay.assurance', version: 1, level: 'overlay-step-up', rank: 2 }, create: () => ({ attests: () => false }) };
+  extensions.registerApprovalAssuranceProducer(producer);
   composeCore();
   expect(providerSpendNoChargeRegistry.find('https://llm.erp.example/v1/chat/completions', 429)).toMatchObject({ vendor: 'overlay.erp-llm' });
   expect(mcpCapabilityRegistry.get(capability.id)).toEqual(capability);
   // The registered backend resolves through the same selection path as Core's own backends.
   expect(openConfiguredSecretStore({ secrets: { store: id } }, {}).descriptor.id).toBe(id);
+  expect(() => extensions.registerApprovalAssuranceProducer({ ...producer, manifest: { ...producer.manifest, id: 'overlay.late-assurance' } })).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
   const sealed = expect.objectContaining({ name: 'RegistryError', code: 'REGISTRY_SEALED' });
   expect(() => extensions.registerSecretStoreBackend(memoryBackend('overlay.secret-store.late@1'))).toThrow(sealed);
   expect(() => extensions.registerMcpCapabilityGroup({ ...capability, id: 'overlay.late' })).toThrow(sealed);

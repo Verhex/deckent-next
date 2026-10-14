@@ -39,6 +39,10 @@ const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), ver
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
 const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
+  /** Additive v1 subject: selected distribution manifests before assurance activation; secrets never enter the inventory. */
+  z.object({ kind: z.literal('approval-assurance-registration'), schemaVersion: z.literal(1), producers: z.array(z.object({
+    schemaVersion: z.literal(1), id: identitySchema, version: counterSchema.positive(), level: identitySchema,
+    rank: counterSchema.positive(), active: z.boolean() }).strict()).max(128) }).strict(),
   /** Config document write intent, recorded before atomic publication; digests only, no authored values. `approvalId` (T3 L2, lead
    * 2026-10-07): the config-change approval this write consumed — present only then, so every other config write keeps its earlier shape. */
   z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),

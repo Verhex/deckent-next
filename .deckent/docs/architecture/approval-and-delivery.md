@@ -1,7 +1,7 @@
 # Task approval, live sessions and isolated delivery
 
 Full contracts (moved from ARCHITECTURE.md 2026-10-05; the short contract summary stays in ARCHITECTURE.md).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 2566–3344; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 2566–3344; original contract text below is verbatim; subsequent dated additions are marked separately.
 
 
 Task admission approval is an additional restriction before scheduling's capacity-limited candidate
@@ -38,8 +38,8 @@ retry waits retryDelayMs + 5 s, including a process's own). Config write-lock wa
 lock age subtracts the allowance before age-based reclaim; worker heartbeat age is `max(0, now − mtime − MAX_WALL_SKEW_MS)`.
 W3-AUTHORITY requires nonzero controlling-TTY evidence and matching terminal character devices on the peer's fd0/fd1 for **both** human
 allow and deny; a client-declared channel or a turn capability does not bypass this. `APPROVAL_INTERACTIVE_REQUIRED` leaves the request
-pending and adds no decision. The session rechecks terminal evidence before privileged settlement. Hard-floor allow still requires the
-initiating process's turn-bound capability. There is no automation exception; TTY attestation cannot prove human presence against a same-UID
+pending and adds no decision. The session rechecks terminal evidence before privileged settlement. Hard-floor allow still requires
+at least turn-bound assurance (Core attests it with the initiating process's capability; selected extension producers may attest a stronger level). There is no automation exception; TTY attestation cannot prove human presence against a same-UID
 process that allocates its own PTY. MCP handlers run under the separate `<host>/mcp` actor, and protocol v26 carries that actor context through
 service calls (lifecycle `[26,25]`); model/spend mutations require a rule explicitly naming that actor. Template v9 adds only MCP observation,
 including through add-only custom-policy upgrades. Existing owner rules/terminal spending authority are preserved.
@@ -894,3 +894,19 @@ last-admin invariant is unchanged. Binary, hosted and live acceptance are separa
 ## Human delivery confirmation — author candidate 2026-10-14
 
 Owner TESLIM-GUVENLIK admits a shared typed effect confirmation port before new delivery publication, adoption moves and rollback moves (every action that moves a branch asks y/N; rollback's card is `rollback-integration`, branch, current → previous commit, asked before its journal claim and again for a resumed unfinished rollback). CLI composition installs the verified controlling-terminal witness and one y/N card; public SDK/MCP input carries no answer capability. Policy allow and configured adoption targets are necessary but never substitute for that answer. Confirmed effects recheck session, policy and Git custody/CAS. Completed replay and already-published exact-custody settlement remain non-effectful. A pending, unpublished intent needs fresh confirmation. Candidate content digests remain deterministic; trusted-clock commit time is frozen with the first claimed delivery plan. The terminal delivery window (TESLIM-PENCERESI, alpha.36 candidate) is wired to this port: `y` in a focused window records one-use consent bound to the shown operation, ids, command, file set and base; composer keys never confirm. Registry-configured autonomous rules remain future work.
+
+## Approval assurance producers
+
+**ONAY-URETICI D1, author candidate 2026-10-15.** `deckent/extensions.registerApprovalAssuranceProducer`
+  admits an add-only v1 manifest (`id`, `version`, `level`, `rank`) and trusted synchronous attester factory before `composeCore` seals.
+  `approvals.assuranceProducers` selects exact id/version pairs (default `core.turn-bound@1`; empty disables the ring, never the floor).
+  Custom producer ids are namespaced; levels use the existing assurance wire grammar and ranks exceed Core turn-bound; duplicates, Core replacement and later registration are refused.
+  Hard-floor paths select the Core ring alongside a stronger custom producer: disabling the Core floor producer keeps its rank unsatisfiable.
+  Only selected, available producers enter the existing ApprovalApplication. Missing/inactive levels remain unsatisfiable; policy only
+  raises the Core class minimum. A client cannot claim assurance. The peer-session baseline still requires verified session evidence,
+  and real interactive-terminal checks remain mandatory. Factories are trusted distribution code, not a sandbox or proof of a human.
+  Before each composed decision, the existing sealed append-only audit records the v1 registration inventory and active flags; audit
+  failure prevents construction/activation. Secrets/capabilities never enter that event. The additive v1 audit subject needs no DDL;
+  legacy sealed approvals and audit records keep their bytes. Public SDK exports and approval wire versions stay unchanged.
+  No new user surface. Host PTY/service/distribution replay, independent review and live acceptance are separate; external proof
+  `proof/ONAY-URETICI-D1-2026-10-15/` contains the author checks and remaining host commands.
