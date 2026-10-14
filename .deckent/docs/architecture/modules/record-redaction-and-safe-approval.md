@@ -40,3 +40,29 @@ monitor brief rendering, MCP results, sealed audit storage, crash/fatal logs and
 uses a credential-shaped fixture through the existing pattern guard; it is not proof of discovering arbitrary unregistered credentials.
 Encoded values, text already lost upstream, independently framed native message fields and post-print retraction remain outside this candidate.
 Targeted author checks do not supply independent review, hosted, native-other-platform, running Desktop, live or N1 acceptance.
+
+## S6 pre-dispatch worker tree secret gate — author candidate, 2026-10-14
+
+Owner decision S6: a Docker worker receives a full Git clone of the Run's pinned base (plus accepted predecessor patches), and everything
+in it can reach the model provider through the worker's one egress. The terminal read floor was not applied to that tree before S6.
+
+- **Where:** `executeConfiguredTask` scans the prepared checkout after predecessor patches are applied and before the handoff record, the
+  native connection, the Docker profile capture and the dispatch claim. The scan is the adapter `worker-tree-gate` (`scanWorkerTree`); the
+  decision, audit event and typed refusal are the engine's `enforceWorkerTreeGate`.
+- **Rules (one source each):** deny paths are `CREDENTIAL_WORKSPACE_DENY`, the terminal read floor without repository internals (the same
+  list the full-access deny view and the shell hard floor use); a deny-listed directory is reported, never descended, and a symlink is
+  checked by its path, never followed. Content is matched against the installation's configured secret values (`known-secret`, never
+  liftable) and against the canonical redaction table rows marked `"gate": true` (row `source`, the precise expression). `key-value` is
+  `"gate": false`: it matches ordinary code (`token = identifier`) and refused 44 non-test source files of this repository. Binary files
+  (NUL within the first 8000 bytes) are path-checked only. The clone's own `.git` (history) is not scanned.
+- **Acknowledgements (`execution.secretGate`, v1, empty by default):** `allowPatternPaths` (≤ 64 globs) lifts content-pattern hits only;
+  `acknowledgedDenyPaths` (≤ 64 exact paths) lifts the deny-path rule for a settings-only file such as `.npmrc`, whose content is still
+  scanned. Bounds `maxFiles`, `maxFileBytes`, `maxTotalBytes`, `timeoutMs` fail closed as `WORKER_TREE_SCAN_INCOMPLETE` naming the setting.
+- **Refusal:** both codes are permanent launch refusals (the Run base is pinned; a fix needs a new Run). The checkout is released; no
+  container, connection or claim exists. The text (EN/TR, shared renderer) names up to 16 `path (rule)` pairs and the omitted count; paths
+  pass through the record redactor and never carry a value. The `worker-tree-refused` audit subject keeps up to 50 findings, the full
+  count and the exhausted bound. No audit, no closure: an audit failure is thrown (transient) and the next turn scans and records again.
+- **Open limits:** Git history is not scanned (a secret removed from the tip but present in history still reaches the worker's `.git`);
+  binary and non-UTF-8 content, values shorter than six characters and credential shapes outside the gated rows are not detected; the
+  time bound is checked between entries. No Next surface lists Core audit events yet; a later Run view shows the recorded code only.
+  Author proof and the base-tree-only clone measurement: external `proof/S6-SIR-KAPISI-2026-10-14/`.
