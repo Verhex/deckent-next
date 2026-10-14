@@ -246,8 +246,8 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   requires freshly verified os-user assurance and the source attempt's evaluate authority. It preserves the old
   attempt/receipts, admits eligibility for a new generated identity (generation +1), and carries source/question/answer
   through the existing bounded prompt and a read-only input artifact. Needs-input cannot be accepted without answering.
-  `run hold --reason` / SDK lifecycle `hold` / MCP `control_run` parks with `operator-hold` and a bounded note under
-  Run cancel policy; resume uses Run reserve policy. MCP executes as its separately granted actor and cannot answer,
+  `run hold --reason` / SDK `hold` / MCP `control_run` / terminal `/runs` `h` (Y1: CLI's command after a y/N card; `r`, `c` likewise) parks
+  with `operator-hold` and a bounded note under Run cancel policy; resume uses Run reserve policy. MCP executes as its separately granted actor and cannot answer,
   accept or reject. Resume clears only an operator hold; unanswered questions and dependency barriers survive.
   The single lifecycle application, pure transition owner and ledger CAS persist state, command replay and sealed audit
   atomically; audit records input digests. Expiry/close never erase live custody or unresolved effects. Historical JSON

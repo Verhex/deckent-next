@@ -25,7 +25,8 @@ export interface RunControlLabels {
   readonly kept: string; readonly gone: string;
   readonly reason: Readonly<{ label: string; hint: string; empty: string }>;
 }
-export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ spans: readonly Span[]; actions: readonly RunControlAction[] }>[]; status: string }>;
+export type RunsWindowPresentation = Readonly<{ kind: 'runs-window'; title: string; rows: readonly Readonly<{ spans: readonly Span[]; actions: readonly RunControlAction[] }>[]; status: string;
+  empty: string }>;
 export type RunControlPresentation = Readonly<{ kind: 'run-control'; run: RunView; action: RunControlAction }>;
 
 const KEYS: Readonly<Record<string, RunControlAction>> = Object.freeze({ h: 'hold', r: 'resume', c: 'close' });
@@ -53,8 +54,11 @@ export function RunsControlWindow({ value, labels, position, onAnswer }: { reado
   const known = useHumanTextSecrets(), [selected, setSelected] = useState(0);
   const project = (spans: readonly Span[]) => spans.flatMap(item => projectHumanPickerText(item.text, known).spans.map(part => ({ ...item, ...part })));
   const count = value.rows.length, row = value.rows[Math.min(selected, Math.max(0, count - 1))];
-  const body: WindowLine[] = value.rows.map((item, index) => ({ spans: [span(index === selected ? '› ' : '  ', index === selected ? { role: 'accent', bold: true } : {}), ...project(item.spans)] }));
-  return <Window title={[span(value.title)]} status={[span(value.status || String(count))]} body={body} hints={runsHints(labels, row?.actions ?? [])} position={position} reveal={selected}
+  // The last result (or typed refusal, possibly several lines) stays above the list until the next key's result replaces it.
+  const notes: WindowLine[] = value.status ? [...value.status.split('\n').map(text => ({ spans: project([span(text, { role: 'accent' })]) })), { spans: [] }] : [];
+  const body: WindowLine[] = [...notes, ...value.rows.map((item, index) => ({ spans: [span(index === selected ? '› ' : '  ', index === selected ? { role: 'accent', bold: true } : {}), ...project(item.spans)] })),
+    ...(count ? [] : [{ spans: [span(value.empty, { role: 'muted' })] }])];
+  return <Window title={[span(value.title)]} status={[span(String(count))]} body={body} hints={runsHints(labels, row?.actions ?? [])} position={position} reveal={notes.length + selected}
     onClose={() => onAnswer(null)} onInput={(input, key) => {
       if ((key.upArrow || key.downArrow) && !key.ctrl && !key.meta && count) { setSelected(current => (current + (key.upArrow ? count - 1 : 1)) % count); return true; }
       const action = runControlKey(input, key);
@@ -90,9 +94,8 @@ export async function runRunsControl(panel: WorklinePanel, execution: LocalExecu
     if (execution.signal.aborted) break;
     const rows = runs.map(run => ({ actions: runControlActions(run), spans: [span(runTitle(run, jobs), { bold: true }), span(` [${runStateText(run, jobs)}]`, { role: run.cancellationRequested ? 'warning' as const : 'accent' as const }),
       span(` · ${shortId(run.runId)}`, { role: 'muted' as const })] }));
-    if (!rows.length) rows.push({ actions: [], spans: [span(work.live!.empty, { role: 'muted' })] });
     const choices = ['close', ...rows.flatMap((row, index) => row.actions.map(action => `${action}:${index}`))];
-    const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status }, choices);
+    const choice = await panel.pick(execution, { kind: 'runs-window', title, rows, status, empty: work.live!.empty }, choices);
     if (choice === null || choice === 'close' || execution.signal.aborted) break;
     const [action, index] = choice.split(':') as [RunControlAction, string];
     const chosen = runs[Number(index)]!, fresh = await ledger.inspectRun(chosen.runId);
