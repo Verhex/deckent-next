@@ -350,6 +350,12 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // K6 (owner 2026-09-30 A): the work target enforces task scope; params count, paths (first 16, repository-relative), omitted.
   PATCH_SCOPE_VIOLATION: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_VIOLATION', p, l) }) },
   PATCH_SCOPE_UNDECLARED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_UNDECLARED', p, l) }) },
+  // S6 (owner 2026-10-14): the pre-dispatch secret gate; params count, paths (first 16 as `path (rule)`), omitted — never a value. Without
+  // params (a later view of the recorded code) the summary sentence stands. INCOMPLETE names the exhausted bound (limit, observed, bound).
+  WORKER_TREE_SECRET_REFUSED: { category: 'error', render: (p, l) => ({ message: p['paths'] === undefined ? t('error.WORKER_TREE_SECRET_REFUSED.summary', p, l) : t('error.WORKER_TREE_SECRET_REFUSED', p, l),
+    suggestion: t('remedy.WORKER_TREE_SECRET_REFUSED', p, l) }) },
+  WORKER_TREE_SCAN_INCOMPLETE: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_INCOMPLETE.summary', p, l) : t('error.WORKER_TREE_SCAN_INCOMPLETE', p, l),
+    suggestion: t('remedy.WORKER_TREE_SCAN_INCOMPLETE', p, l) }) },
   WORK_TARGET_PATH_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_PATH_INVALID', p, l) }) },
   WORK_TARGET_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_UNSAFE', p, l) }) },
   WORK_TARGET_IN_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IN_DATA_ROOT', p, l) }) },

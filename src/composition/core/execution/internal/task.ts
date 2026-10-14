@@ -1,11 +1,11 @@
 import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection,
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, openSqliteAuditStore, openLocalIntegrityAuthority,
   applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, type WorkerEventSealing } from '#adapters/index.js';
-import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
+import { authenticate, AuditApplication, enforceWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -18,7 +18,7 @@ import { configuredResourceCollector } from '#composition/core/resource-observat
 export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
+    const { config, layout, principal, path, document } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
@@ -35,17 +35,18 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const selected = selectReservedTaskProfile(run, await store.load(identity.scopeId, identity.attemptId), identity);
       const profile = resolveDockerTaskProfile(selected);
       if (profile.options.outputFiles && profile.options.outputFiles.maxBytes > config.artifacts.maxBytes) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
-      if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      if (os.uid <= 0 || os.gid < 0) throw ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');
+      if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED'); if (os.uid <= 0 || os.gid < 0) throw ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');
       const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
       const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
         ...Object.values(layout.resources)]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
-      const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-      const start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
-      const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
-      const broker = new GitWorkspaceBroker(git);
+      const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes }), start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
+      const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot }, broker = new GitWorkspaceBroker(git);
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches);
+      // S6: the worker's exact tree is scanned before any container, connection or claim; a refusal is audited (paths, rules) and its checkout released.
+      await enforceWorkerTreeGate(await scanWorkerTree(lease.workspace, config.execution.secretGate, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now },
+        async event => { const audit = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(audit, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { audit.close(); } },
+        () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
       await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
       const events = profile.nativeSubscription ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
@@ -75,8 +76,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
             workspace: lease.workspace, observedAt: Date.now(), process: activity.state, handle: activity.handle,
             terminal: record.terminal, outputRecorded: !!record.output };
         });
-      let result;
-      dispatching = true;
+      let result; dispatching = true;
       try { result = await app.execute(request); } finally { await observation.close(); }
       outcome = { status: result.kind, terminal: result.record.terminal, outputRecorded: !!result.record.output };
       } finally {

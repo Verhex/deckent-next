@@ -22,6 +22,9 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
   '.git', '**/.git']);
 /** The repository internals of the default deny (MODES-3): the only entries a full-access turn opens (commit, branch, push); credentials stay. */
 export const REPOSITORY_INTERNALS_DENY: readonly string[] = Object.freeze(['.git/**', '**/.git/**', '.git', '**/.git']);
+/** The read floor without the repository internals: the credential and product-state paths that stay closed everywhere — a full-access turn,
+ * the shell hard floor and the S6 pre-dispatch gate over a worker's tree (a clone legitimately carries `.git`). One list, never a copy. */
+export const CREDENTIAL_WORKSPACE_DENY: readonly string[] = Object.freeze(DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)));
 
 /** Exact known HOME locations, derived from the shared credential registry rather than a second protection policy. */
 export const HOME_CREDENTIAL_PATHS: readonly string[] = Object.freeze(CREDENTIAL_PATHS.map(pattern => pattern.replace(/^\*\*\//u, ''))

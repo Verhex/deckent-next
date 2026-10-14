@@ -7,6 +7,7 @@
   "patterns": [
     {
       "id": "provider-token",
+      "gate": true,
       "source": "\\b(?:sk-(?:ant-)?[\\w-]+|gh[pousr]_[\\w]+|github_pat_[\\w]+|AKIA[A-Z0-9]{16}|xox[abp]-[A-Za-z0-9_-]{8,}|npm_[A-Za-z0-9]+|AIza[A-Za-z0-9_-]+)\\b",
       "flags": "g",
       "replacement": "[REDACTED]",
@@ -14,6 +15,7 @@
     },
     {
       "id": "bearer-token",
+      "gate": true,
       "source": "(Bearer\\s+)[A-Za-z0-9._~+/=-]{16,}",
       "recordSource": "(Bearer\\s+)\\S+",
       "flags": "gi",
@@ -22,6 +24,7 @@
     },
     {
       "id": "url-userinfo",
+      "gate": true,
       "source": "(\\b[a-z][a-z0-9+.-]{0,31}://[^\\s/@:|\\x60\\x22<>?#]+:)[^\\s/@|\\x60\\x22<>?#]+(@)",
       "flags": "gi",
       "replacement": "$1[REDACTED]$2",
@@ -29,6 +32,7 @@
     },
     {
       "id": "key-value",
+      "gate": false,
       "source": "((?<![\\w-])(?:[\\w-]*(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)|authorization|cookie)\\s*=\\s*)[^\\s;|&$()\\x60\\x27\\x22<>]+",
       "flags": "gi",
       "replacement": "$1[REDACTED]",
@@ -36,6 +40,7 @@
     },
     {
       "id": "jwt",
+      "gate": true,
       "source": "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b",
       "flags": "g",
       "replacement": "[REDACTED]",

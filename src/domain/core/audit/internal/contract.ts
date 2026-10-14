@@ -192,6 +192,16 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('model-ingress'), fieldDigest: digest, projectedDigest: digest, decodedDigest: digest.nullable(),
     codePoints: counterSchema, disposition: z.enum(['note', 'quarantine']) }).strict(),
+  /**
+   * S6 (owner 2026-10-14): the pre-dispatch secret gate refused the tree a worker would receive, before any container, connection or dispatch
+   * claim. `findings` names at most `AUDIT_TRACKED_PATHS_MAX` workspace-relative paths (`count` is the full number), each with the rule that
+   * matched (`deny-path:<glob>`, `pattern:<id>`, `known-secret`) or, for an incomplete scan, the exhausted bound (`limit`). A value, a matched
+   * substring or a digest of one is never recorded.
+   */
+  z.object({ kind: z.literal('worker-tree-refused'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
+    code: z.enum(['WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE']), count: counterSchema,
+    findings: z.array(z.object({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600) }).strict()).max(AUDIT_TRACKED_PATHS_MAX),
+    limit: z.enum(['files', 'file-bytes', 'total-bytes', 'time']).nullable() }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

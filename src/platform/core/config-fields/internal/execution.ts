@@ -43,6 +43,16 @@ export const WORK_TARGET_SETTINGS = z.discriminatedUnion('schemaVersion', [
 export const EXECUTION_RETENTION_SETTINGS = z.object({ schemaVersion: z.literal(1),
   release: z.enum(['after-retained-patch', 'keep']).default('after-retained-patch'),
   sweepLimit: z.number().int().positive().max(10_000).default(16) }).strict();
+/** S6 (owner 2026-10-14): the pre-dispatch secret gate over the tree a worker receives. The deny paths and the content rules are not
+ * configurable here (the Core credential floor and the redaction table's `gate` rows). Two small, explicit acknowledgements, empty by default:
+ * `allowPatternPaths` lifts content-pattern hits under these workspace-relative globs (test fixtures); `acknowledgedDenyPaths` lifts the
+ * deny-path rule for these exact paths (a committed `.npmrc` holding only settings) while their content is still scanned. Neither lifts a
+ * configured secret value. The bounds fail closed with `WORKER_TREE_SCAN_INCOMPLETE`. Versioned; unknown keys stay refused. */
+export const EXECUTION_SECRET_GATE_SETTINGS = z.object({ schemaVersion: z.literal(1),
+  allowPatternPaths: z.array(z.string().min(1).max(512).refine(value => !value.startsWith('/') && !value.split('/').includes('..'))).max(64).default([]),
+  acknowledgedDenyPaths: z.array(z.string().min(1).max(512).refine(value => !value.startsWith('/') && !/[*?[\]]/u.test(value) && !value.split('/').some(part => part === '..' || part === '.' || part === ''))).max(64).default([]),
+  maxFiles: z.number().int().positive().max(10_000_000).default(200_000), maxFileBytes: z.number().int().positive().safe().default(16_777_216),
+  maxTotalBytes: z.number().int().positive().safe().default(1_073_741_824), timeoutMs: z.number().int().positive().max(2_147_483_647).default(120_000) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();
 /** A1/A3: shared parked Run/task deadline policy. 24 hours is a conservative, lead-adjustable default,
  * not a measured optimum. Explicit version and strict keys make unsupported policy fail closed. */
