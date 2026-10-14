@@ -1,3 +1,4 @@
+import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { runProposalSchema, type RunProposal } from '#domain/index.js';
 import { brainPlanCommandSchema, type BrainPlanCommand } from '#domain/index.js';
 import { runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
@@ -24,6 +25,7 @@ import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseR
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 export interface McpApplications {
+  verifyAudit?(query: AuditVerifyQuery): Promise<AuditVerification>;
   inspectPolicyAdministration?(query: PolicyAdministrationQuery): Promise<PolicyAdministrationStatus>;
   planRun?(command: BrainPlanCommand): Promise<unknown>;
   /** Composition records only sealed digests under the authenticated MCP principal, never decoded text. */
@@ -94,6 +96,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     { readOnly: true, destructive: false, idempotent: true, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  const verifyAudit = applications.verifyAudit;
+  if (verifyAudit) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'verify_audit',
+    description: t('mcp.tool.verifyAudit', {}, locale), schema: auditVerifyQuerySchema,
+    invoke: input => verifyAudit(auditVerifyQuerySchema.parse(input)) });
   const renewApproval = applications.renewApproval;
   const inspectMonitor = applications.inspectMonitor;
   if (inspectMonitor) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_monitor',

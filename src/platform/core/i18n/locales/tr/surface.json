@@ -708,5 +708,6 @@
   "resource.recommendation.axis.wall": "duvar süresi",
   "resource.recommendation.axis.api": "ölçülen API parası",
   "resource.recommendation.axis.subscription": "gözlenen abonelik süresi",
-  "monitor.approval.expiredCount": "Süresi dolmuş onaylar: {count} (geçmiş; karar verilemez)."
+  "monitor.approval.expiredCount": "Süresi dolmuş onaylar: {count} (geçmiş; karar verilemez).",
+  "doctor.auditIntegrity": "Audit bütünlüğü: {status} ({reason})"
 }

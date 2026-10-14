@@ -31,6 +31,7 @@ import { configServiceState, type ShutdownCommand, type ServiceShutdownAdmission
 export type { RunLifecycleHandler } from '#surfaces/core/cli-terminal/index.js';
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
 export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, TerminalLaunchContext {
+  verifyAudit?: import('./audit.js').AuditVerifyHandler;
   executeBackup?: import('./backup.js').BackupHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
@@ -156,6 +157,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const policyScope = (config.terminal as { scopeId?: string } | undefined)?.scopeId;
   const policyAdministration = context.inspectPolicyAdministration && policyScope
     ? await context.inspectPolicyAdministration(root, { schemaVersion: 1, scopeId: policyScope }, options).catch(() => null) : null;
+  const auditIntegrity = context.verifyAudit && policyScope ? await context.verifyAudit(root, { schemaVersion: 1, scopeId: policyScope }, options).catch(() => ({ schemaVersion: 1 as const, scopeId: policyScope, status: 'unknown' as const, reason: 'unavailable' as const, head: null, checkpoint: null })) : null;
   const policyTemplate = context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
   // SESSION-RESULT-LIMIT-2026-09-28: unconditional like policyTemplate (nobody was looking at the line-mode/MCP path
   // before this); [] when unwired or every declared profile fits. Read-only, network-free, never blocks doctor.
@@ -174,7 +176,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const startability = context.inspectInstallationStartability ? await context.inspectInstallationStartability(root, { ...options, env: { ...env, DECKENT_LANGUAGE: locale } }) : null;
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, startability, status: startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, auditIntegrity, startability, status: (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');

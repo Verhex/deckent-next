@@ -1,13 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { auditCounterSchema, auditRecordSchema, AuditError, encodeCommandProjection, identitySchema, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
-import type { AuditStore } from '#engine/index.js';
+import { checkpointPage, appendCheckpoint } from './checkpoints.js';
+import type { AuditCheckpoint } from '#domain/index.js';
+import type { AuditCheckpointStore } from '#engine/index.js';
 
 /**
  * SQLite audit store on the shared ledger (v41). `audit_events` is append-only in the database itself (UPDATE/DELETE triggers
  * abort); every row is cross-checked against its sealed record on read, the way approval rows are. Callers may supply the
  * connection of a larger transaction (an agent turn's) so the audit write commits with the decision it records.
  */
-export class SqliteAuditStore implements AuditStore {
+export class SqliteAuditStore implements AuditCheckpointStore {
   constructor(private readonly db: DatabaseSync) {}
   private transaction<T>(work: () => T): T {
     const owned = !this.db.isTransaction;
@@ -71,5 +73,20 @@ export class SqliteAuditStore implements AuditStore {
     return this.guard(() => Object.freeze(this.db.prepare('SELECT scope_id,counter,count,updated_at_ms FROM audit_counters WHERE scope_id=? ORDER BY counter').all(scopeId)
       .map(row => auditCounterSchema.parse({ scopeId: row.scope_id, counter: row.counter, count: row.count, updatedAtMs: row.updated_at_ms }))));
   }
+  scopeIds(limit: number): readonly string[] {
+    const exists = this.db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='audit_checkpoints'").get();
+    return this.db.prepare(exists ? 'SELECT scope_id FROM audit_events UNION SELECT scope_id FROM audit_checkpoints ORDER BY scope_id LIMIT (? + 1)'
+      : 'SELECT DISTINCT scope_id FROM audit_events ORDER BY scope_id LIMIT (? + 1)').all(limit).map(row => String(row.scope_id));
+  }
+  snapshot<T>(write: boolean, work: () => T): T {
+    if (this.db.isTransaction) return this.guard(work);
+    this.db.exec(write ? 'BEGIN IMMEDIATE' : 'BEGIN');
+    try { const value = this.guard(work); this.db.exec('COMMIT'); return value; }
+    catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* Lost connection. */ } throw error; }
+  }
+  checkpointPage(scopeId: string, afterSequence: number, limit: number): readonly AuditCheckpoint[] {
+    return this.guard(() => checkpointPage(this.db, scopeId, afterSequence, limit));
+  }
+  appendCheckpoint(value: AuditCheckpoint): void { this.guard(() => appendCheckpoint(this.db, value)); }
   close() { this.db.close(); }
 }

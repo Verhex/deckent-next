@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
+import { DOWNGRADE_TO_V54_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { encodeModelBindingDefinition, type ModelInvocationBillingAxis, type ModelInvocationProfile, type ModelInvocationNativeResponse } from '#domain/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSqliteModelInvocationReader } from '#adapters/index.js';
 import { ModelInvocationApplication, ModelInvocationInspectionApplication, ModelInvocationPurgeApplication, ModelBindingApplication,
@@ -149,12 +150,13 @@ it('binds plan evidence to the exact outcome and rejects forged counters even wi
 it('upgrades a copied populated v54 ledger, preserves stored v1 receipt bytes and replay, and restores its backup', async () => {
   const f = await fixture('v1', 10), first = await f.app().invoke(f.command());
   const original = new DatabaseSync(f.path); const records = original.prepare('SELECT record FROM model_invocations').all();
-  original.exec('DROP TABLE model_invocation_plan_usage; PRAGMA user_version=54;'); original.close();
+  original.exec(DOWNGRADE_TO_V54_LEDGER_SQL); original.close();
   const candidate = join(f.root, 'candidate.db'); await copyFile(f.path, candidate);
   const upgraded = upgradeExistingLedger(candidate, sqlite, f.root, new Date(1000));
   expect(upgraded).toMatchObject({ from: 54, to: CURRENT_LEDGER_VERSION });
   const db = new DatabaseSync(candidate); expect(db.prepare('SELECT record FROM model_invocations').all()).toEqual(records);
-  expect(db.prepare('SELECT count(*) AS n FROM model_invocation_plan_usage').get()!.n).toBe(0); db.close();
+  expect(db.prepare('SELECT count(*) AS n FROM model_invocation_plan_usage').get()!.n).toBe(0);
+  expect(db.prepare('SELECT count(*) AS n FROM audit_checkpoints').get()!.n).toBe(0); db.close();
   const reader = await openSqliteModelInvocationReader(candidate, { busyTimeoutMs: 1000 });
   try { expect((await reader.loadReceipt('scope', 'command'))?.receipt).toEqual(first.receipt); } finally { reader.close(); }
   const writer = await openSqliteModelInvocationStore(candidate, sqlite, 'forbid');

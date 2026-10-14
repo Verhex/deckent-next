@@ -84,7 +84,14 @@
       "plan": "STORE"
     },
     "src/adapters/core/quota-control-store": {
-      "dependencies": ["src/domain/core/run", "src/engine/core/runs", "src/engine/core/attempts", "src/engine/core/audit", "src/adapters/core/audit-store", "src/adapters/core/sqlite-ledger"],
+      "dependencies": [
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/engine/core/attempts",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger"
+      ],
       "plan": "STORE"
     },
     "src/adapters/core/attempt-store": {
@@ -293,7 +300,8 @@
         "src/engine/core/provider-spend",
         "src/composition/core/run-planner",
         "src/platform/core/i18n",
-        "src/surfaces/core/effect-confirmation"
+        "src/surfaces/core/effect-confirmation",
+        "src/composition/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -369,7 +377,8 @@
         "src/adapters/core/local-keyring",
         "src/domain/core/audit",
         "src/platform/core/clock",
-        "src/composition/core/run-planner"
+        "src/composition/core/run-planner",
+        "src/composition/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -590,7 +599,8 @@
         "src/composition/core/secrets",
         "src/platform/core/i18n",
         "src/adapters/core/installation-files",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/composition/core/audit"
       ],
       "plan": "EXECUTION"
     },
@@ -1138,7 +1148,8 @@
     "src/surfaces/core/doctor": {
       "dependencies": [
         "src/engine/core/toolchain-currency",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/domain/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -1194,7 +1205,8 @@
         "src/surfaces/core/work-labels",
         "src/surfaces/core/cli-terminal",
         "src/engine/core/backup",
-        "src/surfaces/core/run-planning"
+        "src/surfaces/core/run-planning",
+        "src/domain/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -2996,6 +3008,23 @@
         "src/engine/core/oauth-connection"
       ],
       "plan": "PROVIDERS"
+    },
+    "src/composition/core/audit": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/managed-files",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/local-principal",
+        "src/engine/core/audit",
+        "src/engine/core/approval",
+        "src/domain/core/audit",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/root",
+        "src/composition/core/query-errors"
+      ],
+      "plan": "SECURITY"
     }
   },
   "composition": {

@@ -1,3 +1,4 @@
+export { verifyConfiguredAudit } from '#composition/core/audit/index.js';
 export { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 export { applyConfiguredRunLifecycle, inspectConfiguredRun } from '#composition/core/runs/index.js';
 export { proposeConfiguredRun, inspectConfiguredRunProposal, createConfiguredRun, createConfiguredDeliveryRun } from '#composition/core/runs/index.js';

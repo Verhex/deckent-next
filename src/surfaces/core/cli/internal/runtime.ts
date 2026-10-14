@@ -11,6 +11,7 @@ export interface RuntimeServiceHost {
   stop(): Promise<RuntimeServiceDrainResult>;
 }
 export interface RuntimeServiceObserver extends BackupScheduleObserver {
+  onAuditIntegrity?(status: import('#engine/index.js').AuditServiceStatus): void | Promise<void>;
   onQueryFailure?(event: { readonly code: string; readonly diagnosticId: string; readonly detail: string }): void | Promise<void>;
   onRunProgression?(query: ProgressionCursor, result: Readonly<{ run: RunView; attempted: number; stopped: boolean; waitedForSlotMs?: number }>): void | Promise<void>;
   onRunProgressionError?(query: ProgressionCursor | null, error: Pick<DeckentError, 'code'> & Partial<Pick<DeckentError, 'params' | 'localize' | 'message'>>): void | Promise<void>;
@@ -124,6 +125,8 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
           : t('cli.backup.scheduleFailed', { trigger, code: event.code ?? '-' }, locale), event.status === 'failed' ? 'error' : 'info'); },
     onIdleShutdown: async event => { output({ schemaVersion: 1, event: 'idle-shutdown', ...event },
       () => t('cli.runtime.idleShutdown', { duration: formatDuration(event.afterMs) }, locale)); },
+    onAuditIntegrity: async status => { output({ schemaVersion: 1, event: 'audit-integrity', ...status },
+      () => t('cli.audit.service', { status: status.status === 'ready' ? t('cli.audit.service.ready', {}, locale) : t('cli.audit.service.degraded', {}, locale) }, locale)); },
     onLedgerUpgraded: async upgrade => { output({ schemaVersion: 1, event: 'ledger-upgraded', ...upgrade },
       () => t('cli.runtime.ledgerUpgraded', { from: upgrade.from, to: upgrade.to, backup: upgrade.backupPath }, locale)); },
     // WORKER-AUTO-REFRESH: the background refresh reports its typed events here; none of them delays or fails readiness.

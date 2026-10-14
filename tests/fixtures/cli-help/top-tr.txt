@@ -3,6 +3,7 @@ Başlarken:
   terminal    Etkileşimli terminali aç
   init        Kurulumu hazırla
 İzleme:
+  audit       Audit geçmişini ve checkpoint kanıtını doğrula
   report      Run maliyet ve kabul kanıtını incele
   monitor     Kurulumları ve işleri izle
   workers     İşçileri listele veya izle

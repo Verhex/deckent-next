@@ -1,4 +1,5 @@
 export interface InstallationStartabilityView { readonly status: 'ready' | 'blocked'; readonly endpoint: string | null; readonly checks: readonly { readonly code: string; readonly message: string }[] }
+import { renderAuditStatus, renderAuditReason } from './audit.js';
 import { t, type Locale } from '#platform/index.js';
 import type { ToolchainCurrencyReport } from '#engine/index.js';
 
@@ -25,6 +26,7 @@ export interface DoctorRenderInput {
     readonly surface: 'runtime-service' | 'mcp'; readonly requiredBytes: number; readonly availableBytes: number }[];
   readonly policyAdministration?: { readonly usableAdminCount: number; readonly bootstrapRequired: boolean; readonly recoveryRequired: boolean } | null;
   readonly startability?: InstallationStartabilityView | null;
+  readonly auditIntegrity?: import('#domain/index.js').AuditVerification | null;
   readonly platform: string;
   readonly host: { readonly cpuCores: number; readonly totalMemMB: number; readonly recommendedMaxWorkers: number };
   readonly company: { readonly companyId: string };
@@ -65,6 +67,8 @@ function secretStoreCustodyLine(backend: string, locale: Locale): readonly strin
 export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale): string {
   return [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
+  ...(result.auditIntegrity ? [t('doctor.auditIntegrity', { status: renderAuditStatus(result.auditIntegrity.status, locale),
+    reason: renderAuditReason(result.auditIntegrity.reason, locale) }, locale)] : []),
   ...(result.startability ? [t('doctor.startability', { status: result.startability.status, endpoint: result.startability.endpoint ?? '-' }, locale),
     ...result.startability.checks.map(check => `[${check.code}] ${check.message}`)] : []),
   ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
