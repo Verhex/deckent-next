@@ -10,8 +10,7 @@ import { inspectConfiguredWorkspaceIntegration } from './integration.js';
  * never a command field. Neither the exported SDK producers nor MCP install this capability. */
 export function verifiedDeliveryConfirmation(answer: (view: EffectConfirmationView) => Promise<boolean>): EffectConfirmation {
   const assertAvailable = async () => {
-    if (localPrincipalChannel() === 'mcp' || localPrincipalPeer() || !await attestLocalInteractiveTerminal())
-      throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED');
+    if (localPrincipalChannel() === 'mcp' || localPrincipalPeer() || !await attestLocalInteractiveTerminal()) throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED');
   };
   return { assertAvailable, async confirm(view) {
     await assertAvailable();
@@ -27,25 +26,17 @@ export function interactiveDeliveryHandlers(answer: (view: EffectConfirmationVie
       await witness.assertAvailable();
       const c = await workspacePatchContext(root, input.identity, options, false, 'read');
       if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      const git = { ...c.config.execution.git, ...(await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout)).git,
-        workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
-      const candidate = 'integrationCommandId' in input ? (await inspectConfiguredWorkspaceIntegration(root,
-        { schemaVersion: 1, identity: input.identity, commandId: input.integrationCommandId }, options)).manifest : null;
-      const stats = await new GitIntegrationDelivery(candidate ? { ...git, sourceRoot: candidate.workspace } : git).describe(view.from, view.to);
-      const guard = await witness.confirm({ ...view, ...stats });
+      const git = { ...c.config.execution.git, ...(await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
+      const candidate = 'integrationCommandId' in input ? (await inspectConfiguredWorkspaceIntegration(root, { schemaVersion: 1, identity: input.identity, commandId: input.integrationCommandId }, options)).manifest : null;
+      const guard = await witness.confirm({ ...view, ...await new GitIntegrationDelivery(candidate ? { ...git, sourceRoot: candidate.workspace } : git).describe(view.from, view.to) });
       return async () => {
         await guard();
-        if ('targetRef' in input) {
-          const config = await loadConfig(root, { ...options, force: true, heal: false });
-          if (!config.execution?.adoption.targets.includes(input.targetRef)) throw ErrorRegistry.createError('ADOPTION_TARGET_DENIED');
-        }
+        if ('targetRef' in input && !(await loadConfig(root, { ...options, force: true, heal: false })).execution?.adoption.targets.includes(input.targetRef)) throw ErrorRegistry.createError('ADOPTION_TARGET_DENIED');
       };
     },
   });
   return { assertAvailable: witness.assertAvailable, // TESLIM-PENCERESI: the terminal window refuses a non-verified session before preparing a candidate.
-    deliver: (root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions) =>
-      deliverWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
-    adopt: (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions) =>
-      adoptWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
+    deliver: (root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions) => deliverWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
+    adopt: (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions) => adoptWorkspaceIntegrationWithConfirmation(root, input, options, port(root, input, options)),
   };
 }

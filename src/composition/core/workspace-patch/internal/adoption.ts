@@ -38,6 +38,4 @@ export async function rollbackConfiguredWorkspaceIntegration(root: string, input
   let command; try { command = integrationRollbackCommandSchema.parse(input); } catch (error) { throw queryFailure(error); }
   return withAdoption(root, command.identity, options, 'rollback-integration', application => application.rollback(command));
 }
-
-export const adoptConfiguredWorkspaceIntegration = (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions = {}) =>
-  adoptWorkspaceIntegrationWithConfirmation(root, input, options);
+export const adoptConfiguredWorkspaceIntegration = (root: string, input: IntegrationAdoptionCommand, options: ConfigLoadOptions = {}) => adoptWorkspaceIntegrationWithConfirmation(root, input, options);

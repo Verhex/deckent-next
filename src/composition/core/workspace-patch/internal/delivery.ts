@@ -24,6 +24,4 @@ export async function deliverWorkspaceIntegrationWithConfirmation(root: string, 
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }
-
-export const deliverConfiguredWorkspaceIntegration = (root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions = {}) =>
-  deliverWorkspaceIntegrationWithConfirmation(root, input, options);
+export const deliverConfiguredWorkspaceIntegration = (root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions = {}) => deliverWorkspaceIntegrationWithConfirmation(root, input, options);
