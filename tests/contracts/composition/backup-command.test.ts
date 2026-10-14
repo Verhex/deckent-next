@@ -197,7 +197,10 @@ it('store selected → backup → ledger and config lost → in-place restore �
   expect(result.globalConfig).toMatchObject({added:[],kept:[]});
   const project=JSON.parse(await readFile(join(f.root,'.deckent/config.json'),'utf8'));expect(project.secrets).toBeUndefined();expect(project.language).toBeUndefined();
   clearConfigCache();const config=await loadConfig(f.root,{env:f.env});expect((config as unknown as Record<string, unknown>).secrets).toEqual({store:SELECTED_STORE});expect(config.language).toBe('tr');
-  if(process.platform==='linux'){const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:f.env});await service.stop();await service.done;}
+  // The set was taken before the project identity existed: restore publishes no empty identity directory (it would read as a lost record).
+  await expect(stat(join(f.root,'.deckent/project-identity'))).rejects.toMatchObject({code:'ENOENT'});
+  if(process.platform==='linux'){const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:f.env});await service.stop();await service.done;
+    expect(await new FileProjectIdentityStore(f.root).read()).toMatchObject({status:'available'});}
 });
 it('whole machine lost: the empty global home receives the archived global layer, the project config stays project-only (S1 D1)',async()=>{
   const f=await fixture();await selectStore(f);await call(f,'create');
