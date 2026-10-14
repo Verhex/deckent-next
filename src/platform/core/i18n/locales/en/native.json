@@ -194,5 +194,17 @@
   "native_permission.round_item_denied": "(denied by policy)",
   "native_permission.round_item_floor": "(asks every time)",
   "native_permission.round_more": "… {n} more call(s) not listed",
-  "native_permission.round_title": "This round proposes {count} tool call(s)"
+  "native_permission.round_title": "This round proposes {count} tool call(s)",
+  "error.OAUTH_CONNECTION_INVALID": "The ChatGPT connection could not be verified. Start sign-in again.",
+  "error.OAUTH_CONNECTION_DENIED": "The ChatGPT connection was declined or is not permitted in this scope.",
+  "error.OAUTH_CONNECTION_UNAVAILABLE": "The ChatGPT connection is unavailable. An uncertain refresh requires sign-in again.",
+  "error.OAUTH_CONNECTION_CANCELLED": "The ChatGPT connection action was cancelled. Inspect its state before continuing.",
+  "error.OAUTH_CONNECTION_TIMEOUT": "ChatGPT sign-in timed out. Start a new sign-in attempt.",
+  "error.OAUTH_CONNECTION_IDENTITY_INVALID": "The ChatGPT identity could not be verified. No account was activated.",
+  "error.OAUTH_CONNECTION_STORE_REQUIRED": "Select the encrypted secret store before connecting ChatGPT.",
+  "error.OAUTH_CONNECTION_CHANGED": "The connection or secret store changed. Inspect it before continuing.",
+  "error.OAUTH_CONNECTION_REAUTHORIZE": "This ChatGPT session requires sign-in again.",
+  "error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED": "Start ChatGPT sign-in from an interactive terminal. No sign-in URL is printed.",
+  "error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED": "ChatGPT browser sign-in is supported on Linux/WSL only in this implementation.",
+  "error.SECRET_STORE_PROTECTION_REQUIRED": "Renewable credentials require encrypted storage. This secret store cannot accept them."
 }

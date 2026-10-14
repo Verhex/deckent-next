@@ -86,3 +86,4 @@ export * from '#engine/core/resource-observation/index.js';
 export { validateAuthorityWrite, PolicyAdministrationInspection, policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/core/policy/index.js';
 
 export type { AuthorityHistorySource, AuthorityRevision } from '#engine/core/policy/index.js';
+export * from '#engine/core/oauth-connection/index.js';

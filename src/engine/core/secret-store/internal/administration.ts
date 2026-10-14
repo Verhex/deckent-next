@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { isSecretName, isSecretValue, type SecretCustody, type SecretStore } from './port.js';
+import { assertSecretStorageProtection } from './protection.js';
 
 /** Who asks to change which secret in which scope. The principal is the verified caller, never an input of the request body. */
 export interface SecretChangeRequest {
@@ -54,6 +55,7 @@ export class SecretStoreAdministration {
 
   async set(request: SecretChangeRequest, value: string): Promise<void> {
     this.check(request);
+    assertSecretStorageProtection(request.name, this.store.descriptor);
     if (!isSecretValue(value)) throw ErrorRegistry.createError('SECRET_VALUE_INVALID');
     await this.custody.exclusive(async () => {
       await this.selected();

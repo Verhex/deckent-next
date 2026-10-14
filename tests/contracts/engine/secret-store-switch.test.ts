@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SecretStoreAdministration, SecretStoreSwitch, isSecretStoreDowngrade, policySecretStoreSwitchAuthorization, type SecretStore, type SecretStoreSwitchPorts } from '#engine/index.js';
+import { SecretStoreAdministration, SecretStoreSwitch, isSecretStoreDowngrade, policySecretStoreSwitchAuthorization, RENEWABLE_SECRET_PREFIX, type SecretStore, type SecretStoreSwitchPorts } from '#engine/index.js';
 import { firstRunPolicyTemplate, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
@@ -9,11 +9,11 @@ const ENV = 'core.secret-store.env@1', FILE = 'core.secret-store.file@1', SEALED
 const me = { issuer: 'os', subject: '1000' };
 
 const shared: { log: string[] } = { log: [] };
-function memoryStore(id: string, entries: Record<string, string> = {}, options: { writable?: boolean; enumerable?: boolean } = {}) {
+function memoryStore(id: string, entries: Record<string, string> = {}, options: { writable?: boolean; enumerable?: boolean; encryptedAtRest?: true } = {}) {
   const data = new Map(Object.entries(entries));
   const failures = { delete: false, readBack: false };
   const store: SecretStore = {
-    descriptor: { id, writable: options.writable ?? true, enumerable: options.enumerable ?? true },
+    descriptor: { id, writable: options.writable ?? true, enumerable: options.enumerable ?? true, ...(options.encryptedAtRest ? { encryptedAtRest: true } : {}) },
     async get(name) { return failures.readBack ? 'altered' : data.get(name); },
     async set(name, value) { shared.log.push(`set ${id} ${name}`); data.set(name, value); },
     async delete(name) { shared.log.push(`delete ${id} ${name}`); if (failures.delete) throw new Error('crash'); return data.delete(name); },
@@ -42,6 +42,34 @@ const request = (to: string, confirmDowngrade = false) => ({ principal: me, scop
 const code = (promise: Promise<unknown>) => promise.then(() => null, (error: { code?: string }) => error.code);
 
 describe('secret store switch', () => {
+  it('a confirmed downgrade cannot copy a renewable session into plaintext; selection, values and audit remain unchanged', async () => {
+    const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, sealed = memoryStore(SEALED, { [name]: 'synthetic-renewable' }, { encryptedAtRest: true });
+    const file = memoryStore(FILE), h = harness(SEALED, { [SEALED]: sealed, [FILE]: file });
+    expect(await code(h.application.switch(request(FILE, true)))).toBe('SECRET_STORE_PROTECTION_REQUIRED');
+    expect(h.selection()).toBe(SEALED); expect(file.data.size).toBe(0); expect(sealed.data.get(name)).toBe('synthetic-renewable');
+    expect(h.audits).toHaveLength(0); expect(h.log).toEqual(['enter', 'leave']);
+  });
+  it('renewable sessions can use an encrypted Enterprise backend through the same port', async () => {
+    const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, enterprise = 'enterprise.secret-store.vault@1';
+    const sealed = memoryStore(SEALED, { [name]: 'synthetic-renewable' }, { encryptedAtRest: true });
+    const target = memoryStore(enterprise, {}, { encryptedAtRest: true }), h = harness(SEALED, { [SEALED]: sealed, [enterprise]: target });
+    expect(await h.application.switch(request(enterprise, true))).toMatchObject({ status: 'switched', to: enterprise });
+    expect(target.data.get(name)).toBe('synthetic-renewable'); expect(sealed.data.size).toBe(0);
+  });
+  it('a plaintext current selection containing a protected legacy copy cannot silently finish or erase custody', async () => {
+    const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, file = memoryStore(FILE, { [name]: 'synthetic-renewable' }), h = harness(FILE, { [FILE]: file });
+    expect(await code(h.application.switch(request(FILE)))).toBe('SECRET_STORE_PROTECTION_REQUIRED');
+    expect(file.data.get(name)).toBe('synthetic-renewable'); expect(h.audits).toHaveLength(0);
+  });
+  it('the ordinary governed secret writer cannot create a protected session on a plaintext backend', async () => {
+    const file = memoryStore(FILE), h = harness(FILE, { [FILE]: file });
+    const write = new SecretStoreAdministration(file.store, async () => ({ policyRevision: 'p1', effect: 'allow', ruleId: null }), () => {}, () => 1,
+      { exclusive: work => work(), selected: async () => FILE });
+    expect(await code(write.set({ principal: me, scopeId: 'installation', name: `${RENEWABLE_SECRET_PREFIX}FIXTURE` }, 'synthetic-renewable'))).toBe('SECRET_STORE_PROTECTION_REQUIRED');
+    expect(file.data.size).toBe(0); expect(h.log).toHaveLength(0);
+  });
+});
+describe('ordinary secret store switch compatibility', () => {
   it('file → encrypted: audits first, copies and reads back every name, publishes the selection, then deletes the old copies', async () => {
     const file = memoryStore(FILE, { A_KEY: 'synthetic-a', B_KEY: 'synthetic-b' }), sealed = memoryStore(SEALED);
     const h = harness(FILE, { [ENV]: memoryStore(ENV, {}, { writable: false, enumerable: false }), [FILE]: file, [SEALED]: sealed });

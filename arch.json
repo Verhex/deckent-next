@@ -2973,6 +2973,19 @@
         "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
+    },
+    "src/engine/core/oauth-connection": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/engine/core/secret-store"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/provider-siwc": {
+      "dependencies": [
+        "src/engine/core/oauth-connection"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {
