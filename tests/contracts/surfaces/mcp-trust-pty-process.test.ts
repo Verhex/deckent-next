@@ -162,8 +162,9 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'hello\r'],
-      ['mcp_trust · mcp:fx · launch', 'y'],
-      ['mcp_trust · mcp:fx · tools', 'y'],
+      // TERMINAL-SABIT R2 (owner 2026-10-14): trust cards raised during the turn keep the composer focused; Ctrl+O moves to each card, then y.
+      ['mcp_trust · mcp:fx · launch', '\u000fy'],
+      ['mcp_trust · mcp:fx · tools', '\u000fy'],
       // SLASH-WINDOWS I-1 (owner 2026-10-08): in the terminal a typed `/mcp list` opens the /mcp window with the one-time note (the CLI keeps `list`).
       ['Trusted turn done.', '/mcp list\r'],
       ['Typed arguments are not used in the terminal', '\u001b'],
