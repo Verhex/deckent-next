@@ -4,37 +4,40 @@ Bu dosya yalnız **devam eden işi** üç katmanda taşır: **Şimdi** (en çok 
 
 Eski 88 satırlı "Aktif iş alanları" tablosu, eski Şimdi ve P0/P1 maddeleri birebir [arşivde](.deckent/docs/plan/archive-2026-10-14.md) (owner 2026-10-14; hiçbir metin silinmedi). Tamamlananlar [COMPLETED-PLAN](COMPLETED-PLAN.md), owner kararları [owner-decisions](.deckent/docs/decisions/owner-decisions.md), iş ayrıntıları `.deckent/docs/plan/` altındadır. Kimde-ne-var: `node .agents/refactor/board.mjs show`; sözleşmeler [ARCHITECTURE](ARCHITECTURE.md).
 
-**Gerçek durum (2026-10-14):** canlı + N1 = alpha.35 (`ef1aecda`, 2026-10-13 21:47Z). İlk canlı `/do` uçtan uca 2026-10-13 (Run `f42bae9d`), ilk tam teslim + benimseme 22:03Z (Run `1f29f85a` → `refs/heads/deckent/teslim`). alpha.36 adayı `wave/alpha36-2026-10-14` (PR #85 taslak): alpha.35 gerileme düzeltmesi, teslim/benimseme için doğrulanmış insan y/N + anlamlı commit, monitörde süresi dolan onay/para/Brain harcama satırı, terminal sabit giriş alanı + odak kuralı + aktif iş şeridi (Ctrl+T) + terminal teslim penceresi (`/deliver`, Ctrl+O + y). Roller: main Opus, bağımsız inceleme Astra (`gpt-6-astra`), lane'ler Sonnet 5.5, kritikte Opus; DOGFOOD ON (N1 = user systemd `deckent-n1.service`).
+**Gerçek durum (2026-10-14):** canlı + N1 = alpha.38 (`7eba8b1f`, 2026-10-14 17:03Z; CI-KARARLILIK: servis başlarken kimlik, geri yükleme, saat izlemeli kabuk yazma kümeleri). alpha.36 (`c9b36b7c`, 09:38Z) ve alpha.37 (`efb2a5b9`, 12:18Z, Ctrl+Y düzeltmesi; owner'ın tek seferlik CI istisnasıyla) indi; hosted CI kapısı yeniden katı (PR #87 ve main yeşil, 2026-10-14). İlk canlı `/do` uçtan uca 2026-10-13 (Run `f42bae9d`), ilk tam teslim + benimseme 22:03Z (Run `1f29f85a` → `refs/heads/deckent/teslim`). Roller: main Opus, bağımsız inceleme Astra (`gpt-6-astra`), lane'ler Sonnet 5.5, kritikte Opus; DOGFOOD ON (N1 = user systemd `deckent-n1.service`).
 
-**Beta kapısı (öneri, owner onayı bekler):** (1) alpha.36 canlı ve owner terminali kabul eder; (2) S6 sır kapısı dispatch öncesi; (3) NATIVE-BAGLAM model çalışma bağlamı; (4) temiz makinede kurulum provası (init → /do → teslim, lead yardımsız); (5) main hosted CI yeşil; (6) bilinen sınırlar sayfası.
+**Beta kapısı (öneri, owner onayı bekler):** (1) owner terminalde alpha.36+ davranışını kabul eder: owner denemesini bekliyor; (2) S6 sır kapısı dispatch öncesi: worker'da; (3) NATIVE-BAGLAM model çalışma bağlamı: worker'da; (4) temiz makinede kurulum provası (init → /do → teslim, lead yardımsız): başlamadı; (5) main hosted CI yeşil: yapıldı 2026-10-14 (`7eba8b1f`); (6) bilinen sınırlar sayfası: bu kart (`docs/known-limits.md`); (7) owner 2026-10-11 kararı: test-ERP kanıtları canlıda gözlenince ([owner-decisions](.deckent/docs/decisions/owner-decisions.md) "Sürüm sırası", satır 389): canlıda gözlem kaydı yok, kanıt yalnız fixture/test (alpha.28/29), gözlem koşusu planlanmadı.
 
 ## Şimdi (en çok 7)
 
 | İş | Neden | Durum | Sıradaki adım |
 |---|---|---|---|
-| alpha.36 canlıya + terminal kabulü | Kapı 1: owner terminali kabul etmeden beta yok | Aday `wave/alpha36-2026-10-14` (PR #85 taslak): TESLIM-GUVENLIK (doğrulanmış insan y/N + anlamlı commit), TERMINAL-SABIT R2 (sabit giriş, odak kuralı, aktif iş şeridi), terminal teslim penceresi, KUCUK-DUZELTMELER (onay expiry, para, Brain maliye satırı) | Astra PASS + hosted CI → canlı/N1 geçişi → owner terminal kabulü |
-| S6 sır kapısı | Kapı 2: sır dispatch'ten önce kapıda durmalı | Karar var, kod yok | Kart aç, yazar lane; canlı-eşzamanlılık dilim 1–2 ile paralel |
-| NATIVE-BAGLAM | Kapı 3: modelin çalışma bağlamı native çalışsın | Karar var, kod yok | S6 sonrası ya da paralel; ayrı kart |
+| Terminal kabulü | Kapı 1: owner terminali kabul etmeden beta yok | alpha.38 canlıda; kabul owner'ın denemesini bekliyor | Owner denemesi; bulgu çıkarsa Gelen kutusu |
+| S6 sır kapısı | Kapı 2: sır dispatch'ten önce kapıda durmalı | Worker'da (karar var) | Yazar lane teslimi → Astra |
+| NATIVE-BAGLAM | Kapı 3: modelin çalışma bağlamı native çalışsın | Worker'da (karar var) | Yazar lane teslimi → Astra |
 | Temiz makine kurulum provası | Kapı 4: init → /do → teslim lead yardımsız | Başlamadı | WSL/Docker temiz kurulum senaryosu; BATCH-D-KALAN (Gelen kutusu) girdisi |
-| Main hosted CI yeşil | Kapı 5: ubuntu node24+26 zorunlu hücreler | CI-DEBT (CI-ONARIM CARD-2) yazar adayı: açık MCP fixture izinleri, tipli hata/devir beklentileri; node 26 MCP bağlantı zaman aşımı nedeni bilinmiyor | alpha.36 hosted koşusu; CI değişikliği başına bir hosted deneme + bir düzeltme (owner 2026-10-06) |
-| Bilinen sınırlar sayfası | Kapı 6: dürüst kapsam beyanı | Başlamadı | Gelen kutusu + açık P1 listesinden derle; README/docs bağı |
+| Bilinen sınırlar sayfası | Kapı 6: dürüst kapsam beyanı | Bu kart: `docs/known-limits.md` + `.tr.md` + README/mimari bağları | Astra/owner okuması; her sürümde Honest limits ile eşleme |
+| Test-ERP canlı gözlem | Kapı 7: owner 2026-10-11 kararı | Canlıda gözlem kaydı yok (fixture/test kanıtı var) | Gözlem koşusu tasarlanır; owner kapı listesini onaylarken karar verir |
 
 ## Sıradaki (karar verildi; sıralı)
 
+0. **Kuyruğu atlayan güvenlik kartları:** MCP-GUVENLIK G2 (salt okunur MCP aracı yapılandırmayı onarmamalı) ve G3 (terminal yeniden onayı CLI "her zaman sor" kilitlerini silmemeli). G1 (MCP = AI aktörü, politika hücreleri, hold→resume aklama) ONAY-GUVENCE analizinden sonra owner Y3/Y4 bekler (owner yönü 2026-10-14: MCP trafiği her zaman AI; AI, insan adımlarını yalnız politikayla devralır).
 1. **S6 sır kapısı ∥ canlı-eşzamanlılık dilim 1–2** (ölçüm, kayıt boşlukları; KAYNAK-KALITE bounded iz + CPU/RAM inspect/monitor temelini kullanır)
-2. **NATIVE-BAGLAM** ∥ **SIWC-CORE** (owner 2026-10-14: ücretsiz Apache-2.0 Core'da kendi ChatGPT hesabıyla resmî Sign in with ChatGPT; brief `.deckent/host/handoffs/SIWC-CORE-2026-10-14/implementation-brief.md`; Codex yazar lane) ∥ **KOMUT-BIRLESTIRME** analizi (owner 2026-10-14: terminal/CLI izleme-görme-onay komutlarının tekilleştirilmesi; iş listesinde bekleyen komutlar, ör. `/compact`, aynı pakette)
-3. **Atama**: WorkClass → model/effort (sistem atar, Brain atamaz), Brain frontier sınıfı + **M5-D4** ajan/skill kademeleri + başarı defteri (ABONELIK-API-YONLENDIRME D2+ aday listesi, billing ekseni, anahtarsız API worker; owner kararları 2026-10-13)
-4. **Headless CLI abonelik Brain** (Brain abonelik; M5-D5 sürer)
-5. **Test azaltma M1** (+ ağaç-hash test makbuzu, host test servisi, etkilenen seçimi — gölge modda; güvenlik/negatif testler zayıflatılmaz)
-6. **Otonom teslim kuralları** (DONGU-KAPATMA kalanı; owner teslim/benimseme kuralları)
-7. **Eşzamanlılık dilim 4–10** (salt okunur operasyon yolu, aktif iş görünümü, okuma-seti kaydı, teslim anı yeniden doğrulama, merge-tree + birleşik doğrulama, audit olayları, ölçülürse serileştirme)
-8. **KATMAN-ETKIN** (custom katman kanıtı)
-9. **POLITIKA-MODULU P1–P5** (P0 alpha.35'te indi; P1 kurucu admin + kartlı kurtarma, P2 iki gerçek kişiyle devir, P3 rol düzenleme, P4 imzalı paket, P5 Enterprise merkez)
-10. **Masaüstü** (beta sonrası, owner açar; DESKTOP-ARCH Electron + React, ayrı depo `deckent-desktop`).
+2. **NATIVE-BAGLAM** ∥ **SIWC-CORE** (owner 2026-10-14: ücretsiz Apache-2.0 Core'da kendi ChatGPT hesabıyla resmî Sign in with ChatGPT; brief `.deckent/host/handoffs/SIWC-CORE-2026-10-14/implementation-brief.md`; Codex yazar lane) ∥ **KOMUT-BIRLESTIRME** (owner 2026-10-14: terminal/CLI izleme-görme-onay komutlarının tekilleştirilmesi; `/compact` gibi bekleyen komutlar aynı pakette)
+3. **Beta öncesi, owner seti 4 (2026-10-14):** (a) terminal hold/resume + doğrulama-Run benimseme anahtarları (kabul/ret, bekleyen Y3'ü izler); (b) SDK yalnız yönetilen: ham yazıcılar bir sonraki sürümlü SDK sözleşmesinde dışa aktarımdan çıkar, yönetilen config yazımı önce gelir; (c) belirsiz (doğrulanamayan) ERP yazımını Core'da insan beyanıyla kapatma: ayrı terminal durumu, kanıt eki zorunlu, kabul kanıtı sayılmaz, arayüzü beta sonrası. `deckent operation list` beta sonrası; README beta.1'de sınırı yazar.
+4. **Atama**: WorkClass → model/effort (sistem atar, Brain atamaz), Brain frontier sınıfı + **M5-D4** ajan/skill kademeleri + başarı defteri (ABONELIK-API-YONLENDIRME D2+ aday listesi, billing ekseni, anahtarsız API worker; owner kararları 2026-10-13)
+5. **Headless CLI abonelik Brain** (Brain abonelik; M5-D5 sürer)
+6. **Test azaltma M1** (+ ağaç-hash test makbuzu, host test servisi, etkilenen seçimi, gölge mod; güvenlik/negatif testler zayıflatılmaz)
+7. **Otonom teslim kuralları** (DONGU-KAPATMA kalanı; owner teslim/benimseme kuralları)
+8. **Eşzamanlılık dilim 4–10** (salt okunur operasyon yolu, aktif iş görünümü, okuma-seti kaydı, teslim anı yeniden doğrulama, merge-tree + birleşik doğrulama, audit olayları, ölçülürse serileştirme)
+9. **KATMAN-ETKIN** (custom katman kanıtı)
+10. **POLITIKA-MODULU P1–P5** (P0 alpha.35'te indi; P1 kurucu admin + kartlı kurtarma, P2 iki gerçek kişiyle devir, P3 rol düzenleme, P4 imzalı paket, P5 Enterprise merkez)
+11. **NPM-PUBLISH** (owner 2026-10-14): beta'da npm'e dist-tag'lerle yayın (`beta`, sonra `latest`).
+12. **Masaüstü + ajan organizasyonu** (beta sonrası, owner açar): DESKTOP-ARCH Electron + React (ayrı depo `deckent-desktop`); ajan tanımları, skill'ler, tanım başına çok worker, başarı metrikleri, sınırlı evrim. Analiz AJAN-ORG-DESKTOP sürüyor (`proof/ANALIZ-AJAN-ORG-DESKTOP-2026-10-14`).
 
-Yan analizler (ultracode oturumu; `proof/ANALIZ-*-2026-10-14/PROMPT.md`, sonuç lead'e döner): ATAMA-TIER, HEADLESS-BRAIN, TEST-AZALTMA, OTONOM-TESTLIM, TERMINAL-UX.
+Yan analizler (ultracode oturumu; `proof/ANALIZ-*-2026-10-14/`, sonuç lead'e döner): TERMINAL-UX, ATAMA-TIER, HEADLESS-BRAIN, TEST-AZALTMA, OTONOM-TESLIM, SIWC-N0, ABONELIK-LIMIT, CLAUDE-KIMLIK, ACIK-BULGU-DURUM, YUZEY-UYUM, MUSTERI-YOLCULUK bitti; ONAY-GUVENCE ve AJAN-ORG-DESKTOP sürüyor.
 
-**Sıralanmamış (karar var, sıra yok; tam metin arşivde):** M5-D3 onarım, M5-D5 Brain/Auditor devamı, M5-D6 hafıza, M5-D7 Nervous, M5-D8 (ertelendi), M5-RECORD (iz/spool/saklama katmanları), M5-AGENT-TYPES, M5-AGENT-DEF, CONTINUATION-ARTIFACT, RUN-SPEND-CEILING (API worker bütçe tasarımı owner'a), PROVIDER-SPEND-LIMITS, COST-GUARDS onay eşiği, CACHE-SLICE2, LLMTR, SECRET-CONTINUITY, DECKENT-MD-WORKERS, PROTECTED-PATHS, MCP-OAUTH, FIRECRACKER-REALM, NPM-PUBLISH (ürün kararlı olunca), NODE-26 (hedef LTS 2026-10-28), NATIVE-AGENTS, SIWC, COMPUTER-USE. Görev düzelt-yeniden dene yapısı ileride gündeme gelir (owner 2026-10-12; otomatik tekrar yok).
+**Sıralanmamış (karar var, sıra yok; tam metin arşivde):** M5-D3 onarım, M5-D5 Brain/Auditor devamı, M5-D6 hafıza, M5-D7 Nervous, M5-D8 (ertelendi), M5-RECORD (iz/spool/saklama katmanları), M5-AGENT-TYPES, M5-AGENT-DEF, CONTINUATION-ARTIFACT, RUN-SPEND-CEILING (API worker bütçe tasarımı owner'a), PROVIDER-SPEND-LIMITS, COST-GUARDS onay eşiği, CACHE-SLICE2, LLMTR, SECRET-CONTINUITY, DECKENT-MD-WORKERS, PROTECTED-PATHS, MCP-OAUTH, FIRECRACKER-REALM, NODE-26 (hedef LTS 2026-10-28), NATIVE-AGENTS, SIWC, COMPUTER-USE. Görev düzelt-yeniden dene yapısı ileride gündeme gelir (owner 2026-10-12; otomatik tekrar yok).
 
 ## Gelen kutusu (haftalık triyaj; iş değil, bulgu)
 
