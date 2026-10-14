@@ -105,7 +105,11 @@ command exits (any code), the native lister `shell-overlay-scan` (reads the kern
 forces `redirect_dir=nofollow`, `metacopy=off`), symbolic links, special files, hard links and setuid/setgid files are refused per entry,
 `redirect`/`metacopy`/whiteout-xattr metadata refuses the whole set, bounds (2 000 entries incl. subtree deletions, 64 MiB, 16 MiB per file,
 depth 32) refuse the whole set, and a lower path whose ctime is not older than the call directory's own ctime (start mark, kernel clock) — or
-a whiteout whose lower entry is gone — is a conflict: nothing is applied. Every entry is decided exactly like an edit of its path
+a whiteout whose lower entry is gone — is a conflict: nothing is applied. The mark is a wall-clock time, so the call also records wall and
+monotonic readings just before it (CI-KARARLILIK, lead 2026-10-14): when the wall clock fell behind the monotonic clock by more than
+`terminal.shell.clockStepToleranceMs` (default 250 ms) between the mark and the scan, a concurrent change may be invisible to the ctime check
+and nothing is applied (the result names the clock step); when at the mark the wall clock read behind a time the process had already handed
+out by more than the tolerance (a step just before the call), conflicts are named as possibly the clock's, never as the owner's changes. Every entry is decided exactly like an edit of its path
 (`decideAgentToolCall`: `run_shell` × `workspace.file.write`, cell `edit` / `edit-floor` / `edit-authority`; a relaxation is audited per entry
 — `permission-mode` `edit-non-floor`, summary `{kind: 'edit', path}` — before its effect; the write floor and the configuration file are not
 applied and the result tells the model to use the edit tools, which card; a deny keeps it out) and applied as its own C11 effect of

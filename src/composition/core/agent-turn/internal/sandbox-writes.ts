@@ -3,7 +3,7 @@ import type { EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
 import { prepareProductDirectory, SystemTrustedClock } from '#platform/index.js';
 import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession, ensureWorkspaceParents, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
-  removeSandboxWriteSetDirectory, scanSandboxWriteSet, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
+  removeSandboxWriteSetDirectory, scanSandboxWriteSetCall, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
   type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
@@ -22,7 +22,7 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
   type Store = Awaited<ReturnType<typeof openSqliteAttemptStore>>;
   let store: Store | null = null;
   try {
-    const scan = await scanSandboxWriteSet(input.directory.upper, scope.root, input.directory.mark);
+    const { scan, clock: clockVerdict } = await scanSandboxWriteSetCall(input.directory, scope.root);
     const clock = new SystemTrustedClock();
     const target = new WorkspaceFileTarget(scope, await prepareProductDirectory(context.layout, 'fileEffects'), { maxFileBytes: 16 * 1024 * 1024, writeSet: { upper: input.directory.upper } });
     // Opened once, on the first entry that reaches its effect (a set with nothing to apply opens nothing).
@@ -33,7 +33,7 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
       store = attempts;
       return { sessions, store: attempts };
     })();
-    return await applySandboxWriteSet({ scan, decider: input.decider, signal: input.signal,
+    return await applySandboxWriteSet({ scan, clock: clockVerdict, decider: input.decider, signal: input.signal,
       classify: (rel, kind) => input.sealed?.(rel) ? 'denied' : classifySandboxWritePath(scope, input.authority, rel, kind, input.selfSource),
       ensureParents: (rel, modeOf, admit) => ensureWorkspaceParents(scope, rel, modeOf, admit),
       async execute(change, gate) {

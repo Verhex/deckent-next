@@ -12,7 +12,11 @@ function wallFloor(source: () => number): () => number {
 }
 /** Process-wide floor for wall time. Hosts step the wall clock backwards (measured: 2.1-2.2 s about every 30 s on WSL2),
  * so a later sample in this process never reports an earlier wall time than one already handed out (Jev 6086297e). */
-const processWall = wallFloor(() => Date.now());
+let processFloor = 0;
+const processWall = () => (processFloor = Math.max(processFloor, Date.now()));
+/** How far the raw wall clock now reads behind the highest wall time this process has handed out (0 when it is not behind): a backward
+ * host step within the last moment shows here until real time catches up with the step (SHELL-OVERLAY clock guard, CI-KARARLILIK). */
+export function processWallLagMs(): number { return Math.max(0, processFloor - Date.now()); }
 export class SystemTrustedClock implements TrustedClock {
   private readonly wall: () => number;
   /** Every instance shares the process floor over Date.now. An explicit raw source (tests, deterministic replay)

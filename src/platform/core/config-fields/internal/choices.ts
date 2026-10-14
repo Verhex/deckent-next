@@ -220,6 +220,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'terminal.shell.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'terminal.shell.realm': { kind: 'schema' },
   'terminal.shell.environment': { kind: 'reference', source: 'environment', multiple: true },
+  'terminal.shell.clockStepToleranceMs': { kind: 'numeric', unit: 'ms', step: 50, presets: [50, 250, 1000, 5000] },
   'terminal.scratch.schemaVersion': { kind: 'schema' },
   'terminal.scratch.writeMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'terminal.scratch.sessionMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },

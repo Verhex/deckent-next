@@ -54,6 +54,9 @@ export const terminalConfigSchema = z.object({
     timeoutMs: z.number().int().min(1_000).max(3_600_000).default(300_000),
     realm: z.enum(['require-sandbox', 'prefer-sandbox', 'host']).default('prefer-sandbox'),
     environment: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)).max(64).default([]),
+    /** SHELL-OVERLAY clock guard (CI-KARARLILIK, lead 2026-10-14): how far the wall clock may fall behind the monotonic clock during a call
+     * (slew) before its write set is kept aside as a clock step; also the lag at the mark that names a conflict as the clock's. */
+    clockStepToleranceMs: z.number().int().min(10).max(60_000).default(250),
   }).strict().optional(),
   /** The agent's scratch area (SCR-A, owner 2026-09-28): per-write, per-session and installation-wide byte ceilings of the layout's
    * `scratch` resource, how many days an unused session area is kept, and how often the running service sweeps. Data, not code. */
@@ -87,11 +90,12 @@ export function readTerminalChatConfig(config: Record<string, unknown>): Termina
   return terminalConfigSchema.parse(section).chat ?? null;
 }
 
-export type TerminalShellConfig = { readonly realm: 'require-sandbox' | 'prefer-sandbox' | 'host'; readonly timeoutMs: number; readonly environment: readonly string[] };
+export type TerminalShellConfig = { readonly realm: 'require-sandbox' | 'prefer-sandbox' | 'host'; readonly timeoutMs: number; readonly environment: readonly string[];
+  readonly clockStepToleranceMs: number };
 /** The shell section, or its defaults when absent. */
 export function readTerminalShellConfig(config: Record<string, unknown>): TerminalShellConfig {
-  const shell = config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).shell;
-  return Object.freeze({ realm: shell?.realm ?? 'prefer-sandbox', timeoutMs: shell?.timeoutMs ?? 300_000, environment: Object.freeze([...(shell?.environment ?? [])]) });
+  const shell = (config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).shell) ?? terminalConfigSchema.shape.shell.unwrap().parse({ schemaVersion: 1 });
+  return Object.freeze({ realm: shell.realm, timeoutMs: shell.timeoutMs, environment: Object.freeze([...shell.environment]), clockStepToleranceMs: shell.clockStepToleranceMs });
 }
 
 export type TerminalScratchConfig = { readonly writeMaxBytes: number; readonly sessionMaxBytes: number; readonly installationMaxBytes: number;
