@@ -29,6 +29,10 @@ export interface ComposerProps {
   readonly busy: boolean;
   /** False while another component owns the keyboard (e.g. an open decision card); keys and pastes are then not consumed. */
   readonly active?: boolean;
+  /** Immediate focus guard for keys arriving in the same chunk as a window focus switch. */
+  readonly acceptsInput?: () => boolean;
+  /** Total visible rows, including the frame. The full draft remains editable behind this caret-following viewport. */
+  readonly maxRows?: number | undefined;
   /** `mentions`: the draft's `@path` tokens outside paste chips (attached by the owner through the service, never read here). */
   readonly onSubmit: (text: string, mentions: readonly string[]) => void;
   readonly onCancel: () => void;
@@ -57,16 +61,16 @@ function CaretRow({ text, at, marker }: { readonly text: string; readonly at: nu
   return <>{text.slice(0, at)}<Text inverse>{cluster || ' '}</Text>{text.slice(at + cluster.length)}</>;
 }
 
-function MenuRows({ menu, labels }: { readonly menu: ComposerMenu; readonly labels: ComposerLabels }): ReactNode {
+function MenuRows({ menu, labels, limit = MENU_ROWS }: { readonly menu: ComposerMenu; readonly labels: ComposerLabels; readonly limit?: number }): ReactNode {
   const palette = useWorklinePalette();
-  const first = Math.max(0, Math.min(menu.selected - MENU_ROWS + 1, menu.items.length - MENU_ROWS));
+  const first = Math.max(0, Math.min(menu.selected - limit + 1, menu.items.length - limit));
   const rows = menu.kind === 'slash'
     ? menu.items.map(command => slashCommandRow(paletteCommand(command), labels.slash))
     : menu.items.map(path => ({ name: mentionText(path), detail: '' }));
   const width = Math.max(...rows.map(row => displayWidth(row.name)));
   return (
     <Box flexDirection="column">
-      {rows.slice(first, first + MENU_ROWS).map((row, index) => {
+      {rows.slice(first, first + limit).map((row, index) => {
         const selected = first + index === menu.selected;
         return (
           <Text key={row.name} wrap="truncate">
@@ -75,7 +79,7 @@ function MenuRows({ menu, labels }: { readonly menu: ComposerMenu; readonly labe
           </Text>
         );
       })}
-      {rows.length > first + MENU_ROWS ? <Text {...palette.muted}>{`  +${rows.length - first - MENU_ROWS}`}</Text> : null}
+      {rows.length > first + limit ? <Text {...palette.muted}>{`  +${rows.length - first - limit}`}</Text> : null}
     </Box>
   );
 }
@@ -145,10 +149,11 @@ export function Composer(props: ComposerProps): ReactNode {
   }, [dispatch, state.armedAt]);
   const active = props.active ?? true;
   useInput((input, key) => {
+    if (latest.current.acceptsInput?.() === false) return;
     const mapped = composerKey(input, key);
     if (mapped) dispatch(mapped);
   }, { isActive: active });
-  usePaste(text => dispatch({ type: 'paste', text }), { isActive: active });
+  usePaste(text => { if (latest.current.acceptsInput?.() !== false) dispatch({ type: 'paste', text }); }, { isActive: active });
 
   const marker = (props.caret ?? (Object.keys(palette.accent).length === 0 ? 'marker' : 'inverse')) === 'marker';
   const menu = composerMenu(state);
@@ -156,25 +161,33 @@ export function Composer(props: ComposerProps): ReactNode {
   // Border (2) and padding (2) plus one cell so the caret after a full row never wraps.
   const rows = layoutRows(state.text.replace(/\t/gu, ' '), (columns || 80) - 5 - displayWidth(prompt));
   const caretAt = caretRow(rows, state.cursor);
+  const cap = props.maxRows === undefined ? Number.MAX_SAFE_INTEGER : Math.max(1, props.maxRows);
+  const framed = cap >= 3, borderRows = framed ? 2 : 0;
+  const armed = exitArmed(state, clock()), exitRows = armed && cap > borderRows + 1 ? 1 : 0;
+  const visible = Math.min(rows.length, Math.max(1, cap - borderRows - exitRows));
+  const first = Math.max(0, Math.min(caretAt - visible + 1, rows.length - visible));
+  const auxiliary = Math.max(0, cap - borderRows - visible - exitRows);
   // Dim only in a colour tier: the `none` tier (NO_COLOR) renders the hint as plain text without ANSI codes.
   const placeholder = state.text === '' ? labels.placeholder ?? '' : '';
   const dimmable = Object.keys(palette.accent).length > 0;
   const match = state.search ? searchMatches(state)[state.search.skip]?.text ?? '' : '';
   return (
-    <Box flexDirection="column">
-      {state.shortcuts ? labels.shortcuts.split('\n').map((line, index) => <Text key={index} {...(index ? palette.muted : palette.accent)}>{line}</Text>) : null}
-      {menu ? <MenuRows menu={menu} labels={labels} /> : null}
-      {state.search ? <Text wrap="truncate">{`${labels.search} '${state.search.query}': ${match.split('\n')[0]}`}</Text> : null}
-      <Box borderStyle="round" paddingX={1} flexDirection="column">
-        {rows.map((row, index) => (
+    <Box flexDirection="column" flexShrink={0}>
+      <Box flexDirection="column" maxHeight={auxiliary} overflow="hidden" flexShrink={0}>
+        {state.shortcuts ? labels.shortcuts.split('\n').map((line, index) => <Text key={index} wrap="truncate" {...(index ? palette.muted : palette.accent)}>{line}</Text>) : null}
+        {menu && auxiliary > 0 ? <MenuRows menu={menu} labels={labels} limit={Math.min(MENU_ROWS, auxiliary)} /> : null}
+        {state.search ? <Text wrap="truncate">{`${labels.search} '${state.search.query}': ${match.split('\n')[0]}`}</Text> : null}
+      </Box>
+      <Box {...(framed ? { borderStyle: 'round' as const, paddingX: 1 } : {})} flexDirection="column" flexShrink={0}>
+        {rows.slice(first, first + visible).map((row, offset) => { const index = first + offset; return (
           <Text key={index} wrap="truncate">
             {index ? indent : prompt}
             {index === caretAt ? <CaretRow text={row.text} at={state.cursor - row.start} marker={marker} /> : row.text}
             {placeholder && index === 0 ? <Text {...(dimmable ? { dimColor: true } : {})}>{marker ? ` ${placeholder}` : placeholder}</Text> : null}
           </Text>
-        ))}
+        ); })}
       </Box>
-      {exitArmed(state, clock()) ? <Text {...palette.muted}>{labels.exitArmed}</Text> : null}
+      {exitRows ? <Text {...palette.muted} wrap="truncate">{labels.exitArmed}</Text> : null}
     </Box>
   );
 }

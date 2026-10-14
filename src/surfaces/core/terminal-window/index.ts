@@ -1,4 +1,6 @@
 export * from './internal/window-stack.js';
+export * from './internal/pinned-workline.js';
+export * from './internal/main-screen-output.js';
 export * from './internal/window.js';
 export * from './internal/window-note.js';
 export * from './internal/scroll.js';

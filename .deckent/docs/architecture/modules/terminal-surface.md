@@ -137,8 +137,15 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Bounded windows (TUI2 L1, 2026-10-07; `wave/tui-2`; released with alpha.10, PR #37):** unit `terminal-window` (← terminal-kit, terminal-render)
   owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
-  and the window stack: one input owner, the top layer (approval priority, then newest); the composer, cards and pickers listen through
-  `useInput` `isActive` only while they own input. Ink `useFocus` is deliberately unused (it takes Tab/Shift+Tab/Esc). The stack is a
+  and the window stack: one input owner. TERMINAL-SABIT R2 (owner 2026-10-14, author candidate) focuses user-opened windows
+  immediately. Automatic /do/turn cards and run/worker watches keep composer focus; Ctrl+O transfers it to the top layer
+  (approval priority, then newest) and back. Each new automatic card requires a fresh focus switch, even after a focused card.
+  Standalone windows retain their modal default. Rich Workline bounds the live area to terminal rows minus one; measured footer height
+  reserves space for status/input, recent transcript and windows occupy the region above it. Composer draft rows follow the caret.
+  Keys use both `useInput` `isActive` and immediate focus guards; composer submissions only enter the existing FIFO, never approve.
+  The Workline output adapter removes ED3 only from Ink's ED2+ED3+HOME resize/overflow clear; the explicit `/clear`
+  HOME+ED2+ED3 command is preserved. Pipes and TERM=dumb bypass this adapter and retain the line fallback.
+  Ink `useFocus` is deliberately unused (it takes Tab/Shift+Tab/Esc). The stack is a
   view concern; which decision is legal stays with the panel controller. `PanelPresentation` has a generic `{kind:'window'}` (y/N or
   close); `/service-restart` confirms through it. The approval window (`terminal-work/approval-window.ts`) shows nine labelled
   fields from what the producer already sends (tool/target from the call's own `tool.started`, client-side; the sealed binding line

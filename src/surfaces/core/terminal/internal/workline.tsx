@@ -1,7 +1,7 @@
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
-import { render, Box, Static, Text, useApp, useStdout, type Instance } from 'ink';
+import { render, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
@@ -16,7 +16,7 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from './workline-history.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowNoteContext, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -38,6 +38,7 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly statusCancelling: string;
   readonly selfSourceFloor?: string;
   readonly hint: string;
+  readonly focus?: { readonly composer: string; readonly window: string };
   readonly roleUser: string;
   readonly roleAssistant: string;
   readonly runCard: string;
@@ -130,10 +131,10 @@ export interface WorklineProps {
 
 
 
-/** The composer listens only while no window is open (TS-WINDOW: one input owner, the window stack's top). */
+/** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
 function StackComposer(props: ComponentProps<typeof Composer>) {
   const owner = useFocusOwner();
-  return <Composer {...props} active={(props.active ?? true) && owner.idle} />;
+  return <Composer {...props} active={(props.active ?? true) && owner.composing} acceptsInput={owner.inputAllowed} />;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -159,11 +160,13 @@ export function WorklineApp(props: WorklineProps) {
   const { exit } = useApp();
   const { buffer, push, reset } = useLedgerBuffer();
   const stdout = useStdout();
+  const size = useWindowSize(), pinned = stdout.stdout.isTTY === true && props.clearScreen !== false && size.rows > 0 && size.columns > 0;
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
   // A chat turn is running: Esc cancels it now (TL-A D5).
   const [turnRunning, setTurnRunning] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [doRunning, setDoRunning] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const usages = useRef(new Map<string, SessionUsageView>());
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
@@ -363,7 +366,7 @@ export function WorklineApp(props: WorklineProps) {
         hints: labels.work?.jobs?.hints ?? props.doPlan!.cancelHint, confirm: false }, ['close']);
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
       const commandId = globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined);
-      setPlanning(true);
+      setDoRunning(true); setPlanning(true);
       try {
         let result = await plan();
         if (result.run) completion.register(result.run);
@@ -382,7 +385,7 @@ export function WorklineApp(props: WorklineProps) {
         if (!execution.signal.aborted) await show([errorText(error)]);
         else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }
-      finally { setPlanning(false); }
+      finally { setPlanning(false); setDoRunning(false); }
       return true;
     }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
@@ -421,7 +424,8 @@ export function WorklineApp(props: WorklineProps) {
     }
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, usage, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
-    if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: liveWin, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable })) return true;
+    const showLive = (kind: Parameters<typeof liveWin.show>[0]) => liveWin.show(kind, parseSlashLine(execution.input.text)?.command === 'do' ? 'background' : 'foreground');
+    if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: { ...liveWin, show: showLive }, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable })) return true;
     // T4: `/provider` is a window only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || slash.command === 'policy' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
@@ -453,7 +457,7 @@ export function WorklineApp(props: WorklineProps) {
       push(action.entries);
       // Queued watch commands see the transition even before React renders.
       if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
-      if (action.window !== undefined) liveWin.show(action.window);
+      if (action.window !== undefined) showLive(action.window);
       return true;
     }
     try {
@@ -526,23 +530,38 @@ export function WorklineApp(props: WorklineProps) {
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
-  const composing = !planning && !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null && !localWindowOpen && !instructions.open;
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
-    <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS + (fullAccessLine ? 1 : 0)}>
     <WindowNoteContext.Provider value={argumentNote}>
-    {instructions.window}
     <Box flexDirection="column">
-      <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
+      <PinnedWorkline enabled={pinned} history={buffer.tail.slice(-Math.max(1, size.rows)).map((entry, index) => <LedgerEntryRow key={index} entry={entry} labels={ledgerLabels} />)} footer={<>
+      {!pinned || size.rows >= 8 ? <Text {...palette.accent} wrap="truncate-end">{labels.banner}</Text> : null}
+      <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
+        state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
+        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
+        selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
+      {fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null}
+      <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
+        slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
+        busy={busy} historyText={bareSlash} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
+        onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
+        {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
+        {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
+      {!pinned || size.rows >= 5 ? <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} /> : null}
+      </>}>
+      <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
+      {instructions.window}
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
+      <WindowOpeningContext.Provider value={doRunning || state.approval ? 'background' : 'foreground'}>
       {work.region}
       {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(props.doPlan.planning)] }]} hints={props.doPlan.cancelHint}
         position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
+      </WindowOpeningContext.Provider>
       {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
       {planning || work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || localWindowOpen ? null : liveWin.element}
       {resumePicker && !work.modalOpen && !work.pickerOpen
@@ -552,26 +571,12 @@ export function WorklineApp(props: WorklineProps) {
             details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
       {settings.window}
       {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
+      <WindowOpeningContext.Provider value={turnRunning ? 'background' : 'foreground'}>
       {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
-      <Text {...palette.accent}>{labels.banner}</Text>
-      <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
-        state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
-        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
-        selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
-      {/* T3 L4 (owner 2026-10-07): while the session holds full access one standing line above the composer says so (text and mark; colour is a hint). */}
-      {fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null}
-      {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
-          An open decision card or arrow picker takes the keyboard away from it. */}
-      <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
-        slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} active={composing} historyText={bareSlash}
-        onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
-        {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
-        {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
-      <Text {...palette.muted}>{labels.hint}</Text>
+      </WindowOpeningContext.Provider>
+      </PinnedWorkline>
     </Box>
     </WindowNoteContext.Provider>
-    </WindowStackProvider>
     </HumanTextContext.Provider>
   );
 }
@@ -595,7 +600,8 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, createElement(WorklineApp, props));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),
-    { exitOnCtrlC: false, patchConsole: false, ...((stdout ?? process.stdout).isTTY === true ? { interactive: true } : {}), ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}) });
+    { exitOnCtrlC: false, patchConsole: false, ...((stdout ?? process.stdout).isTTY === true ? { interactive: true } : {}), ...(stdin ? { stdin } : {}),
+      stdout: props.clearScreen === false ? stdout ?? process.stdout : mainScreenOutput(stdout ?? process.stdout) });
   const stop = () => instance.unmount();
   signal?.addEventListener('abort', stop, { once: true });
   try { await instance.waitUntilExit(); }

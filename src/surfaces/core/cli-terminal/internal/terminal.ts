@@ -152,6 +152,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     banner: t('terminal.workline.banner', {}, locale), prompt: '', // workline input has no visible prompt prefix (placeholder instead); line mode keeps terminal.session.prompt
     statusReady: t('terminal.workline.statusReady', {}, locale), statusBusy: t('terminal.workline.statusBusy', {}, locale),
     statusCancelling: t('terminal.workline.statusCancelling', {}, locale), hint: t('terminal.workline.hint', {}, locale),
+    focus: { composer: t('tui.focus.composer', {}, locale), window: t('tui.focus.window', {}, locale) },
     selfSourceFloor: t('terminal.mode.selfSourceFloor', {}, locale),
     roleUser: t('terminal.workline.roleUser', {}, locale), roleAssistant: t('terminal.workline.roleAssistant', {}, locale),
     runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),

@@ -46,6 +46,9 @@ wait('READY')
 typed('go\r')
 wait('remembered for npm test')
 read_for(0.4)
+# R2: automatic approval keeps the composer focused until Ctrl+O; preserve the same scoped keys/assertions.
+typed('\x0f')
+read_for(0.15)
 for group in keys.split(';'):
     token, _, expect = group.partition('=')
     typed(token)

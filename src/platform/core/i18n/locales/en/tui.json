@@ -1016,5 +1016,7 @@
   "terminal.jobs.detailsUnavailable": "Details cannot be read: output permission or evidence is unavailable.",
   "terminal.jobs.trackingFull": "Completion tracking is full ({limit}). Run {run} was admitted; check it with /run.",
   "terminal.jobs.deliveryCounts": "Delivery: none {none}{patch}, awaiting delivery {awaiting}, unknown {unknown}",
-  "terminal.jobs.deliveryPatch": ", patch not prepared {patch}"
+  "terminal.jobs.deliveryPatch": ", patch not prepared {patch}",
+  "tui.focus.composer": "Input focused · Ctrl+O focus window · Enter queues a message",
+  "tui.focus.window": "Window focused · Ctrl+O return to input · Esc closes/declines"
 }

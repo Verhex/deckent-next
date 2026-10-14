@@ -2,6 +2,16 @@
 
 Detailed operator behavior behind the product summary in [README.md](../../../README.md). Türkçe: [operator-reference.tr.md](operator-reference.tr.md).
 
+The interactive terminal keeps input and status at the bottom of the screen. Completed output stays in native
+scrollback; recent output and windows appear above input. A window opened by your command or selection takes
+focus immediately; Escape closes it back to input. Automatic /do planning, progress and approval cards, model-turn
+approvals and run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
+operation. Ctrl+O switches between input and the top window. Automatic approvals require this focus switch
+before their decision keys work; typing y/n/s/a in input never answers a card. Existing decision, reason and verified-TTY requirements apply in the focused approval.
+Escape closes or declines in a focused window; from input it retains the draft/cancel behavior. Long window
+bodies scroll internally with arrows, PageUp/PageDown and Home/End, with a visible row range. Multiline input
+follows its caret within a height budget. `/watch-stop` closes observation. Pipe and line-mode output is unchanged.
+
 ## Installation custody
 
 Installation accepts owned group-writable project and bootstrap journal directories (for example,

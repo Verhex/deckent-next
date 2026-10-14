@@ -57,6 +57,8 @@ function isPasteToggle(text: string): boolean {
   return true;
 }
 export const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
+/** Call only after asserting the original window/card is visible: Ctrl+O explicitly transfers input to it. */
+export async function focusWindow(view: ReturnType<typeof mountWorkline>) { view.stdin.write('\u000f'); await settle(40); }
 export async function until(check: () => boolean, label: string, attempts = 500) {
   for (let attempt = 0; attempt < attempts; attempt++) { if (check()) return; await settle(10); }
   throw new Error(`timed out waiting for ${label}`);

@@ -1,12 +1,12 @@
 import type { RunView } from '#engine/index.js';
 import type { JobWindowLabels } from './job-windows.js';
 import { runViewToLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
-import { useState, type ReactElement } from 'react';
+import { useContext, useState, type ReactElement } from 'react';
 import { useWindowSize } from 'ink';
 import { shortId } from '#platform/index.js';
 import { LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type LedgerCardLabels, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { span, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
-import { Window, WINDOW_RESERVED_ROWS, useWindowReserve, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowOpeningContext, WINDOW_RESERVED_ROWS, useWindowReserve, useFocusOwner, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 
 /** What a live window shows: `workers` and `runs` follow one feed each, `tasks` both together (T3 L5), `monitor` the monitor's own body. */
 export type LiveWindowKind = 'workers' | 'runs' | 'tasks' | 'monitor';
@@ -108,14 +108,16 @@ export function liveWindowClosedText(kind: Exclude<LiveWindowKind, 'monitor'>, d
 const FRAME_ROWS = 4, FRAME_COLUMNS = 4, MONITOR_MIN_ROWS = 6, FALLBACK_COLUMNS = 80, FALLBACK_ROWS = 24;
 
 /**
- * Watch frames update in place and leave focus with the composer; `/watch-stop` closes them.
- * `/tasks` owns focus for selection and existing transcript/cancel actions; Esc closes that list.
+ * Watch frames update in place and leave initial focus with the composer. Ctrl+O focuses their scroll/close keys;
+ * `/watch-stop` also closes them. Focused `/tasks` supports existing transcript/cancel actions.
  */
 export function LiveWatchWindow({ kind, data, labels, position, statusText, statusLines, onClose, onAction }: {
   readonly kind: Exclude<LiveWindowKind, 'monitor'>; readonly data: LiveWindowData; readonly labels: LiveWindowRenderLabels; readonly position: string; readonly statusText?: string | undefined; readonly statusLines?: readonly string[] | undefined; readonly onClose: () => void;
   readonly onAction?: ((action: TaskWindowAction) => void) | undefined;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const owner = useFocusOwner();
+  const opening = useContext(WindowOpeningContext);
   const targets = [...data.workers, ...data.runs];
   const keyOf = (target: TaskWindowAction['target']) => target.kind === 'run' ? `run:${target.scopeId}:${target.runId}`
     : `worker:${target.scopeId}:${target.taskId}:${JSON.stringify(target.attempt ?? target.provider)}`;
@@ -126,7 +128,7 @@ export function LiveWatchWindow({ kind, data, labels, position, statusText, stat
     ...(target.kind === 'worker' ? workerLines([target], labels, 1)[0]!.spans : runLines([target], labels, 1)[0]!.spans)] }));
   const taskBody = [{ spans: [span(labels.panel.title, { bold: true })] }, ...taskRows.slice(0, data.workers.length),
     { spans: [] }, { spans: [span(labels.live.runsTitle, { bold: true })] }, ...taskRows.slice(data.workers.length)];
-  return <Window interactive={kind === 'tasks'} title={[span(liveWindowTitle(kind, labels))]} status={status}
+  return <WindowOpeningContext.Provider value={kind === 'tasks' ? opening : 'background'}><Window interactive={kind === 'tasks' || owner.composerWindows} title={[span(liveWindowTitle(kind, labels))]} status={status}
     body={[...notes, ...(kind === 'tasks' && targets.length ? taskBody : liveWindowLines(kind, data, labels))]}
     hints={kind === 'tasks' ? labels.live.tasksHints ?? labels.live.hints : labels.live.watchHints ?? labels.live.hints} position={position} onClose={onClose}
     {...(kind === 'tasks' ? { reveal: notes.length + selected + (selected >= data.workers.length ? 3 : 1), onInput: (input, key) => {
@@ -139,7 +141,7 @@ export function LiveWatchWindow({ kind, data, labels, position, statusText, stat
         onAction?.({ action: key.return ? 'transcript' : 'cancel', target: targets[selected]! }); return true;
       }
       return false;
-    } } : {})} />;
+    } } : {})} /></WindowOpeningContext.Provider>;
 }
 
 /**
@@ -147,9 +149,9 @@ export function LiveWatchWindow({ kind, data, labels, position, statusText, stat
  * rows and columns left on the terminal. The body reads keys only while this window is on top; `q` and Esc (when it has nothing to back out of) close it.
  */
 export function MonitorWindow({ render, labels, onClose }: { readonly render: MonitorWindowRender; readonly labels: LiveWindowLabels; readonly onClose: () => void }) {
-  const size = useWindowSize(), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
+  const size = useWindowSize(), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS, width = Math.max(1, columns - FRAME_COLUMNS);
-  const rows = Math.max(MONITOR_MIN_ROWS, terminalRows - reserved - FRAME_ROWS - (wrapCells(labels.monitorHints, width).length - 1));
+  const rows = Math.max(reserve === undefined ? MONITOR_MIN_ROWS : 1, terminalRows - reserved - FRAME_ROWS - (wrapCells(labels.monitorHints, width).length - 1));
   return <Window title={[span(labels.monitorTitle)]} hints={labels.monitorHints} position="" footerRows={rows} onClose={onClose}
     footer={focused => render({ active: focused, onClose, size: { columns: width, rows } })} />;
 }

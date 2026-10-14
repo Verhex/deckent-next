@@ -1016,5 +1016,7 @@
   "terminal.jobs.detailsUnavailable": "Ayrıntı okunamıyor: çıktı okuma izni veya kanıtı kullanılamıyor.",
   "terminal.jobs.trackingFull": "Bitiş izleme sınırı dolu ({limit}). İş {run} kabul edildi; /run ile kontrol edin.",
   "terminal.jobs.deliveryCounts": "Teslim: gerekmiyor {none}{patch}, bekliyor {awaiting}, bilinmiyor {unknown}",
-  "terminal.jobs.deliveryPatch": ", yama hazır değil {patch}"
+  "terminal.jobs.deliveryPatch": ", yama hazır değil {patch}",
+  "tui.focus.composer": "Giriş odakta · Ctrl+O pencereye geç · Enter mesajı sıraya alır",
+  "tui.focus.window": "Pencere odakta · Ctrl+O girişe dön · Esc kapatır/reddeder"
 }
