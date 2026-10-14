@@ -136,7 +136,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] p
     await client.shutdownService(command(descriptor.instanceId));
     await expect(service.done).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE' });
     expect(JSON.parse(await readFile(record, 'utf8'))).toEqual(published);
-    held.destroy(); await bounded(service.settled);
+    held.destroy(); await service.settled;
     // `settled` covers custody release: the same ledger and endpoint start again at once, with the same identity and no new publication.
     const next = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
     try { expect(spy).toHaveBeenCalledTimes(1); expect(JSON.parse(await readFile(record, 'utf8'))).toEqual(published); }
