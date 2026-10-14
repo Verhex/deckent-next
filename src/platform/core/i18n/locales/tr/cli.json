@@ -1452,13 +1452,14 @@
   "cli.init.registry.applied": "İlk admission registry oluşturuldu. Sıradaki: deckent init pool --scope <id> --preview, ardından --apply.",
   "cli.init.registry.help": "deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id> --execution-slots <n> --in-flight-slots <n> --discovery repository|disabled --preview|--apply [--json] [--lang en|tr]\nexecution.docker yapılandırması gerekir. Seçilen native CLI sürümünü yapılandırılmış Docker imajında tespit eder; mevcut registry üzerine yazmaz.",
   "cli.audit.summary": "Audit geçmişini ve checkpoint kanıtını doğrula",
-  "cli.audit.help": "deckent audit verify [--scope <id>] [--checkpoint <dosya|->] [--export-checkpoint] [--json] [--lang en|tr]. Doğrulama salt okunur; export son kayıtlı checkpointi JSON olarak verir (yoksa null). Ayrı cihaz pull-witness çıktısını saklar; aynı hesaptan müdahaleyi tespit eder, önlemez.",
+  "cli.audit.help": "deckent audit verify [--scope <id>] [--checkpoint <dosya|->] [--export-checkpoint] [--json] [--lang en|tr]. Doğrulama salt okunur; export son kayıtlı checkpointi JSON olarak verir (yoksa null). Ayrı cihaz pull-witness çıktısını saklar; aynı hesaptan müdahaleyi tespit eder, önlemez. Sonuç eşleşme değilse çıkış kodu 1.",
   "cli.audit.result": "Audit {scope} sonucu: {status} ({reason})",
   "cli.audit.service": "Servis audit bütünlüğü: {status}",
   "cli.audit.service.ready": "hazır",
   "cli.audit.service.degraded": "bozulmuş",
   "cli.audit.status.match": "eşleşiyor",
   "cli.audit.status.truncated": "sondan silinmiş",
+  "cli.audit.status.possible-wipe": "olası silme",
   "cli.audit.status.policy-changed": "policy değişmiş",
   "cli.audit.status.producers-changed": "üreticiler değişmiş",
   "cli.audit.status.chain-broken": "zincir kırılmış",
@@ -1471,6 +1472,7 @@
   "cli.audit.reason.key-unavailable": "özgün anahtar erişilemiyor",
   "cli.audit.reason.integrity": "bütünlük uyuşmuyor",
   "cli.audit.reason.head-missing": "saklanan baş veya checkpoint eksik",
+  "cli.audit.reason.checkpoints-missing": "audit kaydında işaretlenen checkpointler eksik",
   "cli.audit.reason.policy": "policy digest farklı",
   "cli.audit.reason.producers": "üretici listesi farklı"
 }

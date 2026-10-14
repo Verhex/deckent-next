@@ -1,4 +1,4 @@
-import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, type Locale, type MessageKey } from '#platform/index.js';
+import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, type ExitCode, type Locale, type MessageKey } from '#platform/index.js';
 import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec, type CliInstallationContract } from './command-catalog.js';
 
 interface CliHelpSpec extends CliCommandSpec {
@@ -7,7 +7,8 @@ interface CliHelpSpec extends CliCommandSpec {
 }
 export interface RegisteredCliCommand<C> extends CliHelpSpec {
   readonly path: readonly string[];
-  readonly run: (argv: readonly string[], context: C) => Promise<void>;
+  /** A handler may return a non-zero exit code for a completed command whose result is not ok (e.g. a failed audit verification). */
+  readonly run: (argv: readonly string[], context: C) => Promise<void | ExitCode>;
 }
 /** Bind the one catalog to actual dispatch handlers. No second command/help inventory. */
 export function registerCliCommands<C>(handlers: Readonly<Record<CliCommandName, RegisteredCliCommand<C>['run']>>): readonly RegisteredCliCommand<C>[] {

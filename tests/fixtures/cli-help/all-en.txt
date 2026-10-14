@@ -26,6 +26,7 @@ Setup / Maintenance:
   toolchains  Check or update worker toolchains
   doctor      Check installation health
 Developer:
+  audit       Verify audit history and checkpoint evidence
   inventory   Inspect recorded attempts
   paths       Inspect installation paths
   runtime     Manage the local runtime service

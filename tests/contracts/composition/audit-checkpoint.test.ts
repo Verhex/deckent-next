@@ -50,6 +50,9 @@ it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share rea
     await writeFile(f.policyPath, JSON.stringify({ ...f.document, grants: [...f.document.grants, { id: 'new-grant', effect: 'allow', actions: ['inspect'],
       scopes: ['s'], principals: f.document.grants[0]!.principals, resource: { kind: 'approval', ids: ['new'] } }] }));
     const drift = await inspect(f.root, query); expect(drift.status).toBe('policy-changed');
+    let failed = '';
+    expect(await main(['audit', 'verify', '--scope', 's'], { root: f.root, env: f.options.env, verifyAudit: inspect,
+      stdout: { write: value => { failed += value; } } })).toBe(1); expect(failed).toContain('policy changed');
     expect((await client.callTool({ name: 'verify_audit', arguments: query })).structuredContent).toEqual(drift);
     json = ''; await runKernelCommand(['doctor', '--json'], { root: f.root, env: f.options.env, verifyAudit: inspect, stdout: { write: value => { json += value; } } });
     expect(JSON.parse(json)).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'policy-changed' } });
@@ -60,6 +63,9 @@ it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share rea
     expect((await client.callTool({ name: 'verify_audit', arguments: query })).isError).toBe(true);
     json = ''; await runKernelCommand(['doctor', '--json'], { root: f.root, env: f.options.env, verifyAudit: inspect, stdout: { write: value => { json += value; } } });
     expect(JSON.parse(json)).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: 'unavailable' } });
+    expect(await main(['audit', 'verify', '--scope', 's', '--json'], { root: f.root, env: f.options.env,
+      verifyAudit: async () => ({ schemaVersion: 1, scopeId: 's', status: 'unknown', reason: 'unavailable', head: null, checkpoint: null }),
+      stdout: { write() {} } })).toBe(1);
   } finally { await client.close(); await server.close(); }
 });
 

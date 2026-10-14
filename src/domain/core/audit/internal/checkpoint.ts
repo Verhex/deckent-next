@@ -10,8 +10,8 @@ export const auditWitnessSchema = z.object({ schemaVersion: z.literal(1), kind: 
 export const auditVerifyQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   witness: auditWitnessSchema.optional() }).strict().readonly();
 export const auditVerificationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  status: z.enum(['match', 'truncated', 'policy-changed', 'producers-changed', 'chain-broken', 'unknown']),
-  reason: z.enum(['verified', 'no-checkpoint-yet', 'unavailable', 'limit', 'foreign-witness', 'key-unavailable', 'integrity', 'head-missing', 'policy', 'producers']),
+  status: z.enum(['match', 'truncated', 'possible-wipe', 'policy-changed', 'producers-changed', 'chain-broken', 'unknown']),
+  reason: z.enum(['verified', 'no-checkpoint-yet', 'unavailable', 'limit', 'foreign-witness', 'key-unavailable', 'integrity', 'head-missing', 'checkpoints-missing', 'policy', 'producers']),
   head: z.object({ sequence: counterSchema, digest }).strict().nullable(), checkpoint: auditWitnessSchema.nullable() }).strict().readonly();
 export type AuditCheckpoint = z.infer<typeof auditCheckpointSchema>;
 export type AuditWitness = z.infer<typeof auditWitnessSchema>;

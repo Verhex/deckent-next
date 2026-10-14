@@ -3,7 +3,6 @@ Getting started:
   terminal    Open the interactive terminal
   init        Set up an installation
 Observe:
-  audit       Verify audit history and checkpoint evidence
   report      Inspect cost and acceptance evidence for a Run
   monitor     Watch installations and work
   workers     List or watch workers

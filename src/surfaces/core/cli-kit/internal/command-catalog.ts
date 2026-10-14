@@ -19,8 +19,9 @@ function action(name: string, group: HelpGroup, summary: MessageKey, detail: Mes
 /** The dispatch catalog. Register a command here with its group, localized summary and detail.
  * Children inherit the family handler; existing handlers retain argument validation and execution. */
 export const CLI_CATALOG = [
-  { name: 'audit', group: 'observe', summary: 'cli.audit.summary', detail: 'cli.audit.help', children: [
-    action('verify', 'observe', 'cli.audit.summary', 'cli.audit.help'),
+  /* Listed under --help --all: the compact top help keeps its approved 30-line cap; doctor reports audit integrity on the main path. */
+  { name: 'audit', group: 'developer', summary: 'cli.audit.summary', detail: 'cli.audit.help', children: [
+    action('verify', 'developer', 'cli.audit.summary', 'cli.audit.help'),
   ] },
   { name: 'report' , group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help' },
   { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do' },

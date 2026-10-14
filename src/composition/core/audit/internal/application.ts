@@ -1,4 +1,4 @@
-import { userInfo } from 'node:os';
+import { hostname, userInfo } from 'node:os';
 import { auditVerifyQuerySchema, type AuditVerification } from '#domain/index.js';
 import { AuditCheckpointCycleError, AuditCheckpointApplication, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
 import { openReadOnlyAuditStore, openSqliteAuditStore, openLocalIntegrityAuthority, LOCAL_AUTHENTICATOR_INVENTORY } from '#adapters/index.js';
@@ -37,7 +37,9 @@ export async function checkpointConfiguredAudit(root: string, installationId: st
     if (scopes.length > config.audit.maxScopes) throw new AuditCheckpointCycleError('limit');
     const app = new AuditCheckpointApplication(store, integrity, config.audit), context = { installationId,
       policyDigest: auditPolicyDigest(document), producersDigest: producersDigest() };
-    return scopes.map(scopeId => app.checkpoint(scopeId, context, Date.now()));
+    // The service's own OS principal authors each checkpoint's sealed wipe marker under the policy revision in force.
+    const writer = { principal: { issuer: hostname(), subject: String(userInfo().uid) }, policyRevision: document.revision };
+    return scopes.map(scopeId => app.checkpoint(scopeId, context, Date.now(), writer));
   } catch (error) { throw error instanceof AuditCheckpointCycleError ? error : new AuditCheckpointCycleError('unavailable'); }
   finally { store?.close(); }
 }

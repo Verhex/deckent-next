@@ -1,11 +1,11 @@
 import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { renderAuditStatus, renderAuditReason } from '#surfaces/core/doctor/index.js';
-import { emit, ErrorRegistry, loadConfig, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
+import { emit, ErrorRegistry, EXIT_CODES, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ExitCode } from '#platform/index.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type AuditVerifyHandler = (root: string, query: AuditVerifyQuery, options: ConfigLoadOptions) => Promise<AuditVerification>;
-/** Pull export is stdout JSON, so the caller owns destination custody; no server-selected filesystem path. */
-export async function auditCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+/** Pull export is stdout JSON, so the caller owns destination custody; no server-selected filesystem path. Anything but `match` exits non-zero. */
+export async function auditCommand(argv: readonly string[], context: CommandContext): Promise<ExitCode> {
   if (argv[1] !== 'verify' || !context.verifyAudit) throw ErrorRegistry.createError('CLI_USAGE');
   const values = new Map<string, string>(); let json = false, exporting = false;
   for (let i = 2; i < argv.length; i++) {
@@ -30,4 +30,5 @@ export async function auditCommand(argv: readonly string[], context: CommandCont
   emit(exporting ? result.checkpoint : result, { json: exporting || json, ...(context.stdout ? { stdout: context.stdout } : {}),
     ...(context.stderr ? { stderr: context.stderr } : {}), render: () => t('cli.audit.result', { scope: result.scopeId,
       status: renderAuditStatus(result.status, locale), reason: renderAuditReason(result.reason, locale) }, locale) });
+  return result.status === 'match' ? EXIT_CODES.success : EXIT_CODES.error;
 }

@@ -200,6 +200,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   authorityDecisionSubjectSchema,
+  /** AUDIT-CHECKPOINT wipe marker: written in the checkpoint's own transaction just before it, so checkpoint `checkpointSequence` has this record as its head. */
+  z.object({ kind: z.literal('audit-checkpoint'), checkpointSequence: counterSchema.positive(), previousDigest: digest.nullable() }).strict(),
   z.object({ kind: z.literal('installation-pool'), installer: z.object({ basis: z.literal('file-owner') }).strict(),
     poolId: identitySchema, capacity: z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict() }).strict(),
   z.object({ kind: z.literal('authority-change'), installer: z.object({ basis: z.enum(['first-run', 'named-person']),

@@ -44,7 +44,7 @@ it.skipIf(process.platform !== 'linux')('publishes a scheduled checkpoint for la
       principal: { issuer: 'test', subject: 'test' }, policyRevision: 'p', atMs: Date.now(), subject: { kind: 'full-access-turn', turnId: 'later-turn',
         sessionId: null, decision: { effect: 'allow', ruleId: 'test' } } }); }
     finally { store.close(); }
-    await vi.waitFor(() => expect(observed.at(-1)?.verifications[0]?.head?.sequence).toBe(2), { timeout: 5000 });
+    await vi.waitFor(() => expect(observed.at(-1)?.verifications[0]?.head?.sequence).toBe(4), { timeout: 5000 }); // event, marker, later event, marker
     expect((await host.stop()).state).toBe('clean'); await host.settled;
     const reports = observed.length; await new Promise(resolve => setTimeout(resolve, 1100)); expect(observed).toHaveLength(reports);
   } finally { if (host) { await host.stop(); await host.settled; } clearConfigCache(); await rm(f.root, { recursive: true, force: true }); }

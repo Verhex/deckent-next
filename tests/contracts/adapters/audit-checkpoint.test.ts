@@ -18,6 +18,7 @@ const options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 
 const integrity = createHmacIntegrity('audit-key', randomBytes(32));
 const context = { installationId: 'installation-a', policyDigest: auditPolicyDigest({ revision: 'p', grants: [] }), producersDigest: auditProducersDigest([]) };
 const limits = { pageSize: 1, maxRecords: 100 };
+const writer = { principal: { issuer: 'local-os', subject: 'service' }, policyRevision: 'p' };
 const event = (scopeId: string, n: number): AuditEvent => ({ schemaVersion: 1, eventId: `event-${n}`, scopeId, principal: { issuer: 'local-os', subject: 'test' },
   policyRevision: 'p', atMs: n, subject: { kind: 'full-access-turn', turnId: `turn-${n}`, sessionId: null, decision: { effect: 'allow', ruleId: 'rule' } } });
 async function fixture() {
@@ -26,15 +27,17 @@ async function fixture() {
   return { root, path, db, store, audit: new AuditApplication(store, integrity), app: new AuditCheckpointApplication(store, integrity, limits) };
 }
 
-it('chains checkpoints and exports exact signed heads; same scheduled timestamp does not duplicate history', async () => {
+it('chains checkpoints whose head is their own sealed marker; a cycle without a new event does not duplicate history', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); const first = f.app.checkpoint('s', context, 10);
-    expect(first).toMatchObject({ status: 'match', head: { sequence: 1 }, checkpoint: { kind: 'deckent-audit-checkpoint', checkpoint: { sequence: 1, previousDigest: null } } });
-    expect(f.app.checkpoint('s', context, 10)).toEqual(first);
-    f.audit.record(event('s', 2)); const second = f.app.checkpoint('s', context, 12);
+    f.audit.record(event('s', 1)); const first = f.app.checkpoint('s', context, 10, writer);
+    expect(first).toMatchObject({ status: 'match', head: { sequence: 2 }, checkpoint: { kind: 'deckent-audit-checkpoint', checkpoint: { sequence: 1, previousDigest: null } } });
+    expect(f.audit.list('s', 1, 1)[0]?.event).toMatchObject({ principal: writer.principal, subject: { kind: 'audit-checkpoint', checkpointSequence: 1, previousDigest: null } });
+    expect(f.app.checkpoint('s', context, 10, writer)).toEqual(first); expect(f.app.checkpoint('s', context, 11, writer)).toEqual(first);
+    expect(f.store.checkpointPage('s', 0, 10)).toHaveLength(1);
+    f.audit.record(event('s', 2)); const second = f.app.checkpoint('s', context, 12, writer);
     expect(second.checkpoint?.checkpoint.previousDigest).toBe(first.checkpoint?.digest);
-    expect(f.app.verify('s', context, first.checkpoint!)).toMatchObject({ status: 'match', head: { sequence: 2 } });
+    expect(f.app.verify('s', context, first.checkpoint!)).toMatchObject({ status: 'match', head: { sequence: 4 } });
     expect(() => f.db.exec("DELETE FROM audit_checkpoints")).toThrow(/AUDIT_CHECKPOINT_APPEND_ONLY/);
     expect(() => f.db.exec("UPDATE audit_checkpoints SET record='{}'")).toThrow(/AUDIT_CHECKPOINT_APPEND_ONLY/);
   } finally { f.store.close(); }
@@ -43,39 +46,80 @@ it('chains checkpoints and exports exact signed heads; same scheduled timestamp 
 it.each([1, 0])('detects tail truncation down to %s records, including deletion of every event', async retained => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); f.audit.record(event('s', 2)); const cp = f.app.checkpoint('s', context, 10);
+    f.audit.record(event('s', 1)); f.audit.record(event('s', 2)); const cp = f.app.checkpoint('s', context, 10, writer);
     expect(() => f.db.exec('DELETE FROM audit_events')).toThrow(/AUDIT_APPEND_ONLY/);
     f.db.exec('DROP TRIGGER audit_events_no_delete'); f.db.prepare('DELETE FROM audit_events WHERE sequence>?').run(retained);
     expect(f.app.verify('s', context)).toMatchObject({ status: 'truncated' });
     expect(f.app.verify('s', context, cp.checkpoint!)).toMatchObject({ status: 'truncated' });
-    expect(f.app.checkpoint('s', context, 11).status).toBe('truncated');
+    expect(f.app.checkpoint('s', context, 11, writer).status).toBe('truncated');
     expect(f.store.checkpointPage('s', 0, 10)).toHaveLength(1);
   } finally { f.store.close(); }
 });
 
-it('a retained witness detects removal of the checkpoint tail even when all event records survive', async () => {
+it('removing the checkpoint tail or every checkpoint row is a possible wipe through the sealed markers; no cycle re-baselines it', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10);
-    f.audit.record(event('s', 2)); const witness = f.app.checkpoint('s', context, 12).checkpoint!;
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
+    f.audit.record(event('s', 2)); const witness = f.app.checkpoint('s', context, 12, writer).checkpoint!;
     f.db.exec('DROP TRIGGER audit_checkpoints_no_delete; DELETE FROM audit_checkpoints WHERE sequence=2');
-    expect(f.app.verify('s', context).status).toBe('match');
+    expect(f.app.verify('s', context)).toMatchObject({ status: 'possible-wipe', reason: 'checkpoints-missing' });
     expect(f.app.verify('s', context, witness).status).toBe('truncated');
+    f.audit.record(event('s', 3));
+    expect(f.app.checkpoint('s', context, 13, writer)).toMatchObject({ status: 'possible-wipe', reason: 'checkpoints-missing' });
+    expect(f.store.checkpointPage('s', 0, 10)).toHaveLength(1);
     f.db.exec('DELETE FROM audit_checkpoints');
-    expect(f.app.verify('s', context).reason).toBe('no-checkpoint-yet');
+    expect(f.app.verify('s', context)).toMatchObject({ status: 'possible-wipe', reason: 'checkpoints-missing' });
+    expect(f.app.checkpoint('s', context, 14, writer).status).toBe('possible-wipe');
+    expect(f.store.checkpointPage('s', 0, 10)).toHaveLength(0);
     expect(f.app.verify('s', context, witness).status).toBe('truncated');
+  } finally { f.store.close(); }
+});
+
+it('a dropped checkpoint table on a current ledger is a broken chain, never no-checkpoint-yet, and is not recreated', async () => {
+  const f = await fixture();
+  try {
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
+    f.db.exec('DROP TABLE audit_checkpoints');
+    expect(f.app.verify('s', context)).toMatchObject({ status: 'chain-broken', reason: 'integrity' });
+    expect(f.app.checkpoint('s', context, 11, writer)).toMatchObject({ status: 'chain-broken', reason: 'integrity' });
+    expect(f.db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name='audit_checkpoints'").get()?.n).toBe(0);
+  } finally { f.store.close(); }
+});
+
+it('same-account limit: deleting markers and checkpoints together leaves a quiet scope, which only a retained witness exposes', async () => {
+  const f = await fixture();
+  try {
+    f.audit.record(event('s', 1)); const firstWitness = f.app.checkpoint('s', context, 10, writer).checkpoint!;
+    f.audit.record(event('s', 2)); const witness = f.app.checkpoint('s', context, 12, writer).checkpoint!;
+    f.db.exec('DROP TRIGGER audit_checkpoints_no_delete; DELETE FROM audit_checkpoints; DROP TRIGGER audit_events_no_delete; DELETE FROM audit_events WHERE sequence>=2');
+    expect(f.app.verify('s', context)).toMatchObject({ status: 'unknown', reason: 'no-checkpoint-yet' });
+    expect(f.app.checkpoint('s', context, 13, writer).status).toBe('match');
+    expect(f.app.verify('s', context, witness)).toMatchObject({ status: 'truncated', reason: 'head-missing' });
+    expect(f.app.verify('s', context, firstWitness)).toMatchObject({ status: 'chain-broken', reason: 'integrity' });
+  } finally { f.store.close(); }
+});
+
+it('a failed checkpoint write commits nothing, reports unknown and degrades the service monitor', async () => {
+  const f = await fixture();
+  try {
+    f.audit.record(event('s', 1));
+    f.store.appendCheckpoint = () => { throw new Error('disk full'); };
+    expect(f.app.checkpoint('s', context, 10, writer)).toMatchObject({ status: 'unknown', reason: 'unavailable' });
+    expect(f.audit.list('s', 0, 10)).toHaveLength(1); expect(f.store.checkpointPage('s', 0, 10)).toHaveLength(0);
+    const monitor = new AuditCheckpointMonitor(async () => [f.app.checkpoint('s', context, 11, writer)], () => undefined);
+    await monitor.check(); expect(monitor.status).toMatchObject({ status: 'degraded', verifications: [{ status: 'unknown', reason: 'unavailable' }] });
   } finally { f.store.close(); }
 });
 
 it.each(['event-payload', 'middle-deletion', 'checkpoint-payload'])('detects chain break: %s without publishing a replacement baseline', async kind => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); f.audit.record(event('s', 2)); f.app.checkpoint('s', context, 10);
+    f.audit.record(event('s', 1)); f.audit.record(event('s', 2)); f.app.checkpoint('s', context, 10, writer);
     if (kind === 'event-payload') f.db.exec("DROP TRIGGER audit_events_no_update; UPDATE audit_events SET record='{}' WHERE sequence=1");
     if (kind === 'middle-deletion') f.db.exec('DROP TRIGGER audit_events_no_delete; DELETE FROM audit_events WHERE sequence=1');
     if (kind === 'checkpoint-payload') f.db.exec("DROP TRIGGER audit_checkpoints_no_update; UPDATE audit_checkpoints SET record='{}'");
     expect(f.app.verify('s', context)).toMatchObject({ status: 'chain-broken', reason: 'integrity' });
-    expect(f.app.checkpoint('s', context, 12).status).toBe('chain-broken');
+    expect(f.app.checkpoint('s', context, 12, writer).status).toBe('chain-broken');
   } finally { f.store.close(); }
 });
 
@@ -86,13 +130,13 @@ it.skipIf(process.platform === 'win32')('a policy file rewritten with the same r
     await writeFile(policyPath, JSON.stringify(document), { mode: 0o600 });
     const policy = new FilePolicySource({ path: policyPath, ownerUid: userInfo().uid, maxBytes: 65536 });
     f.audit.record(event('s', 1)); const original = { ...context, policyDigest: auditPolicyDigest(await policy.load()) };
-    const cp = f.app.checkpoint('s', original, 10);
+    const cp = f.app.checkpoint('s', original, 10, writer);
     await writeFile(policyPath, JSON.stringify({ ...document, grants: [{ id: 'changed', effect: 'allow', actions: ['inspect'], scopes: ['s'],
       principals: [{ issuer: 'test', subject: 'test' }], resource: { kind: 'approval', ids: 'all' } }] }));
     const changed = { ...original, policyDigest: auditPolicyDigest(await policy.load()) };
     expect(changed.policyDigest).not.toBe(original.policyDigest);
     expect(f.app.verify('s', changed, cp.checkpoint!).status).toBe('policy-changed');
-    expect(f.app.checkpoint('s', changed, 12).status).toBe('policy-changed');
+    expect(f.app.checkpoint('s', changed, 12, writer).status).toBe('policy-changed');
     expect(f.store.checkpointPage('s', 0, 10)).toEqual([cp.checkpoint!.checkpoint]);
   } finally { f.store.close(); }
 });
@@ -100,7 +144,7 @@ it.skipIf(process.platform === 'win32')('a policy file rewritten with the same r
 it('reports changed producer inventories independently from policy changes', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10);
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
     expect(f.app.verify('s', { ...context, producersDigest: auditProducersDigest([{ id: 'new-producer' }]) })).toMatchObject({ status: 'producers-changed' });
   } finally { f.store.close(); }
 });
@@ -108,7 +152,7 @@ it('reports changed producer inventories independently from policy changes', asy
 it('refuses foreign/tampered witness and preserves unknown for an unavailable original key or bounded scan', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); const witness = f.app.checkpoint('s', context, 10).checkpoint!;
+    f.audit.record(event('s', 1)); const witness = f.app.checkpoint('s', context, 10, writer).checkpoint!;
     expect(f.app.verify('other', context, witness)).toMatchObject({ status: 'unknown', reason: 'foreign-witness' });
     expect(f.app.verify('s', context, { ...witness, digest: 'f'.repeat(64) }).status).toBe('chain-broken');
     expect(f.app.verify('s', { ...context, installationId: 'foreign' }).status).toBe('chain-broken');
@@ -139,7 +183,7 @@ it('migrates a copied real-shaped v54 ledger, backs up first, retains audit/appr
     expect(db.prepare('SELECT * FROM approvals').all()).toEqual(approvals);
     const app = new AuditCheckpointApplication(new SqliteAuditStore(db), integrity, limits);
     expect(app.verify('s', context).reason).toBe('no-checkpoint-yet');
-    expect(app.checkpoint('s', context, 10).status).toBe('match');
+    expect(app.checkpoint('s', context, 10, writer).status).toBe('match');
   } finally { db.close(); }
   expect((await readFile(f.path)).byteLength).toBeGreaterThan(0);
 });
@@ -154,10 +198,10 @@ it('migration rejects foreign checkpoint table shape and rolls back to v54', asy
 it('service monitor exposes degraded start, contains observer failure, uses the configured interval and drains on abort', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10);
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
     f.db.exec('DROP TRIGGER audit_events_no_delete; DELETE FROM audit_events');
     let cycles = 0; const controller = new AbortController(), waits: number[] = [];
-    const monitor = new AuditCheckpointMonitor(async () => { cycles++; return [f.app.checkpoint('s', context, 11)]; }, () => { throw new Error('observer'); });
+    const monitor = new AuditCheckpointMonitor(async () => { cycles++; return [f.app.checkpoint('s', context, 11, writer)]; }, () => { throw new Error('observer'); });
     await monitor.check(); expect(monitor.status).toMatchObject({ status: 'degraded', verifications: [{ status: 'truncated' }] });
     await monitor.run(1234, controller.signal, async interval => { waits.push(interval); if (waits.length === 2) controller.abort(); });
     expect(waits).toEqual([1234, 1234]); expect(cycles).toBe(2);
@@ -168,17 +212,17 @@ it('service monitor exposes degraded start, contains observer failure, uses the 
 it('a read snapshot stays consistent when another connection appends between pages; the next read sees the new head', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10);
-    const other = openSqliteLedger(f.path, options, 'forbid'), otherStore = new SqliteAuditStore(other), writer = new AuditApplication(otherStore, integrity);
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
+    const other = openSqliteLedger(f.path, options, 'forbid'), otherStore = new SqliteAuditStore(other), otherWriter = new AuditApplication(otherStore, integrity);
     const original = f.store.page.bind(f.store); let appended = false;
     f.store.page = (scope, after, limit) => {
       const rows = original(scope, after, limit);
-      if (!appended) { appended = true; writer.record(event('s', 2)); }
+      if (!appended) { appended = true; otherWriter.record(event('s', 2)); }
       return rows;
     };
     try {
-      expect(f.app.verify('s', context)).toMatchObject({ status: 'match', head: { sequence: 1 } });
       expect(f.app.verify('s', context)).toMatchObject({ status: 'match', head: { sequence: 2 } });
+      expect(f.app.verify('s', context)).toMatchObject({ status: 'match', head: { sequence: 3 } });
     } finally { otherStore.close(); }
   } finally { f.store.close(); }
 });
@@ -186,8 +230,8 @@ it('a read snapshot stays consistent when another connection appends between pag
 it('backward clock refuses checkpoint publication and preserves the last known-good anchor', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); const cp = f.app.checkpoint('s', context, 10);
-    expect(f.app.checkpoint('s', context, 9).status).toBe('unknown');
+    f.audit.record(event('s', 1)); const cp = f.app.checkpoint('s', context, 10, writer); f.audit.record(event('s', 2));
+    expect(f.app.checkpoint('s', context, 9, writer).status).toBe('unknown');
     expect(f.app.verify('s', context).checkpoint).toEqual(cp.checkpoint);
   } finally { f.store.close(); }
 });
@@ -200,7 +244,7 @@ it('an unavailable service cycle reports degraded without fabricating a scope or
 it('detects replacement by a validly sealed record through the retained canonical head', async () => {
   const f = await fixture();
   try {
-    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10);
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
     const replacement = sealAuditRecord({ ...event('s', 1), policyRevision: 'changed' }, 1, integrity);
     f.db.exec('DROP TRIGGER audit_events_no_update');
     f.db.prepare('UPDATE audit_events SET record=?,mac=? WHERE scope_id=? AND sequence=1').run(JSON.stringify(replacement), replacement.mac, 's');

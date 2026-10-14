@@ -88,7 +88,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
-    if (command) { await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (command) return (await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
     const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv);
     emit(result.output, { level: result.code === 0 ? 'info' : 'error', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
     return result.code;

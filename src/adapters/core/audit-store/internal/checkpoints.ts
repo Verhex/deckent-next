@@ -1,8 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { auditCheckpointSchema, AuditError, type AuditCheckpoint } from '#domain/index.js';
+import { AUDIT_CHECKPOINT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 export function checkpointPage(db: DatabaseSync, scopeId: string, afterSequence: number, limit: number): readonly AuditCheckpoint[] {
   const exists = db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='audit_checkpoints'").get();
-  if (!exists) return [];
+  // Only a ledger older than the checkpoint table has none yet; a dropped table on a current ledger is a wipe, never "no checkpoint yet".
+  if (!exists) { if (Number(db.prepare('PRAGMA user_version').get()?.user_version) < AUDIT_CHECKPOINT_LEDGER_VERSION) return []; throw new AuditError('AUDIT_INTEGRITY'); }
   return db.prepare('SELECT scope_id,sequence,record FROM audit_checkpoints WHERE scope_id=? AND sequence>? ORDER BY sequence LIMIT ?')
     .all(scopeId, afterSequence, limit).map(row => {
       let value: AuditCheckpoint;
