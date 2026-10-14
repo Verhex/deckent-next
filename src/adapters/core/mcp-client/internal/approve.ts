@@ -110,7 +110,8 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   const record = (decision: 'trusted' | 'declined', tools: McpTrustRecord['tools']) => (current: McpTrustRecord | null): McpTrustRecord => ({ scope: server.scope,
     name: server.name, definitionDigest: server.definitionDigest, tools, decision, reconnect: keep(current), approvedAtMs: (context.now ?? Date.now)(),
     principal: { issuer: context.principal.issuer, subject: context.principal.subject } });
-  const decline = async () => { await recordMcpTrust(server, context, 'decline', record('declined', [])); return { decision: 'declined' as const, pinned: 0 }; };
+  // A decline keeps the owner's existing always-ask locks on the declined record (a later approval inherits them); nothing else stays pinned.
+  const decline = async () => { await recordMcpTrust(server, context, 'decline', record('declined', (server.trust?.tools ?? []).filter(pin => pin.alwaysAsk))); return { decision: 'declined' as const, pinned: 0 }; };
   const started = await ask(launchCard);
   if (started === null) return { decision: 'unanswered', pinned: 0 };
   if (!started) return decline();

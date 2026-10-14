@@ -47,8 +47,8 @@ async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
   const args = ['--realm', 'host', '--', process.execPath, FIXTURE, '--mode', 'dual', '--tools', tools, '--log', log];
   const entry = { command: process.execPath, args: args.slice(4), realm: 'host' };
   const peer = options.headless ? undefined : await terminalRuntimePeer(createTerminalRuntimeClient(project, { env }));
-  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1]) => withLocalPrincipalChannel(undefined,
-    () => runConfiguredMcpCommand(project, request, { env }, async () => true), peer) as Promise<Record<string, unknown>>;
+  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1], answer = true) => withLocalPrincipalChannel(undefined,
+    () => runConfiguredMcpCommand(project, request, { env }, async () => answer), peer) as Promise<Record<string, unknown>>;
   const policy = () => JSON.parse(readFileSync(join(data, 'policy.json'), 'utf8')) as { revision: string; grants: { id: string; scopes: unknown; principals: unknown; resource: { kind: string; ids: string[] } }[] };
   const mcpGrants = () => policy().grants.filter(grant => grant.id.startsWith('mcp-'));
   const source = new FilePolicySource({ path: join(data, 'policy.json'), bindingsPath: join(data, 'bindings.json'), archivePath: join(data, 'audit', 'authority-revisions'),
@@ -120,6 +120,20 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     // An explicit empty list is the owner's deliberate release.
     expect(await f.run({ verb: 'approve', name: 'fx', alwaysAsk: [] })).toMatchObject({ approved: true });
     expect(await locks()).toEqual([]);
+  }, 90_000);
+
+  it('G3: declining a re-approval keeps the existing always-ask locks, so a later approval still inherits them', async () => {
+    const f = await fixture(), other = { name: 'other', description: 'Other', inputSchema: { type: 'object', properties: {} } };
+    f.setTools([echo, other]);
+    await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry });
+    await f.run({ verb: 'approve', name: 'fx', alwaysAsk: ['echo'] });
+    f.setTools([{ ...echo, description: 'Echo, changed.' }, other]);
+    expect(await f.run({ verb: 'approve', name: 'fx' }, false)).toMatchObject({ approved: false });
+    const detail = (await f.run({ verb: 'get', name: 'fx' })) as { server: { status: string; pinnedTools: number; trust: { decision: string; tools: { name: string; alwaysAsk: boolean }[] } } };
+    expect(detail.server).toMatchObject({ status: 'declined', pinnedTools: 0, trust: { decision: 'declined', tools: [{ name: 'echo', alwaysAsk: true }] } });
+    expect(await f.run({ verb: 'approve', name: 'fx' })).toMatchObject({ approved: true, pinnedTools: 2 });
+    const after = (await f.run({ verb: 'get', name: 'fx' })) as { server: { trust: { tools: { name: string; alwaysAsk: boolean }[] } } };
+    expect(after.server.trust.tools.filter(tool => tool.alwaysAsk).map(tool => tool.name)).toEqual(['echo']);
   }, 90_000);
 
   it('a user-scope server\'s grant covers every scope of this person', async () => {
