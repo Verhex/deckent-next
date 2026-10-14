@@ -6,8 +6,8 @@ Runs: 0 queued · 0 running · 0 checking · 1 on hold · 0 done
 · 0 stopped
 
 Waiting for you (1)
-  Subject                               Waiting    Expires
-  operation: A very long approval sum…  1 min 0 s  no expiry
+  Subject                                 Waiting    Expires
+  operation: A very long approval summa…  1 min 0 s  unknown
 
 Stuck or waiting, oldest first (1)
   Run                      Why                     Stuck for
@@ -53,8 +53,8 @@ Workspace
 /srv/deckent/workspaces/task-with-a-long-name-0123456789
 
 ── Approvals ───────────────────────────────────────────────
-  Subject                    Waiting    Expires    Assurance
-  operation: A very long a…  1 min 0 s  no expiry  local-os
+  Subject                      Waiting    Expires  Assurance
+  operation: A very long app…  1 min 0 s  unknown  local-os
 
 ── Pools ───────────────────────────────────────────────────
   Pool                              Usage          Hold

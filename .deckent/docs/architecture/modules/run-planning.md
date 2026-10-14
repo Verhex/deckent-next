@@ -206,3 +206,21 @@ Templates, context and contribution versions/digests are unchanged; the existing
 request digest binds the added native settings. Author checks and open limits are
 in external `proof/BRAIN-DUSUNME-2026-10-13/WORKER.md`; independent, hosted and
 live/N1 acceptance are separate.
+
+KUCUK-DUZELTMELER author candidate (2026-10-14): `RunProposalResult` optionally
+projects `planningSpending` from the source invocation's authorized read-only
+inspection. It carries spending class, currency, settled minor-unit amount and
+evidence (`measured-tariff`, `provider-reported`, `settled-local`, `held`, `unknown`).
+The existing receipt binds command, invocation, model, actor and response; no new
+model call or money settlement is introduced. Denied/unavailable inspection stays
+unknown without invalidating an already recorded proposal. A held or missing
+measurement never becomes zero or an estimated actual charge. Local literal-zero
+planning without a reservation shows the pinned free class and unrecorded money.
+CLI proposal and shared `/do` previews render a separate planning line; worker
+subscription/free exemption is explicitly labelled as worker spending. Declared
+ceilings use the shared currency formatter in proposal and approval summaries.
+A returned admitted Run leads the shared preview with its durable identity and
+next observation command, so additional budget/planning text cannot push that
+identity behind the details in a cancelled planning summary.
+Author evidence: external `proof/KUCUK-DUZELTMELER-2026-10-14/`; independent,
+hosted, built binary and live/N1 acceptance remain open.

@@ -436,12 +436,16 @@ export function buildMonitorView(snapshot: MonitorSnapshot, locale: Locale, asci
   const runs = each(installs, install => install.runs);
   const stuck = runs.filter(entry => OPEN.includes(entry.value.state) && entry.value.blocker && !MOVING.has(entry.value.blocker.code))
     .sort((a, b) => (a.value.blocker!.sinceMs ?? Infinity) - (b.value.blocker!.sinceMs ?? Infinity) || w.runName(a.value).localeCompare(w.runName(b.value)));
-  const approvals = each(installs, install => install.approvals).sort((a, b) => (a.value.createdAtMs ?? Infinity) - (b.value.createdAtMs ?? Infinity));
+  const recordedApprovals = each(installs, install => install.approvals);
+  const approvals = recordedApprovals.filter(({ value }) => (value.status === undefined || value.status === 'pending')
+    && (value.expiresAtMs === null || value.expiresAtMs > snapshot.observedAt)).sort((a, b) => (a.value.createdAtMs ?? Infinity) - (b.value.createdAtMs ?? Infinity));
+  const expired = recordedApprovals.filter(({ value }) => value.status === 'expired' || value.status !== 'decided' && value.expiresAtMs !== null && value.expiresAtMs <= snapshot.observedAt).length;
+  const history: MonitorBlock[] = expired ? [{ kind: 'line', line: [span(t('monitor.approval.expiredCount', { count: expired }, locale), 'muted')] }] : [];
   const workers = each(installs, install => install.workers);
   const tabs: Record<MonitorTab, readonly MonitorBlock[]> = {
-    summary: summaryBlocks(w, installs, runs, stuck, approvals, workers), runs: [runsBlock(w, runs),
+    summary: [...summaryBlocks(w, installs, runs, stuck, approvals, workers), ...history], runs: [runsBlock(w, runs),
       ...runs.flatMap(({ value: run }) => globalStateLines(projectHumanState({ kind: 'run', value: run }), locale).map(line => ({ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} `), ...line] })))],
-    workers: [workersBlock(w, workers, t('monitor.empty.workers', {}, locale))], approvals: [approvalsBlock(w, approvals, false)],
+    workers: [workersBlock(w, workers, t('monitor.empty.workers', {}, locale))], approvals: [approvalsBlock(w, approvals, false), ...history],
     pools: [poolsBlock(w, each(installs, install => install.pools))], installs: installsBlocks(w, installs), map: mapBlocks(installs, locale, { active: w.marks.states.accepted, off: w.marks.off, sep: w.marks.sep }),
   };
   return { header: headerLines(w, installs), tabs: Object.fromEntries(MONITOR_TABS.map(tab => [tab, tabs[tab]])) as Record<MonitorTab, readonly MonitorBlock[]> };

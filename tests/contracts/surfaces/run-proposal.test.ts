@@ -10,6 +10,7 @@ import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { runProposalDigest, type RunProposalResult } from '#engine/index.js';
 import { runCommand } from '../../fixtures/cli-input.js';
 import { proposalFixture } from '../support/run-proposal.js';
+import { pendingBrainFixture } from '../support/brain-proposal.js';
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
 const proposal = proposalFixture(), digest = runProposalDigest(proposal);
@@ -76,10 +77,45 @@ it('MCP wire submits and inspects the same contract, rejects forged fields and e
 it.each(['en', 'tr'] as const)('non-metered proposal and /do preview explicitly waive only money checks (%s)', async locale => {
   const value: RunProposalResult = { ...receipt, budgetSemantics: 'not-metered', proposal: { ...receipt.proposal, binding: { ...receipt.proposal.binding,
     admission: { ...receipt.proposal.binding.admission!, budgetSemantics: 'not-metered', budget: null } } } };
-  const expected = locale === 'tr' ? 'Abonelik/ücretsiz model — bütçe kontrolü uygulanmaz' : 'Subscription/free model — budget check does not apply';
+  const expected = locale === 'tr' ? 'Worker’lar: abonelik/ücretsiz model — bütçe kontrolü uygulanmaz' : 'Workers: subscription/free model — budget check does not apply';
   const output: string[] = [];
   await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', locale], {
     inspectRunProposal: async () => value, stdout: { write(text: string) { output.push(text); } } });
   expect(output.join('')).toContain(expected); expect(brainProposalLines(value, locale).join('\n')).toContain(expected);
   expect(output.join('')).not.toContain(locale === 'tr' ? 'kabul anında kontrol' : 'checked at admission');
+});
+
+it.each(['en', 'tr'] as const)('paid Brain cost stays distinct from non-metered workers in both proposal renderers (%s)', async locale => {
+  const model = { ...receipt.proposal.proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 5000 }, source: { kind: 'model' as const,
+    receipt: { commandId: 'plan', invocationId: 'inv', reference: { providerId: 'fixture-api', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 }, responseDigest: 'a'.repeat(64) } } };
+  const value: RunProposalResult = { ...receipt, budgetSemantics: 'not-metered', proposal: { ...receipt.proposal, proposal: model },
+    planningSpending: { class: 'metered', currency: 'USD', amountMinorUnits: 2, evidence: 'measured-tariff' } };
+  const expected = locale === 'tr' ? '0,02 $' : '$0.02';
+  const lines = brainProposalLines(value, locale).join('\n');
+  expect(lines).toContain('fixture-api/fixture-model'); expect(lines).toContain(expected);
+  expect(lines).toContain(locale === 'tr' ? 'ücretli API' : 'paid API'); expect(lines).toContain(locale === 'tr' ? 'Worker’lar:' : 'Workers:');
+  const out: string[] = [];
+  await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', locale], {
+    root: '/unused', inspectRunProposal: async () => value, stdout: { write(text: string) { out.push(text); } } });
+  expect(out.join('')).toContain(expected); expect(out.join('')).toContain('fixture-api/fixture-model');
+  const unknown = brainProposalLines({ ...value, planningSpending: { class: 'metered', currency: 'USD', amountMinorUnits: null, evidence: 'held' } }, locale).join('\n');
+  expect(unknown).toContain(locale === 'tr' ? 'bilinmiyor (kesinleşmedi)' : 'unknown (unsettled)'); expect(unknown).not.toContain(expected);
+  const upper = brainProposalLines({ ...value, planningSpending: { ...value.planningSpending!, evidence: 'measured-tariff-upper-bound' } }, locale).join('\n');
+  expect(upper).toContain(locale === 'tr' ? 'üst sınır' : 'upper bound');
+  const metered = brainProposalLines({ ...value, budgetSemantics: 'admission-check-only' }, locale).join('\n');
+  expect(metered).toContain(locale === 'tr' ? '50,00 $' : '$50.00'); expect(metered).not.toContain('5000');
+});
+
+it.each(['en', 'tr'] as const)('returned durable Run identity leads the summary even with a long paid planning projection (%s)', locale => {
+  const pending = pendingBrainFixture(), run: NonNullable<RunProposalResult['run']> = {
+    schemaVersion: 3, runId: 'r', scopeId: 's', revision: 1, cancellationRequested: false, state: { kind: 'running' }, tasks: [],
+  };
+  const accepted: RunProposalResult = { ...pending, run, proposal: { ...pending.proposal, status: 'accepted', reason: null, approval: null,
+    proposal: { ...pending.proposal.proposal, source: { kind: 'model', receipt: { commandId: 'plan', invocationId: 'inv',
+      reference: { providerId: 'fixture-api', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 }, responseDigest: 'a'.repeat(64) } } } },
+    planningSpending: { class: 'metered', currency: 'USD', amountMinorUnits: 2, evidence: 'measured-tariff' } };
+  const lines = brainProposalLines(accepted, locale);
+  expect(lines[0]).toBe(locale === 'en' ? 'Run r admitted. Follow /tasks or /monitor.' : 'Run r kabul edildi. /tasks veya /monitor ile izleyin.');
+  expect(lines.join('\n')).toContain('fixture-api/fixture-model');
+  expect(brainProposalLines(pending, locale)[0]).not.toBe(lines[0]);
 });

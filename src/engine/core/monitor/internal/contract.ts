@@ -93,6 +93,8 @@ export interface MonitorRun {
 }
 export type MonitorDeliveryState = 'integrating' | 'integrated' | 'delivering' | 'delivered' | 'adopting' | 'adopted' | 'rolling-back' | 'rolled-back';
 export interface MonitorApproval {
+  /** Read-only status at snapshot.observedAt; absence supports older projections. */
+  readonly status?: 'pending' | 'expired' | 'decided' | 'unknown';
   readonly scopeId: string; readonly approvalId: string; readonly subjectKind: string; readonly summary: string;
   readonly requiredAssurance: string | null; readonly createdAtMs: number | null; readonly expiresAtMs: number | null;
 }

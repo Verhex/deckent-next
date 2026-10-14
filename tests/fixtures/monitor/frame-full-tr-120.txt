@@ -9,11 +9,10 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
 dogfood notu: biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
-Sizi bekleyen (3)
-  Konu                                           Bekliyor    Süre sonu             Kurulum
-› operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor   current
-  operation: özet görme izniniz yok              10 dk       süresiz               dogfood
-  effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  current
+Sizi bekleyen (2)
+  Konu                                           Bekliyor    Süre sonu            Kurulum
+› operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor  current
+  operation: özet görme izniniz yok              10 dk       bilinmiyor           dogfood
 
 Takılı ya da bekleyen, en eskisi önce (12)
   İş kimliği                     Görev  Neden                            Ne zamandır  Kapsam   Kurulum
@@ -34,6 +33,7 @@ Başarısız işler ve ilk hata yeri (2)
   İş kimliği        İlk hata                                                              Son etkinlik  Kapsam   Kurulum
   run-broken        ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit …  25 dk önce    scope-a  current
   run-broken-quiet  ✗ build: ilk hata satırı kayıtta yok                                  35 dk önce    scope-a  current
+
 ↓ 7 satır daha
 2 sn aralıkla yenilenir · görüntü 2026-10-02 09:30:00Z
 Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · / süz · s sırala · g grupla · r yenile · p duraklat · ? yardım · q çık

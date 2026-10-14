@@ -67,7 +67,7 @@ describe('monitor text snapshot', () => {
     expect(text).not.toMatch(/! [^\n]*most recent finished workers/);
     expect(text).toMatch(/\* dogfood [^\n]*! 3 warning\(s\)/);
     expect(text).toContain('build b0e66d92c0ff (built 2026-10-02 08:00:00Z)'); expect(text).toContain('build 76582f9f0000 (built 2026-10-01 22:15:00Z)');
-    expect(text).toContain('expired 2 min 0 s ago'); expect(text).toContain('expires in 45 min');
+    expect(text).toContain('Expired approvals: 1 (history; no decision available).'); expect(text).not.toContain('expired 2 min 0 s ago'); expect(text).toContain('expires in 45 min');
     expect(text).toContain('! 1 min 35 s (stale)');
     expect(text).not.toContain('\u001b[');
   });
@@ -737,5 +737,32 @@ for (const locale of ['en', 'tr'] as const) for (const columns of [80, 40]) it(`
       await view.press(KEY.down); await view.press(KEY.up); selectedOwner();
       expect(JSON.stringify(snapshot)).toBe(before);
     } finally { view.instance.unmount(); }
+  }
+});
+
+it.each(['en', 'tr'] as const)('only actionable approvals appear as waiting, while expiry is bounded history (%s)', locale => {
+  const base = fullSnapshot.installs[0]!.approvals[0]!;
+  const approvals = [
+    { ...base, approvalId: 'fresh', expiresAtMs: OBSERVED_AT + 1, status: 'pending' as const },
+    { ...base, approvalId: 'expired', expiresAtMs: OBSERVED_AT - 1, status: 'expired' as const },
+    { ...base, approvalId: 'boundary', expiresAtMs: OBSERVED_AT },
+    { ...base, approvalId: 'decided', expiresAtMs: OBSERVED_AT + 1, status: 'decided' as const },
+    { ...base, approvalId: 'unknown', expiresAtMs: null, status: 'unknown' as const },
+  ];
+  const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, approvals }] };
+  const view = surface.buildMonitorView(snapshot, locale, true);
+  const rows = view.tabs.approvals.filter(block => block.kind === 'table').flatMap(block => block.rows);
+  expect(rows.map(row => row.key)).toEqual(['current:fresh']);
+  expect(surface.renderMonitorText(snapshot, { locale, width: 160, ascii: true })).toContain(t('monitor.approval.expiredCount', { count: 2 }, locale));
+  expect(snapshot.installs[0]!.approvals).toHaveLength(5);
+});
+
+it('a missing approval expiry remains unknown rather than promising an unlimited approval window', () => {
+  const base = fullSnapshot.installs[0]!.approvals[0]!;
+  const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, approvals: [{ ...base, expiresAtMs: null }] }] };
+  for (const locale of ['en', 'tr'] as const) {
+    const view = surface.buildMonitorView(snapshot, locale, true), rows = view.tabs.approvals.filter(block => block.kind === 'table').flatMap(block => block.rows);
+    expect(rows[0]!.cells[2]!.text).toBe(t('monitor.time.unknown', {}, locale));
+    expect(rows[0]!.cells[2]!.text).not.toBe(t('monitor.time.noExpiry', {}, locale));
   }
 });

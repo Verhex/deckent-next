@@ -119,7 +119,7 @@ export class MonitorApplication {
           endedAtSource: known?.sealedAtMs != null ? 'sealed' : known?.observedEndAtMs != null ? 'observed' : null } };
     };
     const approvals: MonitorApproval[] = reading.approvals.filter(value => admitted.has(value.scopeId)).map(value => Object.freeze({ scopeId: value.scopeId,
-      approvalId: value.approvalId, subjectKind: value.subjectKind, summary: summaries.has(value.scopeId) ? value.summary : '', requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
+      status: value.status === 'decided' ? 'decided' : value.status === 'expired' || value.expiresAtMs <= observedAt ? 'expired' : 'pending', approvalId: value.approvalId, subjectKind: value.subjectKind, summary: summaries.has(value.scopeId) ? value.summary : '', requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
     const poolViews: MonitorPool[] = !reading.scopeIds.length || admitted.size ? reading.pools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
       held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution })) : [];
     const status = !reading.scopeIds.length || admitted.size ? 'available' : denied ? 'denied' : 'unavailable';

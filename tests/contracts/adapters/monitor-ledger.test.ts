@@ -183,4 +183,27 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     expect(previous.receipts).toHaveLength(count); expect(previous.commandId).toBe(`adopt-${count}`); expect(result.receipts).not.toBe(previous.receipts);
     expect(current.runs.filter(run => run.snapshot.identity.runId !== 'r1').every(run => run.delivery === null)).toBe(true);
   });
+
+  it('retains current expired/decided evidence and keeps newer pending requests ahead of bounded history', async () => {
+  const f = await fixture(); f.store.close();
+  const writer = new DatabaseSync(f.path);
+  const insert = writer.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current) VALUES(?,?,?,?,?,?,?,?,1)');
+  for (const [id, status, expiresAt] of [['old', 'pending', 10], ['fresh', 'pending', 100], ['expired', 'expired', 20], ['decided', 'decided', 90]] as const) {
+    const decision = status === 'decided' ? { commandId: 'decision', decision: 'allow', actor, sessionId: 'session', channel: 'cli', reason: 'fixture card approval',
+      decidedAt: 2, requestDigest: 'a'.repeat(64), commandDigest: 'b'.repeat(64), idempotencyKeyHash: 'c'.repeat(64) } : null;
+    const record = { request: { schemaVersion: 1, approvalId: id, scopeId: 's', runId: 'r1', taskId: id, requester: actor,
+      actionDigest: 'a'.repeat(64), policyRevision: 'fixture', summary: 'Fixture approval evidence', createdAt: 1, expiresAt },
+      revision: status === 'pending' ? 0 : 1, status, decision, keyId: 'fixture-key', mac: 'd'.repeat(64) };
+    insert.run('s', id, 'task', 'r1', id, 'a'.repeat(64), record.revision, JSON.stringify(record));
+  }
+  writer.close(); const before = await files(f.path);
+  const reading = await read(f.path);
+  expect(reading.approvals).toHaveLength(4);
+  expect(reading.approvals).toMatchObject([{ approvalId: 'fresh', status: 'pending' }, { approvalId: 'old', status: 'pending' },
+    { approvalId: 'decided', status: 'decided' }, { approvalId: 'expired', status: 'expired' }]);
+  // Observing leaves the ledger byte- and mtime-identical (an empty WAL may appear, as above).
+  expect((await files(f.path))[0]).toEqual(before[0]);
+  expect((await read(f.path, 1)).approvals).toMatchObject([{ approvalId: 'fresh', status: 'pending' }]);
+  expect((await read(f.path, 1)).diagnostics).toContain('info:approvals-truncated');
+});
 });

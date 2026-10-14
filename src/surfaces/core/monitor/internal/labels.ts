@@ -21,8 +21,8 @@ export const agoText = (now: number, at: number | null, locale: Locale) => at ==
   : t('monitor.time.ago', { duration: durationText(now - at, locale) }, locale);
 export const forText = (now: number, since: number | null, locale: Locale) => since === null ? t('monitor.time.unknown', {}, locale)
   : t('monitor.time.for', { duration: durationText(now - since, locale) }, locale);
-export const expiryText = (now: number, at: number | null, locale: Locale) => at === null ? t('monitor.time.noExpiry', {}, locale)
-  : at >= now ? t('monitor.time.expiresIn', { duration: durationText(at - now, locale) }, locale)
+export const expiryText = (now: number, at: number | null, locale: Locale) => at === null ? t('monitor.time.unknown', {}, locale)
+  : at > now ? t('monitor.time.expiresIn', { duration: durationText(at - now, locale) }, locale)
     : t('monitor.time.expired', { duration: durationText(now - at, locale) }, locale);
 /** A moment in the machine's local time zone: `2026-10-08 00:30:00+03` (`Z` at UTC, `+0530` for a half-hour zone), so the person reads their own clock and the offset says which. */
 export function clockText(ms: number): string {

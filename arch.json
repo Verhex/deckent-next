@@ -2892,7 +2892,9 @@
       "dependencies": [
         "src/engine/core/runs",
         "src/platform/core/i18n",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/redaction"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },

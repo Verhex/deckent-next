@@ -1,5 +1,5 @@
 import type { PolicyDecision } from '#domain/index.js';
-import { redactForRecord, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
+import { currencyAmountText, redactForRecord, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import type { RunCreate } from './store.js';
 
@@ -26,7 +26,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   }, locale));
   const ceiling = command.proposal?.budgetCeiling;
   const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale), t('approval.plan.authorityNotice', {}, locale),
-    t('approval.plan.budget', { ceiling: ceiling ? `${ceiling.limitMinorUnits} ${field(ceiling.currency, limits.currencyChars, known)}` : unknown }, locale),
+    t('approval.plan.budget', { ceiling: ceiling ? currencyAmountText(ceiling.limitMinorUnits, ceiling.currency, locale) : unknown }, locale),
     command.proposal?.admission?.budgetSemantics === 'not-metered' ? t('proposal.budget.notMetered', {}, locale) : t('approval.plan.budgetNotice', {}, locale),
     t('approval.plan.decision', { decision: t('approval.plan.required', {}, locale),
       rule: verdict.ruleId ? field(verdict.ruleId, limits.ruleChars, known) : t('approval.plan.registryGate', {}, locale), reason: field(verdict.reason, limits.reasonChars, known) }, locale),
