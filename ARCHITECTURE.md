@@ -1036,7 +1036,7 @@ HIGH/CRITICAL and on any unreadable source. `acceptedRisks` (evidence-backed, ex
 an exactly matching advisory set on one package@version and carrier into MITIGATED report rows that do not fail; expiry or any
 advisory/version/carrier/severity change fails again; lint-arch validates the entries and warns after expiry. The one entry today is
 fast-uri 3.1.0 inside MCP SDK 2.2.0 (expires 2026-10-29: renewed with fresh evidence, or removed when the SDK ships a rebuilt bundle).
-Not yet: weekly scheduling of deps-watch (CI `schedule` or host cron; the pre-batch run is manual).
+The weekly/manual deps-watch runs in `platform-verification.yml`; daily platform verification remains separate.
 
 **Published package (DEPS-DIST, 2026-09-29; ninth batch).** The npm package has no `dependencies`: `scripts/build-dist.mjs` bundles
 third-party runtime code into `dist/vendor/` chunks with esbuild (ESM, code splitting, lazy `import()` preserved) while every Deckent module
@@ -1073,7 +1073,7 @@ published declarations never name a bare `path` (PACK-SMOKE, after the BWRAP-SEL
 stages it; a bundle that is not exactly the locked build is a `publishable` blocker. The SBOM lists it as
 `pkg:generic/bubblewrap@0.13.0?download_url=…&checksum=sha256:…` (application, binary SHA-256, source-distribution reference) with the
 statically linked `pkg:apk/alpine/{musl,libcap,gcc}` nested; THIRD-PARTY-NOTICES carries its notice. The binary is built in CI
-(`.github/workflows/bwrap-bundle.yml`, check mode), never committed, never downloaded at install (owner S5).
+(`.github/workflows/bwrap-bundle.yml`, check mode), never committed, never downloaded at install (owner S5). CI-BWRAP-CACHE author candidate and pending PR-write authority are documented in the [CI module note](.deckent/docs/architecture/modules/ci-and-verification.md).
 Hosted evidence at `76582f9f` (2026-10-01, [run 36884716254](https://github.com/Verhex/deckent-next/actions/runs/36884716254)):
 x86_64/aarch64 build checks and the x86_64 launcher/realm job succeeded; the real arm64 realm job was skipped. This is not an
 arm64 runtime or full-matrix PASS (main CI run 36884716187: Linux 24/26 success, macOS advisory cells failed). deps-watch reads

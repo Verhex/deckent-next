@@ -3,6 +3,7 @@
 // static-pie, musl + libcap linked in, no SELinux, never setuid (0.12.0 removed setuid support; the binary refuses to run setuid).
 // The source tarball and the linked components' license texts are verified against the lock before anything runs; the output sha256 is
 // compared with the lock (a mismatch fails) unless `--record` writes it. The output directory must not exist or be empty.
+// CI: --reuse restores only after binary/closure/APK verification; --verify-cache checks without use.
 // Usage: node scripts/build-bwrap.mjs [--arch x86_64|aarch64|all] [--out .pack/bwrap/<time>] [--cache .pack/bwrap/cache] [--record]
 //        node scripts/build-bwrap.mjs --constant          (re-generates the runtime identity constant from the lock; `--record` does it too)
 //        node scripts/build-bwrap.mjs --stage-dev <out>   (a verified build output → src/…/bundled/, gitignored, for src-mode tests and `npm run build`)
@@ -11,6 +12,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, r
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { restoreBuild, saveBuild, verifyCache } from './bwrap-cache.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PACKAGING = join(ROOT, 'packaging', 'bwrap');
@@ -156,6 +158,16 @@ async function main() {
   const cache = resolve(option('--cache', join(ROOT, '.pack', 'bwrap', 'cache')));
   const out = resolve(option('--out', join(ROOT, '.pack', 'bwrap', `build-${Date.now()}`)));
   if (existsSync(out) && readdirSync(out).length) throw new Error(`--out ${out} is not empty; refusing to overwrite`);
+  const cachedBuild = join(cache, `build-${arches.join('-')}`);
+  if (process.argv.includes('--verify-cache')) {
+    verifyCache(cachedBuild, ROOT, lock, arches);
+    process.stdout.write('build-bwrap: cache verified (binary, closure and APK checksums)\n'); return;
+  }
+  const reuse = process.argv.includes('--reuse');
+  if (record && reuse) throw new Error('--record cannot reuse a previous build');
+  if (reuse && restoreBuild(cachedBuild, out, ROOT, lock, arches)) {
+    process.stdout.write('build-bwrap: verified cache hit; no Docker or Alpine access\n'); return;
+  }
   mkdirSync(cache, { recursive: true }); mkdirSync(join(out, 'in'), { recursive: true }); mkdirSync(join(out, 'out'), { recursive: true });
 
   const tarball = `bubblewrap-${lock.version}.tar.xz`;
@@ -171,9 +183,14 @@ async function main() {
     SYSROOT_PACKAGES: lock.sysrootPackages.join(' '), ARCHES: arches.join(' '), OUT_OWNER: `${uid}:${gid}`,
     HOST_RESOLVED_PACKAGES: resolvedPackagePins(lock.resolvedPackages?.host ?? []).join(' ') };
   for (const name of arches) env[`SYSROOT_${name.toUpperCase()}_RESOLVED_PACKAGES`] = resolvedPackagePins(lock.resolvedPackages?.[`sysroot-${name}`] ?? []).join(' ');
-  const log = execFileSync('docker', ['run', '--rm', ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
+  let log;
+  try { log = execFileSync('docker', ['run', '--rm', ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
     '-v', `${join(out, 'in')}:/in:ro`, '-v', `${join(out, 'out')}:/out`, lock.buildImage.reference, 'sh', '/in/build.sh'],
-  { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+  { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024, timeout: 10 * 60 * 1000 });
+  } catch (error) {
+    writeFileSync(join(out, 'build.log'), `${error.stdout ?? ''}\n${error.stderr ?? ''}`);
+    throw new Error(`BWRAP_BUILD_FAILED: cache miss build failed. If Alpine pins vanished, run the platform verification deps-watch refresh (CONTRIBUTING.md). See ${join(out, 'build.log')}`, { cause: error });
+  }
   writeFileSync(join(out, 'build.log'), log);
 
   copyFileSync(texts.musl, join(out, 'out', 'licenses', 'musl-COPYRIGHT'));
@@ -209,6 +226,7 @@ async function main() {
   }
   writeFileSync(join(out, 'summary.json'), JSON.stringify({ version: lock.version, image: lock.buildImage.reference, results, drift, recorded: record }, null, 2) + '\n');
   process.stdout.write(`${JSON.stringify({ out, results, drift, recorded: record })}\n`);
+  if (!mismatch && reuse) saveBuild(out, cachedBuild, ROOT, lock, arches);
   if (mismatch) { process.stderr.write('build-bwrap: output or package set differs from bwrap.lock.json (not reproducible, or the lock is stale)\n'); process.exitCode = 1; }
 }
 

@@ -13,7 +13,10 @@ arches=${ARCHES:-x86_64 aarch64}
 export SOURCE_DATE_EPOCH="$epoch" TZ=UTC LC_ALL=C
 
 # shellcheck disable=SC2086
-apk add --no-cache -q $host_pkgs ${HOST_RESOLVED_PACKAGES:-}
+mkdir -p /out/apk/host
+apk add --cache-dir /out/apk/host --cache-packages -q $host_pkgs ${HOST_RESOLVED_PACKAGES:-} || {
+  echo 'BWRAP_PIN_REFRESH_REQUIRED: Alpine pins unavailable; run platform verification deps-watch (CONTRIBUTING.md).' >&2; exit 1;
+}
 LLVM=/usr/lib/llvm22/bin
 mkdir -p /build && cd /build
 tar -xJf "/in/bubblewrap-$version.tar.xz"
@@ -30,7 +33,11 @@ for arch in $arches; do
     *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
   esac
   # shellcheck disable=SC2086
-  apk add -q --root "$root" --arch "$arch" --initdb --no-cache --no-scripts $sysroot_pkgs $resolved_pkgs
+  mkdir -p "$root/var/cache/apk" "/out/apk/sysroot-$arch"
+  apk add -q --root "$root" --arch "$arch" --initdb --cache-dir /var/cache/apk --cache-packages --no-scripts $sysroot_pkgs $resolved_pkgs || {
+    echo "BWRAP_PIN_REFRESH_REQUIRED: Alpine sysroot-$arch pins unavailable; run platform verification deps-watch (CONTRIBUTING.md)." >&2; exit 1;
+  }
+  cp "$root"/var/cache/apk/*.apk "/out/apk/sysroot-$arch/"
   target=$arch-alpine-linux-musl
   cat > "/build/cross-$arch.ini" <<EOF
 [binaries]
