@@ -125,7 +125,8 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     const text = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
     return { events, card: events.some(event => event.kind === 'approval.requested'), status: finished?.kind === 'tool.finished' ? finished.status : null, text, turnId };
   };
-  const audit = () => rows("SELECT record FROM audit_events WHERE kind <> 'approval-assurance-registration' ORDER BY sequence") /* D1 inventory events precede each composed decision (documented) */.map(row => JSON.parse(String((row as { record: string }).record)) as
+  /** Decision audit events; `inventory` adds the D1 producer-inventory events that precede each composed decision (documented). */
+  const audit = (inventory = false) => rows(`SELECT record FROM audit_events${inventory ? '' : " WHERE kind <> 'approval-assurance-registration'"} ORDER BY sequence`).map(row => JSON.parse(String((row as { record: string }).record)) as
     { event: { eventId: string; policyRevision: string; principal: unknown; subject: Record<string, unknown> & { call: Record<string, unknown> } } });
   const counters = () => Object.fromEntries(rows('SELECT counter, count FROM audit_counters').map(row => [(row as { counter: string }).counter, (row as { count: number }).count]));
   return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority, sent: state.sent, client, env,

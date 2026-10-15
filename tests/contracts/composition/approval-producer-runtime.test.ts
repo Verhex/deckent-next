@@ -42,7 +42,7 @@ it.skipIf(process.platform !== 'linux')('[requires host real PTY, socket and pro
     });
     await Promise.all(pending); expect(pending).toHaveLength(1);
     expect(await readFile(join(f.project, 'package.json'), 'utf8')).toBe('{"approved":true}\n');
-    expect(f.audit().filter(record => record.event.subject.kind === 'approval-assurance-registration').at(-1)?.event.subject).toMatchObject({ schemaVersion: 1,
+    expect(f.audit(true).filter(record => record.event.subject.kind === 'approval-assurance-registration').at(-1)?.event.subject).toMatchObject({ schemaVersion: 1,
       producers: expect.arrayContaining([expect.objectContaining({ ...manifest, active: enabled })]) });
   }
 }, 60_000);
