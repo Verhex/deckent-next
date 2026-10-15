@@ -60,6 +60,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   inspectPolicyAdministration?: (root: string, query: import('#engine/index.js').PolicyAdministrationQuery, options: ConfigLoadOptions) => Promise<import('#engine/index.js').PolicyAdministrationStatus>;
   upgradePolicyTemplate?: import('./policy-grants.js').PolicyUpgradeHandler;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
+  delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/doctor/index.js').InstallationStartabilityView>;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.

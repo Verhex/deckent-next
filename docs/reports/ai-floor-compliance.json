@@ -4,11 +4,12 @@
   "sources": {
     "src/domain/core/approval/index.ts": "d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b",
     "src/domain/core/approval/internal/contract.ts": "10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa",
-    "src/domain/core/policy/index.ts": "6ef206511ba15b02c29e1db3fb7ced5e88b244415d8d390ceb798560b8a2591c",
+    "src/domain/core/policy/index.ts": "54623320a2de38385df6ee28fb9116af931038e246924117dd8c9128c66e8922",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0",
     "src/domain/core/policy/internal/ai-floor.ts": "d7f7c65905a2c67a85e791f12cb99b6b186c3d8adeba557414d9fc89dc80eeb7",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
+    "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
     "src/domain/core/policy/internal/evaluate.ts": "009df03fe8e3afa15f41975cbf3fd7a1048eccdfe35fbdc1616133d0e23f424d",
     "src/domain/core/policy/internal/first-run-template.ts": "d646a21b890892c4afec1fe14d7f77c7566717aa3e21cb4b32434104c29f9456",
@@ -27904,9 +27905,9 @@
   ],
   "stepRows": [
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "no-cell",
       "expected": null,
       "actual": null,
@@ -27915,9 +27916,9 @@
       "reason": "NO_GRANT"
     },
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "exact-cell",
       "expected": "fixture-grant",
       "actual": "fixture-grant",
@@ -27926,9 +27927,9 @@
       "reason": "GRANTED"
     },
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "wildcard-action",
       "expected": null,
       "actual": null,
@@ -27937,9 +27938,9 @@
       "reason": "GRANTED"
     },
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "wildcard-principal",
       "expected": null,
       "actual": null,
@@ -27948,9 +27949,9 @@
       "reason": "NO_GRANT"
     },
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "deny",
       "expected": null,
       "actual": null,
@@ -27959,9 +27960,9 @@
       "reason": "DENIED"
     },
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "require-approval",
       "expected": null,
       "actual": null,
@@ -27970,9 +27971,9 @@
       "reason": "APPROVAL_REQUIRED"
     },
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "revoked",
       "expected": null,
       "actual": null,
@@ -27981,9 +27982,9 @@
       "reason": "NO_GRANT"
     },
     {
-      "kind": "approval",
+      "kind": "run-decision",
       "id": "fixture-target",
-      "action": "decide",
+      "action": "resume",
       "context": "wrong-scope",
       "expected": null,
       "actual": null,
@@ -28072,94 +28073,6 @@
       "kind": "run-decision",
       "id": "fixture-target",
       "action": "close",
-      "context": "wrong-scope",
-      "expected": null,
-      "actual": null,
-      "policyDecision": "deny",
-      "verdict": "uyumlu",
-      "reason": "NO_GRANT"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
-      "context": "no-cell",
-      "expected": null,
-      "actual": null,
-      "policyDecision": "deny",
-      "verdict": "uyumlu",
-      "reason": "NO_GRANT"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
-      "context": "exact-cell",
-      "expected": "fixture-grant",
-      "actual": "fixture-grant",
-      "policyDecision": "allow",
-      "verdict": "uyumlu",
-      "reason": "GRANTED"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
-      "context": "wildcard-action",
-      "expected": null,
-      "actual": null,
-      "policyDecision": "allow",
-      "verdict": "uyumlu",
-      "reason": "GRANTED"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
-      "context": "wildcard-principal",
-      "expected": null,
-      "actual": null,
-      "policyDecision": "deny",
-      "verdict": "uyumlu",
-      "reason": "NO_GRANT"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
-      "context": "deny",
-      "expected": null,
-      "actual": null,
-      "policyDecision": "deny",
-      "verdict": "uyumlu",
-      "reason": "DENIED"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
-      "context": "require-approval",
-      "expected": null,
-      "actual": null,
-      "policyDecision": "require-approval",
-      "verdict": "uyumlu",
-      "reason": "APPROVAL_REQUIRED"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
-      "context": "revoked",
-      "expected": null,
-      "actual": null,
-      "policyDecision": "deny",
-      "verdict": "uyumlu",
-      "reason": "NO_GRANT"
-    },
-    {
-      "kind": "run-decision",
-      "id": "fixture-target",
-      "action": "resume",
       "context": "wrong-scope",
       "expected": null,
       "actual": null,
@@ -28258,6 +28171,94 @@
     {
       "kind": "task-decision",
       "id": "fixture-target",
+      "action": "reject",
+      "context": "no-cell",
+      "expected": null,
+      "actual": null,
+      "policyDecision": "deny",
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
+      "action": "reject",
+      "context": "exact-cell",
+      "expected": "fixture-grant",
+      "actual": "fixture-grant",
+      "policyDecision": "allow",
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
+      "action": "reject",
+      "context": "wildcard-action",
+      "expected": null,
+      "actual": null,
+      "policyDecision": "allow",
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
+      "action": "reject",
+      "context": "wildcard-principal",
+      "expected": null,
+      "actual": null,
+      "policyDecision": "deny",
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
+      "action": "reject",
+      "context": "deny",
+      "expected": null,
+      "actual": null,
+      "policyDecision": "deny",
+      "verdict": "uyumlu",
+      "reason": "DENIED"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
+      "action": "reject",
+      "context": "require-approval",
+      "expected": null,
+      "actual": null,
+      "policyDecision": "require-approval",
+      "verdict": "uyumlu",
+      "reason": "APPROVAL_REQUIRED"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
+      "action": "reject",
+      "context": "revoked",
+      "expected": null,
+      "actual": null,
+      "policyDecision": "deny",
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
+      "action": "reject",
+      "context": "wrong-scope",
+      "expected": null,
+      "actual": null,
+      "policyDecision": "deny",
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "task-decision",
+      "id": "fixture-target",
       "action": "answer",
       "context": "no-cell",
       "expected": null,
@@ -28344,9 +28345,9 @@
       "reason": "NO_GRANT"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "no-cell",
       "expected": null,
       "actual": null,
@@ -28355,9 +28356,9 @@
       "reason": "NO_GRANT"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "exact-cell",
       "expected": "fixture-grant",
       "actual": "fixture-grant",
@@ -28366,9 +28367,9 @@
       "reason": "GRANTED"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "wildcard-action",
       "expected": null,
       "actual": null,
@@ -28377,9 +28378,9 @@
       "reason": "GRANTED"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "wildcard-principal",
       "expected": null,
       "actual": null,
@@ -28388,9 +28389,9 @@
       "reason": "NO_GRANT"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "deny",
       "expected": null,
       "actual": null,
@@ -28399,9 +28400,9 @@
       "reason": "DENIED"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "require-approval",
       "expected": null,
       "actual": null,
@@ -28410,9 +28411,9 @@
       "reason": "APPROVAL_REQUIRED"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "revoked",
       "expected": null,
       "actual": null,
@@ -28421,9 +28422,9 @@
       "reason": "NO_GRANT"
     },
     {
-      "kind": "task-decision",
+      "kind": "approval",
       "id": "fixture-target",
-      "action": "reject",
+      "action": "decide",
       "context": "wrong-scope",
       "expected": null,
       "actual": null,

@@ -1,5 +1,5 @@
-import { DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
-import { PolicyLastAdminError, CommandIdError, DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
+import { AuthorityChangeError, DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
+import { DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError, type ProviderSpendAccount } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
@@ -18,7 +18,7 @@ const registeredFailure = (code: string, options?: Parameters<typeof ErrorRegist
   ? ErrorRegistry.createError(code, options) : ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
 /** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
 export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
-  if (error instanceof PolicyLastAdminError || error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
+  if (error instanceof AuthorityChangeError || error instanceof PolicyChangeError || error instanceof DecisionDelegationError || error instanceof PolicyLastAdminError || error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
     || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return registeredFailure(error.code);
   if (error instanceof WorkspacePatchError) return registeredFailure(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
   if (error instanceof RunLifecycleError && error.approvalId) return registeredFailure(error.code, { params: { approvalId: error.approvalId } });

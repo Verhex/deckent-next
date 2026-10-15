@@ -95,6 +95,7 @@ export { inspectConfiguredWorkers } from '#composition/index.js';
 export { inspectMonitor } from '#composition/index.js';
 export type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/index.js';
+export { inspectConfiguredDecisionDelegations } from '#composition/index.js';
 export type { McpCapabilityGroup, McpCapabilityRequest, McpCapabilityView, McpCapabilityPreview } from '#domain/index.js';
 export { inspectConfiguredToolchainCurrency as inspectToolchainCurrency, updateConfiguredToolchains as updateToolchains } from '#composition/index.js';
 export type { ToolchainUpdateResult } from '#composition/index.js';
@@ -126,3 +127,5 @@ export type { QuotaReleaseCommand, QuotaReleaseReceipt } from '#engine/index.js'
 
 export { inspectConfiguredPolicyAdministration as inspectPolicyAdministration } from '#composition/index.js';
 export type { PolicyAdministrationQuery, PolicyAdministrationStatus } from '#engine/index.js';
+
+export type { DelegationQuery, DecisionDelegationView } from '#domain/index.js';

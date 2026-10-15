@@ -1568,22 +1568,6 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 | Kind / id / action | Context | Expected grant | Actual grant | Verdict | Reason |
 |---|---|---|---|---|---|
-| approval / fixture-target / decide | no-cell | null | null | uyumlu | NO_GRANT |
-| approval / fixture-target / decide | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
-| approval / fixture-target / decide | wildcard-action | null | null | uyumlu | GRANTED |
-| approval / fixture-target / decide | wildcard-principal | null | null | uyumlu | NO_GRANT |
-| approval / fixture-target / decide | deny | null | null | uyumlu | DENIED |
-| approval / fixture-target / decide | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
-| approval / fixture-target / decide | revoked | null | null | uyumlu | NO_GRANT |
-| approval / fixture-target / decide | wrong-scope | null | null | uyumlu | NO_GRANT |
-| run-decision / fixture-target / close | no-cell | null | null | uyumlu | NO_GRANT |
-| run-decision / fixture-target / close | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
-| run-decision / fixture-target / close | wildcard-action | null | null | uyumlu | GRANTED |
-| run-decision / fixture-target / close | wildcard-principal | null | null | uyumlu | NO_GRANT |
-| run-decision / fixture-target / close | deny | null | null | uyumlu | DENIED |
-| run-decision / fixture-target / close | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
-| run-decision / fixture-target / close | revoked | null | null | uyumlu | NO_GRANT |
-| run-decision / fixture-target / close | wrong-scope | null | null | uyumlu | NO_GRANT |
 | run-decision / fixture-target / resume | no-cell | null | null | uyumlu | NO_GRANT |
 | run-decision / fixture-target / resume | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
 | run-decision / fixture-target / resume | wildcard-action | null | null | uyumlu | GRANTED |
@@ -1592,6 +1576,14 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | run-decision / fixture-target / resume | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
 | run-decision / fixture-target / resume | revoked | null | null | uyumlu | NO_GRANT |
 | run-decision / fixture-target / resume | wrong-scope | null | null | uyumlu | NO_GRANT |
+| run-decision / fixture-target / close | no-cell | null | null | uyumlu | NO_GRANT |
+| run-decision / fixture-target / close | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
+| run-decision / fixture-target / close | wildcard-action | null | null | uyumlu | GRANTED |
+| run-decision / fixture-target / close | wildcard-principal | null | null | uyumlu | NO_GRANT |
+| run-decision / fixture-target / close | deny | null | null | uyumlu | DENIED |
+| run-decision / fixture-target / close | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
+| run-decision / fixture-target / close | revoked | null | null | uyumlu | NO_GRANT |
+| run-decision / fixture-target / close | wrong-scope | null | null | uyumlu | NO_GRANT |
 | task-decision / fixture-target / accept | no-cell | null | null | uyumlu | NO_GRANT |
 | task-decision / fixture-target / accept | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
 | task-decision / fixture-target / accept | wildcard-action | null | null | uyumlu | GRANTED |
@@ -1600,14 +1592,6 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | task-decision / fixture-target / accept | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
 | task-decision / fixture-target / accept | revoked | null | null | uyumlu | NO_GRANT |
 | task-decision / fixture-target / accept | wrong-scope | null | null | uyumlu | NO_GRANT |
-| task-decision / fixture-target / answer | no-cell | null | null | uyumlu | NO_GRANT |
-| task-decision / fixture-target / answer | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
-| task-decision / fixture-target / answer | wildcard-action | null | null | uyumlu | GRANTED |
-| task-decision / fixture-target / answer | wildcard-principal | null | null | uyumlu | NO_GRANT |
-| task-decision / fixture-target / answer | deny | null | null | uyumlu | DENIED |
-| task-decision / fixture-target / answer | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
-| task-decision / fixture-target / answer | revoked | null | null | uyumlu | NO_GRANT |
-| task-decision / fixture-target / answer | wrong-scope | null | null | uyumlu | NO_GRANT |
 | task-decision / fixture-target / reject | no-cell | null | null | uyumlu | NO_GRANT |
 | task-decision / fixture-target / reject | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
 | task-decision / fixture-target / reject | wildcard-action | null | null | uyumlu | GRANTED |
@@ -1616,16 +1600,33 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | task-decision / fixture-target / reject | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
 | task-decision / fixture-target / reject | revoked | null | null | uyumlu | NO_GRANT |
 | task-decision / fixture-target / reject | wrong-scope | null | null | uyumlu | NO_GRANT |
+| task-decision / fixture-target / answer | no-cell | null | null | uyumlu | NO_GRANT |
+| task-decision / fixture-target / answer | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
+| task-decision / fixture-target / answer | wildcard-action | null | null | uyumlu | GRANTED |
+| task-decision / fixture-target / answer | wildcard-principal | null | null | uyumlu | NO_GRANT |
+| task-decision / fixture-target / answer | deny | null | null | uyumlu | DENIED |
+| task-decision / fixture-target / answer | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
+| task-decision / fixture-target / answer | revoked | null | null | uyumlu | NO_GRANT |
+| task-decision / fixture-target / answer | wrong-scope | null | null | uyumlu | NO_GRANT |
+| approval / fixture-target / decide | no-cell | null | null | uyumlu | NO_GRANT |
+| approval / fixture-target / decide | exact-cell | fixture-grant | fixture-grant | uyumlu | GRANTED |
+| approval / fixture-target / decide | wildcard-action | null | null | uyumlu | GRANTED |
+| approval / fixture-target / decide | wildcard-principal | null | null | uyumlu | NO_GRANT |
+| approval / fixture-target / decide | deny | null | null | uyumlu | DENIED |
+| approval / fixture-target / decide | require-approval | null | null | uyumlu | APPROVAL_REQUIRED |
+| approval / fixture-target / decide | revoked | null | null | uyumlu | NO_GRANT |
+| approval / fixture-target / decide | wrong-scope | null | null | uyumlu | NO_GRANT |
 
 ## Source custody (LF-normalized SHA-256)
 
 - `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
 - `src/domain/core/approval/internal/contract.ts`: `10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa`
-- `src/domain/core/policy/index.ts`: `6ef206511ba15b02c29e1db3fb7ced5e88b244415d8d390ceb798560b8a2591c`
+- `src/domain/core/policy/index.ts`: `54623320a2de38385df6ee28fb9116af931038e246924117dd8c9128c66e8922`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0`
 - `src/domain/core/policy/internal/ai-floor.ts`: `d7f7c65905a2c67a85e791f12cb99b6b186c3d8adeba557414d9fc89dc80eeb7`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
+- `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `009df03fe8e3afa15f41975cbf3fd7a1048eccdfe35fbdc1616133d0e23f424d`
 - `src/domain/core/policy/internal/first-run-template.ts`: `d646a21b890892c4afec1fe14d7f77c7566717aa3e21cb4b32434104c29f9456`

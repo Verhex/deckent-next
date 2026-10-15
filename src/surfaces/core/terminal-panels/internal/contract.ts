@@ -304,15 +304,18 @@ export interface PanelPorts {
 /** Localized presentation of the shared typed MCP capability contract. No typed values or rule editor. */
 export interface PolicyPanelPort {
   scopes(): Promise<readonly string[]>;
+  delegations?(scopeId: string): ReturnType<PolicyPanelPort['inspect']>;
   inspect(scopeId: string): Promise<Readonly<{ groups: readonly Readonly<{ id: string; label: string; detail: string; note: string }>[] }>>;
   preview(scopeId: string, groupId: string, action: 'grant' | 'revoke'): Promise<PolicyPanelPreview>;
   apply(preview: PolicyPanelPreview): Promise<readonly PanelNotice[]>;
 }
 export interface PolicyPanelPreview {
+  readonly delegation?: boolean;
   readonly scopeId: string; readonly groupId: string; readonly action: 'grant' | 'revoke'; readonly digest: string;
   readonly lines: readonly PanelLine[]; readonly applicable: boolean;
 }
 export interface PolicyPanelLabels {
+  readonly delegations?: string; readonly delegationConfirm?: string; readonly delegateGrant?: string; readonly delegateRevoke?: string;
   readonly title: string; readonly scope: string; readonly groups: string; readonly preview: string;
   readonly grant: string; readonly revoke: string; readonly confirm: string; readonly back: string; readonly hints: string; readonly empty: string;
 }

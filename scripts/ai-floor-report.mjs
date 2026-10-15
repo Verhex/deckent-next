@@ -34,7 +34,7 @@ export function generateReport(api, sources = {}) {
       verdict: actual.decision === expected.decision && actual.reason === expected.reason ? 'uyumlu' : 'İHLAL', reason: actual.reason };
   }));
   // The additional step gate requires exact named actor + explicit action, even after evaluatePolicy allows.
-  const steps = routes.filter(route => ['task-decision', 'run-decision'].includes(route.kind) || route.kind === 'approval' && route.id === 'fixture-target' && route.action === 'decide');
+  const steps = api.getDecisionSteps().map(step => ({ kind: step.kind, id: 'fixture-target', action: step.action }));
   const stepRows = steps.flatMap(route => ['no-cell', 'exact-cell', 'wildcard-action', 'wildcard-principal', 'deny', 'require-approval', 'revoked', 'wrong-scope'].map(context => {
     let rule = grant(ai, route);
     if (context === 'wildcard-action') rule = { ...rule, actions: 'all' };

@@ -4,11 +4,11 @@ import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
-import { evaluatePolicy, explicitDecisionGrant, getPolicyVocabulary } from '#domain/index.js';
+import { evaluatePolicy, explicitDecisionGrant, getDecisionSteps, getPolicyVocabulary } from '#domain/index.js';
 import { generateReport, checkReport, summaryLine, guideWithTable, root, reportBase, reportExitCode } from '../../../scripts/ai-floor-report.mjs';
 import { floorFamilies, protectedPaths, inventory } from '../../../scripts/ai-floor-inventory.mjs';
 
-const api = { evaluatePolicy, explicitDecisionGrant, getPolicyVocabulary };
+const api = { evaluatePolicy, explicitDecisionGrant, getDecisionSteps, getPolicyVocabulary };
 const temporary: string[] = [];
 afterEach(() => temporary.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
 function sourceWorker(removeSecretFloor = false): Promise<{ report: ReturnType<typeof generateReport>; drift: string[]; summary: string; exit: number }> {

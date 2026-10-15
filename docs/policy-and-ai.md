@@ -119,20 +119,43 @@ deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 revokes one of those entries, not an arbitrary policy grant. Non-TTY standing revocation has
 a `--yes` confirmation flag; it does not bypass authority, policy or the AI floor.
 
-**Current management limit:** there is no generic CLI grant/revoke editor for selected
-`run-decision`/`task-decision` cells, and `/policy` only manages MCP capability groups. The
-shared internal authority application supports versioned `grant.add/remove/replace` and
-binding changes, but generic `deckent operation execute` and public SDK execution refuse
-`policy.administer@1` with `OPERATION_SURFACE_RESTRICTED`. Do not send a change through those
-commands or hand-edit protected policy files as a workaround. A dedicated admitted authority
-surface/integration is needed to manage the selected cells below. Group grants are broader
-execution permissions and do not supply those missing decision cells.
+## Delegate human steps to AI
+
+The CLI and the terminal `/policy` → **AI delegation** section share one versioned command.
+List first; select a step from that inventory, then confirm its actor, scope, resource class/id
+and policy revision on the y/N card. Only `y`/`yes` confirms CLI; the terminal card uses `y`.
+Enter, N and Escape cancel the terminal card. Writes require verified interactive stdin/output;
+there is no `--yes` bypass. SDK `inspectConfiguredDecisionDelegations(root, query, options)` is
+read-only. No MCP mutation or new decision tool is exposed.
+
+```sh
+deckent policy delegations --scope SCOPE_ID --json
+deckent policy delegate --scope SCOPE_ID --step run-resume --resource RUN_ID --actor mcp
+deckent policy undelegate --scope SCOPE_ID --step run-resume --resource RUN_ID --actor mcp
+deckent policy delegate --scope SCOPE_ID --step task-accept --resource TASK_ID
+```
+
+Steps are `run-resume`, `run-close`, `task-accept`, `task-reject`, `task-answer` and
+`approval-decide`. The default and only supported `--actor` is `mcp`, bound to the verified
+human's MCP principal. `--resource` narrows the cell to one Run, Task or approval id; omit it
+only when you intend to delegate the whole resource class in that scope. The terminal section
+uses that scope-wide class. Protected steps are absent, protected approval ids are refused,
+and the floor remains enforced even for a class-wide grant. Other execution/approval cells
+must already exist; this command never adds them implicitly.
+
+The listing separates the **managed grant** from **effective permission**. Undelegate removes
+only the matching managed rule at the same scope, step and resource selection; a custom or role
+rule can still allow the step. A concurrent policy change refuses the old card; inspect and
+confirm again. Every applied change uses `policy.administer@1`, its expected revision,
+approval, authority bound, audit and archive; the approval/audit names the human granter.
+Generic `deckent operation execute` and public SDK execution still refuse `policy.administer@1`
+with `OPERATION_SURFACE_RESTRICTED`. Never hand-edit protected authority files.
 
 ## Examples and their limits
 
 **“Let AI resume its own failed runs.”** Select the AI principal, scope and already inspected
-Run ids. The conceptual allow below is policy data for an authority integration, not runnable
-CLI input. Give `run/reserve` separately; remove this grant through the same governed writer
+Run ids. The JSON below illustrates the cell created by the dedicated delegation command; it is not
+CLI input. Give `run/reserve` separately; use undelegate with the same resource selection
 to revoke. There is no dynamic “own runs” predicate or automatic grant for future Run ids.
 
 ```json
@@ -146,7 +169,7 @@ to revoke. There is no dynamic “own runs” predicate or automatic grant for f
 }
 ```
 
-Once the required cells have been provisioned by an authorized integration, the existing CLI
+Once the required cells have been granted, the existing CLI
 transition is `deckent run resume --scope SCOPE_ID --id RUN_ID --command-id COMMAND_ID --expected-revision REVISION --json`.
 This command uses the invoking CLI actor; it does not impersonate MCP. A witnessed human can
 resume without an AI delegation cell, while the shared AI ingress needs the explicit cell.
@@ -218,3 +241,5 @@ Command sources: [policy grants/status/upgrade](../src/surfaces/core/cli/interna
 [step grant](../src/domain/core/policy/internal/decision-step.ts),
 [lifecycle broker](../src/engine/core/runs/internal/decision-approval.ts),
 [card authority](../src/engine/core/approval/internal/application.ts).
+
+Delegation sources: [CLI](../src/surfaces/core/cli/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).

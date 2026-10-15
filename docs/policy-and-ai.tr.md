@@ -118,21 +118,44 @@ deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 TTY dışındaki kalıcı izin geri alımında `--yes` teyit bayrağı vardır; yetki, politika veya AI
 tabanını aşmaz.
 
-**Bugünkü yönetim sınırı:** seçilmiş `run-decision`/`task-decision` hücreleri için genel CLI
-grant/revoke editörü yoktur; `/policy` yalnız MCP yetki gruplarını yönetir. Ortak iç yetki
-uygulaması sürümlü `grant.add/remove/replace` ve rol bağı değişimini destekler; ancak genel
-`deckent operation execute` ve açık SDK yürütmesi `policy.administer@1` işlemini
-`OPERATION_SURFACE_RESTRICTED` ile reddeder. Değişikliği bu komutlardan göndermeyin veya
-korunan politika dosyalarını elle düzenleyerek kapıyı aşmayın. Aşağıdaki seçili hücreleri
-yönetmek için ayrıca kabul edilmiş özel yetki yüzeyi/entegrasyonu gerekir. Grup grant'leri daha
-geniş yürütme izinleridir ve eksik karar hücrelerini sağlamaz.
+## İnsan adımlarını AI aktörüne devretme
+
+CLI ve terminal `/policy` → **Yapay zekâya devir** bölümü tek sürümlü komutu kullanır.
+Önce listeleyin; aynı envanterden adımı seçin ve y/N kartındaki aktör, kapsam, kaynak sınıfı/kimliği
+ve politika revizyonunu inceleyin. CLI yalnız `y`/`yes`, terminal kartı yalnız `y` ile onaylar.
+Terminal kartında Enter, N ve Escape vazgeçer. Yazım doğrulanmış etkileşimli girdi/çıktı ister;
+`--yes` geçişi yoktur. SDK `inspectConfiguredDecisionDelegations(root, query, options)` yalnız
+okur. MCP yazma veya yeni karar aracı sunulmaz.
+
+```sh
+deckent policy delegations --scope SCOPE_ID --json
+deckent policy delegate --scope SCOPE_ID --step run-resume --resource RUN_ID --actor mcp
+deckent policy undelegate --scope SCOPE_ID --step run-resume --resource RUN_ID --actor mcp
+deckent policy delegate --scope SCOPE_ID --step task-accept --resource TASK_ID
+```
+
+Adımlar `run-resume`, `run-close`, `task-accept`, `task-reject`, `task-answer` ve
+`approval-decide` olur. Varsayılan ve desteklenen tek `--actor`, doğrulanmış insanın MCP
+kimliğine bağlı `mcp` değeridir. `--resource` hücreyi tek Run, Task veya onay kimliğine daraltır;
+yalnız o kapsamdaki bütün kaynak sınıfını devretmek istediğinizde kaldırın. Terminal bölümü
+kapsamın bütün sınıfını kullanır. Korunan adımlar listelenmez, korunan onay kimlikleri reddedilir;
+sınıfın bütünü devredilse de taban uygulanır. Diğer yürütme/onay hücreleri ayrıca bulunmalıdır;
+bu komut onları örtük olarak vermez.
+
+Liste **yönetilen grant** ile **etkin izni** ayırır. Undelegate yalnız aynı kapsam, adım ve
+kaynak seçiminin yönetilen kuralını kaldırır; özel veya rol kuralı adıma izin vermeyi sürdürebilir.
+Eşzamanlı politika değişimi eski kartı reddeder; tekrar inceleyip onaylayın. Uygulanan her değişiklik
+`policy.administer@1`, beklenen revizyon, onay, yetki sınırı, audit ve arşiv yolundan geçer;
+onay/audit insana ait granter kimliğini kaydeder. Genel `deckent operation execute` ve açık SDK
+yürütmesi `policy.administer@1` işlemini hâlâ `OPERATION_SURFACE_RESTRICTED` ile reddeder.
+Korunan yetki dosyalarını elle düzenlemeyin.
 
 ## Örnekler ve sınırları
 
 **“AI kendi başarısız Run'larını sürdürsün.”** AI kimliğini, kapsamı ve önceden incelenmiş Run
-kimliklerini seçin. Aşağıdaki kavramsal allow, yetki entegrasyonu için politika verisidir;
-çalıştırılabilir CLI girdisi değildir. `run/reserve` ayrıca verilmelidir; geri alma aynı
-yönetilen yazıcıdan bu grant'i kaldırır. Dinamik “kendi Run'ları” koşulu veya gelecekteki Run
+kimliklerini seçin. Aşağıdaki JSON, özel devir komutunun ürettiği hücreyi açıklar;
+çalıştırılabilir CLI girdisi değildir. `run/reserve` ayrıca verilmelidir; undelegate aynı
+kaynak seçimiyle yönetilen grant'i kaldırır. Dinamik “kendi Run'ları” koşulu veya gelecekteki Run
 kimliklerine otomatik devir yoktur.
 
 ```json
@@ -146,7 +169,7 @@ kimliklerine otomatik devir yoktur.
 }
 ```
 
-Gerekli hücreler yetkili entegrasyonla verildikten sonra mevcut CLI geçişi
+Gerekli hücreler verildikten sonra mevcut CLI geçişi
 `deckent run resume --scope SCOPE_ID --id RUN_ID --command-id COMMAND_ID --expected-revision REVISION --json`
 olur. Komut çağıran CLI aktörünü kullanır; MCP kimliğine bürünmez. Tanıklı insan, AI devir
 hücresi olmadan devam edebilir; ortak AI girişi açık hücre ister.
@@ -218,3 +241,5 @@ Komut kaynakları: [policy grants/status/upgrade](../src/surfaces/core/cli/inter
 [adım grant'i](../src/domain/core/policy/internal/decision-step.ts),
 [yaşam döngüsü broker'ı](../src/engine/core/runs/internal/decision-approval.ts),
 [kart yetkisi](../src/engine/core/approval/internal/application.ts).
+
+Devir kaynakları: [CLI](../src/surfaces/core/cli/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).
