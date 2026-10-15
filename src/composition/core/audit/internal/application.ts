@@ -48,25 +48,35 @@ export async function checkpointConfiguredAudit(root: string, installationId: st
   } catch (error) { throw error instanceof AuditCheckpointCycleError ? error : new AuditCheckpointCycleError('unavailable'); }
   finally { store?.close(); }
 }
+/** What the re-baseline card shows and the write is bound to: the verified state plus the policy and producer digests it was computed over. */
+export type AuditRebaselineView = AuditVerification & { readonly policyDigest: string; readonly producersDigest: string };
 /**
  * The explicit operator re-baseline: approval-decide authority on `audit-rebaseline` (on the AI floor), a witnessed human terminal and one
- * y/N on the current state. Only a policy/producer drift or a possible wipe is re-based; the engine re-checks it inside the write.
+ * y/N bound to the shown state. The policy is read again after the answer; the engine re-checks state, head and digests inside the write,
+ * and a change in between asks again (bounded), never writes over what the person did not see.
  */
 export async function rebaselineConfiguredAudit(root: string, input: unknown, options: ConfigLoadOptions,
-  confirm: (current: AuditVerification) => Promise<boolean>): Promise<AuditVerification | null> {
+  confirm: (current: AuditRebaselineView) => Promise<boolean>, attempts = 3): Promise<AuditVerification | null> {
   try {
     const command = auditRebaselineCommandSchema.parse(input), context = await loadConfiguredScopeContext(root, command.scopeId, options, 'write');
     authorizeApproval(context.document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
     if (localPrincipalChannel() === 'mcp' || localPrincipalPeer() || !await attestLocalInteractiveTerminal()) throw ErrorRegistry.createError('AUDIT_REBASELINE_INTERACTIVE_REQUIRED');
     if (!context.installationId) throw new AuditError('AUDIT_UNAVAILABLE');
+    const installationId = context.installationId, policy = createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes);
+    const scoped = async () => { const document = await policy.load(); return { document, value: { installationId, policyDigest: auditPolicyDigest(document), producersDigest: producersDigest() } }; };
     const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile), store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
     try {
-      const app = new AuditCheckpointApplication(store, integrity, context.config.audit), scoped = { installationId: context.installationId,
-        policyDigest: auditPolicyDigest(context.document), producersDigest: producersDigest() }, current = app.verify(command.scopeId, scoped);
-      if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(current.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
-      if (!await confirm(current)) return null;
-      return app.rebaseline(command.scopeId, scoped, Date.now(), { principal: { issuer: context.principal.issuer, subject: context.principal.subject },
-        policyRevision: context.document.revision }, command.reason);
+      const app = new AuditCheckpointApplication(store, integrity, context.config.audit);
+      for (let left = attempts; ; ) {
+        const shown = await scoped(), current = app.verify(command.scopeId, shown.value);
+        if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(current.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
+        if (!await confirm({ ...current, policyDigest: shown.value.policyDigest, producersDigest: shown.value.producersDigest })) return null;
+        const fresh = await scoped();
+        try {
+          return app.rebaseline(command.scopeId, fresh.value, Date.now(), { principal: { issuer: context.principal.issuer, subject: context.principal.subject },
+            policyRevision: fresh.document.revision }, command.reason, { status: current.status, head: current.head, policyDigest: shown.value.policyDigest, producersDigest: shown.value.producersDigest });
+        } catch (error) { if (!(error instanceof AuditError && error.code === 'AUDIT_REBASELINE_STALE') || --left <= 0) throw error; }
+      }
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

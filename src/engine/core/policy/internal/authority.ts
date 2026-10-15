@@ -41,15 +41,19 @@ type Person = { readonly issuer: string; readonly subject: string };
 export function authorityChangeAuditEvent(input: { readonly scopeId: string; readonly requester: Person; readonly decider: Person; readonly atMs: number;
   readonly operation: { readonly id: string; readonly version: number }; readonly commandId: string; readonly approvalId: string; readonly inputDigest: string;
   readonly before: string; readonly after: string; readonly counts: { readonly grantsAdded: number; readonly grantsRemoved: number; readonly bindingsAdded: number; readonly bindingsRemoved: number };
-  readonly policyDigest?: string }): AuditEvent {
+  readonly policyDigest?: string | undefined; readonly policyDigestBefore?: string | undefined }): AuditEvent {
   return { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId, principal: { issuer: input.requester.issuer, subject: input.requester.subject },
     policyRevision: input.before, atMs: input.atMs, subject: { kind: 'authority-change', operation: { id: input.operation.id, version: input.operation.version },
       commandId: input.commandId, approvalId: input.approvalId, decider: { issuer: input.decider.issuer, subject: input.decider.subject }, inputDigest: input.inputDigest,
-      revision: { before: input.before, after: input.after }, counts: { ...input.counts }, ...(input.policyDigest ? { policyDigest: input.policyDigest } : {}) } };
+      revision: { before: input.before, after: input.after }, counts: { ...input.counts }, ...(input.policyDigest ? { policyDigest: input.policyDigest, ...(input.policyDigestBefore ? { policyDigestBefore: input.policyDigestBefore } : {}) } : {}) } };
 }
-/** The audit-checkpoint digest of the effective policy a governed write produces (the same resolution a policy load returns). */
-export const governedPolicyDigest = (policy: unknown, bindings: unknown): string =>
-  auditPolicyDigest(bindings === null || bindings === undefined ? policySchema.parse(policy) : resolvePolicyBindings(policy, bindings));
+/**
+ * The audit-checkpoint digest of an effective policy as a governed write sees it (the same resolution a policy load returns). Never throws: a
+ * document it cannot resolve has no digest, and a governed event without one cannot extend a checkpoint's policy chain (fails closed).
+ */
+export function governedPolicyDigest(policy: unknown, bindings: unknown): string | undefined {
+  try { return auditPolicyDigest(bindings === null || bindings === undefined ? policySchema.parse(policy) : resolvePolicyBindings(policy, bindings)); } catch { return undefined; }
+}
 
 /** The sealed-audit event of one refused authority change (audit subject `authority-refusal`): the stage it stopped at and its stable code. */
 export function authorityRefusalAuditEvent(input: { readonly scopeId: string; readonly principal: Person; readonly atMs: number; readonly policyRevision: string;

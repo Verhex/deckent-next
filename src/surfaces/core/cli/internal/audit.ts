@@ -5,7 +5,8 @@ import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { createInterface } from 'node:readline';
 import type { CommandContext } from './kernel-commands.js';
 export type AuditVerifyHandler = (root: string, query: AuditVerifyQuery, options: ConfigLoadOptions) => Promise<AuditVerification>;
-export type AuditRebaselineHandler = (root: string, input: unknown, options: ConfigLoadOptions, confirm: (current: AuditVerification) => Promise<boolean>) => Promise<AuditVerification | null>;
+export type AuditRebaselineView = AuditVerification & { readonly policyDigest: string; readonly producersDigest: string };
+export type AuditRebaselineHandler = (root: string, input: unknown, options: ConfigLoadOptions, confirm: (current: AuditRebaselineView) => Promise<boolean>) => Promise<AuditVerification | null>;
 /** One card, one explicit y; EOF, blank input and every other answer decline. */
 async function askRebaseline(card: string, prompt: string, context: CommandContext): Promise<boolean> {
   const output = context.stderr ?? process.stderr; output.write(card + '\n');
@@ -63,7 +64,8 @@ async function rebaselineCommand(argv: readonly string[], context: CommandContex
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   if (!reason?.trim()) throw ErrorRegistry.createError('CLI_USAGE');
   const result = await context.rebaselineAudit(root, { schemaVersion: 1, scopeId, reason }, { env }, current => askRebaseline(t('cli.audit.rebaseline.card', { scope: scopeId,
-    status: renderAuditStatus(current.status, locale), reason: renderAuditReason(current.reason, locale), text: reason }, locale), t('cli.audit.rebaseline.prompt', {}, locale), context));
+    status: renderAuditStatus(current.status, locale), reason: renderAuditReason(current.reason, locale), text: reason, head: current.head?.sequence ?? 0,
+    headDigest: current.head?.digest.slice(0, 12) ?? '—', policy: current.policyDigest.slice(0, 12), producers: current.producersDigest.slice(0, 12) }, locale), t('cli.audit.rebaseline.prompt', {}, locale), context));
   const sink = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (!result) { emit(t('cli.audit.rebaseline.declined', {}, locale), { level: 'error', ...sink }); return EXIT_CODES.error; }
   emit(result, { json, ...sink, render: () => t('cli.audit.rebaseline.done', { scope: result.scopeId, sequence: result.checkpoint?.checkpoint.sequence ?? 0,

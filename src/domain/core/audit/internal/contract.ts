@@ -108,7 +108,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict(),
     /** MODES-3: the person's "ask for edits too" preference requested and before (absent on records written before it existed). */
-    askEdits: z.object({ requested: z.boolean(), previous: z.boolean() }).strict().optional(), policyDigest: digest.optional() }).strict(),
+    askEdits: z.object({ requested: z.boolean(), previous: z.boolean() }).strict().optional(), policyDigestBefore: digest.optional(), policyDigest: digest.optional() }).strict(),
   /**
    * Full access switched on for one terminal session (FA-SESSION, owner 2026-10-07): the decision on the person's `permission-mode`/`set`
    * `full-access` grant, the stored mode the session leaves untouched (the next launch starts in it) and the bindings revision read. Nothing is
@@ -151,7 +151,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     revision: z.object({ before: identitySchema, after: identitySchema }).strict(),
     counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict(),
     /** AUDIT-CHECKPOINT (wave 2026-10-15): the audit policy digest of the resulting effective policy; a later checkpoint accepts exactly this content. */
-    policyDigest: digest.optional() }).strict(),
+    policyDigestBefore: digest.optional(), policyDigest: digest.optional() }).strict(),
   /**
    * A refused authority change (POLICY-HARDEN P3-R): where it stopped (`decide` = an approval surface that may not decide authority
    * approvals, `submit` = before any intent, `settle` = a claimed intent refused terminally at the effect), the stable refusal code and the
@@ -227,7 +227,7 @@ export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
     template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), person: auditPrincipalSchema }).strict(),
     commandId: identitySchema, inputDigest: digest, revision: z.object({ before: identitySchema, after: identitySchema }).strict(),
     counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict(),
-    policyDigest: digest.optional() }).strict(),
+    policyDigestBefore: digest.optional(), policyDigest: digest.optional() }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();
@@ -240,5 +240,5 @@ export type AuditSubject = z.infer<typeof auditSubjectSchema>;
 export type AuditRecord = z.infer<typeof auditRecordSchema>;
 export type AuditCounter = z.infer<typeof auditCounterSchema>;
 export class AuditError extends Error {
-  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_REBASELINE_REFUSED') { super(code); this.name = 'AuditError'; }
+  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_REBASELINE_REFUSED' | 'AUDIT_REBASELINE_STALE') { super(code); this.name = 'AuditError'; }
 }

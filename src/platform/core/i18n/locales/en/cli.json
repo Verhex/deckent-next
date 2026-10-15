@@ -1455,7 +1455,7 @@
   "cli.init.registry.help": "deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id> --execution-slots <n> --in-flight-slots <n> --discovery repository|disabled --preview|--apply [--json] [--lang en|tr]\nRequires execution.docker configuration. Detects the selected native CLI version in the configured Docker image; never overwrites an authored registry.",
   "cli.audit.summary": "Verify audit history and checkpoint evidence",
   "cli.audit.rebaseline.summary": "Accept a reviewed audit drift as the new baseline",
-  "cli.audit.rebaseline.card": "Re-baseline audit checkpoints for scope {scope}\nCurrent state: {status} ({reason})\nReason: {text}\nA new checkpoint over the current audit history and policy becomes the trusted baseline. Witnesses exported earlier will no longer match.",
+  "cli.audit.rebaseline.card": "Re-baseline audit checkpoints for scope {scope}\nCurrent state: {status} ({reason})\nReason: {text}\nA new checkpoint over the current audit history and policy becomes the trusted baseline. Witnesses exported earlier will no longer match.\nBound to: audit head {head} ({headDigest}), policy {policy}, producers {producers}. Any change before the write asks again.",
   "cli.audit.rebaseline.prompt": "Re-baseline now? y/N: ",
   "cli.audit.rebaseline.declined": "Re-baseline declined; nothing was written.",
   "cli.audit.rebaseline.done": "Audit {scope} re-baselined: checkpoint {sequence} over audit head {head}. Export a new witness with deckent audit verify --export-checkpoint.",

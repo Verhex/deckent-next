@@ -51,7 +51,7 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
       modes: [theirs, lookalike, { id: expect.stringMatching(/^m-[0-9a-f]{16}$/u), principal: me[0], scopes: ['scope'], mode: 'full-auto' }] });
     expect(await runtime.inspectPermissionMode({ schemaVersion: 1, scopeId: 'scope' })).toMatchObject({ mode: 'full-auto', revision: changed.revision });
     expect(changes(f)).toEqual([{ kind: 'permission-mode-change', requested: 'full-auto', previous: 'standart', decision: { effect: 'allow', ruleId: 'mode-set' },
-      bindingsRevision: { before: 'b1', after: file.revision }, askEdits: { requested: false, previous: false }, policyDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
+      bindingsRevision: { before: 'b1', after: file.revision }, askEdits: { requested: false, previous: false }, policyDigestBefore: expect.stringMatching(/^[a-f0-9]{64}$/), policyDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
     expect(f.audit()[0]!.event).toMatchObject({ principal: me[0], scopeId: 'scope', policyRevision: 'p1+b1' });
     // The next turn decides on the new mode: the eligible ordinary edit runs without a card and writes its own audit event.
     const turn = await f.call('edit_file', { path: 'src/a.ts', old_string: 'a = 1', new_string: 'a = 2' });
@@ -118,7 +118,7 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
       { kind: 'permission-mode-change', requested: 'full-auto', previous: 'standart', decision: { effect: 'deny', ruleId: null }, bindingsRevision: { before: 'b1', after: null },
         askEdits: { requested: true, previous: true } },
       { kind: 'permission-mode-change', requested: 'standart', previous: 'standart', decision: { effect: 'allow', ruleId: null }, bindingsRevision: { before: 'b1', after: file.revision },
-        askEdits: { requested: false, previous: true }, policyDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }]); // written changes seal the resulting policy digest
+        askEdits: { requested: false, previous: true }, policyDigestBefore: expect.stringMatching(/^[a-f0-9]{64}$/), policyDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }]); // written changes seal the resulting policy digest
     // The next turn runs the eligible edit without a card (standart), audited with the default's null person entry.
     expect(await f.call('edit_file', { path: 'src/a.ts', old_string: 'a = 1', new_string: 'a = 2' })).toMatchObject({ card: false, status: 'ok' });
     expect(f.audit().at(-1)!.event.subject).toMatchObject({ kind: 'permission-mode', mode: 'standart', grants: { company: 'edit-tools', person: null } });

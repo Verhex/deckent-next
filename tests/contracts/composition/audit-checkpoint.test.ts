@@ -120,6 +120,18 @@ it.skipIf(process.platform !== 'linux')('deckent audit rebaseline: AI and unwitn
   const marker = events().at(-1);
   expect(marker).toMatchObject({ principal: { subject: String(process.getuid!()) }, subject: { kind: 'audit-checkpoint', rebaseline: { reason: command.reason } } });
   expect(await verifyAudit(f.root, query, f.options)).toMatchObject({ status: 'match' });
+  // Bound confirmation: a policy change injected between the y and the write refuses that write and asks again over the new state.
+  const edit = (id: string) => writeFile(f.policyPath, JSON.stringify({ ...f.document, grants: [...f.document.grants, decide, { ...decide, id, resource: { kind: 'approval', ids: [id] } }] }));
+  await edit('second-hand-edit'); const views: { policyDigest: string }[] = [];
+  const injecting = async (view: { policyDigest: string }) => { views.push(view); if (views.length === 1) await edit('edited-after-the-answer'); return true; };
+  expect(await rebaselineConfiguredAudit(f.root, { ...command, reason: 'second review' }, f.options, injecting)).toMatchObject({ status: 'match' });
+  expect(views).toHaveLength(2); expect(views[1]!.policyDigest).not.toBe(views[0]!.policyDigest);
+  expect(events().filter(event => event.subject.kind === 'audit-checkpoint' && event.subject.rebaseline?.reason === 'second review')).toHaveLength(1);
+  await edit('third-hand-edit'); let changes = 0;
+  await expect(rebaselineConfiguredAudit(f.root, { ...command, reason: 'never settles' }, f.options, async () => { await edit(`moving-${++changes}`); return true; }))
+    .rejects.toMatchObject({ code: 'AUDIT_REBASELINE_STALE' });
+  expect(changes).toBe(3); expect(events().some(event => event.subject.rebaseline?.reason === 'never settles')).toBe(false);
+  await edit('settled'); expect(await rebaselineConfiguredAudit(f.root, { ...command, reason: 'settled' }, f.options, async () => true)).toMatchObject({ status: 'match' });
   expect(await main(['audit', 'rebaseline', '--scope', 's', '--reason', 'again'], { root: f.root, env: f.options.env, rebaselineAudit: rebaselineConfiguredAudit,
     stdin: Readable.from(['y\n']) as never, stdout: { write() {} }, stderr: { write() {} } })).not.toBe(0);
 });

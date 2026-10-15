@@ -6,6 +6,8 @@ import type { AuditCheckpointStore } from './checkpoint-store.js';
 export interface AuditCheckpointContext { readonly installationId: string; readonly policyDigest: string; readonly producersDigest: string }
 export interface AuditVerificationLimits { readonly pageSize: number; readonly maxRecords: number }
 /** Who writes a checkpoint's wipe marker: the service's own verified principal and the policy revision in force. */
+/** Exactly what the person confirmed on the re-baseline card; the write re-checks all of it inside its own transaction. */
+export interface AuditRebaselineExpectation { readonly status: AuditVerification['status']; readonly head: AuditVerification['head']; readonly policyDigest: string; readonly producersDigest: string }
 export interface AuditCheckpointWriter { readonly principal: { readonly issuer: string; readonly subject: string }; readonly policyRevision: string }
 export const auditCheckpointDigest = (checkpoint: AuditCheckpoint): string => sha256(encodeCommandProjection('audit-checkpoint-digest:1', checkpoint));
 export const exportAuditCheckpoint = (checkpoint: AuditCheckpoint): AuditWitness => auditWitnessSchema.parse({ schemaVersion: 1,
@@ -61,7 +63,8 @@ export class AuditCheckpointApplication {
     }
     const latest = checkpoints.at(-1), exported = latest ? exportAuditCheckpoint(latest) : null;
     const anchors = [...checkpoints, ...(witness ? [witness.checkpoint] : [])].sort((a, b) => a.head.sequence - b.head.sequence);
-    let sequence = 0, digest = sha256(encodeCommandProjection('audit-head:1', { scopeId })), index = 0, governed: { sequence: number; digest: string } | null = null;
+    let sequence = 0, digest = sha256(encodeCommandProjection('audit-head:1', { scopeId })), index = 0;
+    const governed: { sequence: number; before: string | null; after: string }[] = [];
     const markers = new Map<number, number>();
     const checkHeads = () => { while (index < anchors.length && anchors[index]!.head.sequence === sequence) {
       if (anchors[index++]!.head.digest !== digest) throw new AuditError('AUDIT_INTEGRITY');
@@ -80,8 +83,8 @@ export class AuditCheckpointApplication {
           else if (markers.has(subject.checkpointSequence)) throw new AuditError('AUDIT_INTEGRITY');
           markers.set(subject.checkpointSequence, sequence);
         }
-        // A governed policy change (policy.administer, /mode, installer) seals the digest of the policy it produced.
-        if ((subject.kind === 'authority-change' || subject.kind === 'permission-mode-change') && subject.policyDigest) governed = { sequence, digest: subject.policyDigest };
+        // A governed policy write (policy.administer, /mode, installer) seals the digests of the policy it changed and of the policy it produced.
+        if ((subject.kind === 'authority-change' || subject.kind === 'permission-mode-change') && subject.policyDigest) governed.push({ sequence, before: subject.policyDigestBefore ?? null, after: subject.policyDigest });
       }
     }
     const head = Object.freeze({ sequence, digest });
@@ -91,8 +94,14 @@ export class AuditCheckpointApplication {
     if (markers.size > checkpoints.length) return this.result(scopeId, 'possible-wipe', 'checkpoints-missing', head, exported);
     if (!latest && !witness) return this.result(scopeId, 'unknown', 'no-checkpoint-yet', head);
     const compared = [...(latest ? [latest] : []), ...(witness ? [witness.checkpoint] : [])];
-    // The current policy is accepted when a checkpoint holds it, or when the latest governed change after that checkpoint produced exactly it.
-    const accepted = (cp: AuditCheckpoint) => cp.policyDigest === context.policyDigest || (governed !== null && governed.sequence > cp.head.sequence && governed.digest === context.policyDigest);
+    // The current policy is accepted only along an unbroken chain from a checkpoint: every governed write after it changed exactly the policy
+    // the chain holds and produced the next one, ending at the current policy. An out-of-band edit before or between them breaks the chain, so a
+    // later governed write never launders it; the drift stays visible until a person re-baselines.
+    const accepted = (cp: AuditCheckpoint) => {
+      let chain = cp.policyDigest;
+      for (const change of governed) if (change.sequence > cp.head.sequence) { if (change.before !== chain) return false; chain = change.after; }
+      return chain === context.policyDigest;
+    };
     if (!compared.every(accepted)) return this.result(scopeId, 'policy-changed', 'policy', head, exported);
     if (compared.some(cp => cp.producersDigest !== context.producersDigest)) return this.result(scopeId, 'producers-changed', 'producers', head, exported);
     return this.result(scopeId, 'match', 'verified', head, exported);
@@ -116,10 +125,13 @@ export class AuditCheckpointApplication {
    * possible wipe can be re-based; a broken chain, truncation, limit or unknown state cannot. One transaction appends a sealed marker that
    * carries the reason and supersedes earlier markers from its sequence on, then the checkpoint over the current state.
    */
-  rebaseline(scopeId: string, context: AuditCheckpointContext, atMs: number, writer: AuditCheckpointWriter, reason: string): AuditVerification {
+  rebaseline(scopeId: string, context: AuditCheckpointContext, atMs: number, writer: AuditCheckpointWriter, reason: string, expected: AuditRebaselineExpectation): AuditVerification {
     return this.store.snapshot(true, () => {
       const verified = this.scan(scopeId, context);
       if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(verified.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
+      // The confirmation binds the shown state: any change of status, audit head, policy or producers since then refuses (the caller asks again).
+      if (verified.status !== expected.status || verified.head?.sequence !== expected.head?.sequence || verified.head?.digest !== expected.head?.digest
+        || context.policyDigest !== expected.policyDigest || context.producersDigest !== expected.producersDigest) throw new AuditError('AUDIT_REBASELINE_STALE');
       return this.append(scopeId, context, atMs, writer, verified, reason);
     });
   }

@@ -563,6 +563,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   AUDIT_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_CONFLICT', p, l) }) },
   AUDIT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_UNAVAILABLE', p, l) }) },
   AUDIT_REBASELINE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_REBASELINE_REFUSED', p, l) }) },
+  AUDIT_REBASELINE_STALE: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_REBASELINE_STALE', p, l) }) },
   AUDIT_REBASELINE_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_REBASELINE_INTERACTIVE_REQUIRED', p, l) }) },
   MANAGED_FILE_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_MISSING', p, l) }) },
   MANAGED_FILE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSAFE', p, l) }) },

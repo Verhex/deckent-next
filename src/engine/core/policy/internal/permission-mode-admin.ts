@@ -66,10 +66,10 @@ export class PermissionModeApplication {
       // grant, and a company deny cannot keep a person in a relaxed mode. The scope boundary still holds. Audited as `allow` with no rule id: a
       // grant always names its rule, so a null rule records that no grant was required.
       const decision: Pick<PolicyDecision, 'decision' | 'ruleId'> = command.mode === 'standart' && evaluated.reason !== 'SCOPE' ? { decision: 'allow' } : evaluated;
-      const record = (after: string | null, policyDigest?: string) => this.audit({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
+      const record = (after: string | null, digests?: { readonly policyDigestBefore: string | undefined; readonly policyDigest: string | undefined }) => this.audit({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
         principal: actor, policyRevision: policy.revision, atMs: this.now(), subject: { kind: 'permission-mode-change', requested: command.mode, previous: before.mode,
           decision: { effect: decision.decision, ruleId: decision.ruleId ?? null }, bindingsRevision: { before: bindings.revision, after },
-          askEdits: { requested: askEdits, previous: before.askEdits }, ...(policyDigest ? { policyDigest } : {}) } });
+          askEdits: { requested: askEdits, previous: before.askEdits }, ...(digests?.policyDigest ? { policyDigest: digests.policyDigest, ...(digests.policyDigestBefore ? { policyDigestBefore: digests.policyDigestBefore } : {}) } : {}) } });
       // FA-SESSION (owner 2026-10-07): full access for this terminal session only is the same grant decision, recorded as its own kind; nothing
       // is written, so the stored mode — the next launch's — stays the person's last normal one.
       const session = command.session ? (() => {
@@ -100,7 +100,7 @@ export class PermissionModeApplication {
       const next = bindingsFileSchema.parse({ schemaVersion: 3, revision: chainAuthorityRevision('permission-mode-bindings:1', 'm', bindings.revision, body), ...body });
       const after = permissionModeView(resolvePolicyBindings(snapshot.policy, next), principal, command.scopeId);
       // No record, no change: the audit event is durable before the file is replaced.
-      return { write: { beforePublish: () => record(next.revision, governedPolicyDigest(snapshot.policy, next)), policy: null, bindings: next, order: 'policy-first' as const }, result: Object.freeze({ ...after, previous: before.mode, changed: true }) };
+      return { write: { beforePublish: () => record(next.revision, { policyDigestBefore: governedPolicyDigest(snapshot.policy, snapshot.bindings), policyDigest: governedPolicyDigest(snapshot.policy, next) }), policy: null, bindings: next, order: 'policy-first' as const }, result: Object.freeze({ ...after, previous: before.mode, changed: true }) };
     });
   }
 }
