@@ -209,7 +209,7 @@ function pinnedTools(tools: readonly McpLiveTool[]): ReadonlyMap<string, PinnedT
 }
 /** SEP-2243 HeaderMismatch (Streamable HTTP; the SDK does not export its constant). */
 const HEADER_MISMATCH = -32020;
-/** The SDK's own post-send structured-result checks (client 2.2.0 `callTool`): missing (-32600), nonconforming or unvalidatable (-32602). */
+/** The SDK's own post-send structured-result checks (client 2.3.1 `callTool`): missing (-32600), nonconforming or unvalidatable (-32602). */
 const OUTPUT_SCHEMA_FAILURE = /^(?:Tool .+ has an output schema but did not return structured content|Structured content does not match the tool's output schema|Failed to validate structured content)/su;
 
 /**

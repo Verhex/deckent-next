@@ -52,6 +52,6 @@ describe('MCP SDK ajv stub against the installed SDK', () => {
   it('the guard refuses the SDK\'s cf-worker provider if anything bundles it (installed SDK)', async () => {
     const { violations } = await bundle(true, `${ENTRY}\n${CF_WORKER}`);
     expect(violations).toEqual([expect.stringMatching(/^bundle input node_modules\/@modelcontextprotocol\/server\/dist\/cfWorkerProvider-/u),
-      expect.stringMatching(/^embedded @cfworker\/json-schema@4\.1\.1 in @modelcontextprotocol\/server@2\.2\.0/u)]);
+      expect.stringMatching(/^embedded @cfworker\/json-schema@4\.1\.1 in @modelcontextprotocol\/server@2\.3\.1/u)]);
   }, 60_000);
 });
