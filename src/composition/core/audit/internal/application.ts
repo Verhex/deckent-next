@@ -1,12 +1,12 @@
 import { hostname, userInfo } from 'node:os';
-import { auditVerifyQuerySchema, type AuditVerification } from '#domain/index.js';
+import { AuditError, auditRebaselineCommandSchema, auditVerifyQuerySchema, type AuditVerification } from '#domain/index.js';
 import { AuditCheckpointCycleError, AuditCheckpointApplication, auditScopeRecorded, auditPolicyDigest, auditProducersDigest, authorizeApproval, coreApprovalAssuranceInventory } from '#engine/index.js';
-import { openReadOnlyAuditStore, openSqliteAuditStore, openLocalIntegrityAuthority, LOCAL_AUTHENTICATOR_INVENTORY } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openReadOnlyAuditStore, openSqliteAuditStore, openLocalIntegrityAuthority, LOCAL_AUTHENTICATOR_INVENTORY } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 const unavailable = (scopeId: string, reason: AuditVerification['reason'] = 'unavailable'): AuditVerification =>
   Object.freeze({ schemaVersion: 1, scopeId, status: 'unknown', reason, head: null, checkpoint: null });
 const producersDigest = () => auditProducersDigest({ authenticators: LOCAL_AUTHENTICATOR_INVENTORY, assurance: coreApprovalAssuranceInventory() });
@@ -47,4 +47,26 @@ export async function checkpointConfiguredAudit(root: string, installationId: st
     return scopes.map(scopeId => app.checkpoint(scopeId, context, Date.now(), writer));
   } catch (error) { throw error instanceof AuditCheckpointCycleError ? error : new AuditCheckpointCycleError('unavailable'); }
   finally { store?.close(); }
+}
+/**
+ * The explicit operator re-baseline: approval-decide authority on `audit-rebaseline` (on the AI floor), a witnessed human terminal and one
+ * y/N on the current state. Only a policy/producer drift or a possible wipe is re-based; the engine re-checks it inside the write.
+ */
+export async function rebaselineConfiguredAudit(root: string, input: unknown, options: ConfigLoadOptions,
+  confirm: (current: AuditVerification) => Promise<boolean>): Promise<AuditVerification | null> {
+  try {
+    const command = auditRebaselineCommandSchema.parse(input), context = await loadConfiguredScopeContext(root, command.scopeId, options, 'write');
+    authorizeApproval(context.document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
+    if (localPrincipalChannel() === 'mcp' || localPrincipalPeer() || !await attestLocalInteractiveTerminal()) throw ErrorRegistry.createError('AUDIT_REBASELINE_INTERACTIVE_REQUIRED');
+    if (!context.installationId) throw new AuditError('AUDIT_UNAVAILABLE');
+    const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile), store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
+    try {
+      const app = new AuditCheckpointApplication(store, integrity, context.config.audit), scoped = { installationId: context.installationId,
+        policyDigest: auditPolicyDigest(context.document), producersDigest: producersDigest() }, current = app.verify(command.scopeId, scoped);
+      if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(current.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
+      if (!await confirm(current)) return null;
+      return app.rebaseline(command.scopeId, scoped, Date.now(), { principal: { issuer: context.principal.issuer, subject: context.principal.subject },
+        policyRevision: context.document.revision }, command.reason);
+    } finally { store.close(); }
+  } catch (error) { throw queryFailure(error); }
 }

@@ -5,7 +5,7 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { type AuditEvent } from '#domain/index.js';
-import { AuditApplication, sealAuditRecord, AuditCheckpointApplication, AuditCheckpointMonitor, auditPolicyDigest, auditProducersDigest } from '#engine/index.js';
+import { AuditApplication, sealAuditRecord, AuditCheckpointApplication, AuditCheckpointMonitor, auditPolicyDigest, auditProducersDigest, PermissionModeApplication } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { CORE_SCHEMA } from '#platform/core/config/index.js';
 import { SqliteAuditStore, openReadOnlyAuditStore } from '#adapters/core/audit-store/index.js';
@@ -265,4 +265,64 @@ it('a service monitor that has not run, or verified no scope, is never ready', a
 it('checkpoints cannot be disabled or skipped by configuration', () => {
   for (const checkpointIntervalMs of [0, -1, 999, null, false]) expect(CORE_SCHEMA.safeParse({ audit: { checkpointIntervalMs } }).success, String(checkpointIntervalMs)).toBe(false);
   for (const limit of [{ maxRecords: 0 }, { maxScopes: 0 }, { pageSize: 0 }, { enabled: false }, { skip: true }]) expect(CORE_SCHEMA.safeParse({ audit: limit }).success, JSON.stringify(limit)).toBe(false);
+});
+
+const operator = { principal: { issuer: 'local-os', subject: 'owner' }, policyRevision: 'p' };
+it.each(['every row', 'the tail'])('an explicit re-baseline after a possible wipe (%s) is audited with its reason, continues the chain and still fails an older witness', async rows => {
+  const f = await fixture();
+  try {
+    f.audit.record(event('s', 1)); const first = f.app.checkpoint('s', context, 10, writer).checkpoint!;
+    f.audit.record(event('s', 2)); const witness = f.app.checkpoint('s', context, 12, writer).checkpoint!;
+    f.db.exec(`DROP TRIGGER audit_checkpoints_no_delete; DELETE FROM audit_checkpoints${rows === 'the tail' ? ' WHERE sequence=2' : ''}`);
+    expect(f.app.verify('s', context).status).toBe('possible-wipe');
+    const rebased = f.app.rebaseline('s', context, 20, operator, 'restored host after disk failure');
+    expect(rebased).toMatchObject({ status: 'match', reason: 'verified' });
+    const marker = f.audit.list('s', rebased.head!.sequence - 1, 1)[0]!;
+    expect(marker.event).toMatchObject({ principal: operator.principal, subject: { kind: 'audit-checkpoint', rebaseline: { reason: 'restored host after disk failure' } } });
+    expect(f.app.verify('s', context)).toMatchObject({ status: 'match' });
+    f.audit.record(event('s', 3)); expect(f.app.checkpoint('s', context, 21, writer).status).toBe('match');
+    expect(f.app.verify('s', context).status).toBe('match');
+    expect(f.app.verify('s', context, witness).status).not.toBe('match');
+    if (rows === 'every row') expect(f.app.verify('s', context, first).status).not.toBe('match');
+  } finally { f.store.close(); }
+});
+
+it('re-baseline accepts an out-of-band policy drift only explicitly, and refuses healthy, broken or truncated history without writing', async () => {
+  const f = await fixture();
+  try {
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
+    expect(() => f.app.rebaseline('s', context, 11, operator, 'nothing to do')).toThrow(expect.objectContaining({ code: 'AUDIT_REBASELINE_REFUSED' }));
+    const drift = { ...context, policyDigest: auditPolicyDigest({ revision: 'p', grants: ['edited by hand'] }) };
+    expect(f.app.verify('s', drift).status).toBe('policy-changed'); expect(f.app.checkpoint('s', drift, 11, writer).status).toBe('policy-changed');
+    expect(f.app.rebaseline('s', drift, 12, operator, 'reviewed hand edit').status).toBe('match');
+    expect(f.app.verify('s', drift).status).toBe('match'); expect(f.app.verify('s', context).status).toBe('policy-changed');
+    const events = f.audit.list('s', 0, 100).length;
+    f.db.exec('DROP TRIGGER audit_events_no_delete; DELETE FROM audit_events WHERE sequence=1');
+    expect(() => f.app.rebaseline('s', drift, 13, operator, 'hide it')).toThrow(expect.objectContaining({ code: 'AUDIT_INTEGRITY' }));
+    expect(f.db.prepare('SELECT count(*) AS n FROM audit_events').get()?.n).toBe(events - 1);
+  } finally { f.store.close(); }
+});
+
+it.skipIf(process.platform === 'win32')('a governed /mode change through the real authority writer keeps verify at match; a later hand edit reads policy-changed', async () => {
+  const f = await fixture();
+  try {
+    const actor = { issuer: 'host', subject: '1000' }, principal = { ...actor, id: 'os:1000', assurance: 'os-user' as const, scopeIds: ['s'] };
+    const policyPath = join(f.root, 'policy.json'), bindingsPath = join(f.root, 'bindings.json');
+    await writeFile(policyPath, JSON.stringify({ schemaVersion: 2, revision: 'p1', roles: [], restrictions: [], separationOfDuties: [], grants: [{ id: 'mode', effect: 'allow',
+      actions: ['set'], scopes: ['s'], principals: [actor], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] }), { mode: 0o600 });
+    await writeFile(bindingsPath, JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [], modes: [] }), { mode: 0o600 });
+    const source = new FilePolicySource({ path: policyPath, bindingsPath, ownerUid: userInfo().uid, maxBytes: 65536 });
+    const contextOf = async () => ({ ...context, policyDigest: auditPolicyDigest(await source.load()) });
+    const before = await contextOf(); f.audit.record(event('s', 1)); expect(f.app.checkpoint('s', before, 10, writer).status).toBe('match');
+    const modes = new PermissionModeApplication(source, audit => { f.audit.record(audit); }, () => 11);
+    await modes.set(principal, { schemaVersion: 1, scopeId: 's', mode: 'full-auto', expectedRevision: 'p1+b1' });
+    const governed = await contextOf();
+    expect(governed.policyDigest).not.toBe(before.policyDigest);
+    expect(f.audit.list('s', 0, 100).map(record => record.event.subject).find(subject => subject.kind === 'permission-mode-change')).toMatchObject({ policyDigest: governed.policyDigest });
+    expect(f.app.verify('s', governed)).toMatchObject({ status: 'match', reason: 'verified' });
+    expect(f.app.checkpoint('s', governed, 12, writer).status).toBe('match');
+    const bindings = JSON.parse(await readFile(bindingsPath, 'utf8'));
+    await writeFile(bindingsPath, JSON.stringify({ ...bindings, modes: [] }));
+    expect(f.app.verify('s', await contextOf()).status).toBe('policy-changed');
+  } finally { f.store.close(); }
 });

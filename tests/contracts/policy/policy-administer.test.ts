@@ -8,7 +8,7 @@ import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, ope
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, POLICY_ADMINISTER_OPERATION,
   evaluatePolicy, type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
-import { ApprovalApplication, AuditApplication, AuthorityDocumentTarget, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization,
+import { ApprovalApplication, AuditApplication, auditPolicyDigest, AuthorityDocumentTarget, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization,
   PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 
@@ -90,6 +90,8 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
       operation: { id: 'policy.administer', version: 1 }, commandId: 'c1', approvalId: first.approval.approvalId, decider: f.me,
       revision: { before: 'p1+b1', after: settled.status === 'settled' ? settled.version : '' }, counts: { grantsAdded: 1, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 } } });
     expect((await readdir(f.archive)).filter(name => name.startsWith('k-'))).toHaveLength(1);
+    // AUDIT-CHECKPOINT: the event seals the audit digest of exactly the policy a load now returns, so a checkpoint accepts this governed change.
+    expect(changes[0]!.subject).toMatchObject({ policyDigest: auditPolicyDigest(await f.source.load()) });
     // Replay of the same command answers the settled outcome; nothing changes twice.
     expect(await f.admin.submit(f.command('c1', addRead('share', other)))).toEqual(settled);
     expect(f.events().filter(event => event.subject.kind === 'authority-change')).toHaveLength(1);

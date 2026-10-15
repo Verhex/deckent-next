@@ -5,6 +5,9 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { processReady } from '../../fixtures/process-readiness.js';
+import { CONFIG_VALUE_CHOICES } from '#platform/core/config-fields/index.js';
+/** The smallest `mcp.responseMaxBytes` preset an operator can select must still carry tools/list (so the catalog cannot outgrow it silently). */
+const SMALLEST_PRESET = (CONFIG_VALUE_CHOICES['mcp.responseMaxBytes'] as { presets: readonly number[] }).presets[0]!;
 
 const roots: string[] = [], children: ChildProcessWithoutNullStreams[] = [];
 const mcp = resolve('dist/composition/core/mcp/internal/entry.js');
@@ -85,7 +88,7 @@ function assertVocabularyResult(value: unknown) {
 }
 
 it('caps actual compiled stdio JSON-RPC lines for initialize, tools list, protocol errors, and surface tool errors', async () => {
-  const cap = 131_072, f = await fixture(cap), raw = await launch(f.root, f.env);
+  const cap = SMALLEST_PRESET, f = await fixture(cap), raw = await launch(f.root, f.env);
   raw.send(initialize('initialize-id'));
   expect(decode(await raw.next('MCP_INITIALIZE_TIMEOUT'), cap)).toMatchObject({ id: 'initialize-id', result: expect.any(Object) });
   raw.send(initialized);
@@ -108,7 +111,7 @@ it('caps actual compiled stdio JSON-RPC lines for initialize, tools list, protoc
 }, 15_000);
 
 it('caps the supported 2026 envelope codec for discovery and an enveloped tools-list request', async () => {
-  const cap = 131_072, f = await fixture(cap), raw = await launch(f.root, f.env);
+  const cap = SMALLEST_PRESET, f = await fixture(cap), raw = await launch(f.root, f.env);
   raw.send({ jsonrpc: '2.0', id: 'modern-discover-id', method: 'server/discover', params: { _meta: modernEnvelope } });
   expect(decode(await raw.next('MCP_MODERN_DISCOVER_TIMEOUT'), cap)).toMatchObject({ id: 'modern-discover-id', result: expect.any(Object) });
   raw.send({ jsonrpc: '2.0', id: 'modern-tools-list-id', method: 'tools/list', params: { _meta: modernEnvelope } });

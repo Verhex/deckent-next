@@ -416,6 +416,8 @@
   "error.POLICY_ADMINISTER_UNSUPPORTED": "This installation's policy (schema version 1) has no role bindings; policy administration needs policy version 2.",
   "error.INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED": "This installation grant requires approval, but there is no approval workflow for it yet. It is refused, not granted.",
   "error.AUDIT_INVALID": "The audit event is not a valid bounded summary; nothing was recorded and no effect was applied.",
+  "error.AUDIT_REBASELINE_REFUSED": "Only a policy or producer drift, or a possible wipe, can be re-baselined. A broken chain, truncation, a verification limit or an unknown state needs a restore or an investigation; nothing was written.",
+  "error.AUDIT_REBASELINE_INTERACTIVE_REQUIRED": "An audit re-baseline needs an interactive terminal and a y/N answer from the person running deckent audit rebaseline; MCP, the SDK and AI actors cannot re-baseline. Nothing was written.",
   "error.AUDIT_INTEGRITY": "Audit evidence could not be verified: a record, its row or the sequence of records was altered.",
   "error.AUDIT_CONFLICT": "An audit event with this id already exists with different content; nothing was recorded.",
   "error.AUDIT_UNAVAILABLE": "The audit record could not be written, so the decision was not applied; check the ledger and retry.",

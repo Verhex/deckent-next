@@ -112,7 +112,8 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'cli.graphInputMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'cli.invocationInputMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'mcp.inputMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
-  'mcp.responseMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
+  // Smallest preset must carry the whole tools/list answer (66,181 bytes at the pre-beta wave); a test pins it.
+  'mcp.responseMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [131072, 1048576, 16777216, 67108864, 536870912] },
   'mcp.maxConcurrentCalls': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
   'mcp.maxServers': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
   'service.identity.scopeId': { kind: 'reference', source: 'scopes' },

@@ -1,19 +1,22 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
+import { DatabaseSync } from 'node:sqlite';
+import * as adapters from '#adapters/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { auditCheckpointFixture } from '../support/audit-checkpoint.js';
 import { verifyAudit, type AuditVerifyQuery } from '../../../src/index.js';
-import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
+import { checkpointConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 
 const roots: string[] = [];
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share read-only verification/export; policy rewrite is visible on every surface', async () => {
   const f = await auditCheckpointFixture(); roots.push(f.root); const query: AuditVerifyQuery = { schemaVersion: 1, scopeId: 's' };
@@ -89,4 +92,34 @@ it('a throwing verifier, an unverified scope and an unavailable result are never
     let json = ''; await runKernelCommand(['doctor', '--json'], { root, env, verifyAudit, stdout: { write: value => { json += value; } }, stderr: quiet });
     expect(JSON.parse(json), name).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: name === 'unverified' ? 'no-checkpoint-yet' : 'unavailable' } });
   }
+});
+
+it.skipIf(process.platform !== 'linux')('deckent audit rebaseline: AI and unwitnessed callers are refused, a declined card writes nothing, an accepted one is audited and verify matches', async () => {
+  const f = await auditCheckpointFixture(); roots.push(f.root); const query: AuditVerifyQuery = { schemaVersion: 1, scopeId: 's' };
+  const decide = { id: 'rebaseline', effect: 'allow', actions: ['decide'], scopes: ['s'], principals: f.document.grants[0]!.principals, resource: { kind: 'approval', ids: ['audit-rebaseline'] } };
+  await writeFile(f.policyPath, JSON.stringify({ ...f.document, grants: [...f.document.grants, decide] }));
+  expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('match');
+  await writeFile(f.policyPath, JSON.stringify({ ...f.document, grants: [...f.document.grants, decide, { ...decide, id: 'hand-edit', resource: { kind: 'approval', ids: ['other'] } }] }));
+  expect((await verifyAudit(f.root, query, f.options)).status).toBe('policy-changed');
+  const command = { schemaVersion: 1, scopeId: 's', reason: 'reviewed the hand edit with the security lead' };
+  const ledger = f.ledger, events = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => JSON.parse(String(row['record'])).event); } finally { db.close(); } };
+  const before = events().length; let asked = 0; const confirm = async () => { asked++; return false; };
+  // AI (MCP actor): the AI floor refuses the re-baseline authority even with a granted decide cell; no card is shown.
+  await expect(adapters.withMcpPrincipal(() => rebaselineConfiguredAudit(f.root, command, f.options, confirm))).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  // No witnessed interactive terminal (this test process): refused before any card.
+  await expect(rebaselineConfiguredAudit(f.root, command, f.options, confirm)).rejects.toMatchObject({ code: 'AUDIT_REBASELINE_INTERACTIVE_REQUIRED' });
+  expect(asked).toBe(0); expect(events()).toHaveLength(before);
+  vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  expect(await rebaselineConfiguredAudit(f.root, command, f.options, confirm)).toBeNull();
+  expect(asked).toBe(1); expect(events()).toHaveLength(before); expect((await verifyAudit(f.root, query, f.options)).status).toBe('policy-changed');
+  // The CLI card: y re-baselines (exit 0), the marker carries the person's reason and principal, and verify matches again.
+  let card = '', out = '';
+  expect(await main(['audit', 'rebaseline', '--scope', 's', '--reason', command.reason], { root: f.root, env: f.options.env, rebaselineAudit: rebaselineConfiguredAudit,
+    stdin: Readable.from(['y\n']) as never, stdout: { write: value => { out += value; } }, stderr: { write: value => { card += value; } } })).toBe(0);
+  expect(card).toContain('policy changed'); expect(card).toContain(command.reason); expect(out).toContain('re-baselined');
+  const marker = events().at(-1);
+  expect(marker).toMatchObject({ principal: { subject: String(process.getuid!()) }, subject: { kind: 'audit-checkpoint', rebaseline: { reason: command.reason } } });
+  expect(await verifyAudit(f.root, query, f.options)).toMatchObject({ status: 'match' });
+  expect(await main(['audit', 'rebaseline', '--scope', 's', '--reason', 'again'], { root: f.root, env: f.options.env, rebaselineAudit: rebaselineConfiguredAudit,
+    stdin: Readable.from(['y\n']) as never, stdout: { write() {} }, stderr: { write() {} } })).not.toBe(0);
 });

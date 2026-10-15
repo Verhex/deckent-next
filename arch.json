@@ -729,7 +729,8 @@
         "src/engine/core/supervisor",
         "src/engine/core/provider-spend",
         "src/domain/core/primitives",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/engine/core/audit"
       ],
       "plan": "SECURITY"
     },
@@ -3041,7 +3042,8 @@
         "src/composition/core/scoped-request",
         "src/composition/core/policy",
         "src/composition/core/root",
-        "src/composition/core/query-errors"
+        "src/composition/core/query-errors",
+        "src/platform/core/errors"
       ],
       "plan": "SECURITY"
     }

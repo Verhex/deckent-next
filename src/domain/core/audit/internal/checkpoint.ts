@@ -13,6 +13,9 @@ export const auditVerificationSchema = z.object({ schemaVersion: z.literal(1), s
   status: z.enum(['match', 'truncated', 'possible-wipe', 'policy-changed', 'producers-changed', 'chain-broken', 'unknown']),
   reason: z.enum(['verified', 'no-checkpoint-yet', 'unavailable', 'limit', 'foreign-witness', 'key-unavailable', 'integrity', 'head-missing', 'checkpoints-missing', 'policy', 'producers']),
   head: z.object({ sequence: counterSchema, digest }).strict().nullable(), checkpoint: auditWitnessSchema.nullable() }).strict().readonly();
+/** The explicit operator re-baseline command: the scope and the person's own reason (sealed into the marker event). */
+export const auditRebaselineCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  reason: z.string().trim().min(1).max(1024) }).strict().readonly();
 export type AuditCheckpoint = z.infer<typeof auditCheckpointSchema>;
 export type AuditWitness = z.infer<typeof auditWitnessSchema>;
 export type AuditVerifyQuery = z.infer<typeof auditVerifyQuerySchema>;

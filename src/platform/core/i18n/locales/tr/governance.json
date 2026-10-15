@@ -416,6 +416,8 @@
   "error.POLICY_ADMINISTER_UNSUPPORTED": "Bu kurulumun policy'si (şema sürümü 1) rol bağlaması içermiyor; policy yönetimi policy sürüm 2 ister.",
   "error.INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED": "Bu kurulum izni onay gerektiriyor, ama henüz bir onay akışı yok. Yetki verilmiyor, reddediliyor.",
   "error.AUDIT_INVALID": "Denetim olayı geçerli bir sınırlı özet değil; kayıt yazılmadı ve etki uygulanmadı.",
+  "error.AUDIT_REBASELINE_REFUSED": "Yalnız policy veya üretici değişimi ya da olası silme yeniden baseline alınabilir. Kırık zincir, kesilme, doğrulama sınırı veya bilinmeyen durum geri yükleme ya da inceleme gerektirir; hiçbir şey yazılmadı.",
+  "error.AUDIT_REBASELINE_INTERACTIVE_REQUIRED": "Audit yeniden baseline etkileşimli terminal ve deckent audit rebaseline çalıştıran kişinin y/N yanıtını gerektirir; MCP, SDK ve AI aktörleri yapamaz. Hiçbir şey yazılmadı.",
   "error.AUDIT_INTEGRITY": "Denetim kanıtı doğrulanamadı: bir kayıt, satırı ya da kayıt sırası değiştirilmiş.",
   "error.AUDIT_CONFLICT": "Bu kimlikli denetim olayı farklı içerikle zaten var; kayıt yazılmadı.",
   "error.AUDIT_UNAVAILABLE": "Denetim kaydı yazılamadığı için karar uygulanmadı; ledger'ı kontrol edip yeniden deneyin.",

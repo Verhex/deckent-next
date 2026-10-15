@@ -3,7 +3,7 @@ import { isAiPrincipal } from '#domain/core/principal/index.js';
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
  * upgrade/rollback (each also needs `policy.administer`, floored below; deciding the card is a second, independent route).
  */
-const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade']);
+const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade', 'audit-rebaseline']);
 /**
  * Y4 v1: security invariants, never policy-grant data. Read-only metadata stays available. Every route that can widen an AI actor's own
  * (or a controlled principal's) authority is here: policy administration (grants, role bindings, delegation cells, restrictions, SoD,

@@ -61,7 +61,8 @@ export class AuditCheckpointApplication {
     }
     const latest = checkpoints.at(-1), exported = latest ? exportAuditCheckpoint(latest) : null;
     const anchors = [...checkpoints, ...(witness ? [witness.checkpoint] : [])].sort((a, b) => a.head.sequence - b.head.sequence);
-    let sequence = 0, digest = sha256(encodeCommandProjection('audit-head:1', { scopeId })), index = 0; const markers = new Map<number, number>();
+    let sequence = 0, digest = sha256(encodeCommandProjection('audit-head:1', { scopeId })), index = 0, governed: { sequence: number; digest: string } | null = null;
+    const markers = new Map<number, number>();
     const checkHeads = () => { while (index < anchors.length && anchors[index]!.head.sequence === sequence) {
       if (anchors[index++]!.head.digest !== digest) throw new AuditError('AUDIT_INTEGRITY');
     } };
@@ -73,7 +74,14 @@ export class AuditCheckpointApplication {
         if (sequence >= this.limits.maxRecords) return this.result(scopeId, 'unknown', 'limit', { sequence, digest }, exported);
         digest = sha256(encodeCommandProjection('audit-link:1', { previousDigest: digest, record })); sequence = record.sequence; checkHeads();
         const subject = record.event.subject;
-        if (subject.kind === 'audit-checkpoint') { if (markers.has(subject.checkpointSequence)) throw new AuditError('AUDIT_INTEGRITY'); markers.set(subject.checkpointSequence, sequence); }
+        if (subject.kind === 'audit-checkpoint') {
+          // An explicit re-baseline supersedes every earlier marker from its sequence on; any other repeated marker is a forged history.
+          if (subject.rebaseline) { for (const key of [...markers.keys()]) if (key >= subject.checkpointSequence) markers.delete(key); }
+          else if (markers.has(subject.checkpointSequence)) throw new AuditError('AUDIT_INTEGRITY');
+          markers.set(subject.checkpointSequence, sequence);
+        }
+        // A governed policy change (policy.administer, /mode, installer) seals the digest of the policy it produced.
+        if ((subject.kind === 'authority-change' || subject.kind === 'permission-mode-change') && subject.policyDigest) governed = { sequence, digest: subject.policyDigest };
       }
     }
     const head = Object.freeze({ sequence, digest });
@@ -83,7 +91,9 @@ export class AuditCheckpointApplication {
     if (markers.size > checkpoints.length) return this.result(scopeId, 'possible-wipe', 'checkpoints-missing', head, exported);
     if (!latest && !witness) return this.result(scopeId, 'unknown', 'no-checkpoint-yet', head);
     const compared = [...(latest ? [latest] : []), ...(witness ? [witness.checkpoint] : [])];
-    if (compared.some(cp => cp.policyDigest !== context.policyDigest)) return this.result(scopeId, 'policy-changed', 'policy', head, exported);
+    // The current policy is accepted when a checkpoint holds it, or when the latest governed change after that checkpoint produced exactly it.
+    const accepted = (cp: AuditCheckpoint) => cp.policyDigest === context.policyDigest || (governed !== null && governed.sequence > cp.head.sequence && governed.digest === context.policyDigest);
+    if (!compared.every(accepted)) return this.result(scopeId, 'policy-changed', 'policy', head, exported);
     if (compared.some(cp => cp.producersDigest !== context.producersDigest)) return this.result(scopeId, 'producers-changed', 'producers', head, exported);
     return this.result(scopeId, 'match', 'verified', head, exported);
   }
@@ -95,12 +105,31 @@ export class AuditCheckpointApplication {
     try { return this.store.snapshot(true, () => {
       const verified = this.scan(scopeId, context);
       if (verified.status !== 'match' && verified.reason !== 'no-checkpoint-yet') return verified;
+      const previous = verified.checkpoint?.checkpoint;
+      if (previous && previous.head.sequence === verified.head!.sequence) return verified;
+      return this.append(scopeId, context, atMs, writer, verified);
+    }); } catch (error) { return this.result(scopeId, error instanceof AuditError && error.code === 'AUDIT_INTEGRITY' ? 'chain-broken' : 'unknown',
+      error instanceof AuditError && error.code === 'AUDIT_INTEGRITY' ? 'integrity' : 'unavailable'); }
+  }
+  /**
+   * The explicit operator re-baseline (the caller has authorized it and taken a witnessed human y/N): only a policy or producer drift or a
+   * possible wipe can be re-based; a broken chain, truncation, limit or unknown state cannot. One transaction appends a sealed marker that
+   * carries the reason and supersedes earlier markers from its sequence on, then the checkpoint over the current state.
+   */
+  rebaseline(scopeId: string, context: AuditCheckpointContext, atMs: number, writer: AuditCheckpointWriter, reason: string): AuditVerification {
+    return this.store.snapshot(true, () => {
+      const verified = this.scan(scopeId, context);
+      if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(verified.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
+      return this.append(scopeId, context, atMs, writer, verified, reason);
+    });
+  }
+  /** Marker ids carry the audit head they follow, so a sequence re-used after a re-baseline never collides with a superseded marker. */
+  private append(scopeId: string, context: AuditCheckpointContext, atMs: number, writer: AuditCheckpointWriter, verified: AuditVerification, reason?: string): AuditVerification {
       const previous = verified.checkpoint?.checkpoint, head = verified.head!;
-      if (previous && previous.head.sequence === head.sequence) return verified;
       if (previous && atMs < previous.atMs) throw new AuditError('AUDIT_INVALID');
       const sequence = (previous?.sequence ?? 0) + 1, previousDigest = previous ? auditCheckpointDigest(previous) : null;
-      this.audit.record({ schemaVersion: 1, eventId: `audit-checkpoint-${sequence}`, scopeId, principal: writer.principal, policyRevision: writer.policyRevision,
-        atMs, subject: { kind: 'audit-checkpoint', checkpointSequence: sequence, previousDigest } });
+      this.audit.record({ schemaVersion: 1, eventId: `audit-${reason ? 'rebaseline' : 'checkpoint'}-${sequence}-${head.sequence}`, scopeId, principal: writer.principal,
+        policyRevision: writer.policyRevision, atMs, subject: { kind: 'audit-checkpoint', checkpointSequence: sequence, previousDigest, ...(reason ? { rebaseline: { reason } } : {}) } });
       const [marker] = this.audit.list(scopeId, head.sequence, 1);
       if (!marker || marker.sequence !== head.sequence + 1 || marker.event.subject.kind !== 'audit-checkpoint') throw new AuditError('AUDIT_CONFLICT');
       const value = { schemaVersion: 1 as const, ...context, scopeId, sequence, atMs, previousDigest, keyId: this.integrity.keyId,
@@ -108,7 +137,5 @@ export class AuditCheckpointApplication {
       const checkpoint = auditCheckpointSchema.parse({ ...value, mac: this.integrity.sign(projection(value)) });
       this.store.appendCheckpoint(checkpoint);
       return this.result(scopeId, 'match', 'verified', value.head, exportAuditCheckpoint(checkpoint));
-    }); } catch (error) { return this.result(scopeId, error instanceof AuditError && error.code === 'AUDIT_INTEGRITY' ? 'chain-broken' : 'unknown',
-      error instanceof AuditError && error.code === 'AUDIT_INTEGRITY' ? 'integrity' : 'unavailable'); }
   }
 }

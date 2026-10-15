@@ -81,7 +81,8 @@ describe.skipIf(process.platform === 'win32')('permission mode write authority (
     expect(file.schemaVersion).toBe(3);
     expect(file.modes).toEqual([theirs]);
     expect(f.events().map(event => event.subject)).toEqual([{ kind: 'permission-mode-change', requested: 'standart', previous: 'full-auto',
-      decision: { effect: 'allow', ruleId: null }, bindingsRevision: { before: 'b1', after: file.revision }, askEdits: { requested: false, previous: false } }]);
+      decision: { effect: 'allow', ruleId: null }, bindingsRevision: { before: 'b1', after: file.revision }, askEdits: { requested: false, previous: false },
+      policyDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }]); // AUDIT-CHECKPOINT: the governed write seals its resulting policy digest
   });
 
   it('MODES-3: the "ask for edits too" preference needs no grant, is kept across a mode change, and a v2 ask entry upgrades to it', async () => {

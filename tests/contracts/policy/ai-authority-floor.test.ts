@@ -24,6 +24,7 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['MCP capability / trust grant card', 'approval', 'policy-mcp-capability', 'decide'],
   ['template upgrade / rollback card', 'approval', 'policy-template-upgrade', 'decide'],
   ['audit checkpoint re-baseline', 'audit', 's', 'rebaseline'],
+  ['audit checkpoint re-baseline command (its authority cell)', 'approval', 'audit-rebaseline', 'decide'],
   ['secret-gate exclusion globs', 'config', 'project:execution.secretGate.allowPatternPaths', 'write'],
   ['secret-gate acknowledged deny paths', 'config', 'global:execution.secretGate.acknowledgedDenyPaths', 'write'],
   ['secret-gate section', 'config', 'project:execution.secretGate', 'write'],

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AuthorityDocumentStore } from '#engine/core/policy/index.js';
+import { governedPolicyDigest, type AuthorityDocumentStore } from '#engine/core/policy/index.js';
 import { firstRunPolicyTemplate, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
@@ -269,7 +269,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const beforePublish = () => input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
       template: { id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, commandId: key,
       inputDigest: digestOf(canonical(again.next as object)), before: first.revision!, after: revisionOf(again.next)!,
-      grantsAdded: again.result.rules.length, atMs: input.now() }));
+      grantsAdded: again.result.rules.length, atMs: input.now(), policyDigest: governedPolicyDigest(again.next, snapshot.bindings) }));
     return { write: { policy: again.next, bindings: null, order: 'policy-first', beforePublish }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
   }, key);
 }

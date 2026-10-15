@@ -32,6 +32,7 @@ export type { RunLifecycleHandler } from '#surfaces/core/cli-terminal/index.js';
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
 export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, TerminalLaunchContext {
   verifyAudit?: import('./audit.js').AuditVerifyHandler;
+  rebaselineAudit?: import('./audit.js').AuditRebaselineHandler;
   executeBackup?: import('./backup.js').BackupHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;

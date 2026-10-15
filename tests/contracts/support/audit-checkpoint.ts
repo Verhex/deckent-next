@@ -25,6 +25,6 @@ export async function auditCheckpointFixture() {
   try { new AuditApplication(store, integrity).record({ schemaVersion: 1, eventId: 'event', scopeId: 's', principal: owner,
     policyRevision: 'p', atMs: 10, subject: { kind: 'full-access-turn', turnId: 'turn', sessionId: null, decision: { effect: 'allow', ruleId: 'inspect-audit' } } }); }
   finally { store.close(); }
-  return { root, data, options, policyPath, document, installationId: identity.installationId };
+  return { root, data, options, policyPath, document, installationId: identity.installationId, ledger: opened.path };
 }
 

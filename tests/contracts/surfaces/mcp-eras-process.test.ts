@@ -18,7 +18,7 @@ afterEach(async () => {
 async function project() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-eras-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home, { mode: 0o700 }); await mkdir(join(root, '.deckent'), { mode: 0o700 });
-  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ mcp: { responseMaxBytes: 131_072, inputMaxBytes: 65_536, maxConcurrentCalls: 2 } }), { mode: 0o600 });
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ mcp: { responseMaxBytes: 131_072, /* smallest mcp.responseMaxBytes preset */ inputMaxBytes: 65_536, maxConcurrentCalls: 2 } }), { mode: 0o600 });
   return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' } };
 }
 

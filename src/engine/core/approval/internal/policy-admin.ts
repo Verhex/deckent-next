@@ -3,7 +3,7 @@ import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalEr
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
 import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
-import { AuthorityChangeError, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
+import { AuthorityChangeError, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
 import { EffectApplication, EffectTargetError, OperationPolicyAuthorization, type EffectAdmission, type EffectApplyRequest, type EffectApprovalContext,
   type EffectApprovalGate, type EffectOutcome, type EffectStore, type EffectTarget } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
@@ -19,7 +19,7 @@ export interface AuthorityTargetHooks {
   /** Throws when the touched rules exceed the bounding principal's authority on exactly this snapshot. */
   bound(snapshot: Policy, touched: readonly DelegatedRule[]): void;
   /** Records the applied change before any file changes (no record, no change). */
-  audit(change: { readonly before: string; readonly after: string; readonly counts: PolicyChangePlan['counts'] }): void;
+  audit(change: { readonly before: string; readonly after: string; readonly counts: PolicyChangePlan['counts']; readonly policyDigest: string }): void;
 }
 const refuse = (cause?: unknown): never => { throw new EffectTargetError('EFFECT_TARGET_REJECTED', cause === undefined ? undefined : { cause }); };
 
@@ -52,7 +52,8 @@ export class AuthorityDocumentTarget implements EffectTarget {
         try { this.hooks.bound(current, plan.touched); } catch (error) { return refuse(error); }
         // The audit runs after the writer's invariant check and before any temporary file, archive record or rename: its failure leaves
         // nothing behind, so it is a clean refusal (no record, no change), never an unknown outcome.
-        const beforePublish = () => { try { this.hooks.audit({ before: current.revision, after, counts: plan.counts }); } catch (error) { refuse(error); } };
+        const policyDigest = governedPolicyDigest(policy ?? snapshot.policy, bindings ?? snapshot.bindings);
+        const beforePublish = () => { try { this.hooks.audit({ before: current.revision, after, counts: plan.counts, policyDigest }); } catch (error) { refuse(error); } };
         return { write: { policy, bindings, order: plan.order, beforePublish }, result: { version: after } };
       }, request.idempotencyKey);
     } catch (error) {
@@ -155,7 +156,7 @@ export class PolicyAdministrationApplication {
         const { requester, decider, approvalId, inputDigest } = submission;
         if (!requester || !decider || !approvalId || !inputDigest) throw new ApprovalError('APPROVAL_MISSING');
         deps.audit(authorityChangeAuditEvent({ scopeId: command.scopeId, requester, decider, atMs: deps.clock.sample().wallMs, operation: POLICY_ADMINISTER_OPERATION.operation,
-          commandId: command.commandId, approvalId, inputDigest, before: change.before, after: change.after, counts: change.counts }));
+          commandId: command.commandId, approvalId, inputDigest, before: change.before, after: change.after, counts: change.counts, policyDigest: change.policyDigest }));
       },
     });
     return new EffectApplication({ async resolve(ref) { return ref.id === POLICY_ADMINISTER_OPERATION.operation.id && ref.version === 1 ? POLICY_ADMINISTER_OPERATION : null; } },
