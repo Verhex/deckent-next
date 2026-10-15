@@ -5,8 +5,12 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** The ordered steps of one shard; `stopOnFailure` steps gate everything after them (no build, no tests). */
-export function shardPlan(index, count) {
+/**
+ * The ordered steps of one shard; `stopOnFailure` steps gate everything after them (no build, no tests). `test:host` covers the lead's
+ * host tooling (.agents/refactor), which runs on the Linux/WSL host only; on Windows it is reported as not run instead of failing on
+ * POSIX paths (first hosted shard run 38804553793).
+ */
+export function shardPlan(index, count, platform = process.platform) {
   if (!Number.isSafeInteger(count) || count < 1 || !Number.isSafeInteger(index) || index < 1 || index > count) throw new Error(`invalid shard ${index}/${count}`);
   const node = (...args) => ({ command: 'node', args });
   const npm = name => ({ command: 'npm', args: ['run', name] });
@@ -16,7 +20,7 @@ export function shardPlan(index, count) {
     { name: 'native test variants', ...node('scripts/test-native.mjs', '--build-test-variants'), stopOnFailure: true },
     { name: `vitest shard ${index}/${count}`, ...node('node_modules/vitest/vitest.mjs', 'run', '--shard', `${index}/${count}`) },
     ...(index === 1 ? [{ name: 'lint:checks', ...npm('lint:checks') }, { name: 'test:native', ...npm('test:native') },
-      { name: 'test:host', ...npm('test:host') }, { name: 'smoke', ...npm('smoke') }] : []),
+      ...(platform === 'win32' ? [] : [{ name: 'test:host', ...npm('test:host') }]), { name: 'smoke', ...npm('smoke') }] : []),
   ];
 }
 
@@ -35,6 +39,7 @@ export function runShard(plan, execute) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [index, count] = process.argv.slice(2).map(Number);
+  if (index === 1 && process.platform === 'win32') process.stdout.write('platform-shard: test:host not run on Windows (host tooling is Linux/WSL only)\n');
   const { exitCode, outcomes } = runShard(shardPlan(index, count), step => {
     process.stdout.write(`platform-shard: ${step.name}\n`);
     // npm is a .cmd shim on Windows, which Node only spawns through a shell; the arguments are fixed literals above.

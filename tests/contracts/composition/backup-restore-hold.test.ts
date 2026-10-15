@@ -69,7 +69,7 @@ async function heldAgainstNormalAdmission(f: Fixture) {
     .rejects.toMatchObject({ code: 'BACKUP_RESTORE_HOLD' });
 }
 
-it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] an injected failure at every publication step leaves a durable hold that refuses normal admission until a rerun restore completes', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] an injected failure at every publication step leaves a durable hold that refuses normal admission until a rerun restore completes', async () => {
   const f = await fixture(); gate.under = [f.root, f.data];
   let failAt = 1;
   for (; ; failAt++) {
@@ -92,7 +92,7 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
   expect(failAt - 1).toBeGreaterThanOrEqual(18);
 }, 300_000);
 
-it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a rerun restore of a held installation keeps the layout of the interrupted attempt, not the archived map (Astra 2471 R1 + R2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] a rerun restore of a held installation keeps the layout of the interrupted attempt, not the archived map (Astra 2471 R1 + R2)', async () => {
   const f = await fixture(), path = join(f.root, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
   config.layout.resources = { artifacts: 'artifacts-v2' }; await writeFile(path, JSON.stringify(config));
   await rename(join(f.data, 'artifacts'), join(f.data, 'artifacts-v2')); clearConfigCache(); gate.under = [f.root, f.data];
@@ -136,7 +136,7 @@ async function walkFiles(directory: string): Promise<string[]> {
   return out;
 }
 const stagesIn = async (directory: string) => (await readdir(directory)).filter(name => name.startsWith('.backup-restore-'));
-it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] an interrupted restore stages in the private .deckent area without the decrypted key; doctor names leftovers and the next restore removes them (S1 D4)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] an interrupted restore stages in the private .deckent area without the decrypted key; doctor names leftovers and the next restore removes them (S1 D4)', async () => {
   const f = await fixture(), key = await readFile(join(f.data, 'approvals/authority.key')), area = join(f.root, '.deckent');
   gate.under = [f.root, f.data]; gate.failAt = 2; gate.seen = 0;
   const refused = await restore(f).then(() => null, (error: { code?: string; cause?: unknown }) => error); gate.failAt = 0;
@@ -167,7 +167,7 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
   await startsAndStops(f);
 }, 60_000);
 
-it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a .deckent readable by others (0755) restores in place without a manual step; one others can write is refused before staging with the path and chmod 700 (S1 D2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] a .deckent readable by others (0755) restores in place without a manual step; one others can write is refused before staging with the path and chmod 700 (S1 D2)', async () => {
   const f = await fixture(), area = join(f.root, '.deckent');
   await chmod(area, 0o755); await writeFile(join(f.root, '.deckent/config.json'), '{broken'); clearConfigCache();
   await restore(f); expect((await lstat(area)).mode & 0o777).toBe(0o755); clearConfigCache();
