@@ -3,7 +3,7 @@
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
 
 This page says plainly what Deckent does not do yet, what has not been tried, and what you should do instead. It
-describes the live pre-release `1.0.0-alpha.38`. A limit leaves this page when the change that closes it has landed and been
+describes the pre-release `1.0.0-alpha.39`. A limit leaves this page when the change that closes it has landed and been
 seen working, not before. Each item gives **what** the limit is, **the impact** on you and, where one exists, a
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
@@ -53,8 +53,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   audit records are sealed with a key stored in your account, the interactive-terminal check proves a terminal rather than
   a person, and your account can write the policy file. Where your account can use Docker or sudo, such an agent can in
   practice do anything. *Impact:* approvals and policy hold against Deckent's own sandboxed workers, not against other
-  agents you run as yourself. Before beta, an audit checkpoint lets a separate device detect a changed policy or a cut
-  audit trail; hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
+  agents you run as yourself. Audit checkpoints (`deckent audit verify`) show a changed policy or producer set and a cut
+  or wiped audit trail; undoing both local histories together on your own account is only caught by a checkpoint export
+  kept on a separate device. Hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
   separate account without Docker or sudo, and keep Deckent's workers in their sandbox.
 
 ## Providers and subscriptions
@@ -101,14 +102,15 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   (`ADOPTION_BASE_CHANGED`). Deckent never rebases or merges for you. *Workaround:* deliver again on the current base.
 - **A patch made on a stale checkout can fail to apply.** The delivery check stops it before anything is written.
   *Workaround:* re-run the request on the current source.
-- **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step that needs the adoption's
-  command id, and a terminal adoption generates an id it does not show. *Workaround:* deliver and adopt from the command
-  line with ids you choose (see [Get your first job done](../README.md#get-your-first-job-done)); or move the branch back with
-  Git yourself, using the commit shown in the `Adopted:` line.
+- **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step; the terminal shows the
+  adoption's command id and the `deckent task integration-rollback --adoption-command-id` hint. *Workaround:* run that
+  command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line.
 - **After a delivery the terminal window does not reopen** for that task, although some messages say `/deliver` opens it
   again. *Workaround:* adopt from the command line, as in the previous item.
-- **The terminal adoption window cannot pick a verification Run.** If your installation requires a verified Run before
-  adopting, adopt from the command line with `--verification-run`.
+- **The adoption window cannot pre-filter verification Runs by commit.** It lists accepted verification Runs of the configured
+  kind; one that verified a different commit is refused at adoption and the window returns to the choice.
+- **A verification Run cannot be created from the terminal.** *Workaround:* run the `deckent run create ...
+  --delivery-command-id <id>` command the window shows from another shell, then press `r` in the window.
 - **By default adoption rests on recorded acceptance, not verification.** The `Adopted:` line says so. *Workaround:* configure
   `execution.adoption.verification` so a verification Run is required.
 - **The approval card for creating a Run does not fill every line.** Its Risk and Undo lines say the tool did not classify or

@@ -3,7 +3,7 @@
 [English](known-limits.md) · [README](../README.tr.md) · [Mimariye genel bakış](architecture-overview.tr.md)
 
 Bu sayfa Deckent'in henüz neyi yapmadığını, neyin denenmediğini ve onun yerine ne yapmanız gerektiğini açıkça söyler.
-Yayında olan ön sürümü, `1.0.0-alpha.38`'i anlatır. Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
+`1.0.0-alpha.39` ön sürümünü anlatır. Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
 çalıştığı görüldüğünde çıkar, daha önce değil. Her madde sınırın **ne** olduğunu, size **etkisini** ve varsa bir
 **yolunu** verir. [CHANGELOG.md](../CHANGELOG.md) her sürümün o günkü sınırlarını listeler.
 
@@ -52,8 +52,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   kayıtları hesabınızda duran bir anahtarla mühürlenir, etkileşimli terminal denetimi bir insanı değil bir terminali
   kanıtlar ve policy dosyasını hesabınız yazabilir. Hesabınız Docker ya da sudo kullanabiliyorsa böyle bir ajan pratikte
   her şeyi yapabilir. *Etkisi:* onaylar ve policy Deckent'in kendi kum havuzundaki işçilerine karşı korur, sizin adınıza
-  çalıştırdığınız başka ajanlara karşı korumaz. Beta öncesi bir denetim kontrol noktası, değişen policy'yi ya da kesilen
-  denetim kaydını ayrı bir cihazın fark etmesini sağlar; donanım anahtarıyla imzalı policy ve onaylar beta sonrası gelir.
+  çalıştırdığınız başka ajanlara karşı korumaz. Denetim kontrol noktaları (`deckent audit verify`) değişen policy'yi ya da
+  üretici kümesini ve kesilen ya da silinen denetim kaydını gösterir; iki yerel geçmişin kendi hesabınızda birlikte geri
+  alınmasını yalnız ayrı bir cihazda saklanan kontrol noktası dışa aktarımı yakalar. Donanım anahtarıyla imzalı policy ve
+  onaylar beta sonrası gelir.
   *Çözüm:* başka yapay zekâ ajanlarını Docker ya da sudo yetkisi olmayan ayrı bir hesapta çalıştırın, Deckent işçilerini
   kum havuzunda tutun.
 
@@ -99,14 +101,15 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   rebase ya da merge yapmaz. *Yol:* güncel tabanda yeniden teslim edin.
 - **Bayat bir checkout'ta üretilen yama uygulanmayabilir.** Teslim kontrolü, bir şey yazılmadan önce durdurur.
   *Yol:* isteği güncel kaynakla yeniden çalıştırın.
-- **Terminalde geri alma penceresi yok.** Dala almayı geri almak, dala almanın komut kimliğini isteyen bir komut satırı
-  adımıdır ve terminaldeki dala alma gösterilmeyen bir kimlik üretir. *Yol:* teslimi ve dala almayı seçtiğiniz kimliklerle
-  komut satırından yapın ([Adım adım ilk işiniz](../README.tr.md#adım-adım-ilk-işiniz)); ya da dalı `Benimsendi:`
-  satırındaki commit ile Git'te kendiniz geri taşıyın.
+- **Terminalde geri alma penceresi yok.** Dala almayı geri almak bir komut satırı adımıdır; terminal dala almanın komut
+  kimliğini ve `deckent task integration-rollback --adoption-command-id` ipucunu gösterir. *Yol:* o komutu çalıştırın ya da
+  dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın.
 - **Teslimden sonra terminal penceresi o görev için yeniden açılmaz;** bazı mesajlar `/deliver`'ın yeniden açtığını söylese de.
   *Yol:* önceki maddedeki gibi komut satırından dala alın.
-- **Terminaldeki dala alma penceresi bir doğrulama Run'ı seçemez.** Kurulumunuz dala almadan önce doğrulanmış bir Run
-  istiyorsa komut satırından `--verification-run` ile dala alın.
+- **Dala alma penceresi doğrulama Run'larını commit'e göre önceden süzemez.** Yapılandırılmış türdeki kabul edilmiş
+  doğrulama Run'larını listeler; başka bir commit'i doğrulamış olan dala almada reddedilir ve pencere seçime döner.
+- **Doğrulama Run'ı terminalden oluşturulamaz.** *Yol:* pencerenin gösterdiği `deckent run create ... --delivery-command-id
+  <kimlik>` komutunu başka bir kabukta çalıştırın, sonra pencerede `r`'ye basın.
 - **Varsayılan olarak dala alma, doğrulamaya değil kayıtlı kabule dayanır.** `Benimsendi:` satırı bunu söyler.
   *Yol:* doğrulama Run'ı zorunlu olsun diye `execution.adoption.verification` ayarlayın.
 - **Run oluşturma onay kartı her satırı doldurmaz.** Risk ve Geri alma satırları aracın bunları sınıflandırmadığını ya da
