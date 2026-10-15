@@ -58,8 +58,12 @@ async function fixture(snapshot: RunSnapshot, grants: unknown[] = [], person = a
 }
 
 it('MCP is workload identity, including legacy/forged os-user assurance', () => {
-  const identity = withMcpPrincipal(() => readLocalOsIdentity());
-  expect(identity.issuer.endsWith('/mcp')).toBe(true); expect(identity.assurance).toBe('workload-verified');
+  // Native Windows has no OS-user identity to derive the MCP workload identity from: the read refuses, never a weaker identity.
+  if (process.platform === 'win32') expect(() => withMcpPrincipal(() => readLocalOsIdentity())).toThrow('AUTHENTICATION_REQUIRED');
+  else {
+    const identity = withMcpPrincipal(() => readLocalOsIdentity());
+    expect(identity.issuer.endsWith('/mcp')).toBe(true); expect(identity.assurance).toBe('workload-verified');
+  }
   expect(explicitDecisionGrant({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [grant('run', ['reserve'])] }, { ...ai, assurance: 'os-user' }, 's', 'run-decision', 'r', 'resume')).toBeNull();
 });
 it.each(['workload-verified', 'os-user'] as const)('MCP %s cannot resume progression failure via reserve permission', async assurance => {

@@ -238,11 +238,8 @@ function simulatedDocker(workspaceRoot: string, handoffInputs: readonly { target
   return { supervisor, calls };
 }
 
-it('needs-input → audited answer → generation 2 dispatches with the exact read-only answer mount and reaches acceptance (controlled Docker daemon)', async context => {
-  if (process.platform === 'win32') {
-    expect(() => simulatedDocker('C:\\fixture')).toThrow('SUPERVISOR_OPTIONS_INVALID');
-    context.skip('SUPERVISOR_OPTIONS_INVALID: POSIX Docker executable/path fixture; native Windows Docker not exercised');
-  }
+// The controlled daemon models a POSIX Docker host (unix socket, POSIX executable and mount paths); native Windows Docker is not exercised.
+it.skipIf(process.platform === 'win32')('[requires POSIX Docker daemon fixture] needs-input → audited answer → generation 2 dispatches with the exact read-only answer mount and reaches acceptance (controlled Docker daemon)', async () => {
   const f = await fixture(true), first = await f.reserve('task'); await f.evaluation.execute(await f.exit(first));
   await f.lifecycle.execute(await f.command('answer', { taskId: 'task', answer: 'Use EU' }));
   const workspaces = join(f.root, 'workspaces'); await mkdir(workspaces);
@@ -299,12 +296,8 @@ it('progression park audit failure rolls back and cannot consume a command or al
 });
 
 
-it.for(['writable-realized', 'foreign-scope', 'duplicate-target', 'arbitrary-target'] as const)(
-  'the answer mount refuses %s before worker start (controlled daemon)', async (kind, context) => {
-    if (process.platform === 'win32') {
-      expect(() => simulatedDocker('C:\\fixture')).toThrow('SUPERVISOR_OPTIONS_INVALID');
-      context.skip('SUPERVISOR_OPTIONS_INVALID: POSIX Docker fixture unavailable');
-    }
+it.skipIf(process.platform === 'win32').for(['writable-realized', 'foreign-scope', 'duplicate-target', 'arbitrary-target'] as const)(
+  '[requires POSIX Docker daemon fixture] the answer mount refuses %s before worker start (controlled daemon)', async kind => {
     const f = await fixture(), root = join(f.root, 'workspaces'), workspace = join(root, 'attempt'); await mkdir(workspace, { recursive: true });
     const receipt = await f.artifacts.put('s', Buffer.from('answer')), path = (await f.artifacts.prepareReadOnlyFile('s', receipt)).path;
     const input = { receipt: kind === 'foreign-scope' ? { ...receipt, scopeId: 'other' } : receipt, path,

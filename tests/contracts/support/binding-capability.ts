@@ -1,11 +1,12 @@
 import { localInstallationBindingSource } from '#adapters/index.js';
 import { resolveProductLayout } from '#platform/index.js';
+import { hostLayoutPlatform } from './host-platform.js';
 
-/** The binding this host reaches by the product's own capture (no machine-id parsing is copied into tests). */
+/** The binding this host reaches by the product's own capture (no machine-id parsing is copied into tests). This is what the doctor reports;
+ * on native Windows the capture reaches the weak location binding although no installation identity can be stored there. */
 export async function hostBindingStrength(): Promise<'machine' | 'weak' | 'unsupported' | 'probe-failed'> {
-  if (process.platform === 'win32') return 'unsupported';
   try {
-    const binding = await localInstallationBindingSource({ ...resolveProductLayout({ projectRoot: process.cwd() }), root: process.cwd() }).capture();
+    const binding = await localInstallationBindingSource({ ...resolveProductLayout({ projectRoot: process.cwd(), platform: hostLayoutPlatform() }), root: process.cwd() }).capture();
     return 'status' in binding ? 'unsupported' : binding.strength;
   } catch { return 'probe-failed'; }
 }
@@ -16,6 +17,8 @@ export async function hostBindingStrength(): Promise<'machine' | 'weak' | 'unsup
  * without a machine identity too (containers, the verify image).
  */
 export async function installationBindingNotRunReason(): Promise<string | null> {
+  // Native Windows: the identity file a binding protects needs managed private files, which the product does not support there.
+  if (process.platform === 'win32') return `INSTALLATION_BINDING_UNSUPPORTED: no installation binding on ${process.platform}`;
   const binding = await hostBindingStrength();
   if (binding === 'unsupported') return `INSTALLATION_BINDING_UNSUPPORTED: no installation binding on ${process.platform}`;
   return binding === 'probe-failed' ? 'INSTALLATION_BINDING_UNSUPPORTED: installation binding could not be probed' : null;
@@ -26,8 +29,8 @@ export async function installationBindingNotRunReason(): Promise<string | null> 
  * assert machine-digest behavior use it; the weak path has its own active tests on every posix host.
  */
 export async function machineBindingNotRunReason(): Promise<string | null> {
-  const binding = await hostBindingStrength();
-  if (binding === 'machine') return null;
-  return binding === 'weak' ? 'INSTALLATION_MACHINE_BINDING_UNAVAILABLE: no machine identity on this host (Linux: valid /etc/machine-id); the weak binding path runs instead'
-    : installationBindingNotRunReason();
+  const notRun = await installationBindingNotRunReason();
+  if (notRun !== null) return notRun;
+  return await hostBindingStrength() === 'machine' ? null
+    : 'INSTALLATION_MACHINE_BINDING_UNAVAILABLE: no machine identity on this host (Linux: valid /etc/machine-id); the weak binding path runs instead';
 }

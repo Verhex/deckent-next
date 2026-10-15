@@ -73,7 +73,7 @@ it.skipIf(process.platform !== 'linux')('a store the installation config already
   expect((await f.globalConfig()).secrets).toBeUndefined();
 }, 60_000);
 
-it('native Windows keeps the environment store until the OS keyring backend: the default is not offered', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: installation policy template needs POSIX layout and OS-user identity] native Windows keeps the environment store until the OS keyring backend: the default is not offered', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-secret-default-win-')); roots.push(root);
   const result = await applyPolicyTemplateInstallationWithSecretDefault(root, 'installation', { platform: 'win32', env: { USERPROFILE: root } });
   expect(result).toMatchObject({ status: 'installed', secretStore: { status: 'platform', backend: null } });

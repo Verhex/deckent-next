@@ -92,9 +92,12 @@ describe('scanWorkerTree', () => {
   it('matches deny paths case-insensitively, refuses special files and scans symlink target text', async () => {
     const root = await tree({ 'certs/SERVER.PEM': 'x', '.ENV': 'x', 'ok.txt': 'fine' });
     await symlink(`/run/${PROVIDER_TOKEN}`, join(root, 'link'));
-    await exec('mkfifo', [join(root, 'pipe')]);
-    await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: 4, findings: [{ path: '.ENV', rule: 'deny-path:.env' },
-      { path: 'certs/SERVER.PEM', rule: 'deny-path:**/*.pem' }, { path: 'link', rule: 'pattern:provider-token' }, { path: 'pipe', rule: 'unscannable:special-file' }] });
+    // A filesystem FIFO exists only on POSIX; native Windows still covers case-insensitive deny paths and symlink target text.
+    const fifo = process.platform !== 'win32';
+    if (fifo) await exec('mkfifo', [join(root, 'pipe')]);
+    const findings = [{ path: '.ENV', rule: 'deny-path:.env' }, { path: 'certs/SERVER.PEM', rule: 'deny-path:**/*.pem' }, { path: 'link', rule: 'pattern:provider-token' },
+      ...(fifo ? [{ path: 'pipe', rule: 'unscannable:special-file' }] : [])];
+    await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: findings.length, findings });
   });
   it('scans every view the worker receives: profile binds, mounted inputs, handoff files and the prompt dependency context', async () => {
     const known = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value: 'erp-hunter2-value' }]);
@@ -108,7 +111,7 @@ describe('scanWorkerTree', () => {
     expect(JSON.stringify(scan)).not.toContain('hunter2');
     await expect(scanWorkerTree(workerTreeViews(workspace, undefined, { inputs: [], handoffInputs: [] }), options, known)).resolves.toEqual({ status: 'clean' });
   });
-  it('rejects (never passes) when an entry cannot be read', async () => {
+  it.skipIf(process.platform === 'win32')('[requires POSIX file modes] rejects (never passes) when an entry cannot be read', async () => {
     const root = await tree({ 'secret.txt': `${PROVIDER_TOKEN}` });
     await chmod(join(root, 'secret.txt'), 0o000);
     await expect(scanWorkerTree(root, options)).rejects.toMatchObject({ code: 'EACCES' });

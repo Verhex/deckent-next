@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, basename } from 'node:path';
+import { basename, delimiter, dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 const exec = promisify(execFile), roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 describe('CS-1 production choice discovery', () => {
-  it('observes principal scopes, the policy company, identity profiles, layout key files and environment names without reading values', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: installation policy template needs POSIX layout and OS-user identity] observes principal scopes, the policy company, identity profiles, layout key files and environment names without reading values', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cs1-sources-')); roots.push(root);
     await applyPolicyTemplateInstallation(root, 'installation');
     const options = { env: { ...process.env, DECKENT_GLOBAL_HOME: join(root, 'global'), CS1_TEST_ENV: 'never-show-this-value' } };
@@ -31,7 +31,7 @@ describe('CS-1 production choice discovery', () => {
     expect(JSON.stringify(names)).not.toContain('never-show-this-value'); expect(JSON.stringify(await source.list('key-files', 'approvals.keyFile'))).not.toContain('secret key content');
     expect((await source.list('paths', 'layout.root')).some(choice => choice.value === root)).toBe(true);
   });
-  it('discovers executables and local branches and reads bounded pool records without a ledger writer', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] discovers executables and local branches and reads bounded pool records without a ledger writer', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cs1-git-')); roots.push(root);
     const limits = { timeoutMs: 5000, outputBytes: 65536, maxEntries: 16 }, git = (await discoverConfigExecutables('git', process.env, limits))[0]!;
     expect(git).toBeTruthy();
@@ -70,9 +70,9 @@ it('probes at most the bounded number of PATH directories and reads a bounded nu
     const root = await mkdtemp(join(tmpdir(), 'cs1-bounds-')); roots.push(root);
     const real = (await discoverConfigExecutables('git', process.env, { timeoutMs: 5000 }))[0]!;
     const filler = Array.from({ length: CONFIG_DISCOVERY_BOUNDS.pathDirectories }, (_, index) => join(root, `empty-${index}`));
-    const beyond = { ...process.env, PATH: [...filler, real.slice(0, real.lastIndexOf('/'))].join(':') };
+    const beyond = { ...process.env, PATH: [...filler, dirname(real)].join(delimiter) };
     expect(await discoverConfigExecutables('git', beyond, { timeoutMs: 5000 })).toEqual([]);
-    const within = { ...process.env, PATH: [...filler.slice(1), real.slice(0, real.lastIndexOf('/'))].join(':') };
+    const within = { ...process.env, PATH: [...filler.slice(1), dirname(real)].join(delimiter) };
     expect(await discoverConfigExecutables('git', within, { timeoutMs: 5000 })).toEqual([real]);
     const many = join(root, 'many'); await mkdir(many);
     for (let index = 0; index < 40; index++) await mkdir(join(many, `dir-${index}`));

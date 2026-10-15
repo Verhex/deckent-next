@@ -466,7 +466,7 @@ it.skipIf(process.platform !== 'linux')('governed runtime SDK revisions reach re
   } finally { await stopTestRuntimeService(service); }
 });
 
-it.each([false, true])('privacy acquisition refusal crosses configured legacy/v5=%s with no POST or durable hold', async v5 => {
+it.skipIf(process.platform === 'win32').each([false, true])('[unsupported on Windows: managed private ledger files] privacy acquisition refusal crosses configured legacy/v5=%s with no POST or durable hold', async v5 => {
   // Only the external acquisition is replaced: actual composition, policy, activation,
   // engine acquisition error boundary and SQLite reservation store remain in use.
   const f = await fixture(true, true, true, v5, true);

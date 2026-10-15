@@ -67,24 +67,24 @@ async function cli(f: Awaited<ReturnType<typeof fixture>>, flags: readonly strin
   const code = await main(['monitor', ...flags], { root: f.current.dir, env: f.options.env, stdout, stderr, inspectMonitor });
   expect({ code, error }).toEqual({ code: 0, error: '' }); return output;
 }
-it('SDK current selection never opens the configured second project or poisoned ledger', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] SDK current selection never opens the configured second project or poisoned ledger', async () => {
   const f = await fixture(), snapshot = await inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'current' });
   untouched(f.other);
   expect(snapshot.sourcesRead).toEqual(['current']); expect(snapshot.installs.map(install => install.id)).toEqual(['current']);
   expect(snapshot.installs[0]!.status).toBe('available'); expect(trace.databases).toContain(f.current.ledger);
 });
-it('invalid SDK queries fail before any configuration or source access', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] invalid SDK queries fail before any configuration or source access', async () => {
   const f = await fixture();
   await expect(inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'other', extra: true } as never)).rejects.toThrow();
   expect(trace.fs).toEqual([]); expect(trace.databases).toEqual([]);
 });
-it.each(['--json', '--once', 'pipe'] as const)('CLI %s forwards selection before collection', async mode => {
+it.skipIf(process.platform === 'win32').each(['--json', '--once', 'pipe'] as const)('[unsupported on Windows: managed private ledger files] CLI %s forwards selection before collection', async mode => {
   const f = await fixture(), output = await cli(f, [...(mode === 'pipe' ? [] : [mode]), '--install', 'current']);
   if (mode === '--json') expect(JSON.parse(output)).toMatchObject({ sourcesRead: ['current'], installs: [{ id: 'current', status: 'available' }] });
   else expect(output).toContain('current');
   expect(trace.databases).toContain(f.current.ledger); untouched(f.other);
 });
-it('interactive CLI collection keeps the selection and stops on abort', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] interactive CLI collection keeps the selection and stops on abort', async () => {
   const f = await fixture(), controller = new AbortController(); let output = '';
   const stdout = Object.assign(new Writable({ write(chunk: Buffer, _encoding, done) { output += chunk.toString(); done(); } }), { isTTY: true, columns: 120, rows: 40 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
@@ -94,19 +94,19 @@ it('interactive CLI collection keeps the selection and stops on abort', async ()
   finally { controller.abort(); expect(await running).toBe(0); }
   untouched(f.other);
 });
-it('slash monitor forwards selection before collection', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] slash monitor forwards selection before collection', async () => {
   const f = await fixture();
   expect((await monitorSlash(f.current.dir, '--install current', { inspectMonitor }, f.options, 'en', 120)).join('\n')).toContain('current');
   expect(trace.databases).toContain(f.current.ledger); untouched(f.other);
 });
-it('an exact external id opens only that ledger and retains its existing diagnostic', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] an exact external id opens only that ledger and retains its existing diagnostic', async () => {
   const f = await fixture(), snapshot = await inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'other' });
   expect(snapshot.sourcesRead).toEqual(['other']); expect(snapshot.installs).toMatchObject([{ id: 'other', status: 'unavailable' }]);
   expect(snapshot.installs[0]!.diagnostics.some(code => code.startsWith('ledger-unavailable:'))).toBe(true);
   expect(trace.databases).toContain(f.other.ledger); expect(trace.databases).not.toContain(f.current.ledger);
   expect(trace.fs.filter(path => path.startsWith(f.current.data + '/'))).toEqual([]);
 });
-it('unknown ids collect nothing, while omission retains all Next sources and proves the poison would be touched', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] unknown ids collect nothing, while omission retains all Next sources and proves the poison would be touched', async () => {
   const f = await fixture(), empty = await inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'missing' });
   expect(empty).toMatchObject({ sourcesRead: [], installs: [] }); expect(trace.databases).toEqual([]); untouched(f.other);
   const all = await inspectMonitor(f.current.dir, f.options);
@@ -115,12 +115,12 @@ it('unknown ids collect nothing, while omission retains all Next sources and pro
   // Display-only filtering cannot rewrite the access-boundary evidence.
   expect((await loadMonitorSurface()).filterSnapshot(all, { install: 'current' }).sourcesRead).toEqual(['current', 'other']);
 });
-it('an explicitly selected same-path alias keeps its id and collects once', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] an explicitly selected same-path alias keeps its id and collects once', async () => {
   const f = await fixture(), snapshot = await inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'alias' });
   expect(snapshot.sourcesRead).toEqual(['alias']); expect(snapshot.installs.map(install => install.id)).toEqual(['alias']);
   expect(trace.databases.filter(path => path === f.current.ledger)).toHaveLength(1); untouched(f.other);
 });
-it('MCP validates the same query, advertises read-only hints and returns the selected source evidence', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] MCP validates the same query, advertises read-only hints and returns the selected source evidence', async () => {
   const f = await fixture(); let calls = 0;
   const server = createMcpServer({ async inspectRun() { return {}; }, async inspectInventory() { return {}; },
     inspectMonitor: (query: MonitorQuery) => { calls++; return inspectMonitor(f.current.dir, f.options, query); } },

@@ -70,7 +70,7 @@ describe('config record editors: actual config publication', () => {
     await f.port.open('execution.workTargets.targets', 'project'); await f.port.commit((await f.port.preview('0', null)).token);
     expect((await f.document()).execution).not.toHaveProperty('workTargets'); expect((await f.document()).execution.docker).toEqual(execution.docker); expect(f.audits).toHaveLength(3);
   });
-  it('layout resources: select registry resource and relative location, edit, remove; refuse fixed resources and escaping paths', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: layout resource editor resolves POSIX layout paths] layout resources: select registry resource and relative location, edit, remove; refuse fixed resources and escaping paths', async () => {
     const f = await fixture(); await f.port.open('layout.resources', 'project'); await f.port.draft(null, { resource: 'memory' });
     await f.port.commit((await f.port.preview(null, { resource: 'memory', path: 'brain/memory.db' })).token);
     expect((await f.document()).layout.resources).toEqual({ memory: 'brain/memory.db' });

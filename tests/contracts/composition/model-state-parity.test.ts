@@ -63,7 +63,7 @@ async function fileNames(root: string): Promise<string[]> {
 }
 
 describe('one invocable-now model across monitor, /config, /model and /provider', () => {
-  it.each(['active', 'stale-activation', 'not-carried', 'delivery-unfit', 'no-credential', 'local-zero-tariff', 'budget', 'tariff'] as const)('%s: exact same decision on all four surfaces, without model effects or state creation', async scenario => {
+  it.skipIf(process.platform === 'win32').each(['active', 'stale-activation', 'not-carried', 'delivery-unfit', 'no-credential', 'local-zero-tariff', 'budget', 'tariff'] as const)('[unsupported on Windows: managed private ledger files] %s: exact same decision on all four surfaces, without model effects or state creation', async scenario => {
       const f = await fixture(), config = await configOf(f), profile = config.provider_invocation_profiles.profiles[0];
       if (scenario === 'stale-activation') config.provider_catalog.revision = 'catalog-2';
       if (scenario === 'not-carried') { const db = new DatabaseSync(f.ledger); try { db.exec('DELETE FROM model_activations'); } finally { db.close(); } }
@@ -90,7 +90,7 @@ describe('one invocable-now model across monitor, /config, /model and /provider'
         accounts: f.rows('SELECT * FROM provider_spend_accounts'), audit: f.rows('SELECT * FROM audit_events') }).toEqual(before);
     });
 
-  it('regression: 13 API models connected through the /provider producer are invocable in the monitor, with no catalog activation rows', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] regression: 13 API models connected through the /provider producer are invocable in the monitor, with no catalog activation rows', async () => {
     const f = await fixture();
     const extra = [
       { id: 'config', effect: 'allow', actions: ['write'], scopes: 'all', principals: me, resource: { kind: 'config', ids: 'all' } },

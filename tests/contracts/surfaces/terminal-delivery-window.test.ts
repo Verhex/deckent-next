@@ -12,6 +12,7 @@ import { terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
+import { homeEnv } from '../support/host-platform.js';
 
 // TESLIM-PENCERESI (owner 2026-10-14): "bu teslimleri neden CLI'dan yapıyorum; … bana sorulması gerekiyorsa terminalden bana sorsun".
 // The real Workline on an in-memory TTY with a recording port that calls the window's answer exactly where the production confirmation port
@@ -148,7 +149,7 @@ describe('verification candidates (cli-terminal port, read-only)', () => {
       interactiveDelivery: () => ({}), ...(reader ? { inspectRun: async (_root: string, query: { runId: string }) => {
         inspected.push(query.runId); return { schemaVersion: 1, layout: {}, run: views[query.runId] ? { runId: query.runId, tasks: views[query.runId] } : null };
       } } : {}) };
-    return { port: terminalDeliveryPort(root, handlers as never, { env: { HOME: join(root, 'home') } })!, inventoryCalls, inspected };
+    return { port: terminalDeliveryPort(root, handlers as never, { env: homeEnv(join(root, 'home')) })!, inventoryCalls, inspected };
   }
 
   it('lists only accepted one-task Runs of the configured kind; never the delivering Run, another kind, two tasks or an unfinished/failed task', async () => {

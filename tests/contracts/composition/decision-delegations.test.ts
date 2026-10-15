@@ -5,7 +5,7 @@ import { withMcpPrincipal } from '#adapters/index.js';
 import { firstRunPolicyTemplate } from '#domain/index.js';
 import { inspectConfiguredDecisionDelegations, changeConfiguredDecisionDelegation } from '#composition/core/approvals/index.js';
 import { me, runtime } from '../support/mcp-capability-harness.js';
-it('SDK listing reads only; a non-TTY grant is refused before confirmation, identity/approval creation or policy write', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] SDK listing reads only; a non-TTY grant is refused before confirmation, identity/approval creation or policy write', async () => {
   const f = await runtime();
   const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
     scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',

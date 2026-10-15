@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { expect, it } from 'vitest';
 
 // S6 structural guarantee: every way a worker is given a tree goes through the one gated composition (`executeConfiguredTask`). SDK
@@ -8,7 +8,7 @@ import { expect, it } from 'vitest';
 const ROOT = join(import.meta.dirname, '../../..');
 const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
   entry.isDirectory() ? sources(join(dir, entry.name)) : entry.name.endsWith('.ts') ? [join(dir, entry.name)] : []);
-const files = sources(join(ROOT, 'src')).map(path => ({ path: relative(ROOT, path), text: readFileSync(path, 'utf8') }));
+const files = sources(join(ROOT, 'src')).map(path => ({ path: relative(ROOT, path).split(sep).join('/'), text: readFileSync(path, 'utf8') }));
 const sites = (needle: RegExp) => files.filter(file => needle.test(file.text)).map(file => file.path).sort();
 const TASK = 'src/composition/core/execution/internal/task.ts';
 

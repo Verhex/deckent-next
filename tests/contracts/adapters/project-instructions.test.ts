@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,11 +6,15 @@ import { openProjectInstructionReader, previewProjectInstructions, PROJECT_INSTR
 import { snapshotKnownSecrets } from '#platform/index.js';
 import { projectSkeleton } from '#surfaces/core/project-instructions/index.js';
 const roots: string[] = [];
+// Native Windows has no POSIX owner or mode to verify a private trust directory: the reader refuses one there, and the product keeps consent
+// in the session instead (configured composition passes no directory). Tests that need no persisted consent open the reader that way.
+const persistedTrust = process.platform !== 'win32';
 async function fixture() {
   const folder = await mkdtemp(join(tmpdir(), 'instruction-')); roots.push(folder);
   const root = join(folder, 'project'), trust = join(folder, 'trust');
   await mkdir(root); await mkdir(trust, { mode: 0o700 });
-  return { root, trust, reader: await openProjectInstructionReader(root, trust) };
+  if (!persistedTrust) await expect(openProjectInstructionReader(root, trust)).rejects.toThrow('unsafe');
+  return { root, trust, reader: await openProjectInstructionReader(root, persistedTrust ? trust : null) };
 }
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 describe('workspace-root project instructions', () => {
@@ -22,7 +26,8 @@ describe('workspace-root project instructions', () => {
     await writeFile(join(f.root, 'AGENTS.md'), 'fallback');
     expect(await f.reader.inspect()).toMatchObject({ status: 'trust-required', source: { content: 'fallback' } });
     await writeFile(join(f.root, 'DECKENT.md'), 'primary');
-    expect(await f.reader.inspect()).toMatchObject({ source: { path: join(f.root, 'DECKENT.md'), bytes: 7, content: 'primary' } });
+    // The reader names the canonical root (a short 8.3 Windows temp name or a symlinked temp prefix resolves first).
+    expect(await f.reader.inspect()).toMatchObject({ source: { path: join(await realpath(f.root), 'DECKENT.md'), bytes: 7, content: 'primary' } });
     await writeFile(join(f.root, 'DECKENT.md'), '');
     expect(await f.reader.inspect()).toMatchObject({ source: { content: '', bytes: 0 } });
   });
@@ -35,13 +40,13 @@ describe('workspace-root project instructions', () => {
   });
   it('masks known values and credential shapes before even the trust preview', async () => {
     const f = await fixture(), secret = 'opaque-private-credential';
-    const reader = await openProjectInstructionReader(f.root, f.trust, snapshotKnownSecrets([{ name: 'DECKENT_TEST', value: secret }]));
+    const reader = await openProjectInstructionReader(f.root, persistedTrust ? f.trust : null, snapshotKnownSecrets([{ name: 'DECKENT_TEST', value: secret }]));
     await writeFile(join(f.root, 'DECKENT.md'), `Use ${secret}; password=very-secret-password`);
     const view = await reader.inspect();
     expect(JSON.stringify(view)).not.toContain(secret); expect(JSON.stringify(view)).not.toContain('very-secret-password');
     expect(view).toMatchObject({ status: 'trust-required', source: { bytes: Buffer.byteLength(`Use ${secret}; password=very-secret-password`) } });
   });
-  it('remembers consent by digest, asks again on change, and refuses stale digest acceptance', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: project instruction trust cache] remembers consent by digest, asks again on change, and refuses stale digest acceptance', async () => {
     const f = await fixture(); await writeFile(join(f.root, 'DECKENT.md'), 'one');
     const first = await f.reader.inspect(); if (!('source' in first)) throw new Error('source');
     expect(await f.reader.trust(first.source.digest)).toMatchObject({ status: 'ready' });
@@ -50,7 +55,7 @@ describe('workspace-root project instructions', () => {
     expect(await f.reader.trust(first.source.digest)).toMatchObject({ status: 'trust-required', source: { content: 'two' } });
     expect(await f.reader.inspect()).toMatchObject({ status: 'trust-required' });
   });
-  it('a cloned workspace with identical instructions cannot inherit consent or use its own trust record', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: project instruction trust cache] a cloned workspace with identical instructions cannot inherit consent or use its own trust record', async () => {
     const f = await fixture(); await writeFile(join(f.root, 'DECKENT.md'), 'same content');
     const first = await f.reader.inspect(); if (!('source' in first)) throw new Error('source'); await f.reader.trust(first.source.digest);
     const clone = join(f.root, 'clone'); await mkdir(clone); await writeFile(join(clone, 'DECKENT.md'), 'same content');

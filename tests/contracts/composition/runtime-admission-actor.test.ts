@@ -8,23 +8,25 @@ import { evaluatePolicy } from '#domain/index.js';
 // admitted with, never the finishing request's. Real channel context and real local identity; only the wait deadline is a fake that never fires.
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(value => { resolve = value; }); return { promise, resolve }; }
 const neverExpires = { wait: () => new Promise<void>(() => undefined) };
-const owner = readLocalOsIdentity();
+// The owner is read when a test runs, outside any request channel (not at collection: native Windows has no OS-user identity).
+const owner = () => readLocalOsIdentity();
 /** Only the owner holds the grant: an MCP actor must be refused, the owner allowed. */
-const policy = { schemaVersion: 1, revision: 'owner-only', restrictions: [],
-  grants: [{ id: 'owner-run', effect: 'allow', actions: ['create'], scopes: ['scope'], principals: [{ issuer: owner.issuer, subject: owner.subject }],
-    resource: { kind: 'run', ids: 'all' } }] };
-const decide = () => {
+const ownerOnly = ({ issuer, subject }: { issuer: string; subject: string }) => ({ schemaVersion: 1, revision: 'owner-only', restrictions: [],
+  grants: [{ id: 'owner-run', effect: 'allow', actions: ['create'], scopes: ['scope'], principals: [{ issuer, subject }],
+    resource: { kind: 'run', ids: 'all' } }] });
+const decide = (policy: ReturnType<typeof ownerOnly>) => () => {
   const actor = readLocalOsIdentity();
   return { issuer: actor.issuer, decision: evaluatePolicy(policy, { principal: { ...actor, scopeIds: ['scope'] }, scopeId: 'scope', action: 'create',
     resource: { kind: 'run', id: 'run-1' } }).decision };
 };
 
 async function queuedBehind(running: 'mcp' | undefined, queued: 'mcp' | undefined) {
+  const policy = ownerOnly(owner());
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1, admissionWaitMs: 60_000 }, () => {}, neverExpires);
   const first = deferred<void>(), second = deferred<void>();
   const holders = [first, second].map(gate => withLocalPrincipalChannel(running, () => lifecycle.admitBounded(() => gate.promise)));
   // Both request slots are taken: this request waits in the bounded admission queue.
-  const waiting = withLocalPrincipalChannel(queued, () => lifecycle.admitBounded(decide));
+  const waiting = withLocalPrincipalChannel(queued, () => lifecycle.admitBounded(decide(policy)));
   let started = false; void waiting.then(() => { started = true; });
   await new Promise(resolve => setImmediate(resolve)); expect(started).toBe(false);
   first.resolve(); // the running request finishes; its completion hands the slot to the waiter
@@ -32,10 +34,10 @@ async function queuedBehind(running: 'mcp' | undefined, queued: 'mcp' | undefine
   return result;
 }
 
-it('a queued MCP request runs as the MCP actor (refused without a named grant) after an owner request frees the slot', async () => {
-  expect(await queuedBehind(undefined, 'mcp')).toEqual({ issuer: `${owner.issuer}/mcp`, decision: 'deny' });
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: OS-user identity] a queued MCP request runs as the MCP actor (refused without a named grant) after an owner request frees the slot', async () => {
+  expect(await queuedBehind(undefined, 'mcp')).toEqual({ issuer: `${owner().issuer}/mcp`, decision: 'deny' });
 });
 
-it('a queued owner request runs as the owner (allowed) after an MCP request frees the slot', async () => {
-  expect(await queuedBehind('mcp', undefined)).toEqual({ issuer: owner.issuer, decision: 'allow' });
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: OS-user identity] a queued owner request runs as the owner (allowed) after an MCP request frees the slot', async () => {
+  expect(await queuedBehind('mcp', undefined)).toEqual({ issuer: owner().issuer, decision: 'allow' });
 });

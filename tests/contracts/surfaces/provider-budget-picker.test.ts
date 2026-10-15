@@ -10,7 +10,7 @@ import { ModelInvocableNowApplication, ProviderSpendError } from '#engine/index.
 import type { ModelReference } from '#domain/index.js';
 
 registerProviderConfig();
-it.each(['en', 'tr'] as const)('shows reservation USD and a ready alternative in %s without exposing private account totals', async locale => {
+it.skipIf(process.platform === 'win32').each(['en', 'tr'] as const)('[unsupported on Windows: managed private ledger files] shows reservation USD and a ready alternative in %s without exposing private account totals', async locale => {
   const f = await runtime({ noServer: true }), path = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
   const first = config.provider_invocation_profiles.profiles[0];
   const cheap = { ...first, id: 'cheap-profile', reference: { ...first.reference, modelId: 'cheap' } };

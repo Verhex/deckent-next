@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
@@ -11,13 +11,16 @@ import { lineInstructionContext, instructionModelContext, projectInstructionLabe
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 import { main } from '#surfaces/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { homeEnv } from '../support/host-platform.js';
 const roots: string[] = [], mounted: ReturnType<typeof mountWorkline>[] = [];
 const cleanup: (() => void)[] = [];
+// Native Windows cannot verify an owner-private trust directory: the product keeps consent in the session there (no directory).
+const persistedTrust = process.platform !== 'win32';
 async function fixture() {
   const folder = await mkdtemp(join(tmpdir(), 'instruction-window-')); roots.push(folder);
   const root = join(folder, 'project'), trust = join(folder, 'trust'); await mkdir(root); await mkdir(trust, { mode: 0o700 });
   await writeFile(join(root, 'DECKENT.md'), 'PROJECT-ONLY-CONTEXT');
-  const reader = await openProjectInstructionReader(root, trust);
+  const reader = await openProjectInstructionReader(root, persistedTrust ? trust : null);
   const port: ProjectInstructionPort = { ...reader, preview: async () => { throw new Error('unused'); }, initialize: async () => [] };
   return { root, trust, port };
 }
@@ -37,7 +40,7 @@ describe('project instruction trust on the real Ink workline', () => {
     view.stdin.write('\u001b'); await until(() => calls.length === 1, 'declined turn');
     expect(calls[0]).not.toContain('PROJECT-ONLY-CONTEXT'); expect(await f.port.inspect()).toMatchObject({ status: 'trust-required' });
   });
-  it('Down then Enter accepts exact content, persists its digest and changed content asks again before the next model turn', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: project instruction trust cache] Down then Enter accepts exact content, persists its digest and changed content asks again before the next model turn', async () => {
     const f = await fixture(), calls: string[] = [];
     const view = mountWorkline({ projectInstructions: { port: f.port, labels: projectInstructionLabels('en') }, completeTurn: async messages => { calls.push(JSON.stringify(messages)); return 'done'; } }); mounted.push(view);
     await settle(60); view.stdin.write('hello\r'); await until(() => view.stdout.frame.includes('Project instruction trust'), 'trust window');
@@ -46,7 +49,7 @@ describe('project instruction trust on the real Ink workline', () => {
     expect(await (await openProjectInstructionReader(f.root, f.trust)).inspect()).toMatchObject({ status: 'ready' });
     await settle(80); view.stdin.write('/context\r');
     await until(() => view.stdout.frame.includes('Project instructions:'), 'context source');
-    expect(view.stdout.frame).toContain(`${f.root}/DECKENT.md`); expect(calls).toHaveLength(1);
+    expect(view.stdout.frame).toContain(join(await realpath(f.root), 'DECKENT.md')); expect(calls).toHaveLength(1);
     await settle(80); await writeFile(join(f.root, 'DECKENT.md'), 'CHANGED-PROJECT'); view.stdin.write('second\r');
     await until(() => view.stdout.frame.includes('CHANGED-PROJECT'), 'changed trust window'); expect(calls).toHaveLength(1);
     view.stdin.write('\u001b'); await until(() => calls.length === 2, 'declined changed turn');
@@ -68,11 +71,11 @@ describe('project instruction trust on the real Ink workline', () => {
     const calls: string[] = []; let output = '';
     const stdout = new Writable({ write(chunk: Buffer, _encoding, done) { output += chunk.toString(); done(); } });
     const invoke = async (digest?: string) => main(['terminal', 'session', ...(digest ? ['--trust-instructions', digest] : [])], {
-      root: f.root, env: { HOME: f.trust, DECKENT_TEST_SKIP_PUBLISH_LOCK: '1' }, stdin: Readable.from(['hello\n/context\n']), stdout, stderr: stdout,
+      root: f.root, env: { ...homeEnv(f.trust), DECKENT_TEST_SKIP_PUBLISH_LOCK: '1' }, stdin: Readable.from(['hello\n/context\n']), stdout, stderr: stdout,
       openProjectInstructions: async () => f.port, completeTerminalChat: async (_root, input) => { calls.push(JSON.stringify(input.messages)); return 'done'; } });
     expect({ code: await invoke(), output }).toMatchObject({ code: 0 }); expect(calls[0]).not.toContain('PROJECT-ONLY-CONTEXT'); expect(output).toContain('--trust-instructions');
     output = ''; expect(await invoke(source.source.digest)).toBe(0); expect(calls[1]).toContain('PROJECT-ONLY-CONTEXT');
-    expect(output).toContain(`${f.root}/DECKENT.md`); expect(output).toContain('20 bytes'); expect(calls).toHaveLength(2);
+    expect(output).toContain(join(await realpath(f.root), 'DECKENT.md')); expect(output).toContain('20 bytes'); expect(calls).toHaveLength(2);
   });
   it('init renders a generated preview before confirmation and Esc performs no write', async () => {
     const f = await fixture(); await rm(join(f.root, 'DECKENT.md'));

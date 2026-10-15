@@ -93,18 +93,18 @@ describe('W3: real sandbox negative paths (synthetic files and IPC only)', () =>
     expect(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).toBe('{}\n');
     expect(await readFile(join(f.home, 'notes.txt'), 'utf8')).toBe('allowed\n');
   }, 60_000);
-  it('a symlinked credential carrier refuses the open view instead of exposing its target', async () => {
+  it.skipIf(process.platform === 'win32')('[requires POSIX bubblewrap/Landlock sandbox paths] a symlinked credential carrier refuses the open view instead of exposing its target', async () => {
     const f = await fixture(true); await writeFile(join(f.home, 'token.txt'), SECRET);
     await rm(join(f.home, '.codex/auth.json')); await symlink(join(f.home, 'token.txt'), join(f.home, '.codex/auth.json'));
     expect(await resolveBubblewrapView(f.layout, f.environment, {}, { open: true })).toMatchObject({ ok: false, reason: expect.stringContaining('credential path is a symbolic link') });
   });
-  it('abstract session D-Bus cannot be file-masked: full access refuses this view', async () => {
+  it.skipIf(process.platform === 'win32')('[requires POSIX bubblewrap/Landlock sandbox paths] abstract session D-Bus cannot be file-masked: full access refuses this view', async () => {
     const f = await fixture(true);
     expect(await resolveBubblewrapView(f.layout, { ...f.environment, DBUS_SESSION_BUS_ADDRESS: 'unix:abstract=w3-synthetic-bus' }, {}, { open: true }))
       .toMatchObject({ ok: false, reason: expect.stringContaining('abstract session D-Bus') });
   });
 
-  it('Landlock refuses system grants that would reopen an absolute installation root', async () => {
+  it.skipIf(process.platform === 'win32')('[requires POSIX bubblewrap/Landlock sandbox paths] Landlock refuses system grants that would reopen an absolute installation root', async () => {
     const f = await fixture();
     for (const root of ['/etc/deckent-w3-synthetic', '/usr']) {
       expect(await buildLandlockRules({ ...f.layout, hardFloor: { ...f.layout.hardFloor!, roots: [root] } }))

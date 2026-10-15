@@ -10,6 +10,7 @@ import { EMPTY_SESSION_USAGE, addSessionUsage } from '#surfaces/core/terminal-ki
 import { infoModelText } from '#surfaces/core/terminal-window/index.js';
 import { terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { homeEnv } from '../support/host-platform.js';
 
 const roots: string[] = [], views: ReturnType<typeof mountWorkline>[] = [];
 afterEach(async () => { for (const view of views.splice(0)) view.instance.unmount(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -27,7 +28,7 @@ it('opens /usage with the current ledger account before the stale config choices
   const checkpoint = createProviderSpendCheckpoint({ schemaVersion: 2,
     budget: { schemaVersion: 1, scopeId: 's', budgetId: 'live-budget', revision: 4, currency: 'USD', limitMinorUnits: 1500 },
     settledMinorUnits: 1025, settledExactMinorUnits: '1024.5', reservedMinorUnits: 100, frozen: true }, 44, 43);
-  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: { HOME: join(root, 'h') } }, locale: 'tr', context: {
+  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale: 'tr', context: {
     async inspectProviderSpendAccount(_root, query) { queries.push(query); return { schemaVersion: 2, scopeId: 's', budgetId: 'live-budget', budgetRevision: 4,
       checkpoint, audit: null, spendingHistoryIntegrity: 'not-recorded' }; } }, status: async () => '', doctor: async () => undefined });
   const model = (await admin.info.ports.usage!({ usage: EMPTY_SESSION_USAGE })).model;
@@ -48,7 +49,7 @@ it('opens /usage with the current ledger account before the stale config choices
 
 it('shows a failed live account read instead of promoting a config value to a ledger amount', async () => {
   const root = await project();
-  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: { HOME: join(root, 'h') } }, locale: 'en', context: {
+  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale: 'en', context: {
     async inspectProviderSpendAccount() { throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE'); } }, status: async () => '', doctor: async () => undefined });
   const model = (await admin.info.ports.usage!({ usage: EMPTY_SESSION_USAGE })).model;
   expect(model.sections[0]!.chip?.state).toBe('fail'); expect(model.sections[0]!.rows).toBeUndefined();
@@ -103,7 +104,7 @@ it('applies the registry defaults and the absolute threshold independently of th
 
 it.each(['tr', 'en'] as const)('renders session cache reads, writes and hit ratio, with partial and missing reports explicit (%s)', async locale => {
   const root = await project();
-  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: { HOME: join(root, 'h') } }, locale, context: {}, status: async () => '', doctor: async () => undefined });
+  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale, context: {}, status: async () => '', doctor: async () => undefined });
   const measured = addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 100, completionTokens: 20, reasoningTokens: null,
     cache: { readTokens: 60, writeTokens: 10, promptTokens: 100 } });
   const missing = addSessionUsage(measured, { promptTokens: 900, completionTokens: 20, reasoningTokens: null });
@@ -122,7 +123,7 @@ it.each(['tr', 'en'] as const)('renders session cache reads, writes and hit rati
 
 it.each(['tr', 'en'] as const)('CACHE-SLICE1 /usage: raw read, 5m and 1h writes and the same-request net benefit as an estimate, negative shown as is (%s)', async locale => {
   const root = await project();
-  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: { HOME: join(root, 'h') } }, locale, context: {}, status: async () => '', doctor: async () => undefined });
+  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale, context: {}, status: async () => '', doctor: async () => undefined });
   const view = async (usage: ReturnType<typeof addSessionUsage>) => infoModelText((await admin.info.ports.usage!({ usage })).model).join('\n');
   const measured = addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 126_000, completionTokens: 500, reasoningTokens: null,
     cache: { readTokens: 100_000, writeTokens: 25_000, promptTokens: 126_000, write5mTokens: 20_000, write1hTokens: 5_000, netBenefitUsdE10: 1_700_000_000 } });
