@@ -110,6 +110,10 @@ jobs:
       contents: read
     outputs:
       base-sha: ${{ steps.base.outputs.sha }}
+      # Set only when refresh-bwrap exited 0 (both independent builds matched); the dependency report below may still fail the job.
+      refresh-verified: ${{ steps.refresh.outputs.verified }}
+      # Set only when the report shows complete signatures, no CRITICAL and no incomplete watch (ordinary advisories do not clear or block it).
+      integrity-clear: ${{ steps.integrity.outputs.clear }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -123,9 +127,18 @@ jobs:
       - run: npm ci
         id: dependencies
       - name: Resolve drift and verify candidate pins with two independent builds
-        run: node scripts/refresh-bwrap.mjs "$RUNNER_TEMP/deps-watch/bwrap-refresh"
+        id: refresh
+        run: |
+          node scripts/refresh-bwrap.mjs "$RUNNER_TEMP/deps-watch/bwrap-refresh"
+          echo "verified=true" >> "$GITHUB_OUTPUT"
       - run: node scripts/deps-watch.mjs "$RUNNER_TEMP/deps-watch"
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+      - name: Supply-chain integrity gate for the pin PR
+        id: integrity
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          node scripts/deps-watch.mjs --integrity "$RUNNER_TEMP/deps-watch"
+          echo "clear=true" >> "$GITHUB_OUTPUT"
       - name: Upload dependency watch reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -138,8 +151,10 @@ jobs:
   deps-publish:
     # Owner 2026-10-15: the only job with write authority. It installs no packages, builds nothing and runs no candidate code: it checks out the exact
     # base the watch resolved, re-verifies the candidate files against that base and opens a DRAFT pull request. It never merges.
+    # An ordinary advisory keeps the watch job red and visible without holding back a verified pin candidate (2026-10-15 dispatch lesson);
+    # a supply-chain integrity problem (signatures, CRITICAL, incomplete watch) still blocks it.
     needs: deps-watch
-    if: ${{ needs.deps-watch.result == 'success' }}
+    if: ${{ !cancelled() && needs.deps-watch.outputs.refresh-verified == 'true' && needs.deps-watch.outputs.integrity-clear == 'true' }}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     permissions:

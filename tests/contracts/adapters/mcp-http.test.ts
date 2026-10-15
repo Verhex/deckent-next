@@ -11,7 +11,7 @@ import { mcpCommand, type CommandContext } from '#surfaces/core/cli/index.js';
 import { startMcpHttpFixture } from '../../fixtures/mcp-http-server.mjs';
 
 // L1 MCP-CORE item 1 (TUI3 2026-10-07): Streamable HTTP servers (MCP 2026-07-28: stdio and Streamable HTTP are the standard transports, no protocol
-// session; SDK @modelcontextprotocol/client 2.2.0 `StreamableHTTPClientTransport`). A `$DECK:` reference in a header resolves only for a personal
+// session; SDK @modelcontextprotocol/client 2.3.1 `StreamableHTTPClientTransport`). A `$DECK:` reference in a header resolves only for a personal
 // scope and its value never reaches an output, the audit, a card, the approval preview or the model. SSE is not a transport of this client.
 interface HttpFixture { readonly url: string; readonly requests: { method: string; headers: Record<string, string> }[]; close(): Promise<void> }
 const SECRET = 'ghp_SECRETvalue0123456789abcdefXYZ';

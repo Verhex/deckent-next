@@ -255,7 +255,7 @@ describe('MCP client: every call carries the pinned tool definition', () => {
   }, 30_000);
 });
 
-describe('MCP client: paginated tool lists (SDK 2.2.0 follows nextCursor; the pool bounds the walk)', () => {
+describe('MCP client: paginated tool lists (SDK 2.3.1 follows nextCursor; the pool bounds the walk)', () => {
   const many = (count: number) => Array.from({ length: count }, (_, index) => tool(`t${index}`, 'echo'));
   it.each(['legacy', 'dual'] as const)('a %s server listing over several pages is read to its end and every page is verified against the pins', async mode => {
     const tools = many(7), f = fixture(mode, tools, ['--page-size', '3']), server = f.server([tools[0]!, tools[4]!, tools[6]!].map(pinOf));

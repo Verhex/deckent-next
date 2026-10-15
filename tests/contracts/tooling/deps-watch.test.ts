@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 // Tooling runs against source; the network is injected so the whole producer-to-report pipeline is exercised offline.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { bundledAdvisoryFindings, licenseAllowed, osvSeverity, runWatch } from '../../../scripts/deps-watch.mjs';
+import { bundledAdvisoryFindings, integrityOf, licenseAllowed, osvSeverity, runWatch, supplyChainProblems } from '../../../scripts/deps-watch.mjs';
 
 type Finding = { severity: string; kind: string; subject: string; detail: string };
 const roots: string[] = [];
@@ -56,6 +56,22 @@ function network(vulnerable: boolean, fastUriIds = ['GHSA-aaaa', 'GHSA-unrated']
 }
 
 describe('deps-watch', () => {
+  it('separates supply-chain integrity from ordinary advisories for the pin-refresh publisher, failing closed', async () => {
+    const report = (findings: { severity: string; kind: string; subject: string }[], signatures: Record<string, unknown> = { invalid: 0, missing: 0 }) => ({ signatures, findings });
+    expect(supplyChainProblems(report([{ severity: 'HIGH', kind: 'vulnerability', subject: 'fast-uri@3.1.0' }, { severity: 'MEDIUM', kind: 'review-overdue', subject: 'x' }]))).toEqual([]);
+    expect(supplyChainProblems(report([{ severity: 'CRITICAL', kind: 'vulnerability', subject: 'evil@1.0.0' }]))).toEqual(['CRITICAL vulnerability: evil@1.0.0']);
+    expect(supplyChainProblems(report([{ severity: 'HIGH', kind: 'watch-incomplete', subject: 'npm audit signatures' }]))).toEqual(['HIGH watch-incomplete: npm audit signatures']);
+    expect(supplyChainProblems(report([], { invalid: 1, missing: 0 }))).toEqual(['registry signatures invalid: 1']);
+    expect(supplyChainProblems(report([], { invalid: 0, missing: null }))).toEqual(['registry signatures missing: unknown']);
+    expect(supplyChainProblems({ signatures: { invalid: 0, missing: 0 } })).toEqual(['report has no findings list']);
+    const out = await mkdtemp(join(tmpdir(), 'deps-watch-integrity-')); roots.push(out);
+    expect(integrityOf(out)).toEqual(['no deps-watch report']);
+    await writeFile(join(out, 'deps-watch-2026-10-14.json'), JSON.stringify(report([])));
+    await writeFile(join(out, 'deps-watch-2026-10-15.json'), JSON.stringify(report([], { invalid: 2, missing: 0 })));
+    expect(integrityOf(out)).toEqual(['registry signatures invalid: 2']);
+    await writeFile(join(out, 'deps-watch-2026-10-16.json'), '{');
+    expect(integrityOf(out)[0]).toMatch(/^unreadable report: /u);
+  });
   it('rates OSV records fail-closed and evaluates SPDX expressions', () => {
     expect(osvSeverity({ id: 'MAL-1' }).severity).toBe('CRITICAL');
     expect(osvSeverity({ id: 'GHSA-x', database_specific: { severity: 'MODERATE' } })).toEqual({ severity: 'MEDIUM', rated: true });

@@ -13,7 +13,7 @@
 // covers only the installed tree: with --sbom, an embedded component the SBOM omits is marked [not shipped], one it names is not accepted.
 // A source that cannot be read is itself a HIGH finding (an incomplete watch never passes).
 import { execFile } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultHosts, scanEmbedded } from './check-embedded-deps.mjs';
@@ -263,7 +263,35 @@ export function renderMarkdown(report) {
     `## Runtime packages without provenance (${report.unprovenancedRuntime.length})`, '', report.unprovenancedRuntime.join(', ') || 'None.', ''].join('\n');
 }
 
+/**
+ * Supply-chain integrity of the watched tree, apart from ordinary advisories: an incomplete watch, any registry-signature problem or any CRITICAL
+ * finding (malware advisories are CRITICAL). The pin-refresh publisher needs this clear; a HIGH advisory alone keeps the report red but does not
+ * hold back a verified pin candidate.
+ */
+export function supplyChainProblems(report) {
+  const problems = [];
+  if (report?.signatures?.invalid !== 0) problems.push(`registry signatures invalid: ${report?.signatures?.invalid ?? 'unknown'}`);
+  if (report?.signatures?.missing !== 0) problems.push(`registry signatures missing: ${report?.signatures?.missing ?? 'unknown'}`);
+  for (const item of report?.findings ?? []) {
+    if (item.severity === 'CRITICAL' || ['watch-incomplete', 'signature-invalid', 'signature-missing'].includes(item.kind)) problems.push(`${item.severity} ${item.kind}: ${item.subject}`);
+  }
+  if (!Array.isArray(report?.findings)) problems.push('report has no findings list');
+  return problems;
+}
+/** The newest report in `outDir` (the date may roll over between the watch and this check); none means not clear. */
+export function integrityOf(outDir) {
+  const names = readdirSync(outDir).filter(name => /^deps-watch-\d{4}-\d{2}-\d{2}\.json$/u.test(name)).sort();
+  if (!names.length) return ['no deps-watch report'];
+  try { return supplyChainProblems(JSON.parse(readFileSync(join(outDir, names.at(-1)), 'utf8'))); } catch (error) { return [`unreadable report: ${error.message}`]; }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv[2] === '--integrity') {
+    if (process.argv.length !== 4) { process.stderr.write('usage: node scripts/deps-watch.mjs --integrity <outDir>\n'); process.exit(2); }
+    const problems = integrityOf(resolve(process.argv[3]));
+    process.stdout.write(problems.length ? `deps-watch integrity: NOT clear\n${problems.join('\n')}\n` : 'deps-watch integrity: clear\n');
+    process.exit(problems.length ? 1 : 0);
+  }
   const args = process.argv.slice(2), dateAt = args.indexOf('--date');
   const date = dateAt > -1 ? args.splice(dateAt, 2)[1] : undefined;
   const sbomAt = args.indexOf('--sbom'), sbomFile = sbomAt > -1 ? args.splice(sbomAt, 2)[1] : undefined;
