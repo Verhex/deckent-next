@@ -60,7 +60,8 @@
     "test:host": "node --test --test-reporter=tap --test-concurrency=2 --test-timeout=180000 .agents/refactor/*.test.mjs",
     "lint:checks": "node scripts/package-metadata.mjs && node scripts/run-parallel.mjs \"eslint .\" \"node scripts/lint-arch.mjs\" \"node scripts/lint-core-memory.mjs\" \"node scripts/lint-docs.mjs\"",
     "verify:built": "node scripts/verify-context.mjs && node scripts/verify-built.mjs",
-    "land:check:local": "node scripts/land-check.mjs"
+    "land:check:local": "node scripts/land-check.mjs",
+    "report:ai-floor": "node scripts/ai-floor-report.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.2.0",
