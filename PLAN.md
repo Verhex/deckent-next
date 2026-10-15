@@ -28,7 +28,7 @@ S6/NATIVE ve Y1, MCP/G1, SIWC/N2-0 farklı sorumluluklardır; aynı dosyaya yaza
 
 1. **Beta.1 → dogfood ağırlıklı beta:** yedi koşul ve owner kabulü; yayımlama tarihi uydurulmaz.
 2. **NPM-PUBLISH:** hazırlık beta öncesi, yayın beta geçişinde `beta`, kararlıda `latest`; isim/scope/paket sayısının açık kalan kararı korunur.
-3. **Masaüstü + ajan organizasyonu:** beta sonrası, tanıtım kapısı. §8'deki 17 dilim; ilk karne/havuz/olay akışı, desktop 4'ten itibaren bağımlılıkla; altı owner sorusu **açık**.
+3. **Masaüstü + ajan organizasyonu:** beta sonrası, tanıtım kapısı. §8'deki 17 dilim; ilk karne/havuz/olay akışı, desktop 4'ten itibaren bağımlılıkla; altı owner sorusu **açık**. **POST-BETA-PRODUCTIZATION-COMPARISON** (owner 2026-10-15): Paperclip/Hermes karşılaştırmasıyla Desktop yönetimi, hızlı onboarding, entegrasyon ömrü, çıktı inceleme ve insan yükü A0–A7 aşamaları; ilk adım güncel kaynak/boşluk matrisi → AL/UYARLA/ALMA → kabul kanıtlı dilimler ([brief](.deckent/docs/plan/post-beta-productization-paperclip-hermes.md)).
 4. **ATAMA + HEADLESS-BRAIN:** sistem WorkClass→model/effort atar, Brain frontier; agent/skill tier, başarı defteri. Headless abonelik Brain **zorunlu**; N2-0, tier, kimlik ve H5 ölçüm tavanı bağımlılıkları.
 5. **TEST-AZALTMA + OTONOM-TESLIM:** ölçüm→ortak fixture→gölge makbuz/seçim; güvenlik/negatifler korunur. Teslim önce gölge; owner'ın dar dogfood kuralı dışında y/N, adopt/rollback hep y/N.
 6. **Eşzamanlılık:** 1–2 ölçüm/kayıt, S6; ardından 4→{5,6}→7→8→9→ölçüm gerektirirse 10. Veri maskeleme yöntemi Enterprise tamamlandıktan sonra ayrı süreç.
