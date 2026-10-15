@@ -272,10 +272,13 @@ describe('the single approval card after Sol 2234', () => {
     let refuseA!: () => void; const aAnswered = new Promise<void>(resolve => { refuseA = resolve; });
     const decided: string[] = [];
     let release!: () => void; const bAnswered = new Promise<void>(resolve => { release = resolve; });
+    // Card A expires only after its decision is in flight, not after a fixed 150 ms: on a slow runner (Windows node 24, platform runs
+    // 38793038837 and 38814829682) the keys reached the workline after A had already expired, so A was never decided (PLATFORM-TEMIZLIK).
+    let markADecided!: () => void; const aDecided = new Promise<void>(resolve => { markADecided = resolve; });
     const streamTurn = async function* () {
       yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'a', approvalId: 'card-a', revision: 0, summary: 'write_file · package.json · aaaaaaaaaaaa',
         preview: 'A', expiresAt: Date.now() + 600_000, decisionCapability: CAPABILITY, risk: 'edit-floor', requiredAssurance: 'turn-bound' };
-      await settle(150);
+      await aDecided; await settle(20);
       yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'a', approvalId: 'card-a', outcome: 'expired' as const };
       yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'b', approvalId: 'card-b', revision: 0, summary: 'write_file · Makefile · bbbbbbbbbbbb',
         preview: 'B', expiresAt: Date.now() + 600_000, decisionCapability: 'R'.repeat(43), risk: 'edit-floor', requiredAssurance: 'turn-bound' };
@@ -286,7 +289,7 @@ describe('the single approval card after Sol 2234', () => {
     };
     const ledger = { ...baseLedger, async decideApproval(approval: { approvalId: string }, decision: string) {
       decided.push(`${approval.approvalId}:${decision}`);
-      if (approval.approvalId === 'card-a') { await aAnswered; await settle(40); throw typed('APPROVAL_ASSURANCE_INSUFFICIENT'); }
+      if (approval.approvalId === 'card-a') { markADecided(); await aAnswered; await settle(40); throw typed('APPROVAL_ASSURANCE_INSUFFICIENT'); }
       release(); return { approvalId: 'card-b', runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
     } };
     const view = mountWorkline({ streamTurn: streamTurn as never, ledger: ledger as never }, 220);

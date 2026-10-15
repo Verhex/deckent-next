@@ -30,7 +30,8 @@ export class BackupApplication {
       await this.audit(event('succeeded', null, result.ledgerDigest), this.authority.integrity);
       return result;
     } catch (error) {
-      const failure = error instanceof DeckentError && error.code.startsWith('BACKUP_') ? error : ErrorRegistry.createError('BACKUP_IO');
+      // The original failure travels only as the error's cause for diagnosis; the message, code and audit stay the registered BACKUP_IO.
+      const failure = error instanceof DeckentError && error.code.startsWith('BACKUP_') ? error : ErrorRegistry.createError('BACKUP_IO', { cause: error });
       await this.audit(event(applied || failure.code === 'BACKUP_RESTORE_INCOMPLETE' ? 'uncertain' : 'failed', failure.code), this.authority.integrity);
       throw failure;
     }

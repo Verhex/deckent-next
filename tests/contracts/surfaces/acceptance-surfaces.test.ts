@@ -60,7 +60,7 @@ it.each(['en', 'tr'] as const)('run and task inspection render acceptance from t
   }
 });
 
-it.each([{ present: true, refused: false }, { present: false, refused: false }, { present: true, refused: true }])('source SDK, CLI JSON, MCP and monitor read the same reopened canonical acceptance ($present, refused $refused)', async ({ present, refused }) => {
+it.skipIf(process.platform === 'win32').each([{ present: true, refused: false }, { present: false, refused: false }, { present: true, refused: true }])('[unsupported on Windows: managed private ledger files] source SDK, CLI JSON, MCP and monitor read the same reopened canonical acceptance ($present, refused $refused)', async ({ present, refused }) => {
   const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir, hostname, userInfo } = await import('node:os');
   const { join } = await import('node:path');

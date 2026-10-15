@@ -14,6 +14,7 @@ import { mcpApplications } from '#composition/core/mcp/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
+import { homeEnv } from '../support/host-platform.js';
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -84,7 +85,10 @@ it.skipIf(process.platform !== 'win32')('unsupported Windows policy custody refu
 it('a throwing verifier, an unverified scope and an unavailable result are never healthy: doctor degraded with the reason, audit verify non-zero', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-audit-failopen-')); roots.push(root); await mkdir(join(root, '.deckent'));
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, terminal: { scopeId: 's' } }));
-  const env = { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: join(root, 'home/.deckent') }, quiet = { write() {} };
+  // The `terminal` section this config names is registered by application ingress; register it here instead of relying on an earlier
+  // test in this file having composed the product (on native Windows those tests are skipped, and alone this one would fail).
+  adapters.registerProviderConfig();
+  const env = { ...homeEnv(join(root, 'home')), DECKENT_GLOBAL_HOME: join(root, 'home/.deckent') }, quiet = { write() {} };
   const result = (reason: 'no-checkpoint-yet' | 'unavailable') => ({ schemaVersion: 1 as const, scopeId: 's', status: 'unknown' as const, reason, head: null, checkpoint: null });
   const verifiers = { throws: async () => { throw new TypeError('verifier bug'); }, unverified: async () => result('no-checkpoint-yet'), unavailable: async () => result('unavailable') };
   for (const [name, verifyAudit] of Object.entries(verifiers)) {

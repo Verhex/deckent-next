@@ -76,19 +76,28 @@ it.skipIf(process.platform === 'win32')('compiled init preview is read-only; exp
 it('compiled MCP startup and read tool over POSIX stdio leave identity and project/HOME absent', async context => {
   if (process.platform === 'win32') context.skip('POSIX_FIFO_TRANSPORT: standard cross-platform MCP pipe proof remains in declared-models-process');
   const f = await fixture(), before = await snapshot(f.project, f.home), fifo = join(f.root, 'input.fifo');
-  // FIFO input and regular-file output exercise actual stdio without the sandbox's socketpair-backed child pipes.
-  execFileSync('/usr/bin/mkfifo', [fifo], { stdio: 'ignore' });
-  // O_RDWR on a FIFO is not defined by POSIX. Separate ends give macOS and Linux the same EOF contract.
-  const [input, writer] = await Promise.all([open(fifo, 'r'), open(fifo, 'w')]);
+  // FIFO input and regular-file output exercise actual stdio without the sandbox's socketpair-backed child pipes (Linux).
+  // macOS (PLATFORM-TEMIZLIK, hosted run 38804553793): the server never saw the FIFO's EOF (MCP_LIVE_HANDLES: only PipeWrap, stdinEnded
+  // false); that is the kqueue FIFO transport, not a handle the server keeps. There the same proof runs over an ordinary pipe.
+  const useFifo = process.platform === 'linux';
+  if (useFifo) execFileSync('/usr/bin/mkfifo', [fifo], { stdio: 'ignore' });
+  // O_RDWR on a FIFO is not defined by POSIX. Separate ends keep the EOF contract explicit.
+  const [input, writer] = useFifo ? await Promise.all([open(fifo, 'r'), open(fifo, 'w')]) : [null, null];
   const outputPath = join(f.root, 'mcp-output');
   const output = await open(outputPath, 'w'), errors = await open(join(f.root, 'mcp-errors'), 'w');
-  const child = spawn(process.execPath, [mcp, '--project', f.project], { cwd: f.project,
+  // macOS diagnosis (PLATFORM-TEMIZLIK, open there): a server still alive 8.5 s after start names its live handles on stderr, which the exit
+  // assertion shows. The timer is unref'd: it never keeps the process alive, so a prompt exit (as on Linux) is unchanged.
+  const handles = `setTimeout(() => process.stderr.write('MCP_LIVE_HANDLES ' + JSON.stringify({ resources: process.getActiveResourcesInfo(),
+    stdinEnded: process.stdin.readableEnded, stdinDestroyed: process.stdin.destroyed }) + '\\n'), 8500).unref();`;
+  const child = spawn(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(handles)}`, mcp, '--project', f.project], { cwd: f.project,
     env: { HOME: f.home, USERPROFILE: f.home, DECKENT_GLOBAL_HOME: join(f.home, 'global'), PATH: process.env.PATH ?? '' },
-    stdio: [input.fd, output.fd, errors.fd] });
+    stdio: [input ? input.fd : 'pipe', output.fd, errors.fd] });
+  const send = (line: string) => writer ? writer.write(line).then(() => undefined) : new Promise<void>((done, fail) => child.stdin!.write(line, error => error ? fail(error) : done()));
+  const endInput = () => writer ? writer.close() : new Promise<void>(done => child.stdin!.end(done));
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((accept, reject) => {
     child.once('close', (code, signal) => accept({ code, signal })); child.once('error', reject);
   });
-  await input.close();
+  await input?.close();
   const timer = setTimeout(() => child.kill(), 10_000);
   const readResponse = async (id: number) => {
     const deadline = Date.now() + 8000;
@@ -101,18 +110,18 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
     throw new Error('MCP_READ_RESPONSE_TIMEOUT');
   };
   try {
-    await writer.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {
+    await send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {
       protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'identity-readonly-proof', version: '1' } } }) + '\n');
     expect((await readResponse(1)).result).toHaveProperty('protocolVersion');
-    await writer.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
-    await writer.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_declared_models', arguments: {} } }) + '\n');
+    await send(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+    await send(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_declared_models', arguments: {} } }) + '\n');
     const response = await readResponse(2);
     expect(response.result).toMatchObject({ structuredContent: { status: 'not-configured' } });
     expect(response.result.isError).not.toBe(true);
-    await writer.close(); expect(await closed).toEqual({ code: 0, signal: null });
+    await endInput(); expect(await closed, await readFile(join(f.root, 'mcp-errors'), 'utf8')).toEqual({ code: 0, signal: null });
     expect(await snapshot(f.project, f.home)).toEqual(before);
   } finally {
     clearTimeout(timer); child.kill(); await closed;
-    await Promise.all([writer, input, output, errors].map(handle => handle.close()));
+    await Promise.all([writer, input, output, errors].map(handle => handle?.close()));
   }
 }, 15_000);

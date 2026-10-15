@@ -1,5 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 // @ts-expect-error build tools are executable JavaScript, outside src's TypeScript contract.
@@ -8,7 +9,7 @@ import { stageBubblewrap } from '../../../scripts/stage-bubblewrap.mjs';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 function fixture() {
-  const root = mkdtempSync('/tmp/dk-bwrap-build-'); roots.push(root);
+  const root = mkdtempSync(join(tmpdir(), 'dk-bwrap-build-')); roots.push(root);
   mkdirSync(join(root, 'packaging/bwrap'), { recursive: true });
   writeFileSync(join(root, 'packaging/bwrap/bwrap.lock.json'), readFileSync(resolve('packaging/bwrap/bwrap.lock.json')));
   return root;

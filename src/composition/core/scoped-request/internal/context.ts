@@ -7,12 +7,18 @@ import { InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationErr
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
-export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) => loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity(), access);
-export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) => loadScopeContext(projectRoot, scopeId, options, verifyLocalPeerIdentity(peer), access);
-async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, identity: ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess) {
+// The local OS identity is read after the policy loads: unsupported policy custody (native Windows) refuses POLICY_UNAVAILABLE before
+// any identity access (PLATFORM-TEMIZLIK). A socket peer is still verified first, so an unauthenticated caller learns nothing about policy.
+export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) => loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access);
+export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) => {
+  const verified = verifyLocalPeerIdentity(peer);
+  return loadScopeContext(projectRoot, scopeId, options, () => verified, access);
+};
+async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, readIdentity: () => ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout;
   let document; try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+  const identity = readIdentity();
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read'), principal = Object.freeze({ ...identity, scopeIds });
   const installation = await accessIdentity(new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation), access);
   if (access === 'write') await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);

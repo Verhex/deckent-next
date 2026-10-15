@@ -168,8 +168,15 @@ describe('platform verification dependency watch schedule', () => {
     expect(depsWatch).toContain('path: ${{ runner.temp }}/deps-watch/');
   });
 
-  it('preserves verify outside the admitted bubblewrap cache block byte-for-byte', () => {
+  it('preserves verify outside the admitted bubblewrap cache block and the admitted shard split byte-for-byte', () => {
     const withoutCache = (job: string) => job.replace(/ {6}- name: Restore locked bubblewrap[\s\S]*?(?= {6}- name: Prove the built product)/u, '');
-    expect(withoutCache(jobBlock('verify'))).toBe(withoutCache(baseVerifyJob));
+    // Owner 2026-10-15 (PLATFORM-TEMIZLIK): exactly these four edits split the suite into four shards; every other byte stays frozen.
+    const sharded = [
+      ['    name: platform verify (${{ matrix.os }}, node ${{ matrix.node }})\n', '    name: platform verify (${{ matrix.os }}, node ${{ matrix.node }}, shard ${{ matrix.shard }}/4)\n'],
+      ["        node: ['24', '26']\n    steps:", "        node: ['24', '26']\n        # Owner 2026-10-15 (PLATFORM-TEMIZLIK): one runner per quarter of the suite instead of the whole suite on one runner.\n        shard: [1, 2, 3, 4]\n    steps:"],
+      ['          npm run verify 2>&1 | tee .pack/ci-evidence/verify.log\n', "          node scripts/platform-shard.mjs '${{ matrix.shard }}' 4 2>&1 | tee .pack/ci-evidence/verify.log\n"],
+      ['          name: verify-${{ matrix.os }}-node${{ matrix.node }}-${{ github.run_attempt }}\n', '          name: verify-${{ matrix.os }}-node${{ matrix.node }}-shard${{ matrix.shard }}-${{ github.run_attempt }}\n'],
+    ].reduce((job, [from, to]) => { expect(job.split(from!)).toHaveLength(2); return job.replace(from!, to!); }, baseVerifyJob);
+    expect(withoutCache(jobBlock('verify'))).toBe(withoutCache(sharded));
   });
 });

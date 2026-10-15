@@ -19,7 +19,7 @@ const receipt: RunProposalResult = { schemaVersion: 1, run: null, runtimeTotalSp
     approval: { approvalId: 'a', expiresAt: 1000, decisionRecordId: 'decision' }, binding: { schemaVersion: 1, proposalId: proposal.proposalId, digest,
       requiredPermissions: [], budgetCeiling: proposal.budgetCeiling, admission: { registryRevision: 'registry', registryDigest: 'a'.repeat(64), standingAdmission: false,
         budget: { budgetId: 'scope-budget', budgetRevision: 1, checkpointDigest: 'b'.repeat(64), checkedAt: 100, remainingMinorUnits: 1000 } } } } };
-it('CLI file/pipe and inspect pass the same typed application input and expose truthful EN/TR states', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: CLI JSON file input (no O_NOFOLLOW)] CLI file/pipe and inspect pass the same typed application input and expose truthful EN/TR states', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-proposal-cli-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, '.deckent')); await writeFile(join(root, '.deckent/config.json'), '{}');
   const file = join(root, 'proposal.json'); await writeFile(file, JSON.stringify(proposal));

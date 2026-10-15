@@ -40,7 +40,7 @@ async function setup() {
   } finally { db.close(); } };
   return { root, options, path, profile, foreign, port, app, command, audits, policyPath: productResourcePath(layout, 'policy'), principal };
 }
-it('the /model protocol preview applies through the real governed writer once, audited, keeping key/binding/allocation and the other scope', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: installation policy template needs POSIX layout and OS-user identity] the /model protocol preview applies through the real governed writer once, audited, keeping key/binding/allocation and the other scope', async () => {
   const f = await setup(), before = await readFile(f.path, 'utf8'), auditCount = f.audits().length;
   const view = await f.port.inspect();
   expect(view?.lines.map(line => line.text).join('\n')).toContain('/v1/responses');
@@ -53,7 +53,7 @@ it('the /model protocol preview applies through the real governed writer once, a
   expect(f.audits().at(-1)?.event.subject).toMatchObject({ kind: 'config-change', keyPath: 'provider_invocation_profiles', layer: 'project' });
   expect(await f.port.inspect()).toBeNull();
 });
-it('policy approval holds the same migration command and writes nothing before a decision', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: installation policy template needs POSIX layout and OS-user identity] policy approval holds the same migration command and writes nothing before a decision', async () => {
   const f = await setup(), policy = JSON.parse(await readFile(f.policyPath, 'utf8')) as { grants: Record<string, unknown>[] };
   policy.grants.push({ id: 'company-protocol-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'],
     principals: [{ issuer: f.principal.issuer, subject: f.principal.subject }], resource: { kind: 'config', ids: ['project:provider_invocation_profiles'] } });
@@ -63,7 +63,7 @@ it('policy approval holds the same migration command and writes nothing before a
   expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.audits()).toHaveLength(auditCount);
   expect((await f.port.apply()).approvalId).toBe(pending.approvalId);
 });
-it('no preview or a changed snapshot refuses the migration before writing', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: installation policy template needs POSIX layout and OS-user identity] no preview or a changed snapshot refuses the migration before writing', async () => {
   const f = await setup(), before = await readFile(f.path, 'utf8');
   await expect(f.port.apply()).rejects.toThrow('Önizlemeden sonra'); expect(await readFile(f.path, 'utf8')).toBe(before);
   await f.port.inspect();

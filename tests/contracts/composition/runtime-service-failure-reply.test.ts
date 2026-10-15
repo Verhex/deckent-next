@@ -14,7 +14,7 @@ import { clearConfigCache } from '#platform/index.js';
 const canary = 'registered-customer-fixture-canary';
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 
-it('replies before the diagnostic sink settles and drains the pending record before host done', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] replies before the diagnostic sink settles and drains the pending record before host done', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dk-query-reply-'));
   const events: { code: string; diagnosticId: string; detail: string }[] = [];
   let releaseReport!: () => void;

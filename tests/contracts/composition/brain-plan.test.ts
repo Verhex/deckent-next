@@ -163,7 +163,7 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
 
 });
 
-it('paid planning with subscription workers projects its own settled cost and read-only inspection reuses it', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] paid planning with subscription workers projects its own settled cost and read-only inspection reuses it', async () => {
   const f = await fixture({ subscription: true }), first = await planRun(f.project, command, f.options);
   expect(first).toMatchObject({ budgetSemantics: 'not-metered', planningSpending: { class: 'metered', currency: 'USD', evidence: 'measured-tariff' } });
   expect(first.planningSpending!.amountMinorUnits).toBeGreaterThan(0);
@@ -172,7 +172,7 @@ it('paid planning with subscription workers projects its own settled cost and re
   expect(await planRun(f.project, command, f.options)).toEqual(first); expect(f.posts).toBe(1);
 });
 
-it('proposal inspection with denied invocation inspection withholds spending and sends no model request', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] proposal inspection with denied invocation inspection withholds spending and sends no model request', async () => {
   const f = await fixture({ subscription: true }), first = await planRun(f.project, command, f.options);
   // First establish the fixture's admitted card, then remove only the spending observation grant.
   const path = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(path, 'utf8'));

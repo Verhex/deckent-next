@@ -38,7 +38,7 @@ async function tree(root: string): Promise<Record<string, string>> {
 const body = { members: [{ id: 'teammate', label: 'Teammate', kind: 'human', principal: { issuer: 'test-idp', subject: 'member' } }], organization: [],
   assignments: [{ id: 'draft-binding', memberId: 'teammate', roleId: 'profile-reader', scopeIds: ['scope'] }], removeBindingIds: [], includeFutureProjects: true };
 const input = { schemaVersion: 1, profile: { id: 'core:team', version: 1 }, scopeId: 'scope', ...body };
-it.each([false, true])('real producer → CLI EN/TR/JSON leaves the entire installation byte-identical (existing ledger %s)', async existingLedger => {
+it.skipIf(process.platform === 'win32').each([false, true])('[unsupported on Windows: OS-user identity] real producer → CLI EN/TR/JSON leaves the entire installation byte-identical (existing ledger %s)', async existingLedger => {
   const f = await fixture(existingLedger), before = await tree(f.root);
   for (const language of ['en', 'tr']) {
     let output = '', error = '';
@@ -59,7 +59,7 @@ it.each([false, true])('real producer → CLI EN/TR/JSON leaves the entire insta
   expect(result.draft).toMatchObject({ grantsAuthority: false, canApply: false, futureProjects: { requested: true, applied: false } });
   expect(await tree(f.root)).toEqual(before);
 });
-it('invalid namespace, stale version, foreign scopes and absent authority never create policy, identity, bindings or ledger', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: OS-user identity] invalid namespace, stale version, foreign scopes and absent authority never create policy, identity, bindings or ledger', async () => {
   const f = await fixture(), before = await tree(f.root);
   for (const [profile, code] of [[{ id: 'absent:team', version: 1 }, 'IDENTITY_PROFILE_NAMESPACE_UNKNOWN'], [{ id: 'core:team', version: 10 }, 'IDENTITY_PROFILE_VERSION_UNKNOWN']] as const) {
     await expect(previewConfiguredIdentityProfile(f.root, { ...input, profile }, [], { env: f.env })).rejects.toMatchObject({ code });
@@ -70,7 +70,7 @@ it('invalid namespace, stale version, foreign scopes and absent authority never 
   await expect(previewConfiguredIdentityProfile(f.root, input, [], { env: f.env })).rejects.toBeDefined();
   expect(await tree(f.root)).toEqual(missing);
 });
-it('lists metadata without loading policy or bootstrapping an installation and keeps help inert', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: OS-user identity] lists metadata without loading policy or bootstrapping an installation and keeps help inert', async () => {
   const f = await fixture(); await rm(join(f.data, 'policy.json')); const before = await tree(f.root);
   for (const language of ['en', 'tr']) {
     let output = '';
@@ -88,7 +88,7 @@ it('rejects extra authority fields and deployment flags at the CLI without invok
   expect(await main(['identity', 'preview', '--profile', 'core:team', '--scope', 'scope', '--apply'], context)).toBe(2);
   expect(calls).toBe(0);
 });
-it('consumes installation profile selection, refuses project overrides and leaves custom selections as unapplied data', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: OS-user identity] consumes installation profile selection, refuses project overrides and leaves custom selections as unapplied data', async () => {
   const f = await fixture(), global = join(f.root, 'global'); await mkdir(global);
   const env = { ...f.env, DECKENT_GLOBAL_HOME: global };
   await writeFile(join(global, 'config.json'), JSON.stringify({ identity: { profile: { id: 'core:team', version: 1 } } }));

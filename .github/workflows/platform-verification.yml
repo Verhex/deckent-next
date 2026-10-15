@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
-    name: platform verify (${{ matrix.os }}, node ${{ matrix.node }})
+    name: platform verify (${{ matrix.os }}, node ${{ matrix.node }}, shard ${{ matrix.shard }}/4)
     runs-on: ${{ matrix.os }}
     # Run 36884716187: Linux 14m05s/14m20s; bound stalled cells without increasing the budget.
     timeout-minutes: 30
@@ -21,6 +21,8 @@ jobs:
         os: [macos-latest, windows-latest]
         # Both versions are required. Node 26 is the planned default after LTS (2026-10-28).
         node: ['24', '26']
+        # Owner 2026-10-15 (PLATFORM-TEMIZLIK): one runner per quarter of the suite instead of the whole suite on one runner.
+        shard: [1, 2, 3, 4]
     steps:
       - name: Preserve repository bytes on Windows
         if: runner.os == 'Windows'
@@ -77,7 +79,7 @@ jobs:
         run: |
           mkdir -p .pack/ci-evidence
           set -o pipefail
-          npm run verify 2>&1 | tee .pack/ci-evidence/verify.log
+          node scripts/platform-shard.mjs '${{ matrix.shard }}' 4 2>&1 | tee .pack/ci-evidence/verify.log
         env:
           DECKENT_TEST_STARTUP_COST: '1'
           # Hosted macOS/Windows per-test bound (main run 37285853079: six 30-54 s completions timed out at 30 s); Linux keeps 30 s.
@@ -97,7 +99,7 @@ jobs:
         # Official actions/upload-artifact v7.0.1, verified 2026-10-03 (proof/CI-FIX-2026-10-03/sources.md).
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: verify-${{ matrix.os }}-node${{ matrix.node }}-${{ github.run_attempt }}
+          name: verify-${{ matrix.os }}-node${{ matrix.node }}-shard${{ matrix.shard }}-${{ github.run_attempt }}
           path: .pack/ci-evidence/
           if-no-files-found: error
           retention-days: 7

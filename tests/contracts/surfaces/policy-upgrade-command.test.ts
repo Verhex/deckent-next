@@ -3,13 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
+import { homeEnv } from '../support/host-platform.js';
 
 // Owner request 2026-10-07: `deckent policy upgrade --template v5` — preview by default (writes nothing), `--apply [--expect <revision>]`, `--rollback`;
 // the surface only words the engine's result (what would be added, what the person lacks) in EN/TR.
 function context(result: Record<string, unknown>, calls: unknown[] = []) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-policy-upgrade-')); mkdirSync(join(root, '.deckent'));
   const out: string[] = [], errors: string[] = [];
-  return { out, errors, ctx: { root, env: { HOME: root }, stdout: { write(value: string) { out.push(value); } }, stderr: { write(value: string) { errors.push(value); } },
+  return { out, errors, ctx: { root, env: homeEnv(root), stdout: { write(value: string) { out.push(value); } }, stderr: { write(value: string) { errors.push(value); } },
     async upgradePolicyTemplate(_root: string, scopeId: string, input: unknown) { calls.push([scopeId, input]); return result; } } as never };
 }
 const PREVIEW = { schemaVersion: 1, status: 'preview', revision: 'first-run-template-v4+b', summary: 'policy.administer@1 · 3 changes\n+ grant first-run-mcp-servers: allow mcp-server*', missing: [], reason: null, rules: [] };

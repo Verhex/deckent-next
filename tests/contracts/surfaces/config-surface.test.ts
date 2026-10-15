@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { configCommand, configSlash, renderConfigInspection, renderConfigExplanation } from '#surfaces/core/config/index.js';
 import { restartConfigDigest } from '#engine/index.js';
 import { loadConfig } from '#platform/index.js';
+import { homeEnv } from '../support/host-platform.js';
 const field = { key: 'max_workers', value: 2, defaultValue: 'auto', descriptionKey: 'config.field.max_workers', description: 'Workers', schema: { type: 'number' }, source: 'project', binding: { state: 'bound', consumers: ['src/composition/core/runs'] }, apply: 'restart', redacted: false } as const;
 const snapshot = { schemaVersion: 1 as const, digest: 'digest', layer: 'project' as const, fields: [field] };
 function fixture() {
@@ -94,7 +95,7 @@ it('CLI absent fence reaches set/unset as null and global explain refuses before
   expect(f.explain).not.toHaveBeenCalled();
 });
 
-const HOME_ENV = { HOME: '/tmp/config-surface-home' };
+const HOME_ENV = homeEnv(join(tmpdir(), 'config-surface-home'));
 describe('restart-apply change against the running service (K6/#16)', () => {
   const set = async (describeRuntimeService: unknown, language = ['--lang', 'en']) => {
     const f = fixture(); await configCommand(['config', 'set', 'max_workers', '2', '--scope', 'scope-a', ...language], { ...f.ctx, env: HOME_ENV, describeRuntimeService } as never); return f.output.join('');

@@ -13,6 +13,7 @@ import { startConfiguredRuntimeService } from '#composition/core/runtime-service
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { SupervisorError, RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { clearConfigCache, ErrorRegistry, getConfigKnownSecrets, loadConfig, reportQueryError, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
+import { homeEnv } from '../support/host-platform.js';
 
 const canary = 'registered-customer-fixture-canary';
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
@@ -21,7 +22,7 @@ it('uses the real fresh config snapshot for the existing service record sink and
   try {
     await mkdir(join(root, '.deckent'));
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } } }));
-    const options = { env: { HOME: join(root, 'home') }, secretResolver: async () => canary };
+    const options = { env: homeEnv(join(root, 'home')), secretResolver: async () => canary };
     const failure = queryFailure(new Error(`adapter failed ${canary}`, { cause: new Error(`driver failed ${canary}`) }));
     expect(JSON.stringify(failure)).not.toContain(canary); expect(String(failure)).not.toContain('adapter failed');
     expect(failure.params).toEqual({ errorClass: 'Error', diagnosticId: expect.stringMatching(uuid) });
@@ -81,7 +82,7 @@ it('gives the distinct MCP actor the same content-free typed error on the actual
   } finally { await client.close(); await server.close(); }
 });
 
-it('records a service request failure with fresh known secrets and returns only safe parameters to SDK and MCP channels (controlled socket port)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] records a service request failure with fresh known secrets and returns only safe parameters to SDK and MCP channels (controlled socket port)', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dk-query-service-'));
   const events: { code: string; diagnosticId: string; detail: string }[] = [];
   let handler!: adapters.RuntimeServiceHandler;

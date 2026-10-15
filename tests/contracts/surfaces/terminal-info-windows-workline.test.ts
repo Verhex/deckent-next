@@ -11,6 +11,7 @@ import { EMPTY_SESSION_USAGE, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/ter
 import { infoModelText, type InfoSurfaceLabels } from '#surfaces/core/terminal-window/index.js';
 import type { WorklineProps } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { homeEnv } from '../support/host-platform.js';
 
 // SW-1 (owner 2026-10-08): bare /help /status /usage /doctor /scope /context open information windows on the real workline. Nothing reaches the
 // chat stream while they are open; on close exactly one framed system summary line stays; identities are never the primary label.
@@ -28,7 +29,7 @@ async function project(config: Record<string, unknown> = {}) {
   return root;
 }
 function admin(root: string, context: TerminalAdminContext, extra: Partial<Parameters<typeof terminalAdminPorts>[0]> = {}) {
-  return terminalAdminPorts({ root, scopeId: 's', installationId: INSTALLATION, projectId: PROJECT, options: { env: { HOME: join(root, 'h') } }, locale: 'en', context,
+  return terminalAdminPorts({ root, scopeId: 's', installationId: INSTALLATION, projectId: PROJECT, options: { env: homeEnv(join(root, 'h')) }, locale: 'en', context,
     status: async () => 'Terminal: stdin yes', doctor: async sink => { sink.write('DOCTOR-TEXT-1\nDOCTOR-TEXT-2\n'); }, principalName: 'alperen', ...extra });
 }
 async function open(props: Partial<WorklineProps>) {

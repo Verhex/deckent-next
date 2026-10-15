@@ -69,18 +69,20 @@ async function heldAgainstNormalAdmission(f: Fixture) {
     .rejects.toMatchObject({ code: 'BACKUP_RESTORE_HOLD' });
 }
 
-it('an injected failure at every publication step leaves a durable hold that refuses normal admission until a rerun restore completes', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] an injected failure at every publication step leaves a durable hold that refuses normal admission until a rerun restore completes', async () => {
   const f = await fixture(); gate.under = [f.root, f.data];
   let failAt = 1;
   for (; ; failAt++) {
     gate.failAt = failAt; gate.seen = 0;
-    const outcome = await restore(f).then(() => 'completed', (error: { code?: string }) => error.code); gate.failAt = 0;
+    // The cause travels with the code so a platform-specific BACKUP_IO names its real reason in the assertion message (PLATFORM-TEMIZLIK).
+    let cause: unknown;
+    const outcome = await restore(f).then(() => 'completed', (error: { code?: string; cause?: unknown }) => { cause = error.cause; return error.code; }); gate.failAt = 0;
     if (outcome === 'completed') break;
     if (failAt === 1) {
       // The first rename preserves the old config: nothing published yet, so this attempt withdraws its own hold.
-      expect(outcome).toBe('BACKUP_IO'); expect(await present(f.hold)).toBe(false); await startsAndStops(f); continue;
+      expect(outcome, String(cause)).toBe('BACKUP_IO'); expect(await present(f.hold)).toBe(false); await startsAndStops(f); continue;
     }
-    expect(outcome).toBe('BACKUP_RESTORE_INCOMPLETE');
+    expect(outcome, String(cause)).toBe('BACKUP_RESTORE_INCOMPLETE');
     await heldAgainstNormalAdmission(f);
     await restore(f); expect(await present(f.hold)).toBe(false); clearConfigCache();
     await expect(loadConfig(f.root, { env: f.env })).resolves.toMatchObject({ projectRoot: resolve(f.root) });
@@ -90,13 +92,14 @@ it('an injected failure at every publication step leaves a durable hold that ref
   expect(failAt - 1).toBeGreaterThanOrEqual(18);
 }, 300_000);
 
-it('a rerun restore of a held installation keeps the layout of the interrupted attempt, not the archived map (Astra 2471 R1 + R2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] a rerun restore of a held installation keeps the layout of the interrupted attempt, not the archived map (Astra 2471 R1 + R2)', async () => {
   const f = await fixture(), path = join(f.root, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
   config.layout.resources = { artifacts: 'artifacts-v2' }; await writeFile(path, JSON.stringify(config));
   await rename(join(f.data, 'artifacts'), join(f.data, 'artifacts-v2')); clearConfigCache(); gate.under = [f.root, f.data];
   // Renames 1–2 publish the restored config (naming artifacts-v2); rename 3 fails while preserving the installation identity.
   gate.failAt = 3; gate.seen = 0;
-  await expect(restore(f)).rejects.toMatchObject({ code: 'BACKUP_RESTORE_INCOMPLETE' }); gate.failAt = 0;
+  const refused = await restore(f).then(() => null, (error: { code?: string; cause?: unknown }) => error); gate.failAt = 0;
+  expect(refused?.code, String(refused?.cause)).toBe('BACKUP_RESTORE_INCOMPLETE');
   await heldAgainstNormalAdmission(f);
   await restore(f); clearConfigCache();
   const reopened = await openConfiguredArtifactStore(f.root, { env: f.env });
@@ -133,10 +136,11 @@ async function walkFiles(directory: string): Promise<string[]> {
   return out;
 }
 const stagesIn = async (directory: string) => (await readdir(directory)).filter(name => name.startsWith('.backup-restore-'));
-it('an interrupted restore stages in the private .deckent area without the decrypted key; doctor names leftovers and the next restore removes them (S1 D4)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] an interrupted restore stages in the private .deckent area without the decrypted key; doctor names leftovers and the next restore removes them (S1 D4)', async () => {
   const f = await fixture(), key = await readFile(join(f.data, 'approvals/authority.key')), area = join(f.root, '.deckent');
   gate.under = [f.root, f.data]; gate.failAt = 2; gate.seen = 0;
-  await expect(restore(f)).rejects.toMatchObject({ code: 'BACKUP_RESTORE_INCOMPLETE' }); gate.failAt = 0;
+  const refused = await restore(f).then(() => null, (error: { code?: string; cause?: unknown }) => error); gate.failAt = 0;
+  expect(refused?.code, String(refused?.cause)).toBe('BACKUP_RESTORE_INCOMPLETE');
   expect(await stagesIn(f.root)).toEqual([]);
   const [stage] = await stagesIn(area); expect(stage).toMatch(/^\.backup-restore-[0-9a-f-]{36}$/);
   expect((await lstat(join(area, stage!))).mode & 0o777).toBe(0o700);
@@ -163,7 +167,7 @@ it('an interrupted restore stages in the private .deckent area without the decry
   await startsAndStops(f);
 }, 60_000);
 
-it('a .deckent readable by others (0755) restores in place without a manual step; one others can write is refused before staging with the path and chmod 700 (S1 D2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] a .deckent readable by others (0755) restores in place without a manual step; one others can write is refused before staging with the path and chmod 700 (S1 D2)', async () => {
   const f = await fixture(), area = join(f.root, '.deckent');
   await chmod(area, 0o755); await writeFile(join(f.root, '.deckent/config.json'), '{broken'); clearConfigCache();
   await restore(f); expect((await lstat(area)).mode & 0o777).toBe(0o755); clearConfigCache();

@@ -35,8 +35,8 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
+mark = 0
 for wait, send, label in steps:
-    mark = len(out)
     deadline = time.time() + 20
     while wait.encode() not in out[mark if label.startswith('+') else 0:]:
         if time.time() > deadline or not read_for(0.1):
@@ -45,8 +45,17 @@ for wait, send, label in steps:
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace'), 'frames': frames})); sys.exit(3)
     read_for(0.4)
     frames.append([label, out.decode('utf8', 'replace')])
+    # A '+' step looks only at what its keys drew: everything from here, including what is read while the keys are sent.
+    mark = len(out)
     for char in send:
-        os.write(fd, char.encode()); time.sleep(0.06)
+        # One key per read: wait (bounded) until the child has drawn its answer before the next key. A slow child (macOS runners) otherwise
+        # reads two keys at once, and Ink keeps consecutive Enters ("\r\r") as one text event that is no key at all.
+        drawn = len(out); os.write(fd, char.encode())
+        until = time.time() + 1
+        while time.time() < until:
+            before = len(out)
+            if not read_for(0.03): break
+            if len(out) > drawn and len(out) == before: break
 os.write(fd, b'\x03'); time.sleep(0.2); os.write(fd, b'\x03')
 deadline = time.time() + 15
 status = None

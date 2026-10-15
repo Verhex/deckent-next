@@ -3,12 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
+import { homeEnv } from '../support/host-platform.js';
 
 // SCR-B (owner 2026-09-28): CLI surface for `deckent init policy --scope <id> [--preview|--apply]`, isolated
 // from the real composition wiring (fake context handlers), mirroring installation-apply-cli.test.ts's style
 // for the heavy install (through the public `main` entry, exit codes rather than thrown errors).
 function context(overrides: Record<string, unknown> = {}) {
-  return { root: '/project', env: { HOME: '/tmp/deckent-init-policy-surface-home' },
+  return { root: '/project', env: homeEnv(join(tmpdir(), 'deckent-init-policy-surface-home')),
     async previewPolicyTemplateInstallation(root: string, scopeId: string) { return { status: 'preview', root, scopeId }; },
     async applyPolicyTemplateInstallation(root: string, scopeId: string) { return { status: 'installed', root, scopeId }; },
     ...overrides };
@@ -21,7 +22,7 @@ it('upgrade uses the saved session language and names current rules without a st
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ schema_version: 4, language: 'tr' }));
     for (const basis of ['first-run', 'named-person']) for (const status of ['preview', 'upgraded', 'current']) {
       const output: string[] = [];
-      const ctx = context({ root, env: { HOME: join(root, 'home') },
+      const ctx = context({ root, env: homeEnv(join(root, 'home')),
         async upgradePolicyTemplateInstallation() { return { status, basis, revision: 'r', rules: [] }; },
         stdout: { write: (text: string) => { output.push(text); return true; } } });
       const argv = ['init', 'policy', '--scope', 'installation', '--upgrade', status === 'preview' ? '--preview' : '--apply'];

@@ -56,7 +56,7 @@ async function audit(f: Awaited<ReturnType<typeof fixture>>) {
   const integrity = await openLocalIntegrityAuthority(f.layout, 'authority.key');
   return Promise.all((await readdir(dir)).map(async name => verifyAuditRecord(JSON.parse(await readFile(join(dir, name), 'utf8')), integrity)));
 }
-it('CLI → application → online WAL backup under concurrent writes → verify → restore preserves a consistent ledger, artifacts, key and relocation', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] CLI → application → online WAL backup under concurrent writes → verify → restore preserves a consistent ledger, artifacts, key and relocation', async () => {
   const f = await fixture();
   const worker = new Worker(`const { parentPort, workerData } = require('node:worker_threads'); const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(workerData, { timeout: 1000 }); db.exec('PRAGMA journal_mode=WAL');
@@ -97,7 +97,7 @@ it('CLI → application → online WAL backup under concurrent writes → verify
   const { gunzipSync } = await import('node:zlib');
   expect(gunzipSync(await readFile(join(f.set, 'state.archive.json.gz'))).toString()).not.toContain((await readFile(join(f.layout.root, 'approvals/authority.key'))).toString('base64'));
 }, 30000);
-it('tampered manifest and wrong passphrase refuse before any target state is published, and are audited without secrets', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] tampered manifest and wrong passphrase refuse before any target state is published, and are audited without secrets', async () => {
   const f = await fixture(); await call(f,'create');
   await expect(call(f,'verify','CANARY-wrong-passphrase')).rejects.toMatchObject({code:'BACKUP_PASSPHRASE_INVALID'});
   const manifest = join(f.set,'MANIFEST.sha256'); await writeFile(manifest,(await readFile(manifest,'utf8')).replace(/^[0-9a-f]/,'x'));
@@ -106,7 +106,7 @@ it('tampered manifest and wrong passphrase refuse before any target state is pub
   const records=await audit(f);expect(records.some(record=>record.event.subject.kind==='backup-operation'&&record.event.subject.code==='BACKUP_PASSPHRASE_INVALID')).toBe(true);
   expect(JSON.stringify(records)).not.toContain('CANARY-wrong-passphrase');
 });
-it('refuses nonempty targets without exact confirmation, preserves damaged files on confirmed restore and requires installation-wide policy', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] refuses nonempty targets without exact confirmation, preserves damaged files on confirmed restore and requires installation-wide policy', async () => {
   const f=await fixture();await call(f,'create');
   await expect(call(f,'restore',phrase,{target:f.root})).rejects.toMatchObject({code:'BACKUP_TARGET_NOT_EMPTY'});
   await writeFile(join(f.layout.root,'artifacts/result.txt'),'damaged');
@@ -124,7 +124,7 @@ it.skipIf(process.platform !== 'linux')('refuses restore while the actual runtim
   await expect(call(f,'restore',phrase,{target:f.root,confirmTarget:f.root})).rejects.toMatchObject({code:'BACKUP_SERVICE_RUNNING'});
   expect(await readFile(join(f.layout.root,'artifacts/result.txt'),'utf8')).toBe('retained artifact');
 });
-it('total-loss restore uses the authenticated retained policy and keeps the installation id',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] total-loss restore uses the authenticated retained policy and keeps the installation id',async()=>{
   const f=await fixture();await call(f,'create');
   await rm(f.root,{recursive:true,force:true});await rm(f.layout.root,{recursive:true,force:true});
   const lost=join(f.base,'lost');await mkdir(lost,{mode:0o700});
@@ -157,7 +157,7 @@ it.skipIf(process.platform !== 'linux')('before-upgrade creates a complete set b
   const directory=join(f.layout.root,'state/backups/recovery'),sets=await readdir(directory);expect(sets).toHaveLength(1);
   const snapshot=new DatabaseSync(join(directory,sets[0]!,'ledger.db'),{readOnly:true});expect(snapshot.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);snapshot.close();
 });
-it('a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and link targets are refused',async()=>{
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and link targets are refused',async()=>{
   const f=await fixture();await call(f,'create');const {createHash}=await import('node:crypto');
   const {symlink}=await import('node:fs/promises');const link=join(f.base,'link');await symlink(f.root,link);
   await expect(call(f,'restore',phrase,{target:link,confirmTarget:link})).rejects.toMatchObject({code:'BACKUP_PATH_UNSAFE'});
@@ -168,7 +168,7 @@ it('a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and
   expect(refused?.code).toBe('BACKUP_PASSPHRASE_INVALID');expect(refused?.message).toContain('the recovery set was modified');
 });
 
-it('recovers damaged configuration and a lost key in place without inventing an installation identity',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] recovers damaged configuration and a lost key in place without inventing an installation identity',async()=>{
   const f=await fixture();await call(f,'create');await writeFile(join(f.root,'.deckent/config.json'),'{broken');
   await rm(join(f.layout.root,'approvals/authority.key'));clearConfigCache();
   const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
@@ -176,7 +176,7 @@ it('recovers damaged configuration and a lost key in place without inventing an 
   const identity=await new FileInstallationIdentityStore(f.layout,2000).read();expect(identity).toMatchObject({value:{installationId:f.installationId}});
   expect(JSON.parse(await readFile(join(f.root,'.deckent/config.json'),'utf8')).layout.root).toBe(f.layout.root);
 });
-it('archives the global layer apart: a restore on the same machine keeps it in the global file, never in the project config (S1 D1)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] archives the global layer apart: a restore on the same machine keeps it in the global file, never in the project config (S1 D1)',async()=>{
   const f=await fixture();await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
   await writeFile(join(f.env.DECKENT_GLOBAL_HOME,'config.json'),JSON.stringify({language:'tr'}),{mode:0o600});clearConfigCache();
   await call(f,'create');const result=await call(f,'restore');
@@ -190,7 +190,7 @@ async function selectStore(f: Awaited<ReturnType<typeof fixture>>) {
   await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
   await writeFile(join(f.env.DECKENT_GLOBAL_HOME,'config.json'),JSON.stringify({language:'tr',secrets:{store:SELECTED_STORE}}),{mode:0o600});clearConfigCache();
 }
-it('store selected → backup → ledger and config lost → in-place restore → config admitted and the service starts, no manual step (S1 D1)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] store selected → backup → ledger and config lost → in-place restore → config admitted and the service starts, no manual step (S1 D1)',async()=>{
   const f=await fixture();await selectStore(f);await call(f,'create');
   await rm(f.ledger);await writeFile(join(f.root,'.deckent/config.json'),'{broken');clearConfigCache();
   const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
@@ -202,7 +202,7 @@ it('store selected → backup → ledger and config lost → in-place restore �
   if(process.platform==='linux'){const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:f.env});await service.stop();await service.done;
     expect(await new FileProjectIdentityStore(f.root).read()).toMatchObject({status:'available'});}
 });
-it('whole machine lost: the empty global home receives the archived global layer, the project config stays project-only (S1 D1)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] whole machine lost: the empty global home receives the archived global layer, the project config stays project-only (S1 D1)',async()=>{
   const f=await fixture();await selectStore(f);await call(f,'create');
   await rm(f.root,{recursive:true,force:true});await rm(f.layout.root,{recursive:true,force:true});await rm(f.env.DECKENT_GLOBAL_HOME,{recursive:true,force:true});clearConfigCache();
   const lost=join(f.base,'lost');await mkdir(lost,{mode:0o700});
@@ -239,7 +239,7 @@ async function downgradeToV1(f: Awaited<ReturnType<typeof fixture>>) {
   await writeFile(join(f.set, 'authority.key.enc'), await sealKeyV1(await readFile(join(f.layout.root, 'approvals/authority.key')), phrase, payload), { mode: 0o600 });
   await writeFile(join(f.set, 'MANIFEST.sha256'), payload + `${await digest('authority.key.enc')}  authority.key.enc\n`, { mode: 0o600 });
 }
-it('an alpha.18 merged (v1) set restores without moving the secrets selection into the project layer (S1 D1)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] an alpha.18 merged (v1) set restores without moving the secrets selection into the project layer (S1 D1)',async()=>{
   const f=await fixture();await selectStore(f);await call(f,'create');await downgradeToV1(f);await call(f,'verify');
   await rm(f.env.DECKENT_GLOBAL_HOME,{recursive:true,force:true});await writeFile(join(f.root,'.deckent/config.json'),'{broken');clearConfigCache();
   const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
@@ -264,7 +264,7 @@ it.skipIf(process.platform !== 'linux')('scheduled retention keeps the three new
   expect(await readFile(join(directory,'operator-note'),'utf8')).toBe('keep');
 });
 
-it('exact target confirmation does not grant authority to overwrite another installation',async()=>{
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] exact target confirmation does not grant authority to overwrite another installation',async()=>{
   const f=await fixture();await call(f,'create');const directory=join(f.target,'.deckent/installation-identity');
   await mkdir(directory,{recursive:true,mode:0o700});const path=join(directory,'identity.json');
   await writeFile(path,JSON.stringify({schemaVersion:1,installationId:'another-installation'}),{mode:0o600});
@@ -280,7 +280,7 @@ it.skipIf(process.platform !== 'linux')('refuses a confirmed target whose existi
   expect(await readFile(path)).toEqual(before);
 });
 
-it('same-root restore after a layout move publishes into the layout its restored config names; the real artifact reader opens the content (Astra 2471 R2)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] same-root restore after a layout move publishes into the layout its restored config names; the real artifact reader opens the content (Astra 2471 R2)',async()=>{
   const f=await fixture();const opened=await openConfiguredArtifactStore(f.root,{env:f.env});
   const receipt=await opened.store.put('scope',Buffer.from('retained by the reader'));await call(f,'create');
   const path=join(f.root,'.deckent/config.json'),config=JSON.parse(await readFile(path,'utf8'));
@@ -293,7 +293,7 @@ it('same-root restore after a layout move publishes into the layout its restored
   expect(await readFile(join(reopened.path,'result.txt'),'utf8')).toBe('retained artifact');
   expect(await readdir(f.layout.root)).toContainEqual(expect.stringMatching(/^artifacts-v2\.damaged-/));
 });
-it('a damaged installation policy refuses restore with a typed code naming the file; moving it aside and rerunning restores the set policy (S1 D3)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] a damaged installation policy refuses restore with a typed code naming the file; moving it aside and rerunning restores the set policy (S1 D3)',async()=>{
   const f=await fixture();await call(f,'create');const policyPath=productResourcePath(f.layout,'policy'),before=await readFile(policyPath,'utf8');
   await writeFile(policyPath,'{corrupt');clearConfigCache();
   await expect(call(f,'restore',phrase,{target:f.root,confirmTarget:f.root})).rejects.toMatchObject({code:'BACKUP_POLICY_UNREADABLE',params:{path:policyPath,reason:'POLICY_FILE_INVALID'}});
@@ -305,7 +305,7 @@ it('a damaged installation policy refuses restore with a typed code naming the f
   await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
   expect(await readFile(policyPath,'utf8')).toBe(before);
 });
-it('backup reports a restore hold in the installation\'s saved language without --lang (S1 O5)',async()=>{
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] backup reports a restore hold in the installation\'s saved language without --lang (S1 O5)',async()=>{
   const f=await fixture();await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
   await writeFile(join(f.env.DECKENT_GLOBAL_HOME,'config.json'),JSON.stringify({language:'tr'}),{mode:0o600});
   await writeFile(restoreHoldPath(f.root),'{}',{mode:0o600});clearConfigCache();
@@ -328,7 +328,7 @@ async function recoveryKeyed(f: Awaited<ReturnType<typeof fixture>>) {
   await executeBackup(f.root,{schemaVersion:1,scopeId:'scope',action:'create',set:join(f.base,'set0')},phrase,{env:f.env});await call(f,'create');
   return globalPath;
 }
-it('restore binds the set key to the name the target effective config opens; the kept global preference is untouched (Astra 2475 R1)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] restore binds the set key to the name the target effective config opens; the kept global preference is untouched (Astra 2475 R1)',async()=>{
   const f=await fixture();const globalPath=await recoveryKeyed(f);
   // Recovery time: the user's global now names authority.key (a different key of this machine); the project config is damaged.
   await writeFile(globalPath,JSON.stringify({approvals:{keyFile:'authority.key'}}),{mode:0o600});const globalBefore=await readFile(globalPath);
@@ -345,14 +345,14 @@ it('restore binds the set key to the name the target effective config opens; the
   const decoy=await openLocalIntegrityAuthority(f.layout,'authority.key'),dir=join(productResourcePath(f.layout,'audit'),'backup-operations'),name=(await readdir(dir))[0]!;
   expect(()=>verifyAuditRecord(JSON.parse(readFileSync(join(dir,name),'utf8')),decoy)).toThrow(expect.objectContaining({code:'AUDIT_INTEGRITY'}));
 });
-it('empty global at recovery: the archived approvals selection is added there and no project pin is needed (Astra 2475 R1)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] empty global at recovery: the archived approvals selection is added there and no project pin is needed (Astra 2475 R1)',async()=>{
   const f=await fixture();await recoveryKeyed(f);await rm(f.env.DECKENT_GLOBAL_HOME,{recursive:true,force:true});clearConfigCache();
   const result=await call(f,'restore');
   expect(result.globalConfig?.added).toEqual(['approvals']);expect(result.relocation?.changedPaths).not.toContain('/approvals/keyFile');
   expect(JSON.parse(await readFile(join(f.target,'.deckent/config.json'),'utf8')).approvals).toBeUndefined();
   const read=await sealedThroughConfig(f.target,f.env);expect(read.keyFile).toBe('recovery.key');expect(read.records.length).toBeGreaterThan(0);
 });
-it('a target global the restored project config cannot load with is refused before any write (Astra 2475 R1)',async()=>{
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] a target global the restored project config cannot load with is refused before any write (Astra 2475 R1)',async()=>{
   const f=await fixture(),projectPath=join(f.root,'.deckent/config.json'),project=JSON.parse(await readFile(projectPath,'utf8'));
   const policy=(choice: number)=>({schemaVersion:1,limits:{maxCaseBytes:65536,maxEvidence:16,maxOptions:8,maxChecks:8,maxTextBytes:4096},thresholds:{choice,sufficiency:0.7}});
   await writeFile(projectPath,JSON.stringify({...project,decision:policy(0.8)}));clearConfigCache();await call(f,'create');

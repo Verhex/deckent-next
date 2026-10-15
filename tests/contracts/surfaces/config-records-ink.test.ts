@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
@@ -10,18 +10,27 @@ import { ConfigRecordWindow, SettingsPanel, type ConfigPanelPort } from '#surfac
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import type { ConfigRecordPort } from '#surfaces/core/config/index.js';
 class Screen extends Writable {
-  frame = ''; readonly isTTY = true;
+  frame = ''; writes = 0; readonly isTTY = true;
   constructor(readonly columns: number, readonly rows: number) { super(); }
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString(); done(); }
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString(); this.writes++; done(); }
 }
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
-const pause = () => new Promise(resolve => setTimeout(resolve, 50));
+const pause = (ms = 50) => new Promise(resolve => setTimeout(resolve, ms));
 function mount(node: ReactElement, width = 100) {
   const stdout = new Screen(width, 40), stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(true) }, createElement(WindowStackProvider, null, node)) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
-  return { frame: () => stdout.frame, press: async (...keys: string[]) => { for (const key of keys) { stdin.write(key); await pause(); } } };
+  // One key per drawn frame: a slow runner otherwise hands the next key to handlers that have not seen the previous key's state yet.
+  // A key that draws nothing (typing at a preview) waits at most 300 ms.
+  const press = async (...keys: string[]) => {
+    for (const key of keys) {
+      const drawn = stdout.writes, until = Date.now() + 300; stdin.write(key);
+      while (stdout.writes === drawn && Date.now() < until) await pause(5);
+      await pause();
+    }
+  };
+  return { frame: () => stdout.frame, press };
 }
 const ENTER = '\r', DOWN = '\u001B[B', ESC = '\u001B';
 function port(key: string, calls: string[]): ConfigRecordPort {
@@ -39,11 +48,14 @@ describe('record window Ink render and keyboard boundary', () => {
       const calls: string[] = [], outcomes: unknown[] = [], errors: unknown[] = [];
       const view = mount(createElement(ConfigRecordWindow, { port: port(key, calls), keyPath: key, title: 'Selected records', layer: 'project', labels: terminalPanelLabels('en'), onResult: outcome => { outcomes.push(outcome); }, onError: error => { errors.push(error); }, onClose: () => undefined }), 40);
       await pause(); expect(view.frame()).toContain('Add a member'); for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
-      await view.press(ENTER); expect(view.frame()).toContain('Select a value'); expect(view.frame()).not.toContain('New value');
+      // The port answers asynchronously: a positive step waits (bounded) for its answer; a slow runner can need more than one pause.
+      await view.press(ENTER); await vi.waitFor(() => expect(view.frame()).toContain('Select a value')); expect(view.frame()).not.toContain('New value');
       await view.press(ENTER, 'nonsense'); expect(calls).toEqual([]); await view.press(ESC, ENTER); // clear filter, choose current item
-      await view.press(DOWN, ENTER); expect(calls).toEqual(['preview']); expect(view.frame()).toContain('Before'); expect(view.frame()).toContain('After'); expect(view.frame()).toContain('Enter confirms');
+      await view.press(DOWN, ENTER); await vi.waitFor(() => expect(calls).toEqual(['preview']));
+      await vi.waitFor(() => { expect(view.frame()).toContain('Before'); expect(view.frame()).toContain('After'); expect(view.frame()).toContain('Enter confirms'); });
       if (process.env['W2_RENDER_DIR']) await writeFile(`${process.env['W2_RENDER_DIR']}/${key}.txt`, view.frame());
-      await view.press('123'); expect(calls).toEqual(['preview']); await view.press(ENTER); expect(calls).toEqual(['preview', 'commit']); expect(outcomes).toHaveLength(1); expect(errors).toEqual([]);
+      await view.press('123'); expect(calls).toEqual(['preview']); await view.press(ENTER); await vi.waitFor(() => expect(calls).toEqual(['preview', 'commit']));
+      await vi.waitFor(() => expect(outcomes).toHaveLength(1)); expect(calls).toEqual(['preview', 'commit']); expect(errors).toEqual([]);
     });
   }
   it('Esc closes without any write; imports offer file selection and preview only', async () => {

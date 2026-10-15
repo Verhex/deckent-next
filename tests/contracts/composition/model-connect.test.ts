@@ -206,7 +206,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
   }, 60_000);
 });
 
-it('preserves an authored v1 invocation profile on reconnect instead of silently rewriting its billing path', async () => {
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] preserves an authored v1 invocation profile on reconnect instead of silently rewriting its billing path', async () => {
   const f = await harness([], true);
   const command = { schemaVersion: 1, commandId: 'billing-v1', scopeId: 'scope', connection: 'vendor-one', endpoint: f.base, model: { nativeId: 'gpt-6-luna' } };
   await connectConfiguredModel(f.project, command, f.options, { registry: localRegistry });
