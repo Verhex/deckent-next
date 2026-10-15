@@ -1082,7 +1082,7 @@
   "terminal.delivery.verifyWithout": "{mark} Adopt without verification (this installation allows it; recorded as not verified)",
   "terminal.delivery.verifyLoading": "Reading accepted verification Runs…",
   "terminal.delivery.verifyNone": "No accepted Run of kind {kind} exists in this scope yet.",
-  "terminal.delivery.verifyHow": "Create one on this delivery from another shell: `deckent run create --scope {scope} --id <run> --graph <one {kind} task> --delivery-command-id {delivery}`; once it is accepted press r here.",
+  "terminal.delivery.verifyHow": "Create one on this delivery from another shell: deckent run create --scope {scope} --id <run> --graph <one {kind} task> --delivery-command-id {delivery}; once it is accepted press r here.",
   "terminal.delivery.verifyCheck": "Adoption checks that the chosen Run verified exactly this delivered commit with the current profile and the installation's criteria; otherwise it is refused and the branch does not move.",
   "terminal.delivery.verifyHints": "↑↓ choose · y adopt with the selected choice · r read again · n/Esc back",
   "terminal.delivery.verifyNoneHints": "r read again · n/Esc back",
