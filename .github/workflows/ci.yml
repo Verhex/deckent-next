@@ -29,10 +29,11 @@ jobs:
         id: bwrap_cache
         with:
           path: .pack/bwrap/cache
-          key: bwrap-${{ hashFiles('packaging/bwrap/bwrap.lock.json') }}
+          key: bwrap-v2-${{ runner.os }}-${{ runner.arch }}-x86_64-${{ hashFiles('packaging/bwrap/bwrap.lock.json', 'packaging/bwrap/build.sh', 'scripts/build-bwrap.mjs', 'scripts/bwrap-cache.mjs') }}
       - name: Prepare locked bubblewrap
         run: |
-          node scripts/build-bwrap.mjs --arch x86_64 --out "$RUNNER_TEMP/bwrap-x86_64"
+          node scripts/build-bwrap.mjs --reuse --arch x86_64 --out "$RUNNER_TEMP/bwrap-x86_64"
+          node scripts/build-bwrap.mjs --verify-cache --arch x86_64
           node scripts/build-bwrap.mjs --stage-dev "$RUNNER_TEMP/bwrap-x86_64"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.bwrap_cache.outputs.cache-hit != 'true'

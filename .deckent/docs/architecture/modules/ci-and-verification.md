@@ -1,5 +1,21 @@
 # CI and verification tooling — module note
 
+**CI-BWRAP-CACHE (owner card 2026-10-15; author candidate, hosted/independent acceptance pending).**
+CI's exact lock/recipe/driver/verifier/architecture cache now retains built outputs and fetched APKs.
+A hit verifies its input identity and all file/APK checksums, then the committed binary/source/license
+hashes and every installed closure before copying/staging. A missing cache builds; a corrupt one fails.
+No signature bypass or prefix restore is admitted. Cache eviction can still expose vanished upstream
+pins; the error identifies the refresh path rather than silently unpinning or repeating the build.
+Weekly/manual deps-watch resolves candidate pins in the existing digest-pinned image, compares the
+host and both sysroot closures, records outputs and runs a separate check build before emitting the
+candidate lock/runtime identity and PR body. Changed linked-library license versions stop for manual
+source verification. No image, source, shipped-arch or Core authority change is included.
+Automatic draft PR publication is prepared but not wired: CARD requires contents:read, whereas Git
+branch creation needs contents:write. Owner permission for only deps-watch is pending; retained
+candidate locks/body can be reviewed by the lead meanwhile. No auto-merge; Astra plus exact-candidate
+hosted CI remain separate release gates. See CONTRIBUTING for the entrypoints and cache limits.
+External proof: `proof/CI-BWRAP-CACHE-2026-10-15/`. Local author checks do not prove Actions/Alpine execution.
+
 **CI doctor preparation (CI-ONARIM, 2026-10-11; author candidate, hosted acceptance pending).**
 `ci-shell-realm.mjs` verifies the locked source/dist bundles and the service's bubblewrap probe, then
 initializes a disposable project with an isolated HOME through the normal `init policy --apply` command.
