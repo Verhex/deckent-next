@@ -336,8 +336,9 @@ it.skipIf(process.platform === 'win32')('a governed /mode change through the rea
     // Drift laundering: a legitimate governed change after that hand edit continues from the edited policy, not from the checkpoint, so it
     // never turns the drift into a match and no automatic checkpoint is written; only an explicit re-baseline moves it on.
     const checkpoints = f.store.checkpointPage('s', 0, 100).length, revision = (await source.load()).revision;
-    await modes.set(principal, { schemaVersion: 1, scopeId: 's', mode: 'standart', expectedRevision: revision });
+    const relaxed = await modes.set(principal, { schemaVersion: 1, scopeId: 's', mode: 'full-auto', expectedRevision: revision }); expect(relaxed.changed).toBe(true);
     const laundered = await contextOf();
+    expect(f.audit.list('s', 0, 100).map(record => record.event.subject).filter(subject => subject.kind === 'permission-mode-change' && subject.policyDigest).at(-1)).toMatchObject({ policyDigest: laundered.policyDigest });
     expect(f.app.verify('s', laundered).status).toBe('policy-changed');
     expect(f.app.checkpoint('s', laundered, 13, writer).status).toBe('policy-changed');
     expect(f.store.checkpointPage('s', 0, 100)).toHaveLength(checkpoints);
