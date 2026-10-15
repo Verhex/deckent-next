@@ -268,9 +268,9 @@ export function renderMarkdown(report) {
 }
 
 /**
- * Supply-chain integrity of the watched tree, apart from ordinary advisories: an incomplete watch, any registry-signature problem or any CRITICAL
- * finding (malware advisories are CRITICAL). The pin-refresh publisher needs this clear; a HIGH advisory alone keeps the report red but does not
- * hold back a verified pin candidate.
+ * Supply-chain integrity of the watched tree, apart from every other finding: an incomplete integrity source, any registry-signature problem or
+ * any CRITICAL finding (malware advisories are CRITICAL). The pin-refresh publisher needs this clear. Any other non-CRITICAL finding (an
+ * advisory, a license or review finding) keeps the report red but does not hold back a verified pin candidate.
  */
 // Owner 2026-10-15 ("Kapıyı daralt"): an unavailable upstream-repository advisory list or npm version metadata says nothing about the
 // installed tree's integrity, so it keeps the report red without holding back a pin candidate (try-1 dispatch: GitHub advisories for
