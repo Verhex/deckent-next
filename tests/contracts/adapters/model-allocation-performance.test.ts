@@ -10,6 +10,7 @@ import { openSqliteModelActivationStore, openSqliteModelAllocationIntegrityReade
 import { encodeModelBindingDefinition, parseModelInvocationControlRecord, parseProviderCatalog, resolveModelBindingDefinition, type ModelActivationRecord } from '#domain/index.js';
 import { createModelAllocationCheckpoint, createModelInvocationClaimReceipt, modelInvocationProfileDigest, modelInvocationRequestDigest,
   parseModelAllocation, verifyModelAllocationIntegrity } from '#engine/index.js';
+import { hostBound } from '../support/host-bounds.js';
 
 const roots: string[] = [];
 const options = { busyTimeoutMs: 20, journalMode: 'delete' as const, durability: 'full' as const };
@@ -106,4 +107,4 @@ it('reports descriptive actual claim timings for schema-valid allocation histori
   process.stdout.write(`${JSON.stringify({ benchmark: 'sqlite-model-invocation-claim-allocation-history', ledgerVersion: CURRENT_LEDGER_VERSION,
     workload: 'one scope/allocation; schema-valid claimed receipt/control/allocation/checkpoint seed; audit before 2 warmup and 10 actual store.claim samples',
     warmupClaims: 2, samplesPerHistory: 10, results })}\n`);
-}, 60_000);
+}, hostBound(60_000));

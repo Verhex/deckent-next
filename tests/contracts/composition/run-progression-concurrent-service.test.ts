@@ -12,6 +12,7 @@ import * as execution from '#composition/core/execution/index.js';
 import { RuntimeServiceLifecycle } from '#engine/index.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
+import { hostBound } from '../support/host-bounds.js';
 
 const nativeAvailable = process.platform === 'linux' && existsSync(resolve('src/adapters/core/local-runtime-socket/native/build/Release/peer_credentials.node'));
 const roots: string[] = [];
@@ -19,7 +20,7 @@ afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
 function bounded<T>(promise: Promise<T>) {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('CONCURRENT_SERVICE_TIMEOUT')), 3000);
+    const timer = setTimeout(() => reject(new Error('CONCURRENT_SERVICE_TIMEOUT')), hostBound(3000));
     promise.then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
   });
 }

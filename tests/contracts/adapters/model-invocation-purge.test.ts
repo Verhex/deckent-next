@@ -10,6 +10,7 @@ import { afterEach, expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
+import { hostBound } from '../support/host-bounds.js';
 
 const execute = promisify(execFile), roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -67,7 +68,7 @@ it('purges retained native content without changing immutable receipt, counters,
 });
 
 async function waitForBarrier(path: string, count: number) {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + hostBound(5_000);
   while (Date.now() < deadline) {
     const ready = await Promise.all(Array.from({ length: count }, (_, index) => access(`${path}.${index}`).then(() => true, () => false)));
     if (ready.every(Boolean)) return;
