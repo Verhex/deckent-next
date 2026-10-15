@@ -151,3 +151,16 @@ it.skipIf(process.platform !== 'linux')('deckent audit rebaseline: AI and unwitn
   expect(await main(['audit', 'rebaseline', '--scope', 's', '--reason', 'again'], { root: f.root, env: f.options.env, rebaselineAudit: rebaselineConfiguredAudit,
     stdin: Readable.from(['y\n']) as never, stdout: { write() {} }, stderr: { write() {} } })).not.toBe(0);
 });
+
+it.skipIf(process.platform === 'win32')('REVIEW2561 R3: the real assurance-producer selection is part of the checkpoint; a selection change reads producers-changed on every surface and is not re-based', async () => {
+  const f = await auditCheckpointFixture(); roots.push(f.root); const query: AuditVerifyQuery = { schemaVersion: 1, scopeId: 's' };
+  expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('match');
+  const configPath = join(f.root, '.deckent/config.json'), authored = JSON.parse(await readFile(configPath, 'utf8'));
+  await writeFile(configPath, JSON.stringify({ ...authored, approvals: { assuranceProducers: [] } })); clearConfigCache();
+  expect(await verifyAudit(f.root, query, f.options)).toMatchObject({ status: 'producers-changed', reason: 'producers' });
+  expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('producers-changed');
+  let json = ''; await runKernelCommand(['doctor', '--json'], { root: f.root, env: f.options.env, verifyAudit: (root: string, input: AuditVerifyQuery) => verifyAudit(root, input, f.options), stdout: { write: value => { json += value; } } });
+  expect(JSON.parse(json)).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'producers-changed' } });
+  await writeFile(configPath, JSON.stringify(authored)); clearConfigCache();
+  expect((await verifyAudit(f.root, query, f.options)).status).toBe('match');
+});

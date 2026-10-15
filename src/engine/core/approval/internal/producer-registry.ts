@@ -60,6 +60,16 @@ export class ApprovalAssuranceProducerRegistry {
 }
 export const approvalAssuranceProducerRegistry = new ApprovalAssuranceProducerRegistry();
 export function registerApprovalAssuranceProducer(registration: ApprovalAssuranceProducerRegistration): void { approvalAssuranceProducerRegistry.register(registration); }
+/**
+ * The read-only inventory an audit checkpoint summarises (REVIEW2561 R3): every registered manifest (Core included) with its active flag under
+ * the configured selection, and the selection as configured. It creates no attester and writes no audit; one function for service, read and
+ * re-baseline, so an added, removed, re-versioned or re-selected producer changes the checkpoint's producer digest.
+ */
+export function approvalAssuranceProducerInventory(selection: readonly Reference[], registry: ApprovalAssuranceProducerRegistry = approvalAssuranceProducerRegistry) {
+  const chosen = new Set(selection.map(ref => `${ref.id}@${ref.version}`));
+  return Object.freeze({ schemaVersion: 1 as const, manifests: registry.manifests().map(manifest => ({ ...manifest, active: chosen.has(`${manifest.id}@${manifest.version}`) })),
+    selection: selection.map(ref => ({ id: ref.id, version: ref.version })) });
+}
 /** The versioned manifest inventory used by this decision path; no new ledger or decision owner. */
 export function approvalAssuranceRegistrationEvent(context: Omit<AuditEvent, 'schemaVersion' | 'subject'>,
   producers: readonly (ApprovalAssuranceProducerManifest & { readonly active: boolean })[]): AuditEvent {

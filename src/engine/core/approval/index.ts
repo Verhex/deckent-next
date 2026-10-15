@@ -29,5 +29,5 @@ export type { SessionStandingResult, SessionApprovalResult, ClearSessionStanding
 export { SessionApprovalAnswers } from './internal/session-answers.js';
 export { RunCreateApprovalBroker, RUN_CREATE_SUBJECT_PROTOCOL_VERSION } from './internal/run-create.js';
 export type { RunCreateApprovalInput } from './internal/run-create.js';
-export { ApprovalAssuranceProducerRegistry, approvalAssuranceProducerRegistry, registerApprovalAssuranceProducer, approvalAssuranceRegistrationEvent, resolveAuditedApprovalAssurance } from './internal/producer-registry.js';
+export { ApprovalAssuranceProducerRegistry, approvalAssuranceProducerRegistry, registerApprovalAssuranceProducer, approvalAssuranceRegistrationEvent, resolveAuditedApprovalAssurance, approvalAssuranceProducerInventory } from './internal/producer-registry.js';
 export type { ApprovalAssuranceAttester, ApprovalAssuranceProducerManifest, ApprovalAssuranceProducerRegistration } from './internal/producer-registry.js';

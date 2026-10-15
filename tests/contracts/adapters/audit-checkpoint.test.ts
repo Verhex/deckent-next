@@ -5,7 +5,8 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { type AuditEvent } from '#domain/index.js';
-import { AuditApplication, sealAuditRecord, AuditCheckpointApplication, AuditCheckpointMonitor, auditPolicyDigest, auditProducersDigest, PermissionModeApplication } from '#engine/index.js';
+import { AuditApplication, sealAuditRecord, AuditCheckpointApplication, AuditCheckpointMonitor, auditPolicyDigest, auditProducersDigest, PermissionModeApplication,
+  ApprovalAssuranceProducerRegistry, approvalAssuranceProducerInventory } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { CORE_SCHEMA } from '#platform/core/config/index.js';
 import { SqliteAuditStore, openReadOnlyAuditStore } from '#adapters/core/audit-store/index.js';
@@ -357,5 +358,37 @@ it('REVIEW2561 R2: the re-baseline decides authority again inside its write; a r
       .toThrow(expect.objectContaining({ code: 'APPROVAL_DENIED' }));
     expect(f.audit.list('s', 0, 100)).toHaveLength(events); expect(f.store.checkpointPage('s', 0, 100)).toHaveLength(checkpoints);
     expect(f.app.verify('s', drift).status).toBe('policy-changed');
+  } finally { f.store.close(); }
+});
+
+it('REVIEW2561 R3: a producer added, removed, re-versioned or re-selected is producers-changed; no cycle re-bases it', async () => {
+  const registry = (...manifests: { id: string; version: number; level: string; rank: number }[]) => {
+    const value = new ApprovalAssuranceProducerRegistry();
+    for (const manifest of manifests) value.register({ manifest: { schemaVersion: 1, ...manifest }, create: () => ({ attests: () => true }) });
+    value.seal(); return value;
+  };
+  const sso = { id: 'erp.sso', version: 1, level: 'enterprise-sso', rank: 5 }, key = { id: 'erp.hardware-key', version: 1, level: 'hardware-key', rank: 6 };
+  const core = { id: 'core.turn-bound', version: 1 };
+  const digestOf = (value: ApprovalAssuranceProducerRegistry, selection: { id: string; version: number }[]) =>
+    ({ ...context, producersDigest: auditProducersDigest({ producers: approvalAssuranceProducerInventory(selection, value) }) });
+  const baseline = digestOf(registry(sso), [core, { id: sso.id, version: 1 }]);
+  const drifts: [string, typeof baseline][] = [
+    ['added', digestOf(registry(sso, key), [core, { id: sso.id, version: 1 }])],
+    ['removed', digestOf(registry(), [core])],
+    ['re-versioned', digestOf(registry({ ...sso, version: 2 }), [core, { id: sso.id, version: 2 }])],
+    ['re-selected', digestOf(registry(sso), [core])],
+    ['installed but not selected', digestOf(registry(sso, key), [core, { id: sso.id, version: 1 }, { id: key.id, version: 1 }])],
+  ];
+  const f = await fixture();
+  try {
+    f.audit.record(event('s', 1)); expect(f.app.checkpoint('s', baseline, 10, writer).status).toBe('match');
+    for (const [label, drift] of drifts) {
+      expect(drift.producersDigest, label).not.toBe(baseline.producersDigest);
+      expect(f.app.verify('s', drift), label).toMatchObject({ status: 'producers-changed', reason: 'producers' });
+      f.audit.record(event('s', 100 + drifts.findIndex(row => row[0] === label)));
+      expect(f.app.checkpoint('s', drift, 11, writer).status, label).toBe('producers-changed');
+    }
+    expect(f.store.checkpointPage('s', 0, 10)).toHaveLength(1);
+    expect(f.app.verify('s', digestOf(registry(sso), [core, { id: sso.id, version: 1 }])).status).toBe('match');
   } finally { f.store.close(); }
 });
