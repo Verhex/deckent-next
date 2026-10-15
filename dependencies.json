@@ -187,7 +187,7 @@
       "ownSolution": "We parse tool input with our own zod schemas and use only the low-level Server; an own stdio JSON-RPC server would drop ajv/zod4/eventsource/jose from the tree but take on spec tracking. The ajv default validator is out of the published package (build-dist stub, FASTURI-OUT) and the Server gets Deckent's own validator through the SDK's jsonSchemaValidator interface (MCP-SCHEMA-VALIDATOR).",
       "watch": [
         "Server dist loads the embedded ajvProvider unconditionally (shimsNode) in the installed dev/test tree; the published package loads a stub instead (FASTURI-OUT) and the Server gets Deckent's own validator explicitly (MCP-SCHEMA-VALIDATOR; the SDK's cf-worker provider is neither used nor shipped).",
-        "Three nested zod@4.6.5 copies under the SDK packages until our zod 4 migration dedupes them."
+        "Three nested zod copies under the SDK packages (client and server 4.6.5, core 4.6.7 since SDK 2.3.1) until our zod 4 migration dedupes them."
       ],
       "lastReview": "2026-10-15",
       "nextReview": "2026-10-29"
