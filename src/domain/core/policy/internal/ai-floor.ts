@@ -20,9 +20,19 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
   if (resource.kind === 'audit' && !['inspect', 'verify'].includes(action)) return true;
   if (resource.kind === 'agent-tool-call' && ['edit-authority', 'edit-floor'].includes(resource.id)) return true;
-  if (resource.kind === 'config' && action === 'write') {
-    const key = resource.id.slice(resource.id.indexOf(':') + 1);
-    return /^(?:policy|approvals|identity|security|storage|service|paths|shell|network|layout|execution|installation|company|enforce_principal_assurance|secrets)(?:\.|$)/u.test(key);
-  }
+  if (resource.kind === 'config' && action === 'write') return protectedConfigKey(resource.id.slice(resource.id.indexOf(':') + 1));
   return false;
+}
+/**
+ * Config subtrees that set a security boundary (REVIEW2561 R1: the real keys, not look-alikes): authority, identity, storage, service and
+ * paths; the whole `execution` tree (Docker isolation, `secretGate` exclusions, work targets); admission and operation registries; audit
+ * monitoring; the agent shell's realm and environment pass-through; the agent fetch egress and host allowlist. A key is protected when it
+ * is one of these, lies inside one, or is an ancestor whose whole-object write would replace one (`terminal`, `terminal.shell`, ...).
+ */
+const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
+  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit',
+  'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);
+export function protectedConfigKey(keyPath: string): boolean {
+  const key = keyPath.replace(/\[[^\]]*\]/gu, '.0').replace(/\.+$/u, '');
+  return PROTECTED_CONFIG_PATHS.some(root => key === root || key.startsWith(`${root}.`) || root.startsWith(`${key}.`)) || key === '';
 }

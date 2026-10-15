@@ -31,8 +31,19 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['approval assurance producers', 'config', 'project:approvals.assuranceProducers', 'write'],
   ['policy config', 'config', 'project:policy', 'write'],
   ['identity config', 'config', 'global:identity.profile', 'write'],
-  ['shell boundary config', 'config', 'project:shell.readOnly', 'write'],
-  ['network boundary config', 'config', 'project:network.allow', 'write'],
+  // REVIEW2561 R1: the real terminal boundary keys (adapters/core/contract terminal schema) and every parent whose whole-object write replaces them.
+  ['agent shell realm (require-sandbox -> host)', 'config', 'project:terminal.shell.realm', 'write'],
+  ['agent shell environment pass-through', 'config', 'project:terminal.shell.environment', 'write'],
+  ['agent shell environment entry', 'config', 'global:terminal.shell.environment[0]', 'write'],
+  ['agent fetch egress', 'config', 'project:terminal.fetch.egress', 'write'],
+  ['agent fetch host allowlist', 'config', 'global:terminal.fetch.allowedHosts', 'write'],
+  ['whole terminal.shell object', 'config', 'project:terminal.shell', 'write'],
+  ['whole terminal.fetch object', 'config', 'project:terminal.fetch', 'write'],
+  ['whole terminal object', 'config', 'project:terminal', 'write'],
+  ['Docker isolation', 'config', 'project:execution.docker.network', 'write'],
+  ['admission registry', 'config', 'project:admission', 'write'],
+  ['operation targets', 'config', 'project:operations.targets', 'write'],
+  ['audit monitoring', 'config', 'project:audit.checkpointIntervalMs', 'write'],
   ['principal assurance enforcement', 'config', 'project:enforce_principal_assurance', 'write'],
 ];
 const grantAll = (kind: string, principal: VerifiedPrincipal) => ({ id: `all-${kind}`, effect: 'allow' as const, actions: 'all' as const, scopes: 'all' as const,
@@ -59,5 +70,6 @@ it('every vocabulary action that is not authority-widening stays policy-governed
   }
   expect(aiAuthorityFloor(mcp, { kind: 'audit', id: 's' }, 'verify')).toBe(false);
   expect(aiAuthorityFloor(mcp, { kind: 'approval', id: 'ordinary-uuid' }, 'decide')).toBe(false);
-  expect(aiAuthorityFloor(mcp, { kind: 'config', id: 'project:terminal.theme' }, 'write')).toBe(false);
+  for (const key of ['terminal.theme', 'terminal.shell.timeoutMs', 'terminal.fetch.timeoutMs', 'terminal.chat', 'terminal.scratch.retentionDays', 'language', 'max_workers'])
+    expect(aiAuthorityFloor(mcp, { kind: 'config', id: `project:${key}` }, 'write'), key).toBe(false);
 });

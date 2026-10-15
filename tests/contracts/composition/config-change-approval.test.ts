@@ -12,7 +12,7 @@ import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } f
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { openLocalIntegrityAuthority } from '#adapters/index.js';
+import { openLocalIntegrityAuthority, withMcpPrincipal } from '#adapters/index.js';
 import { approvalSubject, type ApprovalRecord } from '#domain/index.js';
 import { clearConfigCache, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 
@@ -278,5 +278,34 @@ describe('CACHE-SLICE1: the cache migration through the real governed config wri
     expect(f.auditCount()).toBe(audits + 1);
     expect(f.audits().at(-1)!.event.subject).toMatchObject({ kind: 'config-change', approvalId: pending.approvalId, keyPath: 'provider_invocation_profiles' });
     expect(await port.inspect()).toBeNull();
+  });
+});
+
+describe('REVIEW2561 R1: the AI floor over the real terminal boundary keys, on the direct and the approval path', () => {
+  it('an MCP actor with a config write and approval grant cannot widen the shell realm, its environment, fetch egress or hosts (nor the parent objects); ordinary keys stay writable', async () => {
+    const f = await setup(() => []);
+    const mcp = await withMcpPrincipal(() => resolveConfiguredConfigPrincipal(f.root, 'installation', f.options));
+    const both = [{ issuer: f.command.principal.issuer, subject: f.command.principal.subject }, { issuer: mcp.issuer, subject: mcp.subject }];
+    await f.writePolicy(() => [
+      { id: 'company-config-all', effect: 'allow', actions: ['write'], scopes: ['installation'], principals: both, resource: { kind: 'config', ids: 'all' } },
+      { id: 'company-fetch-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'], principals: both, resource: { kind: 'config', ids: ['project:terminal.fetch'] } },
+      { id: 'company-mcp-approvals', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['installation'], principals: both, resource: { kind: 'approval', ids: 'all' } }]);
+    const asMcp = { ...f.command, principal: mcp }, before = await bytesOf(f.path);
+    const widening: readonly [string, unknown][] = [['terminal.shell.realm', 'host'], ['terminal.shell.environment', ['AWS_SECRET_ACCESS_KEY']],
+      ['terminal.fetch.egress', 'approval'], ['terminal.fetch.allowedHosts', ['evil.example']], ['terminal.shell', { schemaVersion: 1, realm: 'host' }],
+      ['terminal.fetch', { schemaVersion: 1, egress: 'allowlist', allowedHosts: ['evil.example'] }], ['terminal', { shell: { schemaVersion: 1, realm: 'host' } }]];
+    for (const [keyPath, value] of widening) {
+      await expect(withMcpPrincipal(() => f.app.submit('set', { ...asMcp, commandId: `mcp-${keyPath}`, keyPath, value })), keyPath).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    }
+    expect(await bytesOf(f.path)).toBe(before);
+    // Ordinary terminal settings stay governed by policy alone.
+    expect(await withMcpPrincipal(() => f.app.submit('set', { ...asMcp, commandId: 'mcp-theme', keyPath: 'terminal.theme', value: 'ansi' }))).toMatchObject({ status: 'applied' });
+    // Approval path: the owner's own change opens a card; the MCP actor cannot decide it even with an approval decide grant.
+    const pending = await f.app.submit('set', { ...f.command, commandId: 'owner-hosts', keyPath: 'terminal.fetch', value: { schemaVersion: 1, egress: 'allowlist', allowedHosts: ['docs.example'] } });
+    if (pending.status !== 'approval-pending') throw new Error('expected a card');
+    await expect(withMcpPrincipal(() => configuredApproval(f.root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId: pending.approval.approvalId,
+      commandId: 'mcp-decide', expectedRevision: 0, decision: 'allow', reason: 'AI allows its own widening' }, f.options))).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
+    const [card] = (await f.list()).filter(item => item.request.approvalId === pending.approval.approvalId);
+    expect(card?.status).toBe('pending');
   });
 });
