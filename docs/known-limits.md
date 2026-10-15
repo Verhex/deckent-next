@@ -19,7 +19,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   monitor, model calls, the Brain and acceptance do not work natively either. Platform tests skip these with an
   `[unsupported on Windows: …]` tag, so a green Windows check does not mean these parts work. *Workaround:* use WSL2.
 - **macOS has separate, incomplete verification.** It is not part of the required checks. *Impact:* execution and security
-  behavior there is unproven; do not rely on it for real work.
+  behavior there is unproven; do not rely on it for real work. The local runtime socket is Linux-only, so the service
+  transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
 - **arm64 is not shipped.** The locked bubblewrap bundle ships for x86_64; an arm64 build check is not arm64 runtime proof.
