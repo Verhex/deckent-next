@@ -9,7 +9,7 @@ export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from
 export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
   resolveDockerReadOnlyMounts, dockerProfileObservesWorker } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
-export { LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
+export { LOCAL_AUTHENTICATOR_INVENTORY, LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
 export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
 export type { GitWorkspaceOptions, GitWorkspaceLease } from '#adapters/core/git-workspace/index.js';
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from '#adapters/core/git-workspace/index.js';
@@ -17,6 +17,8 @@ export type { GitSourcePreimage, GitSourceBase } from '#adapters/core/git-worksp
 export { GitRunWorkspaceProvider } from '#adapters/core/git-workspace/index.js';
 export { resolveGitWorkTarget, selectWorkTarget } from '#adapters/core/git-workspace/index.js';
 export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
+export { scanWorkerTree, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
+export type { WorkerTreeGateOptions, WorkerTreeView } from '#adapters/core/worker-tree-gate/index.js';
 export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
 export { FilePolicySource, PolicyFileError } from '#adapters/core/file-policy/index.js';
@@ -55,6 +57,7 @@ export { createBoundedMcpTransport, mcpToolDeliveryCapacityForProbe } from '#ada
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError, assertNativeWorkerBinding,
   nativeCliIdSchema, createNativeCodingTemplate, nativeWorkerEffortCapability, bindNativeWorkerEffort, NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase, nativeCodingTemplateWorker } from '#adapters/core/native-coding/index.js';
 export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
+export { detectNativeCliVersion } from '#adapters/core/native-coding/index.js';
 export * from '#adapters/core/native-connection/index.js';
 
 export * from '#adapters/core/git-patch/index.js';
@@ -96,3 +99,4 @@ export * from '#adapters/core/resource-trace/index.js';
 export { sampleDockerResources } from '#adapters/core/docker-supervisor/index.js';
 
 export { openInstallationPoolStore } from '#adapters/core/installation-pool-store/index.js';
+export * from '#adapters/core/provider-siwc/index.js';

@@ -6,7 +6,7 @@ import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfi
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, boundApprovalPreviewFacts, createTurnDecisionCapabilities, parseAgentCompactionSummary,
-  renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
+  renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, MESSAGE_REGISTRY, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, sealedRootEntryRefused, agentDataRootRel, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
@@ -93,16 +93,14 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const toolCapable = declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);
   // Catalog evidence that the served template reads `enable_thinking` (TL-C D8): the compaction call then runs without thinking.
   const thinkingSwitch = declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY);
-  // v16 `reasoning: 'off'`: every round without thinking. A model that cannot switch is refused by name before anything is claimed
-  // or sent (never ignored silently); `/reasoning on` turns the request back to the model's default.
+  // v16 `reasoning: 'off'`: every round without thinking. A model that cannot switch is refused by name before anything is claimed or sent (never ignored silently); `/reasoning on` turns the request back to the model's default.
   if (command.reasoning === 'off' && !thinkingSwitch) throw ErrorRegistry.createError('AGENT_TURN_REASONING_UNSUPPORTED');
   const roundThinking = command.reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {};
   // TL-B D3: `terminal.chat.readResultMaxBytes` reaches the adapter (field default 65_536 = adapter default).
   const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout, fullAccess), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
   // A call the owner did not approve sees the write floor read-only in a sandbox; in full access only the configuration file stays so.
   const selfSource = await isSelfSourceProject(projectRoot), authority = agentAuthorityPaths(projectRoot, context.layout), writeFloor = agentTurnWriteFloor(authority, fullAccess, selfSource);
-  // SCR-A: the conversation's scratch area (the caller's own subtree of the layout's `scratch` resource); `scratch_write` is its edit area.
-  // The area is held from before it is opened until the turn ends (Astra 2149): every exit below releases it in `finally`.
+  // SCR-A: the conversation's scratch area (the caller's own subtree of the layout's `scratch` resource); `scratch_write` is its edit area. The area is held from before it is opened until the turn ends (Astra 2149): every exit below releases it in `finally`.
   const scratch = workspace ? await openScratchSession(await prepareProductDirectory(context.layout, 'scratch'), scratchSessionKey({ scopeId: command.scopeId, principal: context.principal,
     turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}) }), readTerminalScratchConfig(config), host.scratch,
     { maxResultBytes: chat.readResultMaxBytes }) : null;
@@ -115,8 +113,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     event.approvalId), event) : { ...event, decisionCapability: host.decisions.mint({ scopeId: command.scopeId, approvalId: event.approvalId, principal: context.principal, peerPid: peer.pid, expiresAt: event.expiresAt }, clock.sample().wallMs) });
   let store: Awaited<ReturnType<typeof openSqliteAgentTurnStore>> | null = null, registered = false;
   try {
-    // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says fetch_url is not offered (and,
-    // v6, no network at all unless the shell's posture reaches it).
+    // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says fetch_url is not offered (and, v6, no network at all unless the shell's posture reaches it).
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
@@ -129,8 +126,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // L1 item 5: the model may propose an MCP server; its own window asks the person in every mode, and only a yes adds it (untrusted).
     const proposals = workspace ? createMcpProposals({ projectRoot, options, context, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval,
       proposer: `model ${reference.modelId}`, locale: language }) : null;
-    const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
-      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? []), PROPOSE_MCP_SERVER_TOOL_SPEC] : [];
+    // NATIVE-BAGLAM: `session_state` is offered only where policy allows it now (decided like every call; never a default grant).
+    const toolAuthority = new AgentToolPolicyAuthorization(context.policy), tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
+      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? []), PROPOSE_MCP_SERVER_TOOL_SPEC, ...(await toolAuthority.decide(SESSION_STATE_TOOL_SPEC, command.scopeId, context.principal) === 'allow' ? [SESSION_STATE_TOOL_SPEC] : [])] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,
       ...(project ? { authority, selfSource: selfSource && !fullAccess ? isSelfSourceWriteFloored : () => false } : {}) }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
@@ -140,17 +138,6 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(agentDataRootRel(projectRoot, context.layout) ? { dataRoot: agentDataRootRel(projectRoot, context.layout)! } : {}), ...(fullAccess ? { repositoryWritable: true } : {}),
         hardFloor }), sealed: sealedRootEntryRefused(projectRoot, hardFloor) }) : null;
     const principalKey = principalKeyOf(context.principal);
-    const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
-    // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
-    // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
-    const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
-      model: { ...reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
-      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null,
-      // v6 PROMPT-POSTURE: the shell's posture from the realm its calls resolve (the shell owns it), apart from fetch_url.
-      shell: shell ? await shell.posture() : null });
-    const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference, catalogRevision: binding.catalogRevision,
-      binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
-      ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
     // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
     const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
       .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
@@ -192,6 +179,18 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
     const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } });
+    // NATIVE-BAGLAM: the descriptive session snapshot over one fresh policy snapshot (mode, thinking, model facts, each tool's effect now); the prompt states it, `session_state` returns it fresh.
+    const posture = shell ? await shell.posture() : null, sessionOf = async () => { const policy = await context.policy.load().catch(() => null); return agentSessionSnapshot({ policy, principal: context.principal, scopeId: command.scopeId, sessionId: command.sessionId ?? null, fullAccess, tools, shell: posture,
+      thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => decisions.probe(policy, tool, cell, shellInput) }); };
+    // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
+    const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
+      model: { ...reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
+      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null,
+      // v6 PROMPT-POSTURE: the shell's posture from the realm its calls resolve (the shell owns it), apart from fetch_url.
+      shell: posture, session: await sessionOf() });
+    const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference, catalogRevision: binding.catalogRevision,
+      binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
+      ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
     registered = !host.running.has(key);
@@ -228,8 +227,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
               return { status: 'failed', state: chatTurnRoundFailureState({ ...outcome,
                 evidence: { ...evidence, body: { ...evidence.body, ...(body ? { data: body } : {}) } } } as typeof outcome, diagnosis.rejectionCodes) };
             }
-            // Lead 2026-10-10 (E2, P1): a provider's rejection body never reaches the person or the turn; only the provider and HTTP status are named.
-            // The body stays in the governed retained-content record (inspect-content policy, redacted inspection).
+            // Lead 2026-10-10 (E2, P1): a provider's rejection body never reaches the person or the turn; only the provider and HTTP status are named. The body stays in the governed retained-content record (inspect-content policy, redacted inspection).
             const provider = diagnosis.labelKey ? (MESSAGE_REGISTRY.catalogs[language] as Readonly<Record<string, string>>)[diagnosis.labelKey] ?? t('tui.provider.unknown', {}, language)
               : t('tui.provider.unknown', {}, language);
             return { status: 'failed', state: [t('tui.provider.badRequestUnknown', { provider }, language), diagnosis.migration
@@ -337,6 +335,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       async execute(tool, args, toolSignal, callId, execution) {
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
+        if (tool.name === SESSION_STATE_TOOL_SPEC.name) return { status: 'ok', text: agentSessionStateText(await sessionOf()) };
         if ((tool.toolClass === 'edit' && editsOf(tool.name)) || (tool.toolClass === 'shell' && shell)) {
           return decisions.execute(tool, args, execution, callId, (gate, authority, writes, track) => tool.toolClass === 'edit'
             ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate, authority, writes, track));

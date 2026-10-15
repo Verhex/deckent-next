@@ -1,3 +1,4 @@
+import { auditCommand } from './audit.js';
 import { identityCommand } from '#surfaces/core/cli-identity/index.js';
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
 import { approvalsCommand } from './approvals.js';
@@ -24,7 +25,7 @@ export type { ExitCode } from '#platform/index.js';
 
 /** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
-  backup: backupCommand, identity: identityCommand,
+  audit: auditCommand, backup: backupCommand, identity: identityCommand,
   terminal: async (argv, context) => (await import('./terminal.js')).terminalCommand(argv, context),
   init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
   do: doCommand,
@@ -87,7 +88,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
-    if (command) { await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (command) return (await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
     const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv);
     emit(result.output, { level: result.code === 0 ? 'info' : 'error', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
     return result.code;

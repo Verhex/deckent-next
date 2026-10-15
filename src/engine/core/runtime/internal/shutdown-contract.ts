@@ -1,6 +1,6 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { counterSchema, identitySchema, verifiedPrincipalSchema } from '#domain/index.js';
+import { counterSchema, identitySchema, isMcpPrincipal, verifiedPrincipalSchema } from '#domain/index.js';
 
 const reasonSchema = z.string().max(1024).refine(value => value.trim().length > 0, 'SHUTDOWN_REASON_BLANK');
 const peerEvidenceSchema = z.object({
@@ -32,8 +32,10 @@ export const serviceActorSchema = z.object({
   principal: verifiedPrincipalSchema,
   evidence: peerEvidenceSchema,
 }).strict().superRefine((actor, context) => {
-  // Structural consistency only; the transport verifier must still supply the actual kernel evidence.
-  if (actor.principal.assurance !== 'os-user' || actor.principal.subject !== String(actor.evidence.uid)) {
+  // Structural consistency only; the transport verifier must still supply the actual kernel evidence. The local MCP actor (MCP-AI-AKTOR) is the
+  // same OS peer with workload assurance: it stays a separate, policy-governed principal, never refused here as a different identity.
+  const mcpActor = isMcpPrincipal(actor.principal) && actor.principal.assurance === 'workload-verified';
+  if ((actor.principal.assurance !== 'os-user' && !mcpActor) || actor.principal.subject !== String(actor.evidence.uid)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'SHUTDOWN_PEER_IDENTITY_MISMATCH' });
   }
 }).readonly();

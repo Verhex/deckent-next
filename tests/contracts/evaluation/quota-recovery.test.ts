@@ -314,7 +314,9 @@ it.skipIf(process.platform === 'win32')('release keeps cancelled Runs terminal a
   const g = await fixture(); const quota = (await g.evaluate()).snapshot;
   const held = holdRun(quota, quota.revision, 'manual intervention', 1500, 10000);
   const db = new DatabaseSync(g.path); try { db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=?').run(held.revision, JSON.stringify(held), 's', 'r'); } finally { db.close(); }
-  await release(g).apply(releaseCommand); expect((await g.store.loadRun('s', 'r'))!.state).toEqual(held.state);
+  const heldState = held.state; if (heldState.kind !== 'parked') throw new Error('FIXTURE_HOLD_REQUIRED');
+  await release(g).apply(releaseCommand); expect((await g.store.loadRun('s', 'r'))!.state).toEqual({
+    kind: 'parked', reason: 'operator-hold', note: 'manual intervention', since: heldState.since, deadline: heldState.deadline });
   expect((await g.store.loadRun('s', 'r'))!.bindings).toEqual([]);
 });
 it.skipIf(process.platform === 'win32')('inspect uses current time and omits expired channel holds', async () => {

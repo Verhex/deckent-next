@@ -28,7 +28,9 @@ export async function recordAttemptClosure(store: AttemptStore & Pick<RunStore, 
 /** Refusal codes that recur deterministically for the same pinned attempt before any dispatch claim: retrying them each turn cannot
  * succeed, so the attempt closes as `launch-refused`. Every other code (store contention, policy, credentials, daemon, workspace
  * locks, unclassified adapter errors) stays transient: the turn fails as before and the runtime's failure backoff applies. */
-const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_CONFIGURED', 'EXECUTION_HOST_UNSUPPORTED', 'EXECUTION_PROFILE_INVALID', 'DISPATCH_ARTIFACT_REQUIRED']);
+const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_CONFIGURED', 'EXECUTION_HOST_UNSUPPORTED', 'EXECUTION_PROFILE_INVALID', 'DISPATCH_ARTIFACT_REQUIRED',
+  // S6: the Run's base commit is pinned, so the same tree is refused on every turn; the person fixes it in a new Run (or raises a bound).
+  'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE']);
 export function classifyLaunchRefusal(error: unknown): Readonly<{ disposition: 'permanent'; code: string }> | Readonly<{ disposition: 'transient' }> {
   const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
   return code !== null && PERMANENT_LAUNCH_REFUSALS.has(code) ? Object.freeze({ disposition: 'permanent' as const, code }) : Object.freeze({ disposition: 'transient' as const });

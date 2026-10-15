@@ -766,3 +766,11 @@ it('a missing approval expiry remains unknown rather than promising an unlimited
     expect(rows[0]!.cells[2]!.text).not.toBe(t('monitor.time.noExpiry', {}, locale));
   }
 });
+
+it.each(['en', 'tr'] as const)('shows the frozen task billing axis in monitor detail (%s)', locale => {
+  const run = fullSnapshot.installs[0]!.runs[0]!, task = { ...run.tasks[0]!, billingAxis: 'subscription' as const };
+  const snapshot = { ...fullSnapshot, installs: [{ ...fullSnapshot.installs[0]!, runs: [{ ...run, tasks: [task] }] }] };
+  const view = surface.buildMonitorView(snapshot, locale, true);
+  const serialized = view.tabs.runs.flatMap(block => block.kind === 'table' ? block.rows : []).flatMap(row => row.detail().flat()).map(span => span.text).join('\n');
+  expect(serialized).toContain(locale === 'tr' ? 'abonelik planı' : 'subscription plan');
+});

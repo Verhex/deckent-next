@@ -39,12 +39,17 @@ const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), ver
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
 const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
+  /** Additive v1 subject: selected distribution manifests before assurance activation; secrets never enter the inventory. */
+  z.object({ kind: z.literal('approval-assurance-registration'), schemaVersion: z.literal(1), producers: z.array(z.object({
+    schemaVersion: z.literal(1), id: identitySchema, version: counterSchema.positive(), level: identitySchema,
+    rank: counterSchema.positive(), active: z.boolean() }).strict()).max(128) }).strict(),
   /** Config document write intent, recorded before atomic publication; digests only, no authored values. `approvalId` (T3 L2, lead
    * 2026-10-07): the config-change approval this write consumed — present only then, so every other config write keeps its earlier shape. */
   z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),
     keyPath: identitySchema, commandId: identitySchema, beforeDigest: digest.nullable(), afterDigest: digest, approvalId: identitySchema.optional() }).strict(),
   z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'hold', 'answer', 'accept', 'reject', 'park-progression', 'release-worker-custody']),
-    inputDigest: digest.optional(),
+    inputDigest: digest.optional(), deciderClass: z.enum(['human-tty', 'ai-policy', 'system']).optional(),
+    decisionRuleId: identitySchema.optional(), approvalId: identitySchema.optional(),
     runId: identitySchema, commandId: identitySchema, taskId: identitySchema.nullable(), revision: counterSchema,
     evidence: z.literal('model-unverified').nullable() }).strict(),
   z.object({kind:z.literal('decision-port'),action:z.enum(['ask','record','outcome']),phase:z.enum(['admitted','observed']),
@@ -103,7 +108,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict(),
     /** MODES-3: the person's "ask for edits too" preference requested and before (absent on records written before it existed). */
-    askEdits: z.object({ requested: z.boolean(), previous: z.boolean() }).strict().optional() }).strict(),
+    askEdits: z.object({ requested: z.boolean(), previous: z.boolean() }).strict().optional(), policyDigestBefore: digest.optional(), policyDigest: digest.optional() }).strict(),
   /**
    * Full access switched on for one terminal session (FA-SESSION, owner 2026-10-07): the decision on the person's `permission-mode`/`set`
    * `full-access` grant, the stored mode the session leaves untouched (the next launch starts in it) and the bindings revision read. Nothing is
@@ -144,7 +149,9 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('authority-change'), operation: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(),
     commandId: identitySchema, approvalId: identitySchema, decider: auditPrincipalSchema, inputDigest: digest,
     revision: z.object({ before: identitySchema, after: identitySchema }).strict(),
-    counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict() }).strict(),
+    counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict(),
+    /** AUDIT-CHECKPOINT (wave 2026-10-15): the audit policy digest of the resulting effective policy; a later checkpoint accepts exactly this content. */
+    policyDigestBefore: digest.optional(), policyDigest: digest.optional() }).strict(),
   /**
    * A refused authority change (POLICY-HARDEN P3-R): where it stopped (`decide` = an approval surface that may not decide authority
    * approvals, `submit` = before any intent, `settle` = a claimed intent refused terminally at the effect), the stable refusal code and the
@@ -192,16 +199,35 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('model-ingress'), fieldDigest: digest, projectedDigest: digest, decodedDigest: digest.nullable(),
     codePoints: counterSchema, disposition: z.enum(['note', 'quarantine']) }).strict(),
+  /**
+   * S6 (owner 2026-10-14): the pre-dispatch secret gate refused the tree a worker would receive, before any container, connection or dispatch
+   * claim. `findings` names at most `AUDIT_TRACKED_PATHS_MAX` workspace-relative paths (`count` is the full number), each with the rule that
+   * matched (`deny-path:<glob>`, `pattern:<id>`, `known-secret`) or, for an incomplete scan, the exhausted bound (`limit`). A value, a matched
+   * substring or a digest of one is never recorded.
+   */
+  z.object({ kind: z.literal('worker-tree-refused'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
+    code: z.enum(['WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE']), count: counterSchema,
+    findings: z.array(z.object({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600) }).strict()).max(AUDIT_TRACKED_PATHS_MAX),
+    limit: z.enum(['files', 'file-bytes', 'total-bytes', 'time']).nullable() }).strict(),
+  /** S6 (owner 2026-10-15): hits the operator's `execution.secretGate` lists lifted for a dispatched worker: path, rule and the exact config entry
+   * (`allowPatternPaths:<glob>` / `acknowledgedDenyPaths:<path>`) that lifted it; at most `AUDIT_TRACKED_PATHS_MAX` entries, never a value. */
+  z.object({ kind: z.literal('worker-tree-excluded'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, count: counterSchema.positive(),
+    entries: z.array(z.object({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600), by: z.string().min(1).max(600) }).strict()).min(1).max(AUDIT_TRACKED_PATHS_MAX) }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   authorityDecisionSubjectSchema,
+  /** AUDIT-CHECKPOINT wipe marker: written in the checkpoint's own transaction just before it, so checkpoint `checkpointSequence` has this record as its head. */
+  z.object({ kind: z.literal('audit-checkpoint'), checkpointSequence: counterSchema.positive(), previousDigest: digest.nullable(),
+    /** An explicit operator re-baseline (witnessed human terminal, audited reason): supersedes earlier markers from this sequence on. */
+    rebaseline: z.object({ reason: z.string().trim().min(1).max(1024) }).strict().optional() }).strict(),
   z.object({ kind: z.literal('installation-pool'), installer: z.object({ basis: z.literal('file-owner') }).strict(),
     poolId: identitySchema, capacity: z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict() }).strict(),
   z.object({ kind: z.literal('authority-change'), installer: z.object({ basis: z.enum(['first-run', 'named-person']),
     template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), person: auditPrincipalSchema }).strict(),
     commandId: identitySchema, inputDigest: digest, revision: z.object({ before: identitySchema, after: identitySchema }).strict(),
-    counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict() }).strict(),
+    counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict(),
+    policyDigestBefore: digest.optional(), policyDigest: digest.optional() }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();
@@ -214,5 +240,5 @@ export type AuditSubject = z.infer<typeof auditSubjectSchema>;
 export type AuditRecord = z.infer<typeof auditRecordSchema>;
 export type AuditCounter = z.infer<typeof auditCounterSchema>;
 export class AuditError extends Error {
-  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE') { super(code); this.name = 'AuditError'; }
+  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE' | 'AUDIT_REBASELINE_REFUSED' | 'AUDIT_REBASELINE_STALE') { super(code); this.name = 'AuditError'; }
 }

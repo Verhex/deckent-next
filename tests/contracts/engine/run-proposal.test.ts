@@ -52,7 +52,7 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
   const inspect = () => new RunProposalInspectionApplication(proposals, { verify: async () => state.principal }, { authorize: async () => { if (!state.inspect) throw ErrorRegistry.createError('POLICY_DENIED'); } });
   const sessions = { verifySession: async () => ({ principal, session: { schemaVersion: 1, sessionId: 'human', authorityRef: 'verified-test-authority', kind: 'os-user', principalRef: proposal.proposer,
     scopeIds: ['s'], authenticatedAt: 0, expiresAt: 10000 } }), isSessionActive: async () => true, revoke: async () => {} };
-  const approval = (actor = principal) => new ApprovalApplication(f.approvals, { verify: async () => actor }, sessions, source, f.integrity, f.clock, 'local-terminal-card', 100);
+  const approval = (actor = principal) => new ApprovalApplication(f.approvals, { verify: async () => actor }, sessions, source, f.integrity, f.clock, 'local-terminal-card', 100, undefined, undefined, { interactive: async () => true });
   async function decide(decision: 'allow' | 'deny' = 'allow') {
     const record = f.approvals.findRunCreate('s', 'propose')!;
     return approval().decide({ schemaVersion: 1, commandId: 'decision', scopeId: 's', approvalId: record.request.approvalId, expectedRevision: record.revision, decision, reason: 'Reviewed the exact proposed business process' });

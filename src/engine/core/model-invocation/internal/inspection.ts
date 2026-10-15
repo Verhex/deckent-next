@@ -1,3 +1,5 @@
+import { verifyModelInvocationPlanUsage } from './plan-usage.js';
+import type { ModelInvocationPlanUsage } from '#domain/index.js';
 import { verifyInvocationSpendReservation, type ProviderSpendReservation } from '#engine/core/provider-spend/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { parseModelInvocationControlRecord, parseModelInvocationQuery, ModelInvocationError, modelInvocationCommandQueryInputSchema, type ModelInvocationCommandQuery, type ModelInvocationControlRecord, type ModelInvocationPurgeReceipt, type ModelInvocationQuery,
@@ -8,7 +10,7 @@ import { verifyModelInvocationRecord } from './content.js';
 import { ModelInvocationStoreError, type ModelInvocationRecord } from './port.js';
 import { checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 
-export interface ModelInvocationInspectionRecord { readonly record: ModelInvocationRecord; readonly control: ModelInvocationControlRecord; readonly spending: ProviderSpendReservation | null }
+export interface ModelInvocationInspectionRecord { readonly record: ModelInvocationRecord; readonly control: ModelInvocationControlRecord; readonly spending: ProviderSpendReservation | null; readonly planUsage?: ModelInvocationPlanUsage | null }
 export interface ModelInvocationInspectionReader {
   loadReceipt?(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   loadInspection(scopeId: string, invocationId: string): Promise<ModelInvocationInspectionRecord | null>;
@@ -18,6 +20,7 @@ export type ModelInvocationInspection = Readonly<{ schemaVersion: 7; scopeId: st
   reference: ModelInvocationQuery['reference']; historyIntegrity: 'not-recorded'; invocation: ModelInvocationReceipt | null;
   control: ModelInvocationControlRecord | null;
   spending: ProviderSpendReservation | null;
+  planUsage?: ModelInvocationPlanUsage | null;
   contentStatus: 'retained' | 'not-captured' | 'purged' | null; purge: ModelInvocationPurgeReceipt | null;
   responseContent?: ModelInvocationResponseContent | null }>;
 export class ModelInvocationInspectionApplication {
@@ -62,7 +65,10 @@ export class ModelInvocationInspectionApplication {
         throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       }
       const spending = stored.spending === null ? null : verifyInvocationSpendReservation(stored.spending, receipt);
+      const planUsage = verifyModelInvocationPlanUsage(stored.planUsage ?? null, record);
+      if (planUsage && spending) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       return checkInvocationResultDelivery(Object.freeze({ ...identity, invocation: receipt, control, spending,
+        ...(receipt.profile.schemaVersion === 2 ? { planUsage } : {}),
         contentStatus: record.purge ? 'purged' : record.content === null ? 'not-captured' : 'retained', purge: record.purge,
         ...(query.includeResponseContent === true ? { responseContent: record.content } : {}) }), delivery);
     } finally { reader.close(); }

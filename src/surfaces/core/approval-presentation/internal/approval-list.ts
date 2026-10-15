@@ -12,6 +12,7 @@ export interface WorklineApproval {
   readonly revision: number;
   readonly status: 'pending' | 'decided' | 'expired';
   readonly decision: 'allow' | 'deny' | null;
+  readonly deciderLabel?: string;
   readonly expiresAt: number;
   /** Set when the decision asked for a standing scope: what the service answered (never assumed by the view). */
   readonly standing?: SessionStandingResult | { readonly scope: StandingScope; readonly saved: boolean; readonly reason?: string };

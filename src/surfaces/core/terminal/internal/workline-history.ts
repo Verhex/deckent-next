@@ -2,6 +2,7 @@ import type { AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate, humanRecordText } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { notice, type WorkLedgerEntry, WORK_LEDGER_SCHEMA_VERSION } from '#surfaces/core/terminal-ledger/index.js';
+import { withoutActiveWorkNote } from '#surfaces/core/terminal-work/index.js';
 
 /** Templates: `{count}` earlier messages not shown / tool results folded. */
 export interface ResumedHistoryLabels {
@@ -34,7 +35,8 @@ export function resumedHistoryEntries(messages: readonly AgentChatMessage[], lab
     flush();
     if (message.role === 'user') {
       if ([SUMMARY_MARK, EXCERPT_MARK, RENDER_MARK].some(mark => message.content.startsWith(mark))) { rows.push(notice('info', labels.summarized)); continue; }
-      const safe = humanRecordText(message.content, known);
+      // NATIVE-BAGLAM: the terminal's own active-work note is model context, never shown as what the person typed.
+      const safe = humanRecordText(withoutActiveWorkNote(message.content), known);
       const attached = safe.indexOf(ATTACHED);
       const text = (attached >= 0 ? safe.slice(0, attached) : safe).trim();
       rows.push(chat('user', text.length > RESUME_USER_TEXT_CHARS ? `${text.slice(0, RESUME_USER_TEXT_CHARS)} …` : text));
@@ -54,7 +56,7 @@ export function freshContextHistory(history: readonly AgentChatMessage[]): reado
   const kept = rest.flatMap(message => {
     if (message.role !== 'user') return [];
     if ([SUMMARY_MARK, EXCERPT_MARK, RENDER_MARK].some(mark => message.content.startsWith(mark))) return [message];
-    const attached = message.content.indexOf(ATTACHED), text = (attached >= 0 ? message.content.slice(0, attached) : message.content).trim();
+    const typed = withoutActiveWorkNote(message.content), attached = typed.indexOf(ATTACHED), text = (attached >= 0 ? typed.slice(0, attached) : typed).trim();
     return text ? [{ ...message, content: text }] : [];
   });
   return system ? [system, ...kept] : kept;

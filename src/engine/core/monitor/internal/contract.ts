@@ -61,6 +61,7 @@ export interface MonitorAttempt {
   readonly failedTests?: NonNullable<ResultBrief['failedTests']>;
 }
 export interface MonitorTask {
+  readonly billingAxis?: import('#domain/index.js').ModelInvocationBillingAxis | null;
   readonly acceptance?: AcceptanceView;
   readonly waiting?: import('#engine/core/runs/index.js').PoolWait;
   readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready' | 'needs-input'; readonly question?: string; readonly sinceMs: number; readonly deadlineMs: number };
@@ -70,6 +71,8 @@ export interface MonitorTask {
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
   readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null; readonly reason?: 'no-change-produced' };
   readonly dependencies: readonly string[]; readonly handoffs?: readonly HandoffReceiptView[];
+  /** S6: hits the operator's `execution.secretGate` lists lifted for the last attempt (path, rule, lifting entry; never a value). */
+  readonly configExclusions?: { readonly count: number; readonly entries: readonly import('#engine/core/workspaces/index.js').WorkerTreeExclusion[] };
 }
 export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled' | 'parked' | 'incomplete';
 export interface MonitorRun {

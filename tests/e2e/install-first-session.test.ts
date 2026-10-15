@@ -44,7 +44,8 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
         if (health?.serviceConfig === 'current') break;
         await wait(50);
       }
-      expect(health, log).toMatchObject({ status: 'ready', startability: { status: 'ready', checks: [] }, serviceConfig: 'current' });
+      // Nothing is recorded on a fresh install, so audit integrity is not verified yet: shown as unknown/no-checkpoint-yet, never healthy.
+      expect(health, log).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: 'no-checkpoint-yet' }, startability: { status: 'ready', checks: [] }, serviceConfig: 'current' });
       const endpoint = health!.startability.endpoint; roots.push(dirname(endpoint));
       expect(Buffer.byteLength(endpoint)).toBeLessThan(108); expect(endpoint).not.toContain(project);
       expect((await lstat(dirname(endpoint))).mode & 0o777).toBe(0o700);

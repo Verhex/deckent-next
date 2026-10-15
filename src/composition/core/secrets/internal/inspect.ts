@@ -2,7 +2,6 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { assertActorAssurance, principalToActor, resolveLocalOsPrincipal, type ConfigLoadOptions } from '#platform/index.js';
 import { openConfiguredSecretStore, openRegisteredSecretStore, readSecretsConfig, registeredSecretStores } from '#adapters/index.js';
 import { inspectSecretEnvironmentGuard, isSecretName, missingSecretReferenceNames, type SecretStore, type SecretStoreInspection } from '#engine/index.js';
-
 /** `doctor`'s secret store line (SECRET-K1, owner S1): which backend this installation uses and whether it can be read now. */
 export interface SecretStoreInspectionView extends SecretStoreInspection {
   readonly schemaVersion: 1; readonly backend: string; readonly writable: boolean; readonly enumerable: boolean;
@@ -11,7 +10,6 @@ export interface SecretStoreInspectionView extends SecretStoreInspection {
   readonly leftover?: Readonly<{ backends: readonly string[]; entries: number; unverified: readonly string[] }>;
 }
 export interface SecretNamesView { readonly schemaVersion: 1; readonly backend: string; readonly names: readonly string[] }
-
 /** Read the selection without resolving any secret value. */
 async function selectedStore(projectRoot: string, options: ConfigLoadOptions) {
   const config = await loadComposedConfig(projectRoot, { ...options, force: true, heal: false, secretResolver: async () => undefined, onWarning: () => {} });
@@ -45,14 +43,12 @@ export async function listConfiguredSecretNames(projectRoot: string, options: Co
   assertActorAssurance(principalToActor(resolveLocalOsPrincipal('cli')), 'secret-list', config.enforce_principal_assurance);
   return Object.freeze({ schemaVersion: 1, backend: store.descriptor.id, names: await store.listNames() });
 }
-
 /** SECRET-STORE-SWITCH picker: the registered stores and the installation's selection (store ids only; nothing is resolved or read from a store). */
 export async function listConfiguredSecretStores(projectRoot: string, options: ConfigLoadOptions = {}) {
   const { config } = await selectedStore(projectRoot, options);
   return Object.freeze({ schemaVersion: 1 as const, current: readSecretsConfig(config).store, stores: registeredSecretStores(),
     ...(readSecretsConfig(config).store === 'core.secret-store.env@1' ? { envGuard: await environmentGuard(projectRoot, options) } : {}) });
 }
-
 async function environmentGuard(root: string, options: ConfigLoadOptions) {
   return inspectSecretEnvironmentGuard(await configuredEnvironmentReferenceNames(root, options), registeredSecretStores()
     .filter(id => id !== 'core.secret-store.env@1').map(id => openRegisteredSecretStore(id, options.env ?? process.env, options.platform)));

@@ -215,5 +215,6 @@
   "voice.reply_lang_forced": "Reply ONLY in {language}. Do not mix languages.",
   "voice.reply_lang_mirror": "Reply in the same language the user used. Do not mix languages.",
   "voice.transcribe.error": "[voice: transcription unavailable — sending voice note as text]",
-  "voice.wrapper_unreachable": "⚠️ Voice is configured (provider={provider}) but the backend is unreachable at {url} — voice replies will fall back to text. {detail}"
+  "voice.wrapper_unreachable": "⚠️ Voice is configured (provider={provider}) but the backend is unreachable at {url} — voice replies will fall back to text. {detail}",
+  "mcp.tool.verifyAudit": "Read-only verification of scoped audit history and stored checkpoints, optionally against a retained pull-witness export. Detects truncation and policy drift; grants no decision authority."
 }

@@ -1,7 +1,7 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
+import { aiAuthorityFloor, approvalFacts, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
   separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABILITY_PATTERN, type ApprovalAssuranceProducer, type PrincipalVerifier, type SessionVerifier,
@@ -49,14 +49,32 @@ export interface ApprovalDecisionRestriction { readonly catalog: OperationCatalo
  * B1 evidence of this decision path: the assurance producers the service holds (its turn capability ring; Enterprise's own), the registered
  * channel ids a client may declare (absent: any id), and the socket peer's process (null: an in-process SDK call, never turn-bound).
  */
-export interface ApprovalAssuranceOptions { readonly producers?: readonly ApprovalAssuranceProducer[]; readonly channels?: ReadonlySet<string>; readonly peerPid?: number | null }
+export interface ApprovalAssuranceOptions { readonly producers?: readonly ApprovalAssuranceProducer[]; readonly channels?: ReadonlySet<string>; readonly peerPid?: number | null; readonly interactive?: () => Promise<boolean> }
 export class ApprovalApplication {
+  static requiresInteractiveTerminal(principal: VerifiedPrincipal): boolean { return !isAiPrincipal(principal); }
   constructor(private readonly store: ApprovalStore, private readonly verifier: PrincipalVerifier,
     private readonly sessions: SessionVerifier & SessionAuthority, private readonly policy: PolicySource,
     private readonly integrity: IntegrityAuthority, private readonly clock: TrustedClock,
     private readonly channel: string, private readonly pageLimit: number, private readonly beforeCommit: (record: ApprovalRecord) => void = () => undefined,
     private readonly restriction?: ApprovalDecisionRestriction, private readonly assurance: ApprovalAssuranceOptions = {}) {
     identitySchema.parse(channel); counterSchema.positive().parse(pageLimit);
+  }
+  private async assertDecisionAuthority(record: ApprovalRecord, principal: VerifiedPrincipal, policy: unknown, decision: 'allow' | 'deny'): Promise<boolean> {
+    const interactive = !isAiPrincipal(principal) && await this.assurance.interactive?.() === true;
+    const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
+    if (!interactive) {
+      const risk = facts?.risk;
+      // A legacy request (no facts) cannot prove its risk: it is never read as an ordinary card, only a witnessed human allows it.
+      if (decision === 'allow' && (facts === null || risk?.source === 'cell' && ['edit-floor', 'edit-authority', 'mcp-floor'].includes(risk.cell)
+        || risk?.source === 'effect-class' && risk.authority || subject.kind === 'agent-tool-call' && !risk
+        || subject.kind === 'config-change' && aiAuthorityFloor({ ...principal, assurance: 'workload-verified' }, { kind: 'config', id: `${subject.layer}:${subject.keyPath}` }, 'write')))
+        throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
+      const step = subject.kind === 'task' && risk?.source === 'cell' && ['task-accept', 'task-reject'].includes(risk.cell) ? risk.cell.slice(5) : null;
+      const granted = step !== null && subject.kind === 'task' ? explicitDecisionGrant(policy, principal, record.request.scopeId, 'task-decision', subject.taskId, step)
+        : explicitDecisionGrant(policy, principal, record.request.scopeId, 'approval', record.request.approvalId, 'decide');
+      if (!granted) throw new ApprovalError('APPROVAL_DENIED');
+    }
+    return interactive;
   }
   private async authorize(action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
     const policy = policySchema.parse(await this.policy.load());
@@ -132,6 +150,13 @@ export class ApprovalApplication {
     let record = verifyApproval(loaded, this.integrity);
     if ('standing' in command && approvalSubject(record.request).kind !== 'agent-tool-call') throw new ApprovalError('APPROVAL_INVALID');
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
+    const ai = isAiPrincipal(principal);
+    const facts = approvalFacts(record.request), subject = approvalSubject(record.request);
+    // AI never answers "this session" (a standing approval widens its own authority) and never allows a legacy card of unknown risk.
+    if (ai && ('standing' in command || command.decision === 'allow' && facts === null)) throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
+    if (ai && command.decision === 'allow' && (facts?.risk?.source === 'cell' && ['edit-floor', 'edit-authority', 'mcp-floor'].includes(facts.risk.cell)
+      || facts?.risk?.source === 'effect-class' && facts.risk.authority || subject.kind === 'agent-tool-call' && facts?.risk === null))
+      throw new ApprovalError('AI_AUTHORITY_NON_DELEGABLE');
     if (command.decision === 'allow') await this.assertDecidableHere(record, actor);
     const fingerprint = approvalCommandFingerprint('approval-command:1', command, actor);
     const replay = this.store.receipt(command.scopeId, command.commandId);
@@ -140,6 +165,7 @@ export class ApprovalApplication {
       if (replay.operation !== 'decide' || replay.fingerprint !== fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
       const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
       if (JSON.stringify(verified.session.principalRef) !== JSON.stringify(actor)) throw new ApprovalError('APPROVAL_DENIED');
+      await this.assertDecisionAuthority(record, verified.principal, await this.authorize('decide', command.scopeId, command.approvalId, verified.principal), command.decision);
       return { record: verifyApproval(replay.record, this.integrity), commit: 'replay' };
     }
     record = this.expired(record, this.clock.sample().wallMs);
@@ -148,6 +174,7 @@ export class ApprovalApplication {
     const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
     if (JSON.stringify(verified.session.principalRef) !== JSON.stringify(actor)) throw new ApprovalError('APPROVAL_DENIED');
     const policy = await this.authorize('decide', command.scopeId, command.approvalId, verified.principal);
+    const interactive = await this.assertDecisionAuthority(record, verified.principal, policy, command.decision);
     // Four-eyes (policy v2 data, C12 Q6): the session-verified decider may not approve a request it made; withdrawing it grants nothing.
     if (command.decision === 'allow' && separationOfDutiesViolation(policy, { scopeId: command.scopeId, requester: record.request.requester,
       decider: verified.session.principalRef }) !== null) throw new ApprovalError('APPROVAL_DENIED');
@@ -160,14 +187,14 @@ export class ApprovalApplication {
     const registry = approvalAssuranceRegistry(this.assurance.producers);
     const attested = registry.derive({ scopeId: command.scopeId, approvalId: command.approvalId, decider: verified.session.principalRef, peerPid: this.assurance.peerPid ?? null,
       capability: command.decisionCapability ?? null, nowMs: now });
-    if (command.decision === 'allow' && attested.rank < registry.rank(requiredApprovalAssurance(policy, record.request, registry))) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
+    if (command.decision === 'allow' && (interactive ? attested.rank : 0) < registry.rank(requiredApprovalAssurance(policy, record.request, registry))) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
     const decided = { commandId: command.commandId, decision: command.decision, actor, sessionId: verified.session.sessionId,
       // Another process may have created the request at a later wall time than this host's (stepped-back) clock reports;
       // the decision certainly happened after creation, so it is never recorded earlier than it.
       channel: command.channel ?? this.channel, reason: command.reason, decidedAt: Math.max(now, record.request.createdAt), requestDigest: approvalRequestDigest(record.request),
-      commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId), assurance: attested.level };
-    // APPROVER-NOTE: only a decision with the decider's own words is v3; every other decision stays v2 (earlier builds keep reading it).
-    const decision = command.approverNote ? { schemaVersion: 3 as const, ...decided, approverNote: true as const } : { schemaVersion: 2 as const, ...decided };
+      commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId), assurance: interactive ? attested.level : 'ai-policy', deciderClass: interactive ? 'human-tty' as const : 'ai-policy' as const };
+    // D0 v4 carries the producer class; dual readers retain old seals. An authored note keeps its existing mark.
+    const decision = { schemaVersion: 4 as const, ...decided, ...(command.approverNote ? { approverNote: true as const } : {}) };
     const next = sealApproval({ request: record.request, revision: 1, status: 'decided', decision }, this.integrity);
     this.beforeCommit(next);
     if ('standing' in command) {

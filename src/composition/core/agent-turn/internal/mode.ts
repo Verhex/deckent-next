@@ -169,6 +169,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       return decision.decision;
     },
     /** B1 card facts: the permission cell this call was planned as (null: not planned, e.g. a plan error). */ cell(tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null { const kept = stored.get(keyOf(tool, args)); return kept && 'cell' in kept ? kept.cell : null; },
+    /** NATIVE-BAGLAM: one representative cell's decision on the given snapshot, described in the session context; never kept, audited or applied. */ probe: async (snapshot: unknown, tool: AgentToolSpec, cell: AgentToolCallCell, shellInput?: Shell) => (await decide(tool, cell, snapshot, undefined, shellInput))?.decision ?? null,
     /** The loop's prepare: the plan's error, or the kept decision (a call without a kept decision asks). */
     prepare(tool: AgentToolSpec, args: Record<string, unknown>): { readonly ok: true; readonly requireApproval: boolean } | { readonly ok: false; readonly text: string } {
       const kept = stored.get(keyOf(tool, args));

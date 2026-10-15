@@ -11,7 +11,7 @@ it('v50 upgrades through metrics and later additive migrations; old Run and rece
     const bytes = '{"schemaVersion":4,"legacy":true}';
     db.prepare("INSERT INTO runs VALUES('s','r',?)").run(bytes); db.prepare('INSERT INTO run_receipts VALUES(?)').run(bytes);
     migrateLedger(db, 'allow');
-    expect(CURRENT_LEDGER_VERSION).toBe(54);
+    expect(CURRENT_LEDGER_VERSION).toBe(56);
     expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
     expect(db.prepare('SELECT snapshot FROM runs').get()?.snapshot).toBe(bytes);
     expect(db.prepare('SELECT snapshot FROM run_receipts').get()?.snapshot).toBe(bytes);

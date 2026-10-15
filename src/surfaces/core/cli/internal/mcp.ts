@@ -9,7 +9,7 @@ type Scope = 'local' | 'project' | 'user';
 export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
-  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] }
+  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined }
   | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string }
   | { readonly verb: 'import'; readonly from: 'claude-code' | 'claude-desktop' | { readonly file: string }; readonly scope?: 'local' | 'user' };
 /** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision; `locale` is this
@@ -22,7 +22,7 @@ const SCOPES: readonly string[] = ['local', 'project', 'user'];
 /**
  * `deckent mcp add [--scope local|project|user] [--transport stdio] [--env KEY=VALUE]… [--realm …] [--timeout-ms n] [--yes|--no-approve] <name> -- <command> [args…]`
  * or `add [--transport http] [--header 'Key: value']… <name> <url>` (Streamable HTTP; a URL second argument implies http),
- * `add-json [--scope …] [--yes|--no-approve] <name> '<json>'`, `list`, `get <name>`, `remove <name> [--scope …]`, `approve <name> [--always-ask <tool>]… [--yes]`
+ * `add-json [--scope …] [--yes|--no-approve] <name> '<json>'`, `list`, `get <name>`, `remove <name> [--scope …]`, `approve <name> [--always-ask <tool>]… [--no-always-ask] [--yes]`
  * `import [--from claude-code|claude-desktop|<file>] [--scope local|user]` (servers other clients declare, added untrusted),
  * (MCP-CLIENT, Claude Code's scoped model: default scope local). Adding a local/user server is its trust decision (cards, or --yes); a project
  * entry is asked on first use. Registry files hold servers; trust and pins are product state.
@@ -31,7 +31,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   const verb = argv[1];
   const rest = argv.slice(2), separator = rest.indexOf('--'), flags = separator < 0 ? rest : rest.slice(0, separator), command = separator < 0 ? [] : rest.slice(separator + 1);
   const positionals: string[] = [], env: Record<string, string> = {}, headers: Record<string, string> = {}, alwaysAsk: string[] = [];
-  let transport: string | undefined, from: string | undefined, scope: Scope | undefined, json = false, yes = false, noApprove = false, language: string | undefined, realm: string | undefined, timeoutMs: number | undefined;
+  let transport: string | undefined, from: string | undefined, scope: Scope | undefined, json = false, yes = false, noApprove = false, releaseLocks = false, language: string | undefined, realm: string | undefined, timeoutMs: number | undefined;
   for (let i = 0; i < flags.length; i++) {
     const flag = flags[i]!, value = () => { const next = flags[++i]; if (next === undefined || next.startsWith('--')) throw usage(); return next; };
     if (flag === '--json') json = true;
@@ -46,6 +46,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
     else if (flag === '--realm' && verb === 'add' && realm === undefined) realm = value();
     else if (flag === '--timeout-ms' && verb === 'add' && timeoutMs === undefined) { timeoutMs = Number(value()); if (!Number.isSafeInteger(timeoutMs)) throw usage(); }
     else if (flag === '--always-ask' && verb === 'approve') alwaysAsk.push(value());
+    else if (flag === '--no-always-ask' && verb === 'approve') releaseLocks = true;
     else if (flag === '--from' && verb === 'import' && from === undefined) from = value();
     else if (flag.startsWith('-')) throw usage();
     else positionals.push(flag);
@@ -55,7 +56,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   if (verb === 'list' && !positionals.length && !scope && !command.length) request = { verb };
   else if (verb === 'get' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
   else if (verb === 'remove' && positionals.length === 1 && !command.length) request = { verb, name: name!, ...(scope ? { scope } : {}) };
-  else if (verb === 'approve' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name!, alwaysAsk };
+  else if (verb === 'approve' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name!, ...(alwaysAsk.length || releaseLocks ? { alwaysAsk } : {}) };
   else if (verb === 'revoke' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
   else if (verb === 'add' && positionals.length === 2 && !command.length && transport !== 'stdio' && (transport === 'http' || /^https?:\/\//iu.test(positionals[1]!))
     && !Object.keys(env).length && !realm) request = { verb, scope: scope ?? 'local', name: name!, approve: !noApprove,

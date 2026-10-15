@@ -10,6 +10,7 @@ import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentatio
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
 import { JobWindow, pickRun } from './job-windows.js';
+import { RunControlDecisionCard, RunsControlWindow, runRunsControl } from './run-control.js';
 import { systemSummaryEntry } from './system-summary.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
@@ -44,7 +45,8 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const presentation = panel.presentation(state);
-  const modal = presentation?.kind === 'approval' || presentation?.kind === 'cancel' || presentation?.kind === 'window' || presentation?.kind === 'job-window' || presentation?.kind === 'job-picker' ? presentation : null;
+  const modal = presentation?.kind === 'approval' || presentation?.kind === 'cancel' || presentation?.kind === 'window' || presentation?.kind === 'job-window' || presentation?.kind === 'job-picker'
+    || presentation?.kind === 'runs-window' || presentation?.kind === 'run-control' ? presentation : null;
   // A list window's decision carries the reason typed on the approval window it opened (the picker answer itself is only allow/deny).
   const pickedReason = useRef<string | undefined>(undefined);
   const picker = presentation?.kind === 'approvals' && state.picker ? presentation.rows : null;
@@ -68,11 +70,13 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     approvalWatch.current = state;
     if (fresh.length) setApprovalStatus(fillTemplate(work!.approvalNotify, { count: fresh.length }));
   }, error => setApprovalStatus(`${work!.approvalPollFailed}: ${errorText(error)}`));
-  const run = async (command: 'approvals' | 'cancel', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string, preview?: string): Promise<void> => {
+  const run = async (command: 'approvals' | 'cancel' | 'runs', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string, preview?: string): Promise<void> => {
     if (!work || !ledger) return;
-    const title = command === 'approvals' ? work.window.approvalsTitle : work.jobs!.runTitle;
+    const title = command === 'approvals' ? work.window.approvalsTitle : command === 'runs' ? work.live!.runsTitle : work.jobs!.runTitle;
     slashSummary.current = [];
     try {
+      // Y1: the Runs window with its hold/resume/close keys (only when the port and its words are both there); each key has its own y/N card.
+      if (command === 'runs') { output(await runRunsControl(panel, execution, ledger, work, errorText, () => pickedReason.current)); return; }
       if (command === 'cancel') {
         const selected = selectedRunId ? await ledger.inspectRun(selectedRunId) : null;
         const view = selectedRunId ? selected && selected.state?.kind !== 'terminal' && !selected.cancellationRequested ? selected : null : await pickRun(panel, execution, ledger, work, true);
@@ -132,6 +136,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       setApprovalStatus(remaining > 0 ? fillTemplate(work!.approvalMore, { count: remaining }) : '');
       const decision = record.decision ?? (yes ? 'allow' : 'deny');
       result.push(identified(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, record.approvalId));
+      if (record.deciderLabel) result.push(record.deciderLabel);
       if (standing && work!.approvalStanding) result.push(standingAnswerNotice(shortId(record.approvalId), standing, record.standing, work!.approvalStanding).text);
       if (remaining > 0) result.push(fillTemplate(work!.approvalMore, { count: remaining }));
       output(result.join(' · '));
@@ -164,6 +169,11 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
         if (state.approval) panel.decide(state.approval.cardHandle, yes, standing, reason ?? '');
         else { pickedReason.current = reason; panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }
       }} />;
+  } else if (work?.runControl && modal?.kind === 'runs-window') {
+    card = <RunsControlWindow key={state.picker?.pickerHandle} value={modal} labels={work.runControl} position={work.window.position} onAnswer={choice => { panel.choose(state.picker?.pickerHandle, choice); }} />;
+  } else if (work?.runControl && modal?.kind === 'run-control') {
+    card = <RunControlDecisionCard key={`run-control:${state.picker?.pickerHandle}`} value={modal} work={work} labels={labels.render ?? {}} pending={!state.picker}
+      onDecide={(yes, reason) => { pickedReason.current = reason; panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }} />;
   } else if (work && modal?.kind === 'cancel') {
     const view = modal.run;
     card = <CancellationDecisionCard key={`cancel:${view.runId}`} presentation={cancellationCardPresentation(view)} work={work} labels={labels.render ?? {}}

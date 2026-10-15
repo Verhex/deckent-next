@@ -146,6 +146,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   time left) and the Runs `useRunCompletion` registered (state from the same snapshots; finished rows leave once opened). It owns no
   execution, poll or authority; its clock ticks at the inspection heartbeat. Ctrl+T moves the one input owner to it while no window
   holds input; Enter on /do is the Ctrl+O transfer to its window, Enter on a Run opens the `/run` window via the task-action FIFO.
+  NATIVE-BAGLAM (2026-10-14): the strip's records (/do, waiting deliveries, admitted Runs) also reach the model as a bounded note on the
+  latest sent message only (`terminal-work/active-work-note.ts`, English protocol text, marker stripped from resume/fresh-context displays);
+  the strip itself is unchanged and the note grants nothing.
   TESLIM-PENCERESI (owner 2026-10-14, author candidate): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
   window over a `TerminalDeliveryPort` that `cli-terminal/deliver-port.ts` builds from the CLI's own handlers (inventory, patch preview,
   integration check/prepare) and the composition's `interactiveDeliveryHandlers(answer)` (the TESLIM-GUVENLIK port; installed only by
@@ -155,6 +158,10 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the port's answer consumes it only on the same operation, scope, Run, Task, command, file set and base (adoption: branch and commit),
   otherwise it shows the port's exact card and waits (bounded by `approvals.sessionTtlMs`) for a fresh `y`. Ids are fresh per window
   opening. No autonomous delivery; an owner-set rule broker would implement the same `EffectConfirmation` port.
+  Y1 (owner 2026-10-14): with `execution.adoption.verification` the branch's `y` opens a `verify` stage over the port's read-only
+  `verificationRuns` (inventory Run ids → `inspectRun`, one task of the configured kind, accepted; bounded by `deliver-port.json`
+  `scanRuns`); `adopt(…, verificationRunId)` adds the kind from config like `task integration-adopt`. A verification refusal returns to
+  the stage with a fresh adoption id. Result lines and the summary carry the delivery and adoption command ids for CLI rollback.
   Keys use both `useInput` `isActive` and immediate focus guards; composer submissions only enter the existing FIFO, never approve.
   The Workline output adapter removes ED3 only from Ink's ED2+ED3+HOME resize/overflow clear; the explicit `/clear`
   HOME+ED2+ED3 command is preserved. Pipes and TERM=dumb bypass this adapter and retain the line fallback.
@@ -205,7 +212,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   retain `MODEL_INVOCATION_ACTIVATION_CONFLICT`; binding conflicts retain their own code. No fallback or automatic inactive-model
   activation is introduced. These are source behavior contracts; local author checks are separate from installed/live acceptance.
 - **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`.
-  TTY `/runs` reads the same inventory into a scrollable list window (SW-2, alpha.15); it does not create or cancel a run. Line/CLI text producers are unchanged.
+  TTY `/runs` reads the same inventory into a scrollable list window (SW-2, alpha.15); it does not create or cancel a run. Y1 (owner 2026-10-14): with the ledger port `controlRun` (cli-terminal over the CLI's `applyRunLifecycle`) and `runControl` words the list has a selection and `h`/`r`/`c` (hold, resume, close parked) keys offered by observed state; `terminal-work/run-control.tsx` owns the list, the y/N `DecisionCard` (Tab hold reason) and the loop; results and typed refusals stay above the list until Esc. Line/CLI text producers are unchanged.
   Chat text is not run truth. **S18/S18B/S18B-AUTH (batch 36):** üretim yolu runtime SQLite ledger’ına salt okunur `fs.watch` + heartbeat takibidir; servis tek yazardır, okuyucu outbox silmez/etki açmaz. `inspectMonitor` ile ortak principal/scope/policy kapısı okuma öncesi ve takip boyunca yeniden değerlendirilir; ret/veri bağlamı değişimi takibi durdurur. R4 yetkili açılış snapshot’ı, sıra boşluğunda resync ve reconnect başlangıç cursor’ını; R5 çalışan worker’ın canlı panel gözlemini korur. Takip portu olmayan tüketici bounded single-flight poll kullanır. The Ink `Static`
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
 - **Work surface (P4, 2026-09-24):** worker cards and a bounded live panel (dynamic region, shown while `/watch-workers`

@@ -1,3 +1,4 @@
+import { verifyModelInvocationPlanUsage } from './plan-usage.js';
 import { verifyInvocationSpendReservation } from '#engine/core/provider-spend/index.js';
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
@@ -19,7 +20,7 @@ const resultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown(), res
   contentStatus: statusSchema, purge: z.unknown().nullable() }).strict();
 const inspectionSchema = z.object({ schemaVersion: z.literal(7), historyIntegrity: z.literal('not-recorded'), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
   invocation: z.unknown().nullable(), control: z.unknown().nullable(), spending: z.unknown().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().nullable(),
-  responseContent: z.unknown().optional() }).strict();
+  responseContent: z.unknown().optional(), planUsage: z.unknown().optional() }).strict();
 const purgeResultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown() }).strict();
 const same = (left: unknown, right: unknown) => isDeepStrictEqual(left, right);
 function corrupt(): never { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
@@ -54,7 +55,7 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     if (Object.hasOwn(parsed.data, 'responseContent') !== wantsContent) return corrupt();
     const identity = { schemaVersion: 7 as const, historyIntegrity: 'not-recorded' as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
     if (parsed.data.invocation === null) {
-      if (parsed.data.spending !== null || parsed.data.control !== null || parsed.data.contentStatus !== null || parsed.data.purge !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
+      if (parsed.data.planUsage !== undefined || parsed.data.spending !== null || parsed.data.control !== null || parsed.data.contentStatus !== null || parsed.data.purge !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
       return Object.freeze({ ...identity, invocation: null, control: null, spending: null, contentStatus: null, purge: null,
         ...(wantsContent ? { responseContent: null } : {}) });
     }
@@ -62,6 +63,8 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     if (parsed.data.control === null) return corrupt();
     const control = verifyModelInvocationInspectionControl(receipt, parsed.data.control);
     const spending = parsed.data.spending === null ? null : verifyInvocationSpendReservation(parsed.data.spending, receipt);
+    const planUsage = verifyModelInvocationPlanUsage(parsed.data.planUsage ?? null, { receipt, content: null, purge: null }, false);
+    if (planUsage && spending) return corrupt();
     const purge = parsed.data.purge === null ? null : verifyModelInvocationPurgeReceipt(parsed.data.purge);
     if (receipt.claim.scopeId !== query.scopeId || receipt.claim.invocationId !== query.invocationId
       || !same(receipt.request.reference, query.reference) || parsed.data.contentStatus !== expectedStatus(receipt, purge)) return corrupt();
@@ -69,10 +72,11 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     if (wantsContent) {
       responseContent = parsed.data.responseContent === null ? null : modelInvocationResponseContentSchema.parse(parsed.data.responseContent);
       verifyModelInvocationRecord({ receipt, content: responseContent, purge });
+      verifyModelInvocationPlanUsage(planUsage, { receipt, content: responseContent, purge });
     } else if (purge) {
       verifyModelInvocationRecord({ receipt, content: null, purge });
     }
-    return Object.freeze({ ...identity, invocation: receipt, control, spending, contentStatus: parsed.data.contentStatus, purge,
+    return Object.freeze({ ...identity, invocation: receipt, control, spending, ...(receipt.profile.schemaVersion === 2 ? { planUsage } : {}), contentStatus: parsed.data.contentStatus, purge,
       ...(wantsContent ? { responseContent } : {}) });
   } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }
 }

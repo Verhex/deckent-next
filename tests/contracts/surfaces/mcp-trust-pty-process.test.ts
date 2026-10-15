@@ -191,7 +191,8 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
     try {
       const subjects = db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String((row as { record: string }).record)) as
         { event: { subject: Record<string, unknown> } }).event.subject);
-      expect(subjects).toEqual([expect.objectContaining({ kind: 'mcp-trust', action: 'trust', scope: 'project', server: 'fx' })]);
+      // ONAY-URETICI D1 records the assurance-producer inventory before each composed decision; the trust itself is one event.
+      expect(subjects.filter(subject => subject['kind'] !== 'approval-assurance-registration')).toEqual([expect.objectContaining({ kind: 'mcp-trust', action: 'trust', scope: 'project', server: 'fx' })]);
     } finally { db.close(); }
   }, 180_000);
 });

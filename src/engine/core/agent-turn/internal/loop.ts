@@ -5,6 +5,7 @@ import { agentSpendFailureNote, agentContextFailureNote, agentHistoryBytes, crea
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 import { checkModelIngressArguments, projectModelIngressSchema } from './model-ingress-json.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
+import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
 import { LOCALES, t, type Locale } from '#platform/index.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolDiagnostic, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage, AgentMessageContinuation, AgentProviderStop } from '#domain/index.js';
@@ -328,8 +329,15 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     }
     let outcome: AgentRoundOutcome;
     let streamed = '';
-    try { outcome = await ports.invokeRound({ round: rounds, messages, tools }, delta => { if (delta.kind === 'text') streamed += delta.text; emit(delta); }, signal); }
+    // NATIVE-BAGLAM: a leading inline `<think>` block in the answer text goes to the reasoning channel, streamed and settled alike.
+    const routed = createInlineReasoningRouter(), show = (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => { if (delta.kind === 'text') streamed += delta.text; emit(delta); };
+    try { outcome = await ports.invokeRound({ round: rounds, messages, tools }, delta => { for (const part of delta.kind === 'text' ? routed.push(delta.text) : [delta]) show(part); }, signal); }
     catch { outcome = { status: 'failed', state: signal.aborted ? 'cancelled' : 'unavailable' }; }
+    if (outcome.status === 'responded') {
+      for (const part of routed.finish()) show(part);
+      const split = splitInlineReasoning(outcome.content);
+      if (split.reasoning) outcome = { ...outcome, content: split.content, reasoning: `${outcome.reasoning}${split.reasoning}` };
+    }
     if (outcome.status === 'failed') {
       if (signal.aborted || outcome.state === 'cancelled') {
         // The user already saw the streamed text: keep it in the history so the next turn sees it too.

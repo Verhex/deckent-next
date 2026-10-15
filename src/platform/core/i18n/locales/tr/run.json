@@ -381,7 +381,7 @@
   "proposal.status.accepted": "Run kabul edildi; görev sonuçları henüz kabul edilmedi",
   "proposal.status.rejected": "Reddedildi",
   "proposal.status.parked": "Park edildi; yeni Run kabulü yok",
-  "proposal.approval": "Onay {id}; bitiş {expiry}. Bu Run oluşturma kartını doğrulanmış insan terminalinde inceleyin. MCP onay kararı veremez.",
+  "proposal.approval": "Onay {id}; bitiş {expiry}. Bu Run oluşturma kartını etkileşimli terminalnde inceleyin. MCP onay kararı veremez.",
   "proposal.budget": "Beyan tavanı: {amount}; {status}.",
   "proposal.budget.checked": "kabul anında kontrol edildi",
   "proposal.budget.unchecked": "kontrol edilmedi",
@@ -422,5 +422,13 @@
   "proposal.planning.provider-reported": "sağlayıcının bildirdiği",
   "proposal.planning.settled-local": "kayıtlı kesinleştirme",
   "proposal.planning.held": "kesinleşmedi",
-  "proposal.planning.measured-tariff-upper-bound": "kullanım × sabitlenmiş tarife, üst sınır"
+  "proposal.planning.measured-tariff-upper-bound": "kullanım × sabitlenmiş tarife, üst sınır",
+  "billing.axis": "Ödeme yolu: {axis}.",
+  "billing.subscription": "abonelik planı",
+  "billing.metered": "parasal API",
+  "billing.local": "yerel",
+  "proposal.planning.plan-usage": "plan kullanımı; parasal ücret yok",
+  "proposal.planning.subscription": "Planlama: {model}, abonelik planı ({evidence}).",
+  "models.invocation.planUsage": "Plan kullanımı kaydedildi; para ayrılmadı veya ücret yazılmadı. Sağlayıcı sayaçları: {counters}.",
+  "models.invocation.planUsageCounters": "mevcut"
 }

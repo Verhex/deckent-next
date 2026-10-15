@@ -14,7 +14,7 @@ governed approvals, and one typed application contract for human and AI entry po
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-[Türkçe](README.tr.md) · [What it is](#what-is-deckent) · [How a request flows](#how-a-request-flows) · [First session](#your-first-session) · [In the terminal](#in-the-terminal) · [Safety](#safety-model) · [Get started](#get-started)
+[Türkçe](README.tr.md) · [What it is](#what-is-deckent) · [How a request flows](#how-a-request-flows) · [First session](#your-first-session) · [First job](#get-your-first-job-done) · [In the terminal](#in-the-terminal) · [Safety](#safety-model) · [Get started](#get-started)
 
 <img src=".github/assets/screenshots/en/01-startup.png" alt="Deckent terminal right after start: logo, version, project, model and mode" width="880">
 
@@ -29,7 +29,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.37`** (released 2026-10-14). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.38`** (released 2026-10-14). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -52,7 +52,7 @@ remain planned capabilities.
 
 | | |
 |---|---|
-| 🗼 **Govern** | One identity, scope and policy model for people and AI agents. When something needs approval, the window shows exactly what: the full command, where it runs, on whose behalf, the risk, whether it can be undone, and a deadline. A persona or a model's advice never grants authority. |
+| 🗼 **Govern** | One identity, scope and policy model for people and AI agents. When something needs approval, the window shows exactly what: the full command, where it runs, on whose behalf, the risk, whether it can be undone, and a deadline. For a business-system operation the card names the operation, the target and a short input digest; the fields it will write are not shown yet ([known limits](docs/known-limits.md)). A persona or a model's advice never grants authority. |
 | 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); workers run in Docker. Works with Anthropic, OpenAI, DeepSeek, Z.ai (GLM), a local server or an OpenAI-compatible endpoint with published pricing, and OpenRouter model connections (paid calls require verified pricing and routing), and with Claude Code, Codex and Cursor workers. |
 | 📜 **Prove** | Every decision and effect lands in a durable ledger and audit trail. Approvals are sealed, patches are retained, and changes are integrated in an isolated candidate before anything is delivered. |
 
@@ -126,7 +126,7 @@ deckent init policy --scope my-project --apply
    an address, then select an exact ID from its bounded `/v1/models` list. Deckent stores that ID unchanged.
    Local loopback models are free-measured; a remote model without a verified published price is listed but
    locked, with the reason and the next step (Zhipu GLM China stays locked because its prices are in CNY).
-   OpenRouter offers model connections; paid calls still require verified pricing and routing. The same from the
+   OpenRouter offers model connections; paid calls still require verified pricing and routing. Subscriptions today: a Claude Code worker runs with your own Claude login; a subscription-backed Brain is being prepared (not available yet); terminal chat with a Claude subscription is not supported for now, so use an Anthropic API key for chat. Sign in with ChatGPT is listed in `/provider` as not available yet. The same from the
    command line: `deckent secret set <NAME>` and `deckent models connect --scope <id> --connection <kind>
    --command-id <id> --model <exact id>`.
 4. **Set a budget.** Every model turn reserves against one shared USD budget of the scope; without one, every turn is
@@ -158,6 +158,128 @@ deckent init policy --scope my-project --apply
     <td width="50%"><img src=".github/assets/screenshots/en/13-usage.png" alt="/usage window after one chat turn"><br><sub><b>/usage.</b> Tokens this conversation measured and the scope's budgets. A measurement, not an invoice.</sub></td>
   </tr>
 </table>
+
+## Get your first job done
+
+"Your first session" ends with a governed chat. This path goes on to a real job: Deckent plans it, you approve the plan,
+a coding worker does it in Docker, and the change is delivered to Git. Steps 1 to 4 are one-time operator setup; a clean-machine rehearsal of the whole path has not been
+done yet ([known limits](docs/known-limits.md)). Commands and messages below come from the current source and its message
+catalogs; ids, paths and times are examples.
+
+```mermaid
+flowchart LR
+  W["1 · Worker image<br/><sub>npm run worker:image</sub>"] --> E["2 · Where work runs<br/><sub>config set execution</sub>"]
+  E --> A["3 · Pool and kinds<br/><sub>init registry · init pool</sub>"]
+  A --> R["4 · Restart service"]
+  R --> D["5 · /do<br/><sub>plan · approval card</sub>"]
+  D --> T["6 · Watch<br/><sub>/tasks</sub>"]
+  T --> L["7 · /deliver"]
+  L --> B["8 · Adopt into a branch"]
+  B --> U["9 · Undo<br/><sub>command line</sub>"]
+```
+
+Before you start: Docker is running; the project is a Git repository with at least one commit; the coding CLI you want
+as worker (Claude Code or Codex) is logged in on this machine with its own login; and your installation has the current
+first-run policy (a fresh `deckent init policy --scope <id> --apply` does; an older one upgrades with
+`deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <revision>`).
+
+1. **Build the worker image** once, in the Deckent source checkout (it needs Docker and writes a new receipt file):
+
+   ```sh
+   npm run worker:image -- /abs/path/worker-images/r4-20260930.json
+   ```
+
+   It prints one JSON line with the immutable image id, for example
+   `{"imageId":"sha256:f296…5250","tag":"deckent/worker:r4-20260930","imageVersion":"r4-20260930","receipt":"…","activation":"not-activated"}`.
+   Nothing is activated; the next step names the image.
+2. **Tell Deckent where work runs.** Use the `imageId` from step 1 (the other values are the limits used on the live
+   installation):
+
+   ```sh
+   deckent config set execution '{"docker":{"executable":"/usr/bin/docker","imageId":"sha256:<from step 1>","memoryBytes":2147483648,"pids":512,"cpus":1,"logMaxSizeKiB":2048,"logMaxFiles":2,"tmpBytes":1073741824,"deadlineMs":1200000,"controlTimeoutMs":15000,"outputBytes":1048576},"git":{"gitExecutable":"/usr/bin/git","timeoutMs":180000,"outputBytes":8388608}}'
+   ```
+
+   ```text
+   Saved execution in project. Apply: restart. Backup: …/.deckent/config.json.bak.2026-10-13T12-03-51.222Z.…
+   Restart required: the running service started with the previous configuration. Restart it with `deckent runtime restart` (or /service-restart in the terminal).
+   ```
+3. **Declare the pool and the first work kind.** `deckent init registry` writes the first admission registry and pool
+   settings for you from the coding CLI it detects; choose the provider, task kind, pool id and capacities for your
+   machine (the values below are examples):
+
+   ```sh
+   deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+     --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
+   deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+     --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
+   deckent init pool --scope my-project --preview
+   deckent init pool --scope my-project --apply
+   ```
+
+   Preview detects the CLI's exact version in a temporary, network-free container and shows the proposed versioned
+   profile and kind without writing anything; apply repeats the detection and writes through config policy, revision
+   checks and audit. An existing registry is never overwritten (typed refusal); add another kind to it with
+   `deckent coding template --provider <id> --kind <kind> --preview|--apply`. `deckent config explain admission` shows
+   the result.
+4. **Restart the service** so it reads the new configuration: `deckent runtime restart` (or `/service-restart` in the
+   terminal). It answers `Runtime service restarted (pid 494385, instance 8b1e2392-…).`
+5. **Ask for the job.** In the terminal type `/do` and your request in plain words (`deckent do --request "<text>"` is the
+   same from the command line). One connected, active model plans it, and Deckent prints the plan:
+
+   ```text
+   Plan for Run <run-id> · <status>
+   Task t1: <what the task does> · kind coding · WorkClass <class>
+     Acceptance: <the criterion the result must meet>
+   Required permissions: <the permissions this Run needs>
+   Waiting for your TTY approval <approval-id>, expires <time>. The model cannot authorize this work.
+   ```
+
+   A card opens asking you to approve creating the Run. Today its Risk and Undo lines read "not classified by the
+   tool" and "not declared by the tool"; judge the plan and the acceptance line. The card expires after 10 minutes
+   (`approvals.requestTtlMs`). Press `y` once to approve; the model cannot approve for you. Then: `Run <run-id> admitted. Follow /tasks or /monitor.` "Admitted" means the work
+   started, not that its result was accepted.
+6. **Watch it** with `/tasks` (or `/monitor`; `deckent monitor` outside the terminal). When the worker's result is
+   accepted, the task waits for delivery.
+7. **Deliver it** with `/deliver`: the picker is titled "/deliver · tasks awaiting delivery". The window checks the
+   patch against the current source and lists the changed files. Press `y` to write it; it only writes a dedicated
+   reference under `refs/deckent/deliveries/`, never a branch, the index or your working tree:
+
+   ```text
+   Delivered: commit <commit> → refs/deckent/deliveries/<digest>
+   ```
+8. **Adopt it into a branch** (optional, its own `y`). Adoption only moves a branch that nobody has checked out, so
+   `main` is not offered while it is checked out here. Create a branch and allow it once:
+
+   ```sh
+   git branch deckent/first-job HEAD
+   deckent config set execution.adoption.targets '["refs/heads/deckent/first-job"]'
+   ```
+
+   The window then asks `Adopt commit <commit> into a branch? This moves the branch and needs its own y.` and ends with
+   `Adopted: refs/heads/deckent/first-job <from> → <to>`. Your checkout, index and working files are unchanged; look at
+   the result with `git log deckent/first-job` and merge it yourself.
+9. **Undo an adoption** from the command line (the terminal has no undo window yet). The rollback names the adoption by
+   its command id, and a terminal adoption generates an id it does not display, so for an undo you can type, run the
+   delivery and adoption from the command line with ids you choose. The ids `<run>`, `<task>`, `<attempt>`,
+   `<generation>` and `<layout-revision>` come from `deckent inventory --scope my-project --json`; each of these
+   commands asks for one `y` in a verified human terminal:
+
+   ```sh
+   S="--scope my-project --run <run> --task <task> --attempt <attempt> --generation <generation> --layout-revision <layout-revision>"
+   deckent task integration-check $S
+   deckent task integration-prepare $S --command-id prep-1 --proposal <proposal from the check line>
+   deckent task integration-deliver $S --command-id deliver-1 --candidate-command-id prep-1
+   deckent task integration-adopt $S --command-id adopt-1 --delivery-command-id deliver-1 --target refs/heads/deckent/first-job
+   deckent task integration-rollback $S --command-id undo-1 --adoption-command-id adopt-1
+   ```
+
+   ```text
+   Source <source> · affected files match base · proposal <proposal>
+   Candidate prepared: <path>
+   Delivered commit <commit> at <ref>. Source HEAD, index and working files are unchanged.
+   Adopted: <ref> moved from <from> to <to> (sequence 1). Basis: recorded Task acceptance, not verification; checkout, index and working files are unchanged.
+   Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and working files are unchanged.
+   ```
 
 ## In the terminal
 
@@ -308,6 +430,10 @@ flowchart LR
   windows, permission modes, MCP tools, conversation compaction, English and Turkish.
 - **Orchestrate work**: admit Runs, Tasks and Attempts, schedule dependencies, reserve capacity, cancel and recover,
   all recorded in a durable SQLite ledger.
+- **Ask for a job in plain words**: `/do <request>` (or `deckent do --request "<text>"`) turns it into a plan with an
+  acceptance criterion, shows a card for your approval and runs the work on a coding worker; `/deliver` writes the
+  result to a Git reference and adopts it into a branch only when you choose. It needs the one-time setup in
+  [Get your first job done](#get-your-first-job-done).
 - **Use coding workers**: Git-backed checkouts and Docker workers with Claude Code, Codex and Cursor; patches are
   retained, integrated in an isolated candidate, then delivered or released.
 - **Govern**: local identity, company-scoped policy, audit and one approval broker for every surface; human
@@ -323,13 +449,16 @@ flowchart LR
   OpenRouter reports settles each call under your budget.
   Before the first paid OpenRouter call, check https://openrouter.ai/settings/plugins that no plugin is enabled with
   "Prevent overrides", and set an OpenRouter credit limit no higher than your Deckent budget; Deckent cannot see either setting.
-- **Back up and restore**: `deckent backup create|verify|restore` writes encrypted, verifiable recovery sets, on a schedule
-  if you choose, with retention; a restore runs only while the service is stopped.
+- **Back up and restore**: `deckent backup create|verify|restore` writes verifiable recovery sets, on a schedule
+  if you choose, with retention; a restore runs only while the service is stopped. Only the authority key inside a set is
+  encrypted with your passphrase; the ledger and the state archive are plain files, so keep sets on storage you trust
+  (full-set encryption is not available yet).
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
   config` for settings, bilingual help everywhere.
 
-Not yet available: autonomous business-process coordination (Mission/`do`), Enterprise SSO and fleet management,
-a remote HTTP API, Desktop and Dashboard. A Docker worker shares the host kernel and is not a virtual machine.
+Not yet available: Mission-level coordination of multi-step business processes, Enterprise SSO and fleet management,
+a remote HTTP API, Desktop and Dashboard. A Docker worker shares the host kernel and is not a virtual machine. The
+plain list of what is open or untried is in [Known limits](docs/known-limits.md).
 
 ## Roadmap
 
@@ -359,9 +488,16 @@ npm run build
 npm link
 ```
 
-Use a fresh `--out` directory for another build. Do not proceed with sandbox work if the build reports
-`bubblewrap=ABSENT`; inspect the sandbox posture with `deckent doctor`. See the
+Use a fresh `--out` directory for another build. The build ends with `bubblewrap=present` or `bubblewrap=staged from …`.
+On Linux a build that cannot stage the locked bubblewrap stops with `BUBBLEWRAP_BUILD_REQUIRED` instead of finishing;
+start Docker and run it again. Only off Linux does it print `bubblewrap=absent (not Linux)`, which means there is no
+bubblewrap sandbox; inspect the sandbox posture with `deckent doctor`. See the
 [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart) for prerequisites and one test without a provider key.
+
+**Ubuntu 24.04 and later.** The kernel may restrict unprivileged user namespaces, which bubblewrap needs. Check with
+`sysctl kernel.apparmor_restrict_unprivileged_userns`: `1` means restricted. Deckent then reports the restriction, falls back
+to Landlock visibly, and refuses full-access shell calls because they need the open bubblewrap sandbox. An administrator
+can install bubblewrap root-owned as `/usr/local/bin/bwrap` together with an AppArmor profile that allows `userns` for it.
 
 After linking, change to your own project folder, outside the Deckent source checkout.
 Long paths and spaces work: the local socket uses a short private directory per installation.
@@ -387,6 +523,7 @@ deckent --help                            # every command; deckent <command> --h
 
 - [Architecture overview](docs/architecture-overview.md): layers, security, extension points and current limits
 - [Glossary](docs/glossary.md): scope, realm, work lifecycle, approvals and spending
+- [Known limits](docs/known-limits.md): what is not tried, not built or still open, with the impact and a workaround
 - [ARCHITECTURE.md](ARCHITECTURE.md): detailed engineering contracts and implementation notes (English/Turkish)
 - [Operator reference](.deckent/docs/architecture/operator-reference.md): worker toolchains, worker images, coding
   profiles, patch custody and installation custody rules

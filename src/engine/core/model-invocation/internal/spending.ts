@@ -13,10 +13,8 @@ export interface ModelInvocationSpendingInput {
   readonly definition: ModelBindingDefinition;
   readonly prepared: unknown;
 }
-export interface ModelInvocationSpending {
-  readonly budget: ProviderSpendBudget | null;
-  readonly quote: ProviderSpendQuote;
-}
+export type ModelInvocationSpending = Readonly<{ budget: ProviderSpendBudget | null; quote: ProviderSpendQuote }>
+  | Readonly<{ budget: null; quote: null }>;
 /** Trusted composition-owned source, never a model answer or a public command field.
  * Resolve current budget authority and a native-verified bound without credentials or transport effects.
  * A guessed maximum, or a digest of that guess, is not verification of provider billing.
@@ -31,6 +29,7 @@ export interface ModelInvocationSpendingAuthority {
 /** Observe the same account capacity the atomic claim checks; no account initialization, reservation or settlement.
  * A budget-less (local zero-tariff) call has no capacity, but an existing frozen scope account still refuses it, as the claim does. */
 export async function checkModelInvocationCapacity(open: () => Promise<ProviderSpendAccountReader>, { budget, quote }: ModelInvocationSpending): Promise<void> {
+  if (!quote) return;
   if (!budget && !providerSpendHasZeroTariff(quote)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const reader = await open();
   try {
@@ -51,6 +50,7 @@ const spendingSchema = immutableJsonObjectSchema.pipe(z.object({
 
 export async function authorizeModelInvocationSpending(authority: ModelInvocationSpendingAuthority | undefined,
   input: ModelInvocationSpendingInput, signal?: AbortSignal): Promise<ModelInvocationSpending> {
+  if (input.profile.schemaVersion === 2 && input.profile.billingAxis === 'subscription') return Object.freeze({ budget: null, quote: null });
   if (!authority) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
   let result: unknown;
   try { result = await boundedAuthorization(authority, Object.freeze(input), signal); }
@@ -62,6 +62,10 @@ export async function authorizeModelInvocationSpending(authority: ModelInvocatio
   if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const { budget, quote } = parsed.data;
   providerSpendQuoteDigest(quote);
+  if (input.profile.schemaVersion === 2) {
+    const local = providerSpendLocalZeroTariff(input.profile, quote);
+    if (input.profile.billingAxis === 'local' ? !local || budget !== null : budget === null) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+  }
   if ((!budget && !providerSpendLocalZeroTariff(input.profile, quote)) || (budget && (budget.scopeId !== input.command.scopeId || budget.currency !== quote.currency)) || quote.scopeId !== input.command.scopeId || quote.requestDigest !== input.requestDigest
     || quote.profileDigest !== input.profileDigest) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   // A null budget is admitted only for a literal zero tariff on literal loopback endpoints (PROVIDER-LOCALITY); the claim still checks a freeze.

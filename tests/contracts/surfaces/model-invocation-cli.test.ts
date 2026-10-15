@@ -270,3 +270,20 @@ it('renders measured-tariff upper-bound in EN/TR inspection without claiming the
     expect(output).toContain(language === 'en' ? 'not the actual provider charge' : 'sağlayıcının gerçek ücreti değildir');
   }
 });
+
+it.each(['en', 'tr'] as const)('renders non-monetary plan usage separately from spending with honest missing counters (%s)', async language => {
+  const f = await fixture();
+  for (const available of [true, false]) {
+    let output = '';
+    const code = await main(['models', 'invocation', '--input', '-', '--lang', language], { ...f,
+      stdin: Readable.from([JSON.stringify(query)]), stdout: { write(text) { output += text; } },
+      inspectModelInvocation: async () => ({ schemaVersion: 7, scopeId: 'scope', invocationId: 'call', reference,
+        invocation: { ...purgedReceipt, profile: { schemaVersion: 2, billingAxis: 'subscription' } }, control: null, spending: null,
+        contentStatus: 'retained', purge: null, historyIntegrity: 'not-recorded', planUsage: { schemaVersion: 1, kind: 'plan-usage',
+          source: available ? 'provider-reported' : 'unavailable', counters: available ? { input_tokens: 5 } : null } }) as never });
+    expect(code).toBe(0); expect(output).toContain(language === 'tr' ? 'abonelik planı' : 'subscription plan');
+    expect(output).toContain(language === 'tr' ? 'para ayrılmadı veya ücret yazılmadı' : 'no money reserved or charged');
+    expect(output).toContain(available ? language === 'tr' ? 'mevcut' : 'available' : language === 'tr' ? 'bilinmiyor' : 'unknown');
+    expect(output).not.toContain('USD'); expect(output).not.toContain('$0');
+  }
+});

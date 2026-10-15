@@ -8,3 +8,7 @@ export { WorkTargetError, assertWorkTarget } from './internal/work-target.js';
 export type { WorkTargetErrorCode, WorkTargetObservation, WorkTargetContext } from './internal/work-target.js';
 export { createWorkspaceFileIndexCache, rankWorkspacePaths, workspacePathRank } from './internal/file-index.js';
 export type { RuntimeWorkspaceFileHost, WorkspaceFileIndex } from './internal/file-index.js';
+export { enforceWorkerTreeGate, WORKER_TREE_SHOWN_PATHS } from './internal/secret-gate.js';
+export type { WorkerTreeFinding, WorkerTreeGateContext, WorkerTreeLimit, WorkerTreeScan } from './internal/secret-gate.js';
+export { readWorkerTreeExclusions, recordWorkerTreeExclusions, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, workerTreeExclusionSchema } from './internal/exclusion-receipt.js';
+export type { WorkerTreeExclusion, WorkerTreeExclusionRecord } from './internal/exclusion-receipt.js';

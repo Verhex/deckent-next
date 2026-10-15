@@ -12,3 +12,5 @@ export { recordAcceptanceMetric, readRunAcceptanceEvaluations, readAcceptedOpera
 export { readRunAcceptanceMetrics } from './internal/acceptance-metrics.js';
 
 export { quotaHeldTasks, readQuotaHolds, persistQuotaAttempt } from './internal/quota.js';
+
+export { MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION, AUDIT_CHECKPOINT_LEDGER_VERSION } from './internal/schema.js';

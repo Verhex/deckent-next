@@ -20,26 +20,25 @@ import { releaseConfiguredQuota, applyConfiguredRunLifecycle, applyConfiguredPoo
 import { recordConfiguredMcpIngress } from './ingress.js';
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
 import { inspectConfiguredPolicyAdministration } from '#composition/core/approvals/index.js';
+import { verifyConfiguredAudit } from '#composition/core/audit/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
-/** Every handler, including direct configured writes, runs as the distinct MCP actor. */
-export const mcpApplications = <T extends object>(applications: T): T => Object.fromEntries(Object.entries(applications).map(([name, value]) =>
+/** Every handler, including direct configured writes, runs as the distinct MCP actor. */ export const mcpApplications = <T extends object>(applications: T): T => Object.fromEntries(Object.entries(applications).map(([name, value]) =>
   [name, typeof value === 'function' ? (...args: unknown[]) => withMcpPrincipal(() => Reflect.apply(value, applications, args)) : value])) as T;
-/** Stdio verifies the local OS user but delegates no terminal-owner authority to the client. */
-export async function main(root = process.cwd()) {
+/** Stdio verifies the local OS user but delegates no terminal-owner authority to the client. */ export async function main(root = process.cwd()) {
   await loadConfiguredInstallationIdentity(root); const config = await loadComposedConfig(root, { heal: false });
   const locale = resolveLocale(undefined, process.env, config.language);
   const runtime = createConfiguredRuntimeClient(root), { createMcpServer } = await loadMcpSurface();
-  // Catalog operations run on the service (runtime client handlers); their tool hints come from this installation's reachable catalog.
-  const operationCatalog = await describeConfiguredOperationTools(root);
+  /* Catalog operations run on the service (runtime client handlers); their tool hints come from this installation's reachable catalog. */ const operationCatalog = await describeConfiguredOperationTools(root);
   return serveStdio(() => createMcpServer(mcpApplications({ ...runtime, operationCatalog, inspectDeclaredModels: () => inspectDeclaredModels(root),
     planRun: input => planRuntimeRun(root, input),
     recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
     applyRunControl: command => applyConfiguredRunLifecycle(root, command),
-    inspectDecision: query => inspectConfiguredDecision(root, query),
-    inspectPolicyAdministration: query => inspectConfiguredPolicyAdministration(root, query),
+    inspectDecision: query => inspectConfiguredDecision(root, query, { heal: false }),
+    inspectPolicyAdministration: query => inspectConfiguredPolicyAdministration(root, query, { heal: false }),
+    verifyAudit: query => verifyConfiguredAudit(root, query),
     inspectMonitor: query => inspectMonitor(root, {}, query),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
-    inspectToolchainCurrency: () => inspectConfiguredToolchainCurrency(root),
+    inspectToolchainCurrency: () => inspectConfiguredToolchainCurrency(root, { heal: false }),
     updateToolchains: input => updateConfiguredToolchains(root, input),
     inspectModelInvocation: (query, delivery) => runtime.inspectModelInvocation(query, delivery),
     purgeModelInvocationContent: (command, delivery) => runtime.purgeModelInvocationContent(command, delivery),
@@ -48,11 +47,11 @@ export async function main(root = process.cwd()) {
     inspectProviderSpendAccount: (query, delivery) => runtime.inspectProviderSpendAccount(query, delivery),
     manageProviderSpend: (command, delivery) => runtime.manageProviderSpend(command, delivery),
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
-    inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
-    admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
+    inspectModelActivation: query => inspectConfiguredModelActivation(root, query, { heal: false }),
+    admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query, { heal: false }), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
     connectModel: command => connectConfiguredModel(root, command, {}, { listSecretNames: listConfiguredSecretNames }),
-    applyPoolCapacity: command => applyConfiguredPoolCapacity(root, command), inspectPoolCapacity: query => inspectConfiguredPoolCapacity(root, query),
-    releaseQuota: command => releaseConfiguredQuota(root, command), inspectPoolHold: query => inspectConfiguredPoolHold(root, query), applyPoolHold: command => applyConfiguredPoolHold(root, command),
+    applyPoolCapacity: command => applyConfiguredPoolCapacity(root, command), inspectPoolCapacity: query => inspectConfiguredPoolCapacity(root, query, { heal: false }),
+    releaseQuota: command => releaseConfiguredQuota(root, command), inspectPoolHold: query => inspectConfiguredPoolHold(root, query, { heal: false }), applyPoolHold: command => applyConfiguredPoolHold(root, command),
     inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),
     inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }), { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
@@ -60,8 +59,7 @@ export async function main(root = process.cwd()) {
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },
   });
 }
-/** Shared argument contract for Core and a distribution executable using `deckent/extensions`. */
-export async function run(argv: readonly string[] = process.argv.slice(2)) {
+/** Shared argument contract for Core and a distribution executable using `deckent/extensions`. */ export async function run(argv: readonly string[] = process.argv.slice(2)) {
   const { values } = parseArgs({ args: [...argv], options: { project: { type: 'string' } }, strict: true, allowPositionals: false });
   if (values.project !== undefined && !values.project.trim()) throw new Error('MCP_PROJECT_INVALID');
   return main(resolve(values.project ?? process.cwd()));

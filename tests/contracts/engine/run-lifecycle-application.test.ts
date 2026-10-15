@@ -5,7 +5,7 @@ const command = { schemaVersion: 1, commandId: 'decision', scopeId: 's', runId: 
 function fixture(assurance: string, now = 100) {
   const store = { loadRun: vi.fn(), commitRunLifecycle: vi.fn(), hasTaskEvaluation: vi.fn() }, run = { authorize: vi.fn() }, task = { authorize: vi.fn() };
   const app = new RunLifecycleApplication(store as never, { async verify() { return { ...principal, assurance }; } } as never,
-    run, task, () => ({ record: vi.fn() }), () => now, 1000, 'policy');
+    run, task, () => ({ record: vi.fn() }), () => now, 1000, 'policy', assurance === 'os-user' ? { async authorize(_command, actor) { if (actor.assurance !== 'os-user') throw new Error('TASK_DECISION_HUMAN_REQUIRED'); return { schemaVersion: 1, deciderClass: 'human-tty', policyRevision: 'policy' }; } } : undefined);
   return { app, store, run, task };
 }
 it.each(['workload-verified', 'token-verified'])('refuses %s decision before reading or writing durable state', async assurance => {
@@ -14,7 +14,7 @@ it.each(['workload-verified', 'token-verified'])('refuses %s decision before rea
   expect(f.store.loadRun).not.toHaveBeenCalled(); expect(f.store.commitRunLifecycle).not.toHaveBeenCalled();
 });
 it('refuses caller-authored actor, timeout or decision evidence', async () => {
-  for (const extra of [{ actor: principal }, { timeoutMs: 0 }, { evidence: 'verified' }]) {
+  for (const extra of [{ actor: principal }, { timeoutMs: 0 }, { evidence: 'verified' }, { decision: { schemaVersion: 1, deciderClass: 'human-tty', policyRevision: 'policy' } }, { deciderClass: 'human-tty' }]) {
     const f = fixture('os-user'); await expect(f.app.execute({ ...command, ...extra })).rejects.toThrow();
     expect(f.store.commitRunLifecycle).not.toHaveBeenCalled();
   }
@@ -42,7 +42,7 @@ it('authorizes attempt:evaluate for the exact binding and records a typed princi
   const integrity = createHmacIntegrity('audit', new Uint8Array(32).fill(1));
   const records = { append(_event: unknown, seal: (sequence: number) => unknown) { const record = seal(1); audits.push(record); return record; } };
   const app = new RunLifecycleApplication(store as never, { async verify() { return principal; } }, { authorize: vi.fn() }, authorization,
-    () => ({ record(event: unknown) { audits.push(event); return new AuditApplication(records as never, integrity).record(event); } }), () => 100, 1000, 'policy');
+    () => ({ record(event: unknown) { audits.push(event); return new AuditApplication(records as never, integrity).record(event); } }), () => 100, 1000, 'policy', { async authorize(_command, actor) { if (actor.assurance !== 'os-user') throw new Error('TASK_DECISION_HUMAN_REQUIRED'); return { schemaVersion: 1, deciderClass: 'human-tty', policyRevision: 'policy' }; } });
   const result = await app.execute(command);
   expect(authorization.authorize).toHaveBeenCalledWith(identity, principal);
   expect(result.snapshot.progress[0].acceptedEvidence).toBe('model-unverified');

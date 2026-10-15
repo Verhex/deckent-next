@@ -84,7 +84,14 @@
       "plan": "STORE"
     },
     "src/adapters/core/quota-control-store": {
-      "dependencies": ["src/domain/core/run", "src/engine/core/runs", "src/engine/core/attempts", "src/engine/core/audit", "src/adapters/core/audit-store", "src/adapters/core/sqlite-ledger"],
+      "dependencies": [
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/engine/core/attempts",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger"
+      ],
       "plan": "STORE"
     },
     "src/adapters/core/attempt-store": {
@@ -293,7 +300,8 @@
         "src/engine/core/provider-spend",
         "src/composition/core/run-planner",
         "src/platform/core/i18n",
-        "src/surfaces/core/effect-confirmation"
+        "src/surfaces/core/effect-confirmation",
+        "src/composition/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -320,7 +328,11 @@
         "src/adapters/core/worker-observation",
         "src/adapters/core/git-patch",
         "src/engine/core/handoff-observation",
-        "src/composition/core/resource-observation"
+        "src/composition/core/resource-observation",
+        "src/adapters/core/worker-tree-gate",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/engine/core/audit"
       ],
       "plan": "EXECUTION"
     },
@@ -369,7 +381,8 @@
         "src/adapters/core/local-keyring",
         "src/domain/core/audit",
         "src/platform/core/clock",
-        "src/composition/core/run-planner"
+        "src/composition/core/run-planner",
+        "src/composition/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -510,7 +523,8 @@
         "src/adapters/core/contract",
         "src/engine/core/provider-spend",
         "src/composition/core/root",
-        "src/composition/core/resource-observation"
+        "src/composition/core/resource-observation",
+        "src/adapters/core/local-principal"
       ],
       "plan": "EXECUTION"
     },
@@ -590,7 +604,8 @@
         "src/composition/core/secrets",
         "src/platform/core/i18n",
         "src/adapters/core/installation-files",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/composition/core/audit"
       ],
       "plan": "EXECUTION"
     },
@@ -639,6 +654,7 @@
     },
     "src/domain/core/run": {
       "dependencies": [
+        "src/domain/core/model-invocation",
         "src/domain/core/attempt",
         "src/domain/core/primitives",
         "src/domain/core/task-graph",
@@ -713,7 +729,8 @@
         "src/engine/core/supervisor",
         "src/engine/core/provider-spend",
         "src/domain/core/primitives",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/engine/core/audit"
       ],
       "plan": "SECURITY"
     },
@@ -750,7 +767,8 @@
         "src/platform/core/redaction",
         "src/platform/core/i18n",
         "src/domain/core/work-cost",
-        "src/engine/core/resource-observation"
+        "src/engine/core/resource-observation",
+        "src/domain/core/approval"
       ],
       "plan": "CONTRACT"
     },
@@ -818,7 +836,10 @@
     "src/engine/core/workspaces": {
       "dependencies": [
         "src/domain/core/attempt",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/audit",
+        "src/platform/core/errors",
+        "src/engine/core/attempts"
       ],
       "plan": "ISOLATION"
     },
@@ -1137,7 +1158,8 @@
     "src/surfaces/core/doctor": {
       "dependencies": [
         "src/engine/core/toolchain-currency",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/domain/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -1193,7 +1215,8 @@
         "src/surfaces/core/work-labels",
         "src/surfaces/core/cli-terminal",
         "src/engine/core/backup",
-        "src/surfaces/core/run-planning"
+        "src/surfaces/core/run-planning",
+        "src/domain/core/audit"
       ],
       "plan": "SURFACES"
     },
@@ -1294,6 +1317,13 @@
     },
     "src/engine/core/installation": {
       "dependencies": [
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/config",
+        "src/engine/core/toolchain-currency",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/platform/core/integrity",
         "src/engine/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/policy",
@@ -1442,6 +1472,7 @@
     },
     "src/engine/core/model-activation": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/engine/core/toolchain-currency",
         "src/domain/core/model-activation",
         "src/domain/core/primitives",
@@ -1812,6 +1843,8 @@
     },
     "src/adapters/core/native-coding": {
       "dependencies": [
+        "src/platform/core/config-fields",
+        "src/platform/core/errors",
         "src/domain/core/run",
         "src/adapters/core/docker-supervisor",
         "src/domain/core/primitives",
@@ -1823,16 +1856,12 @@
     },
     "src/composition/core/native-coding": {
       "dependencies": [
+        "src/engine/core/installation",
         "src/domain/core/run",
         "src/adapters/core/native-coding",
         "src/platform/core/errors",
-        "src/engine/core/toolchain-currency",
-        "src/engine/core/config",
         "src/platform/core/config",
-        "src/composition/core/config",
-        "src/platform/core/integrity",
-        "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
+        "src/composition/core/config"
       ],
       "plan": "PROVIDERS"
     },
@@ -1969,6 +1998,15 @@
       ],
       "plan": "SURFACES"
     },
+    "src/adapters/core/worker-tree-gate": {
+      "dependencies": [
+        "src/adapters/core/workspace-read",
+        "src/engine/core/workspaces",
+        "src/platform/core/common",
+        "src/platform/core/redaction"
+      ],
+      "plan": "ISOLATION"
+    },
     "src/adapters/core/worker-observation": {
       "dependencies": [
         "src/domain/core/attempt",
@@ -2040,6 +2078,7 @@
     },
     "src/engine/core/approval": {
       "dependencies": [
+        "src/platform/core/config-fields",
         "src/domain/core/approval",
         "src/domain/core/command",
         "src/domain/core/policy",
@@ -2174,6 +2213,8 @@
       "dependencies": [
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
         "src/platform/core/host",
         "src/domain/core/model-invocation",
         "src/platform/core/i18n",
@@ -2395,6 +2436,7 @@
     },
     "src/engine/core/monitor": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/engine/core/worker-observation",
         "src/engine/core/runtime",
         "src/domain/core/run",
@@ -2413,6 +2455,7 @@
     },
     "src/adapters/core/monitor-ledger": {
       "dependencies": [
+        "src/engine/core/workspaces",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/approval",
         "src/domain/core/run",
@@ -2870,6 +2913,7 @@
     },
     "src/engine/core/run-planner": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/domain/core/run",
         "src/domain/core/model-invocation",
         "src/domain/core/command",
@@ -2971,6 +3015,37 @@
         "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
+    },
+    "src/engine/core/oauth-connection": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/engine/core/secret-store"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/provider-siwc": {
+      "dependencies": [
+        "src/engine/core/oauth-connection"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/audit": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/managed-files",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/local-principal",
+        "src/engine/core/audit",
+        "src/engine/core/approval",
+        "src/domain/core/audit",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/root",
+        "src/composition/core/query-errors",
+        "src/platform/core/errors"
+      ],
+      "plan": "SECURITY"
     }
   },
   "composition": {
@@ -3094,6 +3169,8 @@
       "docs/glossary.tr.md",
       "docs/architecture-overview.md",
       "docs/secret-helpers.md",
+      "docs/known-limits.md",
+      "docs/known-limits.tr.md",
       "docs/architecture-overview.tr.md",
       "CODE_OF_CONDUCT.md",
       "SECURITY.md",
@@ -3254,6 +3331,46 @@
           "docker"
         ],
         "reason": "The existing native-coding-template@1 wire contract requires the docker parameter key; it is an adapter-owned protocol field, not a provider choice or mutable policy."
+      },
+      {
+        "file": "src/engine/core/agent-turn/internal/session-context.ts",
+        "symbol": "MAX_PROTOCOLS",
+        "values": [
+          4
+        ],
+        "reason": "NATIVE-BAGLAM session context v1 (AGENT_SESSION_CONTEXT_VERSION 1) format bound: at most four catalog protocols are named, so the per-turn block stays small and cache-stable; changes only with that version, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/engine/core/agent-turn/internal/session-context.ts",
+        "symbol": "MAX_CAPABILITIES",
+        "values": [
+          16
+        ],
+        "reason": "NATIVE-BAGLAM session context v1 format bound: at most sixteen supported capability ids per protocol are named; versioned with AGENT_SESSION_CONTEXT_VERSION 1, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/engine/core/agent-turn/internal/session-context.ts",
+        "symbol": "MAX_MCP_NAMED",
+        "values": [
+          16
+        ],
+        "reason": "NATIVE-BAGLAM session context v1 format bound: past sixteen names a tool group is counted, not listed; versioned with AGENT_SESSION_CONTEXT_VERSION 1, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/surfaces/core/terminal-work/internal/active-work-note.ts",
+        "symbol": "MAX_ROWS",
+        "values": [
+          8
+        ],
+        "reason": "NATIVE-BAGLAM active-work note v1 format bound: at most eight strip rows reach the model, the rest is counted (/runs lists all); a model-facing format invariant, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/surfaces/core/terminal-work/internal/active-work-note.ts",
+        "symbol": "MAX_TITLE",
+        "values": [
+          80
+        ],
+        "reason": "NATIVE-BAGLAM active-work note v1 format bound: a /do or Run title is cut at eighty characters in the model note; a model-facing format invariant, not an operator policy (2026-10-14)."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",
@@ -3881,6 +3998,7 @@
       "packageExport": "./extensions",
       "packageImport": "./dist/extensions.js",
       "registrations": [
+        "registerApprovalAssuranceProducer",
         "registerOperationAdapterModule",
         "registerSecretStoreBackend"
       ],

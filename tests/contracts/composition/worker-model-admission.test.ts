@@ -16,8 +16,8 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const template = { id: 'coding', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64),
   memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } };
-const HAIKU = 'claude-haiku-4-5-20251001';
-const invocation = (modelId: string, cli = '2.1.285', auxiliaryModelIds = [HAIKU], provider = 'claude') => ({ schemaVersion: 4, provider,
+const HAIKU = 'claude-haiku-5-5'; // haiku-4-5 retired 2026-10-15 in the seed: fixtures use a current model (CLI >= 2.1.293)
+const invocation = (modelId: string, cli = '2.1.293', auxiliaryModelIds = [HAIKU], provider = 'claude') => ({ schemaVersion: 4, provider,
   cliVersion: provider === 'claude' ? `${cli} (Claude Code)` : `codex-cli ${cli}`, discovery: { schemaVersion: 1, mode: 'repository' },
   permissionMode: 'unattended', model: { channelId: SEED_CHANNEL, modelId, auxiliaryModelIds }, prompt: 'Edit note.txt.' });
 type Profile = ReturnType<typeof compileNativeCodingDockerProfile>;
@@ -34,9 +34,9 @@ const profiles: Profile[] = [
   compiled('sonnet-r3-cli', invocation('claude-sonnet-5-5', '2.1.278')),
   compiled('opus-stable-cli', invocation('claude-opus-5-5', '2.1.280', [])),
   compiled('opus-old-cli', invocation('claude-opus-5-5', '2.1.279', [])),
-  compiled('fable', invocation('claude-fable-5-1', '2.1.285', [])),
-  compiled('haiku', invocation(HAIKU, '2.1.285', [])),
-  compiled('api-alias', invocation('claude-haiku-4-5', '2.1.285', [])),
+  compiled('fable', invocation('claude-fable-5-1', '2.1.293', [])),
+  compiled('haiku', invocation(HAIKU, '2.1.293', [])),
+  compiled('api-alias', invocation('claude-haiku-4-5', '2.1.293', [])),
   handPinned('cli-alias', 'sonnet'),
   compiled('unknown', invocation('claude-sonnet-9-9')),
   compiled('codex-on-claude', invocation('gpt-exact-1', '0.159.2', [], 'codex')),
@@ -261,7 +261,9 @@ describe.skipIf(process.platform === 'win32')('WORKER-CURRENCY-1 review fixes (A
     await marker('updating', future); clearConfigCache();
     const warned = await createRun(f.project, run('while-updating', 'sonnet-r3-cli'), f.options);
     expect(warned.admission.run.runId).toBe('while-updating');
-    expect(warned.warnings).toEqual([expect.objectContaining({ code: 'WORKER_IMAGE_REFRESHING', modelId: 'claude-sonnet-5-5', minCliVersion: '2.1.284' })]);
+    // The pinned helper (HAIKU, minimum 2.1.293) is stale on the same old image too: each stale pin carries its own warning.
+    expect(warned.warnings).toEqual([expect.objectContaining({ code: 'WORKER_IMAGE_REFRESHING', modelId: 'claude-sonnet-5-5', minCliVersion: '2.1.284' }),
+      expect.objectContaining({ code: 'WORKER_IMAGE_REFRESHING', modelId: HAIKU, minCliVersion: '2.1.293' })]);
     expect((await createRun(f.project, run('while-updating-ok', 'sonnet'), f.options)).warnings).toEqual([]);
     expect(f.runs()).toBe(2);
     // Other refusals are never softened by a running refresh.

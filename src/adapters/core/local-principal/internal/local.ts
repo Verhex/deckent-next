@@ -22,6 +22,6 @@ export function readLocalOsIdentity() {
   const issuer = hostname();
   const owner = { issuer, subject: String(user.uid) }, mcp = localPrincipalChannel() === 'mcp';
   return verifiedPrincipalSchema.unwrap().omit({ scopeIds: true }).readonly().parse({
-    id: `${user.username}@${issuer}${mcp ? '/mcp' : ''}`, ...(mcp ? mcpPrincipalRef(owner) : owner), assurance: 'os-user',
+    id: `${user.username}@${issuer}${mcp ? '/mcp' : ''}`, ...(mcp ? mcpPrincipalRef(owner) : owner), assurance: mcp ? 'workload-verified' : 'os-user',
   });
 }

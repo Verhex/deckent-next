@@ -6,3 +6,4 @@ export { nativeCliCommand, parseNativeCliRegistry, NativeCliRegistryError, nativ
 export type { NativeCliCapabilities } from '#adapters/core/native-cli-registry/index.js';
 
 export { bindNativeWorkerEffort } from './internal/effort.js';
+export { detectNativeCliVersion } from './internal/discovery.js';

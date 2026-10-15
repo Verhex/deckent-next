@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "authenticators": [
+    {
+      "id": "core.local-os-session",
+      "version": 1
+    },
+    {
+      "id": "core.local-peer-session",
+      "version": 1
+    }
+  ]
+}

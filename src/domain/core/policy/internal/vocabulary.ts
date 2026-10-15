@@ -15,6 +15,8 @@ export const policyResources = Object.freeze({
   // `release-quota` clears channel waits, separately from hold/resume/capacity; every affected pool needs installation authority.
   pool: Object.freeze({ kind: 'pool' as const, actions: Object.freeze(['use', 'hold', 'resume', 'inspect', 'set-capacity', 'release-quota'] as const) }),
   run: Object.freeze({ kind: 'run' as const, actions: Object.freeze(['create', 'inspect', 'cancel', 'reserve'] as const) }),
+  taskDecision: Object.freeze({ kind: 'task-decision' as const, actions: Object.freeze(['accept', 'reject', 'answer'] as const) }),
+  runDecision: Object.freeze({ kind: 'run-decision' as const, actions: Object.freeze(['resume', 'close'] as const) }),
   service: Object.freeze({ kind: 'service' as const, actions: Object.freeze(['shutdown'] as const) }),
   modelActivation: Object.freeze({ kind: 'model-activation' as const, actions: Object.freeze(['activate', 'deactivate', 'inspect'] as const) }),
   modelInvocation: Object.freeze({ kind: 'model-invocation' as const, actions: Object.freeze(['invoke', 'inspect', 'inspect-content', 'purge-content', 'cancel-invocation'] as const) }),

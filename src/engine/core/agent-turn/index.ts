@@ -20,3 +20,6 @@ export { AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentTurn
 export { canonicalTurnRequest, withMcpNotices, chatTurnRoundFailureState, classifyProviderRejection, PROVIDER_REJECTION_KINDS } from './internal/metadata.js';
 export type { ProviderRejectionKind } from './internal/metadata.js';
 export { agentCompactionExpected, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './internal/pressure.js';
+export { AGENT_SESSION_CONTEXT_VERSION, AGENT_SESSION_RULES, AGENT_SESSION_SURFACES, SESSION_STATE_TOOL_SPEC, agentSessionCells, agentSessionSnapshot, agentSessionStateText,
+  renderAgentSessionContext, type AgentSessionCell, type AgentSessionDecision, type AgentSessionShellInput, type AgentSessionSnapshot } from './internal/session-context.js';
+export { createInlineReasoningRouter, splitInlineReasoning } from './internal/inline-reasoning.js';

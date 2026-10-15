@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createEnvironmentSecretStore, createFileSecretStore } from '#adapters/index.js';
 import { withConfigWriteLock } from '#platform/index.js';
+import { RENEWABLE_SECRET_PREFIX } from '#engine/index.js';
 
 // Synthetic canary only: never a real credential.
 const CANARY = 'synthetic-canary-8f3c1a-not-a-real-key';
@@ -19,6 +20,13 @@ async function root() {
 }
 const leaks = (error: unknown) => JSON.stringify({ message: (error as Error)?.message, params: (error as { params?: unknown })?.params,
   cause: String((error as { cause?: unknown })?.cause ?? '') }).includes(CANARY);
+
+it('file backend refuses renewable-session writes before filesystem creation, on every platform', async () => {
+  const f = await root(), store = createFileSecretStore({ root: f.global, platform: process.platform });
+  const error = await store.set(`${RENEWABLE_SECRET_PREFIX}FIXTURE`, CANARY).catch(error => error);
+  expect(error).toMatchObject({ code: 'SECRET_STORE_PROTECTION_REQUIRED' });
+  expect(leaks(error)).toBe(false); expect(await readdir(f.global)).toEqual([]);
+});
 
 it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: round trip with a 0600 schemaVersion 1 document in a 0700 directory, atomic and name-validated', async () => {
   const f = await root(), store = createFileSecretStore({ root: f.global, platform: 'linux' });

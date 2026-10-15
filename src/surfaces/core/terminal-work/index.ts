@@ -10,7 +10,9 @@ export { TRANSCRIPT_PAGE_LINES, type TranscriptPageLabels } from './internal/tra
 export { systemSummaryEntry } from './internal/system-summary.js';
 export { JobWindow, openingWorkText, runDetailLines, runJobWindow, type JobWindowLabels } from './internal/job-windows.js';
 export { dispatchWorkCommand } from './internal/job-command.js';
+export { runControlActions } from './internal/run-control.js';
 export { openTaskAction } from './internal/task-actions.js';
 
 export { useRunCompletion, runCompletionText, type TrackedRun } from './internal/run-completion.js';
 export { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow, useActiveWorkClock, type ActiveDelivery, type ActiveDo, type ActiveWorkItem, type ActiveWorkLabels } from './internal/active-work.js';
+export { ACTIVE_WORK_NOTE_MARK, activeWorkModelNote, withoutActiveWorkNote } from './internal/active-work-note.js';

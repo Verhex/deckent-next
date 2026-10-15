@@ -26,6 +26,7 @@ Kurulum/Bakım:
   toolchains  İşçi araçlarını kontrol et veya güncelle
   doctor      Kurulum sağlığını kontrol et
 Geliştirici:
+  audit       Audit geçmişini ve checkpoint kanıtını doğrula
   inventory   Kayıtlı denemeleri incele
   paths       Kurulum yollarını incele
   runtime     Yerel çalışma servisini yönet

@@ -429,6 +429,8 @@
   "monitor.detail.attempt": "attempt {attempt} gen {generation} · launch {launch} · {started} → {ended} ({duration}) · exit {exit} · {provider}/{model}",
   "monitor.detail.evaluation": "evaluation: {verdict} {when}",
   "monitor.detail.handoffReceived": "handoff received from {source} (attempt {attempt}, digest {digest})",
+  "monitor.detail.configExcluded": "excluded by config: {count} path(s) passed the secret gate only because execution.secretGate lists them (audited)",
+  "monitor.detail.configExcludedEntry": "      {path} ({rule}) — lifted by {by}",
   "monitor.detail.dependencies": "depends on: {list}",
   "monitor.graph.summary": "Graph: {tasks} tasks, {edges} edges, depth {depth}; pending {pending}, running {running}, needs attention {attention}, accepted {accepted}, failed {failed}, stopped {stopped}",
   "monitor.graph.criticalPath": "Critical path ({length} open): {path}",
@@ -708,5 +710,6 @@
   "resource.recommendation.axis.wall": "wall time",
   "resource.recommendation.axis.api": "measured API money",
   "resource.recommendation.axis.subscription": "observed subscription time",
-  "monitor.approval.expiredCount": "Expired approvals: {count} (history; no decision available)."
+  "monitor.approval.expiredCount": "Expired approvals: {count} (history; no decision available).",
+  "doctor.auditIntegrity": "Audit integrity: {status} ({reason})"
 }

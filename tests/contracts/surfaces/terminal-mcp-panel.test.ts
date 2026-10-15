@@ -62,6 +62,12 @@ describe('/mcp window port', () => {
     expect(requests).toEqual([{ verb: 'add', scope: 'local', name: 'remote', approve: true, entry: { type: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer $DECK:GH' } } },
       { verb: 'revoke', name: 'files' }, { verb: 'reconnect', name: 'files' }, { verb: 'remove', name: 'files' }]);
   });
+  it('G3: approve sends no alwaysAsk list, so a re-approval keeps the locks the CLI set', async () => {
+    const { run, requests } = host({ approve: { approved: true, pinnedTools: 2 } });
+    expect(await mcpPanelPort('/p', run, {}, 'en').approve('files', async () => true)).toEqual(['files is trusted; 2 tools pinned.']);
+    expect(requests).toEqual([{ verb: 'approve', name: 'files' }]);
+    expect(requests[0]).not.toHaveProperty('alwaysAsk');
+  });
   it('K4 realms: the networked sandbox comes first (the default of an entry without a realm), host last with its warning; an HTTP server runs nowhere here', async () => {
     const port = mcpPanelPort('/p', host({}).run, {}, 'en');
     expect(port.realms.map(choice => choice.id)).toEqual(['sandbox-net', 'require-sandbox', 'prefer-sandbox', 'host']);

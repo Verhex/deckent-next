@@ -1,5 +1,5 @@
 export { agentToolUndo } from './internal/assurance.js';
-export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval } from './internal/integrity.js';
+export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval, expireApproval } from './internal/integrity.js';
 export type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from './internal/store.js';
 export { ApprovalApplication, authorizeApproval, requestTaskApproval, approvalQuerySchema, approvalListSchema, approvalCommandSchema, approvalRenewalSchema } from './internal/application.js';
 export type { ApprovalCommand, ApprovalDecisionRestriction } from './internal/application.js';
@@ -19,7 +19,7 @@ export type { SessionStandingBinding } from './internal/standing.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';
 export type { StandingCellName } from './internal/standing.js';
 export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceRegistry, createTurnDecisionCapabilities, minimumApprovalAssurance, operationApprovalFacts,
-  registerApprovalChannel, registeredApprovalChannels, requiredApprovalAssurance, undeclaredAgentToolApprovalFacts } from './internal/assurance.js';
+  coreApprovalAssuranceInventory, registerApprovalChannel, registeredApprovalChannels, requiredApprovalAssurance, undeclaredAgentToolApprovalFacts } from './internal/assurance.js';
 export type { ApprovalAssuranceOptions } from './internal/application.js';
 export type { AgentToolApprovalFacts, TurnDecisionCapabilities } from './internal/assurance.js';
 export { approvalCommandFingerprint } from './internal/application.js';
@@ -29,3 +29,5 @@ export type { SessionStandingResult, SessionApprovalResult, ClearSessionStanding
 export { SessionApprovalAnswers } from './internal/session-answers.js';
 export { RunCreateApprovalBroker, RUN_CREATE_SUBJECT_PROTOCOL_VERSION } from './internal/run-create.js';
 export type { RunCreateApprovalInput } from './internal/run-create.js';
+export { ApprovalAssuranceProducerRegistry, approvalAssuranceProducerRegistry, registerApprovalAssuranceProducer, approvalAssuranceRegistrationEvent, resolveAuditedApprovalAssurance, approvalAssuranceProducerInventory } from './internal/producer-registry.js';
+export type { ApprovalAssuranceAttester, ApprovalAssuranceProducerManifest, ApprovalAssuranceProducerRegistration } from './internal/producer-registry.js';

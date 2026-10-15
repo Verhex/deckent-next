@@ -24,6 +24,8 @@ export type { Locale, MessageKey, OutputMode, Params, ErrorCategory, ExitCode, C
   IntegrityAuthority, BootstrapJournal, BootstrapJournalPayload, BootstrapObservation, BootstrapStateErrorCode } from '#platform/index.js';
 export { prepareNativeCodingProfile } from '#composition/index.js';
 
+export { verifyConfiguredAudit as verifyAudit } from '#composition/index.js';
+export type { AuditVerification, AuditVerifyQuery, AuditWitness, AuditCheckpoint } from '#domain/index.js';
 export { inspectConfiguredInventory as inspectInventory } from '#composition/index.js';
 export type { DispatchInventoryInput, DispatchInventoryPage, DispatchInventoryEntry } from '#engine/index.js';
 export { inspectConfiguredRun as inspectRun } from '#composition/index.js';

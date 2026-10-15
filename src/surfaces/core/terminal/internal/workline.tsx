@@ -3,7 +3,7 @@ import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
-  ActiveWorkStrip, activeWorkItems, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem } from '#surfaces/core/terminal-work/index.js';
+  ActiveWorkStrip, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
@@ -206,6 +206,9 @@ export function WorklineApp(props: WorklineProps) {
   const trackedRuns = useMemo(() => completion.tracked.map(item => item.run), [completion.tracked]);
   const deliveries = useDeliveryWindows({ port: props.delivery?.port, labels: labels.delivery, runs: trackedRuns, summary: (text, level) => push([systemSummaryEntry(text, level)]),
     errorText, position: labels.work?.window.position ?? '{from}-{to}/{total}', known: props.knownSecrets, confirmTimeoutMs: props.delivery?.confirmTimeoutMs ?? 0 });
+  // NATIVE-BAGLAM: what the strip holds now, read when a turn is sent (the note joins only that turn's own message).
+  const workNote = useRef({ active: activeDo, runs: completion.tracked, deliveries: deliveries.pending });
+  workNote.current = { active: activeDo, runs: completion.tracked, deliveries: deliveries.pending };
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied' || step.status === 'not-initialized') setCompletionRefused(true);
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
@@ -315,7 +318,8 @@ export function WorklineApp(props: WorklineProps) {
     // T-L5 `@file`: the service attaches the mentioned files (bounded, labelled) to this message; a failure leaves the text as typed.
     const content = await messageWithMentions(text, mentioned, props.attachMentions, signal, push, errorText, labels.mentions);
     // Agent history stays whole for runtime compaction (Astra 2091 R1; the registry token threshold bounds growth); only plain turns use the window.
-    const system: AgentChatMessage = { role: 'system', content: systemPrompt + await instructions.prepare(signal) }, asked = [...history.current, { role: 'user' as const, content }];
+    const system: AgentChatMessage = { role: 'system', content: systemPrompt + await instructions.prepare(signal) },
+      asked = [...history.current, { role: 'user' as const, content: content + activeWorkModelNote({ ...workNote.current, nowMs: Date.now() }) }];
     const messages = props.streamTurn ? agentHistory(system, asked) : boundAgentHistory(system, asked, historyMessages);
     try {
       // Cancelled while the files were being attached: nothing is sent.

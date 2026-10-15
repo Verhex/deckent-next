@@ -94,10 +94,18 @@ const attestedDecisionSchema = z.object({ schemaVersion: z.literal(2), ...decisi
  * v2, readable by earlier builds; an earlier build refuses a v3 record with its typed `APPROVAL_INTEGRITY` (strict schema, store decode).
  */
 const notedDecisionSchema = z.object({ schemaVersion: z.literal(3), ...decisionShape, assurance: approvalAssuranceSchema, approverNote: z.literal(true) }).strict().readonly();
-export const approvalDecisionSchema = z.union([notedDecisionSchema, attestedDecisionSchema, sessionDecisionSchema]);
+export const deciderClassSchema = z.enum(['human-tty', 'ai-policy', 'system']);
+export type DeciderClass = z.infer<typeof deciderClassSchema>;
+/** D0 v4 seals the producer-derived decider class. Older MAC payloads remain byte-identical. */
+const classifiedDecisionSchema = z.object({ schemaVersion: z.literal(4), ...decisionShape, assurance: approvalAssuranceSchema,
+  deciderClass: deciderClassSchema, approverNote: z.literal(true).optional() }).strict().readonly();
+export const approvalDecisionSchema = z.union([classifiedDecisionSchema, notedDecisionSchema, attestedDecisionSchema, sessionDecisionSchema]);
 /** The dual reader: a decision's assurance, `peer-session` for a decision sealed before B1. */
 export const approvalDecisionAssurance = (decision: z.infer<typeof approvalDecisionSchema>): string =>
   'assurance' in decision ? decision.assurance : APPROVAL_ASSURANCE.peerSession;
+/** Legacy custody cannot prove the decision class; do not reinterpret it as a human decision. */
+export const approvalDecisionClass = (decision: z.infer<typeof approvalDecisionSchema>): DeciderClass | 'unknown' =>
+  'deciderClass' in decision ? decision.deciderClass : 'unknown';
 export const approvalRecordSchema = z.object({ request: approvalRequestSchema, revision: counterSchema,
   status: z.enum(['pending', 'decided', 'expired']), decision: approvalDecisionSchema.nullable(),
   keyId: identitySchema, mac: digest,
@@ -117,5 +125,5 @@ export type ApprovalActor = z.infer<typeof approvalActorSchema>;
 export class ApprovalError extends Error {
   constructor(readonly code: 'APPROVAL_INVALID' | 'APPROVAL_DENIED' | 'APPROVAL_MISSING' | 'APPROVAL_CONFLICT'
     | 'APPROVAL_EXPIRED' | 'APPROVAL_INTEGRITY' | 'APPROVAL_STALE' | 'APPROVAL_REQUIRED' | 'APPROVAL_UNSETTLED' | 'APPROVAL_SURFACE_RESTRICTED'
-    | 'APPROVAL_ATTENDED_REQUIRED' | 'APPROVAL_ASSURANCE_INSUFFICIENT') { super(code); this.name = 'ApprovalError'; }
+    | 'AI_AUTHORITY_NON_DELEGABLE' | 'APPROVAL_ATTENDED_REQUIRED' | 'APPROVAL_ASSURANCE_INSUFFICIENT') { super(code); this.name = 'ApprovalError'; }
 }

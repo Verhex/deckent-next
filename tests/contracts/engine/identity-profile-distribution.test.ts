@@ -41,7 +41,7 @@ async function fixture(owner = true, auditFailure = false) {
   const app = new IdentityProfileDistributionApplication(registry, catalog, deps);
   const decide = async (pending: Awaited<ReturnType<typeof app.submit>>) => {
     if (pending.status !== 'approval-pending') throw new Error('pending expected');
-    await new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, source, integrity, clock, 'terminal', 10)
+    await new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, source, integrity, clock, 'terminal', 10, undefined, undefined, { interactive: async () => true })
       .decide({ schemaVersion: 1, scopeId: 's', approvalId: pending.approval.approvalId, commandId: `decide-${pending.approval.approvalId}`,
         expectedRevision: pending.approval.revision, decision: 'allow', reason: 'Reviewed exact profile card' });
   };

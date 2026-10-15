@@ -250,7 +250,7 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(toolNames(f.state.requests[3]!).filter(name => name.startsWith('mcp__'))).toEqual([]);
     expect(await get()).toBe('declined');
     // Every decision is a sealed audit event of the project's ledger.
-    const audits = f.rows('SELECT record FROM audit_events ORDER BY sequence').map(row => (JSON.parse(String((row as { record: string }).record)) as { event: { subject: Record<string, unknown> } }).event.subject);
+    const audits = f.rows('SELECT record FROM audit_events ORDER BY rowid') /* insertion order: sequences are per scope, and D1 inventory events shift one scope's numbers */.map(row => (JSON.parse(String((row as { record: string }).record)) as { event: { subject: Record<string, unknown> } }).event.subject);
     expect(audits.filter(subject => subject['kind'] === 'mcp-trust').map(subject => subject['action'])).toEqual(['decline', 'reset', 'trust', 'decline']);
   }, 90_000);
 
@@ -373,6 +373,10 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
       summary: { kind: 'mcp', tool: 'mcp:fx/echo' } });
     const floored = await auto.call('mcp__fx__drop', {});
     expect(floored).toMatchObject({ card: true, status: 'denied' });
+    expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
+    // G3: a re-approval that gives no alwaysAsk list (the terminal's) keeps the owner's lock: the floor cell still asks.
+    await runConfiguredMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env }, async () => true);
+    expect(await auto.call('mcp__fx__drop', {})).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     const ask = await modeRuntime({ grants: both('require-approval', true), mode: 'ask' });
     registry(ask.project, { fx: m.entry() }); await approve(ask.project, env);

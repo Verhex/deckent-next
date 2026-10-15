@@ -23,7 +23,7 @@ async function fixture(policy: unknown) {
   const session = await LocalOsSessionAuthority.create(['scope'], 10000, time);
   const evidence = await session.verifySession(undefined);
   const integrity = createHmacIntegrity('key', randomBytes(32));
-  const app = new ApprovalApplication(journal.store, { verify: async () => evidence.principal }, session, { load: async () => policy }, integrity, time, 'sdk', 20);
+  const app = new ApprovalApplication(journal.store, { verify: async () => evidence.principal }, session, { load: async () => policy }, integrity, time, 'sdk', 20, undefined, undefined, { interactive: async () => true });
   const self = evidence.session.principalRef;
   const request = (requester: { id: string; issuer: string; subject: string }, digest: string) => requestTaskApproval(journal.store, integrity,
     { scopeId: 'scope', runId: 'run', taskId: 'task', requester, actionDigest: digest.repeat(64), policyRevision: 'policy', summary: 'Execute task', createdAt: 1000, expiresAt: 5000 });

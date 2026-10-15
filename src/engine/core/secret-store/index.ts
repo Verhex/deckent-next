@@ -10,5 +10,7 @@ export { SECRET_STORE_SWITCH_RESOURCE_ID, SecretStoreSwitch, isSecretStoreDowngr
 export type { SecretStoreSelectionPort, SecretStoreSwitchPorts, SecretStoreSwitchRequest, SecretStoreSwitchResult } from './internal/switch.js';
 export { missingSecretReferenceNames, inspectSecretEnvironmentGuard } from './internal/env-guard.js';
 export type { SecretEnvironmentGuard } from './internal/env-guard.js';
+export { RENEWABLE_SECRET_PREFIX } from './internal/port.js';
+export { assertSecretStorageProtection } from './internal/protection.js';
 export { createSecretHelperBackend } from './internal/helper.js';
 export type { SecretHelperOptions, SecretHelperReadPort } from './internal/helper.js';

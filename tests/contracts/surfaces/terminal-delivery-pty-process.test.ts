@@ -2,16 +2,20 @@ import { execFile } from 'node:child_process';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { hostname, userInfo } from 'node:os';
-import { promisify } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evaluateTask, inspectConfiguredWorkspaceIntegration } from '../../../src/index.js';
+import { DatabaseSync } from 'node:sqlite';
+import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { readyDeliveryFixture, type FixtureTracker } from '../support/workspace-patch-fixture.js';
+import { DRIVER, inPty as runInPty, type Step } from '../support/pty-steps.js';
 
 // TESLIM-PENCERESI at the real boundary: the built Workline on its own controlling PTY with the built delivery port over the real configured
 // composition and real Git (Docker executes the coding attempt). Only the Run view that triggers the window is a fixture ledger port.
 const execute = promisify(execFile);
 const program = resolve('tests/fixtures/delivery-window-application.mjs');
+const inPty = (project: string, env: NodeJS.ProcessEnv, mode: string, steps: readonly Step[], stdin = 'tty') => runInPty(program, project, env, mode, steps, stdin);
 const track: FixtureTracker = { roots: [], cleanup: [] };
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -19,67 +23,6 @@ afterEach(async () => {
   clearConfigCache(); for (const root of track.roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-/**
- * python3 `pty` driver: each step waits for a text in the output so far, then types its keys 10 ms apart; the view is stopped after the last step.
- * A step marked `fresh` waits for its text in the output after the previous step's keys only (a focus label shown earlier does not count).
- * Ctrl+O and the decision key are separate steps: written back to back, a loaded host can read both bytes in one chunk, which Ink 7.1.1 parses
- * as one text input (`\x0fy`, not Ctrl+O) — the key then lands in the composer (CI run 38503250233; ALPHA36-CI2 DECISIONS).
- */
-const DRIVER = String.raw`
-import fcntl, json, os, pty, select, signal, struct, sys, termios, time
-argv, steps, mode = json.loads(sys.argv[1]), json.loads(sys.argv[2]), sys.argv[3]
-pid, fd = pty.fork()
-if pid == 0:
-    if mode == 'piped-input': os.dup2(os.open('/dev/null', os.O_RDONLY), 0)
-    os.execvp(argv[0], argv)
-fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 160, 0, 0))
-out = b''
-sent_at = 0
-def read_for(seconds):
-    global out
-    end = time.time() + seconds
-    while time.time() < end:
-        ready, _, _ = select.select([fd], [], [], 0.05)
-        if ready:
-            try: chunk = os.read(fd, 65536)
-            except OSError: return False
-            if not chunk: return False
-            out += chunk
-    return True
-for step in steps:
-    wait, send = step[0], step[1]
-    since = sent_at if len(step) > 2 else 0
-    deadline = time.time() + 40
-    while wait.encode() not in out[since:]:
-        if time.time() > deadline or not read_for(0.1):
-            os.kill(pid, 9); os.waitpid(pid, 0)
-            sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(0)
-    read_for(0.4)
-    for char in send:
-        os.write(fd, char.encode()); time.sleep(0.01)
-    sent_at = len(out)
-status = None
-deadline = time.time() + 2
-while status is None and time.time() < deadline:
-    read_for(0.1)
-    finished, code = os.waitpid(pid, os.WNOHANG)
-    if finished: status = os.waitstatus_to_exitcode(code)
-if status is None:
-    os.kill(pid, signal.SIGTERM); time.sleep(0.3)
-    finished, code = os.waitpid(pid, os.WNOHANG)
-    if not finished: os.kill(pid, 9); os.waitpid(pid, 0)
-    status = 'stopped'
-read_for(0.2)
-sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace')}))
-`;
-type Step = readonly [wait: string, keys: string] | readonly [wait: string, keys: string, fresh: 'fresh'];
-async function inPty(project: string, env: NodeJS.ProcessEnv, mode: string, steps: readonly Step[], stdin = 'tty') {
-  const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, program, mode]), JSON.stringify(steps), stdin],
-    { cwd: project, env: { ...process.env, ...env }, timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
-  const result = JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
-  if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-6000)}`);
-  return result;
-}
 const CTRL_O = '\u000f', ESC = '\u001b';
 const WINDOW = 'Delivery · Ship useful change', READY_HINT = 'y check, prepare and deliver';
 const CONFIRM_BODY = 'The confirmation card differs from what was shown';
@@ -164,6 +107,49 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
       expect((await f.source()).head).toBe(source.head); expect((await f.source()).status).toBe(source.status);
       for (const close of track.cleanup.splice(0).reverse()) await close();
     }
+  });
+
+  it('Y1: a required verification is chosen in the window; the real adoption binds that Run and shows the command ids for rollback', async () => {
+    const target = 'refs/heads/adopted', f = await fixture({ adoptionTargets: [target] });
+    await f.git('branch', 'adopted', f.base);
+    await grant(f, ['read-output', 'evaluate']);
+    await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluation', identity: f.identity, expectedRevision: (await f.runtime.store.loadRun('s', 'r'))!.revision }, f.options);
+    // The installation requires a verification Run of kind `verify` (process exit 0); the kind runs on the same pinned image.
+    const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+    const profile = structuredClone(config.admission.registry.profiles[0]); profile.id = 'fixture-verify'; profile.parameters.argv = ['node', '-e', 'process.exit(0)'];
+    config.admission.registry.profiles.push(profile); config.admission.registry.kinds.push({ kind: 'verify', profile: { id: profile.id, version: 1 } });
+    config.execution.adoption.verification = { kind: 'verify', required: true, criteria: [{ evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+    await writeFile(productResourcePath(f.runtime.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'verify-window', restrictions: [], grants: [
+      { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r', 'v'] } },
+      { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
+      { id: 'attempt', effect: 'allow', actions: ['execute', 'read-output', 'evaluate', 'prepare-integration', 'deliver-integration', 'adopt-integration'], scopes: ['s'], principals,
+        resource: { kind: 'attempt', ids: 'all' } },
+      { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
+    ] }), { mode: 0o600 });
+    track.cleanup.push(async () => {
+      const bound = (await f.runtime.store.loadRun('s', 'v'))?.bindings[0]?.identity, record = bound && await f.runtime.store.loadBoundDispatch(bound);
+      if (record) { const supervisor = await DockerSupervisor.restoreProfile(record.profile); await supervisor.cancel(record.request); await supervisor.release(record.request); }
+    });
+    const result = await inPty(f.project, f.options.env, 'verify', [...opening, ...decide('y'), ['y adopt into the selected branch', 'y'],
+      ['Run v · task check · accepted', 'y'], ['Adopted: refs/heads/adopted', '']]);
+    const dir = process.env['Y1_CAPTURE_DIR'];
+    if (dir) await writeFile(join(dir, 'deliver-adopt-verified-en.txt'), stripVTControlCharacters(result.output));
+    const [line] = await f.deliveries(), commit = line!.split(' ')[1]!;
+    expect(await f.git('rev-parse', target)).toBe(commit);
+    expect(result.output).toContain('Verification for refs/heads/adopted: choose an accepted Run of kind verify');
+    const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'), { readOnly: true });
+    let rows: { command_id: string; intent: string }[];
+    try { rows = db.prepare('SELECT command_id, intent FROM workspace_adoptions').all() as never; } finally { db.close(); }
+    expect(rows).toHaveLength(1);
+    const intent = JSON.parse(rows[0]!.intent), adoptionId = rows[0]!.command_id;
+    expect(intent).toMatchObject({ command: { verificationRunId: 'v', verificationKind: 'verify', targetRef: target }, verification: { runId: 'v', kind: 'verify', commit } });
+    // BETA-BELGE rollback gap: the adoption's own command id (and the delivery's) are in the window's result line.
+    const flat = stripVTControlCharacters(result.output).replace(/[│┃\s]+/gu, '');
+    expect(adoptionId).toMatch(/^terminal-adopt-/u);
+    expect(flat).toContain(`verifiedbyRunv·adoptioncommand${adoptionId}`);
+    expect(flat).toContain(`deliverycommand${intent.command.deliveryCommandId}`);
   });
 
   it('a session that is not a verified terminal is refused before any candidate is prepared, even when the answer would be yes', async () => {

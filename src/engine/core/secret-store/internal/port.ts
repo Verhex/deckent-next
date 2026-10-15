@@ -18,14 +18,19 @@ export const SECRET_VALUE_MAX_BYTES = 65_536;
 export const SECRET_STORE_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/;
 export type SecretStoreErrorCode = 'SECRET_NAME_INVALID' | 'SECRET_VALUE_INVALID' | 'SECRET_STORE_UNKNOWN' | 'SECRET_STORE_UNAVAILABLE'
   | 'SECRET_STORE_UNSAFE' | 'SECRET_STORE_CORRUPT' | 'SECRET_STORE_READ_ONLY' | 'SECRET_STORE_UNSUPPORTED' | 'SECRET_STORE_FULL'
-  | 'SECRET_HELPER_INVALID' | 'SECRET_HELPER_DENIED' | 'SECRET_HELPER_TIMEOUT' | 'SECRET_HELPER_OUTPUT_LIMIT' | 'SECRET_HELPER_FAILED';
+  | 'SECRET_HELPER_INVALID' | 'SECRET_HELPER_DENIED' | 'SECRET_HELPER_TIMEOUT' | 'SECRET_HELPER_OUTPUT_LIMIT' | 'SECRET_HELPER_FAILED'
+  | 'SECRET_STORE_PROTECTION_REQUIRED';
 
 export interface SecretStoreDescriptor {
   /** The registry id this store was opened under (the audit names the backend by it). */
   readonly id: string;
   readonly writable: boolean;
   readonly enumerable: boolean;
+  /** Trusted backend capability. Absence never proves encryption; permissions alone are insufficient for renewable sessions. */
+  readonly encryptedAtRest?: true;
 }
+/** Versioned reserved namespace for renewable credential bundles, shared by every provider/Enterprise adapter. */
+export const RENEWABLE_SECRET_PREFIX = 'DECKENT_CREDENTIAL_SESSION_';
 /** A non-throwing health view for `doctor`: whether the store could be read now, and the typed reason when not. */
 export interface SecretStoreInspection {
   readonly status: 'ready' | 'unavailable' | 'unsafe' | 'corrupt';

@@ -1,3 +1,4 @@
+import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { TaskGraphError, validateTaskGraph, resolveTaskWorkClass, getPolicyVocabulary, encodeCommandProjection, type ModelInvocationReceipt, type RunProposal,
   type RunProposalBinding, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type KnownSecretSnapshot } from '#platform/index.js';
@@ -51,7 +52,7 @@ export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInv
       !== encodeCommandProjection('actor', proposal.proposer)) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
   const contribution = proposal.source.contribution;
   if (contribution) {
-    if (contribution.requestDigest !== receipt.request.requestDigest || contribution.activationRevision !== receipt.activationRevision
+    if ((contribution.schemaVersion === 2 && contribution.billingAxis !== modelInvocationBillingAxis(receipt.profile)) || contribution.requestDigest !== receipt.request.requestDigest || contribution.activationRevision !== receipt.activationRevision
       || contribution.bindingDigest !== receipt.request.expectedBinding.digest || !text) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
     const draft = parseBrainDraft(text, known);
     if (brainOutputDigest(draft) !== contribution.outputDigest || brainOutputDigest({ graph: proposal.graph,

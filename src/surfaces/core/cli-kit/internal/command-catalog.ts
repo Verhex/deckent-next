@@ -19,7 +19,12 @@ function action(name: string, group: HelpGroup, summary: MessageKey, detail: Mes
 /** The dispatch catalog. Register a command here with its group, localized summary and detail.
  * Children inherit the family handler; existing handlers retain argument validation and execution. */
 export const CLI_CATALOG = [
-  { name: 'report', group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help' },
+  /* Listed under --help --all: the compact top help keeps its approved 30-line cap; doctor reports audit integrity on the main path. */
+  { name: 'audit', group: 'developer', summary: 'cli.audit.summary', detail: 'cli.audit.help', children: [
+    action('verify', 'developer', 'cli.audit.summary', 'cli.audit.help'),
+    action('rebaseline', 'developer', 'cli.audit.rebaseline.summary', 'cli.audit.help'),
+  ] },
+  { name: 'report' , group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help' },
   { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do' },
   { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', children: [
     action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup'),
@@ -41,6 +46,7 @@ export const CLI_CATALOG = [
     action('identity', 'start', 'cli.help.action.identity', 'cli.help.identity'),
     action('policy', 'start', 'cli.help.action.policy', 'cli.help.initPreview'),
     action('pool', 'start', 'cli.help.action.init.pool', 'cli.help.initPreview'),
+    action('registry', 'start', 'cli.help.action.init.registry', 'cli.init.registry.help'),
   ] },
   { name: 'monitor', group: 'observe', summary: 'cli.help.summary.monitor', detail: 'cli.monitor.help' },
   { name: 'workers', group: 'observe', summary: 'cli.help.summary.workers', detail: 'cli.workers.help', children: [

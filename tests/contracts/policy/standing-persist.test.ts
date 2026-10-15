@@ -40,7 +40,7 @@ async function fixture(options: { grants?: (me: Actor) => unknown[]; bindings?: 
   const administration = new PolicyAdministrationApplication({ authority: source, policy: source, effects, approvals: journal.store, integrity, sessions, clock, requestTtlMs: 60_000,
     audit: (event: AuditEvent) => { audit.record(event); } });
   const approve = (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, source,
-    integrity, clock, 'local-runtime', 10).decide({ schemaVersion: 1, scopeId: 's', approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
+    integrity, clock, 'local-runtime', 10, undefined, undefined, { interactive: async () => true }).decide({ schemaVersion: 1, scopeId: 's', approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
   const standing = new PersistentStanding({ administration, approve, policy: source, ...(options.knownSecrets ? { knownSecrets: options.knownSecrets } : {}) });
   const files = async () => JSON.parse(await readFile(policyPath, 'utf8'));
   const events = () => {

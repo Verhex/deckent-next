@@ -110,7 +110,8 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   const record = (decision: 'trusted' | 'declined', tools: McpTrustRecord['tools']) => (current: McpTrustRecord | null): McpTrustRecord => ({ scope: server.scope,
     name: server.name, definitionDigest: server.definitionDigest, tools, decision, reconnect: keep(current), approvedAtMs: (context.now ?? Date.now)(),
     principal: { issuer: context.principal.issuer, subject: context.principal.subject } });
-  const decline = async () => { await recordMcpTrust(server, context, 'decline', record('declined', [])); return { decision: 'declined' as const, pinned: 0 }; };
+  // A decline keeps the owner's existing always-ask locks on the declined record (a later approval inherits them); nothing else stays pinned.
+  const decline = async () => { await recordMcpTrust(server, context, 'decline', record('declined', (server.trust?.tools ?? []).filter(pin => pin.alwaysAsk))); return { decision: 'declined' as const, pinned: 0 }; };
   const started = await ask(launchCard);
   if (started === null) return { decision: 'unanswered', pinned: 0 };
   if (!started) return decline();
@@ -130,9 +131,11 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     if (!state.ok && state.reason === 'sandbox-unavailable') throw ErrorRegistry.createError('MCP_SANDBOX_UNAVAILABLE', { params: { name: server.name, realm: launch.realm, reason: state.detail ?? state.reason } });
     if (!state.ok) throw fail('MCP_SERVER_START_FAILED', state.detail ?? state.reason);
     const live = state.tools.filter(tool => tool.digest !== null);
+    // `alwaysAsk` not given (a terminal or in-turn re-approval) keeps the owner's existing locks for the tools that still exist; only an explicit list replaces them.
     for (const name of options.alwaysAsk ?? []) if (!live.some(tool => tool.name === name)) throw fail('MCP_TOOL_UNKNOWN', name);
+    const locked = new Set(options.alwaysAsk ?? (server.trust?.tools ?? []).filter(pin => pin.alwaysAsk).map(pin => pin.name));
     const tools = live.map(tool => ({ name: tool.name, digest: tool.digest!, description: tool.description ?? null, annotations: tool.annotations ?? null,
-      alwaysAsk: (options.alwaysAsk ?? []).includes(tool.name) }));
+      alwaysAsk: locked.has(tool.name) }));
     const pinned = await ask({ ...launchCard, phase: 'tools', posture: state.posture, era: state.era, protocolVersion: state.protocolVersion, tools });
     if (pinned === null) return { decision: 'unanswered', pinned: 0 };
     if (!pinned) return decline();

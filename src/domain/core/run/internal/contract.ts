@@ -14,7 +14,7 @@ export const runBindingSchema = z.object({ identity: attemptIdentitySchema, obse
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
   z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted']),
-    failureCode: identitySchema.optional(),
+    failureCode: identitySchema.optional(), operatorHold: z.object({ schemaVersion: z.literal(1), note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars) }).strict().optional(),
     note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), since: counterSchema, deadline: counterSchema }).strict(),
   z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
 ]).readonly();

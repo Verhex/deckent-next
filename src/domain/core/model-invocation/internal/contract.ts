@@ -50,7 +50,7 @@ export const modelInvocationCommandInputSchema = invocationEnvelopeSchema.pipe(m
 export const modelInvocationCommandQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandQuerySchema);
 export const modelInvocationQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationQuerySchema);
 export const modelInvocationPurgeCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationPurgeCommandSchema);
-export const modelInvocationProfileSchema = z.object({ schemaVersion: z.literal(1), id: identitySchema,
+const profileShape = z.object({ id: identitySchema,
   version: counterSchema.positive(), scopeId: identitySchema, reference: modelReferenceSchema, bindingDigest: digest,
   protocol: z.object({ family: identitySchema, version: identitySchema }).strict().readonly(),
   adapter: z.object({ id: identitySchema, version: counterSchema.positive(), definition: invocationEnvelopeSchema }).strict().readonly(),
@@ -61,6 +61,13 @@ export const modelInvocationProfileSchema = z.object({ schemaVersion: z.literal(
   // Context window this deployment serves (T-L5); the same model may be served at different lengths. Absent = the provider's report.
   contextWindowTokens: counterSchema.positive().optional(),
 }).strict().readonly();
+/** v1 is read byte-for-byte without defaults; v2 must explicitly select a billing path. */
+export const modelInvocationBillingAxisSchema = z.enum(['subscription', 'metered', 'local']);
+export type ModelInvocationBillingAxis = z.infer<typeof modelInvocationBillingAxisSchema>;
+export const modelInvocationProfileSchema = z.discriminatedUnion('schemaVersion', [
+  z.object({ schemaVersion: z.literal(1), ...profileShape.unwrap().shape }).strict(),
+  z.object({ schemaVersion: z.literal(2), billingAxis: modelInvocationBillingAxisSchema, ...profileShape.unwrap().shape }).strict(),
+]).readonly();
 export const modelInvocationRequestEvidenceSchema = modelInvocationCommandSchema.unwrap().omit({ nativeRequest: true })
   .extend({ requestDigest: digest }).strict().readonly();
 export const modelInvocationClaimSchema = z.object({ scopeId: identitySchema, commandId: identitySchema,
@@ -194,7 +201,8 @@ export function encodeModelInvocationRequest(commandInput: unknown): string {
   return `${MODEL_INVOCATION_REQUEST_PREFIX}${canonical(command.nativeRequest)}`;
 }
 export function encodeModelInvocationProfile(profileInput: unknown): string {
-  return `${MODEL_INVOCATION_PROFILE_PREFIX}${canonical(parseModelInvocationProfile(profileInput))}`;
+  const profile = parseModelInvocationProfile(profileInput);
+  return `${profile.schemaVersion === 1 ? MODEL_INVOCATION_PROFILE_PREFIX : 'deckent.model-invocation-profile.v2\n'}${canonical(profile)}`;
 }
 export function modelInvocationRequestEvidence(commandInput: unknown, requestDigest: string): ModelInvocationRequestEvidence {
   const command = parseModelInvocationCommand(commandInput), parsedDigest = digest.parse(requestDigest);

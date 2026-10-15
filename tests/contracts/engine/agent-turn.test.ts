@@ -502,7 +502,7 @@ it('names the running model from its catalog reference and tells the model that 
   const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
     model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(9); expect(prompt.startsWith('[Deckent runtime instructions v9]')).toBe(true);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(10); expect(prompt.startsWith('[Deckent runtime instructions v10]')).toBe(true);
   expect(prompt).toContain(`Running Deckent: ${PACKAGE_VERSION}; channel: alpha.`);
   expect(prompt).toContain('A project checkout may be a different revision');
   expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
@@ -547,10 +547,10 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   const render = (posture: Parameters<typeof renderAgentTurnSystemPrompt>[0]['shell'], fetch = false) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout,
     tools: [readFile, shell], model, language: 'en', shell: posture, ...(fetch ? { network: { allowedHosts: ['docs.example'], others: 'refused' as const } } : {}) });
   const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.'))!;
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(9);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(10);
 
   const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'owner-approved' });
-  expect(open.startsWith('[Deckent runtime instructions v9]')).toBe(true);
+  expect(open.startsWith('[Deckent runtime instructions v10]')).toBe(true);
   expect(shellLine(open)).toBe('- Shell tool: run_shell. It runs in the project root in an open bubblewrap sandbox (full access): shell commands have network access'
     + ' (for example curl, git fetch, npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable.'
     + ' Deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is'

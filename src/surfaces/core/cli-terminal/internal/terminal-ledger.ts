@@ -1,10 +1,10 @@
-import { type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance } from '#engine/index.js';
+import { type RunView, type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance, runLifecycleCommandSchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
+import { shortId, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { approvalDecisionClass, approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
 import type { StandingScope } from '#surfaces/core/terminal/index.js';
-import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunQueryHandler } from './context.js';
+import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecycleHandler, RunQueryHandler } from './context.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 
@@ -15,14 +15,35 @@ const approvalPageSchema = z.array(approvalRecordSchema);
 /** The card's risk and undo words from the producer's facts (B1 single card); a v1/v2 record declared none (`null`, shown as not declared). */
 const riskWord = (risk: ApprovalFacts['risk']) => !risk ? null : risk.source === 'cell' ? risk.cell : `${risk.effectClass}${risk.authority ? ' · authority' : ''}`;
 const undoWord = (undo: ApprovalFacts['reversibility']) => !undo ? null : undo.kind === 'compensation' ? `${undo.operation.id}@${undo.operation.version}` : undo.kind;
-function approvalView(record: ApprovalRecord): WorklineApproval {
+function approvalDeciderLabel(record: ApprovalRecord, locale?: Locale): string {
+  const kind = record.decision ? approvalDecisionClass(record.decision) : 'unknown';
+  if (kind === 'human-tty') return t('approval.decider.human-tty', {}, locale);
+  if (kind === 'ai-policy') return t('approval.decider.ai-policy', {}, locale);
+  if (kind === 'system') return t('approval.decider.system', {}, locale);
+  return t('approval.decider.unknown', {}, locale);
+}
+function approvalView(record: ApprovalRecord, locale?: Locale): WorklineApproval {
   const { request } = record, subject = approvalSubject(request), facts = approvalFacts(request);
   // A tool-call approval (C12) has no run or task: its summary names the tool, resource and argument digest.
   return Object.freeze({ approvalId: request.approvalId, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : '-', taskId: subject.kind === 'task' ? subject.taskId : '-', summary: request.summary,
     requester: request.requester.id, revision: record.revision, status: record.status, decision: record.decision?.decision ?? null, expiresAt: request.expiresAt,
     risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}),
+    ...(record.decision ? { deciderLabel: approvalDeciderLabel(record, locale) } : {}),
     createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}),
     ...(subject.kind === 'config-change' ? { config: { action: subject.action, layer: subject.layer, keyPath: subject.keyPath, ruleId: subject.ruleId } } : {}) });
+}
+
+/** The Run state a control left, in the session language (the Runs list's own state words). */
+function runStateWord(state: RunView['state'], locale: Locale): string {
+  if (state.kind === 'running') return t('terminal.jobs.state.running', {}, locale);
+  if (state.kind === 'parked') return t('terminal.jobs.state.parked', {}, locale);
+  switch (state.outcome) {
+    case 'completed': return t('terminal.jobs.state.completed', {}, locale);
+    case 'incomplete': return t('terminal.jobs.state.incomplete', {}, locale);
+    case 'failed': return t('terminal.jobs.state.failed', {}, locale);
+    case 'cancelled': return t('terminal.jobs.state.cancelled', {}, locale);
+    default: return t('terminal.jobs.state.unknown', {}, locale);
+  }
 }
 
 /** Terminal ports over the same handlers as the CLI commands (`workers`, `run`, `inventory`, `approvals`, `task transcript`, `run cancel`). */
@@ -40,12 +61,14 @@ export function createWorklineLedgerPorts(input: {
   readonly inspectSurfaceAccess?: () => Promise<SurfaceSnapshotAccess | null>;
   readonly inspectSurfaceRunIds?: () => Promise<readonly string[]>;
   readonly deliverRunCancellation?: RunCancellationDeliveryHandler;
+  /** `deckent run hold|resume|close`'s own lifecycle application (Y1); absent: the Runs window offers no control keys. */
+  readonly applyRunLifecycle?: RunLifecycleHandler;
   /** The host's cancellation text (CLI `run cancel`), given as a port. */
   readonly renderRunCancellation: RunCancellationRenderer;
 }): WorklineLedgerPorts | undefined {
   if (!input.inspectWorkers || !input.inspectRun) return undefined;
   const { root, scopeId, options, inspectWorkers, inspectRun, inspectInventory, workerHeartbeatMs, inspectWorkerTranscript, listApprovals, decideApproval,
-    deliverRunCancellation, renderRunCancellation, followEvents } = input;
+    deliverRunCancellation, renderRunCancellation, followEvents, applyRunLifecycle } = input;
   const locale = input.locale ?? 'en', pageSize = input.approvalPageSize ?? 100;
   return withSurfaceSnapshot({
     scopeId,
@@ -76,7 +99,7 @@ export function createWorklineLedgerPorts(input: {
     ...(listApprovals && decideApproval ? {
       async listApprovalPage(afterId: string | null) {
         const records = approvalPageSchema.parse(await listApprovals({ schemaVersion: 1, scopeId, afterId, limit: pageSize }));
-        const items = records.map(approvalView);
+        const items = records.map(record => approvalView(record, locale));
         return Object.freeze({ items: Object.freeze(items), nextAfter: items.length >= pageSize ? items.at(-1)!.approvalId : null });
       },
       // B1: the card declares itself and forwards its turn's one-time capability when it has one (the same single y; nothing else to type).
@@ -92,10 +115,10 @@ export function createWorklineLedgerPorts(input: {
           ...(own ? { approverNote: true } : {}) });
         if (standing === 'session') {
           const answer = sessionApprovalResultSchema.parse(result);
-          return { ...approvalView(answer.record), standing: answer.standing };
+          return { ...approvalView(answer.record, locale), standing: answer.standing };
         }
         const record = approvalRecordSchema.parse(result);
-        return standing ? { ...approvalView(record), standing: { scope: standing, saved: false, reason: 'protocol' } } : approvalView(record);
+        return standing ? { ...approvalView(record, locale), standing: { scope: standing, saved: false, reason: 'protocol' } } : approvalView(record, locale);
       },
     } : {}),
     // Same governed cancellation as `deckent run cancel`, against the revision the operator confirmed.
@@ -104,6 +127,20 @@ export function createWorklineLedgerPorts(input: {
         const commandId = `terminal-cancel-${randomUUID()}`;
         const result = await deliverRunCancellation(root, { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision }, options);
         return renderRunCancellation(result, commandId, scopeId, runId, locale);
+      },
+    } : {}),
+    // Y1: the same lifecycle command as `deckent run hold|resume|close` against the revision the person confirmed; policy and the
+    // service's state rules decide (a refusal is the typed error, rendered by the window). Nothing here pre-decides eligibility.
+    ...(applyRunLifecycle ? {
+      async controlRun(runId: string, action: 'hold' | 'resume' | 'close', expectedRevision: number, typed?: string) {
+        const commandId = `terminal-run-${action}-${randomUUID()}`, own = typed?.trim();
+        const command = runLifecycleCommandSchema.parse(action === 'hold'
+          ? { schemaVersion: 1, commandId, scopeId, runId, action, holdReason: own || t('terminal.runControl.reasonDefault', {}, locale), expectedRevision }
+          : { schemaVersion: 1, commandId, scopeId, runId, action, expectedRevision });
+        const result = await applyRunLifecycle(root, command, options), run = result?.lifecycle.run;
+        const params = { run: shortId(runId), command: commandId, revision: run?.revision ?? '—', state: run ? runStateWord(run.state, locale) : '—' };
+        return action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
+          : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale);
       },
     } : {}),
   }, input.inspectSurfaceAccess);

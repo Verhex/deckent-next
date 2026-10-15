@@ -14,7 +14,7 @@ interface WorkCommandContext {
   readonly watchRef: MutableRefObject<WatchState>; readonly setWatch: (state: WatchState) => void; readonly setWatchStatus: (text: string) => void;
   readonly monitor?: ((args: string) => Promise<readonly string[]>) | undefined;
   readonly live: { readonly canOpenMonitor: boolean; readonly openMonitor: () => Promise<void>; readonly close: () => void; readonly show: (kind: Exclude<LiveWindowKind, 'monitor'> | null) => void };
-  readonly runDecision: (command: 'approvals' | 'cancel', args: string, execution: LocalExecution) => Promise<void>;
+  readonly runDecision: (command: 'approvals' | 'cancel' | 'runs', args: string, execution: LocalExecution) => Promise<void>;
   /** `{part}`: a slash command without its port in this terminal (`terminal.admin.partUnavailable`, the session language). */
   readonly commandUnavailable?: string | undefined;
 }
@@ -51,7 +51,8 @@ export async function dispatchWorkCommand(slash: { readonly command: string; rea
         await panel.pick(execution, { kind: 'window', title, body: [text], hints: workLabels?.jobs?.hints ?? '', confirm: false }, ['close']);
         push([systemSummaryEntry(text)]); return true;
       }
-      if (slash.command === 'approvals' || slash.command === 'cancel') await runDecision(slash.command, '', execution);
+      // Y1: `/runs` carries the hold/resume/close keys when the terminal has the lifecycle port and the words; otherwise the read-only list.
+      if (slash.command === 'approvals' || slash.command === 'cancel' || (slash.command === 'runs' && ledger!.controlRun && workLabels!.runControl)) await runDecision(slash.command as 'approvals' | 'cancel' | 'runs', '', execution);
       else if (['watch-workers', 'watch-runs', 'tasks'].includes(slash.command)) {
         const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current })!;
         if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }

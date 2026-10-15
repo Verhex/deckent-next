@@ -116,7 +116,7 @@ export function mcpClientSettings(view: McpRegistryView, limits: { readonly resu
 export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Exclude<McpScope, 'managed'>; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Exclude<McpScope, 'managed'> }
-  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] }
+  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined }
   | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string };
 export interface McpCommandContext extends McpRegistryContext {
   readonly sandboxes: McpLaunchContext['sandboxes'];
@@ -184,7 +184,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
       : mcpStartFailedNotice(server.name, failure)) } } : {}; };
   const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}),
     shadows: server.shadows, realm: isMcpHttpEntry(server.entry) ? null : server.entry.realm ?? MCP_DEFAULT_REALM, ...mcpEntryDisplay(server.entry),
-    definitionDigest: server.definitionDigest, pinnedTools: server.trust?.tools.length ?? 0, ...lastStartOf(server) });
+    definitionDigest: server.definitionDigest, pinnedTools: server.trust?.decision === 'trusted' ? server.trust.tools.length : 0, ...lastStartOf(server) });
   /** `/mcp approve|reconnect|remove` and a successful approval are the owner's explicit retry: the recorded failure goes. */
   const forgetFailure = (scope: McpScope, name: string) => updateMcpStartFailure(productResourcePath(context.layout, 'integrations'), { scope, name }, null).catch(() => undefined);
   const settings = { ...MCP_CLIENT_DEFAULTS, ...(context.limits?.resultMaxBytes ? { resultMaxBytes: context.limits.resultMaxBytes } : {}),
@@ -281,7 +281,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     return { schemaVersion: 1, reconnect: { name: server.name, scope: server.scope } };
   }
   // approve: the launch card, then (only after yes) the server started in its realm and the tools card; the answers land in product state.
-  const decided = await decideMcpTrust(server, trustContext, context.ask, { alwaysAsk: request.verb === 'approve' ? request.alwaysAsk : [] });
+  const decided = await decideMcpTrust(server, trustContext, context.ask, request.verb === 'approve' && request.alwaysAsk !== undefined ? { alwaysAsk: request.alwaysAsk } : {});
   if (decided.decision === 'trusted') await forgetFailure(server.scope, server.name);
   return { schemaVersion: 1, approved: decided.decision === 'trusted', name: server.name, scope: server.scope, pinnedTools: decided.pinned, ...(decided.grant ? { grant: decided.grant } : {}) };
 }

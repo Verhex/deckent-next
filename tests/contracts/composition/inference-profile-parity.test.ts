@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
@@ -82,4 +82,13 @@ it('selects configured inference profiles identically through CLI and MCP and ty
   const absent = await cli(empty.projectRoot, empty.env, '--profile', 'typo');
   expect(absent.code).toBe(0); expect(absent.stderr).toContain('inference_serving is not configured');
   expect((await mcp(empty.projectRoot, empty.env, { profileId: 'typo' })).structuredContent).toEqual({ schemaVersion: 1, configured: false });
+});
+
+it('model-05: the read-only CLI inference plan refuses a corrupt project config without healing it (bytes unchanged, no backup)', async () => {
+  const corrupt = await project(undefined), path = join(corrupt.projectRoot, '.deckent', 'config.json'), bytes = '{"inference_serving":';
+  await writeFile(path, bytes);
+  const result = await cli(corrupt.projectRoot, corrupt.env);
+  expect(result.code).not.toBe(0); expect(result.stderr).toContain('CONFIG_FILE_INVALID');
+  expect(await readFile(path, 'utf8')).toBe(bytes);
+  expect(await readdir(dirname(path))).toEqual(['config.json']);
 });

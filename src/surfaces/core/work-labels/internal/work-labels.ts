@@ -51,6 +51,15 @@ function approvalWindowFactLabels(locale: Locale): Pick<WorkSurfaceLabels['appro
 export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
   const phases = ['starting', 'thinking', 'reading', 'editing', 'running', 'searching', 'fetching', 'delegating', 'finished', 'failed'] as const;
   return {
+    runControl: { hints: t('terminal.runControl.hints', {}, locale), keyHold: t('terminal.runControl.keyHold', {}, locale),
+      keyResume: t('terminal.runControl.keyResume', {}, locale), keyClose: t('terminal.runControl.keyClose', {}, locale),
+      noKeys: t('terminal.runControl.noKeys', {}, locale), holdTitle: t('terminal.runControl.holdTitle', {}, locale),
+      resumeTitle: t('terminal.runControl.resumeTitle', {}, locale), closeTitle: t('terminal.runControl.closeTitle', {}, locale),
+      holdDetail: t('terminal.runControl.holdDetail', {}, locale), resumeDetail: t('terminal.runControl.resumeDetail', {}, locale),
+      closeDetail: t('terminal.runControl.closeDetail', {}, locale), state: t('terminal.runControl.state', {}, locale),
+      identity: t('terminal.runControl.identity', {}, locale), prompt: t('terminal.runControl.prompt', {}, locale),
+      holdPrompt: t('terminal.runControl.holdPrompt', {}, locale), pending: t('terminal.runControl.pending', {}, locale), kept: t('terminal.runControl.kept', {}, locale),
+      gone: t('terminal.runControl.gone', {}, locale), reason: { label: t('terminal.runControl.reason.label', {}, locale), hint: t('terminal.runControl.reason.hint', {}, locale), empty: t('terminal.runControl.reason.empty', {}, locale) } },
     jobs: {
       locale, completed: t('terminal.jobs.completed', {}, locale), deliveryCounts: t('terminal.jobs.deliveryCounts', {}, locale), deliveryPatch: t('terminal.jobs.deliveryPatch', {}, locale), deliveryNext: t('terminal.jobs.deliveryNext', {}, locale),
       detailsUnavailable: t('terminal.jobs.detailsUnavailable', {}, locale), trackingFull: t('terminal.jobs.trackingFull', {}, locale),
@@ -258,6 +267,10 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     summaryFailed: t('terminal.delivery.summaryFailed', {}, locale), summaryAdoptFailed: t('terminal.delivery.summaryAdoptFailed', {}, locale), summaryNotAdopted: t('terminal.delivery.summaryNotAdopted', {}, locale), nextDefault: t('terminal.delivery.nextDefault', {}, locale),
     pickerTitle: t('terminal.delivery.pickerTitle', {}, locale), none: t('terminal.delivery.none', {}, locale),
     fallbackTitle: t('terminal.delivery.fallbackTitle', {}, locale),
+    verifyTitle: t('terminal.delivery.verifyTitle', {}, locale), verifyRow: t('terminal.delivery.verifyRow', {}, locale), verifyWithout: t('terminal.delivery.verifyWithout', {}, locale),
+    verifyLoading: t('terminal.delivery.verifyLoading', {}, locale), verifyNone: t('terminal.delivery.verifyNone', {}, locale), verifyHow: t('terminal.delivery.verifyHow', {}, locale),
+    verifyCheck: t('terminal.delivery.verifyCheck', {}, locale), verifyHints: t('terminal.delivery.verifyHints', {}, locale), verifyNoneHints: t('terminal.delivery.verifyNoneHints', {}, locale),
+    verifiedBy: t('terminal.delivery.verifiedBy', {}, locale), notVerified: t('terminal.delivery.notVerified', {}, locale),
     next: {
       PATCH_BASE_ADVANCED: t('terminal.delivery.next.PATCH_BASE_ADVANCED', {}, locale),
       PATCH_CONFLICT: t('terminal.delivery.next.PATCH_CONFLICT', {}, locale),

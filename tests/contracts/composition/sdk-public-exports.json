@@ -5,6 +5,10 @@
   "exports": {
     "ActorContext": "type",
     "AttemptIdentity": "type",
+    "AuditCheckpoint": "type",
+    "AuditVerification": "type",
+    "AuditVerifyQuery": "type",
+    "AuditWitness": "type",
     "BOOTSTRAP_JOURNAL_MAX_BYTES": "value",
     "BackupCommand": "type",
     "BackupResult": "type",
@@ -339,6 +343,7 @@
     "validatePath": "value",
     "validateStandardSchemaSync": "value",
     "validateTaskId": "value",
+    "verifyAudit": "value",
     "versionedConfig": "value",
     "withConfigWriteLock": "value",
     "writeConfig": "value",

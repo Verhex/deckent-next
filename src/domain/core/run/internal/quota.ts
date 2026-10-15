@@ -14,7 +14,7 @@ export function parkRunQuota(input: unknown, expectedRevision: number, attempt: 
   const classified = attemptSnapshotSchema.parse({ ...attempt, revision: attempt.revision + 1, lastObservation: { ...attempt.lastObservation,
     sequence: attempt.lastObservation.sequence + 1, eventId: 'quota-exhausted', result: { ...result, kind: 'quota-exhausted', quota: wait.quota, evidenceDigest: wait.evidenceDigest, ...(wait.resetBoundExceeded ? { resetBoundExceeded: true } : {}) } } });
   const snapshot = runSnapshotSchema.parse({ ...run, revision: run.revision + 1, quotaWaits: [...(run.quotaWaits ?? []), wait],
-    state: run.state.kind === 'parked' && run.state.reason === 'operator-hold' ? run.state : { kind: 'parked', reason: 'quota-exhausted', since: wait.since, deadline: Math.max(wait.deadline, run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? run.state.deadline : 0) },
+    state: run.state.kind === 'parked' && run.state.reason === 'operator-hold' ? run.state : { kind: 'parked', reason: 'quota-exhausted', ...(run.state.kind === 'parked' && run.state.operatorHold ? { operatorHold: run.state.operatorHold } : {}), since: wait.since, deadline: Math.max(wait.deadline, run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? run.state.deadline : 0) },
     progress: run.progress.map(row => row === task ? { ...row, phase: 'pending' } : row),
     bindings: run.bindings.map(row => row === binding ? { ...row, observedKind: 'quota-exhausted', observedRevision: classified.revision } : row) });
   return { snapshot, attempt: classified };
@@ -22,7 +22,7 @@ export function parkRunQuota(input: unknown, expectedRevision: number, attempt: 
 /** Time alone is not reset evidence. Unknown reset remains parked and uses ordinary bounded expiry. */
 export function resetRunQuota(run: RunSnapshot, now: number): RunSnapshot | null {
   const held = run.bindings.filter(row => row.observedKind === 'quota-exhausted');
-  if (!held.length || run.cancelRequested || run.state.kind !== 'parked' || run.state.reason !== 'quota-exhausted') return null;
+  if (!held.length || run.cancelRequested || run.state.kind !== 'parked' || run.state.reason !== 'quota-exhausted' || run.state.operatorHold) return null;
   const waits = held.map(row => run.quotaWaits?.find(wait => wait.identity.attemptId === row.identity.attemptId));
   if (waits.some(wait => !wait || wait.quota.source !== 'claude-rate-limit' || wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since || wait.deadline > now
     || (run.quotaWaits ?? []).filter(prior => prior.identity.taskId === wait.identity.taskId).length > wait.maxResumes)) return null;
@@ -42,5 +42,5 @@ export function releaseRunQuota(run: RunSnapshot, channelId: string, now: number
   return runSnapshotSchema.parse({ ...run, revision: run.revision + 1,
     quotaWaits: run.quotaWaits!.map(wait => ids.has(wait.identity.attemptId) ? { ...wait, releasedAtMs: now } : wait),
     ...(movable ? { bindings: run.bindings.filter(row => !held.includes(row)), previousBindings: [...(run.previousBindings ?? []), ...held] } : {}),
-    ...(resume ? { state: remaining.length ? { kind: 'parked', reason: 'quota-exhausted', since: Math.min(...remaining.map(wait => wait.since)), deadline: Math.max(...remaining.map(wait => wait.deadline)) } : { kind: 'running' } } : {}) });
+    ...(resume ? { state: remaining.length ? { kind: 'parked', reason: 'quota-exhausted', ...(run.state.kind === 'parked' && run.state.operatorHold ? { operatorHold: run.state.operatorHold } : {}), since: Math.min(...remaining.map(wait => wait.since)), deadline: Math.max(...remaining.map(wait => wait.deadline)) } : run.state.kind === 'parked' && run.state.operatorHold ? { kind: 'parked', reason: 'operator-hold', note: run.state.operatorHold.note, since: run.state.since, deadline: run.state.deadline } : { kind: 'running' } } : {}) });
 }

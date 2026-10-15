@@ -90,7 +90,7 @@ describe.skipIf(process.platform !== 'linux')('task approval decided by another 
     const run = (await store.loadRun('scope', 'run'))!;
     await gate.prepare(run, principal, decidedAtWall);
     const pending = journal.store.list('scope', null, 10)[0]!;
-    const decided = await new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'sdk', 10)
+    const decided = await new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'sdk', 10, undefined, undefined, { interactive: async () => true })
       .decide({ schemaVersion: 1, scopeId: 'scope', approvalId: pending.request.approvalId, commandId: 'approve', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' });
     expect(decided.decision?.decidedAt).toBe(decidedAtWall);
     const reserve = (now: number) => new RunReservationApplication(store, { verify: async () => principal }, { authorize: async () => undefined },

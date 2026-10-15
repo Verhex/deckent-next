@@ -60,3 +60,15 @@ it('keeps verifying a stored model contribution whose valid graph is an older ve
     activationRevision: 1, bindingDigest: binding.digest, inputSummary: 'Plan a purchase', outputSummary: 'Readback', usage: null };
   expect(() => assertRunProposalSource({ ...older, source: { ...older.source, contribution } }, receipt, JSON.stringify(draft))).not.toThrow();
 });
+
+it('binds a v2 Brain billing axis to the invocation profile while continuing to read v1 contributions', () => {
+  const draft = { graph: modelProposal.graph, budgetCeiling: modelProposal.budgetCeiling, requiredPermissions: modelProposal.requiredPermissions };
+  if (modelProposal.source.kind !== 'model') throw new Error('fixture');
+  const contribution = { schemaVersion: 2 as const, billingAxis: 'metered' as const, template: { id: 'fixture', version: 1, digest: sha256('template') },
+    inputDigest: sha256('input'), contextDigest: sha256('context'), outputDigest: brainOutputDigest(draft), requestDigest,
+    activationRevision: 1, bindingDigest: binding.digest, inputSummary: 'Plan a purchase', outputSummary: 'Readback', usage: null };
+  const source = { ...modelProposal.source, contribution };
+  expect(() => assertRunProposalSource({ ...modelProposal, source }, receipt, JSON.stringify(draft))).not.toThrow();
+  expect(() => assertRunProposalSource({ ...modelProposal, source: { ...source, contribution: { ...contribution, billingAxis: 'subscription' } } }, receipt, JSON.stringify(draft)))
+    .toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
+});
