@@ -23,7 +23,8 @@ const cleanup: (() => Promise<void> | void)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 const command = { schemaVersion: 1 as const, scopeId: 's', commandId: 'card-plan', intent: 'Prepare a purchase and durable readback' };
 const frames = (title: string, text: string) => { if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## ${title}\n${text}\n`); };
-it.skipIf(process.platform === 'win32')('a configured Turkish plan remains sealed in its original language after configuration changes', async () => {
+// Plan approvals open a live OS session (LocalOsSessionAuthority reads /proc/<pid>); other platforms refuse with SESSION_REQUIRED by design.
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] a configured Turkish plan remains sealed in its original language after configuration changes', async () => {
   const f = await brainProviderFixture(); cleanup.push(f.close);
   await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ ...f.config, language: 'tr' })); clearConfigCache();
   const pending = await planRun(f.project, command, f.options);
@@ -35,7 +36,7 @@ it.skipIf(process.platform === 'win32')('a configured Turkish plan remains seale
   expect(await planRun(f.project, command, f.options)).toEqual(pending);
   expect(await configuredApproval(f.project, 'inspect', query, f.options)).toEqual(record); expect(f.posts).toBe(1);
 });
-for (const route of ['cli-do-json', 'mcp-plan', 'mcp-propose'] as const) it.skipIf(process.platform === 'win32')(`${route}: a fresh terminal reads the durable plan; SDK, CLI and MCP inspect/list and monitor retain it`, async () => {
+for (const route of ['cli-do-json', 'mcp-plan', 'mcp-propose'] as const) it.skipIf(process.platform !== 'linux')(`[requires Linux live OS session /proc identity] ${route}: a fresh terminal reads the durable plan; SDK, CLI and MCP inspect/list and monitor retain it`, async () => {
   const f = await brainProviderFixture(); cleanup.push(f.close);
   const output: string[] = [];
   const query = { schemaVersion: 1 as const, scopeId: 's', afterId: null, limit: 10 };
