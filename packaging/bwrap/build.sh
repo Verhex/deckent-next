@@ -14,7 +14,7 @@ export SOURCE_DATE_EPOCH="$epoch" TZ=UTC LC_ALL=C
 
 # shellcheck disable=SC2086
 mkdir -p /out/apk/host
-apk add --cache-dir /out/apk/host --cache-packages -q $host_pkgs ${HOST_RESOLVED_PACKAGES:-} || {
+apk add --cache-dir /out/apk/host --cache-packages --cache-predownload -q $host_pkgs ${HOST_RESOLVED_PACKAGES:-} || {
   echo 'BWRAP_PIN_REFRESH_REQUIRED: Alpine pins unavailable; run platform verification deps-watch (CONTRIBUTING.md).' >&2; exit 1;
 }
 LLVM=/usr/lib/llvm22/bin
@@ -33,11 +33,11 @@ for arch in $arches; do
     *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
   esac
   # shellcheck disable=SC2086
-  mkdir -p "$root/var/cache/apk" "/out/apk/sysroot-$arch"
-  apk add -q --root "$root" --arch "$arch" --initdb --cache-dir /var/cache/apk --cache-packages --no-scripts $sysroot_pkgs $resolved_pkgs || {
+  # apk 3: with --root the cache dir is a host path, and packages are kept only with --cache-predownload (verified in the locked image).
+  mkdir -p "/out/apk/sysroot-$arch"
+  apk add -q --root "$root" --arch "$arch" --initdb --cache-dir "/out/apk/sysroot-$arch" --cache-packages --cache-predownload --no-scripts $sysroot_pkgs $resolved_pkgs || {
     echo "BWRAP_PIN_REFRESH_REQUIRED: Alpine sysroot-$arch pins unavailable; run platform verification deps-watch (CONTRIBUTING.md)." >&2; exit 1;
   }
-  cp "$root"/var/cache/apk/*.apk "/out/apk/sysroot-$arch/"
   target=$arch-alpine-linux-musl
   cat > "/build/cross-$arch.ini" <<EOF
 [binaries]
