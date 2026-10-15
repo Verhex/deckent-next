@@ -125,15 +125,20 @@ export class AuditCheckpointApplication {
    * possible wipe can be re-based; a broken chain, truncation, limit or unknown state cannot. One transaction appends a sealed marker that
    * carries the reason and supersedes earlier markers from its sequence on, then the checkpoint over the current state.
    */
-  rebaseline(scopeId: string, context: AuditCheckpointContext, atMs: number, writer: AuditCheckpointWriter, reason: string, expected: AuditRebaselineExpectation): AuditVerification {
-    return this.store.snapshot(true, () => {
+  rebaseline(scopeId: string, context: AuditCheckpointContext, atMs: number, writer: AuditCheckpointWriter, reason: string, expected: AuditRebaselineExpectation,
+    authorize: () => void): AuditVerification {
+    let denied: unknown = null;
+    try { return this.store.snapshot(true, () => {
       const verified = this.scan(scopeId, context);
       if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(verified.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
       // The confirmation binds the shown state: any change of status, audit head, policy or producers since then refuses (the caller asks again).
       if (verified.status !== expected.status || verified.head?.sequence !== expected.head?.sequence || verified.head?.digest !== expected.head?.digest
         || context.policyDigest !== expected.policyDigest || context.producersDigest !== expected.producersDigest) throw new AuditError('AUDIT_REBASELINE_STALE');
+      // The caller's authority over exactly that policy is decided again inside this write (REVIEW2561 R2): a revoked or denied grant writes nothing,
+      // and its own typed refusal reaches the caller (the store would otherwise name any foreign error unavailable).
+      try { authorize(); } catch (error) { denied = error; throw new AuditError('AUDIT_INVALID'); }
       return this.append(scopeId, context, atMs, writer, verified, reason);
-    });
+    }); } catch (error) { throw denied ?? error; }
   }
   /** Marker ids carry the audit head they follow, so a sequence re-used after a re-baseline never collides with a superseded marker. */
   private append(scopeId: string, context: AuditCheckpointContext, atMs: number, writer: AuditCheckpointWriter, verified: AuditVerification, reason?: string): AuditVerification {

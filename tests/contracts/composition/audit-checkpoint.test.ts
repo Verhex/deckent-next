@@ -132,6 +132,22 @@ it.skipIf(process.platform !== 'linux')('deckent audit rebaseline: AI and unwitn
     .rejects.toMatchObject({ code: 'AUDIT_REBASELINE_STALE' });
   expect(changes).toBe(3); expect(events().some(event => event.subject.rebaseline?.reason === 'never settles')).toBe(false);
   await edit('settled'); expect(await rebaselineConfiguredAudit(f.root, { ...command, reason: 'settled' }, f.options, async () => true)).toMatchObject({ status: 'match' });
+  // REVIEW2561 R2: authority is decided again at every card and inside the write; a grant revoked or denied during the card writes nothing.
+  const grants = (list: unknown[]) => writeFile(f.policyPath, JSON.stringify({ ...f.document, grants: [...f.document.grants, ...list] }));
+  const markers = () => events().filter(event => event.subject.kind === 'audit-checkpoint').length, deny = { ...decide, id: 'deny-rebaseline', effect: 'deny' };
+  await grants([decide, { ...decide, id: 'drift-1', resource: { kind: 'approval', ids: ['drift-1'] } }]); const kept = markers();
+  await expect(rebaselineConfiguredAudit(f.root, { ...command, reason: 'revoked during the card' }, f.options, async () => { await grants([{ ...decide, id: 'drift-1', resource: { kind: 'approval', ids: ['drift-1'] } }]); return true; }))
+    .rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  await grants([decide, { ...decide, id: 'drift-2', resource: { kind: 'approval', ids: ['drift-2'] } }]); let cards = 0;
+  await expect(rebaselineConfiguredAudit(f.root, { ...command, reason: 'revoked on the re-card' }, f.options, async () => {
+    cards++; await (cards === 1 ? grants([decide, { ...decide, id: 'drift-3', resource: { kind: 'approval', ids: ['drift-3'] } }]) : grants([deny, decide])); return true;
+  })).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  expect(cards).toBe(2);
+  await grants([deny, decide]); let shownDenied = 0;
+  await expect(rebaselineConfiguredAudit(f.root, { ...command, reason: 'denied before the card' }, f.options, async () => { shownDenied++; return true; })).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  expect(shownDenied).toBe(0); expect(markers()).toBe(kept);
+  expect((await verifyAudit(f.root, query, f.options)).status).toBe('policy-changed');
+  await grants([decide]); expect(await rebaselineConfiguredAudit(f.root, { ...command, reason: 'restored grant' }, f.options, async () => true)).toMatchObject({ status: 'match' });
   expect(await main(['audit', 'rebaseline', '--scope', 's', '--reason', 'again'], { root: f.root, env: f.options.env, rebaselineAudit: rebaselineConfiguredAudit,
     stdin: Readable.from(['y\n']) as never, stdout: { write() {} }, stderr: { write() {} } })).not.toBe(0);
 });

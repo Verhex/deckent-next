@@ -68,13 +68,16 @@ export async function rebaselineConfiguredAudit(root: string, input: unknown, op
     try {
       const app = new AuditCheckpointApplication(store, integrity, context.config.audit);
       for (let left = attempts; ; ) {
-        const shown = await scoped(), current = app.verify(command.scopeId, shown.value);
+        // Authority is decided again on every policy this flow reads (REVIEW2561 R2): each card's, the write's, and inside the write.
+        const shown = await scoped(), current = app.verify(command.scopeId, shown.value), authorize = (document: unknown) => authorizeApproval(document, 'decide', command.scopeId, 'audit-rebaseline', context.principal);
+        authorize(shown.document);
         if (!['policy-changed', 'producers-changed', 'possible-wipe'].includes(current.status)) throw new AuditError('AUDIT_REBASELINE_REFUSED');
         if (!await confirm({ ...current, policyDigest: shown.value.policyDigest, producersDigest: shown.value.producersDigest })) return null;
-        const fresh = await scoped();
+        const fresh = await scoped(); authorize(fresh.document);
         try {
           return app.rebaseline(command.scopeId, fresh.value, Date.now(), { principal: { issuer: context.principal.issuer, subject: context.principal.subject },
-            policyRevision: fresh.document.revision }, command.reason, { status: current.status, head: current.head, policyDigest: shown.value.policyDigest, producersDigest: shown.value.producersDigest });
+            policyRevision: fresh.document.revision }, command.reason, { status: current.status, head: current.head, policyDigest: shown.value.policyDigest, producersDigest: shown.value.producersDigest },
+            () => authorize(fresh.document));
         } catch (error) { if (!(error instanceof AuditError && error.code === 'AUDIT_REBASELINE_STALE') || --left <= 0) throw error; }
       }
     } finally { store.close(); }

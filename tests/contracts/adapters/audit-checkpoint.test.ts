@@ -269,6 +269,7 @@ it('checkpoints cannot be disabled or skipped by configuration', () => {
 
 const operator = { principal: { issuer: 'local-os', subject: 'owner' }, policyRevision: 'p' };
 type Ctx = typeof context;
+const allow = () => undefined;
 /** What a person confirmed: the verified state and the digests it was computed over. */
 const shown = (app: AuditCheckpointApplication, ctx: Ctx) => { const v = app.verify('s', ctx); return { status: v.status, head: v.head, policyDigest: ctx.policyDigest, producersDigest: ctx.producersDigest }; };
 it.each(['every row', 'the tail'])('an explicit re-baseline after a possible wipe (%s) is audited with its reason, continues the chain and still fails an older witness', async rows => {
@@ -278,7 +279,7 @@ it.each(['every row', 'the tail'])('an explicit re-baseline after a possible wip
     f.audit.record(event('s', 2)); const witness = f.app.checkpoint('s', context, 12, writer).checkpoint!;
     f.db.exec(`DROP TRIGGER audit_checkpoints_no_delete; DELETE FROM audit_checkpoints${rows === 'the tail' ? ' WHERE sequence=2' : ''}`);
     expect(f.app.verify('s', context).status).toBe('possible-wipe');
-    const rebased = f.app.rebaseline('s', context, 20, operator, 'restored host after disk failure', shown(f.app, context));
+    const rebased = f.app.rebaseline('s', context, 20, operator, 'restored host after disk failure', shown(f.app, context), allow);
     expect(rebased).toMatchObject({ status: 'match', reason: 'verified' });
     const marker = f.audit.list('s', rebased.head!.sequence - 1, 1)[0]!;
     expect(marker.event).toMatchObject({ principal: operator.principal, subject: { kind: 'audit-checkpoint', rebaseline: { reason: 'restored host after disk failure' } } });
@@ -294,20 +295,20 @@ it('re-baseline accepts an out-of-band policy drift only explicitly, and refuses
   const f = await fixture();
   try {
     f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
-    expect(() => f.app.rebaseline('s', context, 11, operator, 'nothing to do', shown(f.app, context))).toThrow(expect.objectContaining({ code: 'AUDIT_REBASELINE_REFUSED' }));
+    expect(() => f.app.rebaseline('s', context, 11, operator, 'nothing to do', shown(f.app, context), allow)).toThrow(expect.objectContaining({ code: 'AUDIT_REBASELINE_REFUSED' }));
     const drift = { ...context, policyDigest: auditPolicyDigest({ revision: 'p', grants: ['edited by hand'] }) };
     expect(f.app.verify('s', drift).status).toBe('policy-changed'); expect(f.app.checkpoint('s', drift, 11, writer).status).toBe('policy-changed');
     const confirmed = shown(f.app, drift); f.audit.record(event('s', 9));
     // Bound to what was shown: the audit head moved after the confirmation, so the write refuses and nothing is written.
     const count = f.audit.list('s', 0, 100).length;
-    expect(() => f.app.rebaseline('s', drift, 12, operator, 'reviewed hand edit', confirmed)).toThrow(expect.objectContaining({ code: 'AUDIT_REBASELINE_STALE' }));
-    expect(() => f.app.rebaseline('s', { ...drift, producersDigest: auditProducersDigest(['other']) }, 12, operator, 'reviewed hand edit', shown(f.app, drift))).toThrow(expect.objectContaining({ code: 'AUDIT_REBASELINE_STALE' }));
+    expect(() => f.app.rebaseline('s', drift, 12, operator, 'reviewed hand edit', confirmed, allow)).toThrow(expect.objectContaining({ code: 'AUDIT_REBASELINE_STALE' }));
+    expect(() => f.app.rebaseline('s', { ...drift, producersDigest: auditProducersDigest(['other']) }, 12, operator, 'reviewed hand edit', shown(f.app, drift), allow)).toThrow(expect.objectContaining({ code: 'AUDIT_REBASELINE_STALE' }));
     expect(f.audit.list('s', 0, 100)).toHaveLength(count);
-    expect(f.app.rebaseline('s', drift, 12, operator, 'reviewed hand edit', shown(f.app, drift)).status).toBe('match');
+    expect(f.app.rebaseline('s', drift, 12, operator, 'reviewed hand edit', shown(f.app, drift), allow).status).toBe('match');
     expect(f.app.verify('s', drift).status).toBe('match'); expect(f.app.verify('s', context).status).toBe('policy-changed');
     const events = f.audit.list('s', 0, 100).length;
     f.db.exec('DROP TRIGGER audit_events_no_delete; DELETE FROM audit_events WHERE sequence=1');
-    expect(() => f.app.rebaseline('s', drift, 13, operator, 'hide it', shown(f.app, drift))).toThrow(expect.objectContaining({ code: 'AUDIT_INTEGRITY' }));
+    expect(() => f.app.rebaseline('s', drift, 13, operator, 'hide it', shown(f.app, drift), allow)).toThrow(expect.objectContaining({ code: 'AUDIT_INTEGRITY' }));
     expect(f.db.prepare('SELECT count(*) AS n FROM audit_events').get()?.n).toBe(events - 1);
   } finally { f.store.close(); }
 });
@@ -342,6 +343,19 @@ it.skipIf(process.platform === 'win32')('a governed /mode change through the rea
     expect(f.app.verify('s', laundered).status).toBe('policy-changed');
     expect(f.app.checkpoint('s', laundered, 13, writer).status).toBe('policy-changed');
     expect(f.store.checkpointPage('s', 0, 100)).toHaveLength(checkpoints);
-    expect(f.app.rebaseline('s', laundered, 14, operator, 'reviewed the hand edit', shown(f.app, laundered)).status).toBe('match');
+    expect(f.app.rebaseline('s', laundered, 14, operator, 'reviewed the hand edit', shown(f.app, laundered), allow).status).toBe('match');
+  } finally { f.store.close(); }
+});
+
+it('REVIEW2561 R2: the re-baseline decides authority again inside its write; a revoked grant writes no marker and no checkpoint', async () => {
+  const f = await fixture();
+  try {
+    f.audit.record(event('s', 1)); f.app.checkpoint('s', context, 10, writer);
+    const drift = { ...context, policyDigest: auditPolicyDigest({ revision: 'p', grants: ['edited by hand'] }) };
+    const events = f.audit.list('s', 0, 100).length, checkpoints = f.store.checkpointPage('s', 0, 100).length;
+    expect(() => f.app.rebaseline('s', drift, 12, operator, 'revoked meanwhile', shown(f.app, drift), () => { throw Object.assign(new Error('APPROVAL_DENIED'), { code: 'APPROVAL_DENIED' }); }))
+      .toThrow(expect.objectContaining({ code: 'APPROVAL_DENIED' }));
+    expect(f.audit.list('s', 0, 100)).toHaveLength(events); expect(f.store.checkpointPage('s', 0, 100)).toHaveLength(checkpoints);
+    expect(f.app.verify('s', drift).status).toBe('policy-changed');
   } finally { f.store.close(); }
 });
