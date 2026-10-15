@@ -10,10 +10,11 @@ Weekly/manual deps-watch resolves candidate pins in the existing digest-pinned i
 host and both sysroot closures, records outputs and runs a separate check build before emitting the
 candidate lock/runtime identity and PR body. Changed linked-library license versions stop for manual
 source verification. No image, source, shipped-arch or Core authority change is included.
-Automatic draft PR publication is prepared but not wired: CARD requires contents:read, whereas Git
-branch creation needs contents:write. Owner permission for only deps-watch is pending; retained
-candidate locks/body can be reviewed by the lead meanwhile. No auto-merge; Astra plus exact-candidate
-hosted CI remain separate release gates. See CONTRIBUTING for the entrypoints and cache limits.
+Automatic draft PR publication is wired (owner 2026-10-15): the weekly deps-watch job stays read-only
+(it runs npm code and builds) and exports the candidate; the separate deps-publish job is the only one
+with contents/pull-requests write, checks out the exact base the watch resolved without credentials,
+runs no package code, re-verifies the candidate (only pin fields may change, strict shapes) and opens a
+draft PR. No auto-merge; Astra plus exact-candidate hosted CI remain separate release gates. See CONTRIBUTING for the entrypoints and cache limits.
 External proof: `proof/CI-BWRAP-CACHE-2026-10-15/`. Local author checks do not prove Actions/Alpine execution.
 
 **CI doctor preparation (CI-ONARIM, 2026-10-11; author candidate, hosted acceptance pending).**

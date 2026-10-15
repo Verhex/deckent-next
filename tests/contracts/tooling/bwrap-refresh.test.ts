@@ -39,7 +39,7 @@ describe('candidate pin resolution', () => {
     for (const arch of ['x86_64', 'aarch64']) expect(body).toContain(`${arch}: \`${lock.outputs[arch].sha256}\``);
     for (const key of Object.keys(lock.resolvedPackages)) expect(body).toContain(`${key}: removed`);
     expect(body).toContain('https://example.test/evidence'); expect(body).toContain('Astra independent review + hosted CI');
-    expect(body).toContain('GITHUB_TOKEN-created PRs do not trigger normal PR CI');
+    expect(body).toContain('may need its CI run approved or dispatched by a person');
   });
   it('the orchestration records then independently checks both architectures before modifying the checkout', () => {
     const root = fixture(), out = join(root, 'evidence'); mkdirSync(join(root, 'packaging/bwrap'), { recursive: true });

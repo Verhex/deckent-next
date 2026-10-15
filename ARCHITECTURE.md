@@ -1073,7 +1073,7 @@ published declarations never name a bare `path` (PACK-SMOKE, after the BWRAP-SEL
 stages it; a bundle that is not exactly the locked build is a `publishable` blocker. The SBOM lists it as
 `pkg:generic/bubblewrap@0.13.0?download_url=…&checksum=sha256:…` (application, binary SHA-256, source-distribution reference) with the
 statically linked `pkg:apk/alpine/{musl,libcap,gcc}` nested; THIRD-PARTY-NOTICES carries its notice. The binary is built in CI
-(`.github/workflows/bwrap-bundle.yml`, check mode), never committed, never downloaded at install (owner S5). CI-BWRAP-CACHE author candidate and pending PR-write authority are documented in the [CI module note](.deckent/docs/architecture/modules/ci-and-verification.md).
+(`.github/workflows/bwrap-bundle.yml`, check mode), never committed, never downloaded at install (owner S5). The lock-keyed verified build cache and the weekly draft pin-refresh PR (read-only watch, separate write-scoped publisher) are documented in the [CI module note](.deckent/docs/architecture/modules/ci-and-verification.md).
 Hosted evidence at `76582f9f` (2026-10-01, [run 36884716254](https://github.com/Verhex/deckent-next/actions/runs/36884716254)):
 x86_64/aarch64 build checks and the x86_64 launcher/realm job succeeded; the real arm64 realm job was skipped. This is not an
 arm64 runtime or full-matrix PASS (main CI run 36884716187: Linux 24/26 success, macOS advisory cells failed). deps-watch reads

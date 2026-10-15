@@ -51,7 +51,7 @@ export function refreshBody(before, after, evidenceUrl) {
     ...BWRAP_ARCHES.map(arch => `- ${arch}: \`${before.outputs[arch].sha256}\` → \`${after.outputs[arch].sha256}\` (two builds agree)`), '',
     ...Object.keys(after.resolvedPackages).map(key => `- ${key}: removed ${JSON.stringify(before.resolvedPackages[key].filter(pin => !after.resolvedPackages[key].includes(pin)))}; added ${JSON.stringify(after.resolvedPackages[key].filter(pin => !before.resolvedPackages[key].includes(pin)))}`), '',
     `Evidence (resolved host + every sysroot, both build logs and output hashes): ${evidenceUrl}`, '',
-    'Release gate: Astra independent review + hosted CI for this exact candidate. GITHUB_TOKEN-created PRs do not trigger normal PR CI; lead must dispatch ci and bwrap-bundle on the generated branch. Never auto-merge.', ''].join('\n');
+    'Release gate: Astra independent review + hosted CI for this exact candidate. A PR created with GITHUB_TOKEN may need its CI run approved or dispatched by a person before ci and bwrap-bundle run on this branch. Never auto-merge.', ''].join('\n');
 }
 export function refresh({ root = ROOT, out, execute = run }) {
   mkdirSync(out, { recursive: true });
