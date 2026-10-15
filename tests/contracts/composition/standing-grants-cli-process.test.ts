@@ -66,7 +66,7 @@ describe.skipIf(process.platform === 'win32')('deckent policy grants / revoke (G
     expect((await cli(f, ['policy', 'grants', '--mine', '--scope', 'proj'])).value).toEqual([]);
     const db = new DatabaseSync(f.ledger, { readOnly: true });
     try {
-      const events = db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String(row['record'])) as { event: { subject: { kind: string; counts?: unknown } } }).event.subject);
+      const events = db.prepare("SELECT record FROM audit_events WHERE kind <> 'approval-assurance-registration' ORDER BY sequence").all() /* D1 inventory events (documented) */.map(row => (JSON.parse(String(row['record'])) as { event: { subject: { kind: string; counts?: unknown } } }).event.subject);
       expect(events).toEqual([expect.objectContaining({ kind: 'authority-change', counts: expect.objectContaining({ grantsRemoved: 1 }) })]);
     } finally { db.close(); }
     expect((await readdir(join(f.data, 'audit', 'authority-revisions'))).filter(name => name.startsWith('k-'))).toHaveLength(1);

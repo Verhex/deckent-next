@@ -2,11 +2,12 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyModelCatalog, applyRunLifecycle, createRun, inspectConfiguredWorkerTranscript, inspectConfiguredWorkers, inspectRun } from '../../../src/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { FileArtifactStore, compileNativeCodingDockerProfile, openSqliteAttemptStore } from '#adapters/index.js';
+import * as adapters from '#adapters/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
@@ -17,11 +18,11 @@ import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
  * visible; a pinned Claude attempt without a sealed 'verified' verdict is parked (awaiting-decision); Codex stays visibly unverified and is accepted.
  */
 const roots: string[] = [];
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const HAIKU = 'claude-haiku-4-5-20251001', SONNET = 'claude-sonnet-5-5', CODEX_CHANNEL = 'codex-cli-test';
+afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const HAIKU = 'claude-haiku-5-5', SONNET = 'claude-sonnet-5-5', CODEX_CHANNEL = 'codex-cli-test';
 const template = { id: 'coding', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64),
   memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } };
-const claude = { ...compileNativeCodingDockerProfile(template, { schemaVersion: 4, provider: 'claude', cliVersion: '2.1.285 (Claude Code)',
+const claude = { ...compileNativeCodingDockerProfile(template, { schemaVersion: 4, provider: 'claude', cliVersion: '2.1.293 (Claude Code)',
   discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', model: { channelId: SEED_CHANNEL, modelId: SONNET, auxiliaryModelIds: [HAIKU] },
   prompt: 'Edit note.txt.' }), id: 'claude' };
 const codex = { ...compileNativeCodingDockerProfile(template, { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.159.2',
@@ -148,6 +149,8 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     expect((await f.evaluate('early', 2)).evaluation.run.tasks[0]!.phase).toBe('awaiting-decision');
     await expect(f.evaluate('later', 3)).rejects.toMatchObject({ code: 'TASK_EVALUATION_NOT_READY' });
     const command = { schemaVersion: 1 as const, commandId: 'human-accept', scopeId: 's', runId: 'r', taskId: 't', action: 'accept' as const, expectedRevision: 3 };
+    // MCP-AI-AKTOR: accept is a human step; the SDK caller here is the owner at a witnessed terminal (the TTY attestation is simulated).
+    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
     const accepted = await applyRunLifecycle(f.project, command, f.options);
     expect(accepted!.lifecycle.run.tasks[0]).toMatchObject({ phase: 'accepted', acceptedEvidence: 'model-unverified' });
     expect(accepted!.lifecycle.run.state).toMatchObject({ kind: 'terminal', outcome: 'completed' });

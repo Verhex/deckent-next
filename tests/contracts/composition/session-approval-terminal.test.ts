@@ -79,7 +79,7 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   const openAudit = adapters.openSqliteAuditStore;
   // Faults target the remembered (standing) audit only; ONAY-URETICI D1's producer-inventory audit opened by the decision itself is not the subject here.
   vi.spyOn(adapters, 'openSqliteAuditStore').mockImplementation(async (...args) => {
-    if (/approvals[\\/]internal[\\/]application/u.test(new Error().stack ?? '')) return openAudit(...args);
+    if (!/withAgentAudit/u.test(new Error().stack ?? '')) return openAudit(...args); // only the remembered/used standing audit (agent turn) is faulted
     faults.enteredAudit(); await faults.holdAudit; if (faults.failAudit) throw new Error('injected-audit-failure'); return openAudit(...args); });
   // In-process transport routes through the same typed operation handlers, with a real OS peer. No socket or provider is opened.
   vi.spyOn(adapters, 'requestLocalRuntime').mockImplementation(async (_options, input) => {
@@ -273,7 +273,8 @@ it('two authenticated runtime callers join the actual pending remembered audit w
     await expect(f.client.decideApproval({ ...command, reason: 'different' })).rejects.toMatchObject({ code: 'APPROVAL_CONFLICT' });
     await settle(50); expect(completed).toBe(false);
     expect(f.rows('SELECT command_id FROM approval_receipts')).toHaveLength(1);
-    expect(f.rows('SELECT record FROM audit_events')).toHaveLength(0);
+    // D1 records the producer inventory before each composed decision (documented); no standing audit exists while the remembered one is held.
+    expect(f.rows('SELECT record FROM audit_events').filter(row => JSON.parse(String(row.record)).event.subject.kind !== 'approval-assurance-registration')).toHaveLength(0);
     release(); f.faults.holdAudit = null;
     expect(await duplicate).toMatchObject({ standing: { scope: 'session', status: 'saved' } });
     await until(() => f.shown().includes('permission saved for this conversation'), 'duplicate saved');

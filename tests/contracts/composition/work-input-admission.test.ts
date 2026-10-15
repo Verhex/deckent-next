@@ -20,11 +20,11 @@ import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/
 /** K3 = A (owner 2026-09-30): task graph v3 typed work input + reusable coding template compiled once at Run admission. */
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const HAIKU = 'claude-haiku-4-5-20251001';
+const HAIKU = 'claude-haiku-5-5'; // haiku-4-5 retired 2026-10-15 in the seed: fixtures use a current model (CLI >= 2.1.293)
 const docker = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216,
   deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
 const parts = { persona: { id: 'implementer', version: 1, text: 'You implement exactly one card.' }, context: [{ id: 'repo-tooling', version: 2, text: 'Use npm scripts.' }] };
-const claudeInvocation = { provider: 'claude', cliVersion: '2.1.285 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
+const claudeInvocation = { provider: 'claude', cliVersion: '2.1.293 (Claude Code)', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
   maxTurns: 40, composition: parts };
 const codexInvocation = { provider: 'codex', cliVersion: 'codex-cli 0.159.2', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended' };
 const template = (id: string, invocation: object) => ({ id, version: 1, adapter: { id: 'native-coding-template', version: 1 }, parameters: { schemaVersion: 1, docker, invocation } });
@@ -65,7 +65,9 @@ async function seeded(localRegistry: object = registry, suppliedCatalog?: object
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
   const activation = (modelId: string | null, action = 'activate', expectedRevision = 0, channelId = SEED_CHANNEL) => catalog({ action, channelId, modelId, expectedRevision });
-  await catalog({ action: 'register', catalog: suppliedCatalog ?? await seedCatalog() });
+  // The fixture's HAIKU plays the "no reasoning-effort knob" model (the retired haiku-4-5 had none): the seed copy lists no efforts for it.
+  const effortless = async () => { const seed = await seedCatalog(); for (const model of seed.providers[0].models) if (model.nativeId === HAIKU) { model.efforts = []; model.reasoning.supportedEfforts = []; } return seed; };
+  await catalog({ action: 'register', catalog: suppliedCatalog ?? await effortless() });
   // Opus stays inactive on purpose: a work input naming it is refused as not active.
   await activation(null); await activation('claude-sonnet-5-5'); await activation(HAIKU);
   const read = <T>(sql: string, ...args: string[]) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(...args) as T[]; } finally { db.close(); } };
