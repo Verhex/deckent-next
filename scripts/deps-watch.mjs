@@ -99,7 +99,11 @@ const defaultFetchJson = async (url, init = {}) => {
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
-    } catch (error) { if (attempt >= 2) throw new Error(`${url}: ${error.message}`, { cause: error }); }
+    } catch (error) {
+      if (attempt >= 3) throw new Error(`${url}: ${error.message}`, { cause: error });
+      // Bounded backoff for a transient upstream refusal (e.g. GitHub's unauthenticated rate limit); never unbounded.
+      await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+    }
   }
 };
 const defaultSignatures = root => new Promise(done => execFile('npm', ['audit', 'signatures', '--json'], { cwd: root, timeout: 300_000, maxBuffer: 64 << 20 },
@@ -268,12 +272,18 @@ export function renderMarkdown(report) {
  * finding (malware advisories are CRITICAL). The pin-refresh publisher needs this clear; a HIGH advisory alone keeps the report red but does not
  * hold back a verified pin candidate.
  */
+// Owner 2026-10-15 ("Kapıyı daralt"): an unavailable upstream-repository advisory list or npm version metadata says nothing about the
+// installed tree's integrity, so it keeps the report red without holding back a pin candidate (try-1 dispatch: GitHub advisories for
+// containers/bubblewrap did not answer). Any other incomplete source (registry signatures, OSV, which carries npm malware advisories, or a
+// source added later) still blocks: fail closed.
+const NON_INTEGRITY_SOURCES = [/^GitHub advisories \S+$/u, /^npm registry$/u];
 export function supplyChainProblems(report) {
   const problems = [];
   if (report?.signatures?.invalid !== 0) problems.push(`registry signatures invalid: ${report?.signatures?.invalid ?? 'unknown'}`);
   if (report?.signatures?.missing !== 0) problems.push(`registry signatures missing: ${report?.signatures?.missing ?? 'unknown'}`);
   for (const item of report?.findings ?? []) {
-    if (item.severity === 'CRITICAL' || ['watch-incomplete', 'signature-invalid', 'signature-missing'].includes(item.kind)) problems.push(`${item.severity} ${item.kind}: ${item.subject}`);
+    const incomplete = item.kind === 'watch-incomplete' && !NON_INTEGRITY_SOURCES.some(source => source.test(String(item.subject)));
+    if (item.severity === 'CRITICAL' || incomplete || ['signature-invalid', 'signature-missing'].includes(item.kind)) problems.push(`${item.severity} ${item.kind}: ${item.subject}`);
   }
   if (!Array.isArray(report?.findings)) problems.push('report has no findings list');
   return problems;

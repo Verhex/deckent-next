@@ -61,6 +61,12 @@ describe('deps-watch', () => {
     expect(supplyChainProblems(report([{ severity: 'HIGH', kind: 'vulnerability', subject: 'fast-uri@3.1.0' }, { severity: 'MEDIUM', kind: 'review-overdue', subject: 'x' }]))).toEqual([]);
     expect(supplyChainProblems(report([{ severity: 'CRITICAL', kind: 'vulnerability', subject: 'evil@1.0.0' }]))).toEqual(['CRITICAL vulnerability: evil@1.0.0']);
     expect(supplyChainProblems(report([{ severity: 'HIGH', kind: 'watch-incomplete', subject: 'npm audit signatures' }]))).toEqual(['HIGH watch-incomplete: npm audit signatures']);
+    expect(supplyChainProblems(report([{ severity: 'HIGH', kind: 'watch-incomplete', subject: 'OSV' }]))).toEqual(['HIGH watch-incomplete: OSV']);
+    // Upstream advisory lists and npm version metadata are not integrity evidence: red report, open gate. Unknown sources stay closed.
+    expect(supplyChainProblems(report([{ severity: 'HIGH', kind: 'watch-incomplete', subject: 'GitHub advisories containers/bubblewrap' },
+      { severity: 'HIGH', kind: 'watch-incomplete', subject: 'npm registry' }]))).toEqual([]);
+    expect(supplyChainProblems(report([{ severity: 'HIGH', kind: 'watch-incomplete', subject: 'GitHub advisories a/b extra' },
+      { severity: 'HIGH', kind: 'watch-incomplete', subject: 'some future source' }]))).toEqual(['HIGH watch-incomplete: GitHub advisories a/b extra', 'HIGH watch-incomplete: some future source']);
     expect(supplyChainProblems(report([], { invalid: 1, missing: 0 }))).toEqual(['registry signatures invalid: 1']);
     expect(supplyChainProblems(report([], { invalid: 0, missing: null }))).toEqual(['registry signatures missing: unknown']);
     expect(supplyChainProblems({ signatures: { invalid: 0, missing: 0 } })).toEqual(['report has no findings list']);
