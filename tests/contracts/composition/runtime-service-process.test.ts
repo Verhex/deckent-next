@@ -48,7 +48,14 @@ function waitForJson(child: Child, predicate: (value: Record<string, unknown>) =
 // The service may hold the ledger write lock while this observer opens it; on a loaded runner the open can exceed the busy
 // timeout (ATTEMPT_STORE_BUSY, hosted ubuntu node 26). That is "not observable yet" for this bounded poll, never a result.
 async function observe<T>(read: () => Promise<T | undefined>): Promise<T | undefined> {
-  try { return await read(); } catch (error) { if ((error as { code?: unknown }).code === 'ATTEMPT_STORE_BUSY') return undefined; throw error; }
+  try { return await read(); } catch (error) {
+    if ((error as { code?: unknown }).code === 'ATTEMPT_STORE_BUSY') return undefined;
+    // PR #92 CI (ubuntu node 26): a companion was refused MANAGED_FILE_UNSAFE once while the service wrote; the failure must name which
+    // check (reason, mode, links, companion) so the race can be classified. Still a failure, never "not observable yet".
+    const diagnostic = (error as { diagnostic?: unknown }).diagnostic;
+    if (diagnostic) throw new Error(`${(error as { code?: string }).code} ${JSON.stringify(diagnostic)}`, { cause: error });
+    throw error;
+  }
 }
 async function poll<T>(read: () => Promise<T | undefined>, label: string): Promise<T> {
   for (let attempt = 0; attempt < 600; attempt++) {
