@@ -82,7 +82,11 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
   const [input, writer] = await Promise.all([open(fifo, 'r'), open(fifo, 'w')]);
   const outputPath = join(f.root, 'mcp-output');
   const output = await open(outputPath, 'w'), errors = await open(join(f.root, 'mcp-errors'), 'w');
-  const child = spawn(process.execPath, [mcp, '--project', f.project], { cwd: f.project,
+  // macOS diagnosis (PLATFORM-TEMIZLIK, open there): a server still alive 8.5 s after start names its live handles on stderr, which the exit
+  // assertion shows. The timer is unref'd: it never keeps the process alive, so a prompt exit (as on Linux) is unchanged.
+  const handles = `setTimeout(() => process.stderr.write('MCP_LIVE_HANDLES ' + JSON.stringify({ resources: process.getActiveResourcesInfo(),
+    stdinEnded: process.stdin.readableEnded, stdinDestroyed: process.stdin.destroyed }) + '\\n'), 8500).unref();`;
+  const child = spawn(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(handles)}`, mcp, '--project', f.project], { cwd: f.project,
     env: { HOME: f.home, USERPROFILE: f.home, DECKENT_GLOBAL_HOME: join(f.home, 'global'), PATH: process.env.PATH ?? '' },
     stdio: [input.fd, output.fd, errors.fd] });
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((accept, reject) => {
@@ -109,7 +113,7 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
     const response = await readResponse(2);
     expect(response.result).toMatchObject({ structuredContent: { status: 'not-configured' } });
     expect(response.result.isError).not.toBe(true);
-    await writer.close(); expect(await closed).toEqual({ code: 0, signal: null });
+    await writer.close(); expect(await closed, await readFile(join(f.root, 'mcp-errors'), 'utf8')).toEqual({ code: 0, signal: null });
     expect(await snapshot(f.project, f.home)).toEqual(before);
   } finally {
     clearTimeout(timer); child.kill(); await closed;
