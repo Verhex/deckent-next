@@ -6,15 +6,33 @@ import { fileURLToPath } from 'node:url';
 import { REFRESH_PATHS } from './refresh-bwrap.mjs';
 import { bundledIdentityModule } from './build-bwrap.mjs';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-/** Fields a pin refresh may never change: the base checkout is the authority, the candidate (built by npm-installed code) is only data. */
-const INVARIANT = ['schemaVersion', 'component', 'version', 'license', 'licenseNote', 'source', 'sourceDateEpoch', 'buildImage', 'mesonOptions', 'minimumKernel', 'linked', 'setuid', 'shipArches'];
-export function verifiedCandidate(root, out) {
-  const read = path => readFileSync(join(out, 'files', path), 'utf8');
+/** A pin refresh may change only these lock fields; every other field must equal the base checkout, which is the authority. The candidate was
+ * written by npm-installed code, so it is untrusted data: every changed value must also match a strict shape before anything is published
+ * (the bundled identity module interpolates the output sha256 values into source). */
+const REFRESHABLE = Object.freeze(['hostPackages', 'sysrootPackages', 'resolvedPackages', 'outputs']);
+const PIN = /^[a-z0-9][a-z0-9+._-]{0,63}=[0-9][A-Za-z0-9._+~]{0,63}-r[0-9]{1,4}$/u;
+const RESOLVED = /^[a-z0-9][a-z0-9+._-]{0,63}-[0-9][A-Za-z0-9._+~]{0,63}-r[0-9]{1,4}$/u;
+const TITLE = /^build\(bwrap\): refresh pins \(Alpine [0-9][0-9.]{0,15}\)$/u;
+const invalid = reason => new Error(`BWRAP_REFRESH_INVALID: ${reason}`);
+const strings = (value, shape, max, what) => {
+  if (!Array.isArray(value) || value.length === 0 || value.length > max || !value.every(item => typeof item === 'string' && shape.test(item))) throw invalid(`${what} has an unexpected shape`);
+};
+export function verifiedCandidate(root, out, title) {
+  if (typeof title !== 'string' || !TITLE.test(title)) throw invalid('title has an unexpected shape');
+  const read = path => { const text = readFileSync(join(out, 'files', path), 'utf8'); if (text.length > 1_048_576) throw invalid(`${path} is too large`); return text; };
   const files = Object.fromEntries(REFRESH_PATHS.map(path => [path, read(path)]));
   const lock = JSON.parse(files[REFRESH_PATHS[0]]), base = JSON.parse(readFileSync(join(root, REFRESH_PATHS[0]), 'utf8'));
-  if (JSON.stringify(Object.keys(lock).sort()) !== JSON.stringify(Object.keys(base).sort())) throw new Error('BWRAP_REFRESH_INVALID: candidate lock keys differ from the base');
-  for (const key of INVARIANT) if (JSON.stringify(lock[key]) !== JSON.stringify(base[key])) throw new Error(`BWRAP_REFRESH_INVALID: ${key} may not change in a pin refresh`);
-  if (files[REFRESH_PATHS[1]] !== bundledIdentityModule(lock)) throw new Error('BWRAP_REFRESH_INVALID: bundled identity does not match the candidate lock');
+  if (JSON.stringify(Object.keys(lock).sort()) !== JSON.stringify(Object.keys(base).sort())) throw invalid('candidate lock keys differ from the base');
+  for (const key of Object.keys(base)) if (!REFRESHABLE.includes(key) && JSON.stringify(lock[key]) !== JSON.stringify(base[key])) throw invalid(`${key} may not change in a pin refresh`);
+  strings(lock.hostPackages, PIN, 64, 'hostPackages'); strings(lock.sysrootPackages, PIN, 64, 'sysrootPackages');
+  if (JSON.stringify(Object.keys(lock.resolvedPackages).sort()) !== JSON.stringify(Object.keys(base.resolvedPackages).sort())) throw invalid('resolvedPackages groups changed');
+  for (const [group, list] of Object.entries(lock.resolvedPackages)) strings(list, RESOLVED, 512, `resolvedPackages.${group}`);
+  if (JSON.stringify(Object.keys(lock.outputs).sort()) !== JSON.stringify(Object.keys(base.outputs).sort())) throw invalid('outputs architectures changed');
+  for (const [arch, output] of Object.entries(lock.outputs)) {
+    if (JSON.stringify(Object.keys(output).sort()) !== JSON.stringify(Object.keys(base.outputs[arch]).sort()) || output.nodeArch !== base.outputs[arch].nodeArch
+      || typeof output.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(output.sha256)) throw invalid(`outputs.${arch} has an unexpected shape`);
+  }
+  if (files[REFRESH_PATHS[1]] !== bundledIdentityModule(lock)) throw invalid('bundled identity does not match the candidate lock');
   return files;
 }
 export async function publish({ root = ROOT, out, repository, base, baseSha, request }) {
@@ -22,13 +40,14 @@ export async function publish({ root = ROOT, out, repository, base, baseSha, req
   if (!result.changed) return { changed: false };
   if (!/^[\w.-]+\/[\w.-]+$/u.test(repository) || !/^[a-f0-9]{40}$/u.test(baseSha) || !base) throw new Error('invalid repository/base identity');
   if (!/^build\/bwrap-pins-[a-f0-9]{16}$/u.test(result.branch) || JSON.stringify(result.paths) !== JSON.stringify(REFRESH_PATHS)) throw new Error('invalid refresh branch or paths');
-  const candidate = verifiedCandidate(root, out); // before any request: an invalid candidate makes no call
+  const candidate = verifiedCandidate(root, out, result.title); // before any request: an invalid candidate makes no call
   const api = `/repos/${repository}`;
   const headOwner = repository.split('/')[0];
   const pulls = await request('GET', `${api}/pulls?state=open&head=${encodeURIComponent(`${headOwner}:${result.branch}`)}&base=${encodeURIComponent(base)}`);
   if (pulls.length) return { changed: true, existing: pulls[0].html_url }; // never overwrite a reviewed candidate
   const title = result.title;
   const body = readFileSync(join(out, 'PR-BODY.md'), 'utf8');
+  if (body.length > 65_536) throw new Error('BWRAP_REFRESH_INVALID: PR body is too large'); // untrusted evidence text, bounded
   const trees = await request('GET', `${api}/git/commits/${baseSha}`);
   const tree = await request('POST', `${api}/git/trees`, { base_tree: trees.tree.sha,
     tree: REFRESH_PATHS.map(path => ({ path, mode: '100644', type: 'blob', content: candidate[path] })) });

