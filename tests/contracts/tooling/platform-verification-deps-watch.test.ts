@@ -114,6 +114,11 @@ describe('platform verification dependency watch schedule', () => {
     const publishJob = jobBlock('deps-publish');
     expect(publishJob).toMatch(/^ {4}permissions:\n {6}contents: write\n {6}pull-requests: write$/mu);
     expect(publishJob).toMatch(/^ {4}needs: deps-watch$/mu);
+    // Gated on the verified refresh alone: a red dependency report (same job) must not hold back the pin PR, and must stay red itself.
+    expect(publishJob).toMatch(/^ {4}if: \$\{\{ !cancelled\(\) && needs\.deps-watch\.outputs\.refresh-verified == 'true' \}\}$/mu);
+    expect(publishJob).not.toContain('needs.deps-watch.result');
+    expect(depsWatch).toContain('refresh-verified: ${{ steps.refresh.outputs.verified }}');
+    expect(depsWatch).toMatch(/id: refresh\n {8}run: \|\n {10}node scripts\/refresh-bwrap\.mjs "\$RUNNER_TEMP\/deps-watch\/bwrap-refresh"\n {10}echo "verified=true" >> "\$GITHUB_OUTPUT"\n/u);
     expect(publishJob).toContain('ref: ${{ needs.deps-watch.outputs.base-sha }}');
     expect(publishJob).toContain('persist-credentials: false');
     expect(publishJob).not.toMatch(/npm (ci|install|run)|cache: npm|refresh-bwrap|build-bwrap|docker/u);
