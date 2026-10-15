@@ -31,3 +31,5 @@ export { assertPolicyAdministrationPreserved, usablePolicyAdmins, PolicyLastAdmi
 
 export { aiAuthorityFloor } from './internal/ai-floor.js';
 export { explicitDecisionGrant } from './internal/decision-step.js';
+export { DecisionDelegationError, getDecisionSteps, delegationQuerySchema, delegationCommandSchema } from './internal/delegations.js';
+export type { DecisionStep, DelegationQuery, DelegationCommand, DecisionDelegationView } from './internal/delegations.js';

@@ -13,7 +13,7 @@ no automation exception is added. Hard-floor allow additionally retains its turn
 TTY attestation is an interaction requirement, not proof of human presence or account isolation. Ledger/approval formats and package version stay
 unchanged. Contract/design evidence: `proof/W3-AUTHORITY-2026-10-09/`, [decision log](.deckent/docs/architecture/decisions.md).
 
-**Owner amendment 2026-10-02 — MCP-NO-DECIDE, updated 2026-10-15 (MCP-AI-AKTOR / Y3–Y4):** MCP traffic is always an AI actor. Decisions are policy-governed, with a non-delegable floor in versioned code. Human steps need an interactive terminal witness or an explicit named-actor/action policy cell; generic evaluate/reserve or wildcard actions never delegate a step. AI cannot widen authority, write authority policy, read secret values, open hard-floor cells or alter assurance/authenticators, even with an allow. Existing MCP tools remain unchanged; shared SDK/runtime decision ingress enforces the same gates.
+**Owner amendment 2026-10-02 — MCP-NO-DECIDE, updated 2026-10-15 (MCP-AI-AKTOR / Y3–Y4):** MCP traffic is always an AI actor. Decisions are policy-governed, with a non-delegable floor in versioned code. Human steps need an interactive terminal witness or an explicit named-actor/action policy cell; generic evaluate/reserve or wildcard actions never delegate a step. AI cannot widen authority, write authority policy, read secret values, open hard-floor cells or alter assurance/authenticators, even with an allow. Existing MCP tools remain unchanged; shared SDK/runtime decision ingress enforces the same gates. **DEVIR-ARACI author candidate (2026-10-15):** one versioned decision-delegation command manages named MCP actor/action cells through the existing `policy.administer@1` authority writer, expected revision, delegation bound, witnessed human approval, audit and archive. CLI `policy delegate|undelegate --scope --step [--actor mcp] [--resource ID]` and terminal `/policy` → AI delegation confirm y/N; non-TTY writes and AI administration refuse. Without a resource id the selection covers that resource class in the selected scope. Run resume/close, task accept/reject/answer and ordinary approval decide share one inventory with the floor report; protected actions are absent and protected approval ids remain floored. Managed-rule presence and effective permission are separate; revoke never removes custom/role grants or past effects. SDK listing is read-only; no MCP decision or delegation mutation tool is added. Policy, approval, ledger and service protocol formats are unchanged. Author verification and PTY/build limits are in external `proof/DEVIR-ARACI-2026-10-15/WORKER.md`; independent, hosted and live acceptance remain separate.
 
 Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).
 Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yeni kanıt olmadan yeniden açılmaz.
@@ -1036,7 +1036,7 @@ HIGH/CRITICAL and on any unreadable source. `acceptedRisks` (evidence-backed, ex
 an exactly matching advisory set on one package@version and carrier into MITIGATED report rows that do not fail; expiry or any
 advisory/version/carrier/severity change fails again; lint-arch validates the entries and warns after expiry. The one entry today is
 fast-uri 3.1.0 inside MCP SDK 2.2.0 (expires 2026-10-29: renewed with fresh evidence, or removed when the SDK ships a rebuilt bundle).
-Not yet: weekly scheduling of deps-watch (CI `schedule` or host cron; the pre-batch run is manual).
+The weekly/manual deps-watch runs in `platform-verification.yml`; daily platform verification remains separate.
 
 **Published package (DEPS-DIST, 2026-09-29; ninth batch).** The npm package has no `dependencies`: `scripts/build-dist.mjs` bundles
 third-party runtime code into `dist/vendor/` chunks with esbuild (ESM, code splitting, lazy `import()` preserved) while every Deckent module
@@ -1073,7 +1073,7 @@ published declarations never name a bare `path` (PACK-SMOKE, after the BWRAP-SEL
 stages it; a bundle that is not exactly the locked build is a `publishable` blocker. The SBOM lists it as
 `pkg:generic/bubblewrap@0.13.0?download_url=…&checksum=sha256:…` (application, binary SHA-256, source-distribution reference) with the
 statically linked `pkg:apk/alpine/{musl,libcap,gcc}` nested; THIRD-PARTY-NOTICES carries its notice. The binary is built in CI
-(`.github/workflows/bwrap-bundle.yml`, check mode), never committed, never downloaded at install (owner S5).
+(`.github/workflows/bwrap-bundle.yml`, check mode), never committed, never downloaded at install (owner S5). The lock-keyed verified build cache and the weekly draft pin-refresh PR (read-only watch, separate write-scoped publisher) are documented in the [CI module note](.deckent/docs/architecture/modules/ci-and-verification.md).
 Hosted evidence at `76582f9f` (2026-10-01, [run 36884716254](https://github.com/Verhex/deckent-next/actions/runs/36884716254)):
 x86_64/aarch64 build checks and the x86_64 launcher/realm job succeeded; the real arm64 realm job was skipped. This is not an
 arm64 runtime or full-matrix PASS (main CI run 36884716187: Linux 24/26 success, macOS advisory cells failed). deps-watch reads

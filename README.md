@@ -29,7 +29,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.38`** (released 2026-10-14). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.39`** (released 2026-10-15). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -522,6 +522,7 @@ deckent --help                            # every command; deckent <command> --h
 ## Learn more
 
 - [Architecture overview](docs/architecture-overview.md): layers, security, extension points and current limits
+- [Policy and AI](docs/policy-and-ai.md): human and AI authority, delegation, administration commands and compliance evidence
 - [Glossary](docs/glossary.md): scope, realm, work lifecycle, approvals and spending
 - [Known limits](docs/known-limits.md): what is not tried, not built or still open, with the impact and a workaround
 - [ARCHITECTURE.md](ARCHITECTURE.md): detailed engineering contracts and implementation notes (English/Turkish)

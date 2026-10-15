@@ -5,7 +5,7 @@ import { promisify, stripVTControlCharacters } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { inspectConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
+import { inspectConfiguredDecisionDelegations, inspectConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { me, runtime } from '../support/mcp-capability-harness.js';
 
 const DRIVER = String.raw`
@@ -115,4 +115,43 @@ describe.skipIf(process.platform !== 'linux')('MCP permissions on the real Workl
       if (directory) { await mkdir(directory, { recursive: true }); await writeFile(join(directory, `${locale}-${width}-${color}.txt`), text); }
     }, 120_000);
   }
+});
+
+// Requires a fresh product build. Kept with the existing PTY driver to exercise the real Workline and authority composition.
+describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => {
+  for (const locale of ['en', 'tr'] as const) it(`${locale}: Enter cancels, y grants and revokes through witnessed audited administration`, async () => {
+    const f = await runtime(), w = words[locale];
+    const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
+      scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',
+      shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...template.policy,
+      roles: [{ id: 'owner', permissions: installationOwnerPermissions(getPolicyVocabulary().resources.map(resource => resource.kind)) }] }), { mode: 0o600 });
+    await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ ...template.bindings,
+      bindings: [{ id: 'owner', principals: me, roles: ['owner'], scopes: 'all' }] }), { mode: 0o600 });
+    const title = locale === 'tr' ? 'Yapay zekâya devir' : 'AI delegation', keys = locale === 'tr' ? 'y: onayla' : 'y: confirm', grantAction = locale === 'tr' ? 'Bu adımı devret' : 'Delegate this step';
+    const steps = [
+      ['READY', [...'/policy', ENTER], 'start'], ['> scope', [ENTER], '+scopes'],
+      [w.groups, [...Array.from({ length: 8 }, () => DOWN), ENTER], '+groups'],
+      [title, [ENTER], '+delegation list'], [grantAction, [ENTER], '+grant action'],
+      [keys, [ENTER], '+default cancel'], [title, [ENTER], '+cancelled list'],
+      [grantAction, [ENTER], '+grant again'], [keys, ['y'], '+grant card'],
+      [title, [ENTER], '+granted list'], [grantAction, [DOWN, ENTER], '+revoke action'],
+      [keys, ['y'], '+revoke card'], [title, [ESC, ESC], '+revoked list'], ['READY', [], '+closed'],
+    ];
+    const result = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(steps), '100', process.execPath, fixturePath, locale, f.project, 'none'],
+      { env: { ...process.env, ...f.env, TERM: 'xterm-256color', NO_COLOR: '1', FORCE_COLOR: '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 })
+      .catch(error => ({ stdout: String(error.stdout ?? '') }));
+    const value = JSON.parse(result.stdout) as { timeout?: string; output: string };
+    expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
+    const text = stripVTControlCharacters(value.output);
+    expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
+    const view = await inspectConfiguredDecisionDelegations(f.project, { schemaVersion: 1, scopeId: 'scope' }, { env: f.env });
+    expect(view.steps[0]).toMatchObject({ step: { id: 'run-resume' }, managed: 'none', effective: 'denied' });
+    const changes = f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row['record'])))
+      .filter(row => row.event.subject.kind === 'authority-change');
+    expect(changes).toHaveLength(2);
+    for (const row of changes) expect(row.event.subject.decider).toEqual(me[0]);
+    const directory = process.env['DECKENT_MCP_GRANT_FRAMES'];
+    if (directory) { await mkdir(directory, { recursive: true }); await writeFile(join(directory, `delegation-${locale}.txt`), text); }
+  }, 120_000);
 });

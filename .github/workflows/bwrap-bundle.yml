@@ -12,7 +12,7 @@ on:
       'src/composition/core/agent-turn/**', 'src/**/native/**', 'src/domain/core/agent-tool/internal/shell-realm.ts',
       'tests/contracts/adapters/*bwrap*.test.ts', 'tests/contracts/adapters/shell-realm.test.ts',
       'tests/contracts/composition/open-sandbox-ancestor.test.ts', 'tests/contracts/composition/shell-realm-doctor.test.ts',
-      'tests/contracts/tooling/bwrap-lock.test.ts', 'tests/fixtures/shell-host.ts',
+      'tests/contracts/tooling/*bwrap*.test.ts', 'scripts/*bwrap*.mjs', 'tests/fixtures/shell-host.ts',
       'package.json', 'package-lock.json', 'tsconfig*.json', 'vitest.config.ts', '.github/workflows/bwrap-bundle.yml']
   pull_request:
     paths: ['packaging/bwrap/**', 'scripts/build*.mjs', 'scripts/ci-*.mjs', 'scripts/ci-*.sh',
@@ -20,7 +20,7 @@ on:
       'src/composition/core/agent-turn/**', 'src/**/native/**', 'src/domain/core/agent-tool/internal/shell-realm.ts',
       'tests/contracts/adapters/*bwrap*.test.ts', 'tests/contracts/adapters/shell-realm.test.ts',
       'tests/contracts/composition/open-sandbox-ancestor.test.ts', 'tests/contracts/composition/shell-realm-doctor.test.ts',
-      'tests/contracts/tooling/bwrap-lock.test.ts', 'tests/fixtures/shell-host.ts',
+      'tests/contracts/tooling/*bwrap*.test.ts', 'scripts/*bwrap*.mjs', 'tests/fixtures/shell-host.ts',
       'package.json', 'package-lock.json', 'tsconfig*.json', 'vitest.config.ts', '.github/workflows/bwrap-bundle.yml']
   workflow_dispatch:
 permissions:
@@ -29,6 +29,7 @@ jobs:
   build-check:
     name: reproducible build, check mode (${{ matrix.arch }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -37,8 +38,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: 24 }
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: bwrap_cache
+        with:
+          path: .pack/bwrap/cache
+          key: bwrap-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.arch }}-${{ hashFiles('packaging/bwrap/bwrap.lock.json', 'packaging/bwrap/build.sh', 'scripts/build-bwrap.mjs', 'scripts/bwrap-cache.mjs') }}
       - name: Build from the lock inside the digest-pinned Alpine image and compare with the locked sha256
-        run: node scripts/build-bwrap.mjs --arch ${{ matrix.arch }} --out "$RUNNER_TEMP/bwrap-${{ matrix.arch }}"
+        run: |
+          node scripts/build-bwrap.mjs --reuse --arch ${{ matrix.arch }} --out "$RUNNER_TEMP/bwrap-${{ matrix.arch }}"
+          node scripts/build-bwrap.mjs --verify-cache --arch ${{ matrix.arch }}
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.bwrap_cache.outputs.cache-hit != 'true'
+        with:
+          path: .pack/bwrap/cache
+          key: ${{ steps.bwrap_cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bwrap-${{ matrix.arch }}

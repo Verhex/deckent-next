@@ -109,7 +109,16 @@ describe('platform verification dependency watch schedule', () => {
     expect(depsWatch).not.toBe('');
     expect(depsWatch).toMatch(/^ {4}if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.schedule == '41 3 \* \* 1'$/mu);
     expect(depsWatch).toMatch(/^ {4}runs-on: ubuntu-latest$/mu);
+    // The watch runs npm-installed code and builds: read-only. Owner 2026-10-15: only deps-publish writes (draft PR, never merge).
     expect(depsWatch).toMatch(/^ {4}permissions:\n {6}contents: read$/mu);
+    const publishJob = jobBlock('deps-publish');
+    expect(publishJob).toMatch(/^ {4}permissions:\n {6}contents: write\n {6}pull-requests: write$/mu);
+    expect(publishJob).toMatch(/^ {4}needs: deps-watch$/mu);
+    expect(publishJob).toContain('ref: ${{ needs.deps-watch.outputs.base-sha }}');
+    expect(publishJob).toContain('persist-credentials: false');
+    expect(publishJob).not.toMatch(/npm (ci|install|run)|cache: npm|refresh-bwrap|build-bwrap|docker/u);
+    for (const [name, block] of [...workflow.matchAll(/^ {2}([\w-]+):\n((?: {4}.*\n|\n)*)/gmu)].map(match => [match[1], match[2]] as const))
+      if (name !== 'deps-publish') expect(block, name).not.toMatch(/contents: write|pull-requests: write/u);
   });
 
   it('pins every action to a full SHA and reuses the verify checkout and setup-node pins with Node 24', () => {
@@ -128,7 +137,20 @@ describe('platform verification dependency watch schedule', () => {
     expect(depsWatch).toMatch(/^ {6}- run: npm ci$/mu);
     expect(depsWatch).toContain('run: node scripts/deps-watch.mjs "$RUNNER_TEMP/deps-watch"');
     expect(depsWatch).not.toMatch(/continue-on-error:|\|\| true/u);
+    expect(depsWatch).toContain("if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}");
     expect(depsWatch.indexOf('run: npm ci')).toBeLessThan(depsWatch.indexOf('run: node scripts/deps-watch.mjs'));
+  });
+
+  it('resolves pins in the trusted default checkout and publishes only a verified draft candidate', () => {
+    expect(depsWatch).toContain('ref: ${{ github.event.repository.default_branch }}');
+    expect(depsWatch).toContain('node scripts/refresh-bwrap.mjs "$RUNNER_TEMP/deps-watch/bwrap-refresh"');
+    expect(depsWatch).not.toContain('publish-bwrap-refresh.mjs');
+    expect(depsWatch).not.toContain('github.token');
+    const publishJob = jobBlock('deps-publish');
+    expect(publishJob).toContain('run: node scripts/publish-bwrap-refresh.mjs "$RUNNER_TEMP/deps-watch/bwrap-refresh"');
+    expect(publishJob).toContain('GITHUB_TOKEN: ${{ github.token }}');
+    expect(workflow).not.toMatch(/gh pr merge|auto-merge|enable-auto-merge/u);
+    expect(depsWatch).toContain('timeout-minutes: 30');
   });
 
   it('retains reports even on policy failure using the existing upload-artifact pin', () => {
@@ -138,7 +160,8 @@ describe('platform verification dependency watch schedule', () => {
     expect(depsWatch).toContain('path: ${{ runner.temp }}/deps-watch/');
   });
 
-  it('preserves the existing verify job byte-for-byte', () => {
-    expect(jobBlock('verify')).toBe(baseVerifyJob);
+  it('preserves verify outside the admitted bubblewrap cache block byte-for-byte', () => {
+    const withoutCache = (job: string) => job.replace(/ {6}- name: Restore locked bubblewrap[\s\S]*?(?= {6}- name: Prove the built product)/u, '');
+    expect(withoutCache(jobBlock('verify'))).toBe(withoutCache(baseVerifyJob));
   });
 });

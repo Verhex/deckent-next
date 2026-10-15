@@ -55,6 +55,37 @@ A successful build ends with `bubblewrap=present` or `bubblewrap=staged from …
 bubblewrap stops with `BUBBLEWRAP_BUILD_REQUIRED`; only off Linux does it print `bubblewrap=absent (not Linux)`, which means no
 sandbox was supplied. Fix staging before testing sandbox behavior.
 
+### Bubblewrap cache and Alpine pin refresh
+
+CI restores `.pack/bwrap/cache` with an exact key covering the lock, build recipe, build driver,
+cache verifier and target/runner architectures. It stores the built outputs and fetched APKs.
+`node scripts/build-bwrap.mjs --reuse --arch x86_64 --out <fresh-directory>` verifies the input
+identity, all recorded file/APK SHA256 values, complete installed package inventories, source,
+license texts and binary SHA256 against the lock before using a hit. Only a missing build cache
+runs Docker. `--verify-cache --arch x86_64` checks it without staging. APK signature verification
+remains enabled during installation. A corrupt cache fails; it is never silently trusted or retried.
+The cache checksum manifest detects corruption; the committed lock remains the binary authority.
+Actions caches can expire or be evicted: this is not a permanent Alpine mirror.
+
+On a miss, unavailable Alpine pins fail with `BWRAP_PIN_REFRESH_REQUIRED` / `BWRAP_BUILD_FAILED`
+and point here. The weekly/manual **platform verification → deps-watch** job runs
+`node scripts/refresh-bwrap.mjs <fresh-evidence-directory>` in the digest-pinned image. It resolves
+a candidate host closure and every sysroot, updates the direct pins, builds once to record hashes
+and again in check mode to compare them, and retains the inventories, logs, lock delta and
+`PR-BODY.md`. It modifies the checkout's lock/runtime identity only after both builds succeed.
+Linked-library version changes that need a new verified license text stop for maintainer review.
+It never updates the build image, source tarball, shipped architectures or source/license pins silently.
+
+Automatic draft PR publication requires `contents: write` and `pull-requests: write` on that watch
+job; the current card's read-only contents boundary requires an owner decision before enabling it.
+Until then, the uploaded `deps-watch-<attempt>` artifact contains the candidate locks and PR body;
+a maintainer reviews those bytes, creates a branch and submits
+`build(bwrap): refresh pins (Alpine <release>)`. `scripts/publish-bwrap-refresh.mjs` is prepared for
+that narrowly scoped job but is not invoked while contents remain read-only. It changes only the
+lock and generated runtime identity, reuses an existing PR and never force-updates or merges.
+Astra review and hosted CI remain mandatory. GitHub-token-created PRs need an explicit maintainer
+CI dispatch on the candidate branch; their creation does not itself trigger the normal PR workflow.
+
 Check the compiled entry without linking a global executable:
 
 ```sh

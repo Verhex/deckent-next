@@ -24,6 +24,7 @@ export type { ApprovalAssuranceOptions } from './internal/application.js';
 export type { AgentToolApprovalFacts, TurnDecisionCapabilities } from './internal/assurance.js';
 export { approvalCommandFingerprint } from './internal/application.js';
 export { McpCapabilities, McpCapabilityRegistry, mcpCapabilityRegistry, mcpCapabilityScopeCandidates, registerMcpCapabilityGroup } from './internal/mcp-capabilities.js';
+export { DecisionDelegations } from './internal/delegations.js';
 export { sessionStandingResultSchema, sessionApprovalResultSchema, parseApprovalAnswer, clearSessionStandingSchema, sessionStandingClearanceSchema, acceptSessionStandingClearance } from './internal/session-contract.js';
 export type { SessionStandingResult, SessionApprovalResult, ClearSessionStanding, SessionStandingClearance } from './internal/session-contract.js';
 export { SessionApprovalAnswers } from './internal/session-answers.js';

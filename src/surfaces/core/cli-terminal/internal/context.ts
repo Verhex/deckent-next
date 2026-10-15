@@ -88,6 +88,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<RunProposalResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
+  delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   providerConnect?: ProviderConnectHost;

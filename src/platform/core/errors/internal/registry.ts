@@ -513,6 +513,8 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   AUTHENTICATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_REQUIRED', p, l) }) },
   AUTHENTICATION_SCOPE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_SCOPE_DENIED', p, l) }) },
   POLICY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
+  POLICY_DELEGATION_STEP_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_STEP_INVALID', p, l) }) },
+  POLICY_DELEGATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_CONFLICT', p, l) }) },
   POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DENIED', p, l) }) },
   SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SCOPE_UNKNOWN', p, l) }) },
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.

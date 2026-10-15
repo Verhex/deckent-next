@@ -3182,7 +3182,10 @@
       "ARCHITECTURE.md",
       "PLAN.md",
       "COMPLETED-PLAN.md",
-      "CHANGELOG.md"
+      "CHANGELOG.md",
+      "docs/policy-and-ai.md",
+      "docs/policy-and-ai.tr.md",
+      "docs/reports/ai-floor-compliance.md"
     ],
     "pointerFiles": {
       "CLAUDE.md": 70,

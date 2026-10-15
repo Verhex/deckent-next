@@ -8,9 +8,9 @@ ile yürütmeyi birleştirir: kişi, model veya araç iş önerir; yetki politik
 Açık Core Apache-2.0 lisanslıdır ve tek başına çalışabilir. Tescilli Enterprise paketleri,
 Core'un herkese açık sözleşmelerini genişletecek biçimde tasarlanır ve ayrı dağıtılır.
 
-Bu rehber, 2026-10-09 tarihindeki kaynak mimarisini açıklar: yayımlanmış `1.0.0-alpha.21` ve
-`1.0.0-alpha.22` adayı (sandbox hard floor'ları, ayrı MCP aktörü). Mekanizmaları ve
-sınırları anlatır; güvenlik sertifikası veya kapasite ölçümü değildir. [ARCHITECTURE.md](../ARCHITECTURE.md)
+Bu rehber, 2026-10-15 tarihindeki kaynak mimarisini açıklar; paket `1.0.0-alpha.39`.
+Mekanizmaları ve sınırları anlatır; kurulu/canlı kabulü, güvenlik sertifikası veya
+kapasite ölçümü değildir. [ARCHITECTURE.md](../ARCHITECTURE.md)
 ayrıntılı sözleşmeleri, uygulama notlarını ve kabul edilmiş gelecek yönünü içerir;
 bu malzemenin bir bölümü Türkçedir.
 
@@ -59,12 +59,16 @@ Ortak anlam, her yüzeyin aynı yetkiye sahip olduğu anlamına gelmez. MCP bekl
 inceleyebilir; onay kararı veren aracı yoktur. İzin verilen insan/SDK yollarındaki kararlar
 yine kimlik, politika ve canlı oturum denetimlerine tabidir. Persona, model önerisi veya
 zaman aşımı reddedilmiş bir işlemi izin verilmiş hale getirmez.
+AI karar adımı açık kimlik/eylem hücresi ister; yetki değiştiren işlemler allow ile bile
+devredilemez. Terminal tanıklığı etkileşim gereğidir, insan varlığı kanıtı değildir.
 
 İstemci/servis protokolü, ledger şeması ve paket sürümü birbirinden bağımsızdır. Normal
 işlemler uyumlu istemci ve servis gerektirir. Sınırlı yaşam döngüsü uyumluluğu komşu sürümler
 arasında inceleme veya durdurmaya izin verebilir; normal yürütmeye izin vermez. Veri
 geçişleri açık göç ve yedek gereksinimleriyle yapılır. Yeni çalıştırılabilir dosya eski
 veritabanını veya çalışan servisi kendiliğinden uyumlu yapmaz.
+
+Politika ayrıntıları: [insan ve AI yetkisi, devir ve uyum kanıtı](policy-and-ai.tr.md).
 
 ## İşin yaşam döngüsü ve kalıcı etkiler
 

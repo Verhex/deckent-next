@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t } from '#platform/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { policyMcpCommand } from './policy-mcp.js';
+import { policyDelegationsCommand } from './policy-delegations.js';
 
 /** A persisted standing approval as the CLI shows it (the engine's view; the surface owns no rule of its own). */
 export interface StandingGrantRow { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
@@ -20,6 +21,7 @@ export type PolicyUpgradeHandler = (root: string, scopeId: string, input: { read
  * Until `/policy` exists (PERSISTENT-APPROVALS G6). A revoke asks `y/N` on a terminal; without one it needs an explicit `--yes`.
  */
 export async function policyGrantsCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+  if (['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '')) return policyDelegationsCommand(argv, context);
   if (argv[1] === 'status') return policyStatusCommand(argv, context);
   if (argv[1] === 'mcp') return policyMcpCommand(argv, context);
   if (argv[1] === 'upgrade') return policyUpgradeCommand(argv, context);

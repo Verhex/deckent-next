@@ -8,8 +8,8 @@ a configured execution environment performs it; durable records describe the out
 The open Core is Apache-2.0 and can operate independently. Proprietary Enterprise packages
 are designed to extend its public contracts and remain separately distributed.
 
-This is a reading guide to the current source architecture, dated 2026-10-09: the released
-`1.0.0-alpha.21` plus the `1.0.0-alpha.22` candidate (sandbox hard floors, separate MCP actor). It describes mechanisms and boundaries, not a security certification or
+This is a reading guide to the source architecture, dated 2026-10-15, package
+`1.0.0-alpha.39`. It describes mechanisms and boundaries, not installed/live acceptance, a security certification or
 capacity benchmark. [ARCHITECTURE.md](../ARCHITECTURE.md) contains the detailed contracts,
 implementation notes and accepted future direction; some of that material is in Turkish.
 
@@ -58,12 +58,16 @@ Shared semantics do not mean identical authority on every surface. MCP can inspe
 approvals but has no approval-decision tool. Decisions made through permitted human/SDK paths
 still require the applicable identity, policy and live-session checks. A persona, a model's
 recommendation or a timeout cannot turn a denied action into an allowed one.
+AI decision steps need explicit named-actor/action cells; authority-changing actions remain
+non-delegable even with an allow. A terminal witness is an interaction requirement, not proof of human presence.
 
 Client/service protocol versions, ledger schema versions and package versions are independent.
 Normal operations require compatible clients and services; the limited lifecycle window can
 permit inspection or stopping across adjacent versions without permitting normal execution.
 Storage upgrades use explicit migrations and backup requirements. A newer executable does not
 make an older database or running service automatically compatible.
+
+Policy details: [human and AI authority, delegation and compliance evidence](policy-and-ai.md).
 
 ## Work lifecycle and durable effects
 
