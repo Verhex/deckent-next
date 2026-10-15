@@ -109,10 +109,16 @@ describe('platform verification dependency watch schedule', () => {
     expect(depsWatch).not.toBe('');
     expect(depsWatch).toMatch(/^ {4}if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.schedule == '41 3 \* \* 1'$/mu);
     expect(depsWatch).toMatch(/^ {4}runs-on: ubuntu-latest$/mu);
-    // Owner 2026-10-15: only this weekly job may write a refresh branch and open a DRAFT pull request; never merge.
-    expect(depsWatch).toMatch(/^ {4}permissions:\n {6}contents: write\n {6}pull-requests: write$/mu);
+    // The watch runs npm-installed code and builds: read-only. Owner 2026-10-15: only deps-publish writes (draft PR, never merge).
+    expect(depsWatch).toMatch(/^ {4}permissions:\n {6}contents: read$/mu);
+    const publishJob = jobBlock('deps-publish');
+    expect(publishJob).toMatch(/^ {4}permissions:\n {6}contents: write\n {6}pull-requests: write$/mu);
+    expect(publishJob).toMatch(/^ {4}needs: deps-watch$/mu);
+    expect(publishJob).toContain('ref: ${{ needs.deps-watch.outputs.base-sha }}');
+    expect(publishJob).toContain('persist-credentials: false');
+    expect(publishJob).not.toMatch(/npm (ci|install|run)|cache: npm|refresh-bwrap|build-bwrap|docker/u);
     for (const [name, block] of [...workflow.matchAll(/^ {2}([\w-]+):\n((?: {4}.*\n|\n)*)/gmu)].map(match => [match[1], match[2]] as const))
-      if (name !== 'deps-watch') expect(block, name).not.toMatch(/contents: write|pull-requests: write/u);
+      if (name !== 'deps-publish') expect(block, name).not.toMatch(/contents: write|pull-requests: write/u);
   });
 
   it('pins every action to a full SHA and reuses the verify checkout and setup-node pins with Node 24', () => {
@@ -138,10 +144,12 @@ describe('platform verification dependency watch schedule', () => {
   it('resolves pins in the trusted default checkout and publishes only a verified draft candidate', () => {
     expect(depsWatch).toContain('ref: ${{ github.event.repository.default_branch }}');
     expect(depsWatch).toContain('node scripts/refresh-bwrap.mjs "$RUNNER_TEMP/deps-watch/bwrap-refresh"');
-    expect(depsWatch).toContain('run: node scripts/publish-bwrap-refresh.mjs "$RUNNER_TEMP/deps-watch/bwrap-refresh"');
-    expect(depsWatch.indexOf('scripts/refresh-bwrap.mjs')).toBeLessThan(depsWatch.indexOf('scripts/publish-bwrap-refresh.mjs'));
-    expect(depsWatch).toContain('GITHUB_TOKEN: ${{ github.token }}');
-    expect(depsWatch).not.toMatch(/gh pr merge|auto-merge|enable-auto-merge/u);
+    expect(depsWatch).not.toContain('publish-bwrap-refresh.mjs');
+    expect(depsWatch).not.toContain('github.token');
+    const publishJob = jobBlock('deps-publish');
+    expect(publishJob).toContain('run: node scripts/publish-bwrap-refresh.mjs "$RUNNER_TEMP/deps-watch/bwrap-refresh"');
+    expect(publishJob).toContain('GITHUB_TOKEN: ${{ github.token }}');
+    expect(workflow).not.toMatch(/gh pr merge|auto-merge|enable-auto-merge/u);
     expect(depsWatch).toContain('timeout-minutes: 30');
   });
 

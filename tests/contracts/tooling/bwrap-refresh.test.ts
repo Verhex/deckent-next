@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { assertResolved, refresh, refreshedLock, refreshBody, REFRESH_PATHS } from '../../../scripts/refresh-bwrap.mjs';
 // @ts-expect-error Executable JS tooling has no declaration file.
 import { publish } from '../../../scripts/publish-bwrap-refresh.mjs';
+import { bundledIdentityModule } from '../../../scripts/build-bwrap.mjs';
 const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
@@ -75,7 +76,14 @@ describe('candidate pin resolution', () => {
 describe('bounded PR publication (no live requests)', () => {
   function candidate() {
     const root = fixture(), branch = 'build/bwrap-pins-0123456789abcdef';
-    for (const path of REFRESH_PATHS as string[]) { const parts = path.split('/'); parts.pop(); mkdirSync(join(root, ...parts), { recursive: true }); writeFileSync(join(root, path), '{}'); }
+    // The base checkout holds the current lock; the candidate copies (out/files) change only pins, as a refresh may.
+    const candidateLock = { ...lock, hostPackages: [...lock.hostPackages] };
+    const files: Record<string, string> = { [REFRESH_PATHS[0]!]: JSON.stringify(candidateLock, null, 2) + '\n', [REFRESH_PATHS[1]!]: bundledIdentityModule(candidateLock) };
+    for (const path of REFRESH_PATHS as string[]) {
+      const parts = path.split('/'); parts.pop();
+      mkdirSync(join(root, ...parts), { recursive: true }); mkdirSync(join(root, 'files', ...parts), { recursive: true });
+      writeFileSync(join(root, path), path === REFRESH_PATHS[0] ? JSON.stringify(lock) : 'base identity'); writeFileSync(join(root, 'files', path), files[path]!);
+    }
     writeFileSync(join(root, 'result.json'), JSON.stringify({ changed: true, branch, title: 'build(bwrap): refresh pins (Alpine 3)', paths: REFRESH_PATHS }));
     writeFileSync(join(root, 'PR-BODY.md'), 'retained evidence');
     return { root, out: root, branch, repository: 'example/repo', base: 'main', baseSha: 'a'.repeat(40) };
@@ -103,5 +111,29 @@ describe('bounded PR publication (no live requests)', () => {
     expect((await publish({ ...input, request })).existing).toBe('existing-pr'); expect(calls).toEqual(['GET']);
     writeFileSync(join(input.out, 'result.json'), '{"changed":false}'); calls.length = 0;
     expect(await publish({ ...input, request })).toEqual({ changed: false }); expect(calls).toEqual([]);
+  });
+});
+
+describe('publish re-verifies the candidate written by npm-installed code', () => {
+  function base() {
+    const root = fixture();
+    for (const path of REFRESH_PATHS as string[]) { const parts = path.split('/'); parts.pop(); mkdirSync(join(root, ...parts), { recursive: true }); mkdirSync(join(root, 'files', ...parts), { recursive: true }); }
+    writeFileSync(join(root, REFRESH_PATHS[0]!), JSON.stringify(lock));
+    writeFileSync(join(root, 'result.json'), JSON.stringify({ changed: true, branch: 'build/bwrap-pins-0123456789abcdef', title: 't', paths: REFRESH_PATHS }));
+    writeFileSync(join(root, 'PR-BODY.md'), 'evidence');
+    return { root, out: root, repository: 'example/repo', base: 'main', baseSha: 'a'.repeat(40) };
+  }
+  const never = async () => { throw new Error('no request may be made'); };
+  it('refuses a candidate that changes the build image or source (only pins may change)', async () => {
+    for (const change of [{ buildImage: { ...lock.buildImage, reference: 'alpine@sha256:' + 'f'.repeat(64) } }, { source: { ...lock.source, sha256: 'f'.repeat(64) } }]) {
+      const input = base(), candidateLock = { ...lock, ...change };
+      writeFileSync(join(input.out, 'files', REFRESH_PATHS[0]!), JSON.stringify(candidateLock)); writeFileSync(join(input.out, 'files', REFRESH_PATHS[1]!), bundledIdentityModule(candidateLock));
+      await expect(publish({ ...input, request: never })).rejects.toThrow(/BWRAP_REFRESH_INVALID/u);
+    }
+  });
+  it('refuses a bundled identity module that does not match the candidate lock', async () => {
+    const input = base();
+    writeFileSync(join(input.out, 'files', REFRESH_PATHS[0]!), JSON.stringify(lock)); writeFileSync(join(input.out, 'files', REFRESH_PATHS[1]!), 'export const tampered = 1;\n');
+    await expect(publish({ ...input, request: never })).rejects.toThrow(/bundled identity/u);
   });
 });

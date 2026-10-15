@@ -4,12 +4,25 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REFRESH_PATHS } from './refresh-bwrap.mjs';
+import { bundledIdentityModule } from './build-bwrap.mjs';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+/** Fields a pin refresh may never change: the base checkout is the authority, the candidate (built by npm-installed code) is only data. */
+const INVARIANT = ['schemaVersion', 'component', 'version', 'license', 'licenseNote', 'source', 'sourceDateEpoch', 'buildImage', 'mesonOptions', 'minimumKernel', 'linked', 'setuid', 'shipArches'];
+export function verifiedCandidate(root, out) {
+  const read = path => readFileSync(join(out, 'files', path), 'utf8');
+  const files = Object.fromEntries(REFRESH_PATHS.map(path => [path, read(path)]));
+  const lock = JSON.parse(files[REFRESH_PATHS[0]]), base = JSON.parse(readFileSync(join(root, REFRESH_PATHS[0]), 'utf8'));
+  if (JSON.stringify(Object.keys(lock).sort()) !== JSON.stringify(Object.keys(base).sort())) throw new Error('BWRAP_REFRESH_INVALID: candidate lock keys differ from the base');
+  for (const key of INVARIANT) if (JSON.stringify(lock[key]) !== JSON.stringify(base[key])) throw new Error(`BWRAP_REFRESH_INVALID: ${key} may not change in a pin refresh`);
+  if (files[REFRESH_PATHS[1]] !== bundledIdentityModule(lock)) throw new Error('BWRAP_REFRESH_INVALID: bundled identity does not match the candidate lock');
+  return files;
+}
 export async function publish({ root = ROOT, out, repository, base, baseSha, request }) {
   const result = JSON.parse(readFileSync(join(out, 'result.json'), 'utf8'));
   if (!result.changed) return { changed: false };
   if (!/^[\w.-]+\/[\w.-]+$/u.test(repository) || !/^[a-f0-9]{40}$/u.test(baseSha) || !base) throw new Error('invalid repository/base identity');
   if (!/^build\/bwrap-pins-[a-f0-9]{16}$/u.test(result.branch) || JSON.stringify(result.paths) !== JSON.stringify(REFRESH_PATHS)) throw new Error('invalid refresh branch or paths');
+  const candidate = verifiedCandidate(root, out); // before any request: an invalid candidate makes no call
   const api = `/repos/${repository}`;
   const headOwner = repository.split('/')[0];
   const pulls = await request('GET', `${api}/pulls?state=open&head=${encodeURIComponent(`${headOwner}:${result.branch}`)}&base=${encodeURIComponent(base)}`);
@@ -18,7 +31,7 @@ export async function publish({ root = ROOT, out, repository, base, baseSha, req
   const body = readFileSync(join(out, 'PR-BODY.md'), 'utf8');
   const trees = await request('GET', `${api}/git/commits/${baseSha}`);
   const tree = await request('POST', `${api}/git/trees`, { base_tree: trees.tree.sha,
-    tree: REFRESH_PATHS.map(path => ({ path, mode: '100644', type: 'blob', content: readFileSync(join(root, path), 'utf8') })) });
+    tree: REFRESH_PATHS.map(path => ({ path, mode: '100644', type: 'blob', content: candidate[path] })) });
   const commit = await request('POST', `${api}/git/commits`, { message: title, tree: tree.sha, parents: [baseSha] });
   // Failed PR creation can leave this exact ref. Reconcile only if it names the same tree, never force-update it.
   const refPath = `${api}/git/ref/heads/${result.branch}`;

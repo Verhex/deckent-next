@@ -96,6 +96,8 @@ export function refresh({ root = ROOT, out, execute = run }) {
   writeFileSync(join(out, 'candidate-lock.json'), JSON.stringify(checked, null, 2) + '\n');
   writeFileSync(join(root, REFRESH_PATHS[0]), JSON.stringify(checked, null, 2) + '\n');
   writeFileSync(join(root, REFRESH_PATHS[1]), bundledIdentityModule(checked));
+  // The publish job runs without npm code and reads only these copies (re-verified there against its own checkout).
+  for (const path of REFRESH_PATHS) { mkdirSync(dirname(join(out, 'files', path)), { recursive: true }); cpSync(join(root, path), join(out, 'files', path)); }
   const result = { changed: true, title: `build(bwrap): refresh pins (Alpine ${checked.buildImage.alpineRelease})`,
     branch: `build/bwrap-pins-${sha(JSON.stringify(checked)).slice(0, 16)}`, paths: REFRESH_PATHS };
   writeFileSync(join(out, 'result.json'), JSON.stringify(result, null, 2) + '\n'); return result;
