@@ -74,13 +74,15 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
   let failAt = 1;
   for (; ; failAt++) {
     gate.failAt = failAt; gate.seen = 0;
-    const outcome = await restore(f).then(() => 'completed', (error: { code?: string }) => error.code); gate.failAt = 0;
+    // The cause travels with the code so a platform-specific BACKUP_IO names its real reason in the assertion message (PLATFORM-TEMIZLIK).
+    let cause: unknown;
+    const outcome = await restore(f).then(() => 'completed', (error: { code?: string; cause?: unknown }) => { cause = error.cause; return error.code; }); gate.failAt = 0;
     if (outcome === 'completed') break;
     if (failAt === 1) {
       // The first rename preserves the old config: nothing published yet, so this attempt withdraws its own hold.
-      expect(outcome).toBe('BACKUP_IO'); expect(await present(f.hold)).toBe(false); await startsAndStops(f); continue;
+      expect(outcome, String(cause)).toBe('BACKUP_IO'); expect(await present(f.hold)).toBe(false); await startsAndStops(f); continue;
     }
-    expect(outcome).toBe('BACKUP_RESTORE_INCOMPLETE');
+    expect(outcome, String(cause)).toBe('BACKUP_RESTORE_INCOMPLETE');
     await heldAgainstNormalAdmission(f);
     await restore(f); expect(await present(f.hold)).toBe(false); clearConfigCache();
     await expect(loadConfig(f.root, { env: f.env })).resolves.toMatchObject({ projectRoot: resolve(f.root) });
@@ -96,7 +98,8 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
   await rename(join(f.data, 'artifacts'), join(f.data, 'artifacts-v2')); clearConfigCache(); gate.under = [f.root, f.data];
   // Renames 1–2 publish the restored config (naming artifacts-v2); rename 3 fails while preserving the installation identity.
   gate.failAt = 3; gate.seen = 0;
-  await expect(restore(f)).rejects.toMatchObject({ code: 'BACKUP_RESTORE_INCOMPLETE' }); gate.failAt = 0;
+  const refused = await restore(f).then(() => null, (error: { code?: string; cause?: unknown }) => error); gate.failAt = 0;
+  expect(refused?.code, String(refused?.cause)).toBe('BACKUP_RESTORE_INCOMPLETE');
   await heldAgainstNormalAdmission(f);
   await restore(f); clearConfigCache();
   const reopened = await openConfiguredArtifactStore(f.root, { env: f.env });
@@ -136,7 +139,8 @@ const stagesIn = async (directory: string) => (await readdir(directory)).filter(
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] an interrupted restore stages in the private .deckent area without the decrypted key; doctor names leftovers and the next restore removes them (S1 D4)', async () => {
   const f = await fixture(), key = await readFile(join(f.data, 'approvals/authority.key')), area = join(f.root, '.deckent');
   gate.under = [f.root, f.data]; gate.failAt = 2; gate.seen = 0;
-  await expect(restore(f)).rejects.toMatchObject({ code: 'BACKUP_RESTORE_INCOMPLETE' }); gate.failAt = 0;
+  const refused = await restore(f).then(() => null, (error: { code?: string; cause?: unknown }) => error); gate.failAt = 0;
+  expect(refused?.code, String(refused?.cause)).toBe('BACKUP_RESTORE_INCOMPLETE');
   expect(await stagesIn(f.root)).toEqual([]);
   const [stage] = await stagesIn(area); expect(stage).toMatch(/^\.backup-restore-[0-9a-f-]{36}$/);
   expect((await lstat(join(area, stage!))).mode & 0o777).toBe(0o700);
