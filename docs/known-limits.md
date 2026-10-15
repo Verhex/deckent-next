@@ -42,11 +42,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Credential and home-folder hiding is bounded.** The shared registry covers gh, Docker, kube, Codex, Git credentials and
   common cloud CLIs; hiding stops at depth 3 and 20,000 entries. *Impact:* custom locations and unusual file names are not
   masked. *Workaround:* keep such files out of the home folder the sandbox sees, or isolate separately.
-- **No gate yet stops a secret before work is dispatched to a worker.** The gate is decided and in progress. Prompts persist as
-  task data. *Workaround:* never put credentials into a request, a prompt, `DECKENT.md` or files in the checkout.
-- **Two hardening fixes around MCP and approvals are in progress.** They tighten how MCP-origin requests and approval
-  re-use interact with human-only choices. *Workaround:* keep MCP grants minimal (the default is observation only) and
-  review `/policy`.
+- **The secret gate does not scan Git history.** Before dispatch it scans everything the worker receives (checkout, `.git`
+  metadata, binds, task inputs, prompt context) and refuses on a hit; past commits in the object store are not scanned.
+  Exclusions are configured paths only, audited and shown on the Run card. *Workaround:* remove committed secrets from
+  history and rotate them; never put credentials into a request, a prompt or `DECKENT.md`.
+- **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
+  detected. *Workaround:* keep secrets in a secret store, never in source.
 
 - **An AI agent running on your own operating-system account is not contained by Deckent's approvals.** Approval and
   audit records are sealed with a key stored in your account, the interactive-terminal check proves a terminal rather than

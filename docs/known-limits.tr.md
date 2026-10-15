@@ -41,12 +41,12 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Kimlik bilgisi ve ev dizini gizleme sınırlıdır.** Ortak kayıt gh, Docker, kube, Codex, Git kimlik bilgileri ve yaygın
   bulut CLI'larını kapsar; gizleme 3 derinlikte ve 20.000 girdide durur. *Etki:* özel konumlar ve olağandışı dosya adları
   maskelenmez. *Yol:* böyle dosyaları sandbox'ın gördüğü ev dizininin dışında tutun ya da ayrıca yalıtın.
-- **İş bir işçiye gönderilmeden önce bir sırrı durduran kapı henüz yok.** Kapı kararlaştırıldı ve yapım aşamasında. İstemler
-  görev verisi olarak kalıcıdır. *Yol:* isteğe, istem metnine, `DECKENT.md`'ye ya da çalışma kopyasındaki dosyalara asla
-  kimlik bilgisi koymayın.
-- **MCP ve onaylar çevresinde iki sertleştirme düzeltmesi sürüyor.** MCP kaynaklı isteklerin ve onayın yeniden kullanımının
-  yalnız insanın yapabileceği seçimlerle nasıl etkileştiğini sıkılaştırırlar. *Yol:* MCP izinlerini asgaride tutun
-  (varsayılan yalnız gözlemdir) ve `/policy`'yi gözden geçirin.
+- **Sır kapısı Git geçmişini taramaz.** İş gönderilmeden önce işçinin aldığı her şeyi (çalışma kopyası, `.git` üst verisi,
+  bağlamalar, görev girdileri, istem bağlamı) tarar ve bulursa reddeder; nesne deposundaki eski commit'ler taranmaz. Hariç
+  tutmalar yalnız ayarda yazılı yollardır, denetime yazılır ve Run kartında görünür. *Yol:* geçmişe girmiş sırları
+  geçmişten çıkarın ve değiştirin; isteğe, istem metnine ya da `DECKENT.md`'ye asla kimlik bilgisi koymayın.
+- **Sır kapısının ayar kuralı yalnız ayar türü dosyalara bakar.** Sıradan kaynak koduna yazılmış bir parola yakalanmaz.
+  *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 
 - **Kendi işletim sistemi hesabınızla çalışan bir yapay zekâ ajanı Deckent onaylarıyla sınırlanmaz.** Onay ve denetim
   kayıtları hesabınızda duran bir anahtarla mühürlenir, etkileşimli terminal denetimi bir insanı değil bir terminali
