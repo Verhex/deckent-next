@@ -15,7 +15,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   Node 26 ile çalışır.
   *Etki:* davranışın gözlendiği tek yerler bunlardır.
 - **Desteklenmeyen: native Windows runtime.** Servis taşıması orada çalışmaz ve dosya tabanlı gizli depolar orada yoktur.
-  *Yol:* WSL2 kullanın.
+  İşletim sistemi kullanıcı kimliği okunamaz ve özel ledger dosyaları açılamaz; bu yüzden yedekleme, izleme ekranı, model
+  çağrıları, Brain ve iş kabulü de native Windows'ta çalışmaz. Platform testleri bunları `[unsupported on Windows: …]`
+  etiketiyle atlar; Windows kontrolünün yeşil olması bu parçaların çalıştığı anlamına gelmez. *Yol:* WSL2 kullanın.
 - **macOS'un doğrulaması ayrı ve eksiktir.** Zorunlu kontrollerin parçası değildir. *Etki:* orada yürütme ve güvenlik davranışı
   kanıtsızdır; gerçek iş için buna güvenmeyin.
 - **Terminal ekran düzeni** fiziksel Windows Terminal, macOS Terminal, VS Code terminali ya da tmux'ta **denenmedi.**

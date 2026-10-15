@@ -15,7 +15,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   Node 26.
   *Impact:* these are the only places where behavior has been observed.
 - **Not supported: native Windows runtime.** The service transport does not run there, and the file-based secret stores are
-  not available there. *Workaround:* use WSL2.
+  not available there. The OS-user identity cannot be read and the private ledger files cannot be opened, so backup, the
+  monitor, model calls, the Brain and acceptance do not work natively either. Platform tests skip these with an
+  `[unsupported on Windows: …]` tag, so a green Windows check does not mean these parts work. *Workaround:* use WSL2.
 - **macOS has separate, incomplete verification.** It is not part of the required checks. *Impact:* execution and security
   behavior there is unproven; do not rely on it for real work.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
