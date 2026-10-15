@@ -42,6 +42,11 @@ describe('runtime shutdown contract', () => {
     expect(() => serviceActorSchema.parse({ ...actor, evidence: { ...actor.evidence, method: 'wire-claim' } })).toThrow();
     expect(() => serviceActorSchema.parse({ ...actor, principal: { ...principal, assurance: 'token-verified' } })).toThrow();
     expect(() => serviceActorSchema.parse({ ...actor, evidence: { ...actor.evidence, uid: 1001 } })).toThrow();
+    // MCP-AI-AKTOR: the local MCP actor is the same peer with workload assurance — admitted as itself (policy decides), never as the owner.
+    const mcp = { ...principal, id: 'owner/mcp', issuer: 'installation/mcp', assurance: 'workload-verified' as const };
+    expect(stableShutdownActor(serviceActorSchema.parse({ ...actor, principal: mcp }))).toEqual({ issuer: 'installation/mcp', subject: '1000', assurance: 'workload-verified' });
+    expect(() => serviceActorSchema.parse({ ...actor, principal: { ...principal, assurance: 'workload-verified' } })).toThrow();
+    expect(() => serviceActorSchema.parse({ ...actor, principal: mcp, evidence: { ...actor.evidence, uid: 1001 } })).toThrow();
   });
 
   it('matches replay by canonical command and stable actor while retaining the original audit', () => {

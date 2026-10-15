@@ -1082,7 +1082,7 @@
   "terminal.delivery.verifyWithout": "{mark} Doğrulamasız dala al (bu kurulum izin veriyor; doğrulanmadı olarak kaydedilir)",
   "terminal.delivery.verifyLoading": "Kabul edilmiş doğrulama işleri okunuyor…",
   "terminal.delivery.verifyNone": "Bu kapsamda {kind} türünde kabul edilmiş bir iş henüz yok.",
-  "terminal.delivery.verifyHow": "Bu teslim üzerinde başka bir kabukta oluşturun: deckent run create --scope {scope} --id <iş> --graph <tek {kind} görevi> --delivery-command-id {delivery}; kabul edilince burada r'ye basın.",
+  "terminal.delivery.verifyHow": "Bu teslim üzerinde başka bir kabukta oluşturun: `deckent run create --scope {scope} --id <iş> --graph <tek {kind} görevi> --delivery-command-id {delivery}`; kabul edilince burada r'ye basın.",
   "terminal.delivery.verifyCheck": "Dala alma, seçilen işin tam olarak bu teslim commit'ini güncel profil ve kurulumun ölçütleriyle doğruladığını denetler; değilse reddedilir ve dal taşınmaz.",
   "terminal.delivery.verifyHints": "↑↓ seç · y seçimle dala al · r yeniden oku · n/Esc geri",
   "terminal.delivery.verifyNoneHints": "r yeniden oku · n/Esc geri",

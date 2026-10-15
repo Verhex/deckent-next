@@ -105,11 +105,12 @@ it('a Run incomplete observation is recorded by its lifecycle producer and repla
     f.db.prepare('UPDATE runs SET snapshot=?').run(JSON.stringify(parked));
     const command = { schemaVersion: 1 as const, commandId: 'close-run', scopeId: identity.scopeId, runId: identity.runId, expectedRevision: f.run.revision,
       action: 'close' as const, actor: { ...f.input.actor, assurance: 'os-user' as const }, now: 200, timeoutMs: 1000 };
-    const closed = await f.journal.commitRunLifecycle(command);
+    // MCP-AI-AKTOR: close is a human step; the journal commits it only with its atomic audit writer (the application supplies it).
+    let audited = 0; const closed = await f.journal.commitRunLifecycle(command, () => { audited++; }); expect(audited).toBe(1);
     expect(closed.snapshot.state).toMatchObject({ kind: 'terminal', outcome: 'incomplete' });
     const row = f.db.prepare('SELECT record FROM acceptance_metrics').get();
     expect(JSON.parse(String(row?.record)).metric.outcome).toEqual({ kind: 'run', status: 'incomplete' });
-    expect(await f.journal.commitRunLifecycle(command)).toEqual(closed);
+    expect(await f.journal.commitRunLifecycle(command, () => { audited++; })).toEqual(closed); expect(audited).toBe(1);
     expect(f.db.prepare('SELECT COUNT(*) AS n FROM acceptance_metrics').get()?.n).toBe(1);
   } finally { f.journal.close(); f.db.close(); }
 });

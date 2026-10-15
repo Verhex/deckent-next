@@ -89,7 +89,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
     limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: nativeTimeoutMs } };
   const config = { layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog,
     provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
-    mcp: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConcurrentCalls: 8 },
+    mcp: { inputMaxBytes: 65536, responseMaxBytes: 131072, maxConcurrentCalls: 8 }, // wave tools/list exceeds 64 KiB (INTEGRATION.md)
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
@@ -440,7 +440,7 @@ it.skipIf(process.platform !== 'linux')('rejects an MCP cancellation before effe
     await boundedClient.close().catch(() => undefined); await boundedTransport.close().catch(() => undefined);
   }
 
-  await f.setMcpResponseMaxBytes(65_536);
+  await f.setMcpResponseMaxBytes(131_072);
   const normalTransport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
   const normalClient = new Client({ name: 'runtime-model-invocation-normal-cancellation-proof', version: '1' });
   try {

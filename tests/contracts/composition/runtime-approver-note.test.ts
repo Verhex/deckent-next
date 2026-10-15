@@ -35,9 +35,9 @@ it('gives the model the approver\'s own note through the real service, sealed in
   // The note stays in the sealed decision record (audit), marked as the decider's own words.
   const decisions = (f.rows("SELECT snapshot FROM approvals WHERE subject_kind='agent-tool-call' ORDER BY rowid") as { snapshot: string }[])
     .map(row => (JSON.parse(row.snapshot) as { decision: { schemaVersion: number; reason: string; approverNote?: true } }).decision);
-  // Decision v3 only with the decider's own words; the default-reason decision stays v2 (readable by earlier builds).
-  expect(decisions.map(decision => [decision.schemaVersion, decision.reason, decision.approverNote ?? false])).toEqual([[3, 'read b.ts instead', true],
-    [3, 'only this once', true], [2, 'Denied in the terminal', false]]);
+  // MCP-AI-AKTOR D0: every new decision is v4 (sealed decider class); the approver-note mark stays only on the decider's own words.
+  expect(decisions.map(decision => [decision.schemaVersion, decision.reason, decision.approverNote ?? false])).toEqual([[4, 'read b.ts instead', true],
+    [4, 'only this once', true], [4, 'Denied in the terminal', false]]);
 }, 60_000);
 });
 
