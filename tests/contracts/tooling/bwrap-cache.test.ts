@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, type ExecFileSyncOptions } from 'node:child_process';
-import { chmodSync, closeSync, openSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, openSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 // @ts-expect-error Executable JS tooling has no declaration file.
-import { CACHE_INPUTS, cacheIdentity, restoreBuild, saveBuild, verifyCache } from '../../../scripts/bwrap-cache.mjs';
+import { CACHE_INPUTS, cacheIdentity, licenseInput, restoreBuild, saveBuild, verifyCache } from '../../../scripts/bwrap-cache.mjs';
 
 const roots: string[] = [], repo = fileURLToPath(new URL('../../..', import.meta.url));
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -100,15 +100,19 @@ it.skipIf(process.platform === 'win32')('cache miss errors retain the failing bu
 it('committed license texts match the lock, and a missing or altered text refuses the build before any download or Docker run', () => {
   const lock = JSON.parse(readFileSync(join(repo, 'packaging/bwrap/bwrap.lock.json'), 'utf8'));
   for (const part of lock.linked.filter((part: { licenseText: unknown }) => part.licenseText)) {
-    expect(sha(readFileSync(join(repo, 'packaging/bwrap/licenses', `${part.name}-${part.name === 'musl' ? 'COPYRIGHT' : 'License'}`), 'utf8'))).toBe(part.licenseText.sha256);
+    expect(sha(readFileSync(join(repo, licenseInput(part.name)), 'utf8'))).toBe(part.licenseText.sha256);
   }
+  // Cold cache and an unreachable source URL: reaching the download first would fail with "fetch failed", not the license refusal.
   const f = fixture(), cache = join(f.root, 'downloads'), licenses = join(f.root, 'packaging/bwrap/licenses'); mkdirSync(cache); mkdirSync(licenses);
-  writeFileSync(join(cache, `bubblewrap-${f.lock.version}.tar.xz`), 'source');
+  writeFileSync(join(f.root, 'packaging/bwrap/bwrap.lock.json'), JSON.stringify({ ...f.lock, source: { ...f.lock.source, url: `http://127.0.0.1:9/v${f.lock.version}/unreachable.tar.xz` } }));
   const run = (out: string) => { try { capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--arch', 'x86_64', '--cache', cache, '--out', join(f.root, out)],
     { env: { ...process.env, PATH: '' }, stdio: 'pipe' }); } catch (error) { return String((error as { stderr: Buffer }).stderr); } return expect.unreachable(); };
   expect(run('missing')).toMatch(/vendored license text missing for musl: .*musl-COPYRIGHT; verify https:\/\/git\.musl-libc\.org\//u);
   writeFileSync(join(licenses, 'musl-COPYRIGHT'), 'altered'); writeFileSync(join(licenses, 'libcap-License'), 'libcap');
   expect(run('altered')).toContain(`sha256 mismatch for ${join(licenses, 'musl-COPYRIGHT')}: expected ${sha('musl')}, got ${sha('altered')}`);
+  expect(readdirSync(cache)).toEqual([]);
+  writeFileSync(join(licenses, 'musl-COPYRIGHT'), 'musl');
+  expect(run('download')).toContain('fetch failed');
 });
 it('all build workflows restore exact keys including recipes, verify before use/save, and keep SHA-pinned cache actions', () => {
   for (const name of ['ci', 'bwrap-bundle', 'platform-verification']) {
