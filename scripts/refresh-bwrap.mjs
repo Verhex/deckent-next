@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { BWRAP_ARCHES, bundledIdentityModule, resolvedPackagePins } from './build-bwrap.mjs';
-import { CACHE_INPUTS } from './bwrap-cache.mjs';
+import { CACHE_INPUTS, licenseInput } from './bwrap-cache.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 export const REFRESH_PATHS = Object.freeze(['packaging/bwrap/bwrap.lock.json', 'src/adapters/core/shell-sandbox-bwrap/internal/bundled.ts']);
@@ -76,7 +76,9 @@ export function refresh({ root = ROOT, out, execute = run }) {
   if (JSON.stringify(candidate) === JSON.stringify(lock)) {
     writeFileSync(join(out, 'result.json'), JSON.stringify({ changed: false }) + '\n'); return { changed: false };
   }
-  for (const path of [...CACHE_INPUTS, 'packaging/bwrap/resolve.sh']) {
+  // The scratch driver gets every file it reads from the checkout, including the lock-pinned license texts.
+  const licenses = lock.linked.filter(part => part.licenseText).map(part => licenseInput(part.name));
+  for (const path of [...CACHE_INPUTS, ...licenses, 'packaging/bwrap/resolve.sh']) {
     mkdirSync(dirname(join(scratch, path)), { recursive: true }); cpSync(join(root, path), join(scratch, path));
   }
   mkdirSync(dirname(join(scratch, REFRESH_PATHS[1])), { recursive: true });

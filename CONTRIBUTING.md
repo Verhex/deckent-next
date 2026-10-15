@@ -49,6 +49,7 @@ it replaces an existing `node_modules`. Do not update dependencies just to get s
 If installation reports a lockfile mismatch, include the error in your issue.
 
 The bubblewrap recipe and hashes live in [packaging/bwrap/bwrap.lock.json](packaging/bwrap/bwrap.lock.json).
+Linked license texts are committed in [packaging/bwrap/licenses](packaging/bwrap/licenses) and must match the lock hashes.
 The explicit staging step supplies the sandbox to source-mode tests and the subsequent build.
 Do not use `--record` to bypass a hash mismatch. For another build, choose a new `--out` path.
 A successful build ends with `bubblewrap=present` or `bubblewrap=staged from …`. On Linux a build that cannot stage the locked

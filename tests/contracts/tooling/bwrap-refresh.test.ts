@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error Executable JS tooling has no declaration file.
 import { assertResolved, refresh, refreshedLock, refreshBody, REFRESH_PATHS } from '../../../scripts/refresh-bwrap.mjs';
 // @ts-expect-error Executable JS tooling has no declaration file.
 import { publish } from '../../../scripts/publish-bwrap-refresh.mjs';
+// @ts-expect-error Executable JS tooling has no declaration file.
+import { licenseInput } from '../../../scripts/bwrap-cache.mjs';
 import { bundledIdentityModule } from '../../../scripts/build-bwrap.mjs';
 const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
 const roots: string[] = [];
@@ -45,7 +48,9 @@ describe('candidate pin resolution', () => {
     const root = fixture(), out = join(root, 'evidence'); mkdirSync(join(root, 'packaging/bwrap'), { recursive: true });
     mkdirSync(join(root, 'scripts')); mkdirSync(join(root, 'src/adapters/core/shell-sandbox-bwrap/internal'), { recursive: true });
     const repo = new URL('../../../', import.meta.url);
-    for (const path of ['packaging/bwrap/build.sh', 'packaging/bwrap/resolve.sh', 'scripts/build-bwrap.mjs', 'scripts/bwrap-cache.mjs']) {
+    const licenses = ['packaging/bwrap/licenses/musl-COPYRIGHT', 'packaging/bwrap/licenses/libcap-License'];
+    mkdirSync(join(root, 'packaging/bwrap/licenses'));
+    for (const path of ['packaging/bwrap/build.sh', 'packaging/bwrap/resolve.sh', 'scripts/build-bwrap.mjs', 'scripts/bwrap-cache.mjs', ...licenses]) {
       writeFileSync(join(root, path), readFileSync(new URL(path, repo)));
     }
     writeFileSync(join(root, REFRESH_PATHS[0]), JSON.stringify(lock)); writeFileSync(join(root, REFRESH_PATHS[1]), 'unchanged identity');
@@ -59,6 +64,12 @@ describe('candidate pin resolution', () => {
         for (const [key, lines] of Object.entries(resolved)) writeFileSync(join(mount.slice(0, -5), `${key}-packages.txt`), lines.join('\n'));
       } else {
         expect(args).toContain('all');
+        // The scratch driver resolves its inputs beside itself: every lock-pinned license text must be there, byte-exact.
+        const scratch = dirname(dirname(args[0]!));
+        for (const part of lock.linked.filter((part: { licenseText?: { sha256: string } }) => part.licenseText)) {
+          const text = join(scratch, licenseInput(part.name));
+          expect(createHash('sha256').update(readFileSync(text)).digest('hex')).toBe(part.licenseText.sha256);
+        }
         const dest = args[args.indexOf('--out') + 1]!; mkdirSync(join(dest, 'out/x86_64'), { recursive: true }); mkdirSync(join(dest, 'out/aarch64'));
         writeFileSync(join(dest, 'out/host-packages.txt'), resolved.host!.join('\n'));
         for (const arch of ['x86_64', 'aarch64']) writeFileSync(join(dest, `out/${arch}/sysroot-packages.txt`), resolved[`sysroot-${arch}`]!.join('\n'));

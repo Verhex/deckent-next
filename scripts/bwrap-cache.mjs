@@ -5,6 +5,8 @@ import { join } from 'node:path';
 
 export const CACHE_INPUTS = Object.freeze(['packaging/bwrap/bwrap.lock.json', 'packaging/bwrap/build.sh',
   'scripts/build-bwrap.mjs', 'scripts/bwrap-cache.mjs']);
+/** A linked part's committed license text; pinned by the lock's hash, so it is a driver input but not part of the cache key. */
+export const licenseInput = name => `packaging/bwrap/licenses/${name}-${name === 'musl' ? 'COPYRIGHT' : 'License'}`;
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 export function cacheIdentity(root, arches) {
   return { schemaVersion: 1, arches, inputs: Object.fromEntries(CACHE_INPUTS.map(path => [path, sha(readFileSync(join(root, path)))])) };

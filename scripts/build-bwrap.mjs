@@ -12,7 +12,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, r
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { restoreBuild, saveBuild, verifyCache } from './bwrap-cache.mjs';
+import { licenseInput, restoreBuild, saveBuild, verifyCache } from './bwrap-cache.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PACKAGING = join(ROOT, 'packaging', 'bwrap');
@@ -37,6 +37,15 @@ async function verifiedFile(url, expected, path) {
   }
   const actual = sha256(readFileSync(path));
   if (actual !== expected) throw new Error(`sha256 mismatch for ${url}: expected ${expected}, got ${actual} (${path})`);
+  return path;
+}
+
+/** Linked license texts are committed next to the lock (its URL records where they were verified), so a build never waits on a third-party git web host. */
+function vendoredLicense(part) {
+  const path = join(ROOT, licenseInput(part.name));
+  if (!existsSync(path)) throw new Error(`vendored license text missing for ${part.name}: ${path}; verify ${part.licenseText.url} and commit it`);
+  const actual = sha256(readFileSync(path));
+  if (actual !== part.licenseText.sha256) throw new Error(`sha256 mismatch for ${path}: expected ${part.licenseText.sha256}, got ${actual}`);
   return path;
 }
 
@@ -168,15 +177,12 @@ async function main() {
   if (reuse && restoreBuild(cachedBuild, out, ROOT, lock, arches)) {
     process.stdout.write('build-bwrap: verified cache hit; no Docker or Alpine access\n'); return;
   }
+  const texts = Object.fromEntries(lock.linked.filter(entry => entry.licenseText).map(part => [part.name, vendoredLicense(part)]));
   mkdirSync(cache, { recursive: true }); mkdirSync(join(out, 'in'), { recursive: true }); mkdirSync(join(out, 'out'), { recursive: true });
 
   const tarball = `bubblewrap-${lock.version}.tar.xz`;
   copyFileSync(await verifiedFile(lock.source.url, lock.source.sha256, join(cache, tarball)), join(out, 'in', tarball));
   copyFileSync(join(PACKAGING, 'build.sh'), join(out, 'in', 'build.sh'));
-  const texts = {};
-  for (const part of lock.linked.filter(entry => entry.licenseText)) {
-    texts[part.name] = await verifiedFile(part.licenseText.url, part.licenseText.sha256, join(cache, `${part.name}-${part.version}-license.txt`));
-  }
 
   const uid = process.getuid?.() ?? 0, gid = process.getgid?.() ?? 0;
   const env = { BWRAP_VERSION: lock.version, SOURCE_DATE_EPOCH: lock.sourceDateEpoch, HOST_PACKAGES: lock.hostPackages.join(' '),
