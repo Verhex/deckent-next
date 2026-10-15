@@ -522,6 +522,7 @@ deckent --help                            # every command; deckent <command> --h
 ## Learn more
 
 - [Architecture overview](docs/architecture-overview.md): layers, security, extension points and current limits
+- [Policy and AI](docs/policy-and-ai.md): human and AI authority, delegation, administration commands and compliance evidence
 - [Glossary](docs/glossary.md): scope, realm, work lifecycle, approvals and spending
 - [Known limits](docs/known-limits.md): what is not tried, not built or still open, with the impact and a workaround
 - [ARCHITECTURE.md](ARCHITECTURE.md): detailed engineering contracts and implementation notes (English/Turkish)
