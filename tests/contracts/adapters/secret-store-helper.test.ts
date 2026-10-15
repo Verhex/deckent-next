@@ -34,9 +34,14 @@ it.skipIf(!supported)('success: exact name over stdin, no secret or inherited en
   const f = await fixture(`require('node:fs').writeSync(1, JSON.stringify({ name, argv: process.argv.slice(2), env: process.env, cwd: process.cwd() }) + '\\n');`);
   // Registration snapshots arguments; later edits of the registrant's mutable object cannot change the selected command.
   (f.options.args as string[])[0] = join(f.root, 'unregistered-command.cjs');
-  const value = JSON.parse((await f.store.get('PROVIDER_TOKEN'))!);
-  expect(value).toEqual({ name: 'PROVIDER_TOKEN\n', argv: [], env: {}, cwd: f.root });
-  expect(JSON.stringify(value)).not.toContain(CANARY);
+  const raw = (await f.store.get('PROVIDER_TOKEN'))!, value = JSON.parse(raw);
+  expect(raw).not.toContain(CANARY);
+  // The helper starts with an empty environment. On macOS, CoreFoundation inside the child process itself sets __CF_USER_TEXT_ENCODING
+  // ("0x<uid>:0x<encoding>:0x<region>") at startup, so only there, and only in that exact form, it is not an inherited variable.
+  const { __CF_USER_TEXT_ENCODING: encoding, ...env } = value.env as Record<string, string>;
+  if (process.platform === 'darwin' && encoding !== undefined) expect(encoding).toMatch(/^0x[0-9A-F]+:0x[0-9A-F]+:0x[0-9A-F]+$/iu);
+  else expect(encoding).toBeUndefined();
+  expect({ ...value, env }).toEqual({ name: 'PROVIDER_TOKEN\n', argv: [], env: {}, cwd: f.root });
   await writeFile(f.script, `require('node:fs').readFileSync(0); require('node:fs').writeSync(1, '${CANARY}\\r\\n');`);
   expect(await f.store.get('PROVIDER_TOKEN')).toBe(CANARY);
   await writeFile(f.script, `require('node:fs').readFileSync(0); require('node:fs').writeSync(1, 'rotated-synthetic');`);
