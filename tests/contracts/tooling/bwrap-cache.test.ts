@@ -87,7 +87,8 @@ it('the real driver consumes a verified hit without Docker, network or an execut
 it.skipIf(process.platform === 'win32')('cache miss errors retain the failing build log and identify the refresh path; no implicit retry', () => {
   const f = fixture(), cache = join(f.root, 'downloads'), bin = join(f.root, 'bin'); mkdirSync(cache); mkdirSync(bin);
   writeFileSync(join(cache, `bubblewrap-${f.lock.version}.tar.xz`), 'source');
-  for (const part of f.lock.linked.filter((part: { licenseText: unknown }) => part.licenseText)) writeFileSync(join(cache, `${part.name}-${part.version}-license.txt`), part.name);
+  mkdirSync(join(f.root, 'packaging/bwrap/licenses'));
+  for (const [name, content] of [['musl-COPYRIGHT', 'musl'], ['libcap-License', 'libcap']]) writeFileSync(join(f.root, 'packaging/bwrap/licenses', name!), content!);
   writeFileSync(join(bin, 'docker'), '#!/bin/sh\necho vanished-apk >&2\nexit 42\n'); chmodSync(join(bin, 'docker'), 0o755);
   const out = join(f.root, 'miss');
   try { capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--reuse', '--arch', 'x86_64', '--cache', cache, '--out', out],
@@ -95,6 +96,19 @@ it.skipIf(process.platform === 'win32')('cache miss errors retain the failing bu
   catch (error) { expect(String((error as { stderr: Buffer }).stderr)).toContain('BWRAP_BUILD_FAILED: cache miss build failed. If Alpine pins vanished, run the platform verification deps-watch refresh'); }
   expect(readFileSync(join(out, 'build.log'), 'utf8')).toContain('vanished-apk');
   expect(existsSync(join(cache, 'build-x86_64'))).toBe(false);
+});
+it('committed license texts match the lock, and a missing or altered text refuses the build before any download or Docker run', () => {
+  const lock = JSON.parse(readFileSync(join(repo, 'packaging/bwrap/bwrap.lock.json'), 'utf8'));
+  for (const part of lock.linked.filter((part: { licenseText: unknown }) => part.licenseText)) {
+    expect(sha(readFileSync(join(repo, 'packaging/bwrap/licenses', `${part.name}-${part.name === 'musl' ? 'COPYRIGHT' : 'License'}`), 'utf8'))).toBe(part.licenseText.sha256);
+  }
+  const f = fixture(), cache = join(f.root, 'downloads'), licenses = join(f.root, 'packaging/bwrap/licenses'); mkdirSync(cache); mkdirSync(licenses);
+  writeFileSync(join(cache, `bubblewrap-${f.lock.version}.tar.xz`), 'source');
+  const run = (out: string) => { try { capture(process.execPath, [join(f.root, 'scripts/build-bwrap.mjs'), '--arch', 'x86_64', '--cache', cache, '--out', join(f.root, out)],
+    { env: { ...process.env, PATH: '' }, stdio: 'pipe' }); } catch (error) { return String((error as { stderr: Buffer }).stderr); } return expect.unreachable(); };
+  expect(run('missing')).toMatch(/vendored license text missing for musl: .*musl-COPYRIGHT; verify https:\/\/git\.musl-libc\.org\//u);
+  writeFileSync(join(licenses, 'musl-COPYRIGHT'), 'altered'); writeFileSync(join(licenses, 'libcap-License'), 'libcap');
+  expect(run('altered')).toContain(`sha256 mismatch for ${join(licenses, 'musl-COPYRIGHT')}: expected ${sha('musl')}, got ${sha('altered')}`);
 });
 it('all build workflows restore exact keys including recipes, verify before use/save, and keep SHA-pinned cache actions', () => {
   for (const name of ['ci', 'bwrap-bundle', 'platform-verification']) {
