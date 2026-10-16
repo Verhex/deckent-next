@@ -219,6 +219,11 @@ describe('config-secret: the key-value vocabulary narrowed to config-like files 
       'i.yml': `env:\n  API_TOKEN: \${{ secrets.PREFIX }}\n    ${PASSWORD}\n`,
       'j.yml': 'env:\n  API_TOKEN: ${{ secrets.A }}\n  OTHER_TOKEN: ${{ secrets.B }}   # sibling\n\n  # note\nnext: 1\n' }))
       .toEqual(['g.yml pattern:config-secret', 'h.yml pattern:config-secret', 'i.yml pattern:config-secret']);
+    // Mixed line breaks use one definition (Astra 2590); an expression is a reference only to a GitHub context, never a bare literal.
+    expect(await scanOf({ 'k.yml': `root:\n    other: value\rAPI_TOKEN: \${{ secrets.PREFIX }}\n  ${PASSWORD}\n`,
+      'l.yml': 'API_TOKEN: ${{ 12345678901234567890 }}\n', 'm.yml': 'API_TOKEN: ${{ hunter2hunter2 }}\n',
+      'n.yml': 'GITHUB_TOKEN: ${{ github.token }}\r\nNPM_TOKEN: ${{ secrets.NPM_TOKEN }}\rnext: 1\n' }))
+      .toEqual(['k.yml pattern:config-secret', 'l.yml pattern:config-secret', 'm.yml pattern:config-secret']);
   });
 });
 

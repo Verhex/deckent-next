@@ -53,7 +53,8 @@ function blockValue(text: string, end: number): string | null {
 }
 /** Whether the line after an assignment is indented deeper than the assignment's own line (a YAML plain-scalar continuation). */
 function continuesScalar(text: string, start: number, end: number): boolean {
-  const lineStart = text.lastIndexOf('\n', start - 1) + 1, indent = /^[ \t]*/u.exec(text.slice(lineStart))![0].length;
+  // One line-break definition (CRLF, CR, LF; YAML 1.2.2 §5.4) for the line start, the following lines and the value end.
+  const before = text.slice(0, start), indent = /^[ \t]*/u.exec(text.slice(Math.max(before.lastIndexOf('\n'), before.lastIndexOf('\r')) + 1))![0].length;
   const next = text.slice(end).split(/\r\n|\r|\n/u).slice(1).find(line => line.trim() !== '');
   return next !== undefined && /^[ \t]*/u.exec(next)![0].length > indent && !next.trim().startsWith('#');
 }
