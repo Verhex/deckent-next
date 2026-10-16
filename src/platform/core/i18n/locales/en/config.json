@@ -51,5 +51,5 @@
   "config.panel.invalid": "That value does not fit; expected: {expected}. Nothing was sent.",
   "config.field.backup": "Backup frequency and recovery-set retention",
   "config.field.audit": "Audit checkpoint schedule and bounded verification settings",
-  "config.field.targetQueue": "Target queue capacity, per-target backlog, active targets, batch/chain size, collection window, lease, ticket TTL, verification timeout, revalidation budget and candidate slots. Durations are milliseconds; bounds are installation policy, not measured capacity."
+  "config.field.targetQueue": "Target queue capacity, per-target backlog, active targets, batch/chain size, collection window, lease, ticket TTL, verification timeout, revalidation budget and candidate slots. Durations are milliseconds; bounds are installation policy, not measured capacity. The queue never targets main, master, the default branch or a branch listed in execution.adoption.protectedTargets, even when it is in adoption.targets."
 }

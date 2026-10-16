@@ -533,7 +533,7 @@
   "config.field.layout": "Kalıcı veri kökü ve kayıtlı kaynak yolları; başlangıç konfigürasyonu sabit kalır.",
   "config.field.storage": "Depolama sürücüsü ve sınırlı SQLite seçenekleri",
   "config.field.artifacts": "Saklanan artifact için bayt cinsinden azami boyut",
-  "config.field.execution": "Sabit Docker ve Git yürütme ayarları; Docker memoryBytes, cpus ve pids her yeni Run profilini kabulde sınırlar. Null yürütmeyi kapatır. adoption.protectedTargets, adoption.targets içinde olsa bile teslim kuyruğunun asla taşımayacağı ek dalları listeler; main, master ve varsayılan dal her zaman reddedilir.",
+  "config.field.execution": "Sabit Docker ve Git yürütme ayarları; Docker memoryBytes, cpus ve pids her yeni Run profilini kabulde sınırlar. Null yürütmeyi kapatır.",
   "config.field.operations": "Operasyon kataloğu ve etki hedefleri (politika verisi); varsayılan boş, tanımlanmadan hiçbir operasyon çalışmaz",
   "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları",
   "config.field.toolchains": "Worker toolchain güncelliği ve imaj yenileme: güncellik sorgusu (registry uç noktası, sınırlar) ve güncelleme politikası (mode off/propose/auto, build sınırları, servis açılışında denetim, ms cinsinden periyodik denetim aralığı, 0 = kapalı). Varsayılan: açılışta ve 24 saatte bir otomatik yenileme; çalışan Run'lar imajını korur Elle çalıştırılan `toolchains update` her modda --apply verilmedikçe yalnız önizler (off kapatır); çalışan servisin worker imajını kendiliğinden yenilemesini sağlayan `auto`'dur.",
