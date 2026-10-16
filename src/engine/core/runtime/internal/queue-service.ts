@@ -113,7 +113,8 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
             const admitted = await c.app.submit(targetQueueRequestSchema.parse({ schemaVersion: 1, commandId: command.commandId, identity: command.identity, target,
               actor: { id: c.principal.id, issuer: c.principal.issuer, subject: c.principal.subject }, payloadDigest, policyRevision: c.document.revision, ...(command.replacesCommandId ? { replacesCommandId: command.replacesCommandId } : {}),
               outputDigest: accepted.outputDigest, acceptedRevision: accepted.acceptedRevision, submittedAt: now, deadline: now + c.config.targetQueue.ttlMs }), c.principal);
-            await (await ports.effects(c, undefined, async () => { throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED'); })).fence(admitted.request.target, instanceId, Math.max(1, c.queue.epoch(admitted.key)));
+            // No physical generation here (Astra 2607 F1/F2): a queued ticket has no durable owner or epoch yet. The generation is
+            // written only with an owner/epoch the ledger recorded first (reservation, recovery), by the consented execution or recovery.
             return view(admitted);
           }
           if (request.operation === 'listTargetQueue') { const query = queueListSchema.parse(input); return { schemaVersion: 1, records: await Promise.all((await c.app.list(scopeId, query.after, query.limit, c.principal)).map(view)) }; }

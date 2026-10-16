@@ -31,7 +31,7 @@ describe('queue service ingress', () => {
       const first = await service.execute(request, { pid: 42, uid: 1000 }, 8192);
       expect(first).toMatchObject({ commandId: 'queue', target: binding.target, state: 'queued', position: 1 });
       expect(await service.execute(request, { pid: 42, uid: 1000 }, 8192)).toMatchObject({ commandId: 'queue', state: 'queued' });
-      expect(accepted).toHaveBeenCalledOnce(); expect(fence).toHaveBeenCalledOnce();
+      expect(accepted).toHaveBeenCalledOnce(); expect(fence).not.toHaveBeenCalled(); // admission writes nothing to the target (Astra 2607 F1/F2)
       expect(queue.load('s', 'queue')?.request).toMatchObject({ actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, acceptedRevision: 7, outputDigest: 'c'.repeat(64) });
     } finally { db.close(); }
   });
