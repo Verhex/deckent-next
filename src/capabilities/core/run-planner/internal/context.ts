@@ -3,7 +3,7 @@ import type { BrainPlannerConfig } from '../index.js';
 export interface BrainRegistryContext {
   readonly schemaVersion: 2;
   readonly registryRevision: string;
-  readonly kinds: readonly Readonly<{ kind: string; profile: { id: string; version: number }; type: 'template' | 'prepared'; provider?: string }>[];
+  readonly kinds: readonly Readonly<{ kind: string; profile: { id: string; version: number }; type: 'template' | 'prepared'; provider?: string; turnLimit?: 'supported' | 'unsupported' }>[];
   readonly evaluators: readonly Readonly<{ id: string; version: number; parameters: unknown }>[];
   readonly workerModels: readonly Readonly<{ profile: { id: string; version: number }; channelId: string; modelId: string;
     auxiliaryModelIds: readonly string[]; availableAuxiliaryModelIds: readonly string[]; billing: string | null; efforts: readonly string[] }>[];

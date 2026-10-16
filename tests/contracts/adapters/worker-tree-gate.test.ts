@@ -203,6 +203,11 @@ describe('config-secret: the key-value vocabulary narrowed to config-like files 
       'empty-block.yaml pattern:config-secret', 'escaped.json pattern:config-secret', 'wide.properties pattern:config-secret', 'wider.conf pattern:config-secret']);
     expect(await scanOf({ 'block.yml': 'password: |\n  ${DB_PASSWORD}\n' })).toEqual(['clean']);
   });
+  it('a GitHub Actions expression is a reference resolved at run time, not a literal; a quoted literal inside one is still a value', async () => {
+    // Live /do 2026-10-16: `GITHUB_TOKEN: ${{ github.token }}` in .github/workflows refused every worker tree of this repository.
+    expect(await scanOf({ '.github/workflows/ci.yml': 'env:\n  GITHUB_TOKEN: ${{ github.token }}\n  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n' })).toEqual(['clean']);
+    expect(await scanOf({ '.github/workflows/ci.yml': `env:\n  API_TOKEN: \${{ '${PASSWORD}' }}\n` })).toEqual(['.github/workflows/ci.yml pattern:config-secret']);
+  });
 });
 
 describe('parser parity: what the gate cannot read the way the worker can is refused', () => {

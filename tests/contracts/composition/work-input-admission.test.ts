@@ -9,6 +9,7 @@ import { applyModelCatalog, createConfiguredRuntimeClient, createRun, inspectRun
 import { inspectMonitor } from '#composition/index.js';
 import { runCommand } from '../../../src/surfaces/core/cli/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { classifyConfiguredRunSpending } from '../../../src/composition/core/runs/index.js';
 import { admittedToolchains } from '../../../src/engine/core/toolchain-currency/index.js';
 import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, FileArtifactStore, nativeCodingTemplateBase, openSqliteAttemptStore } from '#adapters/index.js';
 import { encodeExecutionProfileDefinition, readWorkerModelPin, validateTaskGraph, TASK_GRAPH_SCHEMA_VERSION, type AttemptIdentity } from '#domain/index.js';
@@ -177,6 +178,12 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     expect(created.admission.run.runId).toBe('effort-ok');
     expect(f.snapshotProfile('effort-ok').tasks[0]!.profile.parameters.argv).toContain('--effort');
     expect(f.snapshotProfile('effort-ok').tasks[0]!.profile.parameters.nativeSubscription).toMatchObject({ reasoningEffort: { level: 'high', source: 'explicit', status: 'selected' } });
+  });
+
+  it('a proposal\'s spending classification refuses an unsupported turn limit typed, as creation does (live /do 2026-10-16 QUERY_UNEXPECTED_FAILURE)', async () => {
+    const f = await seeded();
+    const proposal = { graph: graph('codex-coding', workInput('gpt-exact-1', { maxTurns: 5 }, []), 3) } as unknown as Parameters<typeof classifyConfiguredRunSpending>[1];
+    await expect(classifyConfiguredRunSpending(f.project, proposal, f.options)).rejects.toMatchObject({ code: 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' });
   });
 
   it.each(['codex', 'cursor'] as const)('admits %s through the real catalog with exact argv and refuses undeclared effort before Run effects', async provider => {

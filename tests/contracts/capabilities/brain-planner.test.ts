@@ -32,6 +32,22 @@ it('asks for and enforces the current graph version so typed work input is never
   // Stored-proposal source verification keeps reading a valid older graph (no rejection after an upgrade).
   expect(parseBrainDraft(older).graph.schemaVersion).toBe(3);
 });
+it('offers workInput.maxTurns only when a supplied kind\'s worker supports a turn limit (live /do 2026-10-16: maxTurns on a Codex worker)', () => {
+  const schemaFor = (context: unknown) => JSON.stringify(JSON.parse(prepareBrainPrompt(command, CORE_WORK_CLASSES, context, {}).messages[1]!.content).schema);
+  const kind = (turnLimit: 'supported' | 'unsupported') => ({ kind: 'coding', profile: { id: 'p', version: 1 }, type: 'template', provider: 'x', turnLimit });
+  expect(schemaFor({ kinds: [kind('unsupported')] })).not.toContain('"maxTurns"');
+  expect(schemaFor({ kinds: [kind('unsupported'), { ...kind('supported'), kind: 'other' }] })).toContain('"maxTurns"');
+  // A context without the capability field (older callers, prepared kinds only) keeps today's schema: no new refusal is introduced here.
+  expect(schemaFor({})).toContain('"maxTurns"');
+  expect(schemaFor({ kinds: [{ kind: 'ops', profile: { id: 'q', version: 1 }, type: 'prepared' }] })).toContain('"maxTurns"');
+});
+it('reads a reply that is exactly one Markdown code fence around the object; any other wrapping stays a json-stage failure', () => {
+  const body = JSON.stringify(draft);
+  expect(parseBrainDraft('```json\n' + body + '\n```')).toEqual(parseBrainDraft(body));
+  expect(parseBrainDraft('  ```\n' + body + '\n```\n')).toEqual(parseBrainDraft(body));
+  for (const input of ['Here is the plan:\n```json\n' + body + '\n```', '```json\n' + body, body + '\ntrailing text'])
+    expect(() => parseBrainDraft(input)).toThrow(expect.objectContaining({ code: 'BRAIN_OUTPUT_INVALID', params: { stage: 'json' } }));
+});
 it.each(['missing', 'duplicate'])('refuses %s selected template instead of fallback', kind => {
   const row = { id: 'missing', version: 1, instruction: 'Propose', summaryChars: 200 };
   expect(() => prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'missing', version: 1 }, templates: kind === 'missing' ? [{ ...row, version: 2 }] : [row, row] }))

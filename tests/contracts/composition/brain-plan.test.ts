@@ -56,7 +56,7 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_OUTPUT_INVALID' });
     const context = JSON.parse(f.bodies[0]!).messages[1];
     const projection = JSON.parse(context.content).context.context;
-    expect(projection.kinds).toEqual([{ kind: 'purchase', profile: { id: 'fixture-docker', version: 1 }, type: 'template', provider: 'claude' }]);
+    expect(projection.kinds).toEqual([{ kind: 'purchase', profile: { id: 'fixture-docker', version: 1 }, type: 'template', provider: 'claude', turnLimit: 'supported' }]);
     expect(projection.workerModels).toHaveLength(1);
     expect(projection.workerModels[0]).toMatchObject({ channelId: 'claude-cli-subscription', modelId: 'claude-sonnet-5-5',
       auxiliaryModelIds: [], availableAuxiliaryModelIds: ['claude-sonnet-5-5'], billing: 'subscription' });
