@@ -37,7 +37,10 @@ describe.skipIf(process.platform !== 'linux')('runtime observation transport (le
     const server = await startLocalRuntimeSocketServer(options, async (request, _peer, _stream, _turn, subscription) => {
       if (request.operation === 'subscribeEvents') {
         await subscription!.send(ready, 1000);
-        await new Promise<void>(resolve => { subscription!.signal.addEventListener('abort', () => { closed(); resolve(); }, { once: true }); });
+        // The request is half-closed, so a peer that goes away is seen at the server's next write: the application's heartbeat
+        // (service.events.heartbeatMs) bounds that. This handler stands in for it; without any write the server cannot observe the cancel.
+        const beat = setInterval(() => { void subscription!.send({ type: 'heartbeat', resume, observedAt: 1, freshness: 'current' }, 1000).catch(() => undefined); }, 25);
+        await new Promise<void>(resolve => { subscription!.signal.addEventListener('abort', () => { clearInterval(beat); closed(); resolve(); }, { once: true }); });
       }
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result: { runRevision } };
     });
