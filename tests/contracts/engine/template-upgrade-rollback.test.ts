@@ -7,7 +7,9 @@ import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, ope
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { ApprovalApplication, PolicyAdministrationApplication, PolicyTemplateUpgrade, upgradePolicyTemplate } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { createHmacIntegrity, sha256 } from '#platform/index.js';
+import { effectWireKey } from '#engine/core/effect/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, policyChangeSchema, policyGrantSchema } from '#domain/index.js';
 
 const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
 const deltaIds = ['first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt'];
@@ -106,6 +108,24 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12: a v11 delta the installer a
     expect(await other.rollback()).toMatchObject({ status: 'nothing-to-roll-back', conflicts: deltaIds });
     expect(await other.bytes()).toBe(before); expect(other.cards).toBe(0);
   }
+});
+
+it.skipIf(process.platform !== 'linux')('POLICY-V12 option A: a governed v11 upgrade submitted before the plan carried the v12 rules stays rollbackable', async () => {
+  const v12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+  const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+  const older = { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id) && !v12.includes(rule.id)) };
+  await f.source.updateAuthority(() => ({ write: { policy: older, bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+  // The key the governed chain wrote then: its plan was exactly the v11 delta (no v12 rules), bound by the effect wire key.
+  const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id));
+  const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
+  const tag = `template-v5:${deltaIds.join(',')}`;
+  // The governed chain binds the resolved (policy + bindings) revision it read.
+  const resolved = 'a-older+first-run-template-v12-bindings';
+  const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
+  const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+    target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
+  await f.source.updateAuthority(() => ({ write: { policy: { ...older, revision: 'a-governed', grants: [...older.grants, ...rules] }, bindings: null, order: 'policy-first' }, result: null }), key);
+  expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
 });
 
 it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, detects changed-then-restored content, and refuses missing history without a card or write', async () => {

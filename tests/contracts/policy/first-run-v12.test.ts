@@ -56,22 +56,36 @@ it('F1: only the named owner may shut down exactly this service in this scope; t
   await expect(service(built.policy).authorize({ ...target, serviceId: 'another-service' }, owner)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
 
-it('exact v11 upgrades to v12 (also naming a configured service id); edited and hand-built policies are not given the v12 rules by any add-only plan', () => {
+it('exact v11 upgrades to v12 (also naming a configured service id); edited and hand-built v11 policies get exactly the two rules add-only (option A)', () => {
   expect(upgradeFirstRunPolicy(v11, input)).toEqual({ status: 'upgrade', from: 11, policy: built.policy });
   const configured = firstRunPolicyTemplate({ ...input, serviceId: 'configured' }).policy;
   expect(upgradeFirstRunPolicy(v11, { ...input, serviceId: 'configured' })).toEqual({ status: 'upgrade', from: 11, policy: configured });
   expect(upgradeFirstRunPolicy(built.policy, input)).toEqual({ status: 'current' });
   // Another person's or another scope's exact v11 is not this installation's template.
   expect(upgradeFirstRunPolicy(v11, { ...input, principal: { issuer: 'host', subject: 'colleague' } })).toEqual({ status: 'unavailable', reason: 'not-v4-template' });
-  // A hand-edited v11 (one extra rule) is refused by the exact path and the add-only plans never carry a v12 rule (owner 2026-10-16 scope).
+  // A hand-edited v11 (one extra rule) is refused by the exact path; the add-only plans (owner 2026-10-16 option A) add exactly the two rules.
   const edited = { ...v11, revision: 'a-edited', grants: [...v11.grants, { id: 'extra', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [person],
     resource: { kind: 'agent-tool', ids: ['fetch_url'] } }] };
   expect(upgradeFirstRunPolicy(edited, input)).toEqual({ status: 'unavailable', reason: 'not-v4-template' });
   const handBuilt = { ...edited, grants: edited.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
-  for (const plan of [firstRunTemplateAdditions(edited, { ...names, person }), namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' })]) {
-    expect(plan.status).not.toBe('unavailable');
-    expect(plan.status === 'plan' ? plan.rules.map(rule => rule.id).filter(id => v12ids.includes(id)) : []).toEqual([]);
+  const v12rules = built.policy.grants.filter(rule => v12ids.includes(rule.id));
+  for (const [plan, current] of [[firstRunTemplateAdditions(edited, { ...names, person }), edited], [namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' }), handBuilt]] as const) {
+    expect(plan.status).toBe('plan'); if (plan.status !== 'plan') throw new Error('missing v12 plan');
+    expect(plan.rules).toEqual(v12rules); expect(plan.conflicts).toEqual([]);
+    expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
+    // Applied, a second plan is current; a configured service id is the one named.
+    const applied = { ...current, grants: [...current.grants, ...plan.rules] };
+    expect(firstRunTemplateAdditions(applied, { ...names, person }).status === 'unavailable' ? namedPersonPolicyAdditions(applied, { ...names, person, scopeId: 'installation' }).status
+      : firstRunTemplateAdditions(applied, { ...names, person }).status).toBe('current');
   }
+  const named = firstRunTemplateAdditions(edited, { ...names, person, serviceId: 'configured' });
+  expect(named.status === 'plan' ? named.rules.find(rule => rule.id === v12ids[1])?.resource : null).toEqual({ kind: 'service', ids: ['configured'] });
+  // Never for the MCP actor or a person the policy does not name; a rule that already covers the service stop is not duplicated.
+  expect(firstRunTemplateAdditions(edited, { ...names, person: mcpPrincipalRef(person) })).toEqual({ status: 'unavailable', reason: 'not-this-person' });
+  expect(namedPersonPolicyAdditions(handBuilt, { ...names, person: { issuer: 'host', subject: 'colleague' }, scopeId: 'installation' })).toEqual({ status: 'unavailable', reason: 'person-not-named' });
+  const covered = { ...edited, grants: [...edited.grants, { id: 'own-stop', effect: 'allow', actions: ['shutdown'], scopes: ['installation'], principals: [person], resource: { kind: 'service', ids: 'all' } }] };
+  const partial = firstRunTemplateAdditions(covered, { ...names, person });
+  expect(partial.status === 'plan' ? partial.rules.map(rule => rule.id) : []).toEqual([v12ids[0]]);
   // The rollback delta stays v11's: the v12 owner rules are never removed by `policy upgrade --template current --rollback`.
   expect(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => v12ids.includes(id))).toBe(false);
   expect(firstRunTemplateRollback(built.policy, person).rules.map(rule => rule.id).some(id => v12ids.includes(id))).toBe(false);

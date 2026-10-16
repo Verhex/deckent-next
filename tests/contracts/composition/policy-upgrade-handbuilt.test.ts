@@ -7,6 +7,7 @@ import { evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 import { decideAgentToolCall } from '#engine/index.js';
 import { main } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { clearConfigCache } from '#platform/index.js';
 
 // POLICY-UPGRADE-HANDBUILT (lead 2026-10-08, Jev b6dba079): the live and N1 installations run a hand-built policy (`live-read-tools`, no
 // first-run read rule), so both upgrade commands refused them and MCP calls (decided on `mcp-server` since alpha.11) were denied. The installer
@@ -106,6 +107,9 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       grant('first-run-quota-release', 'pool', ['release-quota'], 'all', { scopes: 'all' }),
       grant('first-run-integration', 'attempt', ['prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'], 'all'),
       grant('first-run-work-target-adopt', 'work-target', ['adopt'], 'all'),
+      // v12 (option A): the hand-built `live-scope` already covers scope inspection; its `local` stop rule names another service than the one
+      // configured here (the fresh install's `live-runtime`), so only the service stop is added.
+      grant('first-run-service-shutdown', 'service', ['shutdown'], [`${SCOPE}-runtime`]),
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -157,7 +161,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; rules: { id: string }[] };
     expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 12 } });
-    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt']);
+    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
     expect(await main([...argv, '--apply', '--expect', preview.revision], context)).toBe(0); expect(errors).toEqual([]);
@@ -231,5 +235,52 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(await upgradePolicyTemplateInstallation(root, SCOPE, true, 'first-run-template-v4')).toMatchObject({ status: 'upgraded' });
     expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
     expect(await upgradePolicyTemplateInstallation(root, SCOPE, true, undefined, {}, process.getuid?.(), owner)).toMatchObject({ status: 'current', basis: 'first-run' });
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('POLICY-V12 option A (owner 2026-10-16): the add-only plan carries the v12 owner rules', () => {
+  it('POLICY-V12 option A: a live-read-tools shape already at v11 gets exactly the two owner rules (preview → apply), then current; an existing service rule and identity are kept', async () => {
+    const V12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+    // The live shape without its own scope/service rules, upgraded to the v11 level under the previous release (the v12 rules removed again).
+    const f = await installation(handBuilt(HAND_BUILT.filter(rule => !['live-scope', 'live-service-shutdown'].includes(rule.id))));
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
+    const upgraded = JSON.parse(await f.bytes()) as { revision: string; grants: { id: string }[] };
+    await writeFile(f.policyPath, JSON.stringify({ ...upgraded, revision: 'a-live-v11', grants: upgraded.grants.filter(rule => !V12.includes(rule.id)) }), { mode: 0o600 });
+    const before = await f.bytes();
+    const preview = await f.upgrade(false, { person: PERSON });
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', exact: false, revision: 'a-live-v11', serviceIdentity: { status: 'kept', identity: { scopeId: SCOPE, serviceId: `${SCOPE}-runtime` } } });
+    expect(preview.rules).toEqual([
+      { id: 'first-run-scope-inspect', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [PERSON], resource: { kind: 'scope', ids: [SCOPE] } },
+      { id: 'first-run-service-shutdown', effect: 'allow', actions: ['shutdown'], scopes: [SCOPE], principals: [PERSON], resource: { kind: 'service', ids: [`${SCOPE}-runtime`] } },
+    ]);
+    expect(await f.bytes()).toBe(before);
+    expect(await f.upgrade(true, { person: PERSON, expect: 'a-stale' })).toMatchObject({ status: 'conflict' });
+    expect(await f.upgrade(true, { person: PERSON, expect: 'a-live-v11' })).toMatchObject({ status: 'upgraded', basis: 'named-person' });
+    const after = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
+    expect(after.grants.slice(0, -2)).toEqual(JSON.parse(before).grants); // every existing rule kept, unchanged and in place
+    expect(after.grants.slice(-2).map(rule => rule.id)).toEqual(V12);
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', basis: 'named-person', rules: [] });
+    // Negatives: the MCP actor and another person are never named by the new rules; a foreign scope stays outside them.
+    expect(await f.mcpActor('shutdown', 'service')).toBe('deny');
+    const loaded = resolvePolicyBindings(after, JSON.parse(await readFile(join(f.root, '.deckent', 'bindings.json'), 'utf8')));
+    const owner = { id: 'owner', ...PERSON, assurance: 'os-user' as const, scopeIds: [SCOPE, 'foreign'] };
+    const decide = (principal: typeof owner, scopeId: string, kind: string, action: string, id: string) => evaluatePolicy(loaded, { principal, scopeId, action, resource: { kind, id } }).decision;
+    expect(decide(owner, SCOPE, 'service', 'shutdown', `${SCOPE}-runtime`)).toBe('allow');
+    expect(decide(owner, SCOPE, 'scope', 'inspect', SCOPE)).toBe('allow');
+    expect(decide({ ...owner, subject: '1001', id: 'stranger' }, SCOPE, 'service', 'shutdown', `${SCOPE}-runtime`)).toBe('deny');
+    expect(decide({ ...owner, subject: '1001', id: 'stranger' }, SCOPE, 'scope', 'inspect', SCOPE)).toBe('deny');
+    expect(decide(owner, 'foreign', 'service', 'shutdown', `${SCOPE}-runtime`)).toBe('deny');
+    expect(decide(owner, 'foreign', 'scope', 'inspect', 'foreign')).toBe('deny');
+
+    // The real live shape: its own `live-scope` and a shutdown rule on the configured service `local` already cover both: nothing is added, the
+    // configured identity is kept as it is.
+    const live = await installation();
+    const config = JSON.parse(await readFile(join(live.root, '.deckent', 'config.json'), 'utf8')) as Record<string, unknown>;
+    await writeFile(join(live.root, '.deckent', 'config.json'), JSON.stringify({ ...config, service: { identity: { scopeId: SCOPE, serviceId: 'local' } } }), { mode: 0o600 }); clearConfigCache();
+    expect(await live.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
+    const liveBytes = await live.bytes();
+    expect((JSON.parse(liveBytes) as { grants: { id: string }[] }).grants.filter(rule => V12.includes(rule.id))).toEqual([]);
+    expect(await live.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', serviceIdentity: { status: 'kept', identity: { scopeId: SCOPE, serviceId: 'local' } } });
+    expect(await live.bytes()).toBe(liveBytes);
   });
 });

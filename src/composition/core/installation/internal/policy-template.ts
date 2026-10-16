@@ -73,8 +73,8 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, serviceId: target.serviceId,
     peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) };
   const preview = await upgradePolicyTemplate(writer, { ...input, apply: false, audit: () => { throw new Error('INSTALLER_PREVIEW_WRITE'); } });
-  // Only an exact first-run template (upgraded now or current) gets a missing identity, before the policy (it grants nothing); edited/hand-built: untouched.
-  const named = preview.exact ? await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), target, apply) : SKIPPED_SERVICE_IDENTITY;
+  // A plan this person may take (first-run or named-person, previewed or current) also gets a missing identity, before the policy (it grants nothing).
+  const named = preview.basis ? await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), target, apply) : SKIPPED_SERVICE_IDENTITY;
   if (!apply || preview.status !== 'preview') return Object.freeze({ ...preview, serviceIdentity: named });
   const store = await openSqliteAuditStore(await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'allow');
   try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true));

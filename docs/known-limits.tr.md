@@ -160,12 +160,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Kaybolan bir işçi slotunu tutabilir.** Verilmiş bir deneme, saklama çözülene kadar etkin kalıp bir yürütme slotunu tutabilir.
   *Yol:* `deckent monitor` ile izleyin; slot yalnız tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
 - **Yeniden başlatma kurtarması bağımsız incelemeden geçmedi:** gerçek konteyner öldürme ve servis yeniden başlatmasıyla.
-- **v12 sahip kurallarını yalnız dokunulmamış ilk kurulum politikası alır.** `init policy --upgrade` kapsam görüntülemeyi ve
-  servis durdurma kuralını yalnız tam olarak eski bir ilk kurulum şablonu olan politikaya ekler; düzenlenmiş ya da elle kurulmuş
-  politika olduğu gibi kalır ve yükseltme onu güncel diye bildirir. *Geçici çözüm:* politikanın sahibi kişiye kapsam üzerinde
-  `scope/inspect` ve yapılandırılmış servis kimliği üzerinde `service/shutdown` ekler. `service.identity`'yi ayarlayan bir
-  yükseltmeden sonra zaten çalışan servis, `runtime restart` çalışmadan önce bir kez elle durdurulmalıdır (`deckent runtime serve`
-  üzerinde Ctrl+C ya da boşta durma).
+- **`service.identity`'yi ayarlayan bir yükseltmeden sonra çalışan servis bir kez elle durdurulmalıdır** (`deckent runtime serve`
+  üzerinde Ctrl+C ya da boşta durma); ancak ondan sonra `runtime restart` çalışır: servis kimliğini yalnız başlarken okur.
 - **Servis kimliği ve saat.** Kurulum kimliğinin ilk yayımında nadir bir pencere kalıyor; tolerans içindeki yavaş bir saat
   kayması algılanmaz; durdurulan bir çalıştırmanın `cancelled` bildirdiği tek bir overlay durumu yeniden üretilemedi.
 

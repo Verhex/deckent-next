@@ -44,8 +44,8 @@ export function firstRunServiceIdentity(scopeId: string, configured: ServiceIden
   return Object.freeze({ scopeId, serviceId: configured?.scopeId === scopeId ? configured.serviceId : firstRunServiceId(scopeId) });
 }
 /** What the first-run installer did with `service.identity`: `written` (the audited config write, or the journaled first config), `planned` (preview),
- * `kept` (already configured for this scope), `other-scope` (configured for another scope: kept, never overwritten), `skipped` (the policy is not
- * exactly the first-run template: nothing written) or `not-set` (a typed refusal; the policy result stands). */
+ * `kept` (already configured for this scope), `other-scope` (configured for another scope: kept, never overwritten), `skipped` (the upgrade was
+ * refused or conflicted: nothing written) or `not-set` (a typed refusal; the policy result stands). */
 export type FirstRunServiceIdentityResult = Readonly<{ status: 'written' | 'planned' | 'kept' | 'other-scope' | 'skipped' | 'not-set'; identity: ServiceIdentity | null; code?: string }>;
 /** The configuration seam: the effective identity and the project layer's digest from one read; the write goes through the one config write contract. */
 export interface FirstRunServiceIdentityPort {
@@ -229,7 +229,7 @@ const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } |
  * The first-run older-template → current migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
  * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install the
  * current template on a fresh installation today. An untouched v4–v11 template becomes exactly the current one (v12 adds the owner's scope inspect and
- * service shutdown, owner 2026-10-16); edited and hand-built policies take only the add-only plan below, which v12 did not extend. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
+ * service shutdown, owner 2026-10-16); edited and hand-built policies take the add-only plan below, which (owner 2026-10-16 option A) includes the two v12 rules for the named person. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
  * call operation, the proposal tool, the `policy.administer` operation and approval decisions — K1 option A) and keeps everything else:
  * hand-added rules, edited first-run rules, modes and bindings; a rule id that exists with other content is kept and named as a conflict. An
  * untouched v4–v10 template becomes exactly the v11 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
@@ -255,7 +255,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   const principal = person ?? { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const template = { scopeId, principal, ...input.toolNames, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
   const names = { person: principal, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
-    policyAdministerOperationId: input.toolNames.policyAdministerOperationId };
+    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
   const result = (status: PolicyTemplateUpgradeResult['status'], extra: Partial<PolicyTemplateUpgradeResult> = {}): PolicyTemplateUpgradeResult => Object.freeze({ schemaVersion: 1,
     status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, person: person ?? null, basis: null,
     exact: false, people: [], revision: null, rules: [], conflicts: [], wireRules: [], ...extra });

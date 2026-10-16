@@ -221,7 +221,9 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
       ['first-run-backup', 'backup', 'all', 'all'],
       ...['run', 'scope', 'approval', 'model-activation', 'model-invocation', 'provider-spend-account'].map(kind => [`first-run-mcp-observe-${kind}`, kind, 'all', ['installation']]),
       ...[['first-run-runs', 'run'], ['first-run-pools', 'pool'], ['first-run-attempts', 'attempt'], ['first-run-work-targets', 'work-target']].map(([id, kind]) => [id, kind, 'all', ['installation']]),
-      ['first-run-quota-release', 'pool', 'all', 'all'], ['first-run-integration', 'attempt', 'all', ['installation']], ['first-run-work-target-adopt', 'work-target', 'all', ['installation']]]);
+      ['first-run-quota-release', 'pool', 'all', 'all'], ['first-run-integration', 'attempt', 'all', ['installation']], ['first-run-work-target-adopt', 'work-target', 'all', ['installation']],
+      // v12 (owner 2026-10-16 option A): the named person's scope inspection and this installation's service stop (default service id).
+      ['first-run-scope-inspect', 'scope', ['installation'], ['installation']], ['first-run-service-shutdown', 'service', ['installation-runtime'], ['installation']]]);
     expect(plan.conflicts).toEqual([]);
     // Applied (the plan's documents), a second run has nothing to add.
     const applied = { ...edited, grants: [...edited.grants, ...plan.rules] };

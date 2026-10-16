@@ -1,4 +1,4 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, planPolicyChange, policySchema,
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, planPolicyChange, policySchema,
   type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
@@ -48,10 +48,16 @@ export class PolicyTemplateUpgrade {
     if (entry.before.schemaVersion !== 2) return false;
     const plan = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, ...this.names });
     if (plan.status !== 'plan') return false;
-    const tag = `template-v5:${plan.rules.map(rule => rule.id).join(',')}`;
-    const commandId = sha256(`policy-template-upgrade:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
-    return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
-      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: plan.change, expectedVersion: entry.before.revision });
+    // The governed key binds the exact plan it submitted: the current one, or the same plan without the v12 owner rules (a governed upgrade
+    // made before option A, owner 2026-10-16, must stay recognizable).
+    const v12: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown];
+    const earlier = plan.change.changes.filter(change => change.kind !== 'grant.add' || !v12.includes(change.grant.id));
+    return [plan.change, ...(earlier.length && earlier.length < plan.change.changes.length ? [{ ...plan.change, changes: earlier }] : [])].some(change => {
+      const tag = `template-v5:${change.changes.map(item => item.kind === 'grant.add' ? item.grant.id : '').join(',')}`;
+      const commandId = sha256(`policy-template-upgrade:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
+      return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
+        target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: entry.before.revision });
+    });
   }
   async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
     readonly reason: string }): Promise<TemplateUpgradeResult> {

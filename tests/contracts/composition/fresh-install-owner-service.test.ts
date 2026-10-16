@@ -107,7 +107,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     expect(f.errors).toEqual([]);
   });
 
-  it('upgrade writes a missing service.identity only for an exact template; a hand-edited policy and an existing identity are not touched', async () => {
+  it('upgrade writes a missing service.identity for an exact or an edited first-run policy (option A); an existing identity is never replaced', async () => {
     const config = (project: string) => readFile(join(project, '.deckent', 'config.json'), 'utf8');
     const unset = async (project: string) => { const text = JSON.parse(await config(project)) as { service?: unknown }; delete text.service;
       await writeFile(join(project, '.deckent', 'config.json'), `${JSON.stringify(text)}\n`, { mode: 0o600 }); clearConfigCache(); };
@@ -124,11 +124,22 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     const edited = await installed(policy => ({ ...policy, revision: 'a-edited', grants: policy.grants.filter(rule => !V12.includes(rule.id))
       .concat([{ id: 'hand-added', effect: 'allow', actions: ['invoke'], scopes: [SCOPE], principals: (policy.grants[0] as unknown as { principals: unknown }).principals,
         resource: { kind: 'agent-tool', ids: ['fetch_url'] } } as never]) }));
-    await unset(edited.project); const before = await readFile(edited.policyPath, 'utf8'), configBefore = await config(edited.project);
-    const result = await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, undefined, { env: edited.env });
-    expect(result).toMatchObject({ exact: false, serviceIdentity: { status: 'skipped', identity: null } });
-    expect(result.rules.map(rule => (rule as { id: string }).id).filter(id => V12.includes(id))).toEqual([]);
-    expect(await readFile(edited.policyPath, 'utf8')).toBe(before); expect(await config(edited.project)).toBe(configBefore);
+    await unset(edited.project); const before = JSON.parse(await readFile(edited.policyPath, 'utf8')) as { grants: unknown[] };
+    const editedPreview = await upgradePolicyTemplateInstallation(edited.project, SCOPE, false, undefined, { env: edited.env });
+    expect(editedPreview).toMatchObject({ status: 'preview', basis: 'first-run', exact: false, revision: 'a-edited', serviceIdentity: { status: 'planned' } });
+    expect(editedPreview.rules.map(rule => (rule as { id: string }).id)).toEqual(V12);
+    expect(JSON.parse(await config(edited.project))).not.toHaveProperty('service');
+    expect(await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, 'a-edited', { env: edited.env }))
+      .toMatchObject({ status: 'upgraded', serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
+    const editedAfter = JSON.parse(await readFile(edited.policyPath, 'utf8')) as { grants: { id: string }[] };
+    expect(editedAfter.grants.slice(0, before.grants.length)).toEqual(before.grants); // hand-added and every existing rule kept
+    expect(editedAfter.grants.slice(before.grants.length).map(rule => rule.id)).toEqual(V12);
+    expect(await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, undefined, { env: edited.env })).toMatchObject({ status: 'current', serviceIdentity: { status: 'kept' } });
+    // The edited installation now observes its scope and stops its own service; the MCP actor still cannot stop it.
+    clearConfigCache(); const service = await edited.start();
+    await expect(inspectConfiguredInventory(edited.project, { schemaVersion: 1, scopeId: SCOPE }, { env: edited.env })).resolves.toMatchObject({ page: { entries: [], nextAfter: null } });
+    await expect(withMcpPrincipal(() => stopConfiguredRuntimeService(edited.project, { env: edited.env }))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await stopConfiguredRuntimeService(edited.project, { env: edited.env }); await service.done;
 
     // An identity configured for another scope is kept as it is (never overwritten) and named.
     const other = await installed(policy => ({ ...policy, revision: 'first-run-template-v11', grants: policy.grants.filter(rule => !V12.includes(rule.id)) }));
