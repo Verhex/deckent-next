@@ -12,3 +12,10 @@ export { enforceWorkerTreeGate, WORKER_TREE_SHOWN_PATHS } from './internal/secre
 export type { WorkerTreeFinding, WorkerTreeGateContext, WorkerTreeLimit, WorkerTreeScan } from './internal/secret-gate.js';
 export { readWorkerTreeExclusions, recordWorkerTreeExclusions, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, workerTreeExclusionSchema } from './internal/exclusion-receipt.js';
 export type { WorkerTreeExclusion, WorkerTreeExclusionRecord } from './internal/exclusion-receipt.js';
+
+export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from './internal/git-source-base.js';
+export type { GitSourcePreimage, GitSourceBase } from './internal/git-source-base.js';
+export { GIT_LOCAL_ENV, localGitArgs } from './internal/git-local-git.js';
+export { gitWorkspaceOptionsSchema, gitWorkspaceRecordSchema, gitWorkspaceFingerprint, validGitSourceBase } from './internal/git-source-base.js';
+export type { GitWorkspaceOptions } from './internal/git-source-base.js';
+export { gitWorkspaceIdentityTarget, gitWorkspaceRequestTarget } from './internal/git-source-base.js';

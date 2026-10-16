@@ -25,6 +25,10 @@ export type { AdoptionVerification, AdoptionVerificationPolicy, AdoptionVerifica
 export type { IntegrationCommitMetadata } from './internal/commit-metadata.js';
 
 export { bindIntegrationCandidate } from './internal/candidate-binding.js';
+export { queueCommandIds, queueGenerationRef, queueGenerationSchema, assertQueueGitTarget } from './internal/queue-git.js';
+export type { GitQueueFence } from './internal/queue-git.js';
+export { queueVerificationGraph, assertQueueVerification } from './internal/queue-verification.js';
+export { readQueueCandidate, queueCommitMetadata, describeWorkspaceQueueCandidate } from './internal/queue-custody.js';
 
 export { SnapshotBudget, parseBaseListing, baseIdentical, gitBlobOid, hashAlgorithmOf, diffAgainstBase, snapshotDigest } from './internal/snapshot.js';
 export type { Snapshot, BaseEntry, BaseListing } from './internal/snapshot.js';
@@ -36,3 +40,9 @@ export { adoptionFenceRef, adoptionFenceText, adoptionFenceObjectSchema } from '
 export { assertIntegrationBefore } from './internal/snapshot.js';
 export { capturedWorkspacePatch } from './internal/snapshot.js';
 export { prepareIntegrationSnapshot } from './internal/snapshot.js';
+
+export { createWorkspaceQueuePreparation } from './internal/queue-preparation.js';
+export { assertIntegrationBase } from './internal/git-integration-base.js';
+export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY } from './internal/git-queue-target.js';
+export { createWorkspaceQueueEffects } from './internal/queue-effects.js';
+export { createWorkspaceQueueAdmission } from './internal/queue-admission.js';

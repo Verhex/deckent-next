@@ -11,7 +11,10 @@ export interface TargetQueueStore {
   load(scopeId: string, commandId: string): TargetQueueRecord | null;
   epoch(key: string): number;
   head(key: string): TargetQueueRecord | null;
+  /** Atomically reserve only a contiguous queued prefix; another scope or policy cuts the batch. */
+  reserve(first: TargetQueueRecord, owner: string, now: number, bounds: TargetQueueBounds, audit: TargetQueueAudit): readonly TargetQueueRecord[];
   list(scopeId: string, after: string | null, limit: number): readonly TargetQueueRecord[];
+  ahead?(record: TargetQueueRecord, limit: number): readonly TargetQueueRecord[];
   change(previous: TargetQueueRecord, next: TargetQueueRecord, bounds: TargetQueueBounds, audit: (store: AuditStore, record: TargetQueueRecord) => void): TargetQueueRecord;
 }
 export interface TargetQueueAuthority {
@@ -51,6 +54,34 @@ export class TargetQueueApplication {
       throw new TargetQueueError('QUEUE_TARGET_BUSY');
     return this.transition(record, { state: 'revalidating', ownerInstance, epoch: this.store.epoch(record.key) + 1, leaseDeadline: now + this.bounds.leaseMs });
   }
+  reserve(record: TargetQueueRecord, ownerInstance: string, now: number): readonly TargetQueueRecord[] {
+    if (!ownerInstance || record.state !== 'queued' || record.request.deadline <= now) throw new TargetQueueError('QUEUE_CONFLICT');
+    return this.store.reserve(record, ownerInstance, now, this.bounds, this.audit);
+  }
+  current(record: TargetQueueRecord): TargetQueueRecord {
+    const current = this.store.load(record.request.identity.scopeId, record.request.commandId);
+    if (!current) throw new TargetQueueError('QUEUE_CORRUPT');
+    return current;
+  }
+  /** A new service holding ledger custody first records a higher epoch, then fences Git before any reconciliation or dispatch. */
+  recover(record: TargetQueueRecord, ownerInstance: string, now: number): TargetQueueRecord {
+    if (record.state === 'queued' || queueTerminal(record.state)) throw new TargetQueueError('QUEUE_CONFLICT');
+    return this.transition(record, { state: 'reconciling',
+      ownerInstance, epoch: this.store.epoch(record.key) + 1, leaseDeadline: now + this.bounds.leaseMs });
+  }
+  async list(scopeId: string, after: string | null, limit: number, principal: VerifiedPrincipal): Promise<readonly TargetQueueRecord[]> {
+    if (!principal.scopeIds.includes(scopeId) || limit > this.bounds.capacity) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    const records = this.store.list(scopeId, after, limit);
+    for (const record of records) await this.authority.authorize(record.request, principal, 'inspect');
+    return records;
+  }
+  async position(record: TargetQueueRecord, principal: VerifiedPrincipal): Promise<number | null> {
+    if (!this.store.ahead || queueTerminal(record.state)) return null;
+    const rows = this.store.ahead(record, this.bounds.perTarget);
+    if (rows.length >= this.bounds.perTarget) return null;
+    for (const row of rows) await this.authority.authorize(row.request, principal, 'inspect');
+    return rows.length + 1;
+  }
   transition(previous: TargetQueueRecord, fields: Partial<Pick<TargetQueueRecord, 'state' | 'ownerInstance' | 'epoch' | 'leaseDeadline' | 'candidate' | 'verification' | 'batchDigest' | 'effectCommandIds' | 'evidenceRefs' | 'outcome'>>): TargetQueueRecord {
     queueNextState(previous, fields.state ?? previous.state);
     const next = targetQueueRecordSchema.parse({ ...previous, ...fields, revision: previous.revision + 1 });
@@ -73,8 +104,12 @@ export function assertQueueChange(previous: TargetQueueRecord, next: TargetQueue
     || previous.key !== next.key || previous.ordinal !== next.ordinal || next.revision !== previous.revision + 1 || queueTerminal(previous.state))
     throw new TargetQueueError('QUEUE_CONFLICT');
   queueNextState(previous, next.state);
+  if (previous.state === 'reconciling' && next.state === 'parked' && (previous.batchDigest !== null || next.evidenceRefs.length <= previous.evidenceRefs.length))
+    throw new TargetQueueError('QUEUE_CONFLICT');
   if (previous.state === 'queued' && next.state === 'revalidating') {
     if (!next.ownerInstance || next.epoch <= previous.epoch || next.leaseDeadline === null) throw new TargetQueueError('QUEUE_CONFLICT');
+  } else if ((next.state === 'parked' || next.state === 'reconciling') && next.ownerInstance && next.epoch > previous.epoch) {
+    if (next.leaseDeadline === null) throw new TargetQueueError('QUEUE_CONFLICT');
   } else if (next.ownerInstance !== previous.ownerInstance || next.epoch !== previous.epoch || next.leaseDeadline !== previous.leaseDeadline) {
     throw new TargetQueueError('QUEUE_CONFLICT');
   }

@@ -1,0 +1,13 @@
+{
+  "capacity": 1024,
+  "perTarget": 256,
+  "activeTargets": 16,
+  "batchSize": 16,
+  "chainSize": 16,
+  "batchWindowMs": 500,
+  "leaseMs": 60000,
+  "ttlMs": 600000,
+  "verificationTimeoutMs": 300000,
+  "revalidations": 2,
+  "candidateSlots": 2
+}

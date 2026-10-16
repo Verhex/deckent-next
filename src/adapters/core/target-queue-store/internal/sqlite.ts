@@ -16,6 +16,15 @@ export class SqliteTargetQueue implements TargetQueueStore {
     const row = this.db.prepare('SELECT * FROM target_queue WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     return row ? decodeTargetQueueRow(row) : null;
   }
+  forVerification(scopeId: string, runId: string): TargetQueueRecord | null {
+    const rows = this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND json_extract(record,'$.effectCommandIds[3]')=? LIMIT 2").all(scopeId, runId);
+    if (rows.length > 1) throw new TargetQueueError('QUEUE_CORRUPT');
+    return rows[0] ? decodeTargetQueueRow(rows[0]) : null;
+  }
+  pending(limit: number, after: Readonly<{ key: string; ordinal: number }> | null = null): readonly TargetQueueRecord[] {
+    return this.db.prepare(`SELECT * FROM target_queue WHERE ${open} AND (target_key>? OR (target_key=? AND ordinal>?)) ORDER BY target_key,ordinal LIMIT ?`)
+      .all(after?.key ?? '', after?.key ?? '', after?.ordinal ?? 0, limit).map(decodeTargetQueueRow);
+  }
   epoch(key: string): number { return Number(this.db.prepare("SELECT coalesce(max(json_extract(record,'$.epoch')),0) AS n FROM target_queue WHERE target_key=?").get(key)?.n); }
   head(key: string): TargetQueueRecord | null {
     const row = this.db.prepare(`SELECT * FROM target_queue WHERE target_key=? AND ${open} ORDER BY ordinal LIMIT 1`).get(key);
@@ -26,11 +35,42 @@ export class SqliteTargetQueue implements TargetQueueStore {
     return this.db.prepare('SELECT * FROM target_queue WHERE scope_id=? AND command_id>? ORDER BY command_id LIMIT ?')
       .all(scopeId, after ?? '', limit).map(row => decodeTargetQueueRow(row));
   }
+  forRun(scopeId: string, runId: string, limit: number): readonly TargetQueueRecord[] {
+    return this.db.prepare("SELECT * FROM target_queue WHERE scope_id=? AND json_extract(record,'$.request.identity.runId')=? ORDER BY command_id LIMIT ?")
+      .all(scopeId, runId, limit).map(decodeTargetQueueRow);
+  }
+  ahead(record: TargetQueueRecord, limit: number): readonly TargetQueueRecord[] {
+    return this.db.prepare(`SELECT * FROM target_queue WHERE scope_id=? AND target_key=? AND ordinal<? AND ${open} ORDER BY ordinal LIMIT ?`)
+      .all(record.request.identity.scopeId, record.key, record.ordinal, limit).map(decodeTargetQueueRow);
+  }
   private retain(record: TargetQueueRecord, audit: TargetQueueAudit): TargetQueueRecord {
     audit(new SqliteAuditStore(this.db), record);
     this.db.prepare('INSERT INTO target_queue_events(scope_id,command_id,revision,record) VALUES(?,?,?,?)')
       .run(record.request.identity.scopeId, record.request.commandId, record.revision, JSON.stringify(record));
     return record;
+  }
+  reserve(first: TargetQueueRecord, owner: string, now: number, bounds: TargetQueueBounds, audit: TargetQueueAudit): readonly TargetQueueRecord[] {
+    assertTargetQueueBounds(bounds);
+    return this.transaction(() => {
+      const head = this.head(first.key);
+      if (!head || JSON.stringify(head) !== JSON.stringify(first) || head.state !== 'queued') throw new TargetQueueError('QUEUE_TARGET_BUSY');
+      if (Number(this.db.prepare(`SELECT count(DISTINCT target_key) AS n FROM target_queue WHERE ${open} AND state!='queued'`).get()?.n) >= bounds.activeTargets)
+        throw new TargetQueueError('QUEUE_CAPACITY');
+      const epoch = this.epoch(first.key) + 1, records: TargetQueueRecord[] = [];
+      for (const row of this.db.prepare(`SELECT * FROM target_queue WHERE target_key=? AND ${open} ORDER BY ordinal LIMIT ?`).all(first.key, bounds.batchSize)) {
+        const before = decodeTargetQueueRow(row);
+        if (before.request.operation !== first.request.operation || before.state !== 'queued' || before.request.identity.scopeId !== first.request.identity.scopeId || before.request.policyRevision !== first.request.policyRevision
+          || JSON.stringify(before.request.actor) !== JSON.stringify(first.request.actor) || before.request.deadline <= now) break;
+        const next = targetQueueRecordSchema.parse({ ...before, revision: before.revision + 1, state: 'revalidating', ownerInstance: owner, epoch, leaseDeadline: now + bounds.leaseMs });
+        assertQueueChange(before, next);
+        if (this.db.prepare('UPDATE target_queue SET revision=?,state=?,record=? WHERE scope_id=? AND command_id=? AND record=?')
+          .run(next.revision, next.state, JSON.stringify(next), before.request.identity.scopeId, before.request.commandId, JSON.stringify(before)).changes !== 1)
+          throw new TargetQueueError('QUEUE_CONFLICT');
+        records.push(this.retain(next, audit));
+      }
+      if (!records.length) throw new TargetQueueError('QUEUE_EXPIRED');
+      return records;
+    });
   }
   enqueue(input: TargetQueueRequest, bounds: TargetQueueBounds, audit: TargetQueueAudit): TargetQueueRecord {
     assertTargetQueueBounds(bounds);

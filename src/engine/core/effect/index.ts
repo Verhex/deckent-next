@@ -13,5 +13,13 @@ export { TargetBatchConfirmation } from './internal/batch-confirmation.js';
 export type { BatchPeer, BatchTerminalWitness, BatchWitnessAuthority } from './internal/batch-confirmation.js';
 export { TargetBatchExecutor } from './internal/batch-execution.js';
 export type { TargetBatchEffects, TargetBatchConsents, TargetBatchExecution, QueueEffectResult } from './internal/batch-execution.js';
-export { projectTargetQueue } from './internal/queue-view.js';
+export { projectTargetQueue, targetQueueViewSchema } from './internal/queue-view.js';
 export type { QueueNextAction, TargetQueueView } from './internal/queue-view.js';
+export { TargetQueueDriver } from './internal/queue-driver.js';
+export type { TargetQueuePreparation } from './internal/queue-driver.js';
+export { queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema, queueChallengeSchema, queueAnswerSchema, queueExecuteSchema,
+  queueInspectionSchema, queuePageSchema, queueConsentSchema, queueExecutionSchema } from './internal/queue-protocol.js';
+export type { QueueRollback, QueueEnqueue, QueueQuery, QueueList, QueueChallenge, QueueAnswer, QueueExecute, QueueConsent, QueueReadClient } from './internal/queue-protocol.js';
+
+export { observeRunQueue, queueObservationReadLimit } from './internal/queue-run-view.js';
+export { recordTargetBatchDecision } from './internal/batch-audit.js';

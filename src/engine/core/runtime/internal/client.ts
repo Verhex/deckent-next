@@ -1,4 +1,5 @@
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
+import { runtimeTargetQueueMethods } from './queue-client.js';
 import type { AgentTurnStreamEvent, ModelInvocationDeltaSink } from '#domain/index.js';
 import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, type RuntimeFailureMapper } from './client-validation.js';
 import { runtimeApprovalMethods, runtimeChatTurnMethods, runtimeModelInvocationMethods, runtimePermissionModeMethods,
@@ -57,6 +58,7 @@ export function createRuntimeServiceClient<Operations>(ports: RuntimeClientPorts
     && (!isRuntimeServiceBoundedResultOperation(operation) || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval')).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as Operations;
   return Object.freeze({ ...operations,
+    ...runtimeTargetQueueMethods(call, ports.mapFailure),
     ...runtimeApprovalMethods(call),
     ...runtimeChatTurnMethods(call, ports.mapFailure),
     ...runtimeWorkspaceFileMethods(call, ports.mapFailure),

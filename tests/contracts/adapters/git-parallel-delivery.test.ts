@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
-  type GitWorkspaceOptions } from '#adapters/index.js';
+  GitQueueTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
-  type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
+  targetQueueKey, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
 
 const exec = promisify(execFile), roots: string[] = [];
@@ -219,5 +219,62 @@ describe.skipIf(process.platform !== 'linux')('source custody after a safe forwa
     expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('unstaged owner\n');
     expect(await f.git('show', second.plan.commit + ':a.txt')).toBe('first worker');
     expect(await f.git('show', second.plan.commit + ':b.txt')).toBe('approved');
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('queue private prefixes and physical generations', () => {
+  it('prepares C1→C2 before publication and allocates the exact private commit with original source custody', async () => {
+    const f = await fixture(true), before = await f.state(), a = f.patch('private-a', 'a.txt', 'a before\n', 'a after\n'), b = f.patch('private-b', 'b.txt', 'b before\n', 'b after\n');
+    const first = await f.prepare(a), metadata = { title: 'check', acceptance: { phase: 'accepted', criteria: 1, runRevision: 1, modelUnverified: false }, deliveredAtMs: 1000 };
+    const plan1 = await f.delivery.plan({ schemaVersion: 1, commandId: 'publish-a', identity: a.identity, integrationCommandId: first.manifest.command.commandId }, first.manifest, a, metadata);
+    const target = new GitIntegrationTarget(f.options, limits, { commit: plan1.commit, repository: first.manifest.workspace });
+    const command = { schemaVersion: 1 as const, commandId: 'private-b', identity: b.identity, proposal: '0'.repeat(20) }, receipt = { schemaVersion: 1 as const, scopeId: 's', digest: patchDigest(JSON.stringify(b)), byteLength: Buffer.byteLength(JSON.stringify(b)) };
+    const manifest = await target.prepare({ schemaVersion: 1, command, patch: receipt, observation: (await target.observe(b)).digest, actor }, b);
+    await target.verify(manifest, b);
+    const plan2 = await f.delivery.plan({ schemaVersion: 1, commandId: 'publish-b', identity: b.identity, integrationCommandId: command.commandId }, manifest, b, metadata);
+    expect(manifest).toMatchObject({ schemaVersion: 2, effectiveBaseCommit: plan1.commit });
+    const provider = new GitRunWorkspaceProvider(new GitWorkspaceBroker(f.options, { repositoryRoot: manifest.workspace, baseCommit: plan2.commit }));
+    const captured = await provider.captureSource(plan2.commit);
+    expect(captured.source.sourceFingerprint).toBe(a.source.sourceFingerprint);
+    const identity = { ...b.identity, runId: 'verification', attemptId: 'verification' }, lease = await provider.allocate(identity, { schemaVersion: 1, scopeId: 's', runId: 'verification', ...captured });
+    expect(await readFile(join(lease.workspace, 'a.txt'), 'utf8')).toBe('a after\n');
+    expect(await readFile(join(lease.workspace, 'b.txt'), 'utf8')).toBe('b after\n');
+    expect((await exec('/usr/bin/git', ['-C', lease.workspace, 'rev-parse', 'HEAD'])).stdout.trim()).toBe(plan2.commit);
+    await expect(f.git('cat-file', '-e', plan1.commit)).rejects.toBeDefined();
+    const after = await f.state();
+    for (const field of ['head', 'tip', 'index', 'status', 'refs'] as const) expect(after[field]).toEqual(before[field]);
+    expect(after.candidates).toContain('integrations');
+  });
+  it('refuses suspended old publication, adoption and rollback writers after a generation advance', async () => {
+    const f = await fixture(true), patch = f.patch('epoch', 'a.txt', 'a before\n', 'a after\n'), prepared = await f.prepare(patch);
+    const plan = await f.delivery.plan({ schemaVersion: 1, commandId: 'epoch-delivery', identity: patch.identity, integrationCommandId: prepared.manifest.command.commandId }, prepared.manifest, patch);
+    const queue = new GitQueueTarget(f.options, 'installation', 'registered', [f.targetRef], []), binding = await queue.binding(f.targetRef), key = targetQueueKey(binding);
+    const old = await queue.fence(key, 'old', 1), current = await queue.fence(key, 'current', 2);
+    await expect(new GitIntegrationDelivery(f.options, old).publish(plan, prepared.manifest, patch)).rejects.toBeDefined();
+    expect(await f.delivery.delivered(plan)).toBe(false);
+    await new GitIntegrationDelivery(f.options, current).publish(plan, prepared.manifest, patch);
+    const first = { sequence: 1, scopeId: 's', commandId: 'epoch-adoption' };
+    await expect(new GitIntegrationAdoption(f.options, old).move(f.targetRef, f.base, plan.commit, null, first)).rejects.toBeDefined();
+    expect(await f.git('rev-parse', f.targetRef)).toBe(f.base);
+    await new GitIntegrationAdoption(f.options, current).move(f.targetRef, f.base, plan.commit, null, first);
+    const rollback = { sequence: 2, scopeId: 's', commandId: 'epoch-rollback' };
+    await expect(new GitIntegrationAdoption(f.options, old).move(f.targetRef, plan.commit, f.base, first, rollback)).rejects.toBeDefined();
+    await expect(new GitIntegrationAdoption(f.options).move(f.targetRef, plan.commit, f.base, first, rollback)).rejects.toBeDefined();
+    expect(await f.git('rev-parse', f.targetRef)).toBe(plan.commit);
+    await new GitIntegrationAdoption(f.options, current).move(f.targetRef, plan.commit, f.base, first, rollback);
+    expect(await f.git('rev-parse', f.targetRef)).toBe(f.base);
+  });
+  it('derives physical identities and refuses main, default, protected, checked-out and foreign targets despite allow-list entries', async () => {
+    const f = await fixture(true), other = await fixture(true);
+    const make = (options: GitWorkspaceOptions, protectedRefs: string[] = []) => new GitQueueTarget(options, 'i', 'registered', [f.targetRef, 'refs/heads/main', 'refs/heads/master', 'refs/heads/foreign'], protectedRefs);
+    const a = await make(f.options).binding(f.targetRef), b = await make(other.options).binding(other.targetRef);
+    expect(targetQueueKey(a)).not.toBe(targetQueueKey(b));
+    for (const ref of ['refs/heads/main', 'refs/heads/master']) await expect(make({ ...f.options, baseRef: ref }).binding(ref)).rejects.toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
+    await expect(make(f.options, [f.targetRef]).binding(f.targetRef)).rejects.toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
+    await expect(make(f.options).binding('refs/heads/foreign')).rejects.toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
+    await f.git('config', 'init.defaultBranch', 'adopted');
+    await expect(make(f.options).binding(f.targetRef)).rejects.toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
+    await f.git('config', '--unset', 'init.defaultBranch'); await f.git('checkout', 'adopted');
+    await expect(make(f.options).binding(f.targetRef)).rejects.toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
   });
 });

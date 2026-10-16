@@ -3,6 +3,8 @@ export { gitDockerAttemptCustody } from './internal/custody.js';
 export { GitIntegrationTarget } from './internal/integration-target.js';
 export { GitIntegrationDelivery } from './internal/delivery.js';
 export { GitIntegrationAdoption } from './internal/adoption.js';
+export { GIT_QUEUE_DISPLAY, GitQueueTarget } from './internal/queue-target.js';
+export { gitQueueCandidateSource } from './internal/queue-source.js';
 /** Pure snapshot helpers exposed for contract tests and future non-Git patch sources; they grant no custody. */
 export { SnapshotBudget, gitFailure, gitBlobOid, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace, diffAgainstBase, snapshotDigest } from './internal/snapshot.js';
 export type { Snapshot, BaseEntry, BaseListing } from './internal/snapshot.js';

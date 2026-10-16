@@ -1,3 +1,4 @@
+import { TARGET_QUEUE_SETTINGS } from './target-queue.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
 import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
@@ -27,6 +28,7 @@ export const CONFIG_FIELDS = Object.freeze({
   storage: field('config.field.storage', { state: 'bound', consumers: ['src/composition/core/storage'] }, 'restart', z.object({ driver: z.literal('sqlite').default('sqlite'),
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   artifacts: field('config.field.artifacts', { state: 'bound', consumers: ['src/composition/core/artifacts'] }, 'restart', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: z.number().int().positive().safe().default(64), patchPreview: z.object({ maxEntries: z.number().int().positive().safe().default(10000), maxDepth: z.number().int().positive().max(128).default(32), maxPathBytes: z.number().int().positive().safe().default(1024) }).strict().default({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
+  targetQueue: field('config.field.targetQueue', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', TARGET_QUEUE_SETTINGS.default({})),
   execution: field('config.field.execution', { state: 'bound', consumers: ['src/composition/core/execution', 'src/composition/core/runs'] }, 'restart', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS, adoption: ADOPTION_TARGET_SETTINGS.default({ targets: [] }),
     workTargets: WORK_TARGET_SETTINGS.optional(), retention: EXECUTION_RETENTION_SETTINGS.default({ schemaVersion: 1 }),
     secretGate: EXECUTION_SECRET_GATE_SETTINGS.default({ schemaVersion: 1 }) }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),

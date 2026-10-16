@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { EffectConfirmationView, RunView } from '#engine/index.js';
+import { targetQueueViewSchema, type QueueConsent, type EffectConfirmationView, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort,
   type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
@@ -439,4 +439,46 @@ describe('delivery window on the real Workline', () => {
     await press(h, '/deliver\r', 150);
     await until(() => transcript(h).includes('NO-PORT deliver'), 'unavailable');
   });
+});
+
+
+it('routes a registered target into the queue and asks each exact batch card with a fresh single y', async () => {
+  const h = harness(), originalPreview = h.port.preview;
+  const display = { schemaVersion: 1, labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.git.prepare' } as const;
+  let commandId = '', state = 'queued', phase = 0;
+  const view = () => targetQueueViewSchema.parse({ schemaVersion: 1, commandId, identity: { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', generation: 1, layoutRevision: 'l' },
+    operation: 'delivery', target: { kind: 'git-ref', id: 'refs/heads/integration' }, display, state, outcome: state === 'settled' ? 'adopted' : null,
+    revision: phase, observedAt: Date.now(), freshness: 'last-known', position: state === 'settled' ? null : 1,
+    nextAction: state === 'awaiting-confirmation' ? 'confirm-batch' : state === 'settled' ? 'inspect-receipt' : 'wait-service', responsibility: 'service', basis: null, verification: null, evidenceRefs: [] });
+  h.port.preview = async target => ({ ...await originalPreview(target), queueTarget: 'refs/heads/integration' });
+  h.port.queue = {
+    async prepareCurrent(_target, id) { commandId = id; h.calls.push('enqueue'); return view(); },
+    async inspect() { return view(); },
+    async confirm(_scope, _command, ask) {
+      for (const operation of ['publish', 'adopt'] as const) {
+        const card: Omit<QueueConsent, 'capability'> = { schemaVersion: 1, digest: 'd'.repeat(64), operation, expiresAt: Date.now() + 60000,
+          target: { kind: 'git-ref', id: 'refs/heads/integration' }, display, items: [{ commandId, from: BASE, to: COMMIT, candidateDigest: 'c'.repeat(64), verificationReceipt: 'e'.repeat(64), changes: ['note.txt'] }] };
+        if (!await ask(card)) throw new Error('declined'); phase++;
+      }
+      state = 'settled'; h.calls.push('queue-settled'); return { settledPrefix: 1, items: [{ commandId, published: true, state: 'settled' }] };
+    },
+  };
+  await admit(h); h.set(awaiting()); await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'delivery ready');
+  await press(h, CTRL_O); await press(h, 'y'); await until(() => frame(h).includes('Queued'), 'durable queue state');
+  expect(h.calls).toContain('enqueue'); expect(h.calls).not.toContain('prepare'); expect(h.calls).not.toContain('publish');
+  state = 'awaiting-confirmation'; await press(h, 'r'); await press(h, 'y');
+  await until(() => frame(h).includes('Publish delivery references'), 'exact publication card');
+  await press(h, 'yy'); await press(h, '\u0019'); expect(phase).toBe(0);
+  await press(h, 'y'); await until(() => frame(h).includes('Adopt the verified prefix'), 'separate adoption card'); expect(phase).toBe(1);
+  await press(h, 'y'); await until(() => frame(h).includes('Adopted'), 'retained queue result'); expect(phase).toBe(2);
+  expect(h.calls).toContain('queue-settled');
+});
+
+it('offers current-base queue preparation after a typed stale-base refusal', async () => {
+  const h = harness(), queued: string[] = [];
+  h.port.preview = async () => { throw Object.assign(new Error('base advanced'), { code: 'PATCH_BASE_ADVANCED' }); };
+  h.port.queue = { async prepareCurrent(_target, command) { queued.push(command); throw new Error('adapter unavailable'); }, async inspect() { return null; }, async confirm() { throw new Error('must-not-confirm'); } };
+  await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
+  await press(h, CTRL_O); await press(h, 'r'); await until(() => frame(h).includes('adapter unavailable'), 'queue preparation refusal');
+  expect(queued).toHaveLength(1); expect(h.calls).not.toContain('publish');
 });

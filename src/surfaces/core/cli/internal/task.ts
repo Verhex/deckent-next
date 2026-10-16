@@ -1,3 +1,4 @@
+import { queueCommand } from '#surfaces/core/delivery-queue/index.js';
 import { inspectTask } from './task-inspect.js';
 import { cliUsage, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
@@ -72,6 +73,7 @@ async function evaluateTask(values: ReadonlyMap<string, string>, context: Comman
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
+  if (action?.startsWith('integration-queue-')) { await queueCommand(argv, context); return; }
   const languageAt = argv.indexOf('--lang');
   const requestedLanguage = languageAt >= 0 ? argv[languageAt + 1] : undefined;
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);

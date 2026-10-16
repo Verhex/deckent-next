@@ -1,3 +1,4 @@
+import { targetQueueViewSchema } from '#engine/core/effect/index.js';
 import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchema } from './brief.js';
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
@@ -9,6 +10,7 @@ import { RunStoreError } from './store.js';
 import { workerTreeExclusionSchema, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
 export const runViewSchema = z.object({
+  targetQueue: z.object({ records: z.array(targetQueueViewSchema), truncated: z.boolean() }).strict().optional(),
   costReport: workCostReportSchema.optional(),
   authority: authorityAdmissionSchema.optional(), proposal: runProposalBindingSchema.optional(),
   schemaVersion: z.literal(3), runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema,

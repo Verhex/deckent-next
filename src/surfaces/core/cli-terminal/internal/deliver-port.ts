@@ -43,7 +43,17 @@ export function patchStat(changes: WorkspacePatch['changes'], render: (path: str
 export function terminalDeliveryPort(root: string, context: TerminalLaunchContext, options: ConfigLoadOptions): TerminalDeliveryPort | undefined {
   const { inspectInventory, previewWorkspacePatch, checkWorkspaceIntegration, prepareWorkspaceIntegration, renderUnifiedDiff, interactiveDelivery, inspectRun } = context;
   if (!inspectInventory || !previewWorkspacePatch || !checkWorkspaceIntegration || !prepareWorkspaceIntegration || !renderUnifiedDiff || !interactiveDelivery) return undefined;
-  return {
+  const queue = context.deliveryQueue && context.confirmDeliveryQueue ? {
+    async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
+      const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
+      const ref = config.execution?.workTargets?.targets[0]?.baseRef;
+      if (!ref) throw ErrorRegistry.createError('QUEUE_AUTHORITY_REQUIRED');
+      return context.deliveryQueue!.enqueueTargetQueue({ schemaVersion: 1, commandId, identity, target: { kind: 'git-ref', id: ref } });
+    },
+    async inspect(scopeId: string, commandId: string) { return (await context.deliveryQueue!.inspectTargetQueue({ schemaVersion: 1, scopeId, commandId })).record; },
+    confirm(scopeId: string, commandId: string, ask: Parameters<NonNullable<TerminalLaunchContext['confirmDeliveryQueue']>>[1]) { return context.confirmDeliveryQueue!({ schemaVersion: 1, scopeId, commandId }, ask); },
+  } : undefined;
+  return { ...(queue ? { queue } : {}),
     async preview(target) {
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
       const preview = await previewWorkspacePatch(root, identity, options);
@@ -52,7 +62,8 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       const config = await loadConfig(root, options), stat = patchStat(preview.patch.changes, renderUnifiedDiff), verification = config.execution?.adoption.verification;
       return Object.freeze({ target, identity, ...stat, source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
         outOfScope: checked.scope.status === 'out-of-scope' ? checked.scope.outOfScope : [], adoptionTargets: Object.freeze([...config.execution?.adoption.targets ?? []]),
-        verification: verification ? Object.freeze({ kind: verification.kind, required: verification.required }) : null });
+        verification: verification ? Object.freeze({ kind: verification.kind, required: verification.required }) : null,
+        ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef } : {}) });
     },
     async deliver(preview, ids, answer) {
       const handlers = interactiveDelivery(answer);

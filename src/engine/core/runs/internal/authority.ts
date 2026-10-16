@@ -1,7 +1,7 @@
 import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema, AuditError,
   type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
-import { AuthorityDecisionRecords } from '#engine/core/audit/index.js';
+import { AuditApplication, AuthorityDecisionRecords } from '#engine/core/audit/index.js';
 import { RunCreateApprovalBroker, type RunCreateApprovalInput } from '#engine/core/approval/index.js';
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
 import { runCreateSchema, RunStoreError, type RunCreate } from './store.js';
@@ -99,4 +99,10 @@ export class RunCreationAuthority {
     if ('pending' in outcome) throw ErrorRegistry.createError('RUN_APPROVAL_REQUIRED', { params: { ...outcome.pending, decisionRecordId: input.subject.decisionRecordId } });
     return outcome.approved;
   }
+}
+
+export function createRunCreationAuthority(source: PolicySource, audit: ConstructorParameters<typeof AuditApplication>[0], approvals: ConstructorParameters<typeof RunCreateApprovalBroker>[0],
+  integrity: ConstructorParameters<typeof AuditApplication>[1], clock: TrustedClock, requestTtlMs: number, presentation: { locale?: Locale; known?: KnownSecretSnapshot }) {
+  return new RunCreationAuthority(source, new AuthorityDecisionRecords(new AuditApplication(audit, integrity)),
+    new RunCreateApprovalBroker(approvals, integrity, clock, { requestTtlMs, admitWithinMs: requestTtlMs }), clock, presentation);
 }

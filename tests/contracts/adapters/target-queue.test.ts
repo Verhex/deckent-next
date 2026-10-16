@@ -39,6 +39,17 @@ describe('durable target queue', () => {
     expect(() => f.app.claim(records[0]!, 'other-service', 99999)).toThrow();
     await expect(f.app.submit({ ...input, payloadDigest: 'd'.repeat(64) }, principal as never)).rejects.toThrow('QUEUE_CONFLICT');
   });
+  it('reserves the same-scope FIFO prefix under one epoch atomically, with rollback on audit failure', () => {
+    const f = fixture(), first = f.store.enqueue(request('one'), bounds, audit);
+    f.store.enqueue(request('two'), bounds, audit); f.store.enqueue(request('foreign', undefined, 'other'), bounds, audit);
+    let count = 0;
+    expect(() => f.store.reserve(first, 'service', 2, bounds, (store, record) => { audit(store, record); if (++count === 2) throw new Error('audit-lost'); })).toThrow('audit-lost');
+    expect(f.store.load('s', 'one')).toEqual(first); expect(f.store.load('s', 'two')?.state).toBe('queued');
+    const batch = f.app.reserve(first, 'service', 2);
+    expect(batch.map(row => [row.request.commandId, row.epoch, row.ownerInstance])).toEqual([['one', 1, 'service'], ['two', 1, 'service']]);
+    expect(f.store.load('other', 'foreign')?.state).toBe('queued');
+    expect(() => f.app.reserve(first, 'other', 2)).toThrow('QUEUE_TARGET_BUSY');
+  });
   it('separates physical resources and shares one FIFO across scopes on the same physical target', () => {
     const f = fixture(), a = f.store.enqueue(request('one'), bounds, audit);
     const b = f.store.enqueue(request('two', 'd'.repeat(64)), bounds, audit);

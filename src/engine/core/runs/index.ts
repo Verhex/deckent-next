@@ -62,3 +62,6 @@ export { RunDecisionApprovalBroker } from './internal/decision-approval.js';
 
 export { pinRunToCandidate, PrivateCandidateRunAdmission } from './internal/candidate-run.js';
 export type { PrivateCandidateStore, PrivateCandidateWorkspace, CandidateRunRequest, CandidateRunCriteria } from './internal/candidate-run.js';
+
+export { runAdmissionStorePerCall, createRunAdmissionContext } from './internal/admission-context.js';
+export { createRunCreationAuthority } from './internal/authority.js';

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
-import type { EffectConfirmationView, RunView } from '#engine/index.js';
+import type { EffectConfirmationView, RunView, TargetQueueView, QueueConsent } from '#engine/index.js';
 import { shortId, type KnownSecretSnapshot } from '#platform/index.js';
 import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/core/terminal-render/index.js';
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
@@ -11,6 +11,8 @@ import WINDOW from './window.json' with { type: 'json' };
 
 /** Catalog words of the delivery window (terminal.delivery.*); `next` maps a typed error code to its next-step sentence. */
 export interface DeliveryWindowLabels {
+  readonly queue?: { readonly reprepare: string; readonly hints: string; readonly waiting: string;
+    status(view: TargetQueueView): string; card(view: Omit<QueueConsent, 'capability'>): string };
   readonly title: string; readonly ids: string; readonly loading: string; readonly check: string; readonly outOfScope: string; readonly summary: string;
   readonly file: string; readonly moreFiles: string; readonly where: string; readonly adoptionLater: string; readonly hints: string;
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
@@ -26,6 +28,7 @@ export interface DeliveryWindowLabels {
 export type DeliveryOpening = 'foreground' | 'background';
 type Waiting = Readonly<{ view: EffectConfirmationView; resolve: (yes: boolean) => void }>;
 type Stage = Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
+  | Readonly<{ kind: 'queue' | 'queue-working' }> | Readonly<{ kind: 'queue-confirm'; view: Omit<QueueConsent, 'capability'>; resolve: (yes: boolean) => void }>
   | Readonly<{ kind: 'delivered' }> | Readonly<{ kind: 'verify' }> | Readonly<{ kind: 'done' }> | Readonly<{ kind: 'failed'; error: string; code: string | null }>;
 /** The verification choice of the selected branch: the candidates (null while read), the selected row and the last refusal or read failure. */
 type Verify = { runs: readonly VerificationCandidate[] | null; selected: number; status: string };
@@ -39,7 +42,7 @@ interface Entry {
   readonly target: DeliveryTarget; readonly sinceMs: number;
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
-  selected: number; closed: boolean; settled: boolean; verify: Verify | null;
+  queue?: TargetQueueView; selected: number; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -68,6 +71,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const latest = useRef(input); latest.current = input;
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
+    if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
     entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0;
     current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.stage = { kind: 'ready' }; changed(); } },
       error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); });
@@ -90,7 +94,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const targets = useMemo(() => labels ? awaitingDeliveryTargets(input.runs, labels.fallbackTitle) : [], [input.runs, labels]);
   useEffect(() => { for (const target of targets) if (!seen.current.has(target.key)) open(target, 'background'); }, [targets, open]);
   // An unmounted terminal answers every waiting card with no.
-  useEffect(() => () => { for (const entry of entries.current.values()) if (entry.stage.kind === 'confirm') entry.stage.waiting.resolve(false); }, []);
+  useEffect(() => () => { for (const entry of entries.current.values()) if (entry.stage.kind === 'confirm') entry.stage.waiting.resolve(false); else if (entry.stage.kind === 'queue-confirm') entry.stage.resolve(false); }, []);
 
   const answer = useCallback((entry: Entry) => async (view: EffectConfirmationView): Promise<boolean> => {
     const consent = entry.consent; entry.consent = null;
@@ -106,9 +110,33 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const fail = useCallback((entry: Entry, error: unknown) => {
     entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed();
   }, [changed]);
+  const refreshQueue = useCallback((entry: Entry) => {
+    const queue = latest.current.port?.queue;
+    if (!queue || !entry.queue) return;
+    queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => {
+      if (view) { entry.queue = view; entry.stage = { kind: 'queue' }; entry.settled = view.state === 'settled'; changed(); }
+    }, error => fail(entry, error));
+  }, [changed, fail]);
+  const prepareCurrent = useCallback((entry: Entry) => {
+    const queue = latest.current.port?.queue; if (!queue) return;
+    entry.stage = { kind: 'queue-working' }; changed();
+    queue.prepareCurrent(entry.target, `terminal-queue-${randomUUID()}`).then(view => { entry.queue = view; entry.stage = { kind: 'queue' }; changed(); }, error => fail(entry, error));
+  }, [changed, fail]);
+  const confirmQueue = useCallback((entry: Entry) => {
+    const queue = latest.current.port?.queue;
+    if (!queue || entry.queue?.state !== 'awaiting-confirmation') return;
+    entry.stage = { kind: 'queue-working' }; changed();
+    const ask = (view: Omit<QueueConsent, 'capability'>) => new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
+      const finish = (yes: boolean) => { clearTimeout(timer); entry.stage = { kind: 'queue-working' }; changed(); resolve(yes); };
+      entry.stage = { kind: 'queue-confirm', view, resolve: finish }; changed();
+    });
+    queue.confirm(entry.target.scopeId, entry.queue.commandId, ask).then(() => refreshQueue(entry), error => fail(entry, error));
+  }, [changed, fail, refreshQueue]);
   const deliver = useCallback((entry: Entry) => {
     const current = latest.current.port, preview = entry.preview, words = latest.current.labels!;
     if (!current || !preview || entry.stage.kind !== 'ready') return;
+    if (preview.queueTarget && current.queue) { prepareCurrent(entry); return; }
     entry.consent = { operation: 'deliver-integration', scopeId: preview.identity.scopeId, runId: preview.identity.runId, taskId: preview.identity.taskId,
       commandId: entry.ids.delivery, files: preview.files.map(file => file.path), from: preview.base };
     entry.stage = { kind: 'working' }; changed();
@@ -120,7 +148,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         command: outcome.commandId }));
       changed();
     }, error => { entry.consent = null; fail(entry, error); });
-  }, [answer, changed, fail]);
+  }, [answer, changed, fail, prepareCurrent]);
   // Y1: the candidates of the configured verification kind, read again on `r`; a failed read is the step's status (nothing is chosen for the person).
   const readVerification = useCallback((entry: Entry) => {
     const current = latest.current.port, preview = entry.preview; if (!current || !preview) return;
@@ -155,7 +183,8 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   }, [answer, changed, fail, readVerification]);
   const close = useCallback((entry: Entry) => {
     const words = latest.current.labels!;
-    if (entry.stage.kind === 'working' || entry.stage.kind === 'adopting') return;
+    if (entry.stage.kind === 'working' || entry.stage.kind === 'adopting' || entry.stage.kind === 'queue-working') return;
+    if (entry.stage.kind === 'queue-confirm') { entry.stage.resolve(false); return; }
     if (entry.stage.kind === 'confirm') { entry.stage.waiting.resolve(false); return; }
     // The one transcript line of a window that ends without a new result: left waiting, or why it was not done (a success already wrote its line).
     const title = humanRecordText(entry.target.title, latest.current.known), stage = entry.stage;
@@ -177,6 +206,12 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
+        if (stage.kind === 'queue-confirm') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
+        if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
+          if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && ['PATCH_BASE_ADVANCED', 'ADOPTION_BASE_CHANGED', 'PATCH_CONFLICT'].includes(stage.code ?? '')) prepareCurrent(visible);
+          return true;
+        }
+        if (stage.kind === 'queue') { if (decision === 'yes') { confirmQueue(visible); return true; } if (decision === 'no') { close(visible); return true; } return false; }
         if (stage.kind === 'confirm') {
           if (decision !== null) stage.waiting.resolve(decision === 'yes');
           return decision !== null;
@@ -219,22 +254,27 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
 
 function hintsOf(entry: Entry, labels: DeliveryWindowLabels): string {
   switch (entry.stage.kind) {
+    case 'queue': return labels.queue?.hints ?? '';
+    case 'queue-confirm': return labels.confirmHints;
     case 'ready': return labels.hints;
     case 'confirm': return labels.confirmHints;
     case 'delivered': return labels.adoptHints;
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
-    case 'failed': return labels.failedHints;
+    case 'failed': return labels.queue ? labels.queue.reprepare : labels.failedHints;
     default: return '';
   }
 }
 
 /** Body rows: ids, the check of the current source, the changed files with their stat, where it writes, and the stage's own lines. */
-export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
+export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
   const rows: WindowLine[] = [line(fillTemplate(labels.ids, { run: shortId(target.runId), task: target.taskId }), { role: 'muted' })];
+  if (stage.kind === 'queue-confirm' && labels.queue) return [...rows, ...labels.queue.card(stage.view).split('\n').map(value => exact(value))];
+  if (entry.queue && labels.queue && stage.kind === 'queue') return [...rows, ...labels.queue.status(entry.queue).split('\n').map(value => exact(value))];
+  if (stage.kind === 'queue-working' && labels.queue) return [...rows, line(labels.queue.waiting)];
   if (stage.kind === 'confirm') {
     const view = stage.waiting.view;
     rows.push(line(labels.confirmBody, { role: 'warning' }), line(view.title, { bold: true }), exact(fillTemplate(labels.confirmRef, { ref: view.resource, from: view.from, to: view.to })),

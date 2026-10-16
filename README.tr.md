@@ -263,20 +263,24 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    Pencere o zaman `<commit> commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.` diye sorar ve
    `Dala alındı: refs/heads/deckent/first-job <önce> → <sonra>` ile biter. Checkout'unuz, index'iniz ve çalışma
    dosyalarınız değişmez; sonucu `git log deckent/first-job` ile görün ve birleştirmeyi kendiniz yapın.
-9. **Dala almayı geri alın**, komut satırından (terminalde henüz geri alma penceresi yok). Geri alma, dala almayı komut
-   kimliğiyle adlandırır; terminaldeki dala alma kendi ürettiği kimliği göstermez. Kendi yazabileceğiniz bir geri alma
-   için teslimi ve dala almayı seçtiğiniz kimliklerle komut satırından yapın. `<run>`, `<task>`, `<attempt>`,
-   `<generation>` ve `<layout-revision>` değerleri `deckent inventory --scope my-project --json` çıktısından gelir; bu
-   komutların her biri doğrulanmış bir insan terminalinde bir `y` ister:
+9. **Kuyrukta benimsenen işi inceleyin veya geri alın** (kaynak adayı; gerçek terminal kabulü bekliyor).
+   Kayıtlı entegrasyon hedefi servis kuyruğunu kullanır. `/deliver` güncel tabanda hazırlar; taban/hedef reddinden sonra `r`
+   yeniden hazırlama sunar. Son bilinen durumu `r` ile okuyun; yayın ve benimseme tam ve sabit partiyi ayrı gösterip `y/N`
+   sorar. `/runs` ayrıntısı yetkili kapsam konumunu, sorumluyu ve sonucu gösterir. Main/varsayılan/korunan, checkout'taki veya
+   yabancı hedef allowlist'te olsa da reddedilir. Çakışan yollar yeni Attempt gerektirir; kullanıcı dalına rebase/merge yapılmaz.
 
    ```sh
-   S="--scope my-project --run <run> --task <task> --attempt <attempt> --generation <generation> --layout-revision <layout-revision>"
-   deckent task integration-check $S
-   deckent task integration-prepare $S --command-id prep-1 --proposal <kontrol satırındaki öneri>
-   deckent task integration-deliver $S --command-id deliver-1 --candidate-command-id prep-1
-   deckent task integration-adopt $S --command-id adopt-1 --delivery-command-id deliver-1 --target refs/heads/deckent/first-job
-   deckent task integration-rollback $S --command-id undo-1 --adoption-command-id adopt-1
+   deckent task integration-queue-list --scope my-project --json
+   deckent task integration-queue-inspect --scope my-project --command-id <bilet> --json
+   deckent task integration-queue-confirm --scope my-project --command-id <bilet>
+   deckent task integration-queue-rollback --scope my-project --source-command-id <bilet> --command-id undo-1
+   deckent task integration-queue-confirm --scope my-project --command-id undo-1
    ```
+
+   Geri alma kartı sonuçlanmış tek işi kapsar. Hata partinin kalanını durdurur; benimsenmiş ön ek korunur. Belirsiz etki o
+   hedefi uzlaştırmaya kadar tutar. Eski doğrudan entegrasyon komutları tarihsel makbuzları okuyabilir; etkin kuyruk generation'ı
+   üzerinden yazamaz. Sınırlar ve bilet ömrü `targetQueue` kaynağındadır; doğrulama profili ve politika gerekir. Bu kaynak adayı
+   paketlenmiş binary, hosted CI, canlı, platform veya N1 yük kabulü kanıtı değildir.
 
    ```text
    Kaynak <kaynak> · etkilenen dosyalar base ile aynı · öneri <öneri>

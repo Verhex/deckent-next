@@ -4,12 +4,12 @@ import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js'
 import { parseIntegrationDiffStats, patchDigest, WorkspacePatchError, type IntegrationDeliveryTarget, type IntegrationDeliveryCommand,
   type IntegrationDeliveryPlan, type IntegrationManifest, type WorkspacePatch } from '#engine/index.js';
 import { SystemTrustedClock, t, redactForRecord } from '#platform/index.js';
-import type { IntegrationCommitMetadata } from '#engine/index.js';
+import { queueGenerationRef, type IntegrationCommitMetadata, type GitQueueFence } from '#engine/index.js';
 import { GitCommand } from './git-command.js';
 /** Writes Git objects and one create-only dedicated reference, never the source index/checkout. */
 export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
   private readonly command: GitCommand;
-  constructor(private readonly options: GitWorkspaceOptions) { this.command = new GitCommand(options); }
+  constructor(private readonly options: GitWorkspaceOptions, private readonly queueFence?: GitQueueFence) { this.command = new GitCommand(options); }
   private git(args: string[], input = '', index?: string, deadline?: number, deliveredAtMs?: number) { return this.command.run(args, input, index, deadline, deliveredAtMs); }
   private custody() { return this.command.custody(); }
   async plan(command: IntegrationDeliveryCommand, manifest: IntegrationManifest, patch: WorkspacePatch, metadata: IntegrationCommitMetadata = { title: command.identity.taskId, acceptance: { phase: 'unknown', criteria: 0, runRevision: 0, modelUnverified: false }, deliveredAtMs: new SystemTrustedClock().sample().wallMs }): Promise<IntegrationDeliveryPlan> {
@@ -67,7 +67,8 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
       const commit = await this.git(['hash-object', '-w', '-t', 'commit', '--stdin'], raw + '\n', undefined, deadline);
       if (commit !== plan.commit) throw new WorkspacePatchError('PATCH_CORRUPT');
     }
-    try { await this.git(['update-ref', '--stdin'], `start\nverify ${base} ${baseCommit}\ncreate ${plan.ref} ${plan.commit}\nprepare\ncommit\n`); }
+    const generation = this.queueFence ?? { ref: queueGenerationRef(base), value: '0'.repeat(baseCommit.length) };
+    try { await this.git(['update-ref', '--stdin'], `start\noption no-deref\nverify ${generation.ref} ${generation.value}\nverify ${base} ${baseCommit}\ncreate ${plan.ref} ${plan.commit}\nprepare\ncommit\n`); }
     catch (error) {
       // A concurrent identical command may have won. Exact ref/commit custody is the only recovery evidence.
       if (await this.delivered(plan)) return;

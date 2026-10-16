@@ -5,8 +5,8 @@ import { targetBindingSchema, candidateBindingSchema, candidateEvidenceSchema } 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const actor = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
 export const targetQueueRequestSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
-  identity: attemptIdentitySchema, target: targetBindingSchema, actor, payloadDigest: digest, policyRevision: identitySchema,
-  outputDigest: digest, acceptedRevision: counterSchema, submittedAt: counterSchema, deadline: counterSchema }).strict().refine(value => value.deadline > value.submittedAt, 'QUEUE_EXPIRED').readonly();
+  operation: z.enum(['delivery', 'rollback']).optional(), sourceCommandId: identitySchema.optional(), replacesCommandId: identitySchema.optional(), identity: attemptIdentitySchema, target: targetBindingSchema, actor, payloadDigest: digest, policyRevision: identitySchema,
+  outputDigest: digest, acceptedRevision: counterSchema, submittedAt: counterSchema, deadline: counterSchema }).strict().refine(value => value.deadline > value.submittedAt && ((value.operation === 'rollback') === (value.sourceCommandId !== undefined)), 'QUEUE_EXPIRED').readonly();
 export type TargetQueueRequest = z.infer<typeof targetQueueRequestSchema>;
 export const targetQueueStateSchema = z.enum(['queued', 'revalidating', 'verifying', 'awaiting-confirmation', 'publishing', 'adopting',
   'reconciling', 'cancelled', 'expired', 'parked', 'settled']);
@@ -29,11 +29,11 @@ export function queueTerminal(state: TargetQueueState): boolean {
 /** Unknown is never skipped or expired; recovery needs physical custody, not a lease's wall-clock age. */
 export function queueNextState(previous: TargetQueueRecord, state: TargetQueueState): void {
   const transitions: Readonly<Record<TargetQueueState, readonly TargetQueueState[]>> = {
-    queued: ['revalidating', 'cancelled', 'expired', 'parked'], revalidating: ['verifying', 'settled', 'cancelled', 'parked'],
-    verifying: ['awaiting-confirmation', 'settled', 'cancelled', 'parked'],
-    'awaiting-confirmation': ['publishing', 'cancelled', 'expired', 'parked'],
+    queued: ['revalidating', 'cancelled', 'expired', 'parked'], revalidating: ['verifying', 'settled', 'cancelled', 'parked', 'reconciling'],
+    verifying: ['awaiting-confirmation', 'settled', 'cancelled', 'parked', 'reconciling'],
+    'awaiting-confirmation': ['publishing', 'adopting', 'cancelled', 'expired', 'parked', 'reconciling'],
     publishing: ['adopting', 'reconciling'], adopting: ['settled', 'reconciling'],
-    reconciling: ['settled'], cancelled: [], expired: [], parked: [], settled: [],
+    reconciling: ['reconciling', 'settled', 'parked'], cancelled: [], expired: [], parked: [], settled: [],
   };
   if (!transitions[previous.state].includes(state)) throw new TargetQueueError('QUEUE_CONFLICT');
 }

@@ -19,7 +19,7 @@ function prepared(n: number): TargetQueueRecord {
 }
 function fixture(failure: 'none' | 'unknown' | 'refused' | 'throw' = 'none') {
   const records = [prepared(1), prepared(2), prepared(3)], map = new Map(records.map(r => [r.request.commandId, r]));
-  const store: TargetQueueStore = { enqueue() { throw new Error('not-used'); }, load(_scope, id) { return map.get(id) ?? null; },
+  const store: TargetQueueStore = { reserve() { throw new Error('not-used'); }, enqueue() { throw new Error('not-used'); }, load(_scope, id) { return map.get(id) ?? null; },
     list() { return [...map.values()]; }, epoch() { return 1; }, head() { return [...map.values()].find(r => r.state !== 'settled') ?? null; },
     change(before, after) { expect(map.get(before.request.commandId)).toEqual(before); map.set(before.request.commandId, after); return after; } };
   const app = new TargetQueueApplication(store, { async authorize() {}, async validate() {} }, bounds, () => {}), effects: string[] = [];
@@ -66,4 +66,20 @@ describe('verified prefix batches', () => {
     expect(view).toMatchObject({ nextAction: 'watch-reconciliation', responsibility: 'reconciler', freshness: 'last-known', basis: { observed: 'V0', effective: 'V0', candidate: 'V1' } });
     expect(view).not.toHaveProperty('ordinal'); expect(view).not.toHaveProperty('backlog');
   });
+});
+
+it('serializes an exact rollback with its own consent and keeps an uncertain rollback reconciling', async () => {
+  const f = fixture(), original = f.records[0]!, rollback = { ...original, request: { ...original.request, operation: 'rollback' as const, sourceCommandId: 'source-ticket' } };
+  f.map.set(rollback.request.commandId, rollback);
+  const batch = prepareTargetBatch([rollback], 'rollback', bounds, 10, 500);
+  expect(batch.items[0]).toMatchObject({ from: 'V1', to: 'V0' });
+  f.port.compensate = async () => { f.effects.push('rollback'); return { state: 'settled', evidenceRefs: ['a'.repeat(64)] }; };
+  expect((await f.executor.rollback(batch)).settledPrefix).toBe(1);
+  expect(f.effects).toEqual(['fence', 'rollback']); expect(f.consents).toEqual(['rollback', 'rollback']);
+  expect(f.map.get('c1')).toMatchObject({ state: 'settled', outcome: null });
+  const u = fixture(), record = { ...u.records[0]!, request: rollback.request }; u.map.set('c1', record);
+  u.port.compensate = async () => ({ state: 'unknown' });
+  expect((await u.executor.rollback(prepareTargetBatch([record], 'rollback', bounds, 10, 500))).settledPrefix).toBe(0);
+  expect(u.map.get('c1')?.state).toBe('reconciling');
+  expect(() => u.app.transition(u.map.get('c1')!, { state: 'parked' })).toThrow('QUEUE_CONFLICT');
 });

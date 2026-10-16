@@ -1,3 +1,4 @@
+import { observeConfiguredQueueRun } from './queue-view.js';
 import { userInfo } from 'node:os';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
@@ -7,7 +8,6 @@ import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { observeConfiguredRunResults } from './result-view.js';
 import { configuredWorkCostEvidence } from '#composition/core/resource-observation/index.js';
-/** Local CLI/SDK scope authority comes from trusted policy, never request/config membership; model rows need `read-output` per attempt. */
 export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
   try {
     const query = runQuerySchema.parse(input);
@@ -18,8 +18,10 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
     const inspected = await app.inspectWithModels(query);
     if (!inspected.run) return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected });
-    const run = await observeConfiguredRunResults(config, options.env, inspected.run, principal,
+    let run = await observeConfiguredRunResults(config, options.env, inspected.run, principal,
       new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes)));
+    const targetQueue = await observeConfiguredQueueRun(query, config, path, principal, new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes)));
+    if (targetQueue.records.length || targetQueue.truncated) run = { ...run, targetQueue };
     return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run });
   } catch (error) { throw queryFailure(error); }
 }

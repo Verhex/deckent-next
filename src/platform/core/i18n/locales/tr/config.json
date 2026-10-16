@@ -50,5 +50,6 @@
   "config.panel.permissionsUnread": "İzinleriniz okunamadı ({code}); kilit gösterilmiyor, her değişiklik yapılırken denetlenir.",
   "config.panel.invalid": "Bu değer uymuyor; beklenen: {expected}. Hiçbir şey gönderilmedi.",
   "config.field.backup": "Yedekleme sıklığı ve kurtarma seti saklama sayısı",
-  "config.field.audit": "Audit checkpoint zamanlaması ve sınırlı doğrulama ayarları"
+  "config.field.audit": "Audit checkpoint zamanlaması ve sınırlı doğrulama ayarları",
+  "config.field.targetQueue": "Hedef kuyruğu kapasitesi, hedef başına bekleyen iş, etkin hedefler, parti/zincir boyu, toplama aralığı, sahiplik süresi, bilet ömrü, doğrulama süresi, yeniden kontrol bütçesi ve aday kapasitesi. Süreler milisaniyedir; sınırlar kurulum politikasıdır, ölçülmüş kapasite değildir."
 }

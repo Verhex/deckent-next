@@ -11,6 +11,7 @@ export interface TargetBatchEffects {
   validate(record: TargetQueueRecord, item: TargetBatchItem, fence: string): Promise<void>;
   publish(record: TargetQueueRecord, fence: string): Promise<QueueEffectResult>;
   adopt(record: TargetQueueRecord, fence: string): Promise<QueueEffectResult>;
+  compensate?(record: TargetQueueRecord, fence: string): Promise<QueueEffectResult>;
   /** Exact custody/fence lookup; never repeats an uncertain external write. */
   lookup(record: TargetQueueRecord, fence: string): Promise<QueueEffectResult>;
 }
@@ -75,13 +76,37 @@ export class TargetBatchExecutor {
     }
     return { settledPrefix, items: outcomes };
   }
+  async rollback(batch: TargetBatch): Promise<TargetBatchExecution> {
+    const item = batch.items[0];
+    if (batch.operation !== 'rollback' || batch.items.length !== 1 || !item || !this.effects.compensate) throw new TargetQueueError('QUEUE_CONFLICT');
+    let record = this.read(item);
+    if (record.request.operation !== 'rollback' || record.state !== 'awaiting-confirmation' || record.revision !== item.revision || record.ordinal !== item.ordinal
+      || record.key !== targetQueueKey(batch.target) || record.ownerInstance !== batch.ownerInstance || record.epoch !== batch.epoch
+      || record.candidate?.candidateDigest !== item.candidateDigest || record.candidate.candidateVersion !== item.from || record.candidate.effectiveVersion !== item.to
+      || record.verification?.evidenceReceipt !== item.verificationReceipt || JSON.stringify(record.effectCommandIds) !== JSON.stringify(item.effectCommandIds)) throw new TargetQueueError('QUEUE_CONFLICT');
+    assertCandidateEvidence(record.candidate, record.verification);
+    if (this.now() >= batch.expiresAt || this.now() >= record.request.deadline) throw new TargetQueueError('QUEUE_EXPIRED');
+    await this.consents.assert(batch);
+    const fence = await this.effects.fence(batch.target, batch.ownerInstance, batch.epoch);
+    await this.effects.validate(record, item, fence); await this.consents.assert(batch);
+    record = this.app.transition(record, { state: 'adopting', batchDigest: targetBatchDigest(batch) });
+    try {
+      const result = await this.effects.compensate(record, fence);
+      if (result.state !== 'settled' || !result.evidenceRefs.length) throw new TargetQueueError('QUEUE_RECOVERY_REQUIRED');
+      this.app.transition(record, { state: 'settled', outcome: null, evidenceRefs: [...record.evidenceRefs, ...result.evidenceRefs] });
+      return { settledPrefix: 1, items: [{ commandId: item.commandId, published: false, state: 'settled' }] };
+    } catch {
+      this.app.transition(this.read(item), { state: 'reconciling' });
+      return { settledPrefix: 0, items: [{ commandId: item.commandId, published: false, state: 'unknown' }] };
+    }
+  }
   async reconcile(record: TargetQueueRecord): Promise<TargetQueueRecord> {
     if (record.state !== 'reconciling' || !record.ownerInstance) throw new TargetQueueError('QUEUE_CONFLICT');
     const fence = await this.effects.fence(record.request.target, record.ownerInstance, record.epoch);
     const found = await this.effects.lookup(record, fence);
     if (found.state !== 'settled' || !found.evidenceRefs.length) return record;
     // Lookup must establish the complete adoption, not merely delivery publication. No silent publication/adoption replay here.
-    return this.app.transition(record, { state: 'settled', outcome: record.candidate?.effectiveVersion === record.candidate?.observedVersion ? 'adopted' : 're-prepared+adopted',
+    return this.app.transition(record, { state: 'settled', outcome: record.request.operation === 'rollback' ? null : record.candidate?.effectiveVersion === record.candidate?.observedVersion ? 'adopted' : 're-prepared+adopted',
       evidenceRefs: [...record.evidenceRefs, ...found.evidenceRefs] });
   }
 }

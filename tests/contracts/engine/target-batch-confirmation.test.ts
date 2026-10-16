@@ -51,3 +51,22 @@ describe('service batch confirmation', () => {
     f.active(false); await expect(guard()).rejects.toThrow('QUEUE_AUTHORITY_REQUIRED');
   });
 });
+
+it('expires an exact batch on monotonic time even when wall time moves backwards', async () => {
+  let wall = 10, mono = 10;
+  const app = new TargetBatchConfirmation({ async capture() { return { processStart: 'p', terminal: 'tty' }; }, async sessionActive() { return true; }, async record() {} }, 4, () => wall, () => mono);
+  const capability = await app.challenge(peer, batch), guard = await app.answer(peer, batch, capability, 'allow');
+  wall = 5; mono = 1001;
+  await expect(guard()).rejects.toThrow('QUEUE_EXPIRED');
+  const other = new TargetBatchConfirmation({ async capture() { return { processStart: 'p', terminal: 'tty' }; }, async sessionActive() { return true; }, async record() {} }, 4, () => wall, () => mono);
+  wall = 10; mono = 10; const token = await other.challenge(peer, batch); wall = 20; mono = 1010;
+  await expect(other.answer(peer, batch, token, 'allow')).rejects.toThrow('QUEUE_EXPIRED');
+});
+
+it('checks expiry after an awaited terminal witness, before releasing the effect guard', async () => {
+  let now = 10, delayed = false;
+  const app = new TargetBatchConfirmation({ async capture() { if (delayed) now = 1000; return { processStart: 'p', terminal: 'tty' }; },
+    async sessionActive() { return true; }, async record() {} }, 4, () => now);
+  const token = await app.challenge(peer, batch), guard = await app.answer(peer, batch, token, 'allow');
+  delayed = true; await expect(guard()).rejects.toThrow('QUEUE_EXPIRED');
+});

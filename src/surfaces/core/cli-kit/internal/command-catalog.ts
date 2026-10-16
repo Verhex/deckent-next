@@ -75,6 +75,7 @@ export const CLI_CATALOG = [
     action('integration-check', 'work', 'cli.help.action.integration-check', 'cli.help.task'),
     action('integration-prepare', 'work', 'cli.help.action.integration-prepare', 'cli.help.task'),
     action('integration-inspect', 'work', 'cli.help.action.integration-inspect', 'cli.help.task'),
+    ...['enqueue', 'list', 'inspect', 'confirm', 'rollback'].map(name => action(`integration-queue-${name}`, 'work', 'queue.cli.summary', 'queue.cli.help')),
     action('integration-deliver', 'work', 'cli.help.action.integration-deliver', 'cli.help.task'),
     action('integration-adopt', 'work', 'cli.help.action.integration-adopt', 'cli.help.task'),
     action('integration-rollback', 'work', 'cli.help.action.integration-rollback', 'cli.help.task'),
