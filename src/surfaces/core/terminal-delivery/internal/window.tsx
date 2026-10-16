@@ -35,6 +35,8 @@ type Verify = { runs: readonly VerificationCandidate[] | null; selected: number;
 /** The choices a verification step offers: each accepted candidate, and adopting without verification only when the installation allows it. */
 const verifyOptions = (preview: DeliveryPreview, verify: Verify): readonly (string | null)[] =>
   [...(verify.runs ?? []).map(run => run.runId), ...(verify.runs && !preview.verification?.required ? [null] : [])];
+/** Typed refusals of a moved base that the queue can re-prepare on the current base (`r`); every other failure only closes. */
+const QUEUE_REPREPARE = new Set(['PATCH_BASE_ADVANCED', 'ADOPTION_BASE_CHANGED', 'PATCH_CONFLICT']);
 /** Typed refusals that mean "choose another verification" rather than "the adoption is over" (the window returns to the choice). */
 const VERIFY_RETRY = new Set(['ADOPTION_NOT_VERIFIED', 'ADOPTION_VERIFICATION_MISMATCH', 'ADOPTION_VERIFICATION_CRITERIA_WEAKER', 'ADOPTION_VERIFICATION_FAILED',
   'ADOPTION_VERIFICATION_PENDING', 'ADOPTION_VERIFICATION_UNSETTLED', 'ADOPTION_VERIFICATION_CANCELLED']);
@@ -202,13 +204,13 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const visible = order.current.map(key => entries.current.get(key)).find((entry): entry is Entry => Boolean(entry && !entry.closed)) ?? null;
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
-      body={deliveryLines(visible, labels, input.known)} hints={hintsOf(visible, labels)} position={input.position} decision
+      body={deliveryLines(visible, labels, input.known)} hints={hintsOf(visible, labels, Boolean(port?.queue))} position={input.position} decision
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
         if (stage.kind === 'queue-confirm') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
         if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
-          if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && ['PATCH_BASE_ADVANCED', 'ADOPTION_BASE_CHANGED', 'PATCH_CONFLICT'].includes(stage.code ?? '')) prepareCurrent(visible);
+          if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && QUEUE_REPREPARE.has(stage.code ?? '')) prepareCurrent(visible);
           return true;
         }
         if (stage.kind === 'queue') { if (decision === 'yes') { confirmQueue(visible); return true; } if (decision === 'no') { close(visible); return true; } return false; }
@@ -252,7 +254,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     target: (key: string) => entries.current.get(key)?.target ?? null };
 }
 
-function hintsOf(entry: Entry, labels: DeliveryWindowLabels): string {
+function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boolean): string {
   switch (entry.stage.kind) {
     case 'queue': return labels.queue?.hints ?? '';
     case 'queue-confirm': return labels.confirmHints;
@@ -261,7 +263,9 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels): string {
     case 'delivered': return labels.adoptHints;
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
-    case 'failed': return labels.queue ? labels.queue.reprepare : labels.failedHints;
+    // The re-prepare key is offered only where `r` acts (the same rule as the key handler); closing stays visible on every failure.
+    case 'failed': return labels.queue && queueAvailable && !entry.queue && QUEUE_REPREPARE.has(entry.stage.code ?? '')
+      ? `${labels.queue.reprepare} · ${labels.failedHints}` : labels.failedHints;
     default: return '';
   }
 }

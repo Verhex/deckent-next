@@ -85,6 +85,8 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const result = await inPty(f.project, f.options.env, 'window', [...opening, [WINDOW, ''], ...decide('y', 'Next: '), ['Enter/Esc close', '']]);
     expect(result.output).toMatch(/ERR PATCH_(?:BASE_ADVANCED|CONFLICT)/u);
     expect(await f.refs()).toEqual(before); expect(await f.deliveries()).toEqual([]);
+    // No queue is composed in this window: the queue's re-prepare key is not offered, closing is (terminal-delivery-window covers the offer).
+    expect(result.output).not.toContain('r: re-prepare on current base');
   });
 
   it('with a configured target, adoption needs a second y: n keeps the branch, y moves it to the delivered commit', async () => {

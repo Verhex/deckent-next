@@ -479,6 +479,19 @@ it('offers current-base queue preparation after a typed stale-base refusal', asy
   h.port.preview = async () => { throw Object.assign(new Error('base advanced'), { code: 'PATCH_BASE_ADVANCED' }); };
   h.port.queue = { async prepareCurrent(_target, command) { queued.push(command); throw new Error('adapter unavailable'); }, async inspect() { return null; }, async confirm() { throw new Error('must-not-confirm'); } };
   await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
+  // The re-prepare key is offered next to closing, never instead of it.
+  expect(frame(h)).toContain(WORDS.queue!.reprepare); expect(frame(h)).toContain(WORDS.failedHints);
   await press(h, CTRL_O); await press(h, 'r'); await until(() => frame(h).includes('adapter unavailable'), 'queue preparation refusal');
   expect(queued).toHaveLength(1); expect(h.calls).not.toContain('publish');
+  // A refusal `r` cannot act on offers only closing.
+  expect(frame(h)).not.toContain(WORDS.queue!.reprepare); expect(frame(h)).toContain(WORDS.failedHints);
+  await press(h, 'r'); expect(queued).toHaveLength(1);
+});
+
+it('without a queue port a stale-base refusal offers only closing; r does nothing', async () => {
+  const h = harness();
+  h.port.preview = async () => { throw Object.assign(new Error('base advanced'), { code: 'PATCH_BASE_ADVANCED' }); };
+  await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
+  expect(frame(h)).toContain(WORDS.failedHints); expect(frame(h)).not.toContain(WORDS.queue!.reprepare);
+  await press(h, CTRL_O); await press(h, 'r'); expect(frame(h)).toContain('base advanced'); expect(h.calls).not.toContain('prepare');
 });
