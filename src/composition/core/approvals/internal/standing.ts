@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
-  PolicyAdministrationInspection, PolicyTemplateUpgrade, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
+  PolicyAdministrationInspection, PolicyTemplateUpgrade, firstRunServiceIdentity, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -13,12 +13,12 @@ function withStanding<T>(root: string, scopeId: string, options: ConfigLoadOptio
   return withPolicyAdministration(root, scopeId, options, access, (deps, person) => use(new PersistentStanding(deps), person));
 }
 export async function withPolicyAdministration<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: 'read' | 'write',
-  use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore }, person: Person) => Promise<T>): Promise<T> {
+  use: (deps: PersistentStandingDependencies & { readonly policy: import('#engine/index.js').PolicySource & Partial<import('#engine/index.js').AuthorityHistorySource>; readonly effects?: import('#engine/index.js').EffectStore; readonly serviceIdentity?: { readonly scopeId: string; readonly serviceId: string } | null }, person: Person) => Promise<T>): Promise<T> {
   try {
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(root, scopeId, options, access);
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
     const denied = () => Promise.reject(new Error('read-only'));
-    if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied }, principal);
+    if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied, serviceIdentity: config.service.identity }, principal);
     const peer = localPrincipalPeer(), clock = new SystemTrustedClock(), sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock, peer);
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), ledger = await path();
     const effects = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid'), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
@@ -36,7 +36,7 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
         { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize, undefined, undefined, { producers, peerPid: peer?.pid ?? null, interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) })
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
       };
-      return await use({ administration, approve, policy: source, effects }, principal);
+      return await use({ administration, approve, policy: source, effects, serviceIdentity: config.service.identity }, principal);
     } finally { journal.close(); effects.close(); auditStore.close(); }
   } catch (error) { throw queryFailure(error); }
 }
@@ -81,7 +81,7 @@ export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, o
   readonly expect?: string; readonly reason: string }): Promise<TemplateUpgradeResult> {
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
     new PolicyTemplateUpgrade(deps, { proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
-      policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID })
+      policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, serviceId: firstRunServiceIdentity(scopeId, deps.serviceIdentity ?? null).serviceId })
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }) }));
 }
 /** CLI, SDK, MCP and doctor share the same scoped, read-only policy observation. */

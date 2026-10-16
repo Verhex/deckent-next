@@ -128,6 +128,25 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12 option A: a governed v11 upg
   expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
 });
 
+it.skipIf(process.platform !== 'linux')('Astra 2596: a governed upgrade that named the configured service `local` stays rollbackable under the historical identity, not today\'s default', async () => {
+  const v12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+  const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+  const older = { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id) && !v12.includes(rule.id)) };
+  await f.source.updateAuthority(() => ({ write: { policy: older, bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+  // The plan the governed chain submitted then: the v11 delta and both owner rules, the stop rule naming the then-configured service `local`.
+  const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || v12.includes(rule.id))
+    .map((rule: { id: string; resource: object }) => rule.id === v12[1] ? { ...rule, resource: { kind: 'service', ids: ['local'] } } : rule);
+  const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v12-bindings';
+  const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
+  const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+    target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
+  await f.source.updateAuthority(() => ({ write: { policy: { ...older, revision: 'a-governed', grants: [...older.grants, ...rules] }, bindings: null, order: 'policy-first' }, result: null }), key);
+  // The fixture's upgrade carries no service id today (default `s-runtime`): the entry's own `local` decides whether it was this upgrade.
+  expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  expect(JSON.parse(await f.bytes()).grants.find((rule: { id: string }) => rule.id === v12[1])?.resource).toEqual({ kind: 'service', ids: ['local'] });
+});
+
 it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
   const fresh = await fixture(undefined, false), initial = await fresh.bytes();
   expect(await fresh.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });

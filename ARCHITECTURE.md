@@ -737,7 +737,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 - **First-run policy template v12 (v5 MCP decisions: Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38; v12 POLICY-V12, owner 2026-10-16):** the installing owner holds `mcp-server` for every server in
   every scope, the `mcp.tool.call` operation, the read tool `propose_mcp_server`, and in the installed scope the `policy.administer` operation
   and approval inspect/decide (every change still passes card, audit and I2). Existing installations: `deckent init policy --scope <id> --upgrade
-  --preview|--apply [--expect <revision>]` (installer authority: only the installation owner — the caller's uid owns both authority documents —
+  --preview|--apply [--expect <token>]` (the token is `<policy revision>~<12 hex>` binding the runtime service identity the plan names; a bare revision, another identity, an identity re-read as changed or a configuration changed under the authority writer's lock is a typed `conflict` — Astra 2596; installer authority: only the installation owner — the caller's uid owns both authority documents —
   and only when the first-run read rule names the caller explicitly; anyone else uses the governed path) adds the current template rules that person lacks, removes
   or replaces nothing (same-id rules with other content are kept and named as conflicts; hand-added MCP wire-name rules are named), writes on the
   previewed revision through the archived authority writer and the configured layout; a second run is `current`; an older policy receives

@@ -181,7 +181,8 @@ flowchart LR
 Before you start: Docker is running; the project is a Git repository with at least one commit; the coding CLI you want
 as worker (Claude Code or Codex) is logged in on this machine with its own login; and your installation has the current
 first-run policy (a fresh `deckent init policy --scope <id> --apply` does; an older one upgrades with
-`deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <revision>`).
+`deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <value>` with the exact value the preview printed; it binds the
+policy revision and the runtime service identity, so a change of either in between is refused and asks for a new preview).
 
 1. **Build the worker image** once, in the Deckent source checkout (it needs Docker and writes a new receipt file):
 

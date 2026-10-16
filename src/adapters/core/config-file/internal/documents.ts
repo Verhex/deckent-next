@@ -1,8 +1,17 @@
+import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs';
 import { ConfigApplicationError, configFieldView, type ConfigLayer, type ConfigSnapshot, type ConfigDocumentPort } from '#engine/index.js';
 import { loadConfig, productResourcePath, resolveProductLayout, resolveGlobalConfigPaths,
   readJsonFile, versionedConfig, withConfigWriteLock, writeJsonAtomic, serializeJsonDocument, type ConfigLoadOptions } from '#platform/index.js';
 import { isRecord, digestText } from '#platform/index.js';
 import { assertConfigPreimage, backupConfig, pruneConfigBackups, ErrorRegistry } from '#platform/index.js';
+/** Both configuration layers' bytes as one synchronous digest, checked under another writer's lock (POLICY-V12, Astra 2596); a missing layer has a marker. */
+export function configLayersFingerprint(projectRoot: string, options: ConfigLoadOptions = {}): string {
+  const env = options.env ?? process.env, platform = options.platform ?? process.platform;
+  const paths = [productResourcePath(resolveProductLayout({ projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config'), resolveGlobalConfigPaths(env, platform).platformPath];
+  const hash = createHash('sha256');
+  for (const path of paths) { let bytes: Buffer | null; try { bytes = readFileSync(path); } catch { bytes = null; } hash.update(bytes === null ? '\0absent\0' : `\0${bytes.length}\0`); if (bytes) hash.update(bytes); }
+  return hash.digest('hex');
+}
 /** Filesystem adapter: fixed bootstrap paths, guarded preimages, durable backups and atomic publication. */
 export function createConfigFileDocuments(projectRoot: string, options: ConfigLoadOptions = {}): ConfigDocumentPort {
   const env = options.env ?? process.env;

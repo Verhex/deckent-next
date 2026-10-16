@@ -46,16 +46,21 @@ export function firstRunServiceIdentity(scopeId: string, configured: ServiceIden
 /** What the first-run installer did with `service.identity`: `written` (the audited config write, or the journaled first config), `planned` (preview),
  * `kept` (already configured for this scope), `other-scope` (configured for another scope: kept, never overwritten), `skipped` (the upgrade was
  * refused or conflicted: nothing written) or `not-set` (a typed refusal; the policy result stands). */
-export type FirstRunServiceIdentityResult = Readonly<{ status: 'written' | 'planned' | 'kept' | 'other-scope' | 'skipped' | 'not-set'; identity: ServiceIdentity | null; code?: string }>;
-/** The configuration seam: the effective identity and the project layer's digest from one read; the write goes through the one config write contract. */
+export type FirstRunServiceIdentityResult = Readonly<{ status: 'written' | 'planned' | 'kept' | 'other-scope' | 'skipped' | 'changed' | 'not-set'; identity: ServiceIdentity | null; code?: string }>;
+/** The configuration seam: the effective identity and the project layer's digest from one read; the write goes through the one config write contract.
+ * `fingerprint` (synchronous) names the bytes of every configuration layer that can set the identity; it is compared under the authority writer's lock. */
 export interface FirstRunServiceIdentityPort {
   read(): Promise<{ readonly identity: ServiceIdentity | null; readonly digest: string | null }>;
   write(identity: ServiceIdentity, expect: string | null): Promise<unknown>;
+  fingerprint?(): string;
 }
-/** Writes `target` only when no identity is configured (on exactly the digest read); an existing one is never replaced. `write: false` reads only. */
-export async function settleFirstRunServiceIdentity(port: FirstRunServiceIdentityPort, target: ServiceIdentity, write: boolean): Promise<FirstRunServiceIdentityResult> {
+const sameIdentity = (a: ServiceIdentity | null, b: ServiceIdentity | null) => a === b || (!!a && !!b && a.scopeId === b.scopeId && a.serviceId === b.serviceId);
+/** Writes `target` only when no identity is configured (on exactly the digest read); an existing one is never replaced. `write: false` reads only.
+ * `seen` (POLICY-V12 Astra 2596): the identity the plan was chosen from; another one now is `changed` (nothing written, the caller re-previews). */
+export async function settleFirstRunServiceIdentity(port: FirstRunServiceIdentityPort, target: ServiceIdentity, write: boolean, seen?: ServiceIdentity | null): Promise<FirstRunServiceIdentityResult> {
   try {
     const { identity, digest } = await port.read();
+    if (seen !== undefined && !sameIdentity(identity, seen)) return Object.freeze({ status: 'changed', identity: identity ? Object.freeze({ scopeId: identity.scopeId, serviceId: identity.serviceId }) : null });
     if (identity) return Object.freeze({ status: identity.scopeId === target.scopeId ? 'kept' : 'other-scope', identity: Object.freeze({ scopeId: identity.scopeId, serviceId: identity.serviceId }) });
     if (!write) return Object.freeze({ status: 'planned', identity: target });
     await port.write(target, digest);
@@ -203,7 +208,7 @@ export interface PolicyTemplateUpgradeResult {
   readonly status: 'preview' | 'upgraded' | 'current' | 'unavailable' | 'conflict';
   /** `not-first-run`: no template read rule (a hand-built policy: name its person with `person`); `not-this-person`: the template's read rule does
    * not name the person; `person-not-named`: the named person is on no explicit allow rule of this scope; `invalid`: unreadable policy or person. */
-  readonly reason: 'not-first-run' | 'not-this-person' | 'person-not-named' | 'not-owner' | 'invalid' | 'revision-changed' | null;
+  readonly reason: 'not-first-run' | 'not-this-person' | 'person-not-named' | 'not-owner' | 'invalid' | 'revision-changed' | 'service-identity-changed' | 'service-identity-unbound' | null;
   readonly template: { readonly id: string; readonly to: number };
   /** The person the added rules name (the OS identity, or the explicitly named `person`). */
   readonly scopeId: string; readonly principal: Person;
@@ -248,7 +253,9 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   /** The explicitly named person (`--person`): required for a hand-built policy; on a template policy it must be the person the template names. */
   readonly person?: Person;
   /** At most this many named people in a refusal hint (display only; the policy may name more): the installation's inspection page size. */
-  readonly peopleLimit: number; readonly audit: (event: AuditEvent) => void; readonly now: () => number }): Promise<PolicyTemplateUpgradeResult> {
+  readonly peopleLimit: number; readonly audit: (event: AuditEvent) => void; readonly now: () => number;
+  /** Runs under the authority writer's lock right before publication (and before the audit record); a throw publishes nothing. */
+  readonly guard?: () => void }): Promise<PolicyTemplateUpgradeResult> {
   const scopeId = identitySchema.parse(input.scopeId);
   const named = input.person === undefined ? null : { issuer: identitySchema.safeParse(input.person.issuer), subject: identitySchema.safeParse(input.person.subject) };
   const person = named === null ? null : named.issuer.success && named.subject.success ? { issuer: named.issuer.data, subject: named.subject.data } : undefined;
@@ -304,10 +311,44 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     if (revisionOf(snapshot.policy) !== first.revision) return { write: null, result: result('conflict', { reason: 'revision-changed', revision: revisionOf(snapshot.policy) }) };
     const again = plan(snapshot.policy);
     if (again.result.status !== 'preview' || again.next === null) return { write: null, result: again.result };
-    const beforePublish = () => input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
+    const beforePublish = () => { input.guard?.(); input.audit(installerAuthorityChangeEvent({ scopeId, caller: input.principal, person: principal, basis: again.result.basis!,
       template: { id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION }, commandId: key,
       inputDigest: digestOf(canonical(again.next as object)), before: first.revision!, after: revisionOf(again.next)!,
-      grantsAdded: again.result.rules.length, atMs: input.now(), policyDigestBefore: governedPolicyDigest(snapshot.policy, snapshot.bindings), policyDigest: governedPolicyDigest(again.next, snapshot.bindings) }));
+      grantsAdded: again.result.rules.length, atMs: input.now(), policyDigestBefore: governedPolicyDigest(snapshot.policy, snapshot.bindings), policyDigest: governedPolicyDigest(again.next, snapshot.bindings) })); };
     return { write: { policy: again.next, bindings: null, order: 'policy-first', beforePublish }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
   }, key);
+}
+
+/** The `--expect` token the installer preview prints (POLICY-V12, Astra 2596): the policy revision and the runtime service identity the plan names,
+ * `<revision>~<12 hex>`, so an apply on another identity is refused instead of granting a stale service id. */
+const serviceToken = (identity: ServiceIdentity) => digestOf(`deckent.first-run-service.v1\0${identity.scopeId}\0${identity.serviceId}`).slice(0, 12);
+class ServiceIdentityDrift extends Error {}
+export type InstalledPolicyTemplateUpgrade = PolicyTemplateUpgradeResult & { readonly expect: string | null; readonly serviceIdentity: FirstRunServiceIdentityResult };
+/**
+ * `deckent init policy --upgrade` end to end (owner 2026-10-16 v12 + option A): the service identity is read once and the plan names it; the apply
+ * refuses a token naming another identity (`service-identity-unbound` without one), refuses an identity that changed since that read (typed
+ * `conflict` / `service-identity-changed`, re-preview), writes a missing identity before the policy (it grants nothing), and publishes the policy
+ * only while the configuration layers are byte-identical to the ones the identity was settled on (checked under the authority writer's lock).
+ */
+export async function upgradeInstalledPolicyTemplate(writer: PolicyTemplateDocumentWriter, port: FirstRunServiceIdentityPort, input: Omit<Parameters<typeof upgradePolicyTemplate>[1], 'serviceId' | 'audit' | 'guard'> & {
+  readonly openAudit: () => Promise<{ record(event: AuditEvent): void; close(): void }> }): Promise<InstalledPolicyTemplateUpgrade> {
+  const seen = (await port.read()).identity, target = firstRunServiceIdentity(input.scopeId, seen);
+  const split = input.expect === undefined ? null : /^(.*)~([a-f0-9]{12})$/u.exec(input.expect);
+  const { openAudit, expect: _expect, ...rest } = input; void _expect;
+  const base = { ...rest, serviceId: target.serviceId, ...(input.expect === undefined ? {} : { expect: split ? split[1]! : input.expect }) };
+  const done = (result: PolicyTemplateUpgradeResult, serviceIdentity: FirstRunServiceIdentityResult): InstalledPolicyTemplateUpgrade => Object.freeze({ ...result,
+    expect: result.revision === null ? null : `${result.revision}~${serviceToken(target)}`, serviceIdentity });
+  const preview = await upgradePolicyTemplate(writer, { ...base, apply: false, audit: () => { throw new Error('INSTALLER_PREVIEW_WRITE'); } });
+  const refused = (reason: 'service-identity-changed' | 'service-identity-unbound', identity: FirstRunServiceIdentityResult) =>
+    done({ ...preview, status: 'conflict', reason, rules: [], conflicts: [] }, identity);
+  if (!preview.basis) return done(preview, SKIPPED_SERVICE_IDENTITY);
+  if (input.apply && input.expect !== undefined && !split) return refused('service-identity-unbound', SKIPPED_SERVICE_IDENTITY);
+  if (split && split[2] !== serviceToken(target)) return refused('service-identity-changed', SKIPPED_SERVICE_IDENTITY);
+  const named = await settleFirstRunServiceIdentity(port, target, input.apply, seen);
+  if (named.status === 'changed') return refused('service-identity-changed', named);
+  if (!input.apply || preview.status !== 'preview') return done(preview, named);
+  const fingerprint = port.fingerprint?.(), audit = await openAudit();
+  const guard = () => { if (port.fingerprint && port.fingerprint() !== fingerprint) throw new ServiceIdentityDrift(); };
+  try { return done(await upgradePolicyTemplate(writer, { ...base, apply: true, guard, audit: event => { audit.record(event); } }), named); }
+  catch (error) { if (error instanceof ServiceIdentityDrift) return refused('service-identity-changed', named); throw error; } finally { audit.close(); }
 }

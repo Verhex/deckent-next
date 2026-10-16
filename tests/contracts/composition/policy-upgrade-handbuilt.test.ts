@@ -114,7 +114,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
 
-    const applied = await f.upgrade(true, { person: PERSON, expect: preview.revision! });
+    const applied = await f.upgrade(true, { person: PERSON, expect: preview.expect! });
     expect(applied).toMatchObject({ status: 'upgraded', basis: 'named-person' });
     const after = JSON.parse(await f.bytes()) as { revision: string; grants: unknown[] };
     expect(applied.revision).toBe(after.revision);
@@ -159,12 +159,12 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
         upgradePolicyTemplateInstallation(root, scopeId, apply, expect, {}, process.getuid?.(), person) };
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
-    const preview = JSON.parse(output.join('')) as { revision: string; rules: { id: string }[] };
+    const preview = JSON.parse(output.join('')) as { revision: string; expect: string; rules: { id: string }[] };
     expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 12 } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
-    expect(await main([...argv, '--apply', '--expect', preview.revision], context)).toBe(0); expect(errors).toEqual([]);
+    expect(await main([...argv, '--apply', '--expect', preview.expect], context)).toBe(0); expect(errors).toEqual([]);
     expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded' });
     const file = JSON.parse(await f.bytes());
     const policy = resolvePolicyBindings(file, JSON.parse(await readFile(join(f.root, '.deckent', 'bindings.json'), 'utf8')));
@@ -232,7 +232,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const same = await upgradePolicyTemplateInstallation(root, SCOPE, false, undefined, {}, process.getuid?.(), owner);
     expect(same).toMatchObject({ status: 'preview', basis: 'first-run', person: owner });
     expect(same.rules).toEqual(plain.rules);
-    expect(await upgradePolicyTemplateInstallation(root, SCOPE, true, 'first-run-template-v4')).toMatchObject({ status: 'upgraded' });
+    expect(await upgradePolicyTemplateInstallation(root, SCOPE, true, plain.expect!)).toMatchObject({ status: 'upgraded' });
     expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
     expect(await upgradePolicyTemplateInstallation(root, SCOPE, true, undefined, {}, process.getuid?.(), owner)).toMatchObject({ status: 'current', basis: 'first-run' });
   });
@@ -255,7 +255,10 @@ describe.skipIf(process.platform !== 'linux')('POLICY-V12 option A (owner 2026-1
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.upgrade(true, { person: PERSON, expect: 'a-stale' })).toMatchObject({ status: 'conflict' });
-    expect(await f.upgrade(true, { person: PERSON, expect: 'a-live-v11' })).toMatchObject({ status: 'upgraded', basis: 'named-person' });
+    // The bare policy revision no longer suffices: the token must also bind the service identity the plan names (Astra 2596).
+    expect(await f.upgrade(true, { person: PERSON, expect: 'a-live-v11' })).toMatchObject({ status: 'conflict', reason: 'service-identity-unbound', rules: [] });
+    expect(await f.bytes()).toBe(before);
+    expect(await f.upgrade(true, { person: PERSON, expect: preview.expect! })).toMatchObject({ status: 'upgraded', basis: 'named-person' });
     const after = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
     expect(after.grants.slice(0, -2)).toEqual(JSON.parse(before).grants); // every existing rule kept, unchanged and in place
     expect(after.grants.slice(-2).map(rule => rule.id)).toEqual(V12);

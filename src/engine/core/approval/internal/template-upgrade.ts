@@ -31,7 +31,9 @@ export interface TemplateUpgradeResult {
  */
 export class PolicyTemplateUpgrade {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve'> & { readonly policy: PersistentStandingDependencies['policy'] & Partial<AuthorityHistorySource> },
-    private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string }) {}
+    private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string;
+      /** v12: the installation's configured runtime service id of the scope (Astra 2596: never a guessed default when one is configured). */
+      readonly serviceId?: string }) {}
   private async snapshot() { return policySchema.parse(await this.deps.policy.load()); }
   private missing(policy: ReturnType<typeof policySchema.parse>, principal: VerifiedPrincipal, scopeId: string, touched: Parameters<typeof delegationWithin>[2]): TemplateUpgradeMissing[] {
     const out: TemplateUpgradeMissing[] = [];
@@ -46,7 +48,11 @@ export class PolicyTemplateUpgrade {
     const installer = /^policy-template-upgrade-v(\d+)-([a-f0-9]{64})$/.exec(entry.key ?? '');
     if (installer && Number(installer[1]) >= FIRST_RUN_DELTA_VERSION && Number(installer[1]) <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
     if (entry.before.schemaVersion !== 2) return false;
-    const plan = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, ...this.names });
+    // The historical plan's own service id (the stop rule this entry added), not today's configuration: a later identity change keeps it recognizable.
+    const before = entry.before, added = entry.after.schemaVersion === 2 ? entry.after.grants.find(rule => rule.id === FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown
+      && !before.grants.some(item => item.id === rule.id)) : undefined;
+    const serviceId = added && added.resource.ids !== 'all' && added.resource.ids.length === 1 ? added.resource.ids[0] : this.names.serviceId;
+    const plan = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, ...this.names, ...(serviceId === undefined ? {} : { serviceId }) });
     if (plan.status !== 'plan') return false;
     // The governed key binds the exact plan it submitted: the current one, or the same plan without the v12 owner rules (a governed upgrade
     // made before option A, owner 2026-10-16, must stay recognizable).

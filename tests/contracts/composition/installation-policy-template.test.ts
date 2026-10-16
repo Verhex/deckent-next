@@ -88,7 +88,7 @@ it('upgrades a changed v4 policy additively (owner 2026-10-07): hand-added and e
   expect(preview).toMatchObject({ status: 'preview', revision: edited.revision, conflicts: ['first-run-approvals'], wireRules: ['hand-mcp-github'] });
   expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt']);
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true, 'stale')).toMatchObject({ status: 'conflict' });
-  const applied = await upgradePolicyTemplateInstallation(root, 'installation', true, preview.revision!);
+  const applied = await upgradePolicyTemplateInstallation(root, 'installation', true, preview.expect!);
   expect(applied).toMatchObject({ status: 'upgraded' });
   const after = JSON.parse(await readFile(policyPath, 'utf8')) as { revision: string; grants: { id: string }[] };
   expect(after.revision).not.toBe(edited.revision);
@@ -193,8 +193,15 @@ it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 delt
     expect(output.join('')).toContain('--expect first-run-template-v10');
     expect(await readFile(path, 'utf8')).toBe(before);
   }
+  const token = /--expect (first-run-template-v10~[a-f0-9]{12})/u.exec(output.join(''))?.[1];
+  expect(token).toBeDefined();
   output.length = 0;
+  // Negative (Astra 2596): the bare policy revision binds no service identity, so nothing is written.
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', 'first-run-template-v10', '--json'], ctx)).toBe(0);
+  expect(JSON.parse(output.join(''))).toMatchObject({ status: 'conflict', reason: 'service-identity-unbound', rules: [] });
+  expect(await readFile(path, 'utf8')).toBe(before);
+  output.length = 0;
+  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--expect', token!, '--json'], ctx)).toBe(0);
   expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded', template: { to: 12 } });
   expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(current); expect(await readFile(bindingPath, 'utf8')).toBe(bindings);
   expect(errors).toEqual([]);

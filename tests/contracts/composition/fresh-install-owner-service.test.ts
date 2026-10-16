@@ -100,11 +100,30 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     const preview = await upgradePolicyTemplateInstallation(f.project, SCOPE, false, undefined, { env: f.env });
     expect(preview).toMatchObject({ status: 'preview', basis: 'first-run', exact: true, serviceIdentity: { status: 'kept' } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(V12);
-    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.revision!, { env: f.env })).toMatchObject({ status: 'upgraded', template: { to: 12 } });
+    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded', template: { to: 12 } });
     await expect(inspectConfiguredInventory(f.project, { schemaVersion: 1, scopeId: SCOPE }, { env: f.env })).resolves.toMatchObject({ page: { entries: [], nextAfter: null } });
     await stopConfiguredRuntimeService(f.project, { env: f.env }); await service.done;
     f.errors.length = 0; f.pages.length = 0; await f.start(); await f.settle();
     expect(f.errors).toEqual([]);
+  });
+
+  it('Astra 2596: an identity changed between preview and apply is a typed conflict; nothing is written for the stale service id', async () => {
+    const f = await installed(policy => ({ ...policy, revision: 'first-run-template-v11', grants: policy.grants.filter(rule => !V12.includes(rule.id)) }));
+    const preview = await upgradePolicyTemplateInstallation(f.project, SCOPE, false, undefined, { env: f.env });
+    expect(preview).toMatchObject({ status: 'preview', expect: expect.stringMatching(/^first-run-template-v11~[a-f0-9]{12}$/u) });
+    const configPath = join(f.project, '.deckent', 'config.json'), config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    // An authorized configuration change in between: the service is now `moved`.
+    await writeFile(configPath, `${JSON.stringify({ ...config, service: { identity: { scopeId: SCOPE, serviceId: 'moved' } } })}\n`, { mode: 0o600 }); clearConfigCache();
+    const policyBefore = await readFile(f.policyPath, 'utf8'), configBefore = await readFile(configPath, 'utf8');
+    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.expect!, { env: f.env }))
+      .toMatchObject({ status: 'conflict', reason: 'service-identity-changed', rules: [] });
+    expect(await readFile(f.policyPath, 'utf8')).toBe(policyBefore); expect(await readFile(configPath, 'utf8')).toBe(configBefore);
+    // A new preview names the current service; its token applies, and the stop rule names `moved`, never the stale id.
+    const again = await upgradePolicyTemplateInstallation(f.project, SCOPE, false, undefined, { env: f.env });
+    expect(again.expect).not.toBe(preview.expect);
+    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, again.expect!, { env: f.env })).toMatchObject({ status: 'upgraded', serviceIdentity: { status: 'kept' } });
+    expect((JSON.parse(await readFile(f.policyPath, 'utf8')) as { grants: { id: string; resource: unknown }[] }).grants.find(rule => rule.id === V12[1])?.resource)
+      .toEqual({ kind: 'service', ids: ['moved'] });
   });
 
   it('upgrade writes a missing service.identity for an exact or an edited first-run policy (option A); an existing identity is never replaced', async () => {
@@ -116,7 +135,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     const preview = await upgradePolicyTemplateInstallation(exact.project, SCOPE, false, undefined, { env: exact.env });
     expect(preview).toMatchObject({ status: 'preview', serviceIdentity: { status: 'planned', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
     expect(JSON.parse(await config(exact.project))).not.toHaveProperty('service');
-    expect(await upgradePolicyTemplateInstallation(exact.project, SCOPE, true, preview.revision!, { env: exact.env }))
+    expect(await upgradePolicyTemplateInstallation(exact.project, SCOPE, true, preview.expect!, { env: exact.env }))
       .toMatchObject({ status: 'upgraded', serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
     expect(JSON.parse(await config(exact.project))).toMatchObject({ service: { identity: { scopeId: SCOPE, serviceId: SERVICE } } });
     expect(await upgradePolicyTemplateInstallation(exact.project, SCOPE, true, undefined, { env: exact.env })).toMatchObject({ status: 'current', serviceIdentity: { status: 'kept' } });
@@ -129,7 +148,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     expect(editedPreview).toMatchObject({ status: 'preview', basis: 'first-run', exact: false, revision: 'a-edited', serviceIdentity: { status: 'planned' } });
     expect(editedPreview.rules.map(rule => (rule as { id: string }).id)).toEqual(V12);
     expect(JSON.parse(await config(edited.project))).not.toHaveProperty('service');
-    expect(await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, 'a-edited', { env: edited.env }))
+    expect(await upgradePolicyTemplateInstallation(edited.project, SCOPE, true, editedPreview.expect!, { env: edited.env }))
       .toMatchObject({ status: 'upgraded', serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
     const editedAfter = JSON.parse(await readFile(edited.policyPath, 'utf8')) as { grants: { id: string }[] };
     expect(editedAfter.grants.slice(0, before.grants.length)).toEqual(before.grants); // hand-added and every existing rule kept

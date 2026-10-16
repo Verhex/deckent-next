@@ -181,7 +181,8 @@ flowchart LR
 Başlamadan önce: Docker çalışıyor; proje en az bir commit'i olan bir Git deposu; işçi olarak istediğiniz kodlama CLI'ı
 (Claude Code ya da Codex) bu makinede kendi girişiyle açık; kurulumunuzda güncel ilk kurulum policy'si var (yeni bir
 `deckent init policy --scope <id> --apply` bunu kurar; eski kurulum `deckent init policy --scope <id> --upgrade --preview`,
-ardından `--apply --expect <revizyon>` ile yükseltilir).
+ardından önizlemenin bastığı değerle `--apply --expect <değer>` ile yükseltilir; değer politika revizyonunu ve runtime servis kimliğini
+bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
 
 1. **İşçi imajını bir kez derleyin**, Deckent kaynak dizininde (Docker ister ve yeni bir makbuz dosyası yazar):
 
