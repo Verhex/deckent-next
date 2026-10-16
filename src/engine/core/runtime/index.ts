@@ -38,3 +38,25 @@ export { runtimeServiceReadiness, runtimeMonotonicDeadline, runtimeDeadlineSigna
 export { awaitRuntimeServiceStart, awaitRuntimeServiceRestart } from './internal/readiness.js';
 export { prepareRuntimeClientRequest, acceptRuntimeClientResponse } from './internal/client.js';
 export { describeRuntimeServiceWithin } from './internal/readiness.js';
+
+export { runtimeEventsQuerySchema, runtimeEventsItemSchema, runtimeEventsRecordSchema, runtimeEventsCursorSchema, runtimeEventsKey, RuntimeEventsError } from './internal/events-contract.js';
+export type { RuntimeEventsQuery, RuntimeEventsSelection, RuntimeEventsTopic, RuntimeEventsCursor, RuntimeEventsRecord, RuntimeEventsItem, RuntimeEventsCloseReason, RuntimeObservationRow, RuntimeObservationCapture, RuntimeObservationSource } from './internal/events-contract.js';
+
+export { RuntimeEventsApplication } from './internal/events-application.js';
+export type { RuntimeEventsAdmission, RuntimeEventsPorts, RuntimeEventsSubscription } from './internal/events-application.js';
+
+export { runtimeServiceSubscriptionFrameSchema } from './internal/service-protocol.js';
+
+export { authorizeRuntimeEventsInventory } from './internal/events-authorization.js';
+
+export { createRuntimeEventsConsumer } from './internal/events-consumer.js';
+
+export { ServiceFrameError, encodeServiceFrame, ServiceFrameDecoder, ServiceFrameStreamDecoder } from '#engine/core/runtime-transport/index.js';
+export type { ServiceFrameErrorCode } from '#engine/core/runtime-transport/index.js';
+export { executeRuntimeOperation } from './internal/operations.js';
+export { createRuntimeEventsDelivery } from './internal/events-subscriptions.js';
+export { createRuntimeEventsFrameConsumer } from './internal/events-frame-consumer.js';
+export { executeRuntimeProviderSpendOperation } from './internal/provider-spend-operation.js';
+export { createRuntimeFrameConsumer } from './internal/frame-consumer.js';
+export { executeRuntimeApprovalOperation } from './internal/approval-operation.js';
+export { resolveSocketOptions as validateRuntimeSocketOptions } from '#engine/core/runtime-transport/index.js';

@@ -9,3 +9,5 @@ export type { ConfigStepper } from './internal/numeric.js';
 export { RESOURCE_OBSERVATION_SETTINGS } from './internal/resource-observation.js';
 export type { ResourceObservationSettings } from './internal/resource-observation.js';
 export { CORE_TURN_ASSURANCE_REFERENCE } from './internal/approval-assurance.js';
+
+export type { RuntimeEventsSettings } from './internal/events.js';

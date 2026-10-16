@@ -1,10 +1,6 @@
-import type { RuntimeServiceDelivery } from '#engine/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { attemptIdentitySchema } from '#domain/index.js';
-import { cancellationRecoveryCommandSchema, dispatchInventoryInputSchema, runAdmissionSchema, runCommandSchema, runQuerySchema,
-  parseRunProposal, runProposalQuerySchema, runReservationCommandSchema, taskEvaluationCommandSchema } from '#engine/index.js';
-import type { RuntimeServiceOperation, RuntimeServiceRequest } from '#engine/index.js';
+import { executeRuntimeOperation, type RuntimeServiceRequest, type RuntimeServiceDelivery } from '#engine/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 import { proposeConfiguredRun, inspectConfiguredRunProposal, createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfiguredTask, inspectConfiguredRun,
@@ -32,28 +28,7 @@ export function createConfiguredRuntimeOperations(projectRoot: string, options: 
   });
 }
 export type ConfiguredRuntimeOperations = ReturnType<typeof createConfiguredRuntimeOperations>;
-type RuntimeOperationHandler = (input: unknown) => Promise<unknown>;
-/** Protocol dispatch only: policy, domain decisions, and error serialization remain with their owners. */
-export async function executeConfiguredRuntimeOperation(projectRoot: string, request: RuntimeServiceRequest,
-  options: ConfigLoadOptions = {}): Promise<unknown> {
-  const operations = createConfiguredRuntimeOperations(projectRoot, options);
-  const handlers = {
-    proposeRun: input => operations.proposeRun(parseRunProposal(input)),
-    inspectRunProposal: input => operations.inspectRunProposal(runProposalQuerySchema.parse(input)),
-    createRun: input => operations.createRun(runAdmissionSchema.parse(input)),
-    reserveRunTasks: input => operations.reserveRunTasks(runReservationCommandSchema.parse(input)),
-    executeTask: input => operations.executeTask(attemptIdentitySchema.parse(input)),
-    evaluateTask: input => operations.evaluateTask(taskEvaluationCommandSchema.parse(input)),
-    inspectRun: input => operations.inspectRun(runQuerySchema.parse(input)),
-    inspectInventory: input => operations.inspectInventory(dispatchInventoryInputSchema.parse(input)),
-    requestRunCancellation: input => operations.requestRunCancellation(runCommandSchema.parse(input)),
-    deliverRunCancellation: input => operations.deliverRunCancellation(runCommandSchema.parse(input)),
-    reconcileAttempt: input => operations.reconcileAttempt(attemptIdentitySchema.parse(input)),
-    recoverCancellations: input => operations.recoverCancellations(cancellationRecoveryCommandSchema.parse(input)),
-  } satisfies Record<Exclude<RuntimeServiceOperation, 'clearSessionStanding' | 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'invokeModelStream' | 'inspectModelInvocation'
-    | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount' | 'manageProviderSpend' | 'chatTurn' | 'cancelChatTurn'
-    | 'findWorkspaceFiles' | 'attachWorkspaceFile' | 'executeOperation' | 'compensateOperation' | 'inspectOperation' | 'inspectPermissionMode' | 'setPermissionMode'
-    | 'inspectScratch' | 'clearScratch' | 'setSecret' | 'deleteSecret' | 'switchSecretStore'>, RuntimeOperationHandler>;
-  if (!(request.operation in handlers)) throw new Error('RUNTIME_SERVICE_HOST_OPERATION');
-  return handlers[request.operation as keyof typeof handlers](request.input);
+/** Host wiring only; protocol validation precedes configured I/O. */
+export async function executeConfiguredRuntimeOperation(projectRoot: string, request: RuntimeServiceRequest, options: ConfigLoadOptions = {}): Promise<unknown> {
+  return executeRuntimeOperation(createConfiguredRuntimeOperations(projectRoot, options), request);
 }

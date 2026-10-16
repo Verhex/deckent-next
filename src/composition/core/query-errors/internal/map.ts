@@ -1,4 +1,4 @@
-import { AuthorityChangeError, DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
+import { RuntimeEventsError, AuthorityChangeError, DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
 import { DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError, type ProviderSpendAccount } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
@@ -59,6 +59,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof TaskGraphError && GRAPH_INPUT_CODES.has(error.code)) return registeredFailure('TASK_GRAPH_INVALID', {
     params: { reason: error.code, path: ['graph', ...(error.issues[0]?.path ?? [])].join('.') } });
   if (error instanceof LocalRuntimeSocketError && error.path) return registeredFailure(error.code, { params: { path: error.path } });
+  if (error instanceof RuntimeEventsError) return registeredFailure(error.code);
   if (error instanceof ZodError) return registeredFailure('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return registeredFailure('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) return registeredFailure(error.code, { params: reservationDiagnosticParams(error.diagnostic) });

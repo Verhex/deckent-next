@@ -2,9 +2,9 @@ import { readQuotaHolds } from '#adapters/core/sqlite-ledger/index.js';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
+import { sameAttemptIdentity, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
-import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
+import { projectMonitorApprovals, projectMonitorCatalog, poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
 import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
@@ -117,13 +117,7 @@ function catalog(db: DatabaseSync, version: number): MonitorMap | null {
   if (version < CATALOG_VERSION) return null;
   const models = db.prepare(`SELECT m.channel_id,m.model_id,m.record,c.record AS channel_record
     FROM model_catalog_models m JOIN model_catalog_channels c ON c.channel_id=m.channel_id ORDER BY m.channel_id,m.model_id`).all();
-  return Object.freeze({ config: [], registry: { profiles: [], kinds: [] }, policy: null, memory: { available: false },
-    models: Object.freeze(models.map(row => {
-      const { model } = parseModelCatalogModelRecord(JSON.parse(String(row.record)));
-      const { channel } = parseModelCatalogChannelRecord(JSON.parse(String(row.channel_record)));
-      return Object.freeze({ channelId: String(row.channel_id), modelId: String(row.model_id), active: false,
-        vendorId: 'vendorId' in model ? model.vendorId : null, billing: 'billing' in channel ? channel.billing : null });
-    })) });
+  return projectMonitorCatalog(models);
 }
 
 function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['snapshot']['bindings'][number], reservedAtMs: number | null,
@@ -164,14 +158,7 @@ function currentApprovals(db: DatabaseSync, limit: number, diagnostics: string[]
     ORDER BY (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.status')='pending' ELSE 1 END) DESC,
     (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.request.expiresAt') END) DESC,scope_id,approval_id LIMIT ?`).all(limit + 1);
   if (rows.length > limit) diagnostics.push('info:approvals-truncated');
-  return rows.slice(0, limit).flatMap(row => {
-    try {
-      const record = approvalRecordSchema.parse(json(row.snapshot)), request = record.request, subject = approvalSubject(request);
-      if (request.scopeId !== row.scope_id || request.approvalId !== row.approval_id) throw new Error();
-      return [Object.freeze({ status: record.status, scopeId: request.scopeId, approvalId: request.approvalId, subjectKind: subject.kind, runId: subject.kind === 'task' || subject.kind === 'run-create' ? subject.runId : null,
-        taskId: subject.kind === 'task' ? subject.taskId : null, summary: request.summary, createdAtMs: request.createdAt, expiresAtMs: request.expiresAt })];
-    } catch (error) { recordOnly(error); diagnostics.push(`approval-corrupt:${row.scope_id}/${row.approval_id}`); return []; }
-  });
+  return projectMonitorApprovals(rows, limit, diagnostics, recordOnly);
 }
 
 /** Installation-wide pools: capacity from `execution_pools`, occupancy recomputed from every Run's progress (the reservation rule), hold (v44). */

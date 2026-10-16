@@ -1,18 +1,17 @@
+import { createConfiguredRuntimeEvents } from './events.js';
 import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
-import { AuditCheckpointMonitor, type AuditServiceStatus } from '#engine/index.js';
 import { withLocalPrincipalChannel } from '#adapters/index.js';
 import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { executeRuntimeApproval } from './approvals.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams } from '#engine/index.js';
-import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, reportQueryError, getConfigKnownSecrets, resolveLocale, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
-import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
-import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
+import { socketOptions, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type RuntimeServiceHandlerReply, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
+import { createRuntimeEventsDelivery, AuditCheckpointMonitor, type AuditServiceStatus, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, prepareConfiguredModelCancellationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
@@ -120,13 +119,15 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const shutdown = config.service.identity ? configuredServiceShutdown(config,
     serviceInstanceSchema.parse({ ...config.service.identity, instanceId })) : null;
   const remoteShutdowns = new Map<string, Promise<void>>(), reports = new Set<Promise<void>>();
+  const events = createConfiguredRuntimeEvents(projectRoot, config.service.events, options);
+  const eventDelivery = createRuntimeEventsDelivery(events, config.service.events);
   const controller = new AbortController();
   let recovery: Promise<void> = Promise.resolve();
   /* WORKER-AUTO-REFRESH: the background refresh started below; a stop waits for it (its build is ended by the controller's signal) so no refresh write lands after this service released its custody. */ let toolchainRefresh: Promise<void> = Promise.resolve();
   let backupSchedule: Promise<void> = Promise.resolve(), auditSchedule: Promise<void> = Promise.resolve();
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions, admissionWaitMs: config.service.admissionWaitMs }, () => {
     /* A scratch removal in flight, every MCP server the turns started (stdin closed, then SIGTERM/SIGKILL) and a toolchain refresh in flight end before the endpoint and ledger custody are released (finalize runs after this settles). */ controller.abort(); turnStop.abort();
-    return Promise.allSettled([recovery, scratchActivity.close(), chatTurnHost.mcp.close(), toolchainRefresh, backupSchedule, auditSchedule]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
+    return Promise.allSettled([recovery, scratchActivity.close(), chatTurnHost.mcp.close(), toolchainRefresh, backupSchedule, auditSchedule, eventDelivery.stop()]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
   }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });
@@ -136,8 +137,14 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     onError: async (query, failure) => { await reportFailure(failure); await observer.onRunProgressionError?.(query, failure); },
     onScopeSkipped: (note: DeckentError) => observer.onRunProgressionError?.(null, note),
   }, (work, onSlotWait) => lifecycle.admitExecution(() => idle.track(work), onSlotWait), options);
-  const server = await guard.start((request, peer, stream, turn) => withLocalPrincipalChannel(request.channel, () => idle.track(async () => {
+  const server = await guard.start((request, peer, stream, turn, subscription) => withLocalPrincipalChannel(request.channel, () => {
+    const handle = async (): Promise<RuntimeServiceHandlerReply> => {
     try {
+      if (request.operation === 'subscribeEvents') {
+        if (!subscription) throw ErrorRegistry.createError('RUNTIME_EVENTS_UNAVAILABLE');
+        await eventDelivery.deliver(lifecycle, subscription, request.input, peer);
+        return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true as const, result: { closed: true } };
+      }
       if (request.operation === 'describeService') {
         const result = await lifecycle.admitBounded(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
         return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
@@ -172,7 +179,9 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false,
         error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };
     }
-  }), peer));
+    };
+    return request.operation === 'subscribeEvents' ? handle() : idle.track(handle);
+  }, peer));
   /* Started once the listener is up: a start that fails before leaves no sweep running after its custody is released. */ startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
     onSweep: result => { void observer.onScratchSwept?.(result); } });
   /* WORKER-AUTO-REFRESH: never awaited by readiness; the controller's signal ends its interval timer and a running build when the service stops, and the stop waits for what is left (above). */ auditSchedule = auditMonitor.run(config.audit.checkpointIntervalMs, controller.signal,
@@ -187,7 +196,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const stop = () => {
     if (stopping) return stopping;
     server.stopAccepting();
-    stopping = lifecycle.stop(config.service.shutdownGraceMs, () => server.dispose()).then(result => {
+    const eventStop = eventDelivery.stop();
+    stopping = lifecycle.stop(config.service.shutdownGraceMs, async () => { await eventStop; await server.dispose(); }).then(result => {
       /* Drop transport clients at the same deadline without aborting their admitted worker operations. */ if (result.state === 'incomplete') {
         server.disconnectClients();
         /* Fatal transport has no signal caller to observe stop()'s deadline result. Release the foreground host with an honest incomplete outcome, not an unbounded done wait. */ if (transportFailure) rejectDone(queryFailure(ErrorRegistry.createError('RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE')));

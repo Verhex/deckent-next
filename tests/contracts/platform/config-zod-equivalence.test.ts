@@ -1,3 +1,4 @@
+import configGolden from '../../fixtures/config-golden/defaults.json' with { type: 'json' };
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CONFIG_FIELDS, getConfigFieldDefault } from '#platform/core/config-fields/index.js';
@@ -72,7 +73,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, assuranceProducers: [{ id: 'core.turn-bound', version: 1 }], keyFile: 'authority.key', approverNoteMaxChars: 500 });
     expect(d.cli).toEqual({ graphInputMaxBytes: 1_048_576, invocationInputMaxBytes: 1_048_576 });
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8, maxServers: 20 });
-    expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
+    expect(d.service).toEqual({ events: configGolden.service.events, identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
       maxConcurrentExecutions: 8, headerTimeoutMs: 10_000, responseTimeoutMs: 10_000, acceptRetryDelayMs: 25, acceptRetryLimit: 3, shutdownGraceMs: 30_000, admissionWaitMs: 250, busyRetryLimit: 2, idleShutdown: { afterMs: 900_000 } });
     expect(d.runRuntime).toEqual({ quotaRecovery: { schemaVersion: 1, maxResumes: 1, maxWaitMs: 604800000 }, parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, pageSize: 64 });
     expect(d.inspection).toEqual({ maxPageSize: 64, policyMaxBytes: 1_048_576,

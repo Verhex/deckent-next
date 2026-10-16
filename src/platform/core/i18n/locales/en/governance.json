@@ -1005,5 +1005,10 @@
   "policy.delegate.step.task-answer": "Answer a task question",
   "policy.delegate.step.approval-decide": "Decide ordinary approval cards",
   "error.POLICY_DELEGATION_STEP_INVALID": "This is not a delegable decision step. List policy delegations to select a supported step. Nothing changed.",
-  "error.POLICY_DELEGATION_CONFLICT": "The policy revision or managed delegation changed. Inspect again and confirm a fresh card; nothing was changed by this request."
+  "error.POLICY_DELEGATION_CONFLICT": "The policy revision or managed delegation changed. Inspect again and confirm a fresh card; nothing was changed by this request.",
+  "error.RUNTIME_EVENTS_INVALID": "The event subscription query is invalid. Use strict scope/topics/resume JSON on stdin.",
+  "error.RUNTIME_EVENTS_CURSOR": "The observation cursor does not belong to this authorized view. Reconnect with a fresh snapshot.",
+  "error.RUNTIME_EVENTS_LIMIT": "Observation capacity is full. Close a subscription or review the configured event limits.",
+  "error.RUNTIME_EVENTS_UNAVAILABLE": "The observation source is unavailable. No work was cancelled.",
+  "error.RUNTIME_EVENTS_TOO_LARGE": "The event or snapshot exceeds the configured delivery limits. Narrow the topics or review the limits."
 }

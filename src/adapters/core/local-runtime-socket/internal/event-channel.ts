@@ -1,7 +1,7 @@
 import type { Socket } from 'node:net';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { RUNTIME_SERVICE_EVENT_FRAME_EVENTS, RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
-import { encodeServiceFrame, ServiceFrameError } from './framing.js';
+import { encodeServiceFrame, ServiceFrameError } from '#engine/index.js';
 
 /**
  * Required-data channel of one `chatTurn` request (v12). Events are never dropped: the producer awaits `drained()` between steps,

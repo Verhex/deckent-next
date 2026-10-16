@@ -1,3 +1,4 @@
+import { eventsCommand } from '#surfaces/core/cli-events/index.js';
 import { auditCommand } from './audit.js';
 import { identityCommand } from '#surfaces/core/cli-identity/index.js';
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
@@ -25,7 +26,7 @@ export type { ExitCode } from '#platform/index.js';
 
 /** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
-  audit: auditCommand, backup: backupCommand, identity: identityCommand,
+  events: eventsCommand, audit: auditCommand, backup: backupCommand, identity: identityCommand,
   terminal: async (argv, context) => (await import('./terminal.js')).terminalCommand(argv, context),
   init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
   do: doCommand,

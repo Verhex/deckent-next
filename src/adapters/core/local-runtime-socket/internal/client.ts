@@ -1,8 +1,8 @@
 import { Socket } from 'node:net';
 import { isRuntimeServiceStreamingOperation, isRuntimeServiceTurnOperation, parseRuntimeServiceLifecycleResponse, parseRuntimeServiceResponse, RUNTIME_SERVICE_SCHEMA_VERSION,
-  RuntimeServiceProtocolError, runtimeServiceEventFrameSchema, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceStreamFrameSchema,
+  createRuntimeFrameConsumer, runtimeServiceEventFrameSchema, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceStreamFrameSchema,
   type RuntimeServiceEventFrame, type RuntimeServiceLifecycleRequest, type RuntimeServiceRequest, type RuntimeServiceResponse, type RuntimeServiceStreamFrame } from '#engine/index.js';
-import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError, ServiceFrameStreamDecoder } from './framing.js';
+import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameStreamDecoder } from '#engine/index.js';
 import { assertOwnedSocket, LocalRuntimeSocketError, resolveSocketOptions, type LocalRuntimeSocketOptions } from './endpoint.js';
 
 /** A refused connection to an owned socket path means no process listens there (a crashed host's stale socket): no live
@@ -107,9 +107,8 @@ export async function turnLocalRuntime(options: LocalRuntimeSocketOptions, value
   }, signal);
 }
 
-type FramePart = { readonly requestId: string; readonly sequence: number; readonly deliver: () => void; readonly required?: boolean };
 async function framedLocalRuntime(options: LocalRuntimeSocketOptions, request: RuntimeServiceRequest, total: (responseMaxBytes: number) => number | null,
-  part: (frame: unknown) => FramePart | null, signal?: AbortSignal): Promise<RuntimeServiceResponse> {
+  part: Parameters<typeof createRuntimeFrameConsumer>[1], signal?: AbortSignal): Promise<RuntimeServiceResponse> {
   if (signal?.aborted) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
   const resolved = await resolveSocketOptions(options);
   const frame = encodeServiceFrame(request, resolved.inputMaxBytes);
@@ -119,7 +118,8 @@ async function framedLocalRuntime(options: LocalRuntimeSocketOptions, request: R
   catch (error) { socket.destroy(); throw connectFailure(error); }
   const decoder = new ServiceFrameStreamDecoder(resolved.responseMaxBytes, total(resolved.responseMaxBytes));
   return await new Promise((resolve, reject) => {
-    let settled = false, sequence = 0, final: RuntimeServiceResponse | null = null;
+    let settled = false;
+    const consumer = createRuntimeFrameConsumer(request, part);
     const fail = (error: unknown) => {
       if (settled) return;
       settled = true; signal?.removeEventListener('abort', abort); socket.destroy();
@@ -131,24 +131,14 @@ async function framedLocalRuntime(options: LocalRuntimeSocketOptions, request: R
       if (settled) return;
       try {
         if (!Buffer.isBuffer(chunk)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
-        for (const value of decoder.push(chunk)) {
-          if (final) throw new ServiceFrameError('SERVICE_FRAME_EXTRA');
-          const parsed = part(value);
-          if (!parsed) { final = parseRuntimeServiceResponse(request.requestId, value); continue; }
-          if (parsed.requestId !== request.requestId || parsed.sequence !== sequence) {
-            throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_CORRELATION');
-          }
-          sequence += 1;
-          if (parsed.required) parsed.deliver();
-          else try { parsed.deliver(); } catch { /* A presentation failure never changes the response. */ }
-        }
+        for (const value of decoder.push(chunk)) consumer.accept(value);
       } catch (error) { fail(error); }
     });
     socket.once('end', () => {
       if (settled) return;
       try {
         decoder.finish();
-        if (!final) throw new ServiceFrameError('SERVICE_FRAME_TRUNCATED');
+        const final = consumer.finish();
         settled = true; signal?.removeEventListener('abort', abort); socket.unref(); resolve(final);
       } catch (error) { fail(error); }
     });

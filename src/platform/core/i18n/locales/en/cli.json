@@ -1483,5 +1483,7 @@
   "cli.audit.reason.head-missing": "retained head or checkpoint missing",
   "cli.audit.reason.checkpoints-missing": "checkpoints recorded in the audit log are missing",
   "cli.audit.reason.policy": "policy digest differs",
-  "cli.audit.reason.producers": "producer inventory differs"
+  "cli.audit.reason.producers": "producer inventory differs",
+  "cli.events.summary": "Follow authorized runtime metadata as JSON lines",
+  "cli.events.help": "Usage: deckent events --follow --json --input - [--lang en|tr]\nRead a strict schemaVersion/scopeId/topics/resume query from stdin. Requires a running service. Stopping the subscription leaves work running. A gap requires a new snapshot."
 }

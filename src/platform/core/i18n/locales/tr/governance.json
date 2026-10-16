@@ -1005,5 +1005,10 @@
   "policy.delegate.step.task-answer": "Görev sorusunu yanıtla",
   "policy.delegate.step.approval-decide": "Olağan onay kartlarını karara bağla",
   "error.POLICY_DELEGATION_STEP_INVALID": "Bu adım devredilebilir bir karar adımı değil. Desteklenen adımlar için policy delegations listesini açın. Değişiklik yapılmadı.",
-  "error.POLICY_DELEGATION_CONFLICT": "Politika revizyonu veya yönetilen devir değişti. Yeniden inceleyip güncel kartı onaylayın; bu istek değişiklik yapmadı."
+  "error.POLICY_DELEGATION_CONFLICT": "Politika revizyonu veya yönetilen devir değişti. Yeniden inceleyip güncel kartı onaylayın; bu istek değişiklik yapmadı.",
+  "error.RUNTIME_EVENTS_INVALID": "Olay aboneliği sorgusu geçersiz. Standart girdide scope/topics/resume JSON biçimini kullanın.",
+  "error.RUNTIME_EVENTS_CURSOR": "Gözlem imleci bu yetkili görünüme ait değil. Yeni anlık görünümle bağlanın.",
+  "error.RUNTIME_EVENTS_LIMIT": "Gözlem kapasitesi dolu. Bir aboneliği kapatın veya olay sınırlarını inceleyin.",
+  "error.RUNTIME_EVENTS_UNAVAILABLE": "Gözlem kaynağı kullanılamıyor. İş iptal edilmedi.",
+  "error.RUNTIME_EVENTS_TOO_LARGE": "Olay veya anlık görünüm teslim sınırını aşıyor. Konuları daraltın veya sınırları inceleyin."
 }

@@ -1,4 +1,4 @@
-import type { LocalRuntimeSocketOptions } from '#adapters/index.js';
+import type { LocalRuntimeSocketOptions } from './endpoint.js';
 
 export function socketOptions(settings: Omit<LocalRuntimeSocketOptions, 'endpoint'>, endpoint: string): LocalRuntimeSocketOptions {
   return { endpoint, maxConnections: settings.maxConnections, inputMaxBytes: settings.inputMaxBytes,

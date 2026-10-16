@@ -1,6 +1,7 @@
+import { validateRuntimeSocketOptions } from '#engine/index.js';
 import { createHash } from 'node:crypto';
 import { lstat, realpath, rm } from 'node:fs/promises';
-import { dirname, isAbsolute, normalize, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_OPTIONS'
   | 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG' | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
@@ -16,7 +17,6 @@ export type LocalRuntimeSocketOptions = Readonly<{ endpoint: string; maxConnecti
 /** `custodyId`: the digest naming this endpoint's custody (the guard socket is `\0deckent-<custodyId>`). */
 export type ResolvedLocalRuntimeSocketOptions = LocalRuntimeSocketOptions & Readonly<{ custodyId: string; guardEndpoint: string }>;
 
-function positive(value: number): boolean { return Number.isSafeInteger(value) && value > 0; }
 export function assertSocketPublicationBudget(endpoint: string): void {
   const parent = dirname(endpoint);
   // Native same-parent staging uses '/.sXXXXXX/s'; include the trailing NUL in sun_path's 108 bytes.
@@ -26,17 +26,7 @@ export function assertSocketPublicationBudget(endpoint: string): void {
 }
 export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): Promise<ResolvedLocalRuntimeSocketOptions> {
   if (process.platform !== 'linux' || !process.getuid) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED');
-  if (options?.endpoint && Buffer.byteLength(options.endpoint, 'utf8') >= 108) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', undefined, options.endpoint);
-  if (!options || !isAbsolute(options.endpoint) || normalize(options.endpoint) !== options.endpoint
-    || options.endpoint.includes('\0') || Buffer.byteLength(options.endpoint, 'utf8') >= 108
-    || !positive(options.maxConnections) || !positive(options.inputMaxBytes) || options.inputMaxBytes > 0xffffffff
-    || !positive(options.responseMaxBytes) || options.responseMaxBytes > 0xffffffff
-    || !positive(options.headerTimeoutMs) || options.headerTimeoutMs > 0x7fffffff
-    || !positive(options.responseTimeoutMs) || options.responseTimeoutMs > 0x7fffffff
-    || !positive(options.acceptRetryDelayMs) || options.acceptRetryDelayMs > 0x7fffffff
-    || !positive(options.acceptRetryLimit) || options.acceptRetryLimit > 0x7fffffff) {
-    throw new LocalRuntimeSocketError('LOCAL_RUNTIME_OPTIONS');
-  }
+  validateRuntimeSocketOptions(options, (code, path) => new LocalRuntimeSocketError(code, undefined, path));
   const parent = dirname(options.endpoint);
   let stat;
   try { stat = await lstat(parent); }

@@ -100,3 +100,5 @@ export { sampleDockerResources } from '#adapters/core/docker-supervisor/index.js
 
 export { openInstallationPoolStore } from '#adapters/core/installation-pool-store/index.js';
 export * from '#adapters/core/provider-siwc/index.js';
+
+export { openRuntimeObservationLedger, readRuntimeObservationBudget } from '#adapters/core/runtime-observation/index.js';

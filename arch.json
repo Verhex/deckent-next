@@ -213,7 +213,8 @@
         "src/engine/core/authentication",
         "src/engine/core/runtime",
         "src/platform/core/clock",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/engine/core/runtime-transport"
       ],
       "plan": "EXECUTION"
     },
@@ -567,19 +568,14 @@
         "src/composition/core/runtime",
         "src/composition/core/scoped-request",
         "src/domain/core/agent-turn",
-        "src/domain/core/attempt",
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
         "src/engine/core/approval",
-        "src/engine/core/dispatch",
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
-        "src/engine/core/provider-spend",
-        "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/secret-store",
-        "src/engine/core/task-evaluation",
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
@@ -605,7 +601,12 @@
         "src/platform/core/i18n",
         "src/adapters/core/installation-files",
         "src/engine/core/workspaces",
-        "src/composition/core/audit"
+        "src/composition/core/audit",
+        "src/platform/core/integrity",
+        "src/platform/core/config-fields",
+        "src/adapters/core/worker-observation",
+        "src/adapters/core/runtime-observation",
+        "src/engine/core/runtime-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -792,7 +793,11 @@
         "src/engine/core/agent-turn",
         "src/engine/core/effect",
         "src/platform/core/errors",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/platform/core/config-fields",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/runtime-transport"
       ],
       "plan": "EXECUTION"
     },
@@ -1216,7 +1221,8 @@
         "src/surfaces/core/cli-terminal",
         "src/engine/core/backup",
         "src/surfaces/core/run-planning",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/surfaces/core/cli-events"
       ],
       "plan": "SURFACES"
     },
@@ -1662,7 +1668,8 @@
         "src/composition/core/approvals",
         "src/composition/core/config",
         "src/adapters/core/provider-connect",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/engine/core/runtime-transport"
       ],
       "plan": "SURFACES"
     },
@@ -2014,7 +2021,8 @@
         "src/engine/core/worker-observation",
         "src/platform/core/clock",
         "src/adapters/core/file-artifacts",
-        "src/adapters/core/attempt-store"
+        "src/adapters/core/attempt-store",
+        "src/platform/core/config-fields"
       ],
       "plan": "EXECUTION"
     },
@@ -2449,7 +2457,9 @@
         "src/engine/core/supervisor",
         "src/domain/core/attempt",
         "src/domain/core/work-cost",
-        "src/engine/core/resource-observation"
+        "src/engine/core/resource-observation",
+        "src/domain/core/approval",
+        "src/domain/core/model-activation"
       ],
       "plan": "MONITOR"
     },
@@ -2457,7 +2467,6 @@
       "dependencies": [
         "src/engine/core/workspaces",
         "src/adapters/core/sqlite-ledger",
-        "src/domain/core/approval",
         "src/domain/core/run",
         "src/engine/core/dispatch",
         "src/engine/core/attempts",
@@ -2478,7 +2487,6 @@
         "src/platform/core/managed-files",
         "src/platform/core/utils",
         "src/adapters/core/local-principal",
-        "src/domain/core/model-activation",
         "src/engine/core/handoff-observation",
         "src/platform/core/errors",
         "src/platform/core/output",
@@ -3046,6 +3054,51 @@
         "src/platform/core/errors"
       ],
       "plan": "SECURITY"
+    },
+    "src/surfaces/core/cli-events": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/engine/core/runtime",
+        "src/surfaces/core/cli-kit"
+      ],
+      "plan": "MONITOR"
+    },
+    "src/adapters/core/runtime-observation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/provider-spend",
+        "src/engine/core/runtime",
+        "src/platform/core/config-fields",
+        "src/platform/core/integrity",
+        "src/adapters/core/sqlite-ledger",
+        "src/engine/core/runtime-observation"
+      ],
+      "plan": "MONITOR"
+    },
+    "src/engine/core/runtime-observation": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/approval",
+        "src/domain/core/run",
+        "src/domain/core/model-invocation",
+        "src/domain/core/model-activation",
+        "src/domain/core/principal",
+        "src/engine/core/runtime",
+        "src/engine/core/provider-spend",
+        "src/engine/core/approval",
+        "src/engine/core/dispatch",
+        "src/engine/core/worker-observation",
+        "src/engine/core/policy",
+        "src/platform/core/config-fields",
+        "src/platform/core/integrity"
+      ],
+      "plan": "MONITOR"
+    },
+    "src/engine/core/runtime-transport": {
+      "dependencies": [],
+      "plan": "EXECUTION"
     }
   },
   "composition": {

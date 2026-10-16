@@ -1,3 +1,4 @@
+import { runtimeEventsQuerySchema, type RuntimeEventsQuery, type RuntimeEventsItem } from './events-contract.js';
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
 import type { AgentTurnStreamEvent, ModelInvocationDeltaSink } from '#domain/index.js';
 import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, type RuntimeFailureMapper } from './client-validation.js';
@@ -9,6 +10,7 @@ import { runtimeServiceDescriptorSchema, shutdownAdmissionSchema, shutdownComman
 import type { ServiceShutdownAdmissionResult } from './shutdown-store.js';
 /** Configuration and waiting are ports; the protocol client owns retries and result validation. */
 export interface RuntimeClientPorts {
+  readonly subscribe?: (query: RuntimeEventsQuery, observer: { readonly signal?: AbortSignal; readonly onEvent: (item: RuntimeEventsItem) => void | Promise<void> }) => Promise<void>;
   readonly attempt: RuntimeStreamingCall;
   readonly readPolicy: () => Promise<{ readonly busyRetryLimit: number; readonly admissionWaitMs: number } | null>;
   readonly wait: (ms: number, signal?: AbortSignal) => Promise<unknown>;
@@ -57,6 +59,12 @@ export function createRuntimeServiceClient<Operations>(ports: RuntimeClientPorts
     && (!isRuntimeServiceBoundedResultOperation(operation) || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval')).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as Operations;
   return Object.freeze({ ...operations,
+    async subscribeEvents(query: RuntimeEventsQuery, observer: { readonly signal?: AbortSignal; readonly onEvent: (item: RuntimeEventsItem) => void | Promise<void> }) {
+      const parsed = runtimeEventsQuerySchema.safeParse(query);
+      if (!parsed.success || typeof observer?.onEvent !== 'function') throw ErrorRegistry.createError('RUNTIME_EVENTS_INVALID');
+      if (!ports.subscribe) throw ErrorRegistry.createError('RUNTIME_EVENTS_UNAVAILABLE');
+      return ports.subscribe(parsed.data, observer);
+    },
     ...runtimeApprovalMethods(call),
     ...runtimeChatTurnMethods(call, ports.mapFailure),
     ...runtimeWorkspaceFileMethods(call, ports.mapFailure),

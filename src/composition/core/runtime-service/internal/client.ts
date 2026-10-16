@@ -4,10 +4,9 @@ import { ManagedFileError, type ConfigLoadOptions } from '#platform/index.js';
 import { createRuntimeServiceClient, RUNTIME_SERVICE_SCHEMA_VERSION, prepareRuntimeClientRequest, acceptRuntimeClientResponse,
   type RuntimeServiceOperation, type RuntimeServiceDelivery, type RuntimeServiceLifecycleVersion, type EffectOutcome, type RuntimeOperationQuery } from '#engine/index.js';
 import type { ModelInvocationDeltaSink, AgentTurnStreamEvent, EffectCommand, EffectRecord } from '#domain/index.js';
-import { localPrincipalChannel, LocalRuntimeSocketError, prepareRuntimeSocket, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
+import { socketOptions, localPrincipalChannel, LocalRuntimeSocketError, prepareRuntimeSocket, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime, subscribeLocalRuntime } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { socketOptions } from './socket-options.js';
 import type { ConfiguredRuntimeOperations } from './operations.js';
 export type ConfiguredRuntimeClient = ReturnType<typeof createRuntimeServiceClient<ConfiguredRuntimeOperations>> & Readonly<{
   executeOperation(command: EffectCommand, delivery?: RuntimeServiceDelivery): Promise<EffectOutcome>;
@@ -36,6 +35,16 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     } catch (error) { throw queryFailure(error); }
   };
   return createRuntimeServiceClient<ConfiguredRuntimeOperations>({ attempt, mapFailure: queryFailure,
+    async subscribe(query, observer) {
+      try {
+        const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
+        const endpoint = await prepareRuntimeSocket(config.productLayout, false);
+        const request = prepareRuntimeClientRequest(RUNTIME_SERVICE_SCHEMA_VERSION, randomUUID(), 'subscribeEvents', query,
+          { ...config.service, maxResultBytes: undefined, channel: localPrincipalChannel() });
+        const response = await subscribeLocalRuntime(socketOptions(config.service, endpoint), request, observer.onEvent, config.service.events.idleTimeoutMs, observer.signal);
+        acceptRuntimeClientResponse(response);
+      } catch (error) { throw queryFailure(error); }
+    },
     readPolicy: async () => (await loadComposedConfig(projectRoot, { ...options, heal: false })).service,
     wait: (ms, signal) => sleep(ms, undefined, signal ? { signal } : {}),
   });

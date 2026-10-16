@@ -1,7 +1,7 @@
 import type { Socket } from 'node:net';
 import { splitModelInvocationDelta, type ModelInvocationDelta } from '#domain/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION, RUNTIME_SERVICE_STREAM_FRAME_DELTAS } from '#engine/index.js';
-import { encodeServiceFrame } from './framing.js';
+import { encodeServiceFrame } from '#engine/index.js';
 
 /** Presentation channel of one streamed request. Emitting never blocks or throws; the final response is separate. */
 export interface RuntimeServiceStreamChannel { emit(delta: ModelInvocationDelta): void }

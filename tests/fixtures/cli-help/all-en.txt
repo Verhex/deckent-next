@@ -27,6 +27,7 @@ Setup / Maintenance:
   doctor      Check installation health
 Developer:
   audit       Verify audit history and checkpoint evidence
+  events      Follow authorized runtime metadata as JSON lines
   inventory   Inspect recorded attempts
   paths       Inspect installation paths
   runtime     Manage the local runtime service

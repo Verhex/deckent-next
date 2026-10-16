@@ -31,6 +31,7 @@ import { configServiceState, type ShutdownCommand, type ServiceShutdownAdmission
 export type { RunLifecycleHandler } from '#surfaces/core/cli-terminal/index.js';
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
 export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, TerminalLaunchContext {
+  subscribeEvents?: import('#surfaces/core/cli-events/index.js').EventsHandler;
   verifyAudit?: import('./audit.js').AuditVerifyHandler;
   rebaselineAudit?: import('./audit.js').AuditRebaselineHandler;
   executeBackup?: import('./backup.js').BackupHandler;

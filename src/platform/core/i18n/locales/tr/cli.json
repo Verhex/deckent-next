@@ -1483,5 +1483,7 @@
   "cli.audit.reason.head-missing": "saklanan baş veya checkpoint eksik",
   "cli.audit.reason.checkpoints-missing": "audit kaydında işaretlenen checkpointler eksik",
   "cli.audit.reason.policy": "policy digest farklı",
-  "cli.audit.reason.producers": "üretici listesi farklı"
+  "cli.audit.reason.producers": "üretici listesi farklı",
+  "cli.events.summary": "Yetkili runtime meta verilerini JSON satırlarıyla izle",
+  "cli.events.help": "Kullanım: deckent events --follow --json --input - [--lang en|tr]\nStandart girdiden schemaVersion/scopeId/topics/resume sorgusunu okur. Çalışan servis gerekir. Aboneliği durdurmak işi durdurmaz. Boşluk bildirimi yeni anlık görünüm gerektirir."
 }

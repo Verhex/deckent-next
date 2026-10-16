@@ -11,3 +11,5 @@ export type { ConfiguredRuntimeClient } from './internal/client.js';
 export { executeRuntimeApproval } from './internal/approvals.js';
 
 export { inspectInstallationStartability } from './internal/startability.js';
+
+export { authorizeRuntimeEvents } from './internal/events.js';

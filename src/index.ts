@@ -129,3 +129,5 @@ export { inspectConfiguredPolicyAdministration as inspectPolicyAdministration } 
 export type { PolicyAdministrationQuery, PolicyAdministrationStatus } from '#engine/index.js';
 
 export type { DelegationQuery, DecisionDelegationView } from '#domain/index.js';
+
+export type { RuntimeEventsQuery, RuntimeEventsItem, RuntimeEventsRecord, RuntimeEventsCursor, RuntimeEventsTopic } from '#engine/index.js';

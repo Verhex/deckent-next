@@ -1,3 +1,4 @@
+import { RUNTIME_EVENTS_SETTINGS } from './events.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
 import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
@@ -80,6 +81,7 @@ export const CONFIG_FIELDS = Object.freeze({
     maxServers: z.number().int().positive().max(256).default(20),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   service: field('config.field.service', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', z.object({
+    events: RUNTIME_EVENTS_SETTINGS.default({}),
     identity: z.object({ scopeId: z.string().min(1), serviceId: z.string().min(1) }).strict().nullable().default(null),
     inputMaxBytes: z.number().int().positive().max(4294967295).default(1048576),
     responseMaxBytes: z.number().int().positive().max(4294967295).default(1048576),
@@ -96,7 +98,7 @@ export const CONFIG_FIELDS = Object.freeze({
     busyRetryLimit: z.number().int().nonnegative().max(10).default(2),
     // K6 = A: a service the terminal started on its own stops through the governed stop once no request or execution ran for this long (null: never).
     idleShutdown: z.object({ afterMs: z.number().int().min(60000).max(86400000).nullable().default(900000) }).strict().default({}),
-  }).strict().superRefine((value, context) => { if (value.maxConcurrentExecutions >= value.maxConcurrentRequests) context.addIssue({ code: z.ZodIssueCode.custom, path: ['maxConcurrentExecutions'], message: 'SERVICE_EXECUTIONS_CAPACITY' }); }).default({}), [], LAYOUT_CONTRACT_SINCE),
+  }).strict().superRefine((value, context) => { if (value.events.enabled && value.events.maxSubscribers >= value.maxConnections) context.addIssue({ code: z.ZodIssueCode.custom, path: ['events', 'maxSubscribers'], message: 'EVENTS_CONNECTION_RESERVE' }); if (value.maxConcurrentExecutions >= value.maxConcurrentRequests) context.addIssue({ code: z.ZodIssueCode.custom, path: ['maxConcurrentExecutions'], message: 'SERVICE_EXECUTIONS_CAPACITY' }); }).default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellation: field('config.field.cancellation', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe(),
     recoveryPageSize: z.number().int().positive().safe().default(64),
     maxAttempts: z.number().int().positive().safe().default(3), retryDelayMs: z.number().int().positive().safe().default(1000),

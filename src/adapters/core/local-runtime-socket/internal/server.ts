@@ -1,3 +1,4 @@
+import { createServerSubscriptionChannel, type RuntimeServiceSubscriptionChannel } from './subscription-channel.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { createServer, type Server, type Socket } from 'node:net';
 import { isRuntimeServiceStreamingOperation, isRuntimeServiceTurnOperation, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
@@ -5,7 +6,7 @@ import { isRuntimeServiceStreamingOperation, isRuntimeServiceTurnOperation, runt
 import { createServerStreamChannel, type RuntimeServiceStreamChannel } from './stream-channel.js';
 import { createServerTurnChannel, type RuntimeServiceTurnChannel } from './event-channel.js';
 import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
-import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './framing.js';
+import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from '#engine/index.js';
 import { assertSocketPublicationBudget, LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 import { acquireLedgerLock, type LedgerLock } from './ledger-lock.js';
@@ -16,7 +17,7 @@ export type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
 }>;
 /** `stream` is present only for streamed operations and `turn` only for turn operations; their frames precede the one final response frame. */
 export type RuntimeServiceHandler = (request: RuntimeServiceRequest, peer: LocalPeerIdentity,
-  stream?: RuntimeServiceStreamChannel, turn?: RuntimeServiceTurnChannel) => RuntimeServiceHandlerReply | Promise<RuntimeServiceHandlerReply>;
+  stream?: RuntimeServiceStreamChannel, turn?: RuntimeServiceTurnChannel, subscription?: RuntimeServiceSubscriptionChannel) => RuntimeServiceHandlerReply | Promise<RuntimeServiceHandlerReply>;
 export interface LocalRuntimeSocketServer { readonly endpoint: string; readonly termination: Promise<PeerClosure>; stopAccepting(): void; disconnectClients(): void; dispose(): Promise<void> }
 
 function listen(server: Server, endpoint: string): Promise<void> {
@@ -97,9 +98,11 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
     // Turn events are required data: bounded per frame and by what may wait unread, never in total (Jev 9df04efb).
     const turn = isRuntimeServiceTurnOperation(request.operation)
       ? createServerTurnChannel(socket, request.requestId, options.responseMaxBytes, 4 * options.responseMaxBytes) : undefined;
-    void Promise.resolve().then(() => stream ? handler(request, peer, stream) : turn ? handler(request, peer, undefined, turn) : handler(request, peer)).then(reply)
+    const subscription = request.operation === 'subscribeEvents'
+      ? createServerSubscriptionChannel(socket, request.requestId, Math.min(options.responseMaxBytes, request.delivery!.maxResultBytes)) : undefined;
+    void Promise.resolve().then(() => subscription ? handler(request, peer, undefined, undefined, subscription) : stream ? handler(request, peer, stream) : turn ? handler(request, peer, undefined, turn) : handler(request, peer)).then(reply)
       .then(value => {
-        stream?.finish(); turn?.finish();
+        stream?.finish(); turn?.finish(); subscription?.finish();
         let response = value.response;
         // A required event that could not be delivered is a capacity failure, never a successful or user-cancelled turn.
         if (turn?.signal.reason instanceof ServiceFrameError && turn.signal.reason.code === 'SERVICE_FRAME_LIMIT') {
@@ -122,7 +125,7 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
           });
         } catch { socket.destroy(); }
       }, () => {
-        stream?.finish(); turn?.finish();
+        stream?.finish(); turn?.finish(); subscription?.finish();
         if (!disconnected) {
           try { socket.end(encodeServiceFrame(versioned(transportFailure(request.requestId)), options.responseMaxBytes)); } catch { socket.destroy(); }
         }

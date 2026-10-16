@@ -38,7 +38,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
   const languageAt = argv.indexOf('--lang');
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
-  const handlesSignals = isRuntimeServe || argv[0] === 'do' || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask') || (argv[0] === 'task' && ['integration-deliver', 'integration-adopt', 'integration-rollback'].includes(argv[1] ?? ''));
+  const handlesSignals = isRuntimeServe || argv[0] === 'events' || argv[0] === 'do' || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask') || (argv[0] === 'task' && ['integration-deliver', 'integration-adopt', 'integration-rollback'].includes(argv[1] ?? ''));
   const controller = new AbortController();
   const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view,
     resolveLocale(languageAt >= 0 ? argv[languageAt + 1] : await loadConfigLanguage(root)), process.stdin, process.stderr,
@@ -46,6 +46,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: composeCore, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+    subscribeEvents: (projectRoot, query, options, observer) => createConfiguredRuntimeClient(projectRoot, options).subscribeEvents(query, observer),
     verifyAudit: verifyConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
