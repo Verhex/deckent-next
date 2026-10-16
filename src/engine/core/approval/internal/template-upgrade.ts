@@ -5,6 +5,8 @@ import { effectWireKey } from '#engine/core/effect/index.js';
 import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
+/** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`). */
+const FIRST_RUN_DELTA_VERSION = 11;
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
@@ -39,8 +41,10 @@ export class PolicyTemplateUpgrade {
     return out;
   }
   private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
-    const prefix = `policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-`;
-    if (entry.key?.startsWith(prefix) && /^[a-f0-9]{64}$/.test(entry.key.slice(prefix.length))) return true;
+    // The installer's upgrade key names the template version it ran under. The rolled-back delta is v11's, so a v11 delta the installer added under
+    // v11 or any later version is this upgrade's (POLICY-V12: the v12 bump must not orphan v11 upgrades already on disk).
+    const installer = /^policy-template-upgrade-v(\d+)-([a-f0-9]{64})$/.exec(entry.key ?? '');
+    if (installer && Number(installer[1]) >= FIRST_RUN_DELTA_VERSION && Number(installer[1]) <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
     if (entry.before.schemaVersion !== 2) return false;
     const plan = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, ...this.names });
     if (plan.status !== 'plan') return false;

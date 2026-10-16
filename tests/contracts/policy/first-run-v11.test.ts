@@ -10,7 +10,9 @@ const input = { scopeId: 'installation', principal: person, ...names, readToolNa
   scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['run_shell'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run' };
 const ids = ['first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt'];
 const built = firstRunPolicyTemplate(input);
-const v10 = { ...built.policy, revision: 'first-run-template-v10', grants: built.policy.grants.filter(rule => !ids.includes(rule.id)) };
+// v10 never had the v12 owner rules either (POLICY-V12): the exact v10 bytes are the current template minus the v11 and v12 rules.
+const v12ids = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+const v10 = { ...built.policy, revision: 'first-run-template-v10', grants: built.policy.grants.filter(rule => !ids.includes(rule.id) && !v12ids.includes(rule.id)) };
 const identity = { scopeId: 'installation', runId: 'run', taskId: 'task', attemptId: 'attempt', generation: 1 };
 const source = (policy: unknown) => ({ async load() { return resolvePolicyBindings(policy, built.bindings); } });
 

@@ -1365,7 +1365,8 @@
         "src/composition/core/root",
         "src/adapters/core/audit-store",
         "src/engine/core/audit",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/composition/core/config"
       ],
       "plan": "INSTALLATION"
     },

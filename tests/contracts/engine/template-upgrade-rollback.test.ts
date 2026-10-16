@@ -89,6 +89,25 @@ describe.skipIf(process.platform !== 'linux')('v11 rollback through the real app
   });
 });
 
+it.skipIf(process.platform !== 'linux')('POLICY-V12: a v11 delta the installer added under template v11 stays rollbackable after the v12 bump; an older or future key does not count', async () => {
+  const seed = async (version: number) => {
+    const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+    await f.source.updateAuthority(() => ({ write: { policy: { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id)) },
+      bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+    // The installer upgrade's own key shape (`policy-template-upgrade-v<version>-<64 hex>`), as an alpha.41 (v11) installer wrote it.
+    await f.source.updateAuthority(() => ({ write: { policy: { ...current, revision: 'a-upgraded' }, bindings: null, order: 'policy-first' }, result: null }),
+      `policy-template-upgrade-v${version}-${'a'.repeat(64)}`);
+    return f;
+  };
+  const v11 = await seed(11);
+  expect(await v11.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  for (const version of [10, 13]) {
+    const other = await seed(version), before = await other.bytes();
+    expect(await other.rollback()).toMatchObject({ status: 'nothing-to-roll-back', conflicts: deltaIds });
+    expect(await other.bytes()).toBe(before); expect(other.cards).toBe(0);
+  }
+});
+
 it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
   const fresh = await fixture(undefined, false), initial = await fresh.bytes();
   expect(await fresh.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });

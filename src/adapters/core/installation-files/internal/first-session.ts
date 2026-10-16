@@ -4,8 +4,11 @@ import { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion, CURRE
 import { InstallationPublicationError, type PolicyTemplatePublishTarget } from '#engine/index.js';
 import { getConfigFieldDefault, inspectProductFile, prepareProductFile, productResourcePath, validateConfig, type ProductLayout } from '#platform/index.js';
 const digest = (content: string) => createHash('sha256').update(content).digest('hex');
-/** First-session material is data in the existing installer journal, never a second config writer or migration. */
-export async function firstSessionTargets(layout: ProductLayout, scopeId: string, maxBytes: number, retained?: unknown): Promise<readonly PolicyTemplatePublishTarget[]> {
+/** First-session material is data in the existing installer journal, never a second config writer or migration. v12 (owner 2026-10-16): the
+ * first config names the installation's runtime service (`service.identity`), so the template's shutdown rule and `runtime restart` work at once;
+ * it is part of the journaled target, so an exact replay still verifies the same bytes. */
+export async function firstSessionTargets(layout: ProductLayout, scopeId: string, maxBytes: number, retained?: unknown,
+  service: { readonly scopeId: string; readonly serviceId: string } | null = null): Promise<readonly PolicyTemplatePublishTarget[]> {
   if (retained !== undefined) {
     if (!Array.isArray(retained)) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
     const targets = retained as PolicyTemplatePublishTarget[];
@@ -20,7 +23,8 @@ export async function firstSessionTargets(layout: ProductLayout, scopeId: string
   }
   const targets: PolicyTemplatePublishTarget[] = [];
   const config = { schema_version: 4, cancellation: { maxConcurrentDeliveries: getConfigFieldDefault('service').maxConcurrentExecutions },
-    cancellationRuntime: { scopeIds: [scopeId] }, terminal: { scopeId, chat: { schemaVersion: 1 } } };
+    cancellationRuntime: { scopeIds: [scopeId] }, terminal: { scopeId, chat: { schemaVersion: 1 } },
+    ...(service ? { service: { identity: { scopeId: service.scopeId, serviceId: service.serviceId } } } : {}) };
   validateConfig(config);
   for (const resource of ['ledger', 'config'] as const) {
     const path = productResourcePath(layout, resource);
