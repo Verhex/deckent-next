@@ -161,6 +161,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A lost worker can keep its slot.** A granted attempt can stay active and hold an execution slot until custody is resolved.
   *Workaround:* watch it with `deckent monitor`; the slot is freed only by a typed manual decision or by evidence that the worker ended.
 - **Restart recovery has not had an independent review** with a real container kill and service restart.
+- **Only an untouched first-run policy gets the v12 owner rules.** `init policy --upgrade` adds scope inspection and the
+  service stop rule only to a policy that is exactly an older first-run template; an edited or hand-built policy is left as
+  it is and the upgrade reports it as current. *Workaround:* the policy's owner adds `scope/inspect` on the scope and
+  `service/shutdown` on the configured service id for the person. After an upgrade that sets `service.identity`, a service
+  that is already running needs one manual stop (Ctrl+C on `deckent runtime serve`, or its idle stop) before `runtime restart` works.
 - **The service identity and the clock.** A rare window remains at first publication of the installation identity; a slow
   clock drift inside the tolerance is not detected; one overlay case where a stopped run reports `cancelled` is not reproduced.
 
