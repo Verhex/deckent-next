@@ -105,7 +105,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   adoption bar are conjunctive. An unsupported profile/changed evaluator refuses; a Run-create approval can leave the ticket
   waiting. After answering that ordinary approval, replay the same enqueue command; no policy is bypassed. Unknown effects
   stay reconciling; elapsed TTL does not prove an old process ended.
-- **Queue generation blocks direct legacy writes.** After activation use the queue command family, including
+- **Queue generation blocks direct legacy writes.** Activation is the first consented queue execution on a target; enqueue,
+  preparation, verification, a conflict and a declined or expired card write nothing to it, and a direct write before
+  activation only makes a waiting ticket stale (typed refusal). After activation use the queue command family, including
   `integration-queue-rollback` plus `integration-queue-confirm`; a busy target refuses rollback. Existing direct-path limits
   below describe historical/direct integrations, not a weaker way around the queue. No remote-host branch-protection lookup
   is performed: protection uses registered policy and local repository/remote-HEAD metadata.

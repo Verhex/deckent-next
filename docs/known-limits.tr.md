@@ -104,7 +104,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   birlikte aranır. Desteklenmeyen profil/değişmiş evaluator reddedilir; Run-create onayı bileti bekletebilir. Normal onayı
   cevapladıktan sonra aynı enqueue komutunu yineleyin; politika atlanmaz. Belirsiz etki uzlaştırmada kalır; TTL'nin geçmesi
   eski sürecin bittiğini kanıtlamaz.
-- **Kuyruk generation'ı doğrudan eski yazıcıyı durdurur.** Etkinleştikten sonra geri alma dahil kuyruk komutlarını kullanın:
+- **Kuyruk generation'ı doğrudan eski yazıcıyı durdurur.** Etkinleşme, bir hedefteki ilk onaylı kuyruk yürütmesidir; sıraya alma,
+  hazırlık, doğrulama, çakışma ve reddedilen ya da süresi dolan kart hedefe hiçbir şey yazmaz. Etkinleşmeden önceki doğrudan
+  yazım yalnız bekleyen bileti eskitir (tipli ret). Etkinleştikten sonra geri alma dahil kuyruk komutlarını kullanın:
   `integration-queue-rollback` ve `integration-queue-confirm`. Meşgul hedef geri almayı reddeder. Aşağıdaki doğrudan yol
   sınırları kuyruğu aşma yolu değildir. Uzak hosting koruması sorgulanmaz; kayıtlı politika ve yerel depo/remote-HEAD bilgisi
   kullanılır.

@@ -23,8 +23,8 @@ import { startTestRuntimeService, stopTestRuntimeService } from '../support/runt
 // leaves an accepted Attempt with a stored patch. Three with disjoint paths are queued through the real runtime service; the service prepares
 // C1 = H0 + P1, C2 = C1 + P2, C3 = C2 + P3 and admits a normal verification Run on each exact candidate, which this test executes and
 // evaluates through the ordinary Run applications. The batch is then confirmed by the shipped CLI on its own controlling PTY (the product's
-// terminal confirmation port: one publication card and one adoption card for the whole batch). A fourth Attempt whose path overlaps the
-// adopted prefix ends as conflict-needs-reattempt with nothing written to the target.
+// terminal confirmation port: one publication card and one adoption card for the whole batch), after a first answer of n that writes
+// nothing. A fourth Attempt whose path overlaps the adopted prefix ends as conflict-needs-reattempt with nothing written to the target.
 const exec = promisify(execFile);
 const roots: string[] = [], cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -157,6 +157,10 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const client = configuredTargetQueueTerminal(f.project, f.options).deliveryQueue;
     const view = async (commandId: string) => (await client.inspectTargetQueue({ schemaVersion: 1, scopeId: SCOPE, commandId })).record;
     const enqueue = (commandId: string, identity: AttemptIdentity) => client.enqueueTargetQueue({ schemaVersion: 1, commandId, identity, target: { kind: 'git-ref', id: TARGET } });
+    // Every reference (branches, deliveries, the queue generation fence), the object store, HEAD and the checkout.
+    const written = async () => ({ refs: await git(f.target, 'for-each-ref', '--format=%(refname) %(objectname)'), objects: await git(f.target, 'count-objects', '-v'),
+      head: await git(f.target, 'rev-parse', 'HEAD'), status: await git(f.target, 'status', '--porcelain') });
+    const quiet = await written(); // first activation: no queue generation exists yet
     const tickets = ['q1', 'q2', 'q3'];
     for (const [index, ticket] of tickets.entries()) expect(await enqueue(ticket, attempts[index]!)).toMatchObject({ commandId: ticket, state: 'queued' });
 
@@ -168,8 +172,15 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
       await f.evaluate(runId, await f.execute(runId));
       await until(() => view(ticket), record => record?.state === 'awaiting-confirmation', `${ticket} awaiting confirmation`);
     }
-    // Nothing reached the target branch before the human answered.
-    expect(await git(f.target, 'rev-parse', TARGET)).toBe(f.base);
+    // Admission, real re-preparation and the verification Runs wrote nothing to the target before the human answered (Astra 2607 F2).
+    expect(await git(f.target, 'rev-parse', TARGET)).toBe(f.base); expect(await written()).toEqual(quiet);
+
+    // The human declines the publication card on the real terminal: no consent, no write, the tickets keep waiting for a fresh card.
+    const declined = await cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', 'q1'],
+      [['y/N: ', 'n\r'], ['No valid consent covers this exact batch', '']]);
+    expect(declined.status).not.toBe(0);
+    expect(await written()).toEqual(quiet);
+    for (const ticket of tickets) expect((await view(ticket))?.state).toBe('awaiting-confirmation');
 
     // The shipped CLI on a real controlling terminal: one exact publication card, then one exact adoption card, for the whole batch.
     const confirmed = await cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', 'q1'],
@@ -197,9 +208,6 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(await git(f.target, 'rev-parse', 'HEAD')).toBe(targetHead);
 
     // The fourth Attempt (made on H0) writes a.txt, which the adopted prefix added: no automatic merge, a typed reattempt outcome.
-    // Every reference (branches, deliveries, the queue generation fence), the object store, HEAD and the checkout.
-    const written = async () => ({ refs: await git(f.target, 'for-each-ref', '--format=%(refname) %(objectname)'), objects: await git(f.target, 'count-objects', '-v'),
-      head: await git(f.target, 'rev-parse', 'HEAD'), status: await git(f.target, 'status', '--porcelain') });
     const before = await written();
     expect(await enqueue('q4', attempts[3]!)).toMatchObject({ commandId: 'q4', state: 'queued' });
     const fourth = await until(() => view('q4'), record => record?.state === 'settled', 'q4 settled');

@@ -115,7 +115,7 @@ async function fixture() {
   return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget };
 }
 
-describe('queue generation fence: no target write before consent, durable ownership across restart (Astra 2607 F1/F2)', () => {
+describe.skipIf(process.platform !== 'linux')('queue generation fence: no target write before consent, durable ownership across restart (Astra 2607 F1/F2)', () => {
   it('a conflicting first activation, a declined batch and an expired ticket leave every ref, object, HEAD and checkout untouched', async () => {
     const f = await fixture(), s = f.service('service-a');
     try {
@@ -182,6 +182,37 @@ describe('queue generation fence: no target write before consent, durable owners
       const key = targetQueueKey(c.record('q2').request.target);
       await expect(f.gitTarget.fence(key, 'service-b', 1)).rejects.toMatchObject({ code: 'QUEUE_CONFLICT' });
       await expect(f.gitTarget.fence(key, 'service-b', 2)).rejects.toMatchObject({ code: 'QUEUE_CONFLICT' });
+    } finally { c.close(); }
+  });
+
+  it('startup parks pre-consent work by durable ownership alone and physically fences only work whose effect may be in flight', async () => {
+    const f = await fixture();
+    f.candidates.set('q1', await f.commit(f.base, 'candidate-1'));
+    const a = f.service('service-a');
+    let quiet: Awaited<ReturnType<typeof f.target>>;
+    try {
+      await a.enqueue('q1', 1); await a.advance();
+      expect(a.record('q1').state).toBe('awaiting-confirmation');
+      quiet = await f.target();
+    } finally { a.close(); }
+    const b = f.service('service-b');
+    try {
+      expect(await b.instance.recover()).toEqual([]);
+      expect(b.record('q1')).toMatchObject({ state: 'parked', ownerInstance: 'service-b', epoch: 2 });
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
+
+      // A publication that was consented and started, then lost with its process: the restart must advance the physical fence.
+      f.candidates.set('q2', await f.commit(f.base, 'candidate-2'));
+      await b.enqueue('q2', 2); await b.advance();
+      const waiting = b.record('q2');
+      expect(waiting).toMatchObject({ state: 'awaiting-confirmation', ownerInstance: 'service-b', epoch: 3 });
+      b.app.transition(waiting, { state: 'publishing', batchDigest: '9'.repeat(64) });
+    } finally { b.close(); }
+    const c = f.service('service-c');
+    try {
+      expect(await c.instance.recover()).toEqual([]);
+      expect(c.record('q2')).toMatchObject({ state: 'reconciling', ownerInstance: 'service-c', epoch: 4 });
+      expect(await f.generation()).toMatchObject({ owner: 'service-c', epoch: 4 });
     } finally { c.close(); }
   });
 });
