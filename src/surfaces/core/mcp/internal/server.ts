@@ -1,3 +1,4 @@
+import { queueQuerySchema, queueListSchema, type QueueQuery, type QueueList } from '#engine/index.js';
 import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { runProposalSchema, type RunProposal } from '#domain/index.js';
 import { brainPlanCommandSchema, type BrainPlanCommand } from '#domain/index.js';
@@ -25,6 +26,8 @@ import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseR
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 export interface McpApplications {
+  inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
+  listTargetQueue?(query: QueueList): Promise<unknown>;
   verifyAudit?(query: AuditVerifyQuery): Promise<AuditVerification>;
   inspectPolicyAdministration?(query: PolicyAdministrationQuery): Promise<PolicyAdministrationStatus>;
   planRun?(command: BrainPlanCommand): Promise<unknown>;
@@ -96,6 +99,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     { readOnly: true, destructive: false, idempotent: true, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  if (applications.inspectTargetQueue) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_delivery_queue', description: t('mcp.tool.inspectTargetQueue', {}, locale), schema: queueQuerySchema,
+    invoke: input => applications.inspectTargetQueue!(queueQuerySchema.parse(input)) });
+  if (applications.listTargetQueue) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'list_delivery_queue', description: t('mcp.tool.listTargetQueue', {}, locale), schema: queueListSchema,
+    invoke: input => applications.listTargetQueue!(queueListSchema.parse(input)) });
   const verifyAudit = applications.verifyAudit;
   if (verifyAudit) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'verify_audit',
     description: t('mcp.tool.verifyAudit', {}, locale), schema: auditVerifyQuerySchema,

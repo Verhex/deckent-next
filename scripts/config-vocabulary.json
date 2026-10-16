@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "417d8d387de97e330e4c24362cb276df10421f96391fce5de44f3b9660d18e6a",
-    "src/platform/core/config-fields/internal/fields.ts": "c862b41e44b06ebb3357ca10dc32b8d25ef09aea390965c315fa39f30a429b88",
+    "src/platform/core/config-fields/internal/fields.ts": "07ad6fdf8ab72044b0d960a3480a9b13a6e4449d5558772f465aabd6b1468ac7",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -22,6 +22,7 @@
       "sqlite"
     ],
     "artifacts": [],
+    "targetQueue": [],
     "execution": [],
     "backup": [
       "before-upgrade",

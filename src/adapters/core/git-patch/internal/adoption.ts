@@ -1,22 +1,14 @@
-import { createHash } from 'node:crypto';
-import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
 import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { adoptionTargetRefSchema, WorkspaceAdoptionError, type AdoptionFence, type AdoptionTargetObservation, type IntegrationAdoptionTarget } from '#engine/index.js';
+import { adoptionFenceRef as fenceRef, adoptionFenceText as fenceText, adoptionFenceObjectSchema as fenceSchema, adoptionTargetRefSchema, WorkspaceAdoptionError, type AdoptionFence, type AdoptionTargetObservation, type IntegrationAdoptionTarget } from '#engine/index.js';
 import { GitCommand } from './git-command.js';
+import { queueGenerationRef, type GitQueueFence } from '#engine/index.js';
 const oid = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
-const fenceRef = (target: string) => `refs/deckent/adoption-fences/${createHash('sha256').update(target).digest('hex')}`;
-/** Deterministic fence content (fixed key order): the same record always hashes to the same blob. */
-const fenceText = (target: string, fence: AdoptionFence) => JSON.stringify({ schemaVersion: 1, kind: 'deckent-adoption-fence', target,
-  sequence: fence.sequence, scopeId: fence.scopeId, commandId: fence.commandId }) + '\n';
-const fenceSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('deckent-adoption-fence'), target: z.string(),
-  sequence: z.number().int().positive().safe(), scopeId: identitySchema, commandId: identitySchema }).strict();
 /** Moves exactly one branch reference together with its fence reference in one Git transaction. `git update-ref` does not refuse
  * a branch checked out in some worktree, so checkout is observed explicitly before each move; a checkout racing the move and
  * writers outside Deckent are not fenced. */
 export class GitIntegrationAdoption implements IntegrationAdoptionTarget {
   private readonly git: GitCommand;
-  constructor(options: GitWorkspaceOptions) { this.git = new GitCommand(options); }
+  constructor(options: GitWorkspaceOptions, private readonly queueFence?: GitQueueFence) { this.git = new GitCommand(options); }
   /** Exact, non-symbolic reference value; for-each-ref alone also matches `<ref>/...`. */
   private async exact(ref: string) {
     const rows = (await this.git.run(['for-each-ref', '--format=%(refname) %(objectname) %(objecttype) %(symref)', ref])).split('\n').filter(Boolean)
@@ -57,7 +49,8 @@ export class GitIntegrationAdoption implements IntegrationAdoptionTarget {
     await this.git.custody();
     const fence = fenceRef(ref), nextValue = await this.fenceObject(ref, next);
     const guard = expected ? `update ${fence} ${nextValue} ${await this.fenceObject(ref, expected)}` : `create ${fence} ${nextValue}`;
-    try { await this.git.run(['update-ref', '--stdin'], `start\nupdate ${ref} ${toCommit} ${fromCommit}\n${guard}\nprepare\ncommit\n`); }
+    const generation = this.queueFence ?? { ref: queueGenerationRef(ref), value: '0'.repeat(fromCommit.length) };
+    try { await this.git.run(['update-ref', '--stdin'], `start\noption no-deref\nverify ${generation.ref} ${generation.value}\nupdate ${ref} ${toCommit} ${fromCommit}\n${guard}\nprepare\ncommit\n`); }
     catch (error) {
       // The transaction failed or its outcome is unknown: only this record's fence proves that its effect happened.
       const current = await this.readFence(ref);

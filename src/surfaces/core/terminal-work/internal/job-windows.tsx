@@ -1,6 +1,7 @@
+import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { RunView } from '#engine/index.js';
 import { renderBriefLines } from '#surfaces/core/monitor/index.js';
-import { shortId, type Locale } from '#platform/index.js';
+import { shortId, t, type Locale } from '#platform/index.js';
 import { loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
@@ -50,6 +51,8 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels): WindowLin
     section(labels.attempts), ...run.tasks.map((task, index) => field(taskLabel(task, index), task.resultBrief?.attemptId ? displayId(task.resultBrief.attemptId) : labels.unknown, true)),
     section(labels.delivery), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: task.resultBrief?.runDelivery
       ? [span(labels.runStates[task.resultBrief.runDelivery.state] ?? task.resultBrief.runDelivery.state), ...(task.resultBrief.runDelivery.commit ? [span(` · ${displayId(task.resultBrief.runDelivery.commit)}`, { role: 'muted' })] : [])] : [span(labels.unknown, { role: 'muted' })] })),
+    ...(run.targetQueue?.records ?? []).flatMap(view => renderQueueStatus(view, labels.locale).split('\n').map(text => ({ spans: [span(text)] }))),
+    ...(run.targetQueue?.truncated ? [{ spans: [span(t('queue.truncated', {}, labels.locale), { role: 'warning' })] }] : []),
     ...run.tasks.flatMap((task, index) => [section(taskLabel(task, index)), ...(task.resultBrief
       ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale).map(text => ({ spans: [span(text)] }))
       : [{ spans: [span(labels.detailsUnavailable, { role: 'warning' })] }])])];

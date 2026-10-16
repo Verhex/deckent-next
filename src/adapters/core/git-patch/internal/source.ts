@@ -1,5 +1,5 @@
 import { sameAttemptIdentity } from '#domain/index.js';
-import { patchExclusions, workspacePatchSchema, WorkspacePatchError, type DispatchRecord, type PatchLimits, type WorkspacePatchSource, type RunWorkspaceCustodyStore } from '#engine/index.js';
+import { capturedWorkspacePatch, WorkspacePatchError, type DispatchRecord, type PatchLimits, type WorkspacePatchSource, type RunWorkspaceCustodyStore } from '#engine/index.js';
 import { GitWorkspaceBroker, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
 import { diffAgainstBase, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace, snapshotDigest, SnapshotBudget } from './snapshot.js';
@@ -36,12 +36,7 @@ export class GitWorkspacePatchSource implements WorkspacePatchSource {
       const changedPaths = diffAgainstBase(listing, after, algorithm);
       const base = await readBaseBlobs(lease, this.options, new SnapshotBudget(this.limits, deadline),
         changedPaths.flatMap(path => { const entry = listing.get(path); return entry ? [[path, entry] as const] : []; }));
-      const changes = changedPaths.flatMap(path => {
-        const before = base.get(path) ?? null; const next = after.get(path) ?? null;
-        return JSON.stringify(before) === JSON.stringify(next) ? [] : [{ path, before, after: next }];
-      });
-      return workspacePatchSchema.parse({ schemaVersion: 1, kind: 'workspace-patch', identity: lease.identity,
-        source: custody.source, baseCommit: lease.baseCommit, snapshotDigest: snapshotDigest(after), exclusions: patchExclusions, changes });
+      return capturedWorkspacePatch(lease.identity, custody.source, lease.baseCommit, changedPaths, base, after);
     } catch (error) {
       if (error instanceof WorkspacePatchError) throw error;
       throw new WorkspacePatchError('PATCH_UNSAFE');

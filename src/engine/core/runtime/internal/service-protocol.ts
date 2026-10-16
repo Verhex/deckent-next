@@ -1,3 +1,4 @@
+import { queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema, queueChallengeSchema, queueAnswerSchema, queueExecuteSchema } from '#engine/core/effect/index.js';
 import { z } from 'zod';
 import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
   parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseProviderSpendManagementCommand, parseScratchQuery,
@@ -5,7 +6,7 @@ import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, ef
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 28 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 29 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -21,7 +22,11 @@ export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listAppro
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount', 'manageProviderSpend',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore']);
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore', 'enqueueTargetQueueRollback', 'enqueueTargetQueue', 'inspectTargetQueue', 'listTargetQueue', 'challengeTargetQueue', 'answerTargetQueue', 'executeTargetQueue']);
+/** v29: source-free queue commands; batch consent is a separately witnessed terminal operation. */
+export function isRuntimeServiceQueueOperation(operation: RuntimeServiceOperation): boolean {
+  return ['enqueueTargetQueueRollback', 'enqueueTargetQueue', 'inspectTargetQueue', 'listTargetQueue', 'challengeTargetQueue', 'answerTargetQueue', 'executeTargetQueue'].includes(operation);
+}
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
@@ -31,7 +36,7 @@ export const isRuntimeServiceBoundedResultOperation = (operation: RuntimeService
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'manageProviderSpend' || operation === 'chatTurn' || operation === 'cancelChatTurn'
   || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
-  || operation === 'clearSessionStanding' || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
+  || isRuntimeServiceQueueOperation(operation) || operation === 'clearSessionStanding' || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
 /** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
 export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeServiceOperation): operation is 'findWorkspaceFiles' | 'attachWorkspaceFile' {
   return operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile';
@@ -91,7 +96,14 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'RUNTIME_SERVICE_DELIVERY_REQUIRED' });
     }
     try {
-      if (value.operation === 'clearSessionStanding') clearSessionStandingSchema.parse(value.input);
+      if (value.operation === 'enqueueTargetQueueRollback') queueRollbackSchema.parse(value.input);
+      else if (value.operation === 'enqueueTargetQueue') queueEnqueueSchema.parse(value.input);
+      else if (value.operation === 'inspectTargetQueue') queueQuerySchema.parse(value.input);
+      else if (value.operation === 'listTargetQueue') queueListSchema.parse(value.input);
+      else if (value.operation === 'challengeTargetQueue') queueChallengeSchema.parse(value.input);
+      else if (value.operation === 'answerTargetQueue') queueAnswerSchema.parse(value.input);
+      else if (value.operation === 'executeTargetQueue') queueExecuteSchema.parse(value.input);
+      else if (value.operation === 'clearSessionStanding') clearSessionStandingSchema.parse(value.input);
       else if (value.operation === 'inspectProviderSpendAccount') parseProviderSpendAccountQuery(value.input);
       else if (value.operation === 'manageProviderSpend') parseProviderSpendManagementCommand(value.input);
       else if (value.operation === 'auditProviderSpendAccount') parseProviderSpendAuditCommand(value.input);
@@ -167,11 +179,11 @@ export class RuntimeServiceProtocolError extends Error {
  * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v20 (S02) kept [20, 19]; v21 (T2) kept [21, 20]; v22 (T3) kept
  * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) kept [23, 22]; v24 (SECRET-STORE-SWITCH: `switchSecretStore`)
  * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) kept [25, 24]; v26 (MCP actor) kept [26, 25];
- * v27 (Run-create approval subject) kept [27, 26]; v28 (RunProposal) keeps [28, 27]: v26 is outside.
+ * v27 (Run-create approval subject) kept [27, 26]; v28 (RunProposal) kept [28, 27]; v29 (target queue) keeps [29, 28]: v27 is outside.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 27] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 28] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(27)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(28)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema, channel: z.literal('mcp').optional(),
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

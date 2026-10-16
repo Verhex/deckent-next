@@ -1,0 +1,151 @@
+import { createHash } from 'node:crypto';
+import { targetQueueKey } from './queue-key.js';
+import { assertCandidateEvidence, targetQueueRequestSchema, targetQueueRecordSchema, TargetQueueError, queueTerminal, queueNextState,
+  encodeCommandProjection, type TargetQueueRequest, type TargetQueueRecord, type TargetBinding, type VerifiedPrincipal } from '#domain/index.js';
+import type { AuditStore } from '#engine/core/audit/index.js';
+
+export interface TargetQueueBounds { readonly capacity: number; readonly perTarget: number; readonly activeTargets: number;
+  readonly batchSize: number; readonly batchWindowMs: number; readonly leaseMs: number; readonly verificationTimeoutMs: number; readonly revalidations: number }
+/** All callback work is synchronous under the shared ledger transaction. No target/process/TTY I/O while holding the writer. */
+export interface TargetQueueStore {
+  enqueue(request: TargetQueueRequest, bounds: TargetQueueBounds, audit: (store: AuditStore, record: TargetQueueRecord) => void): TargetQueueRecord;
+  load(scopeId: string, commandId: string): TargetQueueRecord | null;
+  epoch(key: string): number;
+  head(key: string): TargetQueueRecord | null;
+  /** Atomically reserve only a contiguous queued prefix; another scope or policy cuts the batch. */
+  reserve(first: TargetQueueRecord, owner: string, now: number, bounds: TargetQueueBounds, audit: TargetQueueAudit): readonly TargetQueueRecord[];
+  list(scopeId: string, after: string | null, limit: number): readonly TargetQueueRecord[];
+  ahead?(record: TargetQueueRecord, limit: number): readonly TargetQueueRecord[];
+  change(previous: TargetQueueRecord, next: TargetQueueRecord, bounds: TargetQueueBounds, audit: (store: AuditStore, record: TargetQueueRecord) => void): TargetQueueRecord;
+}
+export interface TargetQueueAuthority {
+  authorize(request: TargetQueueRequest, principal: VerifiedPrincipal, action: 'submit' | 'inspect' | 'cancel'): Promise<void>;
+  /** Checks exact accepted Attempt/output, physical source binding and target protection before durable admission. */
+  validate(request: TargetQueueRequest): Promise<void>;
+}
+export type TargetQueueAudit = (store: AuditStore, record: TargetQueueRecord) => void;
+/** Service-owned admission, immutable scoped replay and CAS transitions. This scheduler never implements external effects. */
+export class TargetQueueApplication {
+  constructor(private readonly store: TargetQueueStore, private readonly authority: TargetQueueAuthority,
+    private readonly bounds: TargetQueueBounds, private readonly audit: TargetQueueAudit) { assertTargetQueueBounds(bounds); }
+  async submit(input: unknown, principal: VerifiedPrincipal): Promise<TargetQueueRecord> {
+    const request = targetQueueRequestSchema.parse(input);
+    await this.authority.authorize(request, principal, 'submit');
+    if (request.actor.id !== principal.id || request.actor.issuer !== principal.issuer || request.actor.subject !== principal.subject
+      || !principal.scopeIds.includes(request.identity.scopeId)) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    const previous = this.store.load(request.identity.scopeId, request.commandId);
+    if (previous) {
+      if (encodeCommandProjection('queue-request:1', previous.request) !== encodeCommandProjection('queue-request:1', request)) throw new TargetQueueError('QUEUE_CONFLICT');
+      return previous;
+    }
+    await this.authority.validate(request);
+    return this.store.enqueue(request, this.bounds, this.audit);
+  }
+  async inspect(scopeId: string, commandId: string, principal: VerifiedPrincipal): Promise<TargetQueueRecord | null> {
+    if (!principal.scopeIds.includes(scopeId)) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    const record = this.store.load(scopeId, commandId);
+    if (record) await this.authority.authorize(record.request, principal, 'inspect');
+    return record;
+  }
+  /** Ownership is a CAS of the eligible head. TTL never transfers ownership; recovery must fence physical effects first. */
+  claim(record: TargetQueueRecord, ownerInstance: string, now: number): TargetQueueRecord {
+    if (record.state !== 'queued' || record.ownerInstance !== null || record.request.deadline <= now) throw new TargetQueueError('QUEUE_CONFLICT');
+    const head = this.store.head(record.key);
+    if (!head || head.request.commandId !== record.request.commandId || head.request.identity.scopeId !== record.request.identity.scopeId)
+      throw new TargetQueueError('QUEUE_TARGET_BUSY');
+    return this.transition(record, { state: 'revalidating', ownerInstance, epoch: this.store.epoch(record.key) + 1, leaseDeadline: now + this.bounds.leaseMs });
+  }
+  reserve(record: TargetQueueRecord, ownerInstance: string, now: number): readonly TargetQueueRecord[] {
+    if (!ownerInstance || record.state !== 'queued' || record.request.deadline <= now) throw new TargetQueueError('QUEUE_CONFLICT');
+    return this.store.reserve(record, ownerInstance, now, this.bounds, this.audit);
+  }
+  current(record: TargetQueueRecord): TargetQueueRecord {
+    const current = this.store.load(record.request.identity.scopeId, record.request.commandId);
+    if (!current) throw new TargetQueueError('QUEUE_CORRUPT');
+    return current;
+  }
+  /** A new service holding ledger custody records a higher epoch. `batchDigest` is set by the same CAS that enters publishing/adopting, so
+   * null proves no effect started: that ticket parks in this ONE durable transition, with no target write, and an interrupted recovery
+   * leaves it unchanged rather than looking in flight (Astra 2609 F2-R). Only a started effect goes to reconciling, where Git is fenced. */
+  recover(record: TargetQueueRecord, ownerInstance: string, now: number): TargetQueueRecord {
+    if (record.state === 'queued' || queueTerminal(record.state)) throw new TargetQueueError('QUEUE_CONFLICT');
+    const owned = { ownerInstance, epoch: this.store.epoch(record.key) + 1, leaseDeadline: now + this.bounds.leaseMs };
+    if (record.batchDigest !== null) return this.transition(record, { state: 'reconciling', ...owned });
+    const evidence = createHash('sha256').update(JSON.stringify({ preEffect: record.state, revision: record.revision, ...owned })).digest('hex');
+    return this.transition(record, { state: 'parked', ...owned, evidenceRefs: [...record.evidenceRefs, evidence] });
+  }
+  async list(scopeId: string, after: string | null, limit: number, principal: VerifiedPrincipal): Promise<readonly TargetQueueRecord[]> {
+    if (!principal.scopeIds.includes(scopeId) || limit > this.bounds.capacity) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    const records = this.store.list(scopeId, after, limit);
+    for (const record of records) await this.authority.authorize(record.request, principal, 'inspect');
+    return records;
+  }
+  async position(record: TargetQueueRecord, principal: VerifiedPrincipal): Promise<number | null> {
+    if (!this.store.ahead || queueTerminal(record.state)) return null;
+    const rows = this.store.ahead(record, this.bounds.perTarget);
+    if (rows.length >= this.bounds.perTarget) return null;
+    for (const row of rows) await this.authority.authorize(row.request, principal, 'inspect');
+    return rows.length + 1;
+  }
+  transition(previous: TargetQueueRecord, fields: Partial<Pick<TargetQueueRecord, 'state' | 'ownerInstance' | 'epoch' | 'leaseDeadline' | 'candidate' | 'verification' | 'batchDigest' | 'effectCommandIds' | 'evidenceRefs' | 'outcome'>>): TargetQueueRecord {
+    queueNextState(previous, fields.state ?? previous.state);
+    const next = targetQueueRecordSchema.parse({ ...previous, ...fields, revision: previous.revision + 1 });
+    assertQueueChange(previous, next);
+    return this.store.change(previous, next, this.bounds, this.audit);
+  }
+  async cancel(record: TargetQueueRecord, principal: VerifiedPrincipal): Promise<TargetQueueRecord> {
+    await this.authority.authorize(record.request, principal, 'cancel');
+    if (!principal.scopeIds.includes(record.request.identity.scopeId)) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    return this.transition(record, { state: 'cancelled' });
+  }
+}
+/** Canonical identity helpers shared with the persistence adapter; no source-specific address syntax. */
+export function newQueueRecord(request: TargetQueueRequest, ordinal: number): TargetQueueRecord {
+  return targetQueueRecordSchema.parse({ schemaVersion: 1, request, key: targetQueueKey(request.target), ordinal, revision: 0, state: 'queued',
+    ownerInstance: null, epoch: 0, leaseDeadline: null, candidate: null, verification: null, batchDigest: null, effectCommandIds: [], evidenceRefs: [], outcome: null });
+}
+export function assertQueueChange(previous: TargetQueueRecord, next: TargetQueueRecord) {
+  if (encodeCommandProjection('queue-request:1', previous.request) !== encodeCommandProjection('queue-request:1', next.request)
+    || previous.key !== next.key || previous.ordinal !== next.ordinal || next.revision !== previous.revision + 1 || queueTerminal(previous.state))
+    throw new TargetQueueError('QUEUE_CONFLICT');
+  queueNextState(previous, next.state);
+  if (previous.state === 'reconciling' && next.state === 'parked' && (previous.batchDigest !== null || next.evidenceRefs.length <= previous.evidenceRefs.length))
+    throw new TargetQueueError('QUEUE_CONFLICT');
+  if (previous.state === 'queued' && next.state === 'revalidating') {
+    if (!next.ownerInstance || next.epoch <= previous.epoch || next.leaseDeadline === null) throw new TargetQueueError('QUEUE_CONFLICT');
+  } else if ((next.state === 'parked' || next.state === 'reconciling') && next.ownerInstance && next.epoch > previous.epoch) {
+    if (next.leaseDeadline === null) throw new TargetQueueError('QUEUE_CONFLICT');
+  } else if (next.ownerInstance !== previous.ownerInstance || next.epoch !== previous.epoch || next.leaseDeadline !== previous.leaseDeadline) {
+    throw new TargetQueueError('QUEUE_CONFLICT');
+  }
+  // Every effect-capable state carries its consented batch; recovery relies on batchDigest=null meaning no effect started.
+  if ((next.state === 'publishing' || next.state === 'adopting') && !next.batchDigest) throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED');
+  if (next.state === 'publishing') {
+    if (!next.candidate || !next.verification) throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED');
+    assertCandidateEvidence(next.candidate, next.verification);
+  }
+  if (next.state === 'settled' && (next.outcome === 'adopted' || next.outcome === 're-prepared+adopted')) {
+    if (!next.evidenceRefs.length || !next.candidate || !next.verification) throw new TargetQueueError('QUEUE_RECOVERY_REQUIRED');
+    assertCandidateEvidence(next.candidate, next.verification);
+  }
+}
+export function sameQueueTarget(a: TargetBinding, b: TargetBinding): boolean { return targetQueueKey(a) === targetQueueKey(b); }
+
+/** No implicit worker counts or mutable policy literals: the caller supplies the complete effective configuration. */
+export function assertTargetQueueBounds(bounds: TargetQueueBounds): void {
+  for (const key of ['capacity', 'perTarget', 'activeTargets', 'batchSize', 'batchWindowMs', 'leaseMs', 'verificationTimeoutMs', 'revalidations'] as const) {
+    const value = bounds[key];
+    if (!Number.isSafeInteger(value) || value < (key === 'revalidations' ? 0 : 1)) throw new TargetQueueError('QUEUE_CAPACITY');
+  }
+  if (bounds.batchSize > bounds.perTarget || bounds.perTarget > bounds.capacity || bounds.activeTargets > bounds.capacity)
+    throw new TargetQueueError('QUEUE_CAPACITY');
+}
+
+export function decodeTargetQueueRow(row: Record<string, unknown>): TargetQueueRecord {
+    let record: TargetQueueRecord;
+    try { record = targetQueueRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new TargetQueueError('QUEUE_CORRUPT'); }
+    if (record.key !== row.target_key || targetQueueKey(record.request.target) !== record.key || record.ordinal !== row.ordinal
+      || record.revision !== row.revision || record.state !== row.state || record.request.identity.scopeId !== row.scope_id || record.request.commandId !== row.command_id)
+      throw new TargetQueueError('QUEUE_CORRUPT');
+    return record;
+  }

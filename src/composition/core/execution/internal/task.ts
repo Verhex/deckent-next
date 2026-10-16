@@ -4,14 +4,13 @@ import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, type Con
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
-  applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, type WorkerEventSealing } from '#adapters/index.js';
+  gitQueueCandidateSource, applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, AuditApplication, enforceWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
-
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
  */
@@ -40,7 +39,11 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
         ...Object.values(layout.resources)]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes }), start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
-      const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot }, broker = new GitWorkspaceBroker(git);
+      const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
+      const queue = await store.loadTargetQueueVerification(identity.scopeId, identity.runId);
+      if (queue) await authorization.authorizeIdentity('read-output', queue.request.identity, principal);
+      const privateSource = queue ? await gitQueueCandidateSource(queue, store, artifacts, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }) : undefined;
+      const broker = new GitWorkspaceBroker(git, privateSource);
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches);
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim; a refusal is audited (paths, rules) and its checkout released.

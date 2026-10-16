@@ -59,3 +59,9 @@ export type { TaskQuotaHold } from './internal/pool-observation.js';
 export { QuotaReleaseApplication, quotaReleaseCommandSchema, quotaReleaseReceiptSchema } from './internal/quota-control.js';
 export type { QuotaReleaseCommand, QuotaReleaseReceipt, QuotaReleaseWrite, QuotaReleaseStore } from './internal/quota-control.js';
 export { RunDecisionApprovalBroker } from './internal/decision-approval.js';
+
+export { pinRunToCandidate, PrivateCandidateRunAdmission } from './internal/candidate-run.js';
+export type { PrivateCandidateStore, PrivateCandidateWorkspace, CandidateRunRequest, CandidateRunCriteria } from './internal/candidate-run.js';
+
+export { runAdmissionStorePerCall, createRunAdmissionContext } from './internal/admission-context.js';
+export { createRunCreationAuthority } from './internal/authority.js';

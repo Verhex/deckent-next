@@ -9,7 +9,10 @@ const parse = (adoption: unknown) => CORE_SCHEMA.shape.execution.parse(execution
 
 it('adds the adoption verification requirement as optional data within config schema 3 (absent = none)', () => {
   expect(parse({ targets: [] })?.adoption.verification).toBeNull();
-  expect(parse(undefined)?.adoption).toEqual({ targets: [], verification: null });
+  // TESLIM-KUYRUGU: `protectedTargets` defaults empty (main/master/default stay refused in code); entries are plain branch refs only.
+  expect(parse(undefined)?.adoption).toEqual({ targets: [], protectedTargets: [], verification: null });
+  expect(parse({ targets: [], protectedTargets: ['refs/heads/release'] })?.adoption.protectedTargets).toEqual(['refs/heads/release']);
+  expect(() => parse({ targets: [], protectedTargets: ['main'] })).toThrow(ZodError);
   expect(parse({ targets: ['refs/heads/dogfood/adopted'], verification: requirement })?.adoption.verification).toEqual(requirement);
 });
 

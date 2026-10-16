@@ -29,7 +29,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.41`** (released 2026-10-16). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.42`** (released 2026-10-16). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -262,20 +262,24 @@ policy revision and the runtime service identity, so a change of either in betwe
    The window then asks `Adopt commit <commit> into a branch? This moves the branch and needs its own y.` and ends with
    `Adopted: refs/heads/deckent/first-job <from> → <to>`. Your checkout, index and working files are unchanged; look at
    the result with `git log deckent/first-job` and merge it yourself.
-9. **Undo an adoption** from the command line (the terminal has no undo window yet). The rollback names the adoption by
-   its command id, and a terminal adoption generates an id it does not display, so for an undo you can type, run the
-   delivery and adoption from the command line with ids you choose. The ids `<run>`, `<task>`, `<attempt>`,
-   `<generation>` and `<layout-revision>` come from `deckent inventory --scope my-project --json`; each of these
-   commands asks for one `y` in a verified human terminal:
+9. **Inspect or undo queued adoption** (source candidate; native acceptance pending). A registered integration target uses
+   the service queue. `/deliver` prepares on the current base; after a base/target refusal, `r` offers re-preparation.
+   Inspect last-known state with `r`; publish and adopt each show their exact frozen batch and ask a separate `y/N`.
+   `/runs` details show authorized scope position, responsibility and outcome. Main/default/protected/checked-out/foreign
+   targets remain refused even when allow-listed. Conflicting paths require a new Attempt; no user branch is rebased or merged.
 
    ```sh
-   S="--scope my-project --run <run> --task <task> --attempt <attempt> --generation <generation> --layout-revision <layout-revision>"
-   deckent task integration-check $S
-   deckent task integration-prepare $S --command-id prep-1 --proposal <proposal from the check line>
-   deckent task integration-deliver $S --command-id deliver-1 --candidate-command-id prep-1
-   deckent task integration-adopt $S --command-id adopt-1 --delivery-command-id deliver-1 --target refs/heads/deckent/first-job
-   deckent task integration-rollback $S --command-id undo-1 --adoption-command-id adopt-1
+   deckent task integration-queue-list --scope my-project --json
+   deckent task integration-queue-inspect --scope my-project --command-id <ticket> --json
+   deckent task integration-queue-confirm --scope my-project --command-id <ticket>
+   deckent task integration-queue-rollback --scope my-project --source-command-id <ticket> --command-id undo-1
+   deckent task integration-queue-confirm --scope my-project --command-id undo-1
    ```
+
+   The rollback card covers one settled item. A failure stops the batch suffix and keeps the adopted prefix; unknown effects
+   hold that target for reconciliation. Legacy direct integration commands keep historical receipts, but cannot write through
+   an activated queue generation. Queue bounds/TTL come from `targetQueue`; a verification profile and policy are required.
+   This source candidate is not evidence of packaged, hosted, live, platform or N1 load acceptance.
 
    ```text
    Source <source> · affected files match base · proposal <proposal>

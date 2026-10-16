@@ -1,3 +1,4 @@
+import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { IdentityCommandContext } from '#surfaces/core/cli-identity/index.js';
 import { assessPoolReadiness, poolReadinessLines } from './pool.js';
 import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunReservationHandler } from './run.js';
@@ -31,6 +32,9 @@ import { configServiceState, type ShutdownCommand, type ServiceShutdownAdmission
 export type { RunLifecycleHandler } from '#surfaces/core/cli-terminal/index.js';
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
 export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, TerminalLaunchContext {
+  deliveryQueue?: QueueSubmitClient;
+  confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
+
   verifyAudit?: import('./audit.js').AuditVerifyHandler;
   rebaselineAudit?: import('./audit.js').AuditRebaselineHandler;
   executeBackup?: import('./backup.js').BackupHandler;

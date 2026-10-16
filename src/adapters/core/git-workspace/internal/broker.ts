@@ -1,24 +1,17 @@
-import { GIT_EXECUTION_SETTINGS } from '#platform/index.js';
+import { gitWorkspaceOptionsSchema as optionsSchema, gitWorkspaceRecordSchema as recordSchema, gitWorkspaceFingerprint, validGitSourceBase, gitWorkspaceIdentityTarget, gitWorkspaceRequestTarget, type GitWorkspaceOptions } from '#engine/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
-import { z } from 'zod';
-import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { workspaceRequestSchema, WorkspaceError, type WorkspaceBroker, type WorkspaceLease, type WorkspaceRequest } from '#engine/index.js';
+import type { AttemptIdentity } from '#domain/index.js';
+import { WorkspaceError, type WorkspaceBroker, type WorkspaceLease, type WorkspaceRequest } from '#engine/index.js';
 import format from './format.json' with { type: 'json' };
 import { fingerprintGitSource, gitSourceBaseSchema, gitSourcePreimageSchema, type GitSourceBase } from './source-base.js';
 const exec = promisify(execFile);
 const SOURCE_BASE_NAME = new RegExp(`^${format.sourceBase.replace('.', '\\.')}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`);
-/** `baseRef` (WORK-TARGETS): a configured work target's base branch. Present, a Run's base is its tip and delivery/integration compare
- * against it; absent, the source checkout's HEAD as before (the option is then not part of any fingerprint). */
-const optionsSchema = GIT_EXECUTION_SETTINGS.extend({ sourceRoot: z.string().min(1), workspaceRoot: z.string().min(1),
-  baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/).optional() }).strict().readonly();
-export type GitWorkspaceOptions = z.infer<typeof optionsSchema>;
-const recordSchema = z.object({ schemaVersion: z.literal(2), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  request: workspaceRequestSchema, sourceBase: gitSourceBaseSchema, status: z.enum(['allocating', 'ready']) }).strict();
+export type { GitWorkspaceOptions } from '#engine/index.js';
 export interface GitWorkspaceLease extends WorkspaceLease { readonly sourceBase: GitSourceBase }
 function code(error: unknown): unknown { return error && typeof error === 'object' && 'code' in error ? error.code : null; }
 /** Lease records are custody evidence: file data and the directory entry are flushed before the step that relies on them. */
@@ -36,33 +29,14 @@ async function writeDurable(path: string, data: string) {
  */
 export class GitWorkspaceBroker implements WorkspaceBroker {
   private readonly options: GitWorkspaceOptions;
-  constructor(input: GitWorkspaceOptions) {
+  constructor(input: GitWorkspaceOptions, private readonly privateSource?: Readonly<{ repositoryRoot: string; baseCommit: string }>) {
     const parsed = optionsSchema.safeParse(input);
     if (!parsed.success || ![parsed.data.sourceRoot, parsed.data.workspaceRoot, parsed.data.gitExecutable].every(isAbsolute)) throw new WorkspaceError('WORKSPACE_OPTIONS_INVALID');
     // Delivery authorship is metadata, not clone custody; changing it must not invalidate retained workspaces.
     const { deliveryIdentity, ...workspaceOptions } = parsed.data; void deliveryIdentity; this.options = workspaceOptions;
   }
-  private identityTarget(input: unknown) {
-    const identity = attemptIdentitySchema.safeParse(input);
-    if (!identity.success) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
-    const id = createHash('sha256').update(JSON.stringify(identity.data)).digest('hex');
-    const directory = join(this.options.workspaceRoot, id);
-    return { identity: identity.data, id, directory, workspace: join(directory, format.checkout), lease: join(directory, format.lease) };
-  }
-  private identify(input: WorkspaceRequest) {
-    const parsed = workspaceRequestSchema.safeParse(input);
-    if (!parsed.success) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
-    const request = parsed.data;
-    const { id, directory, workspace, lease } = this.identityTarget(request.identity);
-    return { request, id, directory, workspace, lease };
-  }
-  private fingerprint(request: WorkspaceRequest, sourceBase: GitSourceBase) {
-    return createHash('sha256').update(JSON.stringify({ request, sourceBase, options: this.options })).digest('hex');
-  }
-  private validSourceBase(sourceBase: GitSourceBase, request: WorkspaceRequest) {
-    return fingerprintGitSource(sourceBase.source) === sourceBase.sourceFingerprint && sourceBase.baseCommit === request.baseCommit
-      && [sourceBase.source.sourceRoot, sourceBase.source.repositoryRoot].every(path => isAbsolute(path) && resolve(path) === path);
-  }
+  private identityTarget(input: unknown) { return gitWorkspaceIdentityTarget(input, this.options.workspaceRoot, format); }
+  private identify(input: WorkspaceRequest) { return gitWorkspaceRequestTarget(input, this.options.workspaceRoot, format); }
   private async checkedDirectory(path: string) {
     const stat = await lstat(path);
     if (!stat.isDirectory() || stat.isSymbolicLink() || await realpath(path) !== resolve(path) ||
@@ -100,8 +74,8 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
   }
   private async record(lease: string, request: WorkspaceRequest, allocating = false) {
     const parsed = await this.readRecord(lease, allocating);
-    if (JSON.stringify(parsed.request) !== JSON.stringify(request) || parsed.fingerprint !== this.fingerprint(parsed.request, parsed.sourceBase)
-      || !this.validSourceBase(parsed.sourceBase, parsed.request)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
+    if (JSON.stringify(parsed.request) !== JSON.stringify(request) || parsed.fingerprint !== gitWorkspaceFingerprint(parsed.request, parsed.sourceBase, this.options, this.privateSource)
+      || !validGitSourceBase(parsed.sourceBase, parsed.request)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
     return parsed;
   }
   async openRecorded(identityInput: AttemptIdentity): Promise<GitWorkspaceLease | null> {
@@ -111,8 +85,8 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     catch (error) { if (code(error) === 'ENOENT') return null; throw error; }
     await this.checkedDirectory(target.directory);
     const candidate = await this.readRecord(target.lease); const recordedTarget = this.identify(candidate.request);
-    if (recordedTarget.id !== target.id || candidate.fingerprint !== this.fingerprint(candidate.request, candidate.sourceBase)
-      || !this.validSourceBase(candidate.sourceBase, candidate.request)
+    if (recordedTarget.id !== target.id || candidate.fingerprint !== gitWorkspaceFingerprint(candidate.request, candidate.sourceBase, this.options, this.privateSource)
+      || !validGitSourceBase(candidate.sourceBase, candidate.request)
       || JSON.stringify(candidate.request.identity) !== JSON.stringify(target.identity)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
     try { await this.checkedDirectory(target.workspace); }
     catch { throw new WorkspaceError('WORKSPACE_ALLOCATION_INCOMPLETE'); }
@@ -133,7 +107,9 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       await this.checkedDirectory(canonicalRepository);
       const source = gitSourcePreimageSchema.parse({ schemaVersion: 1, sourceRoot: canonicalSource, repositoryRoot: canonicalRepository });
       const revision = explicitCommit === undefined ? `${this.options.baseRef ?? 'HEAD'}^{commit}` : `${explicitCommit}^{commit}`;
-      const commit = await this.git(temporary, ['-C', canonicalSource, 'rev-parse', '--verify', revision], true);
+      if (this.privateSource && explicitCommit !== this.privateSource.baseCommit) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
+      const objectSource = this.privateSource?.repositoryRoot ?? canonicalSource; await this.checkedDirectory(objectSource);
+      const commit = await this.git(temporary, ['-C', objectSource, 'rev-parse', '--verify', revision], true);
       if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new WorkspaceError('WORKSPACE_GIT_FAILED');
       if (explicitCommit !== undefined && commit !== explicitCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
       return gitSourceBaseSchema.parse({ schemaVersion: 1, adapter: { id: 'git', version: 1 },
@@ -159,13 +135,14 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       await this.checkedDirectory(target.workspace);
     } else {
       sourceBase = await this.captureSourceBase(target.request.baseCommit);
-      const record = { schemaVersion: format.schemaVersion, fingerprint: this.fingerprint(target.request, sourceBase), request: target.request, sourceBase, status: 'allocating' };
+      const record = { schemaVersion: format.schemaVersion, fingerprint: gitWorkspaceFingerprint(target.request, sourceBase, this.options, this.privateSource), request: target.request, sourceBase, status: 'allocating' };
       await writeDurable(target.lease, JSON.stringify(record)); await syncPath(target.directory, true); await syncPath(o.workspaceRoot, true);
       await writeFile(join(target.directory, format.emptyConfig), '', { flag: 'wx', mode: 0o600 });
       await mkdir(join(target.directory, format.hooks), { mode: 0o700 });
-      const commit = await this.git(target.directory, ['-C', o.sourceRoot, 'rev-parse', '--verify', `${target.request.baseCommit}^{commit}`], true);
+      const objectSource = this.privateSource?.repositoryRoot ?? o.sourceRoot;
+      const commit = await this.git(target.directory, ['-C', objectSource, 'rev-parse', '--verify', `${target.request.baseCommit}^{commit}`], true);
       if (commit !== target.request.baseCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
-      await this.git(target.directory, ['clone', '--local', '--no-hardlinks', '--dissociate', '--no-checkout', `--template=${join(target.directory, format.hooks)}`, '--', o.sourceRoot, target.workspace]);
+      await this.git(target.directory, ['clone', '--local', '--no-hardlinks', '--dissociate', '--no-checkout', `--template=${join(target.directory, format.hooks)}`, '--', objectSource, target.workspace]);
       await this.git(target.directory, ['-C', target.workspace, 'checkout', '--detach', target.request.baseCommit]);
       // Git's directory modes inherit the process umask; secure only this fresh clone before publishing its lease.
       const gitDirectory = await this.git(target.directory, ['-C', target.workspace, 'rev-parse', '--absolute-git-dir']);

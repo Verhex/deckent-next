@@ -35,10 +35,10 @@ async function waitFor(check: () => boolean, label: string) {
   const until = Date.now() + 5_000;
   while (!check()) { if (Date.now() >= until) throw new Error(label); await new Promise(resolve => setTimeout(resolve, 5)); }
 }
-async function within<T>(work: Promise<T>, label: string): Promise<T> {
+async function within<T>(work: Promise<T>, label: string, milliseconds = 2_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([work, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(label)), 2_000); })]);
+    return await Promise.race([work, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(label)), milliseconds); })]);
   } finally { if (timer) clearTimeout(timer); }
 }
 
@@ -93,7 +93,10 @@ async function fixture(nativeTimeoutMs = 2_000) {
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
-      maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 50 } };
+      maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000,
+      // The grace bounds a released invocation's settlement (HTTP end + durable ledger writes); 50 ms sat at the edge on loaded hosted runners.
+      // A held invocation still outlives it, so the incomplete outcome below keeps its proof.
+      shutdownGraceMs: 1000 } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify(config), { mode: 0o600 });
   const setServiceResponseMaxBytes = async (responseMaxBytes: number) => {
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ ...config,
@@ -347,7 +350,7 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
   const input = 'cli-cancel-held-partial.json'; await writeFile(join(f.project, input), JSON.stringify(cancellation), { mode: 0o600 });
   const cancel = async () => JSON.parse((await within(execute(process.execPath, [cli, 'models', 'cancel', '--input', input, '--json'], {
     cwd: f.project, env: f.env, timeout: 10_000, maxBuffer: 1_048_576,
-  }), 'CLI_MODEL_CANCELLATION_TIMEOUT')).stdout) as unknown;
+  }), 'CLI_MODEL_CANCELLATION_TIMEOUT', 10_000)).stdout) as unknown; // a cold compiled CLI process, bounded like execFile
   try {
     const recorded = await cancel();
     expect(recorded).toMatchObject({ replayed: false, receipt: { command: cancellation, disposition: 'requested',

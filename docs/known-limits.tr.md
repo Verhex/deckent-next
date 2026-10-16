@@ -95,12 +95,29 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Teslim ve dala alma
 
+- **Hedef kuyruğu kaynak adayıdır; çalışan ürün kabulü verilmedi.** Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
+  yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve ledger v57 yeniden build edilmiş
+  binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek terminal/socket/crash ve N1 yük kabulü ayrı kapılardır;
+  ölçülmüş kapasite iddiası yoktur. Konum yalnız yetkili kapsamı sayar; görünüm son bilinen durumdur. Teslim penceresi şu an
+  açıkça yenileme gerektirir.
+- **Kuyruk doğrulaması kurulu profil ve normal Run yetkisi ister.** Özgün evaluator kriterleri ve güncel benimseme bar'ı
+  birlikte aranır. Desteklenmeyen profil/değişmiş evaluator reddedilir; Run-create onayı bileti bekletebilir. Normal onayı
+  cevapladıktan sonra aynı enqueue komutunu yineleyin; politika atlanmaz. Belirsiz etki uzlaştırmada kalır; TTL'nin geçmesi
+  eski sürecin bittiğini kanıtlamaz.
+- **Kuyruk generation'ı doğrudan eski yazıcıyı durdurur.** Etkinleşme, bir hedefteki ilk onaylı kuyruk yürütmesidir; sıraya alma,
+  hazırlık, doğrulama, çakışma ve reddedilen ya da süresi dolan kart hedefe hiçbir şey yazmaz. Etkinleşmeden önceki doğrudan
+  yazım yalnız bekleyen bileti eskitir (tipli ret). Etkinleştikten sonra geri alma dahil kuyruk komutlarını kullanın:
+  `integration-queue-rollback` ve `integration-queue-confirm`. Meşgul hedef geri almayı reddeder. Aşağıdaki doğrudan yol
+  sınırları kuyruğu aşma yolu değildir. Uzak hosting koruması sorgulanmaz; kayıtlı politika ve yerel depo/remote-HEAD bilgisi
+  kullanılır.
+
+
 - **Teslim ve dala alma yalnız Git içindir.** Bir çalışma hedefi tek bir Git deposudur (tam bir tane desteklenir). *Etki:* bir
   iş sistemindeki iş için teslim yüzeyi yoktur; sonuçları yama gibi teslim edilmez.
 - **Checkout edilmiş bir dala dala alma yapılamaz.** Dala alma yalnız hiçbir çalışma ağacının kullanmadığı bir dalı ilerletir;
   üzerinde çalıştığınız dal (çoğu zaman `main`) reddedilir. *Yol:* ayrı bir dal açın (`git branch deckent/first-job HEAD`),
   onu `execution.adoption.targets` içine yazın ve birleştirmeyi kendiniz yapın.
-- **Aynı dala ikinci teslim reddedilir,** dal hâlâ teslim tabanında değilse (`ADOPTION_BASE_CHANGED`). Deckent sizin için
+- **Aynı dala bayat hazırlanmış doğrudan teslim reddedilir,** dal hâlâ teslim tabanında değilse (`ADOPTION_BASE_CHANGED`). Deckent sizin için
   rebase ya da merge yapmaz. *Yol:* güncel tabanda yeniden teslim edin.
 - **Bayat bir checkout'ta üretilen yama uygulanmayabilir.** Teslim kontrolü, bir şey yazılmadan önce durdurur.
   *Yol:* isteği güncel kaynakla yeniden çalıştırın.

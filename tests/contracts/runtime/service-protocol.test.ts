@@ -9,7 +9,7 @@ const operations = ['renewApproval', 'listApprovals', 'inspectApproval', 'decide
   'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount', 'manageProviderSpend',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore'] as const;
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore', 'enqueueTargetQueueRollback', 'enqueueTargetQueue', 'inspectTargetQueue', 'listTargetQueue', 'challengeTargetQueue', 'answerTargetQueue', 'executeTargetQueue'] as const;
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const binding = { encodingVersion: 1, algorithm: 'sha256', digest: 'a'.repeat(64) };
 const invocation = {
@@ -28,15 +28,23 @@ function expectProtocolError(call: () => void, code: RuntimeServiceProtocolError
 
 describe('runtime service protocol', () => {
   it('carries only the separate MCP channel at v27; old lifecycle cannot erase the actor and old mutations are refused', () => {
-    const request = { schemaVersion: 28, requestId: 'r', operation: 'inspectProviderSpendAccount', channel: 'mcp',
+    const request = { schemaVersion: 29, requestId: 'r', operation: 'inspectProviderSpendAccount', channel: 'mcp',
       input: { schemaVersion: 1, scopeId: 'scope-1', current: true }, delivery: { maxResultBytes: 4096 } };
     expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
     for (const channel of ['terminal', 'owner', { issuer: 'forged' }]) expect(runtimeServiceRequestSchema.safeParse({ ...request, channel }).success).toBe(false);
-    expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 27 }).success).toBe(false);
-    const lifecycle = { schemaVersion: 28, requestId: 'r', operation: 'describeService', input: {}, channel: 'mcp' };
+    expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 28 }).success).toBe(false);
+    const lifecycle = { schemaVersion: 29, requestId: 'r', operation: 'describeService', input: {}, channel: 'mcp' };
     expect(runtimeServiceLifecycleRequestSchema.safeParse(lifecycle).success).toBe(true);
-    expect(runtimeServiceLifecycleRequestSchema.parse({ ...lifecycle, schemaVersion: 27 }).channel).toBe('mcp');
+    expect(runtimeServiceLifecycleRequestSchema.parse({ ...lifecycle, schemaVersion: 28 }).channel).toBe('mcp');
     expect(runtimeServiceLifecycleRequestSchema.safeParse({ ...lifecycle, schemaVersion: 25 }).success).toBe(false);
+  });
+  it('carries source-free bounded queue commands at v29 and refuses injected authority and v28 mutations', () => {
+    const input = { schemaVersion: 1, commandId: 'queue', identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' }, target: { kind: 'git-ref', id: 'refs/heads/integration' } };
+    const request = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request', operation: 'enqueueTargetQueue', input, delivery: { maxResultBytes: 4096 } };
+    expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
+    for (const extra of [{ actor: 'human' }, { sourceRoot: '/forged' }, { confirmed: true }, { model: 'forged' }]) expect(runtimeServiceRequestSchema.safeParse({ ...request, input: { ...input, ...extra } }).success).toBe(false);
+    expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 28 }).success).toBe(false);
+    expect(runtimeServiceRequestSchema.safeParse({ ...request, delivery: undefined }).success).toBe(false);
   });
   it('accepts exactly the current v14 operation allowlist', () => {
     for (const operation of operations) expect(runtimeServiceOperationSchema.parse(operation)).toBe(operation);
@@ -278,7 +286,7 @@ describe('runtime protocol v15 composer @file operations', () => {
     expect(runtimeServiceRequestSchema.safeParse({ ...attach, schemaVersion: 20 }).success).toBe(false);
   });
 
-  it('adds catalog operations to v15 as bounded, current-only control operations and keeps the lifecycle window at [28,27] (C12 G4, window moved by v27)', () => {
+  it('adds catalog operations to v15 as bounded, current-only control operations and keeps the lifecycle window at [29,28] (C12 G4, window moved by v27)', () => {
     const command = { schemaVersion: 1, commandId: 'c1', scopeId: 'scope-1', operation: { id: 'post-order', version: 1 },
       target: { kind: 'records', id: 'PO-1' }, idempotencyKey: 'k1', input: { amount: 1 }, expectedVersion: '"v1"' };
     const execute = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', operation: 'executeOperation', delivery: { maxResultBytes: 4096 }, input: command };
@@ -299,8 +307,8 @@ describe('runtime protocol v15 composer @file operations', () => {
     for (const input of [{ scopeId: 'scope-1', commandId: 'c1' }, { ...inspect.input, principal: 'x' }, { ...inspect.input, commandId: '' }]) {
       expect(runtimeServiceRequestSchema.safeParse({ ...inspect, input }).success).toBe(false);
     }
-    expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(28);
-    expect(RUNTIME_SERVICE_LIFECYCLE_VERSIONS).toEqual([28, 27]);
+    expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(29);
+    expect(RUNTIME_SERVICE_LIFECYCLE_VERSIONS).toEqual([29, 28]);
     expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 17, requestId: 'request-9', operation: 'describeService', input: {} }).success).toBe(false);
   });
 
@@ -321,7 +329,7 @@ describe('runtime protocol v15 composer @file operations', () => {
       expect(runtimeServiceRequestSchema.safeParse({ ...set, input }).success).toBe(false);
     }
     expect(runtimeServiceRequestSchema.safeParse({ ...inspect, input: { ...inspect.input, subject: '2' } }).success).toBe(false);
-    expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(28);
+    expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(29);
   });
 
   it('carries the view field fullAuto only from v21 on: a v20 client (strict view) cannot reach a v21 service, only describe and stop it (T2 T-MODE-CYCLE)', () => {
@@ -332,8 +340,8 @@ describe('runtime protocol v15 composer @file operations', () => {
       input: { schemaVersion: 1, scopeId: 'scope-1' } };
     expect(runtimeServiceRequestSchema.safeParse(inspect).success).toBe(false);
     expect(runtimeServiceRequestSchema.safeParse({ ...inspect, schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION }).success).toBe(true);
-    // v27 moved the lifecycle window to [28, 27]: a v22 client is now outside it as well.
-    expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 27, requestId: 'r', operation: 'describeService', input: {} }).success).toBe(true);
+    // v27 moved the lifecycle window to [29, 28]: a v22 client is now outside it as well.
+    expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 28, requestId: 'r', operation: 'describeService', input: {} }).success).toBe(true);
   });
 
   it('T2-FOLLOWUP in v21: session full access, the approver-note mark, and the card undo word and posture as strict typed fields; none before v21', () => {
@@ -382,7 +390,7 @@ describe('runtime protocol v16: a chat turn may ask for model thinking off (OPEN
       expect(runtimeServiceRequestSchema.safeParse({ ...turn, input: { ...turn.input, reasoning } }).success).toBe(false);
     }
     expect(runtimeServiceRequestSchema.safeParse({ ...turn, schemaVersion: 20 }).success).toBe(false);
-    expect(RUNTIME_SERVICE_LIFECYCLE_VERSIONS).toEqual([28, 27]);
+    expect(RUNTIME_SERVICE_LIFECYCLE_VERSIONS).toEqual([29, 28]);
   });
 });
 
@@ -421,13 +429,13 @@ describe('runtime protocol v18: the secret write operations (SECRET-WRITE; v17 w
       expect(runtimeServiceLifecycleRequestSchema.safeParse({ ...request, schemaVersion: 20, delivery: undefined }).success).toBe(false);
     }
   });
-  it('keeps every v17 operation in v18 through v27 and keeps the lifecycle reach ([28, 27]); v22 and v17 are outside the window', () => {
+  it('keeps every v17 operation in v18 through v27 and keeps the lifecycle reach ([29, 28]); v22 and v17 are outside the window', () => {
     const v17Operations = runtimeServiceOperationSchema.options.filter(operation => operation !== 'setSecret' && operation !== 'deleteSecret');
     expect(runtimeServiceOperationSchema.options.length - v17Operations.length).toBe(2);
-    expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(28);
-    expect(RUNTIME_SERVICE_LIFECYCLE_VERSIONS).toEqual([28, 27]);
+    expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(29);
+    expect(RUNTIME_SERVICE_LIFECYCLE_VERSIONS).toEqual([29, 28]);
     for (const operation of ['describeService', 'shutdownService'] as const) {
-      expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 27, requestId: 'r', operation, input: {} }).success).toBe(true);
+      expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 28, requestId: 'r', operation, input: {} }).success).toBe(true);
       expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 22, requestId: 'r', operation, input: {} }).success).toBe(false);
       expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 17, requestId: 'r', operation, input: {} }).success).toBe(false);
     }
@@ -482,7 +490,7 @@ describe('runtime v20 session answers', () => {
     }
     expect(runtimeServiceRequestSchema.safeParse({ ...request, delivery: undefined }).success).toBe(false);
     expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 22 }).success).toBe(false);
-    expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 27, requestId: 'r', operation: 'describeService', input: {} }).success).toBe(true);
+    expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 28, requestId: 'r', operation: 'describeService', input: {} }).success).toBe(true);
     expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 22, requestId: 'r', operation: 'describeService', input: {} }).success).toBe(false);
   });
 });

@@ -8,7 +8,7 @@ export { RUNTIME_SERVICE_SCHEMA_VERSION, RuntimeServiceProtocolError, classifyRu
   RUNTIME_SERVICE_EVENT_FRAME_EVENTS, runtimeServiceEventFrameSchema, isRuntimeServiceTurnOperation, isRuntimeServiceWorkspaceFileOperation,
   RUNTIME_SERVICE_LIFECYCLE_VERSIONS, runtimeServiceLifecycleRequestSchema, parseRuntimeServiceLifecycleResponse, runtimeServiceErrorParams,
   isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeOperationQuerySchema, runtimeOperationOutcomeSchema, runtimeOperationInspectionSchema,
-  isRuntimeServiceBoundedResultOperation } from './internal/service-protocol.js';
+  isRuntimeServiceBoundedResultOperation, isRuntimeServiceQueueOperation } from './internal/service-protocol.js';
 export type { RuntimeServiceDelivery, RuntimeServiceOperation, RuntimeServiceRequest, RuntimeServiceResponse, RuntimeServiceStreamFrame, RuntimeServiceEventFrame,
   RuntimeServiceLifecycleRequest, RuntimeServiceLifecycleVersion, RuntimeOperationQuery } from './internal/service-protocol.js';
 
@@ -33,8 +33,16 @@ export type { RuntimeServiceIdleOptions } from './internal/idle-policy.js';
 export { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods } from './internal/client-validation.js';
 export { runtimeApprovalMethods, runtimeChatTurnMethods, runtimeModelInvocationMethods, runtimePermissionModeMethods, runtimeProviderSpendMethods, runtimeScratchMethods,
   runtimeSecretMethods, type RuntimeStreamingCall } from './internal/client-methods.js';
-export { createRuntimeServiceClient, type RuntimeClientPorts } from './internal/client.js';
+export { createRuntimeServiceClient, createRuntimeQueueSubmission, type RuntimeClientPorts } from './internal/client.js';
 export { runtimeServiceReadiness, runtimeMonotonicDeadline, runtimeDeadlineSignal, type RuntimeServiceReadiness, type LifecycleDeadline } from './internal/readiness.js';
 export { awaitRuntimeServiceStart, awaitRuntimeServiceRestart } from './internal/readiness.js';
 export { prepareRuntimeClientRequest, acceptRuntimeClientResponse } from './internal/client.js';
+export { runtimeTargetQueueTerminal } from './internal/queue-client.js';
 export { describeRuntimeServiceWithin } from './internal/readiness.js';
+
+export { createTargetQueueService, selectQueueActor } from './internal/queue-service.js';
+export type { QueueServiceContext, QueueServicePorts } from './internal/queue-service.js';
+export { createRuntimeModelCalls } from './internal/model-client-calls.js';
+export { createRuntimeSpendCalls } from './internal/provider-spend-client-calls.js';
+export { bindRuntimeApplicationMethods, executeRuntimeApplicationOperation } from './internal/application-operations.js';
+export { createRuntimeRequestTransport } from './internal/request-transport.js';

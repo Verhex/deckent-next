@@ -96,12 +96,29 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Delivery and adoption
 
+- **The target queue is a source candidate, not accepted runtime behavior.** It connects registered Git targets, private
+  combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
+  v29 and ledger v57 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load
+  acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
+  position counts this authorized scope only. Explicit refresh is currently needed in the delivery window.
+- **Queue verification needs an installed profile and normal Run authority.** The original evaluator criteria and the current
+  adoption bar are conjunctive. An unsupported profile/changed evaluator refuses; a Run-create approval can leave the ticket
+  waiting. After answering that ordinary approval, replay the same enqueue command; no policy is bypassed. Unknown effects
+  stay reconciling; elapsed TTL does not prove an old process ended.
+- **Queue generation blocks direct legacy writes.** Activation is the first consented queue execution on a target; enqueue,
+  preparation, verification, a conflict and a declined or expired card write nothing to it, and a direct write before
+  activation only makes a waiting ticket stale (typed refusal). After activation use the queue command family, including
+  `integration-queue-rollback` plus `integration-queue-confirm`; a busy target refuses rollback. Existing direct-path limits
+  below describe historical/direct integrations, not a weaker way around the queue. No remote-host branch-protection lookup
+  is performed: protection uses registered policy and local repository/remote-HEAD metadata.
+
+
 - **Delivery and adoption are Git only.** A work target is one Git repository (exactly one is supported). *Impact:* work on a
   business system has no delivery surface; its results are not delivered like a patch.
 - **A checked-out branch cannot be adopted into.** Adoption only moves a branch no worktree uses, so the branch you are
   working on (often `main`) is refused. *Workaround:* create a separate branch (`git branch deckent/first-job HEAD`),
   list it in `execution.adoption.targets`, and merge it yourself.
-- **A second delivery to the same branch is refused** unless the branch is still at the delivery base
+- **A stale prepared direct delivery to the same branch is refused** unless the branch is still at the delivery base
   (`ADOPTION_BASE_CHANGED`). Deckent never rebases or merges for you. *Workaround:* deliver again on the current base.
 - **A patch made on a stale checkout can fail to apply.** The delivery check stops it before anything is written.
   *Workaround:* re-run the request on the current source.

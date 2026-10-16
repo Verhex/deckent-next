@@ -121,7 +121,8 @@
         "src/engine/core/workspaces",
         "src/platform/core/clock",
         "src/domain/core/worker-event",
-        "src/adapters/core/run-proposal-store"
+        "src/adapters/core/run-proposal-store",
+        "src/adapters/core/target-queue-store"
       ],
       "plan": "STORE"
     },
@@ -524,7 +525,10 @@
         "src/engine/core/provider-spend",
         "src/composition/core/root",
         "src/composition/core/resource-observation",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/adapters/core/target-queue-store",
+        "src/adapters/core/sqlite-ledger",
+        "src/engine/core/effect"
       ],
       "plan": "EXECUTION"
     },
@@ -566,20 +570,15 @@
         "src/composition/core/runs",
         "src/composition/core/runtime",
         "src/composition/core/scoped-request",
-        "src/domain/core/agent-turn",
-        "src/domain/core/attempt",
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
         "src/engine/core/approval",
-        "src/engine/core/dispatch",
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
         "src/engine/core/provider-spend",
-        "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/secret-store",
-        "src/engine/core/task-evaluation",
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
@@ -605,7 +604,11 @@
         "src/platform/core/i18n",
         "src/adapters/core/installation-files",
         "src/engine/core/workspaces",
-        "src/composition/core/audit"
+        "src/composition/core/audit",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/git-patch",
+        "src/adapters/core/target-queue-store",
+        "src/engine/core/workspace-patch"
       ],
       "plan": "EXECUTION"
     },
@@ -622,7 +625,8 @@
       "dependencies": [
         "src/adapters/core/git-workspace",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/engine/core/workspaces"
       ],
       "plan": "ISOLATION"
     },
@@ -768,7 +772,10 @@
         "src/platform/core/i18n",
         "src/domain/core/work-cost",
         "src/engine/core/resource-observation",
-        "src/domain/core/approval"
+        "src/domain/core/approval",
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/platform/core/config"
       ],
       "plan": "CONTRACT"
     },
@@ -792,7 +799,11 @@
         "src/engine/core/agent-turn",
         "src/engine/core/effect",
         "src/platform/core/errors",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/config",
+        "src/domain/core/run",
+        "src/domain/core/command"
       ],
       "plan": "EXECUTION"
     },
@@ -839,7 +850,8 @@
         "src/domain/core/primitives",
         "src/domain/core/audit",
         "src/platform/core/errors",
-        "src/engine/core/attempts"
+        "src/engine/core/attempts",
+        "src/platform/core/config-fields"
       ],
       "plan": "ISOLATION"
     },
@@ -975,7 +987,8 @@
         "src/surfaces/core/terminal-panels",
         "src/domain/core/policy",
         "src/platform/core/config",
-        "src/surfaces/core/terminal-delivery"
+        "src/surfaces/core/terminal-delivery",
+        "src/surfaces/core/effect-confirmation"
       ],
       "plan": "SURFACES"
     },
@@ -1101,7 +1114,8 @@
         "src/domain/core/agent-turn",
         "src/engine/core/approval",
         "src/surfaces/core/monitor",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/surfaces/core/effect-confirmation"
       ],
       "plan": "SURFACES"
     },
@@ -1216,7 +1230,8 @@
         "src/surfaces/core/cli-terminal",
         "src/engine/core/backup",
         "src/surfaces/core/run-planning",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/surfaces/core/delivery-queue"
       ],
       "plan": "SURFACES"
     },
@@ -1297,7 +1312,8 @@
         "src/engine/core/decision",
         "src/engine/core/agent-turn",
         "src/domain/core/audit",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/engine/core/effect"
       ],
       "plan": "SURFACES"
     },
@@ -1889,13 +1905,17 @@
         "src/platform/core/common",
         "src/platform/core/errors",
         "src/platform/core/redaction",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/domain/core/effect",
+        "src/engine/core/runs",
+        "src/engine/core/policy",
+        "src/capabilities/core/evaluation-evidence",
+        "src/engine/core/audit"
       ],
       "plan": "ISOLATION"
     },
     "src/adapters/core/git-patch": {
       "dependencies": [
-        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",
@@ -1906,7 +1926,10 @@
         "src/engine/core/task-inputs",
         "src/platform/core/clock",
         "src/platform/core/i18n",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/domain/core/effect",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/runs"
       ],
       "plan": "ISOLATION"
     },
@@ -2206,7 +2229,9 @@
     },
     "src/domain/core/effect": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/domain/core/command"
       ],
       "plan": "CONTRACT"
     },
@@ -2235,7 +2260,11 @@
         "src/domain/core/principal",
         "src/platform/core/clock",
         "src/engine/core/authentication",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/engine/core/audit",
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/engine/core/dispatch"
       ],
       "plan": "EXECUTION"
     },
@@ -3047,6 +3076,27 @@
         "src/platform/core/errors"
       ],
       "plan": "SECURITY"
+    },
+    "src/adapters/core/target-queue-store": {
+      "dependencies": [
+        "src/domain/core/effect",
+        "src/domain/core/command",
+        "src/engine/core/effect",
+        "src/adapters/core/audit-store"
+      ],
+      "plan": "STORE"
+    },
+    "src/surfaces/core/delivery-queue": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/engine/core/effect",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/effect-confirmation"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

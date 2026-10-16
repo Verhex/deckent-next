@@ -2,6 +2,7 @@ import { loadQuotaReleasePools, releaseQuota } from '#adapters/core/quota-contro
 import { readDispatchFence } from './dispatch-fence.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteDeliveryJournal } from './delivery.js';
+import { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 import { SqliteAdoptionJournal } from './adoption.js';
 import { SqliteEffectJournal } from './effect.js';
 import { SqliteWorkerEventLogs } from './worker-events.js';
@@ -38,6 +39,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
     this.poolCeiling = value === 'auto' ? undefined : value;
   }
   setRunAdmissionFilter(admission: import('#engine/index.js').RunAdmissionFilter) { this.admission = admission; }
+  async loadTargetQueueVerification(scopeId: string, runId: string) { return new SqliteTargetQueue(this.db).forVerification(scopeId, runId); }
   constructor(path: string, options: SqliteLedgerOptions, private readonly lifecycleTiming: { now: () => number; timeoutMs: number }, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     this.db = openSqliteLedger(path, options, migration, this.profiles);
   }

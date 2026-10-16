@@ -1,0 +1,48 @@
+import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ModelInvocationCancellationCommand, ModelInvocationCommand,
+  ModelInvocationDeltaSink, ModelInvocationQuery, ModelInvocationPurgeCommand, WorkspaceAttachmentRequest, WorkspaceFileQuery } from '#domain/index.js';
+import type { ConfigLoadOptions } from '#platform/index.js';
+import type { createRuntimeServiceClient } from './client.js';
+
+export function createRuntimeModelCalls(createConfiguredRuntimeClient: (root: string, options: ConfigLoadOptions) => ReturnType<typeof createRuntimeServiceClient>) {
+/**
+ * Abort stops the client's wait, never the runtime-owned model operation. Missing service has no direct fallback.
+ * The local service supports peers of its own OS UID only; this is not a multi-user identity boundary.
+ * `replayed` reports the service's handling of this request, not independently verifiable billing evidence.
+ * Persisted invocation identities/outcomes, not this hint, govern accounting and subsequent actions.
+ */
+function invokeRuntimeModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).invokeModel(input, undefined, signal);
+}
+/** Streamed form of invokeRuntimeModel: deltas are presentation only; abort disconnects, it does not cancel. */
+function invokeRuntimeModelStream(projectRoot: string, input: ModelInvocationCommand, onDelta: ModelInvocationDeltaSink,
+  options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).invokeModelStream(input, onDelta, undefined, signal);
+}
+function inspectRuntimeModelInvocation(projectRoot: string, input: ModelInvocationQuery, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).inspectModelInvocation(input);
+}
+function purgeRuntimeModelInvocationContent(projectRoot: string, input: ModelInvocationPurgeCommand, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).purgeModelInvocationContent(input);
+}
+function cancelRuntimeModelInvocation(projectRoot: string, input: ModelInvocationCancellationCommand, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).cancelModelInvocation(input);
+}
+/** v12 agent turn over the local runtime: required events, then the bounded result; abort disconnects (cancel at the next write). */
+function runRuntimeChatTurn(projectRoot: string, input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void,
+  options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).chatTurn(input, onEvent, signal);
+}
+/** Cancels the caller's own running turn at once. */
+function cancelRuntimeChatTurn(projectRoot: string, input: ChatTurnCancellation, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).cancelChatTurn(input);
+}
+/** v15 composer `@file` candidates from the runtime service's scoped read port. */
+function findRuntimeWorkspaceFiles(projectRoot: string, input: WorkspaceFileQuery, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).findWorkspaceFiles(input, signal);
+}
+/** v15 composer `@file` content: bounded, or a typed refusal. */
+function attachRuntimeWorkspaceFile(projectRoot: string, input: WorkspaceAttachmentRequest, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).attachWorkspaceFile(input, signal);
+}
+  return { invokeRuntimeModel, invokeRuntimeModelStream, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile };
+}

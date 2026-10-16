@@ -201,6 +201,20 @@
       "journalMode": "wal"
     }
   },
+  "targetQueue": {
+    "activeTargets": 16,
+    "batchSize": 16,
+    "batchWindowMs": 500,
+    "candidateSlots": 2,
+    "capacity": 1024,
+    "chainSize": 16,
+    "leaseMs": 60000,
+    "perTarget": 256,
+    "revalidations": 2,
+    "schemaVersion": 1,
+    "ttlMs": 600000,
+    "verificationTimeoutMs": 300000
+  },
   "terminal": {
     "autostartService": true,
     "banner": "full",

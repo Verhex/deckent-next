@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { validateInstalledCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
-import { resolveWorkerEffortExecution, admitWorkerModels, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
-  assertDockerResourceCeiling, assertTaskGraphLimits, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
+import { runAdmissionStorePerCall, createRunAdmissionContext, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, executionResourceAuthorization, authorizeWorkTargetUse,
+  assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -15,49 +15,21 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
   work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[]) => Promise<T>) {
   let warnings: readonly WorkerAdmissionWarning[] = [];
   const { config, layout, document, principal, path } = context;
-  const store = {
-    async loadRunReceipt(scopeId: string, commandId: string) {
-      const reader = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
-      try { return await reader.loadRunReceipt(scopeId, commandId); } finally { reader.close(); }
-    },
-    async loadRunWorkspaceCustody(scopeId: string, runId: string) {
-      const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
-      try { return await writer.loadRunWorkspaceCustody(scopeId, runId); } finally { writer.close(); }
-    },
-    async createRun(request: RunCreate, workspace?: RunWorkspaceCustody, assertAuthority?: () => void) {
-      const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
-      try { return await writer.createRun(request, workspace, assertAuthority); } finally { writer.close(); }
-    },
-  };
+  const store = runAdmissionStorePerCall({ reader: async () => openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
+    writer: async () => openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid') });
   return withRunCreationAuthority(context, async authority => {
-  const app = new RunAdmissionApplication(store, { async verify() { return principal; } },
-    authority, executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null), { async resolve(admitted) {
-      const profile = config.admission;
-      if (!profile) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
-      assertTaskGraphLimits(admitted.graph, profile.graph); // PARALLEL-S3: config policy, refused before the catalog read and any write
-      const catalog = await openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
-      let execution;
-      try {
-        execution = await resolveWorkerEffortExecution(admitted.graph, profile.registry, catalog, {
-          profile(value) {
-            try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
-            try { validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
-            if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(value).options, config.execution.docker);
-            return undefined;
-          },
-          criterion(evaluator, criterion) { try { return validateInstalledCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } },
-          isTemplate: isNativeCodingTemplate, // K3: template + typed work input compile once here, before any write
-        }, { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
-          bind(value, selection) { try { return bindNativeWorkerEffort(value, selection); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
-          compile(template, input, selection) { try { return compileNativeCodingWorkInput(template, input, selection); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } } });
-        // WORKER-AUTO-REFRESH: while a refresh is in flight a stale CLI pin is admitted with a typed warning instead of refused.
-        warnings = await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, Date.now(), admitted.graph.tasks,
-          { imageRefreshInProgress: await isToolchainRefreshInProgress(projectRoot, options) });
-      } finally { catalog.close(); }
-      return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
-        capacity: { executionSlots: Math.min(profile.executionSlots, typeof config.max_workers === 'number' ? config.max_workers : Infinity),
-          inFlightSlots: Math.min(profile.inFlightSlots, typeof config.max_workers === 'number' ? config.max_workers : Infinity) }, ordering: admitted.graph.tasks.map(task => task.id) } };
-    } });
+  const app = new RunAdmissionApplication(store, { async verify() { return principal; } }, authority,
+    executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null),
+    createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
+      refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; },
+      validation: { profile(value) {
+        try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
+        try { validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+        if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(value).options, config.execution.docker); return undefined;
+      }, criterion(evaluator, criterion) { try { return validateInstalledCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } }, isTemplate: isNativeCodingTemplate },
+      compiler: { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
+        bind(value, selection) { try { return bindNativeWorkerEffort(value, selection); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
+        compile(template, input, selection) { try { return compileNativeCodingWorkInput(template, input, selection); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } } } }));
   return work(app, authority, () => warnings);
   });
 }

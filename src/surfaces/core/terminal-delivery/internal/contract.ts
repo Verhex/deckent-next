@@ -1,5 +1,5 @@
 import type { AttemptIdentity } from '#domain/index.js';
-import type { EffectConfirmationView, RunView } from '#engine/index.js';
+import type { EffectConfirmationView, RunView, TargetQueueView, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 
 /**
  * TESLIM-PENCERESI (owner 2026-10-14): the terminal delivery window's port. The surface never writes Git, refs or the ledger itself:
@@ -12,7 +12,7 @@ export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: 
 /** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
-  verification: Readonly<{ kind: string; required: boolean }> | null }>;
+  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string }>;
 export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;
 /** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
 export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
@@ -22,6 +22,11 @@ export type VerificationCandidate = Readonly<{ runId: string; taskId: string }>;
 /** The answer the confirmation port asks for; only the window that showed the card supplies it (never a command field, model or SDK). */
 export type DeliveryAnswer = (view: EffectConfirmationView) => Promise<boolean>;
 export interface TerminalDeliveryPort {
+  queue?: {
+    prepareCurrent(target: DeliveryTarget, commandId: string): Promise<TargetQueueView>;
+    inspect(scopeId: string, commandId: string): Promise<TargetQueueView | null>;
+    confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>): Promise<TargetBatchExecution>;
+  };
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */
   deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer): Promise<DeliveryOutcome>;
