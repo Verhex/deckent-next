@@ -627,7 +627,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   binaries cannot read v2), and adoption CAS and the delivery commit parent use the effective base. Prepared/verified candidates stay pinned
   (another tip movement needs a fresh candidate, reverified). Overlap, rewritten history, a stale prepared candidate or a publication race is
   the typed `PATCH_BASE_ADVANCED` (observation and delivery) instead of `PATCH_CONFLICT`, with no new delivery-reference effect; recovery =
-  a new Run on the current base. No new transition/effect flow, policy bypass or approval relaxation; ledger unchanged. K4 = A: for a
+  historically a new Run on the current base; the source-candidate queue below adds current-base private preparation. No new legacy transition/effect flow, policy bypass or approval relaxation; ledger unchanged. K4 = A: for a
   self/dogfood target `baseRef` is the adoption target branch and the target checkout HEAD is detached; the fenced adoption advances the
   base and the next Run starts from the adopted commit (proven).
 - **Policy.** Vocabulary (schema 1, additive) `work-target {use, adopt}`, resource id = target id. `use` at Run admission and reservation
@@ -922,3 +922,45 @@ Y4 v1 is versioned code: AI may not write authority policy, widen permission mod
 Approval decision v4 seals deciderClass (human-tty / ai-policy / system); AI assurance is ai-policy. Lifecycle writes carry a versioned decision-evidence subrecord, and their sealed audit carries class and rule/approval identity. Existing unversioned/v2/v3 approvals and older lifecycle/audit records remain readable without payload rewriting or re-sealing; historical class is unknown. There is no table/schema migration or old-MAC normalization. TTY witness means interactive terminal, never human proven; stronger Enterprise producers still register their own assurance levels. Older strict clients refuse unknown v4 decision records; they must upgrade to read new decisions.
 
 Author proof lives in external MCP-AI-AKTOR-2026-10-15. Targeted checks, real SQLite fixtures and simulated witnesses are separate from host PTY/socket/process acceptance, independent review, packaged binary and live/N1 acceptance.
+
+## Target delivery queue (source candidate)
+
+TESLIM-KUYRUGU phase 2 round 2 connects the retained ledger v57 queue to runtime protocol v29. It does not rewrite historical sealed
+integration/delivery/adoption records. Config `targetQueue` supplies bounded policy; `execution.adoption.protectedTargets` extends
+main/master, repository default and remote-HEAD protection. A registered target/common-directory producer supplies physical identity.
+Scope-local positions count only authorized tickets; physical ordinals and other scopes are never read projections.
+
+A ticket pins the exact accepted Attempt and retained patch. Revalidation examines every intervening commit, conservatively including
+rename endpoints, mode changes, directory prefixes and changed-then-restored paths. It never rebases/merges a user's branch. An allowed
+drift creates a new integration command (optional `replacesCommandId` must resolve the same retained patch). Private prefix objects
+move through bounded object-only transport between private repositories, without publishing source refs. Zero configured revalidation
+budget refuses drift. An unresolved preparation/admission is not automatically retried with a new identity.
+
+The private-candidate Run uses normal create/reserve/execute/evaluate authority. Its graph retains original evaluator definitions and
+pinned evaluator implementations and conjunctively adds the current adoption bar; a verification profile must be installed. A policy
+that requires Run-create approval can leave preparation waiting; inspect the normal approval and replay the same admitted command,
+never weaken that policy. Missing/failed/cancelled/unknown verification cannot publish. The exact private commit, original source,
+criteria/profile and receipt are checked again before effects. Legacy delivery-pinned Run admission stays readable.
+
+`deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`.
+Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
+`integration-queue-confirm` obtains separate publish and adoption cards; the second card is derived from the first frozen prefix,
+so a later arrival never enters its consent. Capability values are service-issued and never printed as product output. MCP exposes
+only `inspect_delivery_queue`/`list_delivery_queue`; hidden decision RPC with the MCP channel is refused before opening a writer.
+The registered-target `/deliver` flow enqueues; `r` offers current-base preparation after drift or reads last-known queue state.
+`/runs` detail projects authorized positions, ownership and outcome. Neither view is acceptance authority.
+
+A Git generation ref lives in the target repository's namespace, keyed by the full target ref; its payload binds queue key, instance
+and epoch. Publishing, adopting and rolling back verify that generation in the same ref transaction. A legacy entry point in this upgraded binary verifies that
+the generation is absent. A suspended command using that guard cannot cross queue activation; a pre-upgrade binary has no such guard
+and must be drained before switching. After activation, direct legacy writes are
+refused: use the service queue. A queued rollback names a settled queue ticket via `integration-queue-rollback --scope ID
+--source-command-id TICKET --command-id UNDO`, then uses `integration-queue-confirm` for its own exact card. It refuses a busy target
+and delegates to the existing latest-adoption rollback owner; no automatic rollback of a partially adopted batch occurs.
+
+Startup raises durable ownership and physically fences it before parking pre-effect preparation or looking up exact adoption/rollback
+fence evidence. An unattributed publication/move stays reconciling and blocks that target. TTL never proves a writer dead. A failed
+fence leaves an open reconciliation blocker. No historical record is turned into a successful new effect. Native process kill/restart,
+actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57 switch, use and verify the
+existing ledger backup. Rollback of the schema requires stopping the service and restoring the pre-switch backup, not starting older
+source against the upgraded ledger. This lane does not switch live or N1.
