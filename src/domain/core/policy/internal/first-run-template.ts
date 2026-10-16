@@ -1,5 +1,5 @@
 import { isMcpPrincipal, mcpPrincipalRef } from '#domain/core/principal/index.js';
-import { identitySchema } from '#domain/core/primitives/index.js';
+import { IDENTITY_MAX_LENGTH, identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFile, type PolicyGrant } from './schema.js';
 import { policyChangeSchema, type PolicyChange } from './administer.js';
 
@@ -17,9 +17,12 @@ import { policyChangeSchema, type PolicyChange } from './administer.js';
  * src/engine/core/policy/internal/permission-mode.ts) — otherwise a silently-allowed scratch write would still
  * ask. The scratch write operation (SCR-A cross-lane note, 2026-09-28: `workspace.scratch.write`, target kind
  * `scratch-file`) is its own operation, separate from `workspace.file.write` (edit_file/write_file's effect):
- * without that separate grant a scratch write safely falls back to asking, never to a silent allow. No
- * service/other operation grant is produced: that authority stays the owner's explicit decision
- * ("operasyon/servis yönetimi owner'a"), so any such request defaults to `NO_GRANT` (deny) until granted elsewhere.
+ * without that separate grant a scratch write safely falls back to asking, never to a silent allow. Service
+ * authority stays the owner's explicit decision ("operasyon/servis yönetimi owner'a"): until v11 no service grant was produced. The owner
+ * decided it on 2026-10-16 ("Evet, v12 hazırla", clean-install rehearsal F1/F2): from v12 the named installing person (never the MCP actor or
+ * another principal) may stop their own installation's runtime service (`service`/`shutdown` on exactly that service id in the installed
+ * scope; restart is shutdown + start) and inspect the installed scope (`scope`/`inspect`). Every other service/operation request still
+ * defaults to `NO_GRANT` (deny) until granted elsewhere.
  */
 export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of the installation's store in the
@@ -43,7 +46,10 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * neither an owner grant nor `principals: all` is a delegation to MCP. No approval broker is claimed on model/spend paths. */
 /** v10 (RUN-HAZIR-A): the named installing person can run work in the installed scope; pool management and integration remain separate. */
 /** v11 (SABLON-V11): the named person gets separate installation-wide quota release and scoped integration/adoption authority. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 11;
+/** v12 (POLICY-V12, owner 2026-10-16): the named person may inspect the installed scope (inventory, worker observation and the service's own
+ * recovery passes run as this person) and shut down exactly their installation's runtime service (`service.identity`, written at install).
+ * Owner 2026-10-16 option A: edited first-run and named hand-built policies get the same two rules through the add-only plan (named person only). */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 12;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -63,6 +69,9 @@ export interface FirstRunPolicyTemplateInput {
   readonly mcpCallOperationId: string;
   /** v5 (K1 option A): the governed policy change operation (`policy.administer`). */
   readonly policyAdministerOperationId: string;
+  /** v12: the runtime service id the person may shut down (the installation's configured `service.identity` of this scope); absent, the
+   * deterministic default `firstRunServiceId(scopeId)`. Unused by v4–v11. */
+  readonly serviceId?: string;
 }
 export interface FirstRunPolicyTemplate {
   readonly id: typeof FIRST_RUN_POLICY_TEMPLATE_ID;
@@ -77,7 +86,13 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
   const built = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION);
   return Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION, policy: built.policy, bindings: built.bindings });
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11) {
+/** The deterministic, non-secret default runtime service id of a first-run installation: derived from the installed scope only, within the
+ * identity bound (one runtime service per installation; the policy and the service's ledger are both this installation's). */
+export function firstRunServiceId(scopeId: string): string {
+  const scope = identitySchema.parse(scopeId), suffix = '-runtime';
+  return identitySchema.parse(`${scope.slice(0, IDENTITY_MAX_LENGTH - suffix.length)}${suffix}`);
+}
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -115,6 +130,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(version >= 9 ? mcpObservationRules(principal, [scopeId]) : []),
       ...(version >= 10 ? executionRules(principal, [scopeId]) : []),
       ...(version >= 11 ? deliveryRules(principal, [scopeId]) : []),
+      ...(version >= 12 ? ownerServiceRules(principal, [scopeId], input.serviceId) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -123,7 +139,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -136,7 +152,7 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
   // Exact older templates become the current one; edited policies take the explicit add-only plan.
-  for (const from of [10, 9, 8, 7, 6, 5, 4] as const) {
+  for (const from of [11, 10, 9, 8, 7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -167,8 +183,10 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   observeRun: 'first-run-mcp-observe-run', observeScope: 'first-run-mcp-observe-scope', observeApproval: 'first-run-mcp-observe-approval',
   observeActivation: 'first-run-mcp-observe-model-activation', observeInvocation: 'first-run-mcp-observe-model-invocation', observeSpending: 'first-run-mcp-observe-provider-spend-account',
   runs: 'first-run-runs', pools: 'first-run-pools', attempts: 'first-run-attempts', workTargets: 'first-run-work-targets',
-  quotaRelease: 'first-run-quota-release', integration: 'first-run-integration', workTargetAdopt: 'first-run-work-target-adopt' });
-/** Rollback of the current template version never removes earlier versions' administration or observation authority. */
+  quotaRelease: 'first-run-quota-release', integration: 'first-run-integration', workTargetAdopt: 'first-run-work-target-adopt',
+  scopeInspect: 'first-run-scope-inspect', serviceShutdown: 'first-run-service-shutdown' });
+/** The v11 delta: what `policy upgrade --template current --rollback` removes. It never removes earlier versions' administration or observation
+ * authority, nor the v12 owner rules (scope inspection and the service stop stay once added; owner 2026-10-16). */
 export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([
   FIRST_RUN_UPGRADE_RULE_IDS.quotaRelease, FIRST_RUN_UPGRADE_RULE_IDS.integration, FIRST_RUN_UPGRADE_RULE_IDS.workTargetAdopt,
 ]);
@@ -183,7 +201,8 @@ type Selection = 'all' | readonly string[];
 const coversAll = (held: Selection, wanted: Selection) => held === 'all' || (wanted !== 'all' && wanted.every(item => held.includes(item)));
 const sameRule = (a: unknown, b: unknown) => JSON.stringify(policyGrantSchema.parse(a)) === JSON.stringify(policyGrantSchema.parse(b));
 type Person = { readonly issuer: string; readonly subject: string };
-type AdditionNames = { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string };
+/** `serviceId` (v12): the installation's configured runtime service id of this scope; absent, the deterministic default of the plan's first scope. */
+type AdditionNames = { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string; readonly serviceId?: string };
 /** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
 const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
@@ -221,7 +240,9 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     rule(ids.modelActivation, 'model-activation', MODEL_ACTIVATION_ACTIONS, 'all', 'all'), rule(ids.modelInvocation, 'model-invocation', MODEL_INVOCATION_ACTIONS, 'all', scopes),
     rule(ids.spending, 'provider-spend-account', PROVIDER_SPEND_ACCOUNT_ACTIONS, 'all', scopes),
     // v8 (BACKUP-COMMAND): installation-wide backup authority, added the same add-only way.
-    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all'), ...mcpObservationRules(person, scopes), ...executionRules(person, scopes), ...deliveryRules(person, scopes)];
+    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all'), ...mcpObservationRules(person, scopes), ...executionRules(person, scopes), ...deliveryRules(person, scopes),
+    // v12 (owner 2026-10-16 option A): scope inspection and this installation's service stop, for the named person only, added the same add-only way.
+    ...ownerServiceRules(person, scopes, input.serviceId)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
@@ -309,7 +330,18 @@ function deliveryRules(person: Person, scopes: readonly string[]): readonly Poli
     principals: [person], resource: { kind, ids: 'all' } }));
 }
 
-/** Current version delta by content: a same-id customization is preserved and reported, never deleted as a template rule. */
+/** v12 (owner 2026-10-16): the named person inspects the installed scope(s) and shuts down exactly this installation's runtime service, in those
+ * scopes only. Never for the MCP actor (it keeps v9 observation; `serviceActorSchema` admits its peer, so policy is its only shutdown gate). */
+function ownerServiceRules(person: Person, scopes: readonly string[], serviceId: string | undefined): readonly PolicyGrant[] {
+  if (isMcpPrincipal(person)) return [];
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS, service = identitySchema.parse(serviceId ?? firstRunServiceId(scopes[0]!));
+  return [
+    { id: ids.scopeInspect, kind: 'scope', actions: ['inspect'], resource: [...scopes] },
+    { id: ids.serviceShutdown, kind: 'service', actions: ['shutdown'], resource: [service] },
+  ].map(({ id, kind, actions, resource }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: [...scopes], principals: [person], resource: { kind, ids: resource } }));
+}
+
+/** Latest add-only delta (v11) by content: a same-id customization is preserved and reported, never deleted as a template rule. */
 export function firstRunTemplateRollback(current: unknown, person: Person, scopeId?: string): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] } {
   const policy = policyFileSchema.parse(current);
   if (policy.schemaVersion !== 2) return { rules: [], conflicts: [] };

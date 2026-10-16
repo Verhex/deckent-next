@@ -7,7 +7,9 @@ import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, ope
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { ApprovalApplication, PolicyAdministrationApplication, PolicyTemplateUpgrade, upgradePolicyTemplate } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { createHmacIntegrity, sha256 } from '#platform/index.js';
+import { effectWireKey } from '#engine/core/effect/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, policyChangeSchema, policyGrantSchema } from '#domain/index.js';
 
 const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
 const deltaIds = ['first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt'];
@@ -87,6 +89,83 @@ describe.skipIf(process.platform !== 'linux')('v11 rollback through the real app
     expect(await f.rollback()).toMatchObject({ status: 'refused', missing: ['delegation'] });
     expect(await f.bytes()).toBe(before); expect(f.cards).toBe(0); expect(f.events).toEqual([]);
   });
+});
+
+it.skipIf(process.platform !== 'linux')('POLICY-V12: a v11 delta the installer added under template v11 stays rollbackable after the v12 bump; an older or future key does not count', async () => {
+  const seed = async (version: number) => {
+    const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+    await f.source.updateAuthority(() => ({ write: { policy: { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id)) },
+      bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+    // The installer upgrade's own key shape (`policy-template-upgrade-v<version>-<64 hex>`), as an alpha.41 (v11) installer wrote it.
+    await f.source.updateAuthority(() => ({ write: { policy: { ...current, revision: 'a-upgraded' }, bindings: null, order: 'policy-first' }, result: null }),
+      `policy-template-upgrade-v${version}-${'a'.repeat(64)}`);
+    return f;
+  };
+  const v11 = await seed(11);
+  expect(await v11.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  for (const version of [10, 13]) {
+    const other = await seed(version), before = await other.bytes();
+    expect(await other.rollback()).toMatchObject({ status: 'nothing-to-roll-back', conflicts: deltaIds });
+    expect(await other.bytes()).toBe(before); expect(other.cards).toBe(0);
+  }
+});
+
+it.skipIf(process.platform !== 'linux')('POLICY-V12 option A: a governed v11 upgrade submitted before the plan carried the v12 rules stays rollbackable', async () => {
+  const v12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+  const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+  const older = { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id) && !v12.includes(rule.id)) };
+  await f.source.updateAuthority(() => ({ write: { policy: older, bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+  // The key the governed chain wrote then: its plan was exactly the v11 delta (no v12 rules), bound by the effect wire key.
+  const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id));
+  const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
+  const tag = `template-v5:${deltaIds.join(',')}`;
+  // The governed chain binds the resolved (policy + bindings) revision it read.
+  const resolved = 'a-older+first-run-template-v12-bindings';
+  const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
+  const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+    target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
+  await f.source.updateAuthority(() => ({ write: { policy: { ...older, revision: 'a-governed', grants: [...older.grants, ...rules] }, bindings: null, order: 'policy-first' }, result: null }), key);
+  expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+});
+
+it.skipIf(process.platform !== 'linux')('Astra 2596: a governed upgrade that named the configured service `local` stays rollbackable under the historical identity, not today\'s default', async () => {
+  const v12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+  const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+  const older = { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id) && !v12.includes(rule.id)) };
+  await f.source.updateAuthority(() => ({ write: { policy: older, bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+  // The plan the governed chain submitted then: the v11 delta and both owner rules, the stop rule naming the then-configured service `local`.
+  const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || v12.includes(rule.id))
+    .map((rule: { id: string; resource: object }) => rule.id === v12[1] ? { ...rule, resource: { kind: 'service', ids: ['local'] } } : rule);
+  const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v12-bindings';
+  const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
+  const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+    target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
+  await f.source.updateAuthority(() => ({ write: { policy: { ...older, revision: 'a-governed', grants: [...older.grants, ...rules] }, bindings: null, order: 'policy-first' }, result: null }), key);
+  // The fixture's upgrade carries no service id today (default `s-runtime`): the entry's own `local` decides whether it was this upgrade.
+  expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  expect(JSON.parse(await f.bytes()).grants.find((rule: { id: string }) => rule.id === v12[1])?.resource).toEqual({ kind: 'service', ids: ['local'] });
+});
+
+it.skipIf(process.platform !== 'linux')('Astra 2598: a governed upgrade whose `local` stop was covered by another allow ([v11 delta, scope-inspect]) stays rollbackable when today\'s id differs', async () => {
+  const v12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+  const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+  const ownStop = { id: 'own-stop', effect: 'allow', actions: ['shutdown'], scopes: ['s'], principals: [{ issuer: f.principal.issuer, subject: f.principal.subject }], resource: { kind: 'service', ids: ['local'] } };
+  const older = { ...current, revision: 'a-older', grants: [...current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id) && !v12.includes(rule.id)), ownStop] };
+  await f.source.updateAuthority(() => ({ write: { policy: older, bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+  // Then the configured service was `local`, covered by `own-stop`: the plan was the v11 delta and scope inspection only, no stop rule.
+  const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || rule.id === v12[0]);
+  const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v12-bindings';
+  const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
+  const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+    target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
+  await f.source.updateAuthority(() => ({ write: { policy: { ...older, revision: 'a-governed', grants: [...older.grants, ...rules] }, bindings: null, order: 'policy-first' }, result: null }), key);
+  // Today the fixture names no service (default `s-runtime`, not covered by `own-stop`): the recomputed plan would carry a stop rule.
+  expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  const after = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
+  expect(after.grants.map(rule => rule.id)).toEqual(expect.arrayContaining(['own-stop', v12[0]]));
+  expect(after.grants.some(rule => deltaIds.includes(rule.id))).toBe(false);
 });
 
 it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, detects changed-then-restored content, and refuses missing history without a card or write', async () => {

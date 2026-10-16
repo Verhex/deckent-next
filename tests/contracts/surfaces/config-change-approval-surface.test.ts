@@ -104,6 +104,9 @@ describe('the model cannot reach a config write', () => {
       .filter(path => /createConfiguredConfigApplication|configApplication!?\(|configWrite\(|terminalConfigWrite\(|configPanelPort\(/.test(readFileSync(path, 'utf8')))
       .map(path => path.replaceAll('\\', '/')).sort();
     expect(writers).toEqual(['src/composition/core/cli/internal/entry.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
+      // POLICY-V12: `init policy --apply|--upgrade` writes a missing `service.identity` through the same governed writer (the person's own config
+      // grant, digest CAS, audited). Reached only from the human CLI entry (asserted below): no SDK export, no MCP tool, no agent unit.
+      'src/composition/core/installation/internal/policy-template.ts',
       'src/composition/core/model-connect/internal/connect.ts',
       'src/composition/core/native-coding/internal/template.ts', // RUN-HAZIR-B: human coding CLI only, through the governed writer
       'src/composition/core/toolchains/internal/refresh.ts',
@@ -121,6 +124,13 @@ describe('the model cannot reach a config write', () => {
     // Coding-template configuration remains internal to the human CLI; neither agent nor MCP dispatch can reach it.
     expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /configureNativeCodingTemplate|configureCodingTemplate|native-coding/.test(readFileSync(path, 'utf8')))).toEqual([]);
+    // POLICY-V12: the installer's identity write is reachable from the human CLI entry only — neither the SDK nor MCP nor an agent unit names it.
+    const installer = /PolicyTemplateInstallation|composition\/core\/installation\/internal\/policy-template/;
+    // Only composition and surfaces can call composition (engine's own `PolicyTemplateInstallationApplication` is a name match, not a caller).
+    expect([...files('src/composition'), ...files('src/surfaces')].filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/installation/'))
+      .filter(path => installer.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/')).sort())
+      .toEqual(['src/composition/core/cli/internal/entry.ts', 'src/surfaces/core/cli-installation/internal/context.ts', 'src/surfaces/core/cli-installation/internal/init.ts']);
+    expect(readFileSync('src/index.ts', 'utf8') + readFileSync('src/composition/index.ts', 'utf8')).not.toMatch(installer);
     const mcp = readFileSync('src/surfaces/core/mcp/internal/server.ts', 'utf8');
     expect([...mcp.matchAll(/name: '([a-z_]+)'/g)].map(match => match[1]).filter(name => /config/.test(name!))).toEqual([]);
   });

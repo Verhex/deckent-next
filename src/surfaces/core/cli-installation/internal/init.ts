@@ -28,7 +28,11 @@ type Person = { readonly issuer: string; readonly subject: string };
  * policy's file owner names (`--person <issuer>/<subject>`). */
 export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string, person?: Person) => Promise<{ readonly status: string;
   readonly reason?: string | null; readonly revision?: string | null; readonly rules?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[];
-  readonly basis?: string | null; readonly person?: Person | null; readonly people?: readonly Person[] }>;
+  readonly basis?: string | null; readonly person?: Person | null; readonly people?: readonly Person[];
+  /** v12 (owner 2026-10-16): what happened to `service.identity` (written/planned/kept/other-scope/skipped/not-set). */
+  readonly serviceIdentity?: { readonly status: string; readonly identity: { readonly scopeId: string; readonly serviceId: string } | null; readonly code?: string };
+  /** v12 (Astra 2596): the `--expect` token binding the policy revision and the runtime service identity the plan names. */
+  readonly expect?: string | null }>;
 /** `<issuer>/<subject>`, split at the last `/` (an issuer may itself contain one); both parts non-empty. Identity rules are the engine's. */
 function parsePerson(value: string | undefined): Person {
   const at = value?.lastIndexOf('/') ?? -1;
@@ -167,9 +171,12 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
   // The next command repeats `--person` whenever it was given: without it the apply could be refused or name another person.
   const person = value.person ? ` --person ${named}` : '', handBuilt = value.basis === 'named-person';
   const people = (value.people ?? []).map(who).join(', ') || '-';
-  const head = value.status === 'preview' ? handBuilt ? t('cli.init.policyUpgrade.previewPerson', { scope, revision, person }, locale) : t('cli.init.policyUpgrade.preview', { scope, revision, person }, locale)
+  const expect = value.expect ?? revision; // the apply must repeat exactly this token (policy revision + service identity)
+  const head = value.status === 'preview' ? handBuilt ? t('cli.init.policyUpgrade.previewPerson', { scope, revision: expect, person }, locale) : t('cli.init.policyUpgrade.preview', { scope, revision: expect, person }, locale)
     : value.status === 'upgraded' ? handBuilt ? t('cli.init.policyUpgrade.upgradedPerson', {}, locale) : t('cli.init.policyUpgrade.upgraded', {}, locale)
     : value.status === 'current' ? handBuilt ? t('cli.init.policyUpgrade.currentPerson', {}, locale) : t('cli.init.policyUpgrade.current', {}, locale)
+    : value.reason === 'service-identity-changed' ? t('cli.init.policyUpgrade.serviceIdentityChanged', { scope }, locale)
+    : value.reason === 'service-identity-unbound' ? t('cli.init.policyUpgrade.serviceIdentityUnbound', { scope }, locale)
     : value.status === 'conflict' ? t('cli.init.policyUpgrade.conflict', { revision }, locale)
     : value.reason === 'not-owner' ? t('cli.init.policyUpgrade.notOwner', { scope }, locale)
     : value.reason === 'not-first-run' ? t('cli.init.policyUpgrade.handBuilt', { scope, people }, locale)
@@ -179,5 +186,14 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
     return `  + ${grant.id ?? '-'}: ${grant.resource?.kind ?? '-'} ${Array.isArray(grant.resource?.ids) ? grant.resource!.ids.join(', ') : '*'}`; });
   const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];
   const wire = (value.wireRules ?? []).length ? [t('cli.init.policyUpgrade.wireRules', { ids: value.wireRules!.join(', ') }, locale)] : [];
-  return [head, ...rules, ...kept, ...wire].join('\n');
+  return [head, ...rules, ...kept, ...wire, ...serviceIdentityText(value.serviceIdentity, locale)].join('\n');
+}
+/** The `service.identity` line (v12): only when something was written, is planned, names another scope or was refused; kept/skipped say nothing. */
+function serviceIdentityText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>['serviceIdentity'], locale: Locale): string[] {
+  if (!value) return [];
+  const params = { scope: terminalSafeText(value.identity?.scopeId ?? '-'), service: terminalSafeText(value.identity?.serviceId ?? '-'), code: terminalSafeText(value.code ?? '-') };
+  return value.status === 'written' ? [t('cli.init.policyUpgrade.serviceIdentityWritten', params, locale)]
+    : value.status === 'planned' ? [t('cli.init.policyUpgrade.serviceIdentityPlanned', params, locale)]
+    : value.status === 'other-scope' ? [t('cli.init.policyUpgrade.serviceIdentityOtherScope', params, locale)]
+    : value.status === 'not-set' ? [t('cli.init.policyUpgrade.serviceIdentityNotSet', params, locale)] : [];
 }

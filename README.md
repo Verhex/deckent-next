@@ -181,7 +181,8 @@ flowchart LR
 Before you start: Docker is running; the project is a Git repository with at least one commit; the coding CLI you want
 as worker (Claude Code or Codex) is logged in on this machine with its own login; and your installation has the current
 first-run policy (a fresh `deckent init policy --scope <id> --apply` does; an older one upgrades with
-`deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <revision>`).
+`deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <value>` with the exact value the preview printed; it binds the
+policy revision and the runtime service identity, so a change of either in between is refused and asks for a new preview).
 
 1. **Build the worker image** once, in the Deckent source checkout (it needs Docker and writes a new receipt file):
 
@@ -222,7 +223,10 @@ first-run policy (a fresh `deckent init policy --scope <id> --apply` does; an ol
    `deckent coding template --provider <id> --kind <kind> --preview|--apply`. `deckent config explain admission` shows
    the result.
 4. **Restart the service** so it reads the new configuration: `deckent runtime restart` (or `/service-restart` in the
-   terminal). It answers `Runtime service restarted (pid 494385, instance 8b1e2392-…).`
+   terminal). It answers `Runtime service restarted (pid 494385, instance 8b1e2392-…).` A fresh `init policy --apply`
+   (first-run policy v12) already names the service (`service.identity`) and lets you, and only you, stop it. On an older
+   first-run installation run the upgrade above first; if it says it set the service identity, stop the running service
+   once by hand (see [The runtime service](#the-runtime-service)) before `runtime restart` works.
 5. **Ask for the job.** In the terminal type `/do` and your request in plain words (`deckent do --request "<text>"` is the
    same from the command line). One connected, active model plans it, and Deckent prints the plan:
 
@@ -280,6 +284,20 @@ first-run policy (a fresh `deckent init policy --scope <id> --apply` does; an ol
    Adopted: <ref> moved from <from> to <to> (sequence 1). Basis: recorded Task acceptance, not verification; checkout, index and working files are unchanged.
    Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and working files are unchanged.
    ```
+
+### The runtime service
+
+Model turns, approvals, `/do` and recovery run in one local runtime service per project.
+
+- **Start.** `deckent` starts it in the background when none is running and reuses a running one. Its output goes to
+  `.deckent/state/runtime-service.log` (under your data root if you moved it). `deckent runtime serve` runs it in the
+  foreground instead; Ctrl+C stops it.
+- **Idle stop.** A service the terminal started stops itself after 15 minutes without work (`service.idleShutdown.afterMs`);
+  the next `deckent` starts it again. A service you started with `runtime serve` never stops by itself.
+- **Restart and stop.** `deckent runtime restart` stops the service through the governed stop and starts the current
+  build and configuration; `deckent runtime shutdown` only stops it. `deckent runtime describe` shows the running one.
+  Both need the service's identity (`deckent config explain service.identity`) and your `shutdown` rule on it, which
+  the first-run policy gives the installing person only; the local MCP actor cannot stop the service.
 
 ## In the terminal
 

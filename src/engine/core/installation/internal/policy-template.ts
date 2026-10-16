@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { governedPolicyDigest, type AuthorityDocumentStore } from '#engine/core/policy/index.js';
-import { firstRunPolicyTemplate, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
+import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
@@ -37,6 +37,42 @@ export async function inspectFirstRunPolicyTemplate(source: PolicyTemplateSource
   catch { return null; }
 }
 
+type ServiceIdentity = Readonly<{ scopeId: string; serviceId: string }>;
+/** v12 (owner 2026-10-16): the service a first-run template's shutdown rule names — this scope's configured `service.identity`, else the deterministic,
+ * non-secret default derived from the scope. One rule for the fresh install and the exact upgrade. */
+export function firstRunServiceIdentity(scopeId: string, configured: ServiceIdentity | null): ServiceIdentity {
+  return Object.freeze({ scopeId, serviceId: configured?.scopeId === scopeId ? configured.serviceId : firstRunServiceId(scopeId) });
+}
+/** What the first-run installer did with `service.identity`: `written` (the audited config write, or the journaled first config), `planned` (preview),
+ * `kept` (already configured for this scope), `other-scope` (configured for another scope: kept, never overwritten), `skipped` (the upgrade was
+ * refused or conflicted: nothing written) or `not-set` (a typed refusal; the policy result stands). */
+export type FirstRunServiceIdentityResult = Readonly<{ status: 'written' | 'planned' | 'kept' | 'other-scope' | 'skipped' | 'changed' | 'not-set'; identity: ServiceIdentity | null; code?: string }>;
+/** The configuration seam: the effective identity and the project layer's digest from one read; the write goes through the one config write contract.
+ * `hold` runs `work` while every configuration layer's write lock is held (the one lock each configuration write takes): no configuration write
+ * lands between a read inside it and the end of `work` (POLICY-V12, Astra 2598). */
+export interface FirstRunServiceIdentityPort {
+  read(): Promise<{ readonly identity: ServiceIdentity | null; readonly digest: string | null }>;
+  write(identity: ServiceIdentity, expect: string | null): Promise<unknown>;
+  hold<T>(work: () => Promise<T>): Promise<T>;
+}
+const sameIdentity = (a: ServiceIdentity | null, b: ServiceIdentity | null) => a === b || (!!a && !!b && a.scopeId === b.scopeId && a.serviceId === b.serviceId);
+/** Writes `target` only when no identity is configured (on exactly the digest read); an existing one is never replaced. `write: false` reads only.
+ * `seen` (POLICY-V12 Astra 2596): the identity the plan was chosen from; another one now is `changed` (nothing written, the caller re-previews). */
+export async function settleFirstRunServiceIdentity(port: FirstRunServiceIdentityPort, target: ServiceIdentity, write: boolean, seen?: ServiceIdentity | null): Promise<FirstRunServiceIdentityResult> {
+  try {
+    const { identity, digest } = await port.read();
+    if (seen !== undefined && !sameIdentity(identity, seen)) return Object.freeze({ status: 'changed', identity: identity ? Object.freeze({ scopeId: identity.scopeId, serviceId: identity.serviceId }) : null });
+    if (identity) return Object.freeze({ status: identity.scopeId === target.scopeId ? 'kept' : 'other-scope', identity: Object.freeze({ scopeId: identity.scopeId, serviceId: identity.serviceId }) });
+    if (!write) return Object.freeze({ status: 'planned', identity: target });
+    await port.write(target, digest);
+    return Object.freeze({ status: 'written', identity: target });
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    return Object.freeze({ status: 'not-set', identity: null, ...(typeof code === 'string' ? { code } : {}) });
+  }
+}
+export const SKIPPED_SERVICE_IDENTITY: FirstRunServiceIdentityResult = Object.freeze({ status: 'skipped', identity: null });
+
 export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger';
 export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplateResource; readonly path: string; readonly content: string; readonly digest: string }
 export interface PolicyTemplatePreview {
@@ -67,6 +103,8 @@ export interface PreparePolicyTemplateInput {
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
   readonly paths: { readonly policy: string; readonly bindings: string };
   readonly toolNames: FirstRunToolNames;
+  /** v12: the runtime service id the template's shutdown rule names (the configured `service.identity` of this scope, else the default). */
+  readonly serviceId?: string;
   /** Optional installer-owned first-session targets; retained in the same recovery journal. */
   readonly firstSessionTargets?: readonly PolicyTemplatePublishTarget[];
 }
@@ -82,7 +120,7 @@ export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames
 export function preparePolicyTemplateInstallation(input: PreparePolicyTemplateInput): PreparedPolicyTemplateInstallation {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
-  const template = firstRunPolicyTemplate({ scopeId, principal, ...input.toolNames });
+  const template = firstRunPolicyTemplate({ scopeId, principal, ...input.toolNames, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) });
   const policyContent = `${canonical(template.policy)}\n`, bindingsContent = `${canonical(template.bindings)}\n`;
   const targets: readonly PolicyTemplatePublishTarget[] = Object.freeze([
     Object.freeze({ resource: 'policy' as const, path: input.paths.policy, content: policyContent, digest: digestOf(policyContent) }),
@@ -171,7 +209,7 @@ export interface PolicyTemplateUpgradeResult {
   readonly status: 'preview' | 'upgraded' | 'current' | 'unavailable' | 'conflict';
   /** `not-first-run`: no template read rule (a hand-built policy: name its person with `person`); `not-this-person`: the template's read rule does
    * not name the person; `person-not-named`: the named person is on no explicit allow rule of this scope; `invalid`: unreadable policy or person. */
-  readonly reason: 'not-first-run' | 'not-this-person' | 'person-not-named' | 'not-owner' | 'invalid' | 'revision-changed' | null;
+  readonly reason: 'not-first-run' | 'not-this-person' | 'person-not-named' | 'not-owner' | 'invalid' | 'revision-changed' | 'service-identity-changed' | 'service-identity-unbound' | null;
   readonly template: { readonly id: string; readonly to: number };
   /** The person the added rules name (the OS identity, or the explicitly named `person`). */
   readonly scopeId: string; readonly principal: Person;
@@ -179,6 +217,8 @@ export interface PolicyTemplateUpgradeResult {
   readonly person: Person | null;
   /** Which plan applies: the first-run template's read rule (`first-run`) or a hand-built policy's named person (`named-person`); null when refused early. */
   readonly basis: 'first-run' | 'named-person' | null;
+  /** Whether the policy read is exactly an older or the current first-run template of this scope and person (the only path to v12's owner rules). */
+  readonly exact: boolean;
   /** On a `not-first-run`/`person-not-named` refusal: the people this policy already names on an allow rule of the scope (a display hint, capped). */
   readonly people: readonly Person[];
   /** The policy revision read (preview: pass it back as `--expect`); after an upgrade, the new one. */
@@ -192,9 +232,10 @@ export interface PolicyTemplateUpgradeResult {
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /**
- * The first-run older-template → v11 migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
- * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install v11
- * on a fresh installation today. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
+ * The first-run older-template → current migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
+ * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install the
+ * current template on a fresh installation today. An untouched v4–v11 template becomes exactly the current one (v12 adds the owner's scope inspect and
+ * service shutdown, owner 2026-10-16); edited and hand-built policies take the add-only plan below, which (owner 2026-10-16 option A) includes the two v12 rules for the named person. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
  * call operation, the proposal tool, the `policy.administer` operation and approval decisions — K1 option A) and keeps everything else:
  * hand-added rules, edited first-run rules, modes and bindings; a rule id that exists with other content is kept and named as a conflict. An
  * untouched v4–v10 template becomes exactly the v11 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
@@ -206,6 +247,8 @@ const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } |
  */
 export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter, input: { readonly scopeId: string;
   readonly principal: Person; readonly toolNames: FirstRunToolNames; readonly apply: boolean; readonly expect?: string;
+  /** v12: the runtime service id the exact template's shutdown rule names (the configured `service.identity` of this scope, else the default). */
+  readonly serviceId?: string;
   /** Whether the caller owns the installation's authority documents (the files' owner uid is the caller's): only the owner may write here. */
   readonly owner: boolean;
   /** The explicitly named person (`--person`): required for a hand-built policy; on a template policy it must be the person the template names. */
@@ -216,12 +259,12 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   const named = input.person === undefined ? null : { issuer: identitySchema.safeParse(input.person.issuer), subject: identitySchema.safeParse(input.person.subject) };
   const person = named === null ? null : named.issuer.success && named.subject.success ? { issuer: named.issuer.data, subject: named.subject.data } : undefined;
   const principal = person ?? { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
-  const template = { scopeId, principal, ...input.toolNames };
+  const template = { scopeId, principal, ...input.toolNames, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
   const names = { person: principal, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
-    policyAdministerOperationId: input.toolNames.policyAdministerOperationId };
+    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
   const result = (status: PolicyTemplateUpgradeResult['status'], extra: Partial<PolicyTemplateUpgradeResult> = {}): PolicyTemplateUpgradeResult => Object.freeze({ schemaVersion: 1,
     status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, person: person ?? null, basis: null,
-    people: [], revision: null, rules: [], conflicts: [], wireRules: [], ...extra });
+    exact: false, people: [], revision: null, rules: [], conflicts: [], wireRules: [], ...extra });
   type Planned = { readonly result: PolicyTemplateUpgradeResult; readonly next: unknown | null };
   const nextWith = (current: unknown, revision: string | null, rules: readonly unknown[]) => {
     const body = { ...(current as Record<string, unknown>), grants: [...(current as { grants: readonly unknown[] }).grants, ...rules] };
@@ -233,12 +276,13 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const wireRules = ((current as { grants?: { id: string; resource?: { kind?: string; ids?: unknown } }[] } | null)?.grants ?? [])
       .filter(grant => grant.resource?.kind === 'agent-tool' && Array.isArray(grant.resource.ids) && grant.resource.ids.some(id => typeof id === 'string' && id.startsWith('mcp__')))
       .map(grant => grant.id);
-    // An untouched older template becomes exactly v11 (doctor names it v11).
+    // An untouched older template becomes exactly the current one (doctor names its version).
     const exact = upgradeFirstRunPolicy(current, template);
     if (exact.status === 'upgrade') {
       const rules = (exact.policy.schemaVersion === 2 ? exact.policy.grants : []).filter(rule => !((current as { grants: { id: string }[] }).grants.some(held => JSON.stringify(held) === JSON.stringify(rule))));
-      return { result: result('preview', { basis: 'first-run', revision, rules, wireRules }), next: exact.policy };
+      return { result: result('preview', { basis: 'first-run', exact: true, revision, rules, wireRules }), next: exact.policy };
     }
+    if (exact.status === 'current') return { result: result('current', { basis: 'first-run', exact: true, revision, wireRules }), next: null };
     const additions = firstRunTemplateAdditions(current, names);
     if (additions.status === 'unavailable' && additions.reason === 'not-first-run') {
       // A hand-built policy: only for an explicitly named person (never the OS identity implicitly); refusals carry the people it names.
@@ -272,4 +316,40 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
       grantsAdded: again.result.rules.length, atMs: input.now(), policyDigestBefore: governedPolicyDigest(snapshot.policy, snapshot.bindings), policyDigest: governedPolicyDigest(again.next, snapshot.bindings) }));
     return { write: { policy: again.next, bindings: null, order: 'policy-first', beforePublish }, result: { ...again.result, status: 'upgraded', revision: revisionOf(again.next) } };
   }, key);
+}
+
+/** The `--expect` token the installer preview prints (POLICY-V12, Astra 2596): the policy revision and the runtime service identity the plan names,
+ * `<revision>~<12 hex>`, so an apply on another identity is refused instead of granting a stale service id. */
+const serviceToken = (identity: ServiceIdentity) => digestOf(`deckent.first-run-service.v1\0${identity.scopeId}\0${identity.serviceId}`).slice(0, 12);
+export type InstalledPolicyTemplateUpgrade = PolicyTemplateUpgradeResult & { readonly expect: string | null; readonly serviceIdentity: FirstRunServiceIdentityResult };
+/**
+ * `deckent init policy --upgrade` end to end (owner 2026-10-16 v12 + option A): the service identity is read once and the plan names it; the apply
+ * refuses a token naming another identity (`service-identity-unbound` without one), refuses an identity that changed since that read (typed
+ * `conflict` / `service-identity-changed`, re-preview), writes a missing identity before the policy (it grants nothing), and then holds every
+ * configuration layer's write lock from a last identity read to the policy publication (Astra 2598): the published stop rule names the identity
+ * that is configured at publication, or nothing is published.
+ */
+export async function upgradeInstalledPolicyTemplate(writer: PolicyTemplateDocumentWriter, port: FirstRunServiceIdentityPort, input: Omit<Parameters<typeof upgradePolicyTemplate>[1], 'serviceId' | 'audit'> & {
+  readonly openAudit: () => Promise<{ record(event: AuditEvent): void; close(): void }> }): Promise<InstalledPolicyTemplateUpgrade> {
+  const seen = (await port.read()).identity, target = firstRunServiceIdentity(input.scopeId, seen);
+  const split = input.expect === undefined ? null : /^(.*)~([a-f0-9]{12})$/u.exec(input.expect);
+  const { openAudit, expect: _expect, ...rest } = input; void _expect;
+  const base = { ...rest, serviceId: target.serviceId, ...(input.expect === undefined ? {} : { expect: split ? split[1]! : input.expect }) };
+  const done = (result: PolicyTemplateUpgradeResult, serviceIdentity: FirstRunServiceIdentityResult): InstalledPolicyTemplateUpgrade => Object.freeze({ ...result,
+    expect: result.revision === null ? null : `${result.revision}~${serviceToken(target)}`, serviceIdentity });
+  const preview = await upgradePolicyTemplate(writer, { ...base, apply: false, audit: () => { throw new Error('INSTALLER_PREVIEW_WRITE'); } });
+  const refused = (reason: 'service-identity-changed' | 'service-identity-unbound', identity: FirstRunServiceIdentityResult) =>
+    done({ ...preview, status: 'conflict', reason, rules: [], conflicts: [] }, identity);
+  if (!preview.basis) return done(preview, SKIPPED_SERVICE_IDENTITY);
+  if (input.apply && input.expect !== undefined && !split) return refused('service-identity-unbound', SKIPPED_SERVICE_IDENTITY);
+  if (split && split[2] !== serviceToken(target)) return refused('service-identity-changed', SKIPPED_SERVICE_IDENTITY);
+  const named = await settleFirstRunServiceIdentity(port, target, input.apply, seen);
+  if (named.status === 'changed') return refused('service-identity-changed', named);
+  if (!input.apply || preview.status !== 'preview') return done(preview, named);
+  const settled = named.status === 'written' ? target : seen;
+  return port.hold(async () => {
+    if (!sameIdentity((await port.read()).identity, settled)) return refused('service-identity-changed', named);
+    const audit = await openAudit();
+    try { return done(await upgradePolicyTemplate(writer, { ...base, apply: true, audit: event => { audit.record(event); } }), named); } finally { audit.close(); }
+  });
 }

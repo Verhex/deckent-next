@@ -160,6 +160,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Kaybolan bir işçi slotunu tutabilir.** Verilmiş bir deneme, saklama çözülene kadar etkin kalıp bir yürütme slotunu tutabilir.
   *Yol:* `deckent monitor` ile izleyin; slot yalnız tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
 - **Yeniden başlatma kurtarması bağımsız incelemeden geçmedi:** gerçek konteyner öldürme ve servis yeniden başlatmasıyla.
+- **`service.identity`'yi ayarlayan bir yükseltmeden sonra çalışan servis bir kez elle durdurulmalıdır** (`deckent runtime serve`
+  üzerinde Ctrl+C ya da boşta durma); ancak ondan sonra `runtime restart` çalışır: servis kimliğini yalnız başlarken okur.
 - **Servis kimliği ve saat.** Kurulum kimliğinin ilk yayımında nadir bir pencere kalıyor; tolerans içindeki yavaş bir saat
   kayması algılanmaz; durdurulan bir çalıştırmanın `cancelled` bildirdiği tek bir overlay durumu yeniden üretilemedi.
 

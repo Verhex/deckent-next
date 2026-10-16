@@ -11,6 +11,7 @@ import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
 import { upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { closeModeRuntimes, me, modeRuntime } from '../support/agent-turn-modes.js';
+import { clearConfigCache } from '#platform/index.js';
 
 // Owner request 2026-10-07 (lead): the existing-installation migration as one governed product command, `deckent policy upgrade --template v5`
 // (preview, then apply through `policy.administer@1`: I2, `expect` revision, `authority-change` audit, authority archive as backup, rollback by id;
@@ -134,7 +135,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     // v7: the harness's own model-invocation rule (ids all, this scope) covers the invocation rule; only activation is added.
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt']);
     expect(grants().map(grant => grant.id)).toEqual(before);
-    expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, 'first-run-template-v4', { env: f.env })).toMatchObject({ status: 'upgraded' });
+    expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded' });
     expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt']]);
     const upgraded = bytes();
     expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'current' });
@@ -217,4 +218,33 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     // Security: the governed path writes nothing and records no authority change for a person without policy.administer.
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toEqual([]);
   }, 120_000);
+});
+
+describe.skipIf(process.platform !== 'linux')('Astra 2596: the governed upgrade names the configured runtime service', () => {
+  const configure = (f: Awaited<ReturnType<typeof modeRuntime>>, serviceId: string) => {
+    const path = join(f.project, '.deckent', 'config.json'), config = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    writeFileSync(path, JSON.stringify({ ...config, service: { ...(config['service'] as object | undefined), identity: { scopeId: 'scope', serviceId } } }), { mode: 0o600 });
+    // This file's v4 fixture is cut from the current template: a real v4 never had the two v12 owner rules.
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(readFileSync(policyPath, 'utf8')) as { grants: { id: string }[] };
+    writeFileSync(policyPath, JSON.stringify({ ...policy, grants: policy.grants.filter(rule => !['first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)) }), { mode: 0o600 });
+    clearConfigCache();
+  };
+  const service = (rules: readonly { id: string; resource: { kind: string; ids: unknown } }[]) => rules.filter(rule => rule.resource.kind === 'service');
+  it('a custom configured id is the one the stop rule names (never the `<scope>-runtime` default)', async () => {
+    const { f } = await project('pure');
+    configure(f, 'custom');
+    const preview = await configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'preview', reason: 'test' });
+    expect(service(preview.rules)).toEqual([expect.objectContaining({ id: 'first-run-service-shutdown', actions: ['shutdown'], scopes: ['scope'], principals: me, resource: { kind: 'service', ids: ['custom'] } })]);
+  });
+  it('an existing allow that covers the configured service adds no second stop rule for the person (no grant for another service)', async () => {
+    const { f, grants } = await project('pure');
+    configure(f, 'local');
+    const path = join(f.data, 'policy.json'), policy = JSON.parse(readFileSync(path, 'utf8')) as { grants: unknown[] };
+    writeFileSync(path, JSON.stringify({ ...policy, grants: [...policy.grants, { id: 'own-stop', effect: 'allow', actions: ['shutdown'], scopes: ['scope'], principals: me,
+      resource: { kind: 'service', ids: ['local'] } }] }), { mode: 0o600 });
+    const preview = await configuredPolicyTemplateUpgrade(f.project, 'scope', { env: f.env }, { mode: 'preview', reason: 'test' });
+    expect(service(preview.rules)).toEqual([]);
+    expect(preview.rules.map(rule => rule.id)).toContain('first-run-scope-inspect');
+    expect(service(grants())).toEqual([expect.objectContaining({ id: 'own-stop' })]);
+  });
 });

@@ -181,7 +181,8 @@ flowchart LR
 Başlamadan önce: Docker çalışıyor; proje en az bir commit'i olan bir Git deposu; işçi olarak istediğiniz kodlama CLI'ı
 (Claude Code ya da Codex) bu makinede kendi girişiyle açık; kurulumunuzda güncel ilk kurulum policy'si var (yeni bir
 `deckent init policy --scope <id> --apply` bunu kurar; eski kurulum `deckent init policy --scope <id> --upgrade --preview`,
-ardından `--apply --expect <revizyon>` ile yükseltilir).
+ardından önizlemenin bastığı değerle `--apply --expect <değer>` ile yükseltilir; değer politika revizyonunu ve runtime servis kimliğini
+bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
 
 1. **İşçi imajını bir kez derleyin**, Deckent kaynak dizininde (Docker ister ve yeni bir makbuz dosyası yazar):
 
@@ -222,7 +223,10 @@ ardından `--apply --expect <revizyon>` ile yükseltilir).
    `deckent coding template --provider <id> --kind <tür> --preview|--apply` kullanın. Sonucu
    `deckent config explain admission` gösterir.
 4. **Servisi yeniden başlatın**, yeni yapılandırmayı okusun: `deckent runtime restart` (terminalde `/service-restart`).
-   Şunu söyler: `Runtime servisi yeniden başlatıldı (pid 494385, örnek 8b1e2392-…).`
+   Şunu söyler: `Runtime servisi yeniden başlatıldı (pid 494385, örnek 8b1e2392-…).` Yeni bir `init policy --apply`
+   (ilk kurulum politikası v12) servisi zaten adlandırır (`service.identity`) ve onu yalnız sizin durdurmanıza izin verir.
+   Daha eski bir ilk kurulumda önce yukarıdaki yükseltmeyi çalıştırın; servis kimliğini ayarladığını söylerse çalışan
+   servisi bir kez elle durdurun ([Runtime servisi](#runtime-servisi)), sonra `runtime restart` çalışır.
 5. **İşi isteyin.** Terminalde `/do` yazıp isteğinizi sade sözlerle yazın (komut satırında aynısı
    `deckent do --request "<metin>"`). Bağlı ve etkin bir model planlar, Deckent planı basar:
 
@@ -281,6 +285,20 @@ ardından `--apply --expect <revizyon>` ile yükseltilir).
    Benimsendi: <ref>, <önce> → <sonra> taşındı (sıra 1). Dayanak: kayıtlı Task kabulü, doğrulama değil; checkout, index ve çalışma dosyaları değişmedi.
    Geri alındı: <ref>, <sonra> → <önce> taşındı (sıra 2). Checkout, index ve çalışma dosyaları değişmedi.
    ```
+
+### Runtime servisi
+
+Model turları, onaylar, `/do` ve kurtarma her proje için tek bir yerel runtime servisinde çalışır.
+
+- **Başlatma.** `deckent`, çalışan servis yoksa onu arka planda başlatır, varsa onu kullanır. Çıktısı
+  `.deckent/state/runtime-service.log` dosyasına gider (veri kökünü taşıdıysanız onun altına). `deckent runtime serve`
+  onu ön planda çalıştırır; Ctrl+C durdurur.
+- **Boşta durma.** Terminalin başlattığı servis 15 dakika iş almazsa kendiliğinden durur (`service.idleShutdown.afterMs`);
+  sonraki `deckent` onu yeniden başlatır. `runtime serve` ile başlattığınız servis kendiliğinden durmaz.
+- **Yeniden başlatma ve durdurma.** `deckent runtime restart` servisi yönetilen durdurmayla kapatır, güncel derleme ve
+  yapılandırmayla yeniden başlatır; `deckent runtime shutdown` yalnız durdurur. `deckent runtime describe` çalışanı
+  gösterir. İkisi de servisin kimliğini (`deckent config explain service.identity`) ve sizin o servis üzerindeki
+  `shutdown` kuralınızı ister; ilk kurulum politikası bunu yalnız kuran kişiye verir, yerel MCP aktörü servisi durduramaz.
 
 ## Terminalde
 

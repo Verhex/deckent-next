@@ -1,10 +1,12 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, planPolicyChange, policySchema,
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, FIRST_RUN_POLICY_TEMPLATE_VERSION, FIRST_RUN_UPGRADE_RULE_IDS, authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, firstRunTemplateRollback, planPolicyChange, policySchema,
   type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
 import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
+/** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`). */
+const FIRST_RUN_DELTA_VERSION = 11;
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
@@ -29,7 +31,9 @@ export interface TemplateUpgradeResult {
  */
 export class PolicyTemplateUpgrade {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve'> & { readonly policy: PersistentStandingDependencies['policy'] & Partial<AuthorityHistorySource> },
-    private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string }) {}
+    private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string;
+      /** v12: the installation's configured runtime service id of the scope (Astra 2596: never a guessed default when one is configured). */
+      readonly serviceId?: string }) {}
   private async snapshot() { return policySchema.parse(await this.deps.policy.load()); }
   private missing(policy: ReturnType<typeof policySchema.parse>, principal: VerifiedPrincipal, scopeId: string, touched: Parameters<typeof delegationWithin>[2]): TemplateUpgradeMissing[] {
     const out: TemplateUpgradeMissing[] = [];
@@ -39,15 +43,30 @@ export class PolicyTemplateUpgrade {
     return out;
   }
   private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
-    const prefix = `policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-`;
-    if (entry.key?.startsWith(prefix) && /^[a-f0-9]{64}$/.test(entry.key.slice(prefix.length))) return true;
+    // The installer's upgrade key names the template version it ran under. The rolled-back delta is v11's, so a v11 delta the installer added under
+    // v11 or any later version is this upgrade's (POLICY-V12: the v12 bump must not orphan v11 upgrades already on disk).
+    const installer = /^policy-template-upgrade-v(\d+)-([a-f0-9]{64})$/.exec(entry.key ?? '');
+    if (installer && Number(installer[1]) >= FIRST_RUN_DELTA_VERSION && Number(installer[1]) <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
     if (entry.before.schemaVersion !== 2) return false;
-    const plan = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, ...this.names });
+    // The historical plan's own service id (the stop rule this entry added), not today's configuration: a later identity change keeps it recognizable.
+    const before = entry.before, added = entry.after.schemaVersion === 2 ? entry.after.grants.find(rule => rule.id === FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown
+      && !before.grants.some(item => item.id === rule.id)) : undefined;
+    const serviceId = added && added.resource.ids !== 'all' && added.resource.ids.length === 1 ? added.resource.ids[0] : this.names.serviceId;
+    const plan = firstRunTemplateAdditions(authorityDocuments(entry.before).policy, { person: principal, ...this.names, ...(serviceId === undefined ? {} : { serviceId }) });
     if (plan.status !== 'plan') return false;
-    const tag = `template-v5:${plan.rules.map(rule => rule.id).join(',')}`;
-    const commandId = sha256(`policy-template-upgrade:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
-    return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
-      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: plan.change, expectedVersion: entry.before.revision });
+    // The governed key binds the exact plan it submitted: the current one, or the same plan without the v12 owner rules (a governed upgrade
+    // made before option A, owner 2026-10-16, must stay recognizable).
+    // Astra 2598: when the historical stop was covered by another allow (no stop rule added), the plan then was today's without its stop rule; the
+    // exact effect key below decides which one it was.
+    const without = (ids: readonly string[]) => plan.change.changes.filter(change => change.kind !== 'grant.add' || !ids.includes(change.grant.id));
+    const variants = [without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
+      .filter((changes, index, all) => changes.length > 0 && changes.length < plan.change.changes.length && all.findIndex(other => other.length === changes.length) === index);
+    return [plan.change, ...variants.map(changes => ({ ...plan.change, changes }))].some(change => {
+      const tag = `template-v5:${change.changes.map(item => item.kind === 'grant.add' ? item.grant.id : '').join(',')}`;
+      const commandId = sha256(`policy-template-upgrade:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
+      return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
+        target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: entry.before.revision });
+    });
   }
   async run(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly mode: 'preview' | 'apply' | 'rollback'; readonly expect?: string;
     readonly reason: string }): Promise<TemplateUpgradeResult> {

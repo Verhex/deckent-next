@@ -27,10 +27,13 @@ async function fixture(named: boolean) {
 
 it.skipIf(process.platform === 'win32').each([false, true])('installer template/person=%s: sealed verifiable event without approval/decider, archive retained, preview/conflict/current write no event', async named => {
   const f = await fixture(named), before = await readFile(f.path, 'utf8');
-  expect(await f.upgrade(false)).toMatchObject({ status: 'preview' });
+  const preview = await f.upgrade(false);
+  expect(preview).toMatchObject({ status: 'preview' });
   expect(await f.upgrade(true, 'stale')).toMatchObject({ status: 'conflict' });
+  // POLICY-V12 (Astra 2596): the bare revision binds no runtime service identity: a typed conflict, no event, nothing written.
+  expect(await f.upgrade(true, 'first-run-template-v4')).toMatchObject({ status: 'conflict', reason: 'service-identity-unbound' });
   expect(await readFile(f.path, 'utf8')).toBe(before);
-  const applied = await f.upgrade(true, 'first-run-template-v4');
+  const applied = await f.upgrade(true, preview.expect!);
   expect(applied.status).toBe('upgraded');
   expect(await f.upgrade(true)).toMatchObject({ status: 'current' });
   const store = await openSqliteAuditStore(productResourcePath(f.config.productLayout, 'ledger'), f.config.storage.sqlite);

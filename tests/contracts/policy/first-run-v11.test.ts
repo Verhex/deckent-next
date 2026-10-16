@@ -10,7 +10,9 @@ const input = { scopeId: 'installation', principal: person, ...names, readToolNa
   scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['run_shell'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run' };
 const ids = ['first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt'];
 const built = firstRunPolicyTemplate(input);
-const v10 = { ...built.policy, revision: 'first-run-template-v10', grants: built.policy.grants.filter(rule => !ids.includes(rule.id)) };
+// v10 never had the v12 owner rules either (POLICY-V12): the exact v10 bytes are the current template minus the v11 and v12 rules.
+const v12ids = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+const v10 = { ...built.policy, revision: 'first-run-template-v10', grants: built.policy.grants.filter(rule => !ids.includes(rule.id) && !v12ids.includes(rule.id)) };
 const identity = { scopeId: 'installation', runId: 'run', taskId: 'task', attemptId: 'attempt', generation: 1 };
 const source = (policy: unknown) => ({ async load() { return resolvePolicyBindings(policy, built.bindings); } });
 
@@ -25,11 +27,12 @@ it('migrates exact v10 to v11 and plans the same named delta additively for firs
   const hand = namedPersonPolicyAdditions(custom, { ...names, person, scopeId: 'installation' });
   for (const plan of [first, hand]) {
     expect(plan.status).toBe('plan'); if (plan.status !== 'plan') throw new Error('missing v11 delta');
-    expect(plan.rules.map(rule => rule.id)).toEqual(ids);
+    // v12 (owner 2026-10-16 option A): the add-only plan now also carries the two owner rules after the v11 delta.
+    expect(plan.rules.map(rule => rule.id)).toEqual([...ids, ...v12ids]);
     expect(plan.rules.some(rule => rule.id === 'first-run-mcp-propose-tool')).toBe(false);
     expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     expect(plan.rules[0]).toMatchObject({ actions: ['release-quota'], scopes: 'all', principals: [person], resource: { kind: 'pool', ids: 'all' } });
-    for (const rule of plan.rules.slice(1)) expect(rule).toMatchObject({ scopes: ['installation'], principals: [person], resource: { ids: 'all' } });
+    for (const rule of plan.rules.slice(1, ids.length)) expect(rule).toMatchObject({ scopes: ['installation'], principals: [person], resource: { ids: 'all' } });
   }
   expect(JSON.stringify(custom)).toBe(before);
 });
@@ -65,7 +68,7 @@ it('preserves customized v11 ids and existing coverage; only content-equal v11 r
   const plan = firstRunTemplateAdditions(custom, { ...names, person });
   expect(plan).toMatchObject({ status: 'plan', conflicts: [ids[1]] });
   if (plan.status !== 'plan') throw new Error('missing v11 plan');
-  expect(plan.rules.map(rule => rule.id)).toEqual([ids[2]]);
+  expect(plan.rules.map(rule => rule.id)).toEqual([ids[2], ...v12ids]);
   const rollback = firstRunTemplateRollback({ ...built.policy, grants: built.policy.grants.map(rule => rule.id === changed.id ? changed : rule) }, person);
   expect(rollback.rules.map(rule => rule.id)).toEqual([ids[0], ids[2]]); expect(rollback.conflicts).toEqual([ids[1]]);
   expect(firstRunTemplateRollback(built.policy, mcpPrincipalRef(person))).toEqual({ rules: [], conflicts: [] });

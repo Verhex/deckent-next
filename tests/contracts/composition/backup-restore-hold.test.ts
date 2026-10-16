@@ -72,7 +72,13 @@ async function heldAgainstNormalAdmission(f: Fixture) {
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: backup and restore coordinate with the runtime service] an injected failure at every publication step leaves a durable hold that refuses normal admission until a rerun restore completes', async () => {
   const f = await fixture(); gate.under = [f.root, f.data];
   let failAt = 1;
+  // The ledger's `-wal`/`-shm` sidecars are two of the publication steps (each is moved aside). A stopped service used to leave them behind only
+  // because its recovery passes were refused (POLICY_DENIED) under the v11 template; with v12 the owner's scope inspection lets those passes
+  // finish and the ledger closes cleanly, so they are gone after `startsAndStops`. Every attempt starts with the sidecars an interrupted
+  // process leaves, so a failure is still injected at each of them (POLICY-V12, CI 38933530158).
+  const sidecars = async () => { for (const suffix of ['-wal', '-shm']) { const path = join(f.data, `state/ledger.db${suffix}`); if (!await present(path)) await writeFile(path, '', { mode: 0o600 }); } };
   for (; ; failAt++) {
+    await sidecars();
     gate.failAt = failAt; gate.seen = 0;
     // The cause travels with the code so a platform-specific BACKUP_IO names its real reason in the assertion message (PLATFORM-TEMIZLIK).
     let cause: unknown;

@@ -1621,7 +1621,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 - `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
 - `src/domain/core/approval/internal/contract.ts`: `10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa`
-- `src/domain/core/policy/index.ts`: `54623320a2de38385df6ee28fb9116af931038e246924117dd8c9128c66e8922`
+- `src/domain/core/policy/index.ts`: `b33acc0768c61d72f4c359cb2913f50a23ebbba2ec5be7886c51afae33f73372`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0`
 - `src/domain/core/policy/internal/ai-floor.ts`: `d7f7c65905a2c67a85e791f12cb99b6b186c3d8adeba557414d9fc89dc80eeb7`
@@ -1629,7 +1629,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `009df03fe8e3afa15f41975cbf3fd7a1048eccdfe35fbdc1616133d0e23f424d`
-- `src/domain/core/policy/internal/first-run-template.ts`: `d646a21b890892c4afec1fe14d7f77c7566717aa3e21cb4b32434104c29f9456`
+- `src/domain/core/policy/internal/first-run-template.ts`: `60d7ea9b997092e4acc7bfaee8365844502e9be6e88ac6dd68bebebebf868051`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `ea7d39a53c386e5d8a16c64f52cfad9466355450d63786b7412d08954f498827`
