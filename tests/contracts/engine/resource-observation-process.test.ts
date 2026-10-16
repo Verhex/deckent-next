@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
+import { hostBound } from '../support/host-bounds.js';
 
 it('lets a process exit with an unfinished worker observation instead of waiting for its next poll', async () => {
   const engine = pathToFileURL(resolve('dist/engine/index.js')).href;
@@ -22,7 +23,8 @@ it('lets a process exit with an unfinished worker observation instead of waiting
       { async readResources() { return resourceGap(identity, Date.now(), 'starting'); } });
   `;
   try {
-    await promisify(execFile)(process.execPath, ['--input-type=module', '-e', program], { timeout: 2000 });
+    // The bound proves the process does not wait for the next 60 s poll; the child's own start-up (loading dist) is slower on hosted macOS.
+    await promisify(execFile)(process.execPath, ['--input-type=module', '-e', program], { timeout: hostBound(2000) });
     expect(await readFile(witness, 'utf8')).toBe('sampled');
   } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -118,7 +118,7 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
     await gates[index]!.promise;
     return undefined as unknown as Awaited<ReturnType<typeof execution.executeConfiguredTask>>;
   });
-  let work: Promise<void> = Promise.resolve();
+  let work: Promise<void> = Promise.resolve(), admissions = 0;
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 4, maxConcurrentExecutions: cap }, () => {
     controller.abort(); return work;
   }, { async wait(milliseconds, signal) {
@@ -127,7 +127,7 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
   } });
   const loop = await prepareConfiguredRunRuntime(f.project, {
     onRun(query, result) { observed.set(query.runId, result); if (query.runId === starts[0]) firstObserved.resolve(); }, onError(_query, error) { errors.push(error.code); },
-  }, (operation, onSlotWait) => lifecycle.admitExecution(operation, onSlotWait), { env: f.env });
+  }, (operation, onSlotWait) => { admissions++; return lifecycle.admitExecution(operation, onSlotWait); }, { env: f.env });
   work = loop.run(controller.signal);
   try {
     await bounded(first.promise);
@@ -137,7 +137,9 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
     }).toBe(2);
     // A durable reservation precedes execution admission; join the second start when capacity allows it.
     if (cap === 2) await bounded(second.promise);
-    else await new Promise(resolve => setTimeout(resolve, 25));
+    // cap=1: release the first execution only once the second has asked for the slot (it then really waits). A fixed 25 ms was not enough
+    // on hosted macOS: the second admission came after the slot was free, so no waitedForSlotMs was recorded (PLATFORM-TEMIZLIK open test).
+    else await expect.poll(() => admissions).toBe(2);
     expect(starts).toHaveLength(cap);
     if (cap === 1) { gates[0]!.resolve(); await bounded(second.promise); }
     const stopping = lifecycle.stop(2000); let settled = false; void stopping.then(() => { settled = true; });
