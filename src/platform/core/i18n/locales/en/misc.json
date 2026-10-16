@@ -533,7 +533,7 @@
   "config.field.layout": "Durable data root and registered resource locations; bootstrap configuration stays fixed.",
   "config.field.storage": "Storage driver and bounded SQLite options",
   "config.field.artifacts": "Maximum retained artifact size in bytes",
-  "config.field.execution": "Pinned Docker and Git execution settings; Docker memoryBytes, cpus and pids cap each new Run profile at admission. Null disables execution.",
+  "config.field.execution": "Pinned Docker and Git execution settings; Docker memoryBytes, cpus and pids cap each new Run profile at admission. Null disables execution. adoption.protectedTargets lists further branches the delivery queue never moves, even when also in adoption.targets; main, master and the default branch are always refused.",
   "config.field.operations": "Operation catalog and effect targets (policy data); empty by default so no operation can run until declared",
   "config.field.inspection": "Read-only inspection page and policy document limits",
   "config.field.toolchains": "Worker toolchain currency and image refresh: currency probe (registry endpoint, limits) and update policy (mode off/propose/auto, build limits, check at service start, periodic check interval in ms, 0 = off). Default: auto refresh at start and every 24 hours; running Runs keep their image Manual `toolchains update` only previews unless --apply is given, in every mode (off disables it); `auto` is what lets the running service refresh the worker image by itself.",

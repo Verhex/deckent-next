@@ -36,6 +36,18 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'resourceObservation.segmentMaxEntries': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 16, 64] },
   'resourceObservation.segmentMaxAgeMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 15000, 60000] },
   'resourceObservation.syncIntervalMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 15000, 60000] },
+  'targetQueue.schemaVersion': { kind: 'schema' },
+  'targetQueue.capacity': { kind: 'numeric', unit: 'count', step: 1, presets: [256, 1024, 4096, 16384] },
+  'targetQueue.perTarget': { kind: 'numeric', unit: 'count', step: 1, presets: [16, 64, 256, 1024] },
+  'targetQueue.activeTargets': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 4, 16, 64] },
+  'targetQueue.batchSize': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 4, 16, 64] },
+  'targetQueue.chainSize': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 4, 16, 64] },
+  'targetQueue.batchWindowMs': { kind: 'numeric', unit: 'ms', step: 100, presets: [100, 500, 1000, 5000] },
+  'targetQueue.leaseMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [15000, 60000, 300000] },
+  'targetQueue.ttlMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [60000, 600000, 3600000, 86400000] },
+  'targetQueue.verificationTimeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [60000, 300000, 900000, 3600000] },
+  'targetQueue.revalidations': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1, 2, 4, 8] },
+  'targetQueue.candidateSlots': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8] },
   'execution': { kind: 'container' },
   'cancellation': { kind: 'container' },
   'cancellationRuntime': { kind: 'container' },
@@ -72,6 +84,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   // Delivery commit author (name + email): an operator record set in the config file, shown read-only — never a hand-typed picker value.
   'execution.git.deliveryIdentity': { kind: 'document' },
   'execution.adoption.targets': { kind: 'reference', source: 'branches', multiple: true },
+  'execution.adoption.protectedTargets': { kind: 'reference', source: 'branches', multiple: true },
   'execution.adoption.verification.kind': { kind: 'reference', source: 'task-kinds' },
   'execution.adoption.verification.required': { kind: 'schema' },
   'execution.adoption.verification.criteria': { kind: 'document' },
@@ -274,7 +287,7 @@ export function configChoiceDeclaration(key: string): ConfigChoiceDeclaration | 
   if (direct) return direct;
   // Structured records stay read-only, including members of current documents; record editors are a later slice.
   if (Object.entries(CONFIG_VALUE_CHOICES).some(([parent, declaration]) => declaration.kind === 'document' && key.startsWith(parent + '.'))) return { kind: 'document' };
-  if (['execution.adoption.targets', 'cancellationRuntime.scopeIds', 'reconciliationRuntime.scopeIds', 'terminal.shell.environment', 'terminal.fetch.allowedHosts'].some(parent => key.startsWith(parent + '.'))) return { kind: 'hidden' };
+  if (['execution.adoption.targets', 'execution.adoption.protectedTargets', 'cancellationRuntime.scopeIds', 'reconciliationRuntime.scopeIds', 'terminal.shell.environment', 'terminal.fetch.allowedHosts'].some(parent => key.startsWith(parent + '.'))) return { kind: 'hidden' };
   return undefined;
 }
 export const CONFIG_ALLOWED_ENTRY_FIELDS = Object.freeze(['terminal.fetch.allowedHosts', 'toolchains.currency.registryEndpoint']);

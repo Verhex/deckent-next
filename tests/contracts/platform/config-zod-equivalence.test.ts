@@ -104,9 +104,9 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   it('nullable-with-inner-defaults fields apply their inner defaults once authored', () => {
     const parsed = CORE_SCHEMA.parse({ execution: { docker, git: { gitExecutable: 'git', timeoutMs: 1 } },
       cancellation: { maxConcurrentDeliveries: 1 }, cancellationRuntime: { scopeIds: ['a'] }, reconciliationRuntime: { scopeIds: ['a'] } });
-    // `adoption: ADOPTION_TARGET_SETTINGS.default({ targets: [] })` is an incomplete literal: `verification: null` comes from the inner schema.
+    // `adoption: ADOPTION_TARGET_SETTINGS.default({ targets: [] })` is an incomplete literal: `protectedTargets: []` and `verification: null` come from the inner schema.
     // EXEC-RELEASE: `retention` is a versioned sub-object whose defaults come from the inner schema too.
-    expect(parsed.execution).toEqual({ docker, git: { gitExecutable: 'git', timeoutMs: 1, outputBytes: 4_194_304 }, adoption: { targets: [], verification: null },
+    expect(parsed.execution).toEqual({ docker, git: { gitExecutable: 'git', timeoutMs: 1, outputBytes: 4_194_304 }, adoption: { targets: [], protectedTargets: [], verification: null },
       retention: { schemaVersion: 1, release: 'after-retained-patch', sweepLimit: 16 },
       // S6: the secret gate's acknowledgements default empty (refuse by default) and its bounds come from the inner schema.
       secretGate: { schemaVersion: 1, allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 200_000, maxFileBytes: 16_777_216, maxTotalBytes: 1_073_741_824, timeoutMs: 120_000 } });
