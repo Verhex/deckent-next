@@ -147,6 +147,27 @@ it.skipIf(process.platform !== 'linux')('Astra 2596: a governed upgrade that nam
   expect(JSON.parse(await f.bytes()).grants.find((rule: { id: string }) => rule.id === v12[1])?.resource).toEqual({ kind: 'service', ids: ['local'] });
 });
 
+it.skipIf(process.platform !== 'linux')('Astra 2598: a governed upgrade whose `local` stop was covered by another allow ([v11 delta, scope-inspect]) stays rollbackable when today\'s id differs', async () => {
+  const v12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
+  const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
+  const ownStop = { id: 'own-stop', effect: 'allow', actions: ['shutdown'], scopes: ['s'], principals: [{ issuer: f.principal.issuer, subject: f.principal.subject }], resource: { kind: 'service', ids: ['local'] } };
+  const older = { ...current, revision: 'a-older', grants: [...current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id) && !v12.includes(rule.id)), ownStop] };
+  await f.source.updateAuthority(() => ({ write: { policy: older, bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
+  // Then the configured service was `local`, covered by `own-stop`: the plan was the v11 delta and scope inspection only, no stop rule.
+  const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || rule.id === v12[0]);
+  const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v12-bindings';
+  const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
+  const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
+    target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
+  await f.source.updateAuthority(() => ({ write: { policy: { ...older, revision: 'a-governed', grants: [...older.grants, ...rules] }, bindings: null, order: 'policy-first' }, result: null }), key);
+  // Today the fixture names no service (default `s-runtime`, not covered by `own-stop`): the recomputed plan would carry a stop rule.
+  expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  const after = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
+  expect(after.grants.map(rule => rule.id)).toEqual(expect.arrayContaining(['own-stop', v12[0]]));
+  expect(after.grants.some(rule => deltaIds.includes(rule.id))).toBe(false);
+});
+
 it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
   const fresh = await fixture(undefined, false), initial = await fresh.bytes();
   expect(await fresh.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });

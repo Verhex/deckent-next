@@ -56,9 +56,12 @@ export class PolicyTemplateUpgrade {
     if (plan.status !== 'plan') return false;
     // The governed key binds the exact plan it submitted: the current one, or the same plan without the v12 owner rules (a governed upgrade
     // made before option A, owner 2026-10-16, must stay recognizable).
-    const v12: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown];
-    const earlier = plan.change.changes.filter(change => change.kind !== 'grant.add' || !v12.includes(change.grant.id));
-    return [plan.change, ...(earlier.length && earlier.length < plan.change.changes.length ? [{ ...plan.change, changes: earlier }] : [])].some(change => {
+    // Astra 2598: when the historical stop was covered by another allow (no stop rule added), the plan then was today's without its stop rule; the
+    // exact effect key below decides which one it was.
+    const without = (ids: readonly string[]) => plan.change.changes.filter(change => change.kind !== 'grant.add' || !ids.includes(change.grant.id));
+    const variants = [without([FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown]), without([FIRST_RUN_UPGRADE_RULE_IDS.scopeInspect, FIRST_RUN_UPGRADE_RULE_IDS.serviceShutdown])]
+      .filter((changes, index, all) => changes.length > 0 && changes.length < plan.change.changes.length && all.findIndex(other => other.length === changes.length) === index);
+    return [plan.change, ...variants.map(changes => ({ ...plan.change, changes }))].some(change => {
       const tag = `template-v5:${change.changes.map(item => item.kind === 'grant.add' ? item.grant.id : '').join(',')}`;
       const commandId = sha256(`policy-template-upgrade:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${tag}\0${entry.before.revision}`);
       return entry.key === effectWireKey({ schemaVersion: 1, commandId, scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,

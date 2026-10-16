@@ -8,6 +8,7 @@ import { emit } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
 import { SystemTrustedClock, MAX_WALL_SKEW_MS, type ClockSample, type TrustedClock } from '#platform/core/clock/index.js';
 import { getConfigFieldDefault } from '#platform/core/config-fields/index.js';
+import { productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, type Environment } from '#platform/core/host/index.js';
 import type { ConfigWarning } from './validate/issues.js';
 
 const STALE_MS = 10 * 60_000;
@@ -123,6 +124,13 @@ async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<ty
 }
 /** Exclusive directory ownership, private metadata, bounded waiting, and inode-safe release.
  * Without a caller timeout the wait is the registered `configFile.writeLockTimeoutMs` default (single source). */
+/** Holds the write lock of both configuration layers (project, then global: one fixed order) for `fn`, the same lock every configuration write takes:
+ * nothing changes either layer until `fn` settles (POLICY-V12, Astra 2598: the installer names the service identity it read and publishes inside). */
+export function withConfigLayersLocked<T>(projectRoot: string, options: { readonly env?: Environment; readonly platform?: string }, fn: () => Promise<T>): Promise<T> {
+  const env = options.env ?? process.env, platform = options.platform ?? process.platform;
+  const project = productResourcePath(resolveProductLayout({ projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config');
+  return withConfigWriteLock(project, () => withConfigWriteLock(resolveGlobalConfigPaths(env, platform).platformPath, fn));
+}
 export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>, timeoutMs = getConfigFieldDefault('configFile').writeLockTimeoutMs, options: ConfigLockOptions = {}): Promise<T> {
   options.signal?.throwIfAborted();
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });

@@ -49,7 +49,7 @@ export type { SecretResolverContext, SecretResolverFactory } from '#platform/cor
 export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
 export { loadConfig, loadGlobalConfig, loadConfigLanguage, clearConfigCache, restoreHoldPath } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
-export { saveGlobalConfig, writeConfig, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
+export { saveGlobalConfig, writeConfig, withConfigLayersLocked, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';
 export { getConfigMetadata } from '#platform/core/config/index.js';
 export { getConfigValue } from '#platform/core/config/index.js';
