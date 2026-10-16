@@ -213,6 +213,12 @@ describe('config-secret: the key-value vocabulary narrowed to config-like files 
     // A YAML plain scalar continues after spaces: anything but a comment or the line end after the expression is part of the value (Astra 2586).
     expect(await scanOf({ 'd.yml': `API_TOKEN: \${{ secrets.PREFIX }} ${PASSWORD}\n`, 'e.yml': `API_TOKEN: \${{ secrets.PREFIX }};${PASSWORD}\n`,
       'f.yml': `API_TOKEN: \${{ secrets.PREFIX }} \${{ '${PASSWORD}' }}\n` })).toEqual(['d.yml pattern:config-secret', 'e.yml pattern:config-secret', 'f.yml pattern:config-secret']);
+    // Only the verifiable shape is a placeholder (Astra 2588): no comma or bracket continuation, `#` needs a space before it, and the
+    // value must not continue on a deeper-indented line. Sibling keys and real comments after a reference stay clean.
+    expect(await scanOf({ 'g.yml': `API_TOKEN: \${{ secrets.PREFIX }},${PASSWORD}\n`, 'h.yml': `API_TOKEN: \${{ secrets.PREFIX }}#${PASSWORD}\n`,
+      'i.yml': `env:\n  API_TOKEN: \${{ secrets.PREFIX }}\n    ${PASSWORD}\n`,
+      'j.yml': 'env:\n  API_TOKEN: ${{ secrets.A }}\n  OTHER_TOKEN: ${{ secrets.B }}   # sibling\n\n  # note\nnext: 1\n' }))
+      .toEqual(['g.yml pattern:config-secret', 'h.yml pattern:config-secret', 'i.yml pattern:config-secret']);
   });
 });
 
