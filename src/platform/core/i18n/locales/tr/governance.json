@@ -1005,5 +1005,15 @@
   "policy.delegate.step.task-answer": "Görev sorusunu yanıtla",
   "policy.delegate.step.approval-decide": "Olağan onay kartlarını karara bağla",
   "error.POLICY_DELEGATION_STEP_INVALID": "Bu adım devredilebilir bir karar adımı değil. Desteklenen adımlar için policy delegations listesini açın. Değişiklik yapılmadı.",
-  "error.POLICY_DELEGATION_CONFLICT": "Politika revizyonu veya yönetilen devir değişti. Yeniden inceleyip güncel kartı onaylayın; bu istek değişiklik yapmadı."
+  "error.POLICY_DELEGATION_CONFLICT": "Politika revizyonu veya yönetilen devir değişti. Yeniden inceleyip güncel kartı onaylayın; bu istek değişiklik yapmadı.",
+  "error.QUEUE_CONFLICT": "Kuyruk makbuzu değişti. Yeni komuttan önce güncel kaydı inceleyin.",
+  "error.QUEUE_CAPACITY": "Yapılandırılmış kuyruk veya yürütme kapasitesi dolu ya da geçersiz. Kapasiteyi inceleyin; bu istek yeni sıra almadı.",
+  "error.QUEUE_TARGET_BUSY": "Bu hedef önceki kaydın sahipliğinde. İlerlemeyi izleyin; etkiyi tekrarlamayın.",
+  "error.QUEUE_CORRUPT": "Kuyruk custody kanıtı doğrulanamadı. Bu hedefi durdurup saklanan kanıtı inceleyin.",
+  "error.QUEUE_AUTHORITY_REQUIRED": "Bu eylem doğrulanmış gerçek terminale bağlı yetkili insan oturumu gerektirir.",
+  "error.QUEUE_RECOVERY_REQUIRED": "Hedefin çözülmemiş etki veya custody kaydı var. Devam etmeden önce uzlaştırın.",
+  "error.QUEUE_CONFIRMATION_REQUIRED": "Bu parti ve işlemi kapsayan geçerli rıza yok. Yetkili terminalde yeni kart gösterin.",
+  "error.QUEUE_EXPIRED": "Kuyruk beklemesi veya onay süresi doldu. Yeni adaydan önce hedefi inceleyin.",
+  "error.CANDIDATE_MISMATCH": "Aday kaynağı, çıktısı, kriteri veya doğrulama kimliği eşleşmiyor. Saklanan tam adayı inceleyin.",
+  "error.CANDIDATE_NOT_ACCEPTED": "Birleşik aday kabul edilmedi. Doğrulama kanıtını inceleyin; yayımlama yapılamaz."
 }

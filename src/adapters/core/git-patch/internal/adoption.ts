@@ -1,16 +1,7 @@
-import { createHash } from 'node:crypto';
-import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
 import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { adoptionTargetRefSchema, WorkspaceAdoptionError, type AdoptionFence, type AdoptionTargetObservation, type IntegrationAdoptionTarget } from '#engine/index.js';
+import { adoptionFenceRef as fenceRef, adoptionFenceText as fenceText, adoptionFenceObjectSchema as fenceSchema, adoptionTargetRefSchema, WorkspaceAdoptionError, type AdoptionFence, type AdoptionTargetObservation, type IntegrationAdoptionTarget } from '#engine/index.js';
 import { GitCommand } from './git-command.js';
 const oid = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
-const fenceRef = (target: string) => `refs/deckent/adoption-fences/${createHash('sha256').update(target).digest('hex')}`;
-/** Deterministic fence content (fixed key order): the same record always hashes to the same blob. */
-const fenceText = (target: string, fence: AdoptionFence) => JSON.stringify({ schemaVersion: 1, kind: 'deckent-adoption-fence', target,
-  sequence: fence.sequence, scopeId: fence.scopeId, commandId: fence.commandId }) + '\n';
-const fenceSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('deckent-adoption-fence'), target: z.string(),
-  sequence: z.number().int().positive().safe(), scopeId: identitySchema, commandId: identitySchema }).strict();
 /** Moves exactly one branch reference together with its fence reference in one Git transaction. `git update-ref` does not refuse
  * a branch checked out in some worktree, so checkout is observed explicitly before each move; a checkout racing the move and
  * writers outside Deckent are not fenced. */

@@ -768,7 +768,8 @@
         "src/platform/core/i18n",
         "src/domain/core/work-cost",
         "src/engine/core/resource-observation",
-        "src/domain/core/approval"
+        "src/domain/core/approval",
+        "src/domain/core/effect"
       ],
       "plan": "CONTRACT"
     },
@@ -1889,13 +1890,13 @@
         "src/platform/core/common",
         "src/platform/core/errors",
         "src/platform/core/redaction",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/domain/core/effect"
       ],
       "plan": "ISOLATION"
     },
     "src/adapters/core/git-patch": {
       "dependencies": [
-        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",
@@ -2206,7 +2207,9 @@
     },
     "src/domain/core/effect": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/domain/core/command"
       ],
       "plan": "CONTRACT"
     },
@@ -2235,7 +2238,8 @@
         "src/domain/core/principal",
         "src/platform/core/clock",
         "src/engine/core/authentication",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/engine/core/audit"
       ],
       "plan": "EXECUTION"
     },
@@ -3047,6 +3051,15 @@
         "src/platform/core/errors"
       ],
       "plan": "SECURITY"
+    },
+    "src/adapters/core/target-queue-store": {
+      "dependencies": [
+        "src/domain/core/effect",
+        "src/domain/core/command",
+        "src/engine/core/effect",
+        "src/adapters/core/audit-store"
+      ],
+      "plan": "STORE"
     }
   },
   "composition": {

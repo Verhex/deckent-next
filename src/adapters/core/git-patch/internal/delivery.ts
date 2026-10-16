@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { patchDigest, WorkspacePatchError, type IntegrationDeliveryTarget, type IntegrationDeliveryCommand,
+import { parseIntegrationDiffStats, patchDigest, WorkspacePatchError, type IntegrationDeliveryTarget, type IntegrationDeliveryCommand,
   type IntegrationDeliveryPlan, type IntegrationManifest, type WorkspacePatch } from '#engine/index.js';
 import { SystemTrustedClock, t, redactForRecord } from '#platform/index.js';
 import type { IntegrationCommitMetadata } from '#engine/index.js';
@@ -41,13 +41,7 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
   /** Read-only bounded diff statistics, with no external diff/textconv and no rename policy. */
   async describe(from: string, to: string) {
     const output = await this.git(['diff', '--numstat', '-z', '--no-ext-diff', '--no-textconv', '--no-renames', from, to, '--']);
-    let added = 0, removed = 0; const files: string[] = [];
-    for (const row of output.split('\0').filter(Boolean)) {
-      const [a, r, ...path] = row.split('\t');
-      if (!a || !r || !/^(?:[0-9]+|-)$/u.test(a) || !/^(?:[0-9]+|-)$/u.test(r) || !path.length) throw new WorkspacePatchError('PATCH_CORRUPT');
-      added += a === '-' ? 0 : Number(a); removed += r === '-' ? 0 : Number(r); files.push(path.join('\t'));
-    }
-    return { files, added, removed };
+    return parseIntegrationDiffStats(output);
   }
   async delivered(plan: IntegrationDeliveryPlan) {
     await this.custody();

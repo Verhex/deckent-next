@@ -23,3 +23,16 @@ export type { AdoptionVerification, AdoptionVerificationPolicy, AdoptionVerifica
   AdoptionVerificationRequirement, CriterionWithin } from './internal/verification.js';
 
 export type { IntegrationCommitMetadata } from './internal/commit-metadata.js';
+
+export { bindIntegrationCandidate } from './internal/candidate-binding.js';
+
+export { SnapshotBudget, parseBaseListing, baseIdentical, gitBlobOid, hashAlgorithmOf, diffAgainstBase, snapshotDigest } from './internal/snapshot.js';
+export type { Snapshot, BaseEntry, BaseListing } from './internal/snapshot.js';
+export { patchPathsIntersect, changedHistoryPaths, assertDisjointHistory } from './internal/path-history.js';
+export { gitFailure } from './internal/snapshot.js';
+export { parseIntegrationDiffStats } from './internal/snapshot.js';
+export { assertIntegrationSnapshot } from './internal/snapshot.js';
+export { adoptionFenceRef, adoptionFenceText, adoptionFenceObjectSchema } from './internal/git-fence.js';
+export { assertIntegrationBefore } from './internal/snapshot.js';
+export { capturedWorkspacePatch } from './internal/snapshot.js';
+export { prepareIntegrationSnapshot } from './internal/snapshot.js';

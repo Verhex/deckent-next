@@ -1,3 +1,4 @@
+import { changedHistoryPaths, assertDisjointHistory } from '#engine/index.js';
 import { WorkspacePatchError, type WorkspacePatch } from '#engine/index.js';
 import { gitBlobOid, hashAlgorithmOf, type SnapshotBudget } from './snapshot.js';
 /** A forward base move is safe only when every touched path still has its approved before identity. */
@@ -5,6 +6,15 @@ export async function assertIntegrationBase(git: (args: string[]) => Promise<str
   if (head === patch.baseCommit) return;
   // The caller disables replacement objects and grafts: ancestry must come from the actual immutable commits.
   await git(['merge-base', '--is-ancestor', patch.baseCommit, head]);
+  // Compare every intervening commit, including merge parents: a changed-then-restored path is still stale input.
+  const commits = (await git(['rev-list', `${patch.baseCommit}..${head}`])).trim().split('\n').filter(Boolean);
+  for (const commit of commits) {
+    budget.entry();
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new WorkspacePatchError('PATCH_CORRUPT');
+    const paths = changedHistoryPaths(await git(['diff-tree', '--root', '-m', '-r', '--no-commit-id', '--name-only', '-z', '--no-renames', commit]));
+    for (const path of paths) { budget.entry(); budget.path(path); }
+    assertDisjointHistory(paths, patch.changes.map(change => change.path));
+  }
   for (const change of patch.changes) {
     budget.entry(); budget.path(change.path);
     const parts = change.path.split('/');

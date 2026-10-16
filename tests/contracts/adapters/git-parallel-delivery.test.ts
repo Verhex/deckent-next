@@ -134,6 +134,23 @@ describe.skipIf(process.platform !== 'linux').each([false, true])('parallel deli
     await expect(f.prepare(p)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
     expect(await f.state()).toEqual(before);
   });
+  it('refuses a changed-then-restored touched path even when the final base tree matches', async () => {
+    const f = await fixture(refOnly), p = f.patch('loser', 'a.txt', 'a before\n', 'approved\n');
+    const changed = (await f.deliver(f.patch('winner', 'a.txt', 'a before\n', 'temporary\n'))).plan.commit;
+    const restored = await f.git('commit-tree', `${f.base}^{tree}`, '-p', changed, '-m', 'restored');
+    await f.advance(restored); const before = await f.state();
+    await expect(f.prepare(p)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    expect(await f.state()).toEqual(before);
+  });
+  it('refuses both rename endpoints without modifying owner HEAD, index or WIP', async () => {
+    const f = await fixture(refOnly), p = f.patch('loser', 'a.txt', 'a before\n', 'approved\n');
+    // Only the temporary fixture checkout creates the historical rename; preparation remains private.
+    await f.git('mv', 'a.txt', 'renamed.txt'); await f.git('commit', '-qm', 'rename');
+    const renamed = await f.git('rev-parse', 'HEAD'); await f.advance(renamed);
+    const before = await f.state();
+    await expect(f.prepare(p)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    expect(await f.state()).toEqual(before);
+  });
   it('checks every path before writing when only a later touched path changed', async () => {
     const f = await fixture(refOnly), p = f.patch('loser', 'a.txt', 'a before\n', 'approved\n');
     p.changes.push(f.patch('loser', 'b.txt', 'b before\n', 'approved\n').changes[0]!);
