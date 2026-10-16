@@ -1,4 +1,4 @@
-import type { QueueReadClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
+import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import type { BrainPlanCommand } from '#domain/index.js';
 import type { RunProposalResult } from '#engine/index.js';
@@ -87,7 +87,7 @@ export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
 export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
-  deliveryQueue?: QueueReadClient;
+  deliveryQueue?: QueueSubmitClient;
   confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
 
   readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<RunProposalResult>;

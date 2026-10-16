@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
-import { inspectInstallationStartability, createConfiguredRuntimeClient, confirmConfiguredTargetQueue, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
+import { inspectInstallationStartability, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles, listConfiguredIdentityDistributionChoices, previewConfiguredIdentityDistribution, applyConfiguredIdentityDistribution } from '#composition/core/identity-profile/index.js';
@@ -48,7 +48,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     verifyAudit: verifyConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
-    deliveryQueue: runtime, confirmDeliveryQueue: (query, ask) => confirmConfiguredTargetQueue(root, query, ask),
+    ...configuredTargetQueueTerminal(root),
     deliverWorkspaceIntegration: delivery.deliver,
     adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
     inspectWorkerTranscript: inspectConfiguredWorkerTranscript, executeOperation: executeConfiguredOperation, compensateOperation: compensateConfiguredOperation, inspectOperation: inspectConfiguredOperation,

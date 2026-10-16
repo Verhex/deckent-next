@@ -5,7 +5,8 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createConfiguredRuntimeClient, evaluateTask, prepareConfiguredWorkspacePatch } from '../../../src/index.js';
+import { evaluateTask, prepareConfiguredWorkspacePatch } from '../../../src/index.js';
+import { configuredTargetQueueTerminal } from '../../../src/composition/core/runtime-service/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -153,7 +154,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
 
     const service = await startTestRuntimeService(f.project, f.options.env);
     cleanup.push(() => stopTestRuntimeService(service));
-    const client = createConfiguredRuntimeClient(f.project, f.options);
+    const client = configuredTargetQueueTerminal(f.project, f.options).deliveryQueue;
     const view = async (commandId: string) => (await client.inspectTargetQueue({ schemaVersion: 1, scopeId: SCOPE, commandId })).record;
     const enqueue = (commandId: string, identity: AttemptIdentity) => client.enqueueTargetQueue({ schemaVersion: 1, commandId, identity, target: { kind: 'git-ref', id: TARGET } });
     const tickets = ['q1', 'q2', 'q3'];

@@ -946,7 +946,8 @@ criteria/profile and receipt are checked again before effects. Legacy delivery-p
 Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
 `integration-queue-confirm` obtains separate publish and adoption cards; the second card is derived from the first frozen prefix,
 so a later arrival never enters its consent. Capability values are service-issued and never printed as product output. MCP exposes
-only `inspect_delivery_queue`/`list_delivery_queue`; hidden decision RPC with the MCP channel is refused before opening a writer.
+only `inspect_delivery_queue`/`list_delivery_queue`; submission, rollback, decision and execution RPC on the MCP channel are refused
+before opening a scope or writer. The SDK runtime client carries inspect/list only; the CLI/Terminal composition installs submission.
 The registered-target `/deliver` flow enqueues; `r` offers current-base preparation after drift or reads last-known queue state.
 `/runs` detail projects authorized positions, ownership and outcome. Neither view is acceptance authority.
 

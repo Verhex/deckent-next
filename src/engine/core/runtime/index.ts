@@ -33,7 +33,7 @@ export type { RuntimeServiceIdleOptions } from './internal/idle-policy.js';
 export { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods } from './internal/client-validation.js';
 export { runtimeApprovalMethods, runtimeChatTurnMethods, runtimeModelInvocationMethods, runtimePermissionModeMethods, runtimeProviderSpendMethods, runtimeScratchMethods,
   runtimeSecretMethods, type RuntimeStreamingCall } from './internal/client-methods.js';
-export { createRuntimeServiceClient, type RuntimeClientPorts } from './internal/client.js';
+export { createRuntimeServiceClient, createRuntimeQueueSubmission, type RuntimeClientPorts } from './internal/client.js';
 export { runtimeServiceReadiness, runtimeMonotonicDeadline, runtimeDeadlineSignal, type RuntimeServiceReadiness, type LifecycleDeadline } from './internal/readiness.js';
 export { awaitRuntimeServiceStart, awaitRuntimeServiceRestart } from './internal/readiness.js';
 export { prepareRuntimeClientRequest, acceptRuntimeClientResponse } from './internal/client.js';

@@ -1,5 +1,6 @@
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
-import { runtimeTargetQueueMethods } from './queue-client.js';
+import { runtimeTargetQueueMethods, runtimeTargetQueueSubmission } from './queue-client.js';
+import type { QueueSubmitClient } from '#engine/core/effect/index.js';
 import type { AgentTurnStreamEvent, ModelInvocationDeltaSink } from '#domain/index.js';
 import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, type RuntimeFailureMapper } from './client-validation.js';
 import { runtimeApprovalMethods, runtimeChatTurnMethods, runtimeModelInvocationMethods, runtimePermissionModeMethods,
@@ -34,6 +35,10 @@ function busyRetrying(readPolicy: RuntimeClientPorts['readPolicy'], wait: Runtim
       }
     }
   };
+}
+/** Human CLI/Terminal queue submission (DESIGN §6), with the same BUSY retry as the client below, which never carries it. */
+export function createRuntimeQueueSubmission(ports: RuntimeClientPorts): QueueSubmitClient {
+  return runtimeTargetQueueSubmission(busyRetrying(ports.readPolicy, ports.wait, ports.attempt), ports.mapFailure);
 }
 export function createRuntimeServiceClient<Operations>(ports: RuntimeClientPorts) {
   const call = busyRetrying(ports.readPolicy, ports.wait, ports.attempt);

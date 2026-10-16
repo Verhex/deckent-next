@@ -77,7 +77,8 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
     },
     async execute(request: RuntimeServiceRequest, peer: Peer, responseMaxBytes: number) {
       if (!request.delivery) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-      if (ports.isMcp(peer) && !['enqueueTargetQueue', 'inspectTargetQueue', 'listTargetQueue'].includes(request.operation)) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+      // DESIGN §6: the AI channel reads (inspect/list) only. Submission, rollback, consent and execution are human CLI/Terminal acts.
+      if (ports.isMcp(peer) && request.operation !== 'inspectTargetQueue' && request.operation !== 'listTargetQueue') throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
       const readOnly = request.operation === 'inspectTargetQueue' || request.operation === 'listTargetQueue';
       const input = request.operation === 'enqueueTargetQueueRollback' ? queueRollbackSchema.parse(request.input) : request.operation === 'enqueueTargetQueue' ? queueEnqueueSchema.parse(request.input) : request.operation === 'listTargetQueue' ? queueListSchema.parse(request.input)
         : request.operation === 'challengeTargetQueue' ? queueChallengeSchema.parse(request.input) : request.operation === 'answerTargetQueue' ? queueAnswerSchema.parse(request.input)

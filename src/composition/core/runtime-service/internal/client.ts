@@ -1,7 +1,7 @@
 import { attestLocalInteractiveTerminal, localPrincipalChannel, LocalRuntimeSocketError, prepareRuntimeSocket, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
 import { ErrorRegistry, ManagedFileError, type ConfigLoadOptions } from '#platform/index.js';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { runtimeTargetQueueTerminal, type QueueQuery, type QueueConsent, createRuntimeRequestTransport, createRuntimeServiceClient,
+import { runtimeTargetQueueTerminal, createRuntimeQueueSubmission, createRuntimeRequestTransport, createRuntimeServiceClient,
   type RuntimeServiceDelivery, type EffectOutcome, type RuntimeOperationQuery } from '#engine/index.js';
 import type { EffectCommand, EffectRecord } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -26,13 +26,13 @@ function configuredRuntimeTransport(projectRoot: string, options: ConfigLoadOpti
     turn: (config, request, sink, signal) => turnLocalRuntime(socketOptions(config.service, config.endpoint), request, sink, signal),
   });
 }
+const clientPorts = (projectRoot: string, options: ConfigLoadOptions) => ({ attempt: configuredRuntimeTransport(projectRoot, options), mapFailure: queryFailure,
+  readPolicy: async () => (await loadComposedConfig(projectRoot, { ...options, heal: false })).service, wait: (ms: number, signal?: AbortSignal) => sleep(ms, undefined, signal ? { signal } : {}) });
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
-  return createRuntimeServiceClient<ConfiguredRuntimeOperations>({ attempt: configuredRuntimeTransport(projectRoot, options), mapFailure: queryFailure,
-    readPolicy: async () => (await loadComposedConfig(projectRoot, { ...options, heal: false })).service,
-    wait: (ms, signal) => sleep(ms, undefined, signal ? { signal } : {}),
-  });
+  return createRuntimeServiceClient<ConfiguredRuntimeOperations>(clientPorts(projectRoot, options));
 }
-export async function confirmConfiguredTargetQueue(projectRoot: string, input: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>, options: ConfigLoadOptions = {}) {
-  if (localPrincipalChannel() === 'mcp' || !await attestLocalInteractiveTerminal()) throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED');
-  return runtimeTargetQueueTerminal(configuredRuntimeTransport(projectRoot, options))(input, ask);
+/** CLI/Terminal only (DESIGN §6): submission and the TTY-bound confirmation. The SDK client above stays inspect/list; the service refuses MCP submission. */
+export function configuredTargetQueueTerminal(projectRoot: string, options: ConfigLoadOptions = {}) {
+  const ports = clientPorts(projectRoot, options), interactive = async () => { if (localPrincipalChannel() === 'mcp' || !await attestLocalInteractiveTerminal()) throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED'); };
+  return { deliveryQueue: createRuntimeQueueSubmission(ports), confirmDeliveryQueue: runtimeTargetQueueTerminal(ports.attempt, interactive) };
 }

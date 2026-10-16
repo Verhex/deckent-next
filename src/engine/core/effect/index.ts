@@ -19,7 +19,7 @@ export { TargetQueueDriver } from './internal/queue-driver.js';
 export type { TargetQueuePreparation } from './internal/queue-driver.js';
 export { queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema, queueChallengeSchema, queueAnswerSchema, queueExecuteSchema,
   queueInspectionSchema, queuePageSchema, queueConsentSchema, queueExecutionSchema } from './internal/queue-protocol.js';
-export type { QueueRollback, QueueEnqueue, QueueQuery, QueueList, QueueChallenge, QueueAnswer, QueueExecute, QueueConsent, QueueReadClient } from './internal/queue-protocol.js';
+export type { QueueRollback, QueueEnqueue, QueueQuery, QueueList, QueueChallenge, QueueAnswer, QueueExecute, QueueConsent, QueueReadClient, QueueSubmitClient } from './internal/queue-protocol.js';
 
 export { observeRunQueue, queueObservationReadLimit } from './internal/queue-run-view.js';
 export { recordTargetBatchDecision } from './internal/batch-audit.js';

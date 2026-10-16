@@ -1,10 +1,10 @@
 import { resolve } from 'node:path';
 import { emit, ErrorRegistry, loadConfig, resolveLocale, t } from '#platform/index.js';
-import { type QueueReadClient, type QueueQuery, type QueueConsent, type TargetBatchExecution, queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema } from '#engine/index.js';
+import { type QueueSubmitClient, type QueueQuery, type QueueConsent, type TargetBatchExecution, queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema } from '#engine/index.js';
 import { askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
-export interface QueueCommandContext extends CliBaseContext { deliveryQueue?: QueueReadClient; confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution> }
+export interface QueueCommandContext extends CliBaseContext { deliveryQueue?: QueueSubmitClient; confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution> }
 /** Queue admission is non-interactive; the exact publish and adoption batch each need the verified TTY. */
 export async function queueCommand(argv: readonly string[], context: QueueCommandContext) {
   const action = argv[1], values = new Map<string, string>(); let json = false;

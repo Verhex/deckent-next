@@ -30,9 +30,13 @@ export const queueConsentSchema = z.object({ schemaVersion: z.literal(1), digest
 export const queueExecutionSchema = z.object({ settledPrefix: z.number().int().nonnegative().safe(), items: z.array(z.object({ commandId: identitySchema,
   published: z.boolean(), state: z.enum(['settled', 'refused', 'unknown']) }).strict()) }).strict().readonly();
 export type QueueConsent = z.infer<typeof queueConsentSchema>;
+/** The SDK/MCP shape: inspect and list only (DESIGN §6). */
 export interface QueueReadClient {
-  enqueueTargetQueueRollback(input: QueueRollback): Promise<z.infer<typeof targetQueueViewSchema>>;
-  enqueueTargetQueue(input: QueueEnqueue): Promise<z.infer<typeof targetQueueViewSchema>>;
   inspectTargetQueue(input: QueueQuery): Promise<z.infer<typeof queueInspectionSchema>>;
   listTargetQueue(input: QueueList): Promise<z.infer<typeof queuePageSchema>>;
+}
+/** Human CLI/Terminal submission; only that composition installs it, and the service refuses it on the MCP channel. */
+export interface QueueSubmitClient extends QueueReadClient {
+  enqueueTargetQueueRollback(input: QueueRollback): Promise<z.infer<typeof targetQueueViewSchema>>;
+  enqueueTargetQueue(input: QueueEnqueue): Promise<z.infer<typeof targetQueueViewSchema>>;
 }

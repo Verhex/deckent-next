@@ -1,4 +1,4 @@
-export { createConfiguredRuntimeClient, confirmConfiguredTargetQueue } from './internal/client.js';
+export { createConfiguredRuntimeClient, configuredTargetQueueTerminal } from './internal/client.js';
 export { invokeRuntimeModel, invokeRuntimeModelStream, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation,
   runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile } from './internal/model-client.js';
 export { manageRuntimeProviderSpend, auditRuntimeProviderSpendAccount, inspectRuntimeProviderSpendAccount } from './internal/provider-spend-client.js';
