@@ -207,6 +207,9 @@ describe('config-secret: the key-value vocabulary narrowed to config-like files 
     // Live /do 2026-10-16: `GITHUB_TOKEN: ${{ github.token }}` in .github/workflows refused every worker tree of this repository.
     expect(await scanOf({ '.github/workflows/ci.yml': 'env:\n  GITHUB_TOKEN: ${{ github.token }}\n  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n' })).toEqual(['clean']);
     expect(await scanOf({ '.github/workflows/ci.yml': `env:\n  API_TOKEN: \${{ '${PASSWORD}' }}\n` })).toEqual(['.github/workflows/ci.yml pattern:config-secret']);
+    // The expression is a placeholder only as the whole scalar (Astra 2584): a literal glued after it, or a second expression, is still a value.
+    expect(await scanOf({ 'a.yml': `API_TOKEN: \${{ secrets.PREFIX }}${PASSWORD}\n`, 'b.yml': 'API_TOKEN: ${{ secrets.A }}${{ secrets.B }}\n',
+      'c.yml': 'GITHUB_TOKEN: ${{ github.token }} # comment\nTOKEN: "${{ secrets.T }}"\n' })).toEqual(['a.yml pattern:config-secret', 'b.yml pattern:config-secret']);
   });
 });
 
