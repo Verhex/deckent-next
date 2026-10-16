@@ -51,6 +51,13 @@ function blockValue(text: string, end: number): string | null {
   const line = text.slice(end).split(/\r\n|\r|\n/u).slice(1).find(candidate => candidate.trim() !== '');
   return line === undefined ? null : line;
 }
+/** Whether the line after an assignment is indented deeper than the assignment's own line (a YAML plain-scalar continuation). */
+function continuesScalar(text: string, start: number, end: number): boolean {
+  // One line-break definition (CRLF, CR, LF; YAML 1.2.2 §5.4) for the line start, the following lines and the value end.
+  const before = text.slice(0, start), indent = /^[ \t]*/u.exec(text.slice(Math.max(before.lastIndexOf('\n'), before.lastIndexOf('\r')) + 1))![0].length;
+  const next = text.slice(end).split(/\r\n|\r|\n/u).slice(1).find(line => line.trim() !== '');
+  return next !== undefined && /^[ \t]*/u.exec(next)![0].length > indent && !next.trim().startsWith('#');
+}
 /**
  * `config-secret`: a secret-named key (case-insensitive, the redaction vocabulary) assigned a non-placeholder literal in a config-like file.
  * The expressions are linear by construction (token-start lookbehind, classes that exclude their own start characters); a YAML alias
@@ -64,6 +71,9 @@ export function configSecretHit(text: string): boolean {
     if (yamlAlias.test(bare) && !/^\*+$/u.test(bare)) return true;
     if (yamlBlock.test(bare)) { const value = blockValue(text, match.index + match[0].length); if (value === null || !isPlaceholder(value)) return true; continue; }
     if (!isPlaceholder(bare)) return true;
+    // A bare GitHub Actions expression is the whole value only when the next non-empty line does not continue the plain scalar
+    // (more indented than the key's line); otherwise the continuation is part of the value and stays a hit (fail closed, Astra 2588).
+    if (bare.startsWith('${{') && continuesScalar(text, match.index, match.index + match[0].length)) return true;
   }
   for (const match of text.matchAll(element)) if (!isPlaceholder(match[2] ?? '')) return true;
   return false;

@@ -34,11 +34,28 @@ export function brainInputDigest(command: BrainPlanCommand, known?: KnownSecretS
 }
 /** The draft schema shown to the model. The graph contract still reads older versions (stored proposals), but a NEW plan must use the
  * current graph version: an older one cannot carry typed work input (live /do 2026-10-13: a v2 plan with workInput was refused). */
-function brainDraftJsonSchema() {
+function brainDraftJsonSchema(turnLimit: boolean) {
   const schema = zodToJsonSchema(brainDraftSchema, { $refStrategy: 'none' }) as { properties?: { graph?: { properties?: Record<string, unknown> } } };
   const graph = schema.properties?.graph?.properties;
   if (graph) graph['schemaVersion'] = { type: 'number', const: TASK_GRAPH_SCHEMA_VERSION };
+  // No supplied kind's worker can honour a turn limit: the model is not offered `workInput.maxTurns` at all (live /do 2026-10-16 planned
+  // maxTurns for a Codex worker). The draft contract still accepts it, so a stored proposal keeps parsing; creation refuses it typed.
+  if (!turnLimit) dropProperty(schema, 'maxTurns');
   return schema;
+}
+function dropProperty(node: unknown, name: string): void {
+  if (Array.isArray(node)) { node.forEach(value => dropProperty(value, name)); return; }
+  if (!node || typeof node !== 'object') return;
+  const record = node as Record<string, unknown>, properties = record['properties'];
+  if (properties && typeof properties === 'object' && !Array.isArray(properties)) delete (properties as Record<string, unknown>)[name];
+  if (Array.isArray(record['required'])) record['required'] = (record['required'] as unknown[]).filter(value => value !== name);
+  Object.values(record).forEach(value => dropProperty(value, name));
+}
+/** A turn limit is offered only when at least one supplied kind's worker supports it; unknown context offers it (no new refusal). */
+function supportsTurnLimit(context: unknown): boolean {
+  const kinds = (context as { kinds?: readonly { turnLimit?: string }[] } | null)?.kinds;
+  if (!Array.isArray(kinds) || !kinds.some(row => row.turnLimit !== undefined)) return true;
+  return kinds.some(row => row.turnLimit === 'supported');
 }
 export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassPolicy, context: unknown, configInput: unknown, known?: KnownSecretSnapshot) {
   const config = brainPlannerConfigSchema.parse(configInput), chosen = config.templates.filter(row => row.id === config.selected.id && row.version === config.selected.version);
@@ -52,14 +69,21 @@ export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassP
     inputDigest: brainInputDigest(command, known), contextDigest: sha256(projected), intent,
     messages: [{ role: 'system' as const, content: redactForRecord(chosenTemplate.instruction, known) },
       { role: 'user' as const, content: JSON.stringify({ intent, context: JSON.parse(projected) as unknown,
-        schema: brainDraftJsonSchema() }) }] });
+        schema: brainDraftJsonSchema(supportsTurnLimit(context)) }) }] });
+}
+/** A reply that is exactly one Markdown code fence around the object (```json … ``` or ``` … ```) is read as its body; anything else is
+ * parsed as given. Models add the fence despite the instruction (live /do 2026-10-16, stage json); no other repair is attempted. */
+const FENCED = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/u;
+function unfence(text: string): string {
+  const match = FENCED.exec(text.trim());
+  return match ? match[1]! : text;
 }
 /** Each failure stage is explicit and contains no provider text or secret-bearing parse diagnostics. */
 /** `requireCurrentGraph` is for a NEW model reply only. Verifying a stored proposal's model contribution keeps reading every graph
  * version the contract accepts, so an upgrade never turns a pending, valid older proposal into a rejection (Astra 2524). */
 export function parseBrainDraft(text: string, known?: KnownSecretSnapshot, options: { readonly requireCurrentGraph?: boolean } = {}): BrainDraft {
   let input: unknown;
-  try { input = redactJson(JSON.parse(text) as unknown, known); } catch { throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'json' } }); }
+  try { input = redactJson(JSON.parse(unfence(text)) as unknown, known); } catch { throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'json' } }); }
   const parsed = brainDraftSchema.safeParse(input);
   if (!parsed.success) throw ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'schema' } });
   if (options.requireCurrentGraph && parsed.data.graph.schemaVersion !== TASK_GRAPH_SCHEMA_VERSION) throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_GRAPH_VERSION' } });

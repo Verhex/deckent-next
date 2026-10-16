@@ -123,7 +123,7 @@
       "authorization",
       "cookie"
     ],
-    "assignmentSource": "(?<![\\w.-])[\"']?([\\w.-]*(?:{keys}))[\"']?[ \\t]*[:=](?:[ \\t]*|\\s*(?=[\"']))(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|(\\$\\{[^}\\r\\n]*\\}|<[^>\\r\\n]*>|[^\\s\"',;#}\\]<]+))",
+    "assignmentSource": "(?<![\\w.-])[\"']?([\\w.-]*(?:{keys}))[\"']?[ \\t]*[:=](?:[ \\t]*|\\s*(?=[\"']))(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|(\\$\\{\\{[^}\\r\\n]*\\}\\}(?=(?:[ \\t]+#[^\\r\\n]*)?[ \\t]*(?:\\r\\n|\\r|\\n|$))|\\$\\{[^}\\r\\n]*\\}|<[^>\\r\\n]*>|[^\\s\"',;#}\\]<]+))",
     "elementSource": "<(?:[\\w.-]+:)?([\\w.-]*(?:{keys}))(?:\\s[^<>]*)?>([^<\\r\\n]*)</",
     "flags": "gi",
     "placeholders": [
@@ -131,7 +131,7 @@
       "^\\$\\(?[A-Za-z_][A-Za-z0-9_]*\\)?$",
       "^%[A-Za-z_][A-Za-z0-9_]*%$",
       "^<[^<>]*>$",
-      "^\\{\\{[^'\"{}]*\\}\\}$",
+      "^\\{\\{[^'\"{}]*\\}\\}$","^\\$\\{\\{[ \\t]*(?:github|secrets|env|vars|inputs|steps|needs|matrix|runner|job|strategy)\\.[A-Za-z0-9_.\\-]+[ \\t]*\\}\\}$",
       "^\\*+$",
       "^[xX]+$",
       "^(?:changeme|change[_-]?me|change[_-]?it|example|dummy|redacted|placeholder|null|none|nil|true|false|todo|tbd|fixme|secret|password|your[_-][\\w-]*|xxx[\\w-]*|\\.\\.\\.)$"

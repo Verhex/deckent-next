@@ -203,6 +203,28 @@ describe('config-secret: the key-value vocabulary narrowed to config-like files 
       'empty-block.yaml pattern:config-secret', 'escaped.json pattern:config-secret', 'wide.properties pattern:config-secret', 'wider.conf pattern:config-secret']);
     expect(await scanOf({ 'block.yml': 'password: |\n  ${DB_PASSWORD}\n' })).toEqual(['clean']);
   });
+  it('a GitHub Actions expression is a reference resolved at run time, not a literal; a quoted literal inside one is still a value', async () => {
+    // Live /do 2026-10-16: `GITHUB_TOKEN: ${{ github.token }}` in .github/workflows refused every worker tree of this repository.
+    expect(await scanOf({ '.github/workflows/ci.yml': 'env:\n  GITHUB_TOKEN: ${{ github.token }}\n  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n' })).toEqual(['clean']);
+    expect(await scanOf({ '.github/workflows/ci.yml': `env:\n  API_TOKEN: \${{ '${PASSWORD}' }}\n` })).toEqual(['.github/workflows/ci.yml pattern:config-secret']);
+    // The expression is a placeholder only as the whole scalar (Astra 2584): a literal glued after it, or a second expression, is still a value.
+    expect(await scanOf({ 'a.yml': `API_TOKEN: \${{ secrets.PREFIX }}${PASSWORD}\n`, 'b.yml': 'API_TOKEN: ${{ secrets.A }}${{ secrets.B }}\n',
+      'c.yml': 'GITHUB_TOKEN: ${{ github.token }} # comment\nTOKEN: "${{ secrets.T }}"\nNPM_TOKEN: ${{ secrets.NPM }}\n' })).toEqual(['a.yml pattern:config-secret', 'b.yml pattern:config-secret']);
+    // A YAML plain scalar continues after spaces: anything but a comment or the line end after the expression is part of the value (Astra 2586).
+    expect(await scanOf({ 'd.yml': `API_TOKEN: \${{ secrets.PREFIX }} ${PASSWORD}\n`, 'e.yml': `API_TOKEN: \${{ secrets.PREFIX }};${PASSWORD}\n`,
+      'f.yml': `API_TOKEN: \${{ secrets.PREFIX }} \${{ '${PASSWORD}' }}\n` })).toEqual(['d.yml pattern:config-secret', 'e.yml pattern:config-secret', 'f.yml pattern:config-secret']);
+    // Only the verifiable shape is a placeholder (Astra 2588): no comma or bracket continuation, `#` needs a space before it, and the
+    // value must not continue on a deeper-indented line. Sibling keys and real comments after a reference stay clean.
+    expect(await scanOf({ 'g.yml': `API_TOKEN: \${{ secrets.PREFIX }},${PASSWORD}\n`, 'h.yml': `API_TOKEN: \${{ secrets.PREFIX }}#${PASSWORD}\n`,
+      'i.yml': `env:\n  API_TOKEN: \${{ secrets.PREFIX }}\n    ${PASSWORD}\n`,
+      'j.yml': 'env:\n  API_TOKEN: ${{ secrets.A }}\n  OTHER_TOKEN: ${{ secrets.B }}   # sibling\n\n  # note\nnext: 1\n' }))
+      .toEqual(['g.yml pattern:config-secret', 'h.yml pattern:config-secret', 'i.yml pattern:config-secret']);
+    // Mixed line breaks use one definition (Astra 2590); an expression is a reference only to a GitHub context, never a bare literal.
+    expect(await scanOf({ 'k.yml': `root:\n    other: value\rAPI_TOKEN: \${{ secrets.PREFIX }}\n  ${PASSWORD}\n`,
+      'l.yml': 'API_TOKEN: ${{ 12345678901234567890 }}\n', 'm.yml': 'API_TOKEN: ${{ hunter2hunter2 }}\n',
+      'n.yml': 'GITHUB_TOKEN: ${{ github.token }}\r\nNPM_TOKEN: ${{ secrets.NPM_TOKEN }}\rnext: 1\n' }))
+      .toEqual(['k.yml pattern:config-secret', 'l.yml pattern:config-secret', 'm.yml pattern:config-secret']);
+  });
 });
 
 describe('parser parity: what the gate cannot read the way the worker can is refused', () => {

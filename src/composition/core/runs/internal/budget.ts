@@ -1,9 +1,9 @@
 import { executionRegistrySchema, type RunProposal } from '#domain/index.js';
 import { workSpendingBasis, configuredProviderSpendCheckpoint } from '#engine/index.js';
-import { assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, providerSpendingConfiguredBudget } from '#adapters/index.js';
+import { assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, providerSpendingConfiguredBudget } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
-import { type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 export async function readConfiguredRunBudget(root: string, scopeId: string, options: ConfigLoadOptions) {
   const config = await loadComposedConfig(root, options);
   const inspected = await inspectConfiguredProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options);
@@ -17,7 +17,12 @@ export async function classifyConfiguredRunSpending(root: string, proposal: RunP
   const profiles = proposal.graph.tasks.map(task => {
     const ref = registry?.kinds.find(row => row.kind === task.kind)?.profile;
     const profile = registry?.profiles.find(row => row.id === ref?.id && row.version === ref.version) ?? null;
-    const selected = profile && isNativeCodingTemplate(profile) && task.workInput ? compileNativeCodingWorkInput(profile, task.workInput) : profile;
+    // A work input the worker cannot run (e.g. maxTurns on a CLI without a turn limit) is a typed refusal here as at creation (create.ts),
+    // never an unexpected failure (live /do 2026-10-16: QUERY_UNEXPECTED_FAILURE from NATIVE_CODING_TURN_LIMIT_UNSUPPORTED).
+    let selected = profile;
+    if (profile && isNativeCodingTemplate(profile) && task.workInput) {
+      try { selected = compileNativeCodingWorkInput(profile, task.workInput); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); }
+    }
     if (selected) assertNativeWorkerBinding(selected);
     return selected;
   });

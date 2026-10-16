@@ -43,6 +43,10 @@ export function nativeCodingTemplateWorker(profile: ExecutionProfileDefinition) 
   const { provider, cliVersion } = parseTemplate(profile).invocation;
   return { provider, cliVersion };
 }
+/** Whether a template's worker CLI can honour a per-task `workInput.maxTurns` (registry capability; no provider-specific application logic). */
+export function nativeCodingTemplateTurnLimit(profile: ExecutionProfileDefinition): 'supported' | 'unsupported' {
+  return nativeCliCommand(parseTemplate(profile).invocation.provider).capabilities.maxTurns ? 'supported' : 'unsupported';
+}
 
 /** The Docker task profile a template compiles onto (installation preview reads its image through this). Throws on an invalid template. */
 export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return parseTemplate(profile).docker; }
