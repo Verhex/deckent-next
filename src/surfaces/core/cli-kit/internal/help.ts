@@ -53,6 +53,8 @@ export function wrapHelp(text: string, width = 80): string {
   }).join('\n');
 }
 
+/** The action column of a family: at least 22 columns, and always one name plus two spaces so a long action never runs into its summary. */
+const childColumn = (children: readonly { readonly name: string }[]) => Math.max(22, ...children.map(child => child.name.length + 2));
 /** Catalog-owned messages contain no interpolation; their keys are validated in both locales. */
 function message(key: MessageKey, locale: Locale): string { return MESSAGE_REGISTRY.catalogs[locale][key]!; }
 
@@ -70,7 +72,7 @@ export function renderCommandHelp(command: CliHelpSpec, locale: Locale): string 
   const overview = family ? [`deckent ${command.path!.join(' ')}`, message(command.summary, locale), '',
     t('cli.help.familySynopsis', { command: family.path!.join(' ') }, locale), message(family.summary, locale), ''] : [];
   return wrapHelp([...overview, message(command.detail, locale).replace(/ ?\[--(?:json|no-color|lang (?:en\|tr|<locale>))\]/g, '').replace(/\n +(?=\n)/g, ''), ...(family ? [] : ['', message(command.summary, locale)]),
-    ...(command.children?.length ? [t('cli.help.heading.commands', {}, locale), ...command.children.map(child => `  ${child.name.padEnd(22)}${message(child.summary, locale)}`)] : []),
+    ...(command.children?.length ? [t('cli.help.heading.commands', {}, locale), ...command.children.map(child => `  ${child.name.padEnd(childColumn(command.children!))}${message(child.summary, locale)}`)] : []),
     '', t('cli.help.common', {}, locale), t('cli.help.output', {}, locale), ...(examples ? [examples] : [])].join('\n'));
 }
 
