@@ -55,12 +55,9 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
     async recover() {
       const failures: unknown[] = [];
       for (const record of await ports.snapshot()) if (record.state !== 'queued') try { await ports.withActor(record, () => ports.withScope(record.request.identity.scopeId, undefined, false, async c => {
+        // Ownership and the park decision are one ledger transition; a ticket whose effect never started is parked without a target write.
         const recovered = c.app.recover(record, instanceId, Date.now());
-        // Pre-consent work never started an effect: every effect first commits `publishing`/`adopting` by ledger CAS, which this raised
-        // epoch invalidates. It parks on that durable evidence with no target write (Astra 2607 F2); the target is fenced only below.
-        if (!['publishing', 'adopting', 'reconciling'].includes(record.state)) {
-          c.app.transition(recovered, { state: 'parked', evidenceRefs: [...recovered.evidenceRefs, queueDigest({ preConsent: record.state, revision: record.revision, owner: instanceId, epoch: recovered.epoch })] }); return;
-        }
+        if (recovered.state === 'parked') return;
         // A consented effect may still be in flight: reconcile() advances the physical generation before its exact lookup.
         const effects = await ports.effects(c, undefined, async () => { throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED'); });
         await new TargetBatchExecutor(c.app, c.queue, effects, { async assert() { throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED'); } }, Date.now).reconcile(recovered);

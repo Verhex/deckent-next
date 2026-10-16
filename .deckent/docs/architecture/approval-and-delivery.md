@@ -963,9 +963,11 @@ waiting ticket stale at its pre-effect revalidation (typed refusal, no queue eff
 --source-command-id TICKET --command-id UNDO`, then uses `integration-queue-confirm` for its own exact card. It refuses a busy target
 and delegates to the existing latest-adoption rollback owner; no automatic rollback of a partially adopted batch occurs.
 
-Startup raises durable ownership in the ledger. Pre-consent work (revalidating, verifying, awaiting a card) parks on that ledger
-evidence without a target write, because every effect first commits publishing/adopting under the same ledger CAS. Work whose effect
-may be in flight (publishing, adopting, reconciling) is physically fenced before its exact adoption/rollback fence lookup. An unattributed publication/move stays reconciling and blocks that target. TTL never proves a writer dead. A failed
+Startup raises durable ownership in the ledger. The CAS that enters publishing or adopting also records the consented batch digest,
+so a ticket without one never started an effect: it is parked in the same single ledger transition that raises its owner/epoch, with
+no target write. A failed or interrupted recovery therefore leaves it unchanged, or (after an older two-step recovery) reconciling
+without a batch digest, which the next start also parks from the ledger. Work whose effect may have started (a batch digest is
+present) is physically fenced before its exact adoption/rollback fence lookup. An unattributed publication/move stays reconciling and blocks that target. TTL never proves a writer dead. A failed
 fence leaves an open reconciliation blocker. No historical record is turned into a successful new effect. Native process kill/restart,
 actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57 switch, use and verify the
 existing ledger backup. Rollback of the schema requires stopping the service and restoring the pre-switch backup, not starting older

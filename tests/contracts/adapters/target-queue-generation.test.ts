@@ -48,9 +48,11 @@ async function fixture() {
   const candidates = new Map<string, string>(), conflicts = new Set<string>();
   const ttl = { ms: 60_000 };
   /** One service process: its own instance id and ledger connection, like a restart of the runtime service. */
-  const service = (instanceId: string) => {
+  /** `failAudit` makes the audit of the first write entering that state fail inside its ledger transaction (an audit/storage error). */
+  const service = (instanceId: string, failAudit?: { state: TargetQueueRecord['state'] }) => {
     const db = new DatabaseSync(ledger), queue = new SqliteTargetQueue(db);
-    const app = new TargetQueueApplication(queue, { async authorize() {}, async validate() {} }, bounds, () => {});
+    const app = new TargetQueueApplication(queue, { async authorize() {}, async validate() {} }, bounds, (_store, written) => {
+      if (failAudit && written.state === failAudit.state) { failAudit = undefined; throw new Error('audit-storage-failure'); } });
     const context = (): QueueServiceContext => ({ principal, document: { revision: 'p' }, config: { targetQueue: { capacity: 8, ttlMs: ttl.ms } }, queue, bounds, app,
       target: { binding: ref => gitTarget.resolveTarget(ref), describe: () => gitTarget.describe() },
       async accepted() { return { acceptedRevision: 1, outputDigest: 'c'.repeat(64) }; }, async describeCandidate() { return { changes: ['note.txt'] }; } });
@@ -214,5 +216,60 @@ describe.skipIf(process.platform !== 'linux')('queue generation fence: no target
       expect(c.record('q2')).toMatchObject({ state: 'reconciling', ownerInstance: 'service-c', epoch: 4 });
       expect(await f.generation()).toMatchObject({ owner: 'service-c', epoch: 4 });
     } finally { c.close(); }
+  });
+
+  it('an interrupted recovery leaves pre-consent work unchanged or safely parkable, never an effect in flight (Astra 2609 F2-R)', async () => {
+    const f = await fixture();
+    f.candidates.set('q1', await f.commit(f.base, 'candidate-1')); f.candidates.set('q2', await f.commit(f.base, 'candidate-2'));
+    const a = f.service('service-a');
+    let quiet: Awaited<ReturnType<typeof f.target>>;
+    try {
+      await a.enqueue('q1', 1); await a.advance();
+      expect(a.record('q1')).toMatchObject({ state: 'awaiting-confirmation', ownerInstance: 'service-a', epoch: 1, batchDigest: null });
+      quiet = await f.target();
+    } finally { a.close(); }
+    // Recovery's park write fails in its ledger transaction (audit/storage error). Nothing about that ticket may have been committed.
+    const b = f.service('service-b', { state: 'parked' });
+    try {
+      const failures = await b.instance.recover();
+      expect(failures).toHaveLength(1);
+      expect(b.record('q1')).toMatchObject({ state: 'awaiting-confirmation', ownerInstance: 'service-a', epoch: 1 });
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
+    } finally { b.close(); }
+    // The ledger is reopened and recovery runs again: the ticket parks under the new owner, still without any target write.
+    const c = f.service('service-c');
+    try {
+      expect(await c.instance.recover()).toEqual([]);
+      expect(c.record('q1')).toMatchObject({ state: 'parked', ownerInstance: 'service-c', epoch: 2, batchDigest: null });
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
+    } finally { c.close(); }
+  });
+
+  it('a ticket an earlier recovery left reconciling before its park committed is parked from the ledger, not fenced (Astra 2609 F2-R)', async () => {
+    const f = await fixture();
+    f.candidates.set('q2', await f.commit(f.base, 'candidate-2'));
+    const c = f.service('service-c');
+    let quiet: Awaited<ReturnType<typeof f.target>>;
+    try {
+      // The process died between the two commits of the previous recovery: ownership is durable, the park is not. No effect started.
+      await c.enqueue('q2', 2); await c.advance();
+      const waiting = c.record('q2');
+      expect(waiting).toMatchObject({ state: 'awaiting-confirmation', ownerInstance: 'service-c', epoch: 1, batchDigest: null });
+      c.app.transition(waiting, { state: 'reconciling', ownerInstance: 'service-c', epoch: 2, leaseDeadline: Date.now() + 60_000 });
+      quiet = await f.target();
+    } finally { c.close(); }
+    const d = f.service('service-d');
+    try {
+      expect(await d.instance.recover()).toEqual([]);
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
+      expect(d.record('q2')).toMatchObject({ state: 'parked', ownerInstance: 'service-d', epoch: 3, batchDigest: null });
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
+      // An effect-capable state can never be entered without its consented batch, so null keeps meaning "no effect started".
+      f.candidates.set('q3', await f.commit(f.base, 'candidate-3')); await d.enqueue('q3', 3); await d.advance();
+      const pending = d.record('q3');
+      expect(pending.state).toBe('awaiting-confirmation');
+      expect(() => d.app.transition(pending, { state: 'adopting' })).toThrow('QUEUE_CONFIRMATION_REQUIRED');
+      expect(d.record('q3')).toEqual(pending);
+    } finally { d.close(); }
   });
 });

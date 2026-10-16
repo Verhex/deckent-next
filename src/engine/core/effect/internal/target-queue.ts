@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { targetQueueKey } from './queue-key.js';
 import { assertCandidateEvidence, targetQueueRequestSchema, targetQueueRecordSchema, TargetQueueError, queueTerminal, queueNextState,
   encodeCommandProjection, type TargetQueueRequest, type TargetQueueRecord, type TargetBinding, type VerifiedPrincipal } from '#domain/index.js';
@@ -63,11 +64,15 @@ export class TargetQueueApplication {
     if (!current) throw new TargetQueueError('QUEUE_CORRUPT');
     return current;
   }
-  /** A new service holding ledger custody first records a higher epoch, then fences Git before any reconciliation or dispatch. */
+  /** A new service holding ledger custody records a higher epoch. `batchDigest` is set by the same CAS that enters publishing/adopting, so
+   * null proves no effect started: that ticket parks in this ONE durable transition, with no target write, and an interrupted recovery
+   * leaves it unchanged rather than looking in flight (Astra 2609 F2-R). Only a started effect goes to reconciling, where Git is fenced. */
   recover(record: TargetQueueRecord, ownerInstance: string, now: number): TargetQueueRecord {
     if (record.state === 'queued' || queueTerminal(record.state)) throw new TargetQueueError('QUEUE_CONFLICT');
-    return this.transition(record, { state: 'reconciling',
-      ownerInstance, epoch: this.store.epoch(record.key) + 1, leaseDeadline: now + this.bounds.leaseMs });
+    const owned = { ownerInstance, epoch: this.store.epoch(record.key) + 1, leaseDeadline: now + this.bounds.leaseMs };
+    if (record.batchDigest !== null) return this.transition(record, { state: 'reconciling', ...owned });
+    const evidence = createHash('sha256').update(JSON.stringify({ preEffect: record.state, revision: record.revision, ...owned })).digest('hex');
+    return this.transition(record, { state: 'parked', ...owned, evidenceRefs: [...record.evidenceRefs, evidence] });
   }
   async list(scopeId: string, after: string | null, limit: number, principal: VerifiedPrincipal): Promise<readonly TargetQueueRecord[]> {
     if (!principal.scopeIds.includes(scopeId) || limit > this.bounds.capacity) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
@@ -113,8 +118,10 @@ export function assertQueueChange(previous: TargetQueueRecord, next: TargetQueue
   } else if (next.ownerInstance !== previous.ownerInstance || next.epoch !== previous.epoch || next.leaseDeadline !== previous.leaseDeadline) {
     throw new TargetQueueError('QUEUE_CONFLICT');
   }
+  // Every effect-capable state carries its consented batch; recovery relies on batchDigest=null meaning no effect started.
+  if ((next.state === 'publishing' || next.state === 'adopting') && !next.batchDigest) throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED');
   if (next.state === 'publishing') {
-    if (!next.candidate || !next.verification || !next.batchDigest) throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED');
+    if (!next.candidate || !next.verification) throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED');
     assertCandidateEvidence(next.candidate, next.verification);
   }
   if (next.state === 'settled' && (next.outcome === 'adopted' || next.outcome === 're-prepared+adopted')) {
