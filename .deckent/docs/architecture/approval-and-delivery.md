@@ -426,6 +426,18 @@ Live checkout/runtime activation (B07) is separate. Git writers outside
 Deckent under the same OS user and a checkout racing the observe→update-ref window are not fenced; a record that can no longer
 complete keeps the target blocked until operator recovery (no abandon command yet).
 
+**Repository identity (BENIMSEME-DEPO-KIMLIGI, ledger v58).** The journal numbers adoptions per (repository, target), not per ref
+name: the repository identity is the SHA-256 of the canonical Git common directory and its inode (not the device number, which some
+hosts renumber across restarts). A `git clone` is a new directory and never copies `refs/deckent/*`, so a re-registered clone starts
+its own chain at sequence 1. v58 rebuilds `workspace_adoptions` with a `repository` column and `UNIQUE(repository,target_ref,sequence)`
+over unreleased rows; every older row is kept byte for byte with repository `pre-v58`, because a ledger migration cannot observe Git and
+"the project repository" is false on real data (N1's stuck sequence 20 was claimed in the clone). A `pre-v58` chain is attributed by
+the only evidence that exists: the repository whose fence names its latest applied record continues it under its own identity; an
+unsettled `pre-v58` row blocks every repository of that target until resolved; no claim ever writes `pre-v58`. A claim, and the queue
+before publication, refuse with `ADOPTION_FENCE_MISMATCH` when the repository's fence does not name the journal's latest applied record
+there (no fence = no record). `settled = 2` marks an intent released as not applied; it never settles, resumes (`ADOPTION_RELEASED`) or
+counts as a chain head. Downgrade = restore the pre-switch backup.
+
 **Delivery-pinned Run (B06-2a, no version change).** `createDeliveryRun` (SDK; composition `createConfiguredDeliveryRun`, not a
 runtime-service operation) admits the same Run contract as `createRun` plus `deliveryCommandId`. After `run:create`, trusted
 composition resolves the completed delivery of the same scope with its reference still naming the delivered commit (the
@@ -972,8 +984,15 @@ Startup raises durable ownership in the ledger. The CAS that enters publishing o
 so a ticket without one never started an effect: it is parked in the same single ledger transition that raises its owner/epoch, with
 no target write. A failed or interrupted recovery therefore leaves it unchanged, or (after an older two-step recovery) reconciling
 without a batch digest, which the next start also parks from the ledger. Work whose effect may have started (a batch digest is
-present) is physically fenced before its exact adoption/rollback fence lookup. An unattributed publication/move stays reconciling and blocks that target. TTL never proves a writer dead. A failed
+present) is physically fenced before its exact adoption/rollback fence lookup. An unattributed publication/move stays reconciling and blocks that target.
+BENIMSEME-DEPO-KIMLIGI: a failed publish/adopt keeps its typed code on the ticket (`reason`, also in its `target-queue` audit event) and is
+reconciled at once; the first item's fence/journal agreement is checked before the generation is written. Reconciliation runs at start
+and periodically from `tick()` (per target, backoff doubling from the batch window up to the lease). When the fenced observation shows the
+branch still at the ticket's base, no fence of this record and the journal intent absent, unsettled or released in this repository
+(`adoptionNotApplied`), the intent is released (receipt in the artifact store) and the ticket parks with a typed reason and next action
+`new-attempt`; release precedes the park and both are idempotent. A settled record, this record's fence or a moved branch never releases.
+TTL never proves a writer dead. A failed
 fence leaves an open reconciliation blocker. No historical record is turned into a successful new effect. Native process kill/restart,
-actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57 switch, use and verify the
+actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57/v58 switch, use and verify the
 existing ledger backup. Rollback of the schema requires stopping the service and restoring the pre-switch backup, not starting older
 source against the upgraded ledger. This lane does not switch live or N1.

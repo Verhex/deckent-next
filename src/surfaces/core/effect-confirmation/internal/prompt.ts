@@ -48,6 +48,6 @@ async function askLine(locale: Locale, input: Readable, output: Writable, contro
 
 export function renderQueueStatus(view: TargetQueueView, locale: Locale): string {
   return t('queue.window.status', { targetLabel: word(view.display.labelKey, locale), target: text(view.target.id), basisLabel: word(view.display.basisKey, locale), basis: view.basis?.effective ?? '—', versionLabel: word(view.display.versionKey, locale), version: view.basis?.candidate ?? '—', command: view.commandId, position: view.position ?? '—', state: word(`queue.state.${view.state}`, locale),
-    outcome: view.outcome ? word(`queue.outcome.${view.outcome}`, locale) : '—',
+    outcome: view.outcome ? word(`queue.outcome.${view.outcome}`, locale) : view.reason ? word(`error.${view.reason}`, locale) : '—',
     owner: word(`queue.owner.${view.responsibility}`, locale), next: word(view.nextAction === 'prepare-current' ? view.display.prepareActionKey : `queue.next.${view.nextAction}`, locale) }, locale);
 }

@@ -99,7 +99,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 - **The target queue is a source candidate, not accepted runtime behavior.** It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
-  v29 and ledger v57 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load
+  v29 and ledger v58 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
   position counts this authorized scope only. Explicit refresh is currently needed in the delivery window.
 - **Queue verification needs an installed profile and normal Run authority.** The original evaluator criteria and the current

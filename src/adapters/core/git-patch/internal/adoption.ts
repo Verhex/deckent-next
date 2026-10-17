@@ -1,5 +1,5 @@
 import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
-import { adoptionFenceRef as fenceRef, adoptionFenceText as fenceText, adoptionFenceObjectSchema as fenceSchema, adoptionTargetRefSchema, WorkspaceAdoptionError, type AdoptionFence, type AdoptionTargetObservation, type IntegrationAdoptionTarget } from '#engine/index.js';
+import { adoptionFenceRef as fenceRef, adoptionFenceText as fenceText, adoptionFenceObjectSchema as fenceSchema, adoptionTargetRefSchema, adoptionRepositoryIdentity, WorkspaceAdoptionError, type AdoptionFence, type AdoptionTargetObservation, type IntegrationAdoptionTarget } from '#engine/index.js';
 import { GitCommand } from './git-command.js';
 import { queueGenerationRef, type GitQueueFence } from '#engine/index.js';
 const oid = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -41,7 +41,7 @@ export class GitIntegrationAdoption implements IntegrationAdoptionTarget {
     if (branch && (branch.symbolic || branch.type !== 'commit' || !oid.test(branch.value))) throw new WorkspaceAdoptionError('ADOPTION_TARGET_DENIED');
     const worktrees = await this.git.run(['worktree', 'list', '--porcelain']);
     const checkedOut = worktrees.split('\n').some(line => line === `branch ${ref}`);
-    return Object.freeze({ tip: branch?.value ?? null, checkedOut, fence: await this.readFence(ref) });
+    return Object.freeze({ tip: branch?.value ?? null, checkedOut, fence: await this.readFence(ref), repository: adoptionRepositoryIdentity(await this.git.common()) });
   }
   async move(targetRef: string, fromCommit: string, toCommit: string, expected: AdoptionFence | null, next: AdoptionFence): Promise<void> {
     const ref = adoptionTargetRefSchema.parse(targetRef);

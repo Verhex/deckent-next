@@ -24,7 +24,7 @@ const v1Rollback = (commandId: string, adoptionCommandId: string, targetRef: str
   command: { schemaVersion: 1, commandId, identity, adoptionCommandId }, targetRef, fromCommit: delivered, toCommit: base, actor });
 
 it('upgrades a v41 ledger to v42: backup at v41, v1 adoptions rewritten losslessly to v2, rollbacks and corrupt rows untouched', async () => {
-  expect(CURRENT_LEDGER_VERSION).toBe(57); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42);
+  expect(CURRENT_LEDGER_VERSION).toBe(58); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42);
   const root = await mkdtemp(join(tmpdir(), 'dn-adoption-v42-')); roots.push(root);
   const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
   openSqliteLedger(path, options).close();
@@ -75,7 +75,7 @@ it('upgrades a v41 ledger to v42: backup at v41, v1 adoptions rewritten lossless
     const adopted = (await store.loadAdoption('s', 'settled'))!.intent;
     const rolled = await store.claimAdoption(integrationAdoptionIntentSchema.parse({ schemaVersion: 1, kind: 'rollback',
       command: { schemaVersion: 1, commandId: 'rollback-one', identity, adoptionCommandId: 'settled' }, targetRef: adopted.targetRef,
-      fromCommit: adopted.toCommit, toCommit: adopted.fromCommit, actor }));
+      fromCommit: adopted.toCommit, toCommit: adopted.fromCommit, actor }), { repository: 'd'.repeat(64), fence: { sequence: 1, scopeId: 's', commandId: 'settled' } });
     expect(rolled).toMatchObject({ sequence: 2, settled: false });
     expect((await store.loadAdoption('s', 'rollback'))!.intent.kind).toBe('rollback');
     await expect(store.loadAdoption('s', 'corrupt')).rejects.toMatchObject({ code: 'ADOPTION_CORRUPT' });

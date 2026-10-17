@@ -109,7 +109,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i1', intent('r1', {}), '{}');
     writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i3', intent('r3', {}), null);
     writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', 'd1', intent('r1', { plan: { commit: c1 } }), 1);
-    writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)').run('s', 'a1', 'refs/heads/x', 1, 'adopt', intent('r1', { toCommit: c2 }), 0);
+    writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)').run('s', 'a1', 'refs/heads/x', 1, 'adopt', intent('r1', { toCommit: c2 }), 0);
     writer.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)').run('s', 'eval-model', JSON.stringify({ action: 'apply-task-evaluation',
       evaluation: { identity: { attemptId: 'r3-x' }, model: { provider: 'claude', requested: { channelId: 'ch', modelId: 'm-1', auxiliaryModelIds: [] }, init: 'm-1', usage: ['m-1'],
         verdict: 'verified', unexpected: [], evidence: 'sealed' } } }), '{}');
@@ -135,7 +135,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     const delivery = writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)');
     delivery.run('s', 'd-pending', intent('r1', { plan: { commit: 'invalid', ref: 7 } }), 0);
     delivery.run('s', 'd-finished', intent('r1', { plan: { commit, ref: 'refs/heads/delivery' } }), 1);
-    const adoption = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)');
+    const adoption = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)');
     // Insertion order differs from the per-target sequence; later rollback is not delivery success.
     adoption.run('s', 'rollback-pending', 'refs/heads/main', 4, 'rollback', intent('r1', { toCommit: null, targetRef: 'refs/heads/main' }), 0);
     adoption.run('s2', 'adopt-other-scope', 'refs/heads/other', 3, 'adopt', intent('r1', { toCommit: commit, targetRef: 'refs/heads/other' }), 1);
@@ -164,7 +164,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
   });
   it('retains a large single-Run receipt history and isolates earlier readings from later ledger receipts', async () => {
     const f = await fixture(); f.store.close(); const writer = new DatabaseSync(f.path), count = 4096, commit = 'd'.repeat(40);
-    const insert = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)');
+    const insert = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)');
     const intent = JSON.stringify({ command: { identity: { runId: 'r1' } }, toCommit: commit, targetRef: 'refs/heads/main' });
     writer.exec('BEGIN');
     for (let sequence = count; sequence > 0; sequence--) insert.run('s', `adopt-${sequence}`, 'refs/heads/main', sequence, 'adopt', intent, 1);
@@ -175,7 +175,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     expect(previous).toMatchObject({ state: 'adopted', commit, commandId: `adopt-${count}`, targetRef: 'refs/heads/main' });
     expect(Object.isFrozen(previous)).toBe(true); expect(Object.isFrozen(previous.receipts)).toBe(true);
     const later = new DatabaseSync(f.path);
-    later.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)')
+    later.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)')
       .run('s', 'latest-rollback', 'refs/heads/main', count + 1, 'rollback', intent, 0); later.close();
     const current = await read(f.path), result = current.runs.find(run => run.snapshot.identity.runId === 'r1')!.delivery!;
     expect(result).toMatchObject({ state: 'rolling-back', commandId: 'latest-rollback' }); expect(result.receipts).toHaveLength(count + 1);

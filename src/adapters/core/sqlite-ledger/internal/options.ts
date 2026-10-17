@@ -1,4 +1,5 @@
 import { SQLITE_STORAGE_OPTIONS } from '#platform/index.js';
+import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { AttemptStoreError } from '#engine/index.js';
 
@@ -12,6 +13,15 @@ export function sqliteFailure(error: unknown): unknown {
   const code = error && typeof error === 'object' && 'errcode' in error ? error.errcode : null;
   if (typeof code === 'number' && [5, 6].includes(code & 255)) return new AttemptStoreError('ATTEMPT_STORE_BUSY');
   return error;
+}
+/** One synchronous writer transaction: a failed ROLLBACK leaves the outcome unknown; every other failure is mapped by `sqliteFailure`. */
+export function ledgerTransaction<T>(db: DatabaseSync, work: () => T): T {
+  let active = false;
+  try { db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); db.exec('COMMIT'); return value; }
+  catch (error) {
+    if (active) { try { db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
+    throw sqliteFailure(error);
+  }
 }
 /** Numeric (not lexical) per-segment compare: '3.9.0' must fail a '3.51.3' floor despite '9' > '5' as characters.
  * A missing or unparsable version (older Node builds without `process.versions.sqlite`, or a non-numeric segment)

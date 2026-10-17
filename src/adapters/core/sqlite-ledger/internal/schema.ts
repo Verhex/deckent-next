@@ -37,7 +37,9 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 57;
+export const CURRENT_LEDGER_VERSION = 58;
+// BENIMSEME-DEPO-KIMLIGI: adoptions numbered per (repository, target); pre-v58 rows stamped 'pre-v58'; settled 2 = released as not applied.
+export const ADOPTION_REPOSITORY_LEDGER_VERSION = 58;
 export const MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION = 55;
 // ONAY-GUVENCE D2: chained audit checkpoints (additive; lane v55, renumbered to v56 at the pre-beta wave integration).
 export const AUDIT_CHECKPOINT_LEDGER_VERSION = 56;
@@ -61,6 +63,13 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // Table rebuild (UNIQUE and CHECK change): every row is kept byte for byte with repository 'pre-v58'. Downgrade = restore the pre-switch backup.
+  58: `CREATE TABLE workspace_adoptions_v58(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,repository TEXT NOT NULL,target_ref TEXT NOT NULL,
+    sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,
+    settled INTEGER NOT NULL CHECK(settled IN(0,1,2)),PRIMARY KEY(scope_id,command_id));
+    INSERT INTO workspace_adoptions_v58 SELECT scope_id,command_id,'pre-v58',target_ref,sequence,kind,intent,settled FROM workspace_adoptions;
+    DROP TABLE workspace_adoptions; ALTER TABLE workspace_adoptions_v58 RENAME TO workspace_adoptions;
+    CREATE UNIQUE INDEX workspace_adoptions_sequence ON workspace_adoptions(repository,target_ref,sequence) WHERE settled<2; PRAGMA user_version=58;`,
   // Additive target queue: no backfill invents source custody for historical effects. Restore the pre-switch backup to roll back.
   57: `CREATE TABLE target_queue(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_key TEXT NOT NULL,ordinal INTEGER NOT NULL CHECK(ordinal>0),
     revision INTEGER NOT NULL CHECK(revision>=0),state TEXT NOT NULL,record TEXT NOT NULL,
@@ -225,13 +234,6 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
     PRIMARY KEY(scope_id,invocation_id),UNIQUE(scope_id,command_id));
     CREATE INDEX model_invocations_allocation_state ON model_invocations(scope_id,allocation_id,state);
     PRAGMA user_version=14;`,
-  15: '',
-  16: '',
-  17: '',
-  18: '',
-  19: '',
-  20: '',
-  21: '',
   22: `CREATE TABLE provider_spend_audits(sequence INTEGER PRIMARY KEY AUTOINCREMENT,scope_id TEXT NOT NULL,
     budget_id TEXT NOT NULL,budget_revision INTEGER NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,digest TEXT NOT NULL,
     UNIQUE(scope_id,command_id));
@@ -254,99 +256,19 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
   // Older custody validators inspect the current Run shape. Prove and convert old eligibility
   // before those validators, inside the same transaction; never skip their independent checks.
   if (version >= 3 && version < IMMEDIATE_ELIGIBILITY_LEDGER_VERSION) migrateImmediateEligibility(db);
+  const codeSteps: Readonly<Record<number, () => void>> = { 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
+    8: () => requireLedgerV8ExecutionRegistry(db), 15: () => migrateModelInvocationEvidence(db), 16: () => migrateModelInvocationContents(db),
+    17: () => migrateModelInvocationPurge(db), 18: () => migrateModelInvocationControl(db), 19: () => migrateModelAllocationCheckpoints(db),
+    20: () => migrateProviderSpend(db), 21: () => migrateProviderReportedSpend(db), [SCOPE_REGISTRY_LEDGER_VERSION]: () => migrateScopeRegistry(db, companyId),
+    [AUDIT_EVENT_LEDGER_VERSION]: () => migrateAuditEvents(db), [ADOPTION_VERIFICATION_LEDGER_VERSION]: () => migrateAdoptionVerification(db),
+    [MODEL_CATALOG_LEDGER_VERSION]: () => migrateModelCatalog(db), [POOL_HOLD_LEDGER_VERSION]: () => migrateExecutionPoolHolds(db),
+    [RUN_PARKING_LEDGER_VERSION]: () => migrateRunParking(db), [DECISION_PORT_LEDGER_VERSION]: () => migrateDecisionPort(db),
+    [POOL_CAPACITY_LEDGER_VERSION]: () => migratePoolCapacity(db), 49: () => migrateMeasuredTariffSpend(db) };
   for (let next = version + 1; next <= CURRENT_LEDGER_VERSION; next++) {
     if (next === 52) { migrateRunCreateApprovals(db); continue; }
-    if (next === 49) { migrateMeasuredTariffSpend(db); db.exec('PRAGMA user_version=49;'); continue; }
-    if (next === 5) {
-      requireLedgerV5Custody(db);
-      db.exec('PRAGMA user_version=5;');
-      continue;
-    }
-    if (next === 6) {
-      requireLedgerV6ProfileCompatibility(db, profiles);
-      db.exec('PRAGMA user_version=6;');
-      continue;
-    }
-    if (next === 8) {
-      requireLedgerV8ExecutionRegistry(db);
-      db.exec('PRAGMA user_version=8;');
-      continue;
-    }
-    if (next === 15) {
-      migrateModelInvocationEvidence(db);
-      db.exec('PRAGMA user_version=15;');
-      continue;
-    }
-    if (next === 16) {
-      migrateModelInvocationContents(db);
-      db.exec('PRAGMA user_version=16;');
-      continue;
-    }
-    if (next === 17) {
-      migrateModelInvocationPurge(db);
-      db.exec('PRAGMA user_version=17;');
-      continue;
-    }
-    if (next === 18) {
-      migrateModelInvocationControl(db);
-      db.exec('PRAGMA user_version=18;');
-      continue;
-    }
-    if (next === 19) {
-      migrateModelAllocationCheckpoints(db);
-      db.exec('PRAGMA user_version=19;');
-      continue;
-    }
-    if (next === 20) {
-      migrateProviderSpend(db);
-      db.exec('PRAGMA user_version=20;');
-      continue;
-    }
-    if (next === 21) {
-      migrateProviderReportedSpend(db);
-      db.exec('PRAGMA user_version=21;');
-      continue;
-    }
-    if (next === SCOPE_REGISTRY_LEDGER_VERSION) {
-      migrateScopeRegistry(db, companyId);
-      db.exec(`PRAGMA user_version=${SCOPE_REGISTRY_LEDGER_VERSION};`);
-      continue;
-    }
-    if (next === AUDIT_EVENT_LEDGER_VERSION) {
-      migrateAuditEvents(db);
-      db.exec(`PRAGMA user_version=${AUDIT_EVENT_LEDGER_VERSION};`);
-      continue;
-    }
-    if (next === ADOPTION_VERIFICATION_LEDGER_VERSION) {
-      migrateAdoptionVerification(db);
-      db.exec(`PRAGMA user_version=${ADOPTION_VERIFICATION_LEDGER_VERSION};`);
-      continue;
-    }
-    if (next === MODEL_CATALOG_LEDGER_VERSION) {
-      migrateModelCatalog(db);
-      db.exec(`PRAGMA user_version=${MODEL_CATALOG_LEDGER_VERSION};`);
-      continue;
-    }
-    if (next === POOL_HOLD_LEDGER_VERSION) {
-      migrateExecutionPoolHolds(db);
-      db.exec(`PRAGMA user_version=${POOL_HOLD_LEDGER_VERSION};`);
-      continue;
-    }
-    if (next === RUN_PARKING_LEDGER_VERSION) {
-      migrateRunParking(db);
-      db.exec(`PRAGMA user_version=${RUN_PARKING_LEDGER_VERSION};`);
-      continue;
-    }
-    if (next === DECISION_PORT_LEDGER_VERSION) {
-      migrateDecisionPort(db);
-      db.exec(`PRAGMA user_version=${DECISION_PORT_LEDGER_VERSION};`);
-      continue;
-    }
-    if (next === POOL_CAPACITY_LEDGER_VERSION) {
-      migratePoolCapacity(db);
-      db.exec(`PRAGMA user_version=${POOL_CAPACITY_LEDGER_VERSION};`);
-      continue;
-    }
+    // Code-owned steps: each runs, then the version is recorded, in this one transaction.
+    const step = codeSteps[next];
+    if (step) { step(); db.exec(`PRAGMA user_version=${next};`); continue; }
     if (next === AUDIT_CHECKPOINT_LEDGER_VERSION) { migrateAuditCheckpoints(db); continue; }
     if (next === 54) { migrateQuotaWaits(db); continue; }
     const sql = migrations[next];

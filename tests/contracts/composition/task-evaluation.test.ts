@@ -93,7 +93,7 @@ describe.skipIf(process.platform === 'win32')('configured evaluation reply autho
           JSON.stringify({ command: { identity: value.producer } }), 'retained-manifest');
         writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', value.delivery,
           JSON.stringify({ command: { identity: value.producer }, plan: { commit: value.commit, ref: value.targetRef } }), 1);
-        writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)').run('s', value.adoption, value.targetRef, 1, 'adopt',
+        writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)').run('s', value.adoption, value.targetRef, 1, 'adopt',
           JSON.stringify({ command: { identity: value.producer }, targetRef: value.targetRef, toCommit: value.commit }), 1);
       }
       writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', 'unattributed-secret',

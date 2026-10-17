@@ -43,7 +43,7 @@ const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), ver
 const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('target-batch-decision'), batchDigest: digest, operation: z.enum(['publish', 'adopt', 'rollback']), answer: z.enum(['allow', 'decline']), peerPid: counterSchema.positive(), witnessDigest: digest }).strict(),
   z.object({ kind: z.literal('target-queue'), commandId: identitySchema, targetKey: digest, ordinal: counterSchema.positive(),
-    revision: counterSchema, state: identitySchema, payloadDigest: digest, recordDigest: digest }).strict(),
+    revision: counterSchema, state: identitySchema, payloadDigest: digest, recordDigest: digest, reason: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/).optional() }).strict(),
   /** Additive v1 subject: selected distribution manifests before assurance activation; secrets never enter the inventory. */
   z.object({ kind: z.literal('approval-assurance-registration'), schemaVersion: z.literal(1), producers: z.array(z.object({
     schemaVersion: z.literal(1), id: identitySchema, version: counterSchema.positive(), level: identitySchema,
