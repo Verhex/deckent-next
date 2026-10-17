@@ -164,7 +164,8 @@ describe('pinned Workline terminal', () => {
       await until(() => stdout.text.includes('READY'), 'entrypoint first frame');
       stdout.rows = 12; stdout.columns = 32; stdout.emit('resize'); await settle(120);
       stdin.write('still typing'); await until(() => stdout.text.includes('still typing'), 'entrypoint resized input');
-      expect(stdout.text).not.toContain('\u001b[3J'); expect(stdout.text).not.toContain('\u001b[?1049h');
+      // TERMINAL-SABIT-DUZEN: the production entry draws on the alternate screen; a resize still never erases the terminal's own scrollback.
+      expect(stdout.text).not.toContain('\u001b[3J'); expect(stdout.text).toContain('\u001b[?1049h');
     } finally { controller.abort(); await running; }
     expect(stdout.text).not.toContain('\u001b[3J');
   });

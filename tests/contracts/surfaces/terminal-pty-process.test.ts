@@ -231,7 +231,9 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.status).toBe(0);
     const at = result.output.lastIndexOf('\u001b[3J');
     expect(at, 'ED 3 sent').toBeGreaterThan(-1);
-    expect(result.output.lastIndexOf('\u001b[2J', at)).toBeGreaterThan(result.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'));
+    expect(at).toBeGreaterThan(result.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'));
+    // TERMINAL-SABIT-DUZEN: the full window empties itself on the alternate screen (no ED 2 needed there); ED 3 still drops the scrollback.
+    expect(result.output).toContain('\u001b[?1049h');
     // The replayed terminal, scrollback included: the earlier conversation is gone; the new conversation's one system line is there.
     const screen = terminalScreen(result.output, 120);
     expect(screen).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(screen).not.toMatch(/│ hello/u);

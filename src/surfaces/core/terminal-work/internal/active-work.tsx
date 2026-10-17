@@ -101,8 +101,10 @@ export function useActiveWorkClock(running: boolean, cadenceMs: number, resetKey
 
 /** Listens only while no window holds input. Enter on the `/do` row is the same explicit focus transfer as Ctrl+O to its open window
  * (planning or run-create card); it never answers the card. Enter on a Run row asks the host to open that Run's existing window. */
-export function ActiveWorkStrip({ items, labels, rows, focused, onFocus, onOpen }: { readonly items: readonly ActiveWorkItem[]; readonly labels: ActiveWorkLabels;
-  readonly rows: number; readonly focused: boolean; readonly onFocus: (focused: boolean) => void; readonly onOpen: (item: ActiveWorkItem) => void }) {
+export function ActiveWorkStrip({ items, labels, rows, focused, onFocus, onOpen, collapsed = false }: { readonly items: readonly ActiveWorkItem[]; readonly labels: ActiveWorkLabels;
+  readonly rows: number; readonly focused: boolean; readonly onFocus: (focused: boolean) => void; readonly onOpen: (item: ActiveWorkItem) => void;
+  /** Full window (TERMINAL-SABIT-DUZEN): the list is drawn only while selected (Ctrl+T); otherwise `ActiveWorkSummary` is its one row. */
+  readonly collapsed?: boolean }) {
   const [selected, setSelected] = useState(0), glyphs = useRenderGlyphs(), known = useHumanTextSecrets(), owner = useFocusOwner(), composing = owner.composing;
   const latest = useRef(items); latest.current = items;
   const index = Math.min(selected, Math.max(0, items.length - 1));
@@ -121,7 +123,7 @@ export function ActiveWorkStrip({ items, labels, rows, focused, onFocus, onOpen 
     }
   }, { isActive: focused && composing && items.length > 0 });
   useInput((input, key) => { if (key.ctrl && !key.meta && input === 't') onFocus(true); }, { isActive: !focused && composing && items.length > 0 });
-  if (items.length === 0) return null;
+  if (items.length === 0 || (collapsed && !focused)) return null;
   const view = activeWorkWindow(items.length, index, rows), arrow = glyphs.ascii ? '>' : '›';
   const human = (text: string): readonly Span[] => projectHumanPickerText(text, known).spans;
   // The projected (secret-masked) title is cut by cells, never the raw text, so a cut never exposes part of a masked value.
@@ -141,4 +143,14 @@ export function ActiveWorkStrip({ items, labels, rows, focused, onFocus, onOpen 
     })}
     {view.more > 0 ? <Text wrap="truncate-end"><SpanText spans={[span(fillTemplate(labels.more, { count: view.more }), { role: 'muted' })]} /></Text> : null}
   </Box>;
+}
+
+/** The strip as one row under the full-window bar: the header (it names Ctrl+T), the first item and how many more; never a decision. */
+export function ActiveWorkSummary({ items, labels }: { readonly items: readonly ActiveWorkItem[]; readonly labels: ActiveWorkLabels }) {
+  const known = useHumanTextSecrets(), first = items[0];
+  if (!first) return null;
+  const title = projectHumanPickerText(first.title, known).spans;
+  return <Text wrap="truncate-end"><SpanText spans={[span(labels.title, { role: 'muted' }), span(' · '), ...title.map(part => ({ ...part, bold: true })), span(' · '),
+    span(first.state, { role: first.role }), span(` · ${first.elapsed}`, { role: 'muted' }),
+    ...(items.length > 1 ? [span(` · ${fillTemplate(labels.more, { count: items.length - 1 })}`, { role: 'muted' })] : [])]} /></Text>;
 }

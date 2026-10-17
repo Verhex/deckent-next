@@ -178,6 +178,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
       stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale) },
+    viewport: { below: t('terminal.viewport.below', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
       more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
@@ -386,7 +387,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (parsed.fullAccess && !view?.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
   if (parsed.fullAccess || (view?.mode === 'full-access' && view.fullAccess)) fullAccess = true;
   else if (view?.mode === 'full-access') accessNotices.push({ level: 'error', text: t('terminal.fullAccess.startDenied', {}, locale) });
-  if (fullAccess) accessNotices.push({ level: 'error', text: t('terminal.fullAccess.banner', {}, locale) });
+  // A mode, stated calmly (owner 2026-10-18): the warning tone, not the error tone; the facts are unchanged.
+  if (fullAccess) accessNotices.push({ level: 'warning', text: t('terminal.fullAccess.banner', {}, locale) });
   const ledger = createWorklineLedgerPorts({ root, scopeId, options, locale, workerHeartbeatMs: config.inspection.workers.heartbeatMs, renderRunCancellation: ports.renderRunCancellation,
     approvalPageSize: config.approvals.pageSize,
     ...(context.inspectWorkers ? { inspectWorkers: context.inspectWorkers } : {}),
@@ -406,7 +408,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const target = scopeId;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
-  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean };
+  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly viewportRows?: number };
   const theme = resolveTerminalTheme(presentation.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
   const ascii = prefersAsciiGlyphs(env);
   const home = env['HOME'] ?? env['USERPROFILE'], where = shortenHomePath(root, home);
@@ -436,6 +438,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
     // NO_COLOR concerns colour only, so it does not stop the clear.
     clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
+    // TERMINAL-SABIT-DUZEN: the full-window layout unless the person keeps the inline one (`terminal.layout: inline`).
+    ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale),
       plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference) => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal),

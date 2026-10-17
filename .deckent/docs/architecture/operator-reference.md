@@ -2,17 +2,27 @@
 
 Detailed operator behavior behind the product summary in [README.md](../../../README.md). Türkçe: [operator-reference.tr.md](operator-reference.tr.md).
 
-The interactive terminal keeps input and status under the latest output and, once the screen is full, on its bottom
-rows; open windows and live output never push them off the screen. Completed output is printed once and stays in native scrollback. A window opened by your command or selection takes
+The interactive terminal is a full window (the terminal's alternate screen, like the Claude Code fullscreen renderer): the
+conversation scrolls in the top area, the input bar stays on the same bottom row for the whole session (only a resize or your
+own multi-line draft moves it), and under it a fixed information area shows the state, model and mode, the Active work
+summary (or the full-access line) and key hints. The conversation follows the newest line; PgUp/PgDn scroll it by half a view,
+Ctrl+Home goes to its first line and Ctrl+End back to the newest one (a row says how many lines are below while you read
+back). Windows and cards open right above the input bar, take at most half the screen and scroll inside; they shrink the
+conversation area, never move the bar. On exit the conversation is written to the normal screen, so it stays in your
+terminal's scrollback; `/clear` empties the view and that scrollback. The mouse is not captured (your terminal's own
+selection and copy keep working; the wheel does not scroll the view yet). `terminal.layout: inline` keeps the previous
+inline layout (native scrollback while running; recommended with screen readers); `terminal.viewportRows` (default 2000)
+bounds how far the view scrolls back. Mode colours: standard muted, full auto its own colour, full access the warning tone
+with a calm `⏵⏵⏵` mark (NO_COLOR: the words carry the mode). A window opened by your command or selection takes
 focus immediately; Escape closes it back to input. Automatic /do planning, progress and approval cards, model-turn
 approvals and run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
 operation. Ctrl+O switches between input and the top window. Automatic approvals require this focus switch
 before their decision keys work (the waiting card says "Ctrl+O to decide this card"); typing y/n/s/a in input never answers a card. Existing decision, reason and verified-TTY requirements apply in the focused approval.
 Escape closes or declines in a focused window; from input it retains the draft/cancel behavior. Long window
 bodies scroll internally with arrows, PageUp/PageDown and Home/End, with a visible row range. Multiline input
-follows its caret within a height budget. `/watch-stop` closes observation. Above input, an "Active work" strip lists
+follows its caret within a height budget. `/watch-stop` closes observation. Under input, the "Active work" summary row names
 this session's running /do (planning, or waiting for you with the approval time left) and the Runs it started, with title,
-state and elapsed time; it never takes input by itself. Ctrl+T selects it (↑↓, Esc back): Enter on /do focuses its window, Enter on a
+state, elapsed time and "+N more"; it never takes input by itself. Ctrl+T opens the full list above input (↑↓, Esc back): Enter on /do focuses its window, Enter on a
 Run opens that Run's window; a finished Run leaves the strip once opened. Pipe and line-mode output is unchanged.
 
 ## Installation custody

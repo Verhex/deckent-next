@@ -2,17 +2,26 @@
 
 [README.tr.md](../../../README.tr.md) içindeki ürün özetinin arkasındaki ayrıntılı işletim davranışı. English: [operator-reference.md](operator-reference.md).
 
-Etkileşimli terminal giriş alanını ve durum satırını son çıktının altında, ekran dolduğunda da en alt satırlarda tutar;
-açık pencereler ve canlı çıktı onları ekranın dışına itmez. Tamamlanan çıktı bir kez yazılır ve kaydırma geçmişinde kalır. Komutunuzla veya seçiminizle açılan
+Etkileşimli terminal tam penceredir (terminalin alternatif ekranı, Claude Code tam ekran görünümü gibi): sohbet üst alanda
+kayar, giriş barı oturum boyunca aynı alt satırda kalır (yalnız pencere boyutu ya da kendi çok satırlı taslağınız onu oynatır),
+altında sabit yükseklikte bir bilgi alanı durumu, modeli ve modu, Aktif iş özetini (ya da tam erişim satırını) ve tuş
+ipuçlarını gösterir. Sohbet en yeni satırı izler; PgUp/PgDn yarım görünüm kaydırır, Ctrl+Home ilk satıra, Ctrl+End en yeniye
+döner (geriye okurken bir satır aşağıda kaç satır olduğunu söyler). Pencere ve kartlar giriş barının hemen üstünde açılır,
+ekranın en çok yarısını kaplar ve içeride kayar; sohbet alanını daraltır, barı oynatmaz. Çıkışta sohbet normal ekrana yazılır,
+böylece terminalin kaydırma geçmişinde kalır; `/clear` görünümü ve o geçmişi boşaltır. Fare yakalanmaz (terminalin kendi seçme
+ve kopyalaması çalışır; tekerlek görünümü henüz kaydırmaz). `terminal.layout: inline` önceki satır içi düzeni korur (çalışırken
+yerel kaydırma geçmişi; ekran okuyucuyla önerilir); `terminal.viewportRows` (varsayılan 2000) görünümün ne kadar geriye
+kaydığını sınırlar. Mod renkleri: standart soluk, tam otomatik kendi rengi, tam erişim uyarı tonunda sakin `⏵⏵⏵` işaretiyle
+(NO_COLOR: modu sözcükler taşır). Komutunuzla veya seçiminizle açılan
 pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
 turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
 arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Otomatik onay kartında
 karar tuşları ancak bu odak geçişinden sonra çalışır (bekleyen kart "Bu kartta karar için Ctrl+O" der); girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
 Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut taslak/iptal davranışı sürer. Uzun pencere
 içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
-yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin üstündeki "Aktif iş" şeridi bu
-oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum ve geçen
-süreyle listeler; kendiliğinden odak almaz. Ctrl+T ile seçilir (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
+yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin altındaki "Aktif iş" özet satırı bu
+oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum, geçen
+süre ve "+N daha" ile gösterir; kendiliğinden odak almaz. Ctrl+T tam listeyi girişin üstünde açar (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
 Enter o Run'ın penceresini açar; biten Run açıldıktan sonra şeritten çıkar. Pipe ve satır modu çıktısı değişmez.
 
 ## Kurulum muhafazası

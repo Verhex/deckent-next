@@ -1,9 +1,9 @@
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
-import { render, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
+import { render, renderToString, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
-  ActiveWorkStrip, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem } from '#surfaces/core/terminal-work/index.js';
+  ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
@@ -12,12 +12,13 @@ import { AssistantLive, openAssistantStream, renderAssistantStream, renderComple
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { RunProposalResult } from '#engine/index.js';
-import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
+import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { freshContextHistory } from './workline-history.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote,
+  FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -26,7 +27,8 @@ import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type Work
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
 import { askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
-import { CLEAR_SCREEN_AND_SCROLLBACK, writeStartup, type WorklineStartup } from './startup-banner.js';
+import { CLEAR_SCREEN_AND_SCROLLBACK, CLEAR_SCROLLBACK, startupFrame, writeStartup, type WorklineStartup } from './startup-banner.js';
+import { useTranscriptBlocks } from './workline-transcript.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
 import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/terminal-panels/index.js';
 import { openTaskAction, type TaskWindowAction } from '#surfaces/core/terminal-work/index.js';
@@ -64,6 +66,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly windows?: SlashWindowLabels;
   /** TESLIM-PENCERESI: the delivery window's words (terminal.delivery.*); without them (or without the port) `/deliver` is unavailable. */
   readonly delivery?: DeliveryWindowLabels;
+  /** Full-window chat viewport words (terminal.viewport.*): the row shown while scrolled back. */
+  readonly viewport?: ChatViewportLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -135,6 +139,15 @@ export interface WorklineProps {
   /** TESLIM-PENCERESI: check → prepare → deliver (and adopt) through the trusted composition's verified-terminal confirmation port.
    *  `confirmTimeoutMs`: how long the port's exact card waits for a fresh y (the session approval time). */
   readonly delivery?: { readonly port: TerminalDeliveryPort; readonly confirmTimeoutMs: number };
+  /** TERMINAL-SABIT-DUZEN (owner 2026-10-18): the full-window layout on the alternate screen (`runTerminalWorkline` sets it on a TTY unless
+   *  `terminal.layout` is `inline`). Absent: the inline main-screen layout. */
+  readonly fullscreen?: boolean;
+  /** Rows the full-window conversation keeps to scroll back through (`terminal.viewportRows`). */
+  readonly viewportRows?: number;
+  /** The opening frame drawn as the first block of the full-window conversation (until `/clear`). */
+  readonly startup?: WorklineStartup;
+  /** The full-window conversation as text, read once after the view closes so it is left in the terminal's own scrollback. */
+  readonly transcriptExit?: { current: (() => string) | null };
 }
 
 
@@ -150,11 +163,11 @@ function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
   return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'chat' as const, id: 'chat', role, text });
 }
 
-function useLedgerBuffer() {
+function useLedgerBuffer(historyLimit: number) {
   const [buffer, setBuffer] = useState<LedgerBuffer>(EMPTY_LEDGER);
-  const push = useCallback((entries: readonly WorkLedgerEntry[]) => setBuffer(current => appendLedger(current, entries)), []);
+  const push = useCallback((entries: readonly WorkLedgerEntry[]) => setBuffer(current => appendLedger(current, entries, LEDGER_TAIL_LIMIT, historyLimit)), [historyLimit]);
   // `/clear`: a new epoch is a fresh `Static`, so Ink's replay buffer (used when the terminal is resized) forgets the earlier conversation.
-  const reset = useCallback(() => setBuffer(current => Object.freeze({ epoch: current.epoch + 1, nextSeq: current.nextSeq, pending: Object.freeze([]), tail: Object.freeze([]) })), []);
+  const reset = useCallback(() => setBuffer(current => Object.freeze({ epoch: current.epoch + 1, nextSeq: current.nextSeq, pending: Object.freeze([]), tail: Object.freeze([]), history: Object.freeze([]) })), []);
   // Every pending row was printed by `Static` in this commit; compaction keeps rows appended after it.
   useLayoutEffect(() => {
     const printed = buffer.pending.length;
@@ -167,11 +180,15 @@ export function WorklineApp(props: WorklineProps) {
   const { labels, target, systemPrompt, historyMessages, completeTurn, errorText, ledger } = props;
   const palette = useWorklinePalette();
   const { exit } = useApp();
-  const { buffer, push, reset } = useLedgerBuffer();
+  // The full window keeps the newest `terminal.viewportRows` rows to scroll back through; the inline layout keeps none (they are in the scrollback).
+  const { buffer, push, reset } = useLedgerBuffer(props.fullscreen === true ? props.viewportRows ?? LEDGER_TAIL_LIMIT : 0);
   const stdout = useStdout();
   // The layout mode is resolved once at mount: a real stream does not change TTY-ness, and flipping it would remount the composer and windows.
   const [pinnedMode] = useState(() => stdout.stdout.isTTY === true && props.clearScreen !== false);
   const size = useWindowSize(), pinned = pinnedMode && size.rows > 0 && size.columns > 0;
+  // TERMINAL-SABIT-DUZEN: the full-window layout is chosen once too (the alternate screen was entered for it before the first frame).
+  const [fullscreenMode] = useState(() => pinnedMode && props.fullscreen === true);
+  const [bannerShown, setBannerShown] = useState(true);
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
   // A chat turn is running: Esc cancels it now (TL-A D5).
@@ -483,7 +500,12 @@ export function WorklineApp(props: WorklineProps) {
         const result = slash.command === 'context' ? { ...sessionResult, entries: [...sessionResult.entries, ...instructions.sourceLines().map(line => notice('info', line))] } : sessionResult;
         // `/clear` really clears: the visible screen is wiped and Ink forgets the earlier conversation; only the summary line follows.
         // Owner 2026-10-08: the terminal's scrollback goes too (ED 3); only on a TTY that takes escape sequences (`clearScreen`, see the prop).
-        if (slash.command === 'clear' && result.entries.length) { if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK); reset(); }
+        // Full window: the view itself empties; ED 3 still drops the terminal's own scrollback (the screen is the view's, so no ED 2).
+        if (slash.command === 'clear' && result.entries.length) {
+          if (fullscreenMode) { stdout.stdout.write(CLEAR_SCROLLBACK); setBannerShown(false); }
+          else if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK);
+          reset();
+        }
         if (result.resumePicker) {
           // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
           const choice = await panel.pick(execution, { kind: 'resume', rows: result.resumePicker }, result.resumePicker.map((_, index) => String(index)));
@@ -591,61 +613,96 @@ export function WorklineApp(props: WorklineProps) {
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
-  return (
-    <HumanTextContext.Provider value={props.knownSecrets}>
-    <WindowNoteContext.Provider value={argumentNote}>
-    <WindowDecideHintContext.Provider value={labels.focus?.decide}>
-    <Box flexDirection="column">
+  // TERMINAL-SABIT-DUZEN: the full-window conversation, laid out per row with the providers `Static` gave each row.
+  const renderRow = (row: LedgerRow) => <WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={glyphs}>
+    <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>;
+  // The conversation opens with the opening frame (until `/clear`) and the workline's own how-to line (how to cancel and quit), once, at its top.
+  const startup = props.startup, bannerLine = labels.banner, bannerOf = useMemo(() => fullscreenMode ? (columns: number) => {
+    const frame = bannerShown && startup && startup.banner !== 'off' ? startupFrame({ ...startup, clear: false }, palette, columns, 0) : '';
+    return `${frame}${renderToString(<Text {...palette.accent}>{bannerLine}</Text>, { columns })}\n`;
+  } : null, [fullscreenMode, bannerShown, startup, palette, bannerLine]);
+  const transcript = useTranscriptBlocks(fullscreenMode ? buffer.history : EMPTY_ROWS, size.columns || 80, renderRow, bannerOf, palette);
+  const transcriptExit = props.transcriptExit;
+  useLayoutEffect(() => { if (transcriptExit && fullscreenMode) transcriptExit.current = transcript.text; }, [transcriptExit, fullscreenMode, transcript]);
+  const statusNode = <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
+    state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
+    queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
+    selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />;
+  const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
+  const composerNode = <StackComposer elsewhere={() => stripFocus.current} active={!stripFocused} prompt={labels.prompt} labels={{ ...labels.composer,
+    slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
+    busy={busy} historyText={bareSlash} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
+    onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
+    {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
+    {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;
+  const hintNode = <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
+  const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
+    waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null;
+  const windowsNode = <>
+    <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
+    {instructions.window}
+    {fullscreenMode ? null : liveNode}
+    <WindowOpeningContext.Provider value={doRunning || state.approval ? 'background' : 'foreground'}>
+    {work.region}
+    {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(props.doPlan.planning)] }]} hints={props.doPlan.cancelHint}
+      position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
+    </WindowOpeningContext.Provider>
+    {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
+    {othersOpen || deliveryShown ? null : liveWin.element}
+    {/* TESLIM-PENCERESI: the delivery window gives way to every card, picker and slash window and returns after it; it takes the live window's place. */}
+    {deliveryShown ? deliveries.element : null}
+    {resumePicker && !work.modalOpen && !work.pickerOpen
+      ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
+        position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
+        footer={focused => <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])} active={focused}
+          details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
+    {settings.window}
+    {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
+    <WindowOpeningContext.Provider value={turnRunning ? 'background' : 'foreground'}>
+    {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
+    </WindowOpeningContext.Provider>
+  </>;
+  // Full window: a fixed number of information rows (state; work, else the full-access line; key hints) so the bar never moves.
+  const infoRows = fullscreenInfoRows(fullscreenFrameRows(size.rows || 24));
+  const activityNode = activeLabels && stripItems.length ? <ActiveWorkSummary items={stripItems} labels={activeLabels} /> : fullAccessNode ?? <Text> </Text>;
+  const layout = fullscreenMode
+    ? <FullscreenWorkline
+      viewport={<ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} />}
+      above={<>
+        {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} collapsed /> : null}
+        {windowsNode}</>}
+      bar={composerNode}
+      info={<>{statusNode}{infoRows >= 3 ? activityNode : null}{infoRows >= 2 ? hintNode : null}</>} />
+    : <Box flexDirection="column">
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
       <PinnedWorkline enabled={pinnedMode} footer={<>
       {/* The banner wraps (never truncates): on a narrow terminal it still says how to quit; the footer's height is measured, not fixed. */}
       {!pinned || size.rows >= 8 ? <Text {...palette.accent}>{labels.banner}</Text> : null}
-      <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
-        state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
-        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
-        selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
-      {fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null}
+      {statusNode}
+      {fullAccessNode}
       {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} /> : null}
-      <StackComposer elsewhere={() => stripFocus.current} active={!stripFocused} prompt={labels.prompt} labels={{ ...labels.composer,
-        slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} historyText={bareSlash} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
-        onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
-        {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
-        {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
-      {!pinned || size.rows >= 5 ? <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} /> : null}
+      {composerNode}
+      {!pinned || size.rows >= 5 ? hintNode : null}
       </>}>
-      <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
-      {instructions.window}
-      {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
-        waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
-      <WindowOpeningContext.Provider value={doRunning || state.approval ? 'background' : 'foreground'}>
-      {work.region}
-      {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(props.doPlan.planning)] }]} hints={props.doPlan.cancelHint}
-        position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
-      </WindowOpeningContext.Provider>
-      {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
-      {othersOpen || deliveryShown ? null : liveWin.element}
-      {/* TESLIM-PENCERESI: the delivery window gives way to every card, picker and slash window and returns after it; it takes the live window's place. */}
-      {deliveryShown ? deliveries.element : null}
-      {resumePicker && !work.modalOpen && !work.pickerOpen
-        ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
-          position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
-          footer={focused => <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])} active={focused}
-            details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
-      {settings.window}
-      {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
-      <WindowOpeningContext.Provider value={turnRunning ? 'background' : 'foreground'}>
-      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
-      </WindowOpeningContext.Provider>
+      {windowsNode}
       </PinnedWorkline>
-    </Box>
+    </Box>;
+  return (
+    <HumanTextContext.Provider value={props.knownSecrets}>
+    <WindowNoteContext.Provider value={argumentNote}>
+    <WindowDecideHintContext.Provider value={labels.focus?.decide}>
+    {layout}
     </WindowDecideHintContext.Provider>
     </WindowNoteContext.Provider>
     </HumanTextContext.Provider>
   );
 }
+
+const EMPTY_ROWS: readonly LedgerRow[] = Object.freeze([]);
+/** Language-neutral until the catalog words are passed (tests, hosts without the catalog). */
+const NEUTRAL_VIEWPORT_LABELS: ChatViewportLabels = Object.freeze({ below: '+{count} PgDn · Ctrl+End' });
 
 export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly labels: WorklineLabels;
@@ -662,17 +719,26 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
 /** Ctrl+C is handled by the composer (cancel a running turn, clear a draft, or exit on a second press); the outer signal unmounts the view. */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
   const { palette, stdin, stdout, signal, ascii, startup, ...props } = options;
-  if (startup) writeStartup(stdout ?? process.stdout, startup, palette);
-  const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, createElement(WorklineApp, props));
+  const out = stdout ?? process.stdout;
+  // TERMINAL-SABIT-DUZEN: a TTY that takes escape sequences gets the full-window layout unless the person chose `inline` (`fullscreen: false`).
+  const fullscreen = out.isTTY === true && props.clearScreen !== false && props.fullscreen !== false;
+  const transcriptExit: { current: (() => string) | null } = { current: null };
+  if (startup && !fullscreen) writeStartup(out, startup, palette);
+  const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
+    createElement(WorklineApp, { ...props, fullscreen, ...(fullscreen && startup ? { startup } : {}), transcriptExit }));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
+  // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),
-    { exitOnCtrlC: false, patchConsole: false, ...((stdout ?? process.stdout).isTTY === true ? { interactive: true } : {}), ...(stdin ? { stdin } : {}),
-      stdout: props.clearScreen === false ? stdout ?? process.stdout : mainScreenOutput(stdout ?? process.stdout) });
+    { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true } : {}), ...(stdin ? { stdin } : {}),
+      ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
+      stdout: props.clearScreen === false ? out : mainScreenOutput(out) });
   const stop = () => instance.unmount();
   signal?.addEventListener('abort', stop, { once: true });
   try { await instance.waitUntilExit(); }
   finally {
     signal?.removeEventListener('abort', stop);
+    // The conversation goes to the main screen after the alternate screen is left, so it stays in the terminal's own scrollback.
+    if (fullscreen) { try { const text = transcriptExit.current?.(); if (text) out.write(`${text}\n`); } catch { /* the view is gone; nothing to restore */ } }
     const input = stdin ?? process.stdin;
     try { if (input.isTTY && input.isRaw) input.setRawMode(false); } catch { /* already restored */ }
     input.unref?.();

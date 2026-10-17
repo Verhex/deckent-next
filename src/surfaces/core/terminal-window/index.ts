@@ -7,3 +7,5 @@ export * from './internal/scroll.js';
 export * from './internal/info-model.js';
 export * from './internal/info-window.js';
 export * from './internal/system-summary.js';
+export * from './internal/viewport.js';
+export * from './internal/fullscreen-workline.js';

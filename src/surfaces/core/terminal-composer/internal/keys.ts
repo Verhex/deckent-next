@@ -28,8 +28,9 @@ export function composerKey(input: string, key: Key): ComposerKey | null {
   if (key.rightArrow) return { type: 'move', to: word ? 'wordRight' : 'right' };
   if (key.upArrow) return { type: 'move', to: 'up' };
   if (key.downArrow) return { type: 'move', to: 'down' };
-  if (key.home) return { type: 'move', to: 'home' };
-  if (key.end) return { type: 'move', to: 'end' };
+  // Ctrl+Home / Ctrl+End scroll the full-window conversation (TERMINAL-SABIT-DUZEN); plain Home/End stay line moves.
+  if (key.home && !key.ctrl) return { type: 'move', to: 'home' };
+  if (key.end && !key.ctrl) return { type: 'move', to: 'end' };
   if (key.ctrl) return CTRL[input] ?? null;
   if (key.meta) return META[input] ?? null;
   return input ? { type: 'text', text: input } : null;

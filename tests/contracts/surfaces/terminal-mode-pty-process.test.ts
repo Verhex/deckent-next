@@ -314,8 +314,8 @@ describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-term
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     const text = plain(run.output);
-    expect(text).toContain('FULL ACCESS is on');
-    expect(text).toContain('⚠ full access');
+    expect(text).toContain('Full access is on');
+    expect(text).toContain('⏵⏵⏵ full access');
     expect(text).not.toContain('Approval needed');
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
@@ -343,13 +343,13 @@ describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-term
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
-    expect(plain(run.output)).toContain('FULL ACCESS is on');
+    expect(plain(run.output)).toContain('Full access is on');
     const g = await modeProject('no-set-grant', { mode: 'full-access' });
     await startRuntime(g.projectRoot, g.env);
     const denied = await inPty(g.projectRoot, g.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
     expect(denied.timeout, denied.output).toBeUndefined();
     expect(plain(denied.output)).toContain('this session runs as standart');
-    expect(plain(denied.output)).not.toContain('FULL ACCESS is on');
+    expect(plain(denied.output)).not.toContain('Full access is on');
   }, 180_000);
 });
 
@@ -370,7 +370,7 @@ describe.skipIf(process.platform !== 'linux')('Shift+Tab mode cycle in a real ps
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     expect(run.output).not.toContain('Approval requested');
-    expect(plain(run.output)).toContain('⚠ full access');
+    expect(plain(run.output)).toContain('⏵⏵⏵ full access');
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
     const events = subjects(f);
     // FA-SESSION (owner 2026-10-07): the full-access stop is this session's only — its own audit kind, nothing stored (the stored mode stays full-auto).
@@ -401,10 +401,10 @@ describe.skipIf(process.platform !== 'linux')('Shift+Tab mode cycle in a real ps
     // The banner no longer names the mode (it can change in the session); the status line shows the stored mode the launch opened in.
     expect(plain(next.output)).toContain('· ⏵⏵ full auto ·');
     expect(plain(next.output)).not.toContain('full access');
-    expect(plain(next.output)).not.toContain('FULL ACCESS is on');
+    expect(plain(next.output)).not.toContain('Full access is on');
     const launched = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['Deckent workline', '/exit\r']]);
     expect(launched.timeout, launched.output).toBeUndefined();
-    expect(plain(launched.output)).toContain('FULL ACCESS is on');
+    expect(plain(launched.output)).toContain('Full access is on');
     expect(subjects(f).map(subject => subject['kind'])).toEqual(['permission-mode-change', 'permission-mode-change', 'permission-mode-session']);
   }, 180_000);
 
@@ -458,9 +458,10 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
       expect(run.timeout, run.output).toBeUndefined();
       expect(run.status, run.output).toBe(0);
       expect(run.output).not.toContain('\u001b[3J');
-      expect(run.output.split('\u001b[H\u001b[2J')).toHaveLength(2);
-      const after = run.output.slice(run.output.indexOf('\u001b[H\u001b[2J') + '\u001b[H\u001b[2J'.length);
-      // The banner is written before the live view starts: from the clear to the end of its hint row it carries no escape at all (NO_COLOR).
+      // TERMINAL-SABIT-DUZEN: the full window opens on the alternate screen with the banner at the top of the conversation; the person's main
+      // screen is never cleared, and on exit the conversation (banner first) is written to it as plain text (NO_COLOR: no escape at all).
+      expect(run.output).toContain('\u001b[?1049h'); expect(run.output).not.toContain('\u001b[H\u001b[2J');
+      const left = run.output.slice(run.output.lastIndexOf('\u001b[?1049l') + '\u001b[?1049l'.length), after = left.slice(left.indexOf('╭──╮'));
       const hint = language === 'en' ? '? shortcuts' : '? kısayollar';
       const banner = after.slice(0, after.indexOf(hint) + hint.length);
       expect(banner.trimStart().startsWith('╭──╮')).toBe(true);
@@ -481,7 +482,7 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
-    expect(run.output.split('\u001b[H\u001b[2J')).toHaveLength(2);
+    expect(run.output).toContain('\u001b[?1049h');
     expect(stripVTControlCharacters(run.output)).toContain('/help · Shift+Tab mode · ? shortcuts');
   }, 180_000);
 });
@@ -558,20 +559,20 @@ describe.skipIf(process.platform !== 'linux')('the approval window shows the who
     const command = ["cat <<'EOF'", 'risk: none (example)', 'ne: zararsız bir okuma', 'nerede: hiçbir yerde', 'x'.repeat(220), 'EOF', "printf 'changed' > important.txt"].join('\n');
     const f = await modeProject('v2', { call: { name: 'run_shell', arguments: { command } }, shell: true });
     await startRuntime(f.projectRoot, f.env);
-    // The window is capped to the terminal: the whole command continues below its first page and PgDn scrolls to it.
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Whole command (7 lines)', '\u000f\u001b[6~'],
-      ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
+    // The window is capped (TERMINAL-SABIT-DUZEN: at most half the full window): the whole command continues below its first page and PgDn scrolls to it.
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['the whole command is below (↑↓ scrolls)', '\u000f\u001b[6~'],
+      ['Whole command (7 lines)', '\u001b[6~'], ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
     const screen = (mark: number) => terminalScreen(run.output.slice(0, complete(run.marks![mark]!)), 100).split('\n').slice(-40).join('\n');
-    const [first, scrolled] = [screen(1), screen(2)];
+    const [first, scrolled] = [screen(1), screen(3)];
     const proof = process.env['DECKENT_T2_FRAME_PROOF'];
     if (proof) { const { appendFile } = await import('node:fs/promises'); for (const [title, text] of [['first page', first], ['after PgDn', scrolled]] as const)
       await appendFile(proof, `\n### en · Astra 2431 heredoc window · ${title}\n\n\`\`\`text\n${text}\n\`\`\`\n`); }
     expect(first).toMatch(/Command: +cat <<'EOF'/u);
     expect(first).toContain('the whole command is below (↑↓ scrolls)');
-    expect(first).toContain('Whole command (7 lines)');
+    expect(screen(2)).toContain('Whole command (7 lines)');
     expect(first).toMatch(/rows 1–\d+ of \d+/u);
     // After one PgDn the write is a row of the window itself (inside the frame), as part of the whole command.
     expect(scrolled).toMatch(/│ printf 'changed' > important\.txt +│/u);

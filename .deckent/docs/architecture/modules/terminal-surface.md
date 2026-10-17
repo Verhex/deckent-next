@@ -140,9 +140,20 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   and the window stack: one input owner. TERMINAL-SABIT R2 (owner 2026-10-14, author candidate) focuses user-opened windows
   immediately. Automatic /do/turn cards and run/worker watches keep composer focus; Ctrl+O transfers it to the top layer
   (approval priority, then newest) and back. Each new automatic card requires a fresh focus switch, even after a focused card; while it waits behind the composer a decision card shows the catalog line `tui.focus.decide` (Ctrl+O to decide).
-  Standalone windows retain their modal default. Rich Workline bounds (does not fill) the live area to terminal rows minus one: the live part clips its top, the measured
-  footer (status/input) never shrinks; completed records print once through Ink `Static` above it (R3: no live-area transcript replay). Composer draft rows follow the caret.
-  Slice 2 active work strip (`terminal-work/active-work.tsx`): a footer view over the running /do (planning, waiting with approval
+  Standalone windows retain their modal default. TERMINAL-SABIT-DUZEN (owner 2026-10-18; the Claude Code fullscreen renderer's model,
+  https://code.claude.com/docs/en/fullscreen): on a TTY `runTerminalWorkline` renders on Ink's alternate screen with incremental line
+  updates and `FullscreenWorkline` (terminal-window) is exactly one frame tall (rows − 1 on win32, Ink's Windows-console clear): chat
+  viewport (flex, bottom-anchored), windows/cards (capped at half the frame through `reservedRows`, internal scroll), the composer, and
+  a fixed-height information region (`fullscreenInfoRows`: state row; Active work summary or the full-access line; focus hint). The
+  bar's row therefore depends only on the terminal size and its own draft height. `ChatViewport` draws the bounded `LedgerBuffer.history`
+  (`terminal.viewportRows`, registry default 2000) through a pure anchor model (`viewport.ts`: follow, PgUp/PgDn half view, Ctrl+Home,
+  Ctrl+End re-follow, a "lines below" row while anchored); rows are laid out once per width by `renderToString` with the providers
+  `Static` used (`workline-transcript.tsx`), outside React's render (a nested reconciler pass crashes Yoga), so only shown rows are laid
+  out. The opening banner and the how-to line are the first viewport block; on exit the conversation is written to the main screen
+  (native scrollback); `/clear` resets the view and sends ED 3 only. No mouse capture (native selection kept; wheel scrolling is an open
+  limit). `terminal.layout: inline` (and non-TTY / TERM=dumb) keeps the R3 inline layout: the live area bounded to rows − 1, the
+  measured footer never shrinks, completed records print once through Ink `Static` (no live-area transcript replay). Composer draft rows follow the caret.
+  Slice 2 active work strip (`terminal-work/active-work.tsx`; in the full window one `ActiveWorkSummary` row under the bar, the list above the bar only while Ctrl+T selects it): a footer view over the running /do (planning, waiting with approval
   time left) and the Runs `useRunCompletion` registered (state from the same snapshots; finished rows leave once opened). It owns no
   execution, poll or authority; its clock ticks at the inspection heartbeat. Ctrl+T moves the one input owner to it while no window
   holds input; Enter on /do is the Ctrl+O transfer to its window, Enter on a Run opens the `/run` window via the task-action FIFO.
@@ -323,7 +334,10 @@ on each reference background of its theme; Deckent never sets the terminal backg
 `resolveTerminalTheme` (terminal-theme) applies `terminal.theme` (`auto|dark|light|dark-daltonized|light-daltonized|ansi`, default `auto`):
 `auto` uses the dark/light theme only when `COLORFGBG` reports the background and otherwise stays in ansi16 (the terminal's own palette);
 `colorTier` (monitor, crash report) keeps its background guard. The person's row is a left rail with the `You`/`Sen` label and the text in
-the terminal's own foreground; the answer heading is `● Deckent` (`assistantLabel`); worker cards use `workerCard`. Opening: on a TTY the
+the terminal's own foreground; the answer heading is `● Deckent` (`assistantLabel`); worker cards use `workerCard`. Mode colours (owner
+2026-10-18): standart `muted`, full-auto `modeIndicator` (its own token, no longer equal to `warning`), full-access `warning` bold with the
+calm mark `⏵⏵⏵` (ASCII `>>>`) and a factual line (`tui.panel.mode.fullAccessLine`); the launch notice is warning level. Security behaviour
+is unchanged. Opening (inline layout; the full window shows the banner as its first block instead): on a TTY the
 workline first scrolls the visible rows into the scrollback (`rows` line feeds), then sends CUP home + ED 2 and prints the banner (catalog
 mark with an ASCII form, version, project and path, model, mode, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
 with `terminal.banner: compact`, none with `off`; `terminal.clearOnStart: false` and `TERM=dumb` never clear; a pipe receives nothing.

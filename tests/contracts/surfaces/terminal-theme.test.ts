@@ -67,7 +67,8 @@ describe('terminal themes (T2 T-READABLE)', () => {
     expect(palette.selection.inverse).toBe(true);
     expect(palette.diffAdded.color).toBe('green');
     expect(palette.diffRemoved.color).toBe('red');
-    expect(palette.modeIndicator.color).toBe('yellow');
+    // Owner 2026-10-18: full-auto has its own colour; full access keeps the warning tone.
+    expect(palette.modeIndicator.color).toBe('cyanBright'); expect(palette.warning.color).toBe('yellow');
     expect(resolveWorklinePalette('truecolor', 'light').assistantLabel.color).toBe('#0B6A9E');
     expect(resolveWorklinePalette('ansi16', 'dark-daltonized').diffRemoved.color).toBe('yellowBright');
     for (const style of Object.values(resolveWorklinePalette('none', 'light'))) expect(style).toEqual({});

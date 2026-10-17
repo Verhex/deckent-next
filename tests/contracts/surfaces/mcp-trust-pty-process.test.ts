@@ -174,7 +174,8 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
       ['Deckent workline', 'hello\r'],
       // TERMINAL-SABIT R2 (owner 2026-10-14): trust cards raised during the turn keep the composer focused; Ctrl+O moves to each card, then y.
       ['mcp_trust · mcp:fx · launch', '\u000f'], [FOCUSED, 'y', 'fresh'],
-      ['mcp_trust · mcp:fx · tools', '\u000f'], [FOCUSED, 'y', 'fresh'],
+      // TERMINAL-SABIT-DUZEN: a card takes at most half the full window and scrolls; the tool list is read with PgDn before y.
+      ['mcp_trust · mcp:fx · tools', '\u000f'], [FOCUSED, '\u001b[6~\u001b[6~\u001b[6~', 'fresh'], ['echo', 'y', 'fresh'],
       // SLASH-WINDOWS I-1 (owner 2026-10-08): in the terminal a typed `/mcp list` opens the /mcp window with the one-time note (the CLI keeps `list`).
       ['Trusted turn done.', '/mcp list\r'],
       ['Typed arguments are not used in the terminal', '\u001b'],

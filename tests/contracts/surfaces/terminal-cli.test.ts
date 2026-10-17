@@ -214,6 +214,8 @@ describe('deckent terminal CLI', () => {
             async ensureRuntimeService() { return { mode: 'connected' as const, instanceId: 'i', pid: null, logPath: null, shutdownAvailable: true, build: null, configDigest: digest, idleStopMs: 900_000 }; },
             async describeRuntimeService() { described++; return {} as never; } });
         await until(() => stdout.text.includes('Ask anything'), 'terminal startup');
+        // The full-window conversation lays a notice out right after the frame that first shows it (TERMINAL-SABIT-DUZEN).
+        await until(() => !stale || stdout.text.includes('/service-restart'), 'stale notice'); if (!stale) await settle(100);
         expect(stdout.text.includes('/service-restart')).toBe(stale);
         expect(described).toBe(0); vi.advanceTimersByTime(RUNTIME_SERVICE_HEARTBEAT_MS * 2); expect(described).toBe(2);
         stdin.write('/exit\r'); expect(await run).toBe(0);
