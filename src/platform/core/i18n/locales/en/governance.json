@@ -1034,6 +1034,7 @@
   "queue.cli.result": "Queue result: {result}",
   "queue.confirm.publish": "Publish delivery references",
   "queue.confirm.adopt": "Adopt the verified prefix",
+  "queue.confirm.adoptPrompt": "Move {branch} to the verified commit? y/N: ",
   "queue.confirm.card": "{operation}\n{targetLabel}: {target}\nExact batch: {digest}\nExpires: {expires}\nItems: {count}\n{items}\nA failure stops the suffix; already adopted items remain adopted.",
   "queue.confirm.item": "Ticket {command}\n  {from} → {to}\n  Candidate {candidate}\n  Verification {verification}\n{changes}\n  Additional changes: {omitted}",
   "queue.window.status": "{targetLabel}: {target}\n{basisLabel}: {basis}\n{versionLabel}: {version}\nQueue {command} · position in authorized scope {position} · {state} · {outcome}\nResponsible: {owner} · last known\nNext: {next}",

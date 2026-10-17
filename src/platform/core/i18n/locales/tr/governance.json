@@ -1034,6 +1034,7 @@
   "queue.cli.result": "Kuyruk sonucu: {result}",
   "queue.confirm.publish": "Teslim referanslarını yayımla",
   "queue.confirm.adopt": "Doğrulanmış ön eki benimse",
+  "queue.confirm.adoptPrompt": "{branch} doğrulanmış commit'e taşınsın mı? y/N: ",
   "queue.confirm.card": "{operation}\n{targetLabel}: {target}\nTam parti: {digest}\nSon geçerlilik: {expires}\nİş: {count}\n{items}\nHata kalan işleri durdurur; benimsenmiş işler korunur.",
   "queue.confirm.item": "Bilet {command}\n  {from} → {to}\n  Aday {candidate}\n  Doğrulama {verification}\n{changes}\n  Ek değişiklik: {omitted}",
   "queue.window.status": "{targetLabel}: {target}\n{basisLabel}: {basis}\n{versionLabel}: {version}\nKuyruk {command} · yetkili kapsam içindeki konum {position} · {state} · {outcome}\nSorumlu: {owner} · son bilinen durum\nSonraki: {next}",

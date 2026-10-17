@@ -21,7 +21,8 @@ export async function askQueueConfirmation(view: Omit<QueueConsent, 'capability'
   input: Readable = process.stdin, output: Writable = process.stderr, control: { readonly timeoutMs?: number; readonly signal?: AbortSignal } = {}): Promise<boolean> {
   if (!(input as { isTTY?: boolean }).isTTY) throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED');
   output.write(renderQueueConsent(view, locale) + '\n');
-  return askLine(locale, input, output, control);
+  // The adoption card moves a branch: its question says so; publication keeps the reference-write question.
+  return askLine(locale, input, output, control, view.operation === 'adopt' ? t('queue.confirm.adoptPrompt', { branch: text(view.target.id) }, locale) : undefined);
 }
 export function renderQueueConsent(view: Omit<QueueConsent, 'capability'>, locale: Locale): string {
   return t('queue.confirm.card', { operation: word(`queue.confirm.${view.operation}`, locale),
@@ -29,7 +30,8 @@ export function renderQueueConsent(view: Omit<QueueConsent, 'capability'>, local
     items: view.items.map(item => t('queue.confirm.item', { command: text(item.commandId), from: text(item.from), to: text(item.to),
       candidate: item.candidateDigest, verification: item.verificationReceipt, changes: item.changes.slice(0, preview.maxFiles).map(text).join('\n'), omitted: Math.max(0, item.changes.length - preview.maxFiles) }, locale)).join('\n') }, locale);
 }
-async function askLine(locale: Locale, input: Readable, output: Writable, control: { readonly timeoutMs?: number; readonly signal?: AbortSignal }): Promise<boolean> {
+async function askLine(locale: Locale, input: Readable, output: Writable, control: { readonly timeoutMs?: number; readonly signal?: AbortSignal },
+  prompt = t('cli.task.delivery.prompt', {}, locale)): Promise<boolean> {
   const reader = createInterface({ input, output, terminal: true });
   const timeoutMs = control.timeoutMs ?? getConfigFieldDefault('approvals').sessionTtlMs;
   const timer = setTimeout(() => reader.close(), timeoutMs);
@@ -41,7 +43,7 @@ async function askLine(locale: Locale, input: Readable, output: Writable, contro
       let finished = false;
       const finish = (value: boolean) => { if (!finished) { finished = true; resolve(value); } };
       reader.once('close', () => finish(false)); reader.once('SIGINT', () => { finish(false); reader.close(); });
-      reader.question(t('cli.task.delivery.prompt', {}, locale), answer => finish(answer.trim().toLowerCase() === 'y'));
+      reader.question(prompt, answer => finish(answer.trim().toLowerCase() === 'y'));
     });
   } finally { clearTimeout(timer); control.signal?.removeEventListener('abort', abort); reader.close(); }
 }

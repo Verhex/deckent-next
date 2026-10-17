@@ -36,6 +36,8 @@ afterEach(async () => {
 });
 const git = async (cwd: string, ...args: string[]) => (await exec('/usr/bin/git', ['-C', cwd, ...args])).stdout.trim();
 const TARGET = 'refs/heads/dogfood/adopted', SCOPE = 's';
+/** The adoption card asks whether the branch moves (QUEUE-SMALL 5); the publication card keeps its reference-write question. */
+const ADOPT_PROMPT = `Move ${TARGET} to the verified commit? y/N: `;
 const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
 const attemptActions = ['execute', 'read-output', 'recover-output', 'prepare-integration', 'deliver-integration', 'evaluate', 'adopt-integration', 'rollback-integration'];
 const criterion = { id: 'exit', version: 1, description: 'Zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } };
@@ -221,9 +223,11 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
 
     // The shipped CLI on a real controlling terminal: one exact publication card, then one exact adoption card, for the whole batch.
     const confirmed = await cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', 'q1'],
-      [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Queue result', '']]);
+      [['y/N: ', 'y\r'], [ADOPT_PROMPT, 'y\r', 'fresh'], ['Queue result', '']]);
     expect(confirmed.status).toBe(0);
     expect(confirmed.output).toContain('Publish delivery references');
+    expect(confirmed.output).toContain('Adopt the verified prefix');
+    expect(confirmed.output.match(/Write this reference\? y\/N: /gu)).toHaveLength(1); expect(confirmed.output.match(/to the verified commit\? y\/N: /gu)).toHaveLength(1);
     expect(confirmed.output.match(/Exact batch: [a-f0-9]{64}/gu)).toHaveLength(2);
     expect(confirmed.output.match(/Items: 3/gu)).toHaveLength(2);
     for (const ticket of tickets) expect(confirmed.output).toContain(`Ticket ${ticket}`);
@@ -273,7 +277,7 @@ async function queueSession(f: Fixture) {
     await f.evaluate(runId, await f.execute(runId));
     await until(() => view(ticket), record => record?.state === 'awaiting-confirmation', `${ticket} awaiting confirmation`);
   };
-  const confirm = (ticket: string, steps: readonly Step[] = [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Queue result', '']]) =>
+  const confirm = (ticket: string, steps: readonly Step[] = [['y/N: ', 'y\r'], [ADOPT_PROMPT, 'y\r', 'fresh'], ['Queue result', '']]) =>
     cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', ticket], steps);
   const written = async () => ({ refs: await git(f.target, 'for-each-ref', '--format=%(refname) %(objectname)'), objects: await git(f.target, 'count-objects', '-v'),
     head: await git(f.target, 'rev-parse', 'HEAD'), status: await git(f.target, 'status', '--porcelain') });
@@ -312,7 +316,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const s = await queueSession(f);
     await s.toConfirmation('q1', attempt);
     const before = await s.written();
-    const refused = await s.confirm('q1', [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['does not agree', '']]);
+    const refused = await s.confirm('q1', [['y/N: ', 'y\r'], [ADOPT_PROMPT, 'y\r', 'fresh'], ['does not agree', '']]);
     const ids = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q1' } } as never);
     expect({ status: refused.status === 0, ticket: (await s.view('q1'))?.state, row: journal(f, ids.adoption) ?? null })
       .toEqual({ status: false, ticket: 'awaiting-confirmation', row: null });
@@ -380,7 +384,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     // The process dies after publication and the journal claim, before any move or reconciliation (the shape the bare catch left on N1).
     vi.spyOn(GitIntegrationAdoption.prototype, 'move').mockRejectedValue(new Error('process died'));
     vi.spyOn(TargetBatchExecutor.prototype, 'reconcile').mockRejectedValue(new Error('process died'));
-    await s.confirm('q1', [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Queue result', '']]);
+    await s.confirm('q1', [['y/N: ', 'y\r'], [ADOPT_PROMPT, 'y\r', 'fresh'], ['Queue result', '']]);
     expect((await s.view('q1'))?.state).toBe('reconciling');
     await s.stop(); vi.restoreAllMocks();
     // Rewrite that ledger into the exact v57 N1 shape: the queue adoption numbered N+1 in the ref-name-wide sequence, no reason on the ticket.
