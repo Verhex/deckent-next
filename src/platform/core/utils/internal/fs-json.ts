@@ -70,3 +70,14 @@ export async function writeTextAtomic(path: string, text: string): Promise<void>
     await unlink(temp).catch(error => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; });
   }
 }
+/** One small JSON record per name under a private directory: absent-tolerant read, atomic replace, absent-tolerant removal. Names are
+ * caller-chosen file stems (`[A-Za-z0-9_-]`, at most 128); the directory is created 0700 on the first write. */
+export interface JsonRecordFile { read(): Promise<JsonRead>; write(value: unknown): Promise<void>; remove(): Promise<void> }
+export function jsonRecordDirectory(directory: string): (name: string) => JsonRecordFile {
+  return name => {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(name)) throw ErrorRegistry.createError('CONFIG_UNSAFE_KEY');
+    const path = join(directory, `${name}.json`);
+    return { read: () => readJsonFile(path), write: value => writeJsonAtomic(path, value),
+      remove: () => unlink(path).catch(error => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }) };
+  };
+}

@@ -161,6 +161,7 @@
     "failureBackoffMs": 5000,
     "maxConcurrentRuns": 8,
     "maxConsecutiveFailures": 3,
+    "maxPreparationAborts": 2,
     "maxReservationsPerTurn": 4,
     "pageSize": 64,
     "parking": {

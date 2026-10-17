@@ -9,6 +9,8 @@ export const AUDIT_EVENT_SCHEMA_VERSION = 1;
 export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
 /** FA-TRACKED-WARN: the most workspace-relative paths one `tracked-files-changed` list names (its count is always the full number). */
 export const AUDIT_TRACKED_PATHS_MAX = 50;
+/** Crash-loop breaker: the phases of one dispatch preparation, in order (before workspace acquisition → secret gate → handoff → supervisor/claim). */
+export const DISPATCH_PREPARATION_PHASES = Object.freeze(['prepare', 'workspace', 'secret-gate', 'handoff', 'dispatch'] as const);
 /** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
 export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
 /**
@@ -216,6 +218,11 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * (`allowPatternPaths:<glob>` / `acknowledgedDenyPaths:<path>`) that lifted it; at most `AUDIT_TRACKED_PATHS_MAX` entries, never a value. */
   z.object({ kind: z.literal('worker-tree-excluded'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, count: counterSchema.positive(),
     entries: z.array(z.object({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600), by: z.string().min(1).max(600) }).strict()).min(1).max(AUDIT_TRACKED_PATHS_MAX) }).strict(),
+  /** Crash-loop breaker (pilot1 2026-10-17): a start found this attempt's dispatch preparation left unsettled by another process instance, i.e.
+   * that process died during it. `phase` is the last preparation phase it entered (null: the record was unreadable); `aborts` counts such
+   * ends since the last settle or resume; at `bound` the Run is parked (`progression-failed`, DISPATCH_PREPARATION_ABORTED) instead of dispatched. */
+  z.object({ kind: z.literal('dispatch-preparation-aborted'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
+    phase: z.enum(DISPATCH_PREPARATION_PHASES).nullable(), aborts: counterSchema.positive(), bound: counterSchema.positive() }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

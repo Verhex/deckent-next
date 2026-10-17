@@ -63,4 +63,8 @@ it('resolves the consecutive progression failure limit through config and refuse
   expect(validateConfig({}).config.runRuntime.maxConsecutiveFailures).toBe(3);
   expect(validateConfig({ runRuntime: { maxConsecutiveFailures: 2 } }).config.runRuntime.maxConsecutiveFailures).toBe(2);
   for (const value of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, null]) expect(() => validateConfig({ runRuntime: { maxConsecutiveFailures: value } })).toThrow();
+  // Crash-loop breaker bound (abnormal ends of one dispatch preparation before the Run is parked): registry default 2, same validation.
+  expect(validateConfig({}).config.runRuntime.maxPreparationAborts).toBe(2);
+  expect(validateConfig({ runRuntime: { maxPreparationAborts: 5 } }).config.runRuntime.maxPreparationAborts).toBe(5);
+  for (const value of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, null]) expect(() => validateConfig({ runRuntime: { maxPreparationAborts: value } })).toThrow();
 });
