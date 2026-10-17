@@ -23,8 +23,12 @@ export const patchExclusions = Object.freeze(rules);
 export function isPatchExcluded(path: string) {
   return path.split('/').some(part => rules.excludedSegments.includes(part) || rules.excludedPrefixes.some(prefix => part.startsWith(prefix)));
 }
-export const patchPathSchema = z.string().min(1).refine(path => !path.includes('\\') && [...path].every(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)
-  && path.split('/').every(part => part !== '' && part !== '.' && part !== '..') && !isPatchExcluded(path));
+/** A well-formed repository-relative path (no traversal, separators or control characters). History written by others is read with this:
+ * it may name paths a patch may never write (e.g. tracked `.deckent/docs`), which are only "touched". */
+export const historyPathSchema = z.string().min(1).refine(path => !path.includes('\\') && [...path].every(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)
+  && path.split('/').every(part => part !== '' && part !== '.' && part !== '..'));
+/** A path the patch itself may write: well formed AND outside every exclusion. */
+export const patchPathSchema = historyPathSchema.refine(path => !isPatchExcluded(path));
 const fileSchema = z.object({ mode: z.enum(['100644', '100755']), text: z.string(), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
 export type PatchFile = z.infer<typeof fileSchema>;
 export function patchFile(bytes: Uint8Array, mode: PatchFile['mode']): PatchFile {

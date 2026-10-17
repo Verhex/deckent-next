@@ -1,7 +1,7 @@
 import type { AttemptIdentity } from '#domain/index.js';
 import type { WorkspaceSource } from '#engine/core/workspaces/index.js';
 import { createHash } from 'node:crypto';
-import { patchExclusions, workspacePatchSchema, patchPathSchema, isPatchExcluded, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchFile, type PatchLimits } from './contract.js';
+import { patchExclusions, workspacePatchSchema, patchPathSchema, historyPathSchema, isPatchExcluded, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchFile, type PatchLimits } from './contract.js';
 export type Snapshot = Map<string, PatchFile>;
 /** Base tree entry from the trusted source repository: identity only, no content read. */
 export type BaseEntry = Readonly<{ mode: PatchFile['mode']; oid: string; size: number }>;
@@ -12,13 +12,14 @@ export class SnapshotBudget {
   bytes = 0; entries = 0; readonly started = Date.now();
   constructor(readonly limits: PatchLimits, readonly deadline: number) {}
   time() { if (Date.now() >= this.deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time', { observed: Date.now() - this.started, limit: this.deadline - this.started }); }
-  path(path: string) {
+  /** `history`: a path another commit changed is bounded and well formed, but may lie under a patch exclusion (never written by the patch). */
+  path(path: string, origin: 'patch' | 'history' = 'patch') {
     this.time();
     const depth = path.split('/').length;
     if (depth > this.limits.maxDepth) throw new WorkspacePatchError('PATCH_LIMIT', 'depth', { observed: depth, limit: this.limits.maxDepth });
     const bytes = Buffer.byteLength(path);
     if (bytes > this.limits.maxPathBytes) throw new WorkspacePatchError('PATCH_LIMIT', 'path', { observed: bytes, limit: this.limits.maxPathBytes });
-    if (!patchPathSchema.safeParse(path).success) throw new WorkspacePatchError('PATCH_UNSAFE');
+    if (!(origin === 'history' ? historyPathSchema : patchPathSchema).safeParse(path).success) throw new WorkspacePatchError('PATCH_UNSAFE');
   }
   entry() { this.time(); if (++this.entries > this.limits.maxEntries) throw new WorkspacePatchError('PATCH_LIMIT', 'entries', { observed: this.entries, limit: this.limits.maxEntries }); }
   size(size: number) {
