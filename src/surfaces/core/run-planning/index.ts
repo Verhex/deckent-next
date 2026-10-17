@@ -15,7 +15,7 @@ export function brainProposalLines(result: RunProposalResult, locale: Locale): r
       t('proposal.budget.notice', {}, locale)]),
     ...planningSpendingLines(result, locale),
     t('brain.permissions', { permissions: proposal.requiredPermissions.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ') || '-' }, locale),
-    ...(record.reason && record.reason !== 'RUN_APPROVAL_REQUIRED' ? [ErrorRegistry.createError(record.reason, { locale }).message] : []),
+    ...(record.reason && record.reason !== 'RUN_APPROVAL_REQUIRED' ? [ErrorRegistry.createError(record.reason, { locale, ...(result.reasonParams ? { params: result.reasonParams } : {}) }).message] : []),
     ...(record.approval ? [t('brain.waiting', { id: record.approval.approvalId, expires: new Date(record.approval.expiresAt).toISOString() }, locale), t('brain.revise', {}, locale)] : []),
     ...(proposal.source.kind === 'model' ? [t('brain.contribution', { model: proposal.source.receipt.reference.modelId, invocation: proposal.source.receipt.invocationId, template: proposal.source.contribution?.template.version ?? '-' }, locale)] : []),
   ];

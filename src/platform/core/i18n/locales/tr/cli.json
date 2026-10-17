@@ -810,7 +810,7 @@
   "terminal.worker.ordinal": "işçi {n}",
   "terminal.duration.seconds": "{n} sn",
   "terminal.duration.minutes": "{n} dk",
-  "terminal.duration.hours": "{n} sa",
+  "terminal.duration.hours": "{n} sa {m} dk",
   "terminal.worker.ago": "{duration} önce",
   "terminal.worker.tokens": "{tokens} token",
   "terminal.worker.tokensCache": "{tokens} token (önbellek %{ratio})",

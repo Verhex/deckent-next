@@ -810,7 +810,7 @@
   "terminal.worker.ordinal": "worker {n}",
   "terminal.duration.seconds": "{n} s",
   "terminal.duration.minutes": "{n} min",
-  "terminal.duration.hours": "{n} h",
+  "terminal.duration.hours": "{n}h {m}m",
   "terminal.worker.ago": "{duration} ago",
   "terminal.worker.tokens": "{tokens} tokens",
   "terminal.worker.tokensCache": "{tokens} tokens (cache {ratio}%)",

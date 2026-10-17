@@ -21,7 +21,10 @@ function graphemeCells(cluster: string): number {
   return 1;
 }
 
+/** Printable ASCII is one grapheme and one cell per code unit: the common case skips segmentation (monitor snapshots measure thousands of lines). */
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/, JOINS_PREVIOUS = /^[\p{M}\p{Cf}]/u;
 export function cells(text: string): number {
+  if (PRINTABLE_ASCII.test(text)) return text.length;
   let width = 0;
   for (const cluster of graphemes(text)) width += graphemeCells(cluster);
   return width;
@@ -60,19 +63,23 @@ export function wrapCells(text: string, width: number): string[] {
   const limit = Math.max(1, width);
   if (cells(text) <= limit) return [text];
   const lines: string[] = [];
-  let line = '';
+  // Widths add up token by token, so each token is measured once instead of re-measuring the line; a token opening with a mark or format
+  // character can join the previous grapheme and is measured with the line, exactly as before.
+  let line = '', used = 0;
   for (const token of text.split(/(\s+)/)) {
     if (token === '') continue;
-    if (cells(line + token) <= limit) { line += token; continue; }
+    const width = JOINS_PREVIOUS.test(token) ? cells(line + token) - used : cells(token);
+    if (used + width <= limit) { line += token; used += width; continue; }
     if (line.trim() !== '') lines.push(line.trimEnd());
-    line = '';
+    line = ''; used = 0;
     if (/^\s+$/.test(token)) continue;
-    let chunk = '';
+    let chunk = '', chunkCells = 0;
     for (const cluster of graphemes(token)) {
-      if (chunk !== '' && cells(chunk + cluster) > limit) { lines.push(chunk); chunk = ''; }
-      chunk += cluster;
+      const w = graphemeCells(cluster);
+      if (chunk !== '' && chunkCells + w > limit) { lines.push(chunk); chunk = ''; chunkCells = 0; }
+      chunk += cluster; chunkCells += w;
     }
-    line = chunk;
+    line = chunk; used = chunkCells;
   }
   if (line !== '' || lines.length === 0) lines.push(line);
   return lines;

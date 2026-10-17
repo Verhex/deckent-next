@@ -21,17 +21,24 @@ export class FileResourceTraceStore implements ResourceTraceStore {
       return await work(join(`/proc/self/fd/${handle.fd}`, this.settings.fileName), handle);
     } finally { await handle.close(); }
   }
-  async read(identity: AttemptIdentity) {
+  async read(identity: AttemptIdentity) { return (await this.readMany([identity]))[0]!; }
+  /** One pass over the segments for many attempts (one monitor snapshot reads each segment once, not once per attempt); each result is
+   * exactly what `read` returns for that identity. */
+  async readMany(identities: readonly AttemptIdentity[]) {
     return this.withPath(async path => {
       const rows = await segments(path, this.settings), trim = await checkpoint(path, this.settings.maxStoreBytes);
-      const lastTrim = trim.lastTrim ?? rows.find(row => row.legacy)?.lastTrim ?? null;
-      const samples = rows.flatMap(row => row.samples).filter(row => sameAttemptIdentity(row.identity, identity));
-      for (const row of rows.filter(row => row.damaged && (!row.samples.length || row.samples.some(value => sameAttemptIdentity(value.identity, identity))))) {
-        // Tail identity/time are untrusted. Explicit unknown measurement, never a zero counter.
-        samples.push(resourceGap(identity, row.samples.reduce((at, sample) => Math.max(at, sample.observedAtMs), row.createdAtMs), 'invalid'));
-      }
-      return { samples: [...new Map(samples.map(row => [JSON.stringify(row), row])).values()].sort((a, b) => a.observedAtMs - b.observedAtMs),
-        trimmedBeforeMs: lastTrim && sameAttemptIdentity(lastTrim.identity, identity) ? lastTrim.throughMs : null };
+      const lastTrim = trim.lastTrim ?? rows.find(row => row.legacy)?.lastTrim ?? null, key = (value: AttemptIdentity) => JSON.stringify([value.scopeId, value.runId,
+        value.taskId, value.attemptId, value.layoutRevision, value.generation]), byIdentity = new Map<string, ResourceSample[]>();
+      for (const sample of rows.flatMap(row => row.samples)) { const id = key(sample.identity), list = byIdentity.get(id); if (list) list.push(sample); else byIdentity.set(id, [sample]); }
+      return identities.map(identity => {
+        const samples = [...byIdentity.get(key(identity)) ?? []];
+        for (const row of rows.filter(row => row.damaged && (!row.samples.length || row.samples.some(value => sameAttemptIdentity(value.identity, identity))))) {
+          // Tail identity/time are untrusted. Explicit unknown measurement, never a zero counter.
+          samples.push(resourceGap(identity, row.samples.reduce((at, sample) => Math.max(at, sample.observedAtMs), row.createdAtMs), 'invalid'));
+        }
+        return { samples: [...new Map(samples.map(row => [JSON.stringify(row), row])).values()].sort((a, b) => a.observedAtMs - b.observedAtMs),
+          trimmedBeforeMs: lastTrim && sameAttemptIdentity(lastTrim.identity, identity) ? lastTrim.throughMs : null };
+      });
     });
   }
   private async syncSegment(row: Segment) {

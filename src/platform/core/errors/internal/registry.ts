@@ -1,4 +1,4 @@
-import { t, resolveLocale, type Locale, type Params } from '#platform/core/i18n/index.js';
+import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
 import { NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
 import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
@@ -482,7 +482,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   RUN_PROPOSAL_WORK_CLASS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROPOSAL_WORK_CLASS_REQUIRED', p, l) }) },
   RUN_PROPOSAL_PERMISSION_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROPOSAL_PERMISSION_UNKNOWN', p, l) }) },
   RUN_PROPOSAL_BUDGET_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROPOSAL_BUDGET_MISSING', p, l) }) },
-  RUN_PROPOSAL_BUDGET_EXCEEDED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROPOSAL_BUDGET_EXCEEDED', p, l) }) },
+  RUN_PROPOSAL_BUDGET_EXCEEDED: { category: 'error', render: (p, l) => {
+    const money = (key: string) => typeof p[key] === 'number' && typeof p['currency'] === 'string' ? currencyAmountText(p[key], p['currency'], l) : null, remaining = money('remaining'), ceiling = money('ceiling');
+    return { message: remaining === null ? t('error.RUN_PROPOSAL_BUDGET_EXCEEDED', p, l) : ceiling === null ? t('error.RUN_PROPOSAL_BUDGET_EXCEEDED.remaining', { remaining }, l)
+      : t('error.RUN_PROPOSAL_BUDGET_EXCEEDED.ceiling', { remaining, ceiling }, l) }; } },
   RUN_PROPOSAL_BASIS_STALE: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROPOSAL_BASIS_STALE', p, l) }) },
   RUN_PROPOSAL_COMMAND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROPOSAL_COMMAND_CONFLICT', p, l) }) },
   RUN_PROPOSAL_ACTOR_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROPOSAL_ACTOR_MISMATCH', p, l) }) },

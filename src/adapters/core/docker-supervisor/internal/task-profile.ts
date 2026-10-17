@@ -7,7 +7,7 @@ import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index.js';
 
 const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
-  nativeSubscription: nativeSubscriptionSchema.optional(),
+  nativeSubscription: nativeSubscriptionSchema.optional(), billingAxis: z.literal('local').optional(),
   outputFiles: dockerOutputFilesSchema.optional(),
   readOnlyMounts: dockerReadOnlyMountsSchema.optional(),
   argv: z.array(z.string().refine(value => !value.includes(String.fromCharCode(0)))).min(1)
@@ -33,9 +33,10 @@ export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   }
   const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
   if (!parsed.success) throw new DockerTaskProfileError();
-  const { argv, nativeSubscription, readOnlyMounts, ...options } = parsed.data;
-  if (nativeSubscription?.promptDelivery && nativeSubscription.promptDelivery.argvSha256
-    !== createHash('sha256').update(JSON.stringify(argv)).digest('hex')) throw new DockerTaskProfileError();
+  // `billingAxis: 'local'` declares no provider connection (spending class only); a subscription binding opens one, so both are refused.
+  const { argv, nativeSubscription, readOnlyMounts, billingAxis, ...options } = parsed.data;
+  if ((billingAxis && nativeSubscription) || (nativeSubscription?.promptDelivery && nativeSubscription.promptDelivery.argvSha256
+    !== createHash('sha256').update(JSON.stringify(argv)).digest('hex'))) throw new DockerTaskProfileError();
   // Project-relative binds stay profile data; trusted composition resolves them to host paths (resolveDockerReadOnlyMounts).
   return Object.freeze({ argv, nativeSubscription, readOnlyMounts, options: Object.freeze(options) });
 }

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, formatDuration, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { SpanText, projectHumanPickerText, span, useHumanTextSecrets, useRenderGlyphs, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
+import { SpanText, cells, projectHumanPickerText, span, truncateEnd, useHumanTextSecrets, useRenderGlyphs, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
 import { useFocusOwner } from '#surfaces/core/terminal-window/index.js';
-import { runStateText, runTitle, type JobWindowLabels } from './job-windows.js';
+import { displayId, parkReasonText, runStateText, runTitle, type JobWindowLabels } from './job-windows.js';
 import type { TrackedRun } from './run-completion.js';
 
 /**
@@ -26,7 +26,12 @@ export type ActiveDo = Readonly<{ title: string; phase: 'planning' | 'waiting'; 
 export type ActiveWorkTarget = Readonly<{ kind: 'do' }> | Readonly<{ kind: 'run'; run: RunView }> | Readonly<{ kind: 'delivery'; key: string }>;
 /** A delivery waiting for the person in this session (TESLIM-PENCERESI); `sinceMs`: when this session first saw it. */
 export type ActiveDelivery = Readonly<{ key: string; title: string; sinceMs: number }>;
-export type ActiveWorkItem = Readonly<{ key: string; title: string; state: string; role: SpanRole; elapsed: string; target: ActiveWorkTarget }>;
+/** `detail`: a Run's short id and its model (or task kind), between the title and the state (owner 2026-10-17). */
+export type ActiveWorkItem = Readonly<{ key: string; title: string; detail?: string; state: string; role: SpanRole; elapsed: string; target: ActiveWorkTarget }>;
+/** Finished Runs stay visible this many at most (most recent first): unfinished work is never hidden, finished work does not pile up. */
+const FINISHED_SHOWN = 3;
+/** A row's title takes at most this many cells, so id, model, state and age stay on the one line. */
+const TITLE_CELLS = 48;
 
 /** Display rank: a Run that needs the person first, then running, parked, finished. Not a policy: only the order of rows. */
 function runRank(run: RunView): number {
@@ -38,8 +43,8 @@ function runState(run: RunView, labels: ActiveWorkLabels, jobs: JobWindowLabels)
   const rank = runRank(run);
   if (rank === 0) return { text: labels.needsYou, role: 'warning' };
   if (rank === 1 && run.tasks.some(task => task.phase === 'evaluating')) return { text: labels.evaluating, role: 'accent' };
-  const text = runStateText(run, jobs);
-  if (run.state.kind !== 'terminal') return { text, role: rank === 2 ? 'warning' : 'accent' };
+  const text = runStateText(run, jobs), reason = parkReasonText(run, jobs);
+  if (run.state.kind !== 'terminal') return { text: reason ? `${text} · ${reason}` : text, role: rank === 2 ? 'warning' : 'accent' };
   return { text, role: run.state.outcome === 'completed' ? 'success' : run.state.outcome === 'cancelled' ? 'muted' : 'error' };
 }
 
@@ -58,10 +63,14 @@ export function activeWorkItems(input: { readonly active: ActiveDo | null; reado
   // A waiting delivery needs the person: it is listed right after the running /do, before the Runs.
   for (const delivery of labels.deliveryWaiting ? input.deliveries ?? [] : [])
     items.push({ key: `delivery:${delivery.key}`, title: delivery.title, state: labels.deliveryWaiting!, role: 'warning', elapsed: elapsed(delivery.sinceMs), target: { kind: 'delivery', key: delivery.key } });
-  const runs = [...input.runs].sort((a, b) => runRank(a.run) - runRank(b.run) || b.sinceMs - a.sinceMs);
+  const sorted = [...input.runs].sort((a, b) => runRank(a.run) - runRank(b.run) || b.sinceMs - a.sinceMs);
+  const runs = [...sorted.filter(row => row.run.state.kind !== 'terminal'), ...sorted.filter(row => row.run.state.kind === 'terminal').slice(0, FINISHED_SHOWN)];
   for (const { run, sinceMs } of runs) {
-    const state = runState(run, labels, jobs);
-    items.push({ key: `run:${run.scopeId}:${run.runId}`, title: runTitle(run, jobs), state: state.text, role: state.role, elapsed: elapsed(sinceMs), target: { kind: 'run', run } });
+    const state = runState(run, labels, jobs), first = run.tasks[0], model = run.tasks.find(task => task.taskBrief?.model)?.taskBrief?.model?.modelId ?? first?.kind;
+    const detail = [displayId(run.runId), ...(model ? [`${model}${run.tasks.length > 1 ? ` +${run.tasks.length - 1}` : ''}`] : [])].join(' · ');
+    // Age: this session's registration of the Run (at its admission here). RunView carries no admission time; adding one is an open
+    // contract decision (every RunView producer must agree), so the recorded time is not shown yet.
+    items.push({ key: `run:${run.scopeId}:${run.runId}`, title: runTitle(run, jobs), detail, state: state.text, role: state.role, elapsed: elapsed(sinceMs), target: { kind: 'run', run } });
   }
   return Object.freeze(items);
 }
@@ -115,12 +124,20 @@ export function ActiveWorkStrip({ items, labels, rows, focused, onFocus, onOpen 
   if (items.length === 0) return null;
   const view = activeWorkWindow(items.length, index, rows), arrow = glyphs.ascii ? '>' : '›';
   const human = (text: string): readonly Span[] => projectHumanPickerText(text, known).spans;
+  // The projected (secret-masked) title is cut by cells, never the raw text, so a cut never exposes part of a masked value.
+  const clipped = (parts: readonly Span[]): readonly Span[] => {
+    const whole = parts.map(part => part.text).join('');
+    if (cells(whole) <= TITLE_CELLS) return parts;
+    let room = TITLE_CELLS - cells('…'); const out: Span[] = [];
+    for (const part of parts) { if (room <= 0) break; const text = truncateEnd(part.text, room, ''); out.push({ ...part, text }); room -= cells(text); }
+    return [...out, span('…')];
+  };
   return <Box flexDirection="column" flexShrink={0}>
     <Text wrap="truncate-end"><SpanText spans={[span(focused ? labels.focused : labels.title, { role: focused ? 'accent' : 'muted', bold: focused })]} /></Text>
     {items.slice(view.first, view.first + view.shown).map((item, offset) => {
       const mark = focused && view.first + offset === index ? `${arrow} ` : '  ';
-      return <Text key={item.key} wrap="truncate-end"><SpanText spans={[span(mark, { role: 'accent' }), ...human(item.title).map(part => ({ ...part, bold: true })),
-        span(' · '), span(item.state, { role: item.role }), span(` · ${item.elapsed}`, { role: 'muted' })]} /></Text>;
+      return <Text key={item.key} wrap="truncate-end"><SpanText spans={[span(mark, { role: 'accent' }), ...clipped(human(item.title)).map(part => ({ ...part, bold: true })),
+        ...(item.detail ? [span(` · ${item.detail}`, { role: 'muted' })] : []), span(' · '), span(item.state, { role: item.role }), span(` · ${item.elapsed}`, { role: 'muted' })]} /></Text>;
     })}
     {view.more > 0 ? <Text wrap="truncate-end"><SpanText spans={[span(fillTemplate(labels.more, { count: view.more }), { role: 'muted' })]} /></Text> : null}
   </Box>;
