@@ -26,10 +26,27 @@ export interface QueueServicePorts<C extends QueueServiceContext, Peer extends Q
   isMcp(peer: Peer): boolean;
   record(peer: BatchPeer, digest: string, operation: TargetBatch['operation'], answer: 'allow' | 'decline'): Promise<void>;
 }
+/** Reconciliation never holds consent: it observes, settles a completed effect or releases a provably unapplied one, and never re-runs a write. */
+async function reconcileQueueRecord<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>, c: C, record: TargetQueueRecord) {
+  const refuse = async () => { throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED'); };
+  return new TargetBatchExecutor(c.app, c.queue, await ports.effects(c, undefined, refuse), { assert: refuse }, Date.now).reconcile(record);
+}
+/** One holder per target key. A service turn skips a held key; a human request waits for the bounded service turn holding its key instead of
+ * being refused for the service's own housekeeping (PR #97 CI: a consented execute met the batch-window turn). A second request stays BUSY. */
+function targetKeyLock() {
+  const held = new Map<string, { by: 'turn' | 'request'; released: Promise<void> }>();
+  const lock = async <T>(key: string, work: () => Promise<T>, by: 'turn' | 'request' = 'turn'): Promise<T> => {
+    for (let holder = held.get(key); by === 'request' && holder?.by === 'turn'; holder = held.get(key)) await holder.released;
+    if (held.has(key)) throw new TargetQueueError('QUEUE_TARGET_BUSY');
+    let release!: () => void; held.set(key, { by, released: new Promise<void>(resolve => { release = resolve; }) });
+    try { return await work(); } finally { held.delete(key); release(); }
+  };
+  return { held: held as ReadonlyMap<string, unknown>, lock };
+}
 /** Service lifecycle, admission and batch authority; native custody, persistence and effect owners remain explicit ports. */
 export function createTargetQueueService<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>) {
   const { config, instanceId } = ports;
-  const held = new Set<string>(), challenges = new Map<string, { batch: TargetBatch; peer: string; guard?: () => Promise<void> }>();
+  const { held, lock } = targetKeyLock(), challenges = new Map<string, { batch: TargetBatch; peer: string; guard?: () => Promise<void> }>();
   const confirmation = new TargetBatchConfirmation({
     capture: peer => ports.captureProcess(peer.peerPid, Number(peer.principal.subject)),
     sessionActive: async peer => await ports.captureProcess(peer.peerPid, Number(peer.principal.subject)) !== null,
@@ -43,10 +60,9 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
     const verifying = c.app.transition(claimed, { state: 'verifying', candidate: original.candidate, effectCommandIds: [...original.effectCommandIds.slice(0, 4), record.request.commandId] });
     return c.app.transition(verifying, { state: 'awaiting-confirmation', verification: original.verification });
   };
-  const lock = async <T>(key: string, work: () => Promise<T>): Promise<T> => {
-    if (held.has(key)) throw new TargetQueueError('QUEUE_TARGET_BUSY'); held.add(key);
-    try { return await work(); } finally { held.delete(key); }
-  };
+  const reconcile = (c: C, record: TargetQueueRecord) => reconcileQueueRecord(ports, c, record);
+  /** Per-key retry time of a reconciling head: doubles from the batch window up to the lease (existing bounds; no new literal policy). */
+  const backoff = new Map<string, { at: number; delay: number }>();
   const service = {
     async run(signal: AbortSignal, wait: (milliseconds: number, signal: AbortSignal) => Promise<void>, onError: (error: unknown) => Promise<void>) {
       while (!signal.aborted) { try { await service.tick(); } catch (error) { await onError(error); }
@@ -59,8 +75,7 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
         const recovered = c.app.recover(record, instanceId, Date.now());
         if (recovered.state === 'parked') return;
         // A consented effect may still be in flight: reconcile() advances the physical generation before its exact lookup.
-        const effects = await ports.effects(c, undefined, async () => { throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED'); });
-        await new TargetBatchExecutor(c.app, c.queue, effects, { async assert() { throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED'); } }, Date.now).reconcile(recovered);
+        await reconcile(c, recovered);
       })); } catch (error) { failures.push(error); }
       return failures;
     },
@@ -69,7 +84,18 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
       for (const record of await ports.snapshot()) { const rows = grouped.get(record.key) ?? []; rows.push(record); grouped.set(record.key, rows); }
       const targets = [...grouped.entries()]; let failure: unknown = null;
       for (let offset = 0; offset < targets.length; offset += config.targetQueue.candidateSlots) { const results = await Promise.allSettled(targets.slice(offset, offset + config.targetQueue.candidateSlots).map(async ([key, records]) => {
-        if (held.has(key) || records[0]?.state === 'reconciling') return;
+        if (held.has(key)) return;
+        if (records[0]?.state === 'reconciling') {
+          const due = backoff.get(key); if (due && due.at > Date.now()) return;
+          let state: TargetQueueRecord['state'] = 'reconciling', cap = config.targetQueue.batchWindowMs;
+          try { await lock(key, () => ports.withActor(records[0]!, () => ports.withScope(records[0]!.request.identity.scopeId, undefined, false, async c => {
+            cap = Math.max(cap, c.bounds.leaseMs); state = (await reconcile(c, records[0]!)).state; }))); }
+          finally {
+            const delay = Math.min(Math.max(due?.delay ?? 0, config.targetQueue.batchWindowMs) * 2, cap);
+            if (state === 'reconciling') backoff.set(key, { at: Date.now() + delay, delay }); else backoff.delete(key);
+          }
+          return;
+        }
         await lock(key, () => ports.withActor(records[0]!, () => ports.withScope(records[0]!.request.identity.scopeId, undefined, false, async c => {
           if (records[0]?.request.operation === 'rollback' && records[0].state === 'queued') { await initializeRollback(c, records[0]); return; }
           await new TargetQueueDriver(c.app, c.bounds, await ports.preparation(c), instanceId, Date.now).advance(records);
@@ -161,7 +187,7 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
             challenges.delete(command.publishDigest); challenges.delete(command.adoptDigest);
             const consent = async (operation: TargetBatch['operation']) => (operation === 'publish' ? publish.guard! : adopt.guard!)();
             return new TargetBatchExecutor(c.app, c.queue, await ports.effects(c, peer, consent), { assert: batch => consent(batch.operation) }, Date.now).execute(publish.batch, adopt.batch);
-          });
+          }, 'request');
         })();
         if (Buffer.byteLength(JSON.stringify(result)) > runtimeServiceResultCapacity(request.requestId, responseMaxBytes, request.delivery!.maxResultBytes)) throw ErrorRegistry.createError('RUNTIME_SERVICE_RESPONSE_LIMIT');
         return result;

@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
 import { targetBindingSchema, TargetQueueError, type EffectTargetRef } from '#domain/index.js';
 import { assertQueueGitTarget, queueGenerationRef, queueGenerationSchema, type GitQueueFence } from './queue-git.js';
-interface QueueGitPort { custody(): Promise<void>; run(args: string[], input?: string): Promise<string>; common(): Promise<{ path: string; device: number; inode: number }> }
+import { adoptionRepositoryIdentity } from './git-fence.js';
+interface QueueGitPort { custody(): Promise<void>; run(args: string[], input?: string): Promise<string>; common(): Promise<{ path: string; inode: number }> }
 export const GIT_QUEUE_DISPLAY = Object.freeze({ schemaVersion: 1 as const, labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.git.prepare' });
 /** Physical identity and protection producer. A config allow-list never overrides the security floor. */
 export class GitQueueTargetApplication {
@@ -20,8 +20,9 @@ export class GitQueueTargetApplication {
     await this.git.run(['check-ref-format', ref]);
     const exact = await this.git.run(['for-each-ref', '--format=%(refname) %(objecttype) %(symref)', ref]);
     if (exact !== `${ref} commit`) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    // The same physical identity as the adoption journal: no device number, which WSL2 renumbers across restarts (QUEUE_CONFLICT otherwise).
     return targetBindingSchema.parse({ schemaVersion: 1, installationId: this.installationId, adapter: { id: 'git', version: 1 },
-      resourceBinding: createHash('sha256').update(JSON.stringify(common)).digest('hex'), target: { kind: 'git-ref', id: ref } });
+      resourceBinding: adoptionRepositoryIdentity(common), target: { kind: 'git-ref', id: ref } });
   }
   async resolveTarget(target: EffectTargetRef) {
     if (target.kind !== 'git-ref') throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');

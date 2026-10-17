@@ -19,7 +19,14 @@
  * checkpoint child rebuilt against it).
  */
 export const PREVIOUS_LEDGER_VERSION = 50;
-export const DOWNGRADE_TO_V56_LEDGER_SQL = `DROP TABLE target_queue_events; DROP TABLE target_queue; PRAGMA user_version=56;`;
+/** v58 → v57: the adoption journal back to one sequence per ref name (no repository column, settled 0/1). A released row, or two
+ * repositories' rows of one target at the same sequence, makes it fail, as it must; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V57_LEDGER_SQL = `CREATE TABLE workspace_adoptions_v57(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
+    sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,
+    settled INTEGER NOT NULL CHECK(settled IN(0,1)),PRIMARY KEY(scope_id,command_id),UNIQUE(target_ref,sequence));
+  INSERT INTO workspace_adoptions_v57 SELECT scope_id,command_id,target_ref,sequence,kind,intent,settled FROM workspace_adoptions;
+  DROP TABLE workspace_adoptions; ALTER TABLE workspace_adoptions_v57 RENAME TO workspace_adoptions; PRAGMA user_version=57;`;
+export const DOWNGRADE_TO_V56_LEDGER_SQL = `${DOWNGRADE_TO_V57_LEDGER_SQL} DROP TABLE target_queue_events; DROP TABLE target_queue; PRAGMA user_version=56;`;
 export const DOWNGRADE_TO_V55_LEDGER_SQL = `${DOWNGRADE_TO_V56_LEDGER_SQL} DROP TABLE audit_checkpoints; PRAGMA user_version=55;`;
 export const DOWNGRADE_TO_V54_LEDGER_SQL = `${DOWNGRADE_TO_V55_LEDGER_SQL} DROP TABLE model_invocation_plan_usage; PRAGMA user_version=54;`;
 export const DOWNGRADE_TO_V53_LEDGER_SQL = `${DOWNGRADE_TO_V54_LEDGER_SQL} DROP TRIGGER run_quota_waits_insert; DROP TRIGGER run_quota_waits_update; DROP TRIGGER run_quota_waits_delete; DROP TABLE run_quota_waits; DROP TABLE quota_release_receipts; PRAGMA user_version=53;`;

@@ -1,13 +1,11 @@
-import { createHash } from 'node:crypto';
 import type { EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
-import { prepareProductDirectory, SystemTrustedClock } from '#platform/index.js';
+import { prepareProductDirectory, sha256, SystemTrustedClock } from '#platform/index.js';
 import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession, ensureWorkspaceParents, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
   removeSandboxWriteSetDirectory, scanSandboxWriteSetCall, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
   type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
-const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
 /**
  * Settles one finished call's write set (design §5–§6): scan, then every entry through the edit path rules (`writablePath` → denied; the

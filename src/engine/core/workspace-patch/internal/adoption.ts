@@ -47,20 +47,34 @@ export const integrationAdoptionIntentSchema = z.discriminatedUnion('kind', [
   : intent.verification.runId === intent.command.verificationRunId && intent.verification.kind === intent.command.verificationKind
     && intent.verification.commit === intent.toCommit), 'ADOPTION_VERIFICATION_INCONSISTENT').readonly();
 export type IntegrationAdoptionIntent = z.infer<typeof integrationAdoptionIntentSchema>;
-/** `sequence` is the per-target fence assigned by the store when the intent is claimed. */
-export interface IntegrationAdoptionRecord { readonly intent: IntegrationAdoptionIntent; readonly sequence: number; readonly settled: boolean }
+/** `sequence` is the per-repository, per-target fence assigned by the store when the intent is claimed. `released`: settled as not applied
+ * (proven by observation, never by an error code). `repository` is the physical repository the intent was claimed in; null for an intent
+ * recorded before repository identity existed (ledger v58), whose repository only its fence chain can attribute. */
+export interface IntegrationAdoptionRecord { readonly intent: IntegrationAdoptionIntent; readonly sequence: number; readonly settled: boolean;
+  readonly released?: boolean; readonly repository?: string | null }
+/** The repository and fence an intent is claimed against, as the target observed them. */
+export type AdoptionClaimObservation = Pick<AdoptionTargetObservation, 'repository' | 'fence'>;
 export interface IntegrationAdoptionStore extends AdoptionVerificationStore {
   findDelivery(scopeId: string, commandId: string): Promise<IntegrationDeliveryRecord | null>;
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   loadAdoption(scopeId: string, commandId: string): Promise<IntegrationAdoptionRecord | null>;
-  /** Serializes per target: refuses while any intent on the target is unsettled (ADOPTION_TARGET_BUSY) and a rollback
-   * unless its adoption is settled and still the latest record on the target (ADOPTION_SUPERSEDED). */
-  claimAdoption(intent: IntegrationAdoptionIntent): Promise<IntegrationAdoptionRecord>;
+  /** Serializes per repository and target: refuses while an intent on it is unsettled (ADOPTION_TARGET_BUSY), when the repository's fence
+   * does not name the journal's latest applied record there (ADOPTION_FENCE_MISMATCH; no fence = no record), and a rollback unless its
+   * adoption is settled and still that latest record (ADOPTION_SUPERSEDED). */
+  claimAdoption(intent: IntegrationAdoptionIntent, observed: AdoptionClaimObservation): Promise<IntegrationAdoptionRecord>;
+  /** The claim's busy and fence-agreement refusals without writing anything (the queue runs it before publication). */
+  assertAdoptionFence(targetRef: string, observed: AdoptionClaimObservation): Promise<void>;
   finishAdoption(intent: IntegrationAdoptionIntent): Promise<IntegrationAdoptionRecord>;
+  /** Settles an unsettled intent as not applied (idempotent). Callers prove non-application first (`adoptionNotApplied`). */
+  releaseAdoption(intent: IntegrationAdoptionIntent): Promise<IntegrationAdoptionRecord>;
 }
 /** Which journal record last moved a target: the per-target sequence and its command. */
 export interface AdoptionFence { readonly sequence: number; readonly scopeId: string; readonly commandId: string }
-export interface AdoptionTargetObservation { readonly tip: string | null; readonly checkedOut: boolean; readonly fence: AdoptionFence | null }
+/** `repository`: the physical repository identity (see `adoptionRepositoryIdentity`); a re-clone is a new repository with its own chain.
+ * `legacyBinding`: the same repository's queue binding as builds before QUEUE-SMALL 2 recorded it (`legacyQueueBinding`); it only lets a
+ * ticket bound then be recognized, never establishes a new identity. */
+export interface AdoptionTargetObservation { readonly tip: string | null; readonly checkedOut: boolean; readonly fence: AdoptionFence | null; readonly repository: string;
+  readonly legacyBinding?: string }
 export interface IntegrationAdoptionTarget {
   observe(targetRef: string): Promise<AdoptionTargetObservation>;
   /** One atomic transaction: the branch moves `fromCommit`→`toCommit` and the target's fence moves `expected`→`next`, or nothing
@@ -73,6 +87,21 @@ type AdoptionResult = Readonly<{ schemaVersion: 2; status: 'adopted' | 'rolled-b
   verification: Readonly<{ status: 'not-verified' }> | Readonly<{ status: 'verified' } & AdoptionVerification>; application: 'branch-reference' }>;
 
 const sameFence = (a: AdoptionFence | null, b: AdoptionFence) => a !== null && a.sequence === b.sequence && a.scopeId === b.scopeId && a.commandId === b.commandId;
+/** A Deckent branch move provably did not happen. No journal record: never claimed, so never moved, whatever the tip (every move claims
+ * first, and a target with a queue generation refuses an unfenced adoption). With a record: the branch still names `fromCommit` and the
+ * repository's fence names another record (the move advances branch and fence in one Git transaction), the intent is unsettled or already
+ * released, and the observation comes from the repository the intent was claimed in (Astra 2616 F1). That is the recorded repository, or —
+ * for a pre-v58 intent, which recorded none — `claimedIn`: the binding of the repository the caller independently knows the claim was
+ * made in (a queue ticket's revalidated target binding). Without such evidence nothing counts as not applied: the state of another
+ * repository proves nothing about the one that may have moved. The caller holds the target's current physical generation. */
+export function adoptionNotApplied(observed: AdoptionTargetObservation, record: IntegrationAdoptionRecord | null, fromCommit: string, claimedIn: string | null = null): boolean {
+  if (!record) return true;
+  if (observed.tip !== fromCommit) return false;
+  const { intent } = record, mine = sameFence(observed.fence, { sequence: record.sequence, scopeId: intent.command.identity.scopeId, commandId: intent.command.commandId });
+  const here = record.repository != null ? record.repository === observed.repository
+    : claimedIn !== null && (claimedIn === observed.repository || claimedIn === observed.legacyBinding);
+  return !mine && !record.settled && intent.fromCommit === fromCommit && here;
+}
 /** Moves a configured, not-checked-out branch to a delivered commit, or back to its previous tip. Never writes the live checkout,
  * never accepts a Task, and claims verification only through a bound, accepted verification Run of the delivered commit. Deckent's own commands are fenced through the target's fence reference;
  * Git writers outside Deckent are not fenced (a foreign move turns into a conflict, never into attributed success). */
@@ -106,8 +135,8 @@ export class WorkspaceAdoptionApplication {
     if (intent.kind !== 'adopt') throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
     const confirm = await this.confirmAdoption(intent, run);
     await settle(); await confirm(); await this.accepted(command);
-    await this.ready(command.targetRef, baseCommit, 'ADOPTION_BASE_CHANGED');
-    return this.apply(await this.store.claimAdoption(intent), settle, confirm);
+    const observed = await this.ready(command.targetRef, baseCommit, 'ADOPTION_BASE_CHANGED');
+    return this.apply(await this.store.claimAdoption(intent, observed), settle, confirm);
   }
 
   async rollback(input: unknown, credential?: unknown): Promise<AdoptionResult> {
@@ -129,8 +158,8 @@ export class WorkspaceAdoptionApplication {
     // TESLIM-GUVENLIK: moving the branch back is a branch move too — the same verified human y/N as adoption, before the journal claim.
     const confirm = await this.confirmRollback(intent);
     await settle(); await confirm();
-    await this.ready(intent.targetRef, intent.fromCommit, 'ADOPTION_TARGET_MOVED');
-    return this.apply(await this.store.claimAdoption(intent), settle, confirm);
+    const observed = await this.ready(intent.targetRef, intent.fromCommit, 'ADOPTION_TARGET_MOVED');
+    return this.apply(await this.store.claimAdoption(intent, observed), settle, confirm);
   }
 
   /** Replay or crash settlement of an existing command, decided by exact fence ownership (see apply). */
@@ -141,6 +170,7 @@ export class WorkspaceAdoptionApplication {
     if (JSON.stringify(previous.intent.command) !== JSON.stringify(command) || JSON.stringify(previous.intent.actor) !== JSON.stringify(actor)) {
       throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
     }
+    if (previous.released) throw new WorkspaceAdoptionError('ADOPTION_RELEASED');
     if (previous.settled) return this.result(previous);
     return this.apply(previous, settle);
   }
@@ -155,6 +185,8 @@ export class WorkspaceAdoptionApplication {
     const mine: AdoptionFence = { sequence: record.sequence, scopeId: intent.command.identity.scopeId, commandId: intent.command.commandId };
     const observed = await this.target.observe(intent.targetRef);
     if (!sameFence(observed.fence, mine)) {
+      // Astra 2616 F2: a new move happens only in the repository the intent was claimed in (a pre-v58 intent recorded none, so never).
+      if (record.repository !== observed.repository) throw new WorkspaceAdoptionError('ADOPTION_REPOSITORY_CHANGED');
       if (!this.allowedTargets.includes(intent.targetRef)) throw new WorkspaceAdoptionError('ADOPTION_TARGET_DENIED');
       if (observed.checkedOut) throw new WorkspaceAdoptionError('ADOPTION_TARGET_CHECKED_OUT');
       const previous = observed.fence === null ? record.sequence === 1 : observed.fence.sequence === record.sequence - 1;
@@ -162,8 +194,8 @@ export class WorkspaceAdoptionApplication {
       // Every new branch move (adoption or rollback, also a resumed unfinished one) needs its own human answer.
       const confirm = confirmed ?? (intent.kind === 'adopt' ? await this.confirmAdoption(intent, await this.accepted(intent.command)) : await this.confirmRollback(intent));
       await settle(); await confirm(); if (intent.kind === 'adopt') await this.accepted(intent.command);
-      // Human think time may have changed target custody; re-observe through the existing fenced CAS.
-      await this.ready(intent.targetRef, intent.fromCommit, 'ADOPTION_CONFLICT');
+      // Human think time may have changed target custody; re-observe the same physical repository through the existing fenced CAS.
+      if ((await this.ready(intent.targetRef, intent.fromCommit, 'ADOPTION_CONFLICT')).repository !== record.repository) throw new WorkspaceAdoptionError('ADOPTION_REPOSITORY_CHANGED');
       await this.target.move(intent.targetRef, intent.fromCommit, intent.toCommit, observed.fence, mine);
     }
     await settle();
@@ -202,6 +234,7 @@ export class WorkspaceAdoptionApplication {
     if (observed.tip === null) throw new WorkspaceAdoptionError('ADOPTION_TARGET_MISSING');
     if (observed.checkedOut) throw new WorkspaceAdoptionError('ADOPTION_TARGET_CHECKED_OUT');
     if (observed.tip !== expectedTip) throw new WorkspaceAdoptionError(moved);
+    return observed;
   }
 
   private result(record: IntegrationAdoptionRecord): AdoptionResult {

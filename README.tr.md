@@ -29,7 +29,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.42`** (2026-10-16 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.43`** (2026-10-16 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
@@ -162,8 +162,8 @@ deckent init policy --scope my-project --apply
 
 "Adım adım ilk oturum" yönetilen bir sohbetle biter. Bu yol gerçek bir işe devam eder: Deckent planlar, planı siz onaylarsınız,
 bir kodlama işçisi Docker içinde yapar ve değişiklik Git'e teslim edilir. 1 ile 4 arası adımlar bir kez yapılan operatör
-kurulumudur; yolun tamamının temiz bir makinede provası
-henüz yapılmadı ([bilinen sınırlar](docs/known-limits.tr.md)). Aşağıdaki komutlar ve mesajlar güncel kaynaktan ve mesaj
+kurulumudur; yolun temiz bir makinede 2026-10-15/16'da yapılan provası model adımına kadar
+gitti (model adımı ve boş bir Docker daemon'unda işçi imajı derlemesi denenmedi; [bilinen sınırlar](docs/known-limits.tr.md)). Aşağıdaki komutlar ve mesajlar güncel kaynaktan ve mesaj
 kataloglarından gelir; kimlikler, yollar ve saatler örnektir.
 
 ```mermaid
@@ -227,6 +227,23 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    (ilk kurulum politikası v12) servisi zaten adlandırır (`service.identity`) ve onu yalnız sizin durdurmanıza izin verir.
    Daha eski bir ilk kurulumda önce yukarıdaki yükseltmeyi çalıştırın; servis kimliğini ayarladığını söylerse çalışan
    servisi bir kez elle durdurun ([Runtime servisi](#runtime-servisi)), sonra `runtime restart` çalışır.
+   **5. adımdan önce, bir kez: model ve işçi girişi.** `/do` bütçeli, bağlı bir model ister; işçi CLI'ın da bu makinede
+   kendi girişi olmalıdır:
+
+   ```sh
+   deckent secret set DECKENT_ANTHROPIC_KEY
+   deckent models create-budget --scope my-project --usd 10
+   deckent models connect --scope my-project --connection anthropic-api --command-id connect-1 --model claude-sonnet-5-5
+   ```
+
+   `secret set` anahtarı gizli bir istemde sorar. Her bağlantı türünün kendi gizli adı vardır: `DECKENT_ANTHROPIC_KEY`,
+   `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`, `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY` ya da `DECKENT_OPENROUTER_KEY`
+   (`/provider` aynı adla saklar). `--model` birebir API model kimliğini alır; paketlenmiş katalogların kimlikleri kaynak
+   dizinindeki `assets/model-catalog/<bağlantı>.json` dosyalarında, terminalde ise `/model` ile listelenir. İşçi CLI
+   (`codex` ya da `claude`) bu makinede kurulu ve girişli olmalıdır: `codex login` çalıştırın; Claude Code için `claude`
+   yazıp `/login` girin. Deckent bu girişi CLI'ın kendi dizininden okur (`~/.codex/auth.json`,
+   `~/.claude/.credentials.json`).
+
 5. **İşi isteyin.** Terminalde `/do` yazıp isteğinizi sade sözlerle yazın (komut satırında aynısı
    `deckent do --request "<metin>"`). Bağlı ve etkin bir model planlar, Deckent planı basar:
 
@@ -303,6 +320,11 @@ Model turları, onaylar, `/do` ve kurtarma her proje için tek bir yerel runtime
   yapılandırmayla yeniden başlatır; `deckent runtime shutdown` yalnız durdurur. `deckent runtime describe` çalışanı
   gösterir. İkisi de servisin kimliğini (`deckent config explain service.identity`) ve sizin o servis üzerindeki
   `shutdown` kuralınızı ister; ilk kurulum politikası bunu yalnız kuran kişiye verir, yerel MCP aktörü servisi durduramaz.
+- **Eski kurulumlar.** v12'den eski bir ilk kurulum politikasında ne servis kimliği ne de `shutdown` kuralı vardır; bu
+  yüzden `runtime restart` ve `runtime shutdown` reddedilir. Şöyle yükseltin:
+  `deckent init policy --scope <id> --upgrade --preview`, sonra `--apply --expect <değer>` ([Adım adım ilk işiniz](#adım-adım-ilk-işiniz));
+  apply `service.identity` ayarlarsa çalışan servisi bir kez elle durdurun (`runtime serve` üzerinde Ctrl+C), sonra
+  `runtime restart` çalışır.
 
 ## Terminalde
 
@@ -496,7 +518,7 @@ flowchart LR
 
 ## Başlarken
 
-Deckent Linux veya Windows üzerinde WSL2 ile, Node.js ≥ 24.15.0 kullanarak çalışır (Node 24 ve 26 desteklenir).
+Deckent Linux veya Windows üzerinde WSL2 ile, Node.js ≥ 24.22.0 kullanarak çalışır (Node 24 ve 26 desteklenir).
 Native Windows runtime taşıması desteklenmez. Yeni kaynak derlemesi, kilitli bubblewrap’ı (şu an 0.13.0)
 derleyip yerleştirmek için Docker ister; kilitli kaynağı indirir, kaynak ve binary özetlerini doğrular.
 Doğrulanmış hazır paket çevrimdışı yeniden kullanılabilir. Sistem bubblewrap seçilirse sürümü en az 0.12.0
@@ -517,11 +539,13 @@ npm link
 Sonraki build için yeni bir `--out` dizini kullanın. Build `bubblewrap=present` ya da `bubblewrap=staged from …` ile biter.
 Linux'ta kilitli bubblewrap yerleştirilemezse build bitmez, `BUBBLEWRAP_BUILD_REQUIRED` ile durur; Docker'ı başlatıp
 yeniden çalıştırın. Yalnız Linux dışında `bubblewrap=absent (not Linux)` basar; bu bubblewrap sandbox'ının olmadığı
-demektir; yalıtım durumunu `deckent doctor` ile inceleyin. Ön koşullar ve sağlayıcı anahtarı
+demektir; yalıtım durumunu `deckent doctor` ile inceleyin. Hiçbir servis çalışmadan yapılan ilk `doctor` bubblewrap yerine
+Landlock gösterebilir: `doctor` yalnız ölçer, paketlenmiş bubblewrap'ı `.deckent/bin` altına runtime servisi, ana makineyi
+ölçerken yerleştirir. Servisi başlatın (`deckent`) ve `doctor`'ı yeniden çalıştırın. Ön koşullar ve sağlayıcı anahtarı
 gerektirmeyen tek test için [katkıcı hızlı başlangıcına (EN)](CONTRIBUTING.md#a-30-minute-quickstart) bakın.
 
 **Ubuntu 24.04 ve sonrası.** Çekirdek, bubblewrap'ın ihtiyaç duyduğu ayrıcalıksız kullanıcı ad alanlarını kısıtlayabilir.
-`sysctl kernel.apparmor_restrict_unprivileged_userns` ile bakın: `1` kısıtlı demektir. Deckent o zaman kısıtı bildirir,
+`sysctl kernel.apparmor_restrict_unprivileged_userns` ile bakın: `1` kısıtlı demektir; WSL'de anahtar yoksa (`cannot stat`) kısıt yok demektir. Deckent o zaman kısıtı bildirir,
 görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder; çünkü onlar açık bubblewrap sandbox'ı ister.
 Bir yönetici, bubblewrap'ı root sahipli `/usr/local/bin/bwrap` olarak, ona `userns` izni veren bir AppArmor profiliyle
 kurabilir.

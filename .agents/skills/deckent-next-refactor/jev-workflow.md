@@ -6,17 +6,40 @@ do not call for every mechanical edit or repeat the same unchanged question to o
 Use the logged preparation layer from Next only (host tooling, not a product feature):
 - `node .agents/refactor/jev-review.mjs prepare CASE.json` validates/compiles context offline.
 - `node .agents/refactor/jev-review.mjs ask CASE.json` records request before the bounded external call.
+  Lineage flags (recorded beside the request, never sent): `--relation new-decision` (default) |
+  `context-revision --parent CALL_ID --reason TEXT` (changed context for the same decision; an unchanged
+  request is refused) | `transport-retry --parent CALL_ID` (identical request after a recorded failure
+  only; refused when the parent has advice or is response-unknown); `--case-id ID`; `--purpose
+  development|evaluation|control|pilot`. A context revision is not `process.reopenReason`, which reopens
+  an accepted decision.
 - `node .agents/refactor/jev-review.mjs decision CALL_ID DECISION.json` records actor, selectedOption,
   rationale, actions and evidenceRefs; explicitly explain disagreement or missing evidence.
 - `node .agents/refactor/jev-review.mjs outcome CALL_ID OUTCOME.json` records actor, status
   (verified/failed/inconclusive), observation, evidenceRefs, labels, inputQuality and outputQuality.
-  Outcome is a final immutable assessment: leave absent while validation is pending. Noul labels require
+  Outcome is a final immutable assessment: leave absent while validation is pending.
+  `node .agents/refactor/jev-review.mjs pending [COUNT]` (read-only, no credential) lists recorded
+  decisions still without an outcome, each with a ready `command` and a skeleton that is rejected if
+  submitted unedited. Shorthand: `outcome CALL_ID --actor A --status verified|failed|inconclusive
+  --observation TEXT --evidence REF [--evidence REF]` (qualities default to `not-assessed`; labels need a
+  file or `-` for stdin). Verified needs at least one evidence reference.
+  Lead routine (owner 2026-10-17): when a decided action's result is known (landing, closure, review
+  verdict, failed attempt, abandonment), run `pending` and record that decision's outcome with the real
+  evidence the same day; leave it absent while the result is pending. Never backfill another session's
+  record or label with Jev's own answer. Noul labels require
   verified evidence and contain questionId, expected boolean, evidenceRef. Never label using Jev's own answer.
 - `node .agents/refactor/jev-review.mjs report [COUNT]` reports the latest dated requests within a
   bounded scan, usage, latency, decisions, outcomes and Brier score only where evidence-backed labels
-  exist. COUNT defaults to reportLimit (200); `report 100` selects 100. The scan defaults to 10,000
+  exist. Usage is a known-token subtotal plus coverage counts: null/missing provider metering, failed
+  attempts and unrecorded responses stay `unknown`, never zero. `cost` and per-row `estimatedUsd` apply
+  the dated list prices in review config `pricing` (exact served model ID, source, access date) to known
+  usage only; an unpriced model or unknown usage is cost-unknown. Estimates are not invoices.
+  `latencyByResult` separates success and failure timing. `slices` group rows by served model, requested
+  model and purpose (unknown for old records), each with usage coverage, cost, timing, follow-up,
+  dispositions and failure codes. Never pool models or purposes for calibration claims. COUNT defaults to reportLimit (200); `report 100` selects 100. The scan defaults to 10,000
   directories (optional review config reportScanLimit). Scan truncation and undated requests are
-  disclosed; global recency then remains unknown. Agreement is not correctness.
+  disclosed; global recency then remains unknown. Agreement is not correctness. Reading is non-mutating:
+  `report` and follow-up lookups never create a journal root or call directory (a missing root reports
+  `journalRootPresent: false`), and still refuse symlinked or non-owner-only directories.
 
 Case schema: schemaVersion=2, objective, scope, exact revision (identify dirty changes), constraints[],
 unknowns[], evidence[{id,source,observedAt,observation}], options[{id,action,tradeoffs[],northStarImpact,evidenceIds[]}],
@@ -38,14 +61,18 @@ immutable request/response-or-failure/decision/outcome files linked by callId; n
 No recorded response after a crash means response-unknown, not failure or permission to repeat a billed call.
 Credential: TYPESAFE_API_KEY, TYPESAFE_API_KEY_FILE, or configured ~/.config/typesafe/api-key reference.
 Never print/source credentials or put them into state/commands/evidence. Private file storage is not a keyring.
-One bounded call, no hidden retry; failure means unavailable advice. The low-level jev.mjs client is for
+One bounded call, no hidden retry; failure means unavailable advice. failure.json (schemaVersion 2) keeps
+safe diagnostics only: stage (request/transport/http/body/parse/validate/secret-echo), HTTP status,
+shape-checked `x-typesafe-request-id`, Retry-After and served model, response bytes/SHA-256, per Choice/Score
+distribution sum/count/min/max/key match and independently valid usage. Error bodies, messages, other
+headers and response strings are never kept. Diagnostics are not a cause verdict, retry or normalization. The low-level jev.mjs client is for
 transport tests; normal development consultations use jev-review.mjs so preparation and journaling apply.
 
 Jev is probabilistic advice, not proof, test success, independent PASS, policy, owner permission or acceptance.
 Do not execute returned content or hardcode a universal confidence threshold. Record actual model/usage;
 use independent tests/reviews to assess quality. No automatic training or behavioral promotion from this log.
 
-Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=2; low-level transport remains generic, normal development consultations use the preparation layer.
+Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=4 (2 and 3 still accepted); low-level transport remains generic, normal development consultations use the preparation layer.
 
 ### Context sufficiency preparation — owner 2026-09-28
 
@@ -53,6 +80,12 @@ For this development workflow, report selection probability against 0.85 and con
 against 0.67 (owner 2026-10-09; was 0.90/0.75); aim for at least 0.85 sufficiency on the first well-prepared call. These are owner
 review criteria, not automatic tool gates or evidence of decision correctness. Never repeat an
 unchanged question to chase a score. Preserve option meaning in context-only comparisons.
+The criteria live in review config `reviewPolicy` (version, decider, date, source, 0.85, 0.67, one
+context revision, role advice-disposition-only) and each request records the policy in force. Report
+rows carry `adviceDisposition` (thresholds-met, below-choice, below-sufficiency, below-both, abstained,
+incomplete, unavailable, response-unknown, thresholds-unknown; raw `>=`, so 0.66 stays below 0.67) and
+`lineage` (unknown for pre-lineage records); exceeding one context revision is flagged for lead/owner
+disposition. None of this blocks, approves or executes anything.
 
 Before asking: pin the decision-time revision and scope; state accepted decisions and why any
 reopening is justified; distinguish observed facts, proposals, assumptions and unknowns. Supply
@@ -64,7 +97,7 @@ and their reasons in existing process/constraints/evidence fields; if none apply
 inventing them. For speed/cost/scale claims supply measurements with workload, environment and
 revision, or explicitly mark a hypothesis. Do not turn a planned test into a passed test.
 
-`prepare` now returns `diagnostics.sufficiencyRisks` (version 2, advisory-only). Warnings flag
+`prepare` now returns `diagnostics.sufficiencyRisks` (version 3, advisory-only). Warnings flag
 empty option references, identical evidence sets/actions/impacts, locator-only observations,
 checks citing only explicitly tagged `[plan]`/`[assumption]`/`[hypothesis]` (also `[varsayım]`/
 `[hipotez]`), and lexical signs of missing measurements, balanced tradeoffs, rejected alternatives
@@ -74,6 +107,35 @@ Do not add words or unrelated numbers merely to clear warnings. Empty/dangling c
 remain schema errors. Case schema v2, prepared questions and provider state are unchanged; warnings
 stay in local diagnostics/journal and never become additional model context. No source retrieval,
 auto-rewrite, automatic sanitization, retry, confidence score or acceptance is added.
+
+### Sufficiency gating and shadow proposition — JEV-114, owner 2026-10-17
+
+Review config schemaVersion 4. Gating stays on the previous compound sufficiency question, byte-identical
+and compiled as before (`sufficiency`, a string). The single proposition (is the supplied evidence
+sufficient to compare the authored options for the decision in state.case.objective at
+state.case.process.stage) runs as a SHADOW: a separate Noul `sufficiency_shadow` in the same request,
+`{question, rule}` with a non-interrogative rubric. It is journaled (`diagnostics.shadow`, the answer in
+response.json) and reported (row `sufficiencyShadow`, summary and per-slice `shadowSufficiency`: means,
+shadow-minus-gating deltas, threshold crossings), but it never becomes the row's sufficiency and never
+enters adviceDisposition or the 0.85/0.67 criteria. It costs one extra question per call. It is omitted,
+recorded as `omittedReason`, when the 12-question cap is reached (`question-limit`) or when it would push the
+request over maxRequestBytes (`request-size`); the gating questions are never dropped. Measured on the
+latest 100 v2 host cases re-prepared with v4 (2026-10-17): +1,152 bytes per request, p50 27,022 / p95
+31,579 / max 33,223 bytes against the 32,768 cap (p50 margin 5,746 bytes); 3 of 100 (9 of 879 overall)
+would omit the shadow; none becomes unaskable (gating-only maximum 32,071, overall 32,750). Basis for
+the shadow: proof/JEV-114-2026-10-17/eval-template-reprepare (sufficiency dropped sharply on both models).
+v3 configs (single proposition gating, the JEV-114 evaluation form) and v2 configs remain accepted and send
+no shadow. Each request records `diagnostics.templates` (version, SHA-256, forms, risks). Config validation
+refuses a compound/open shadow proposition or an interrogative rubric (shared CHECK_* hygiene logic).
+Promoting the shadow to gating is a separate owner decision.
+
+Authoring guidance (`authoringGuidance` in the review config, printed by `prepare`) uses existing v2
+fields: start each observation with a class tag ([observed-source], [retained-run], [proposal],
+[assumption]/[hypothesis], [unknown]); tag contrary observations [counterevidence] (or state in
+constraints that none was found); link each option to the observation that distinguishes it; list in
+unknowns what could change this decision and which option it affects. New advisory warnings:
+OBSERVATION_CLASS_UNTAGGED, COUNTEREVIDENCE_UNCLEAR, OPTION_SPECIFIC_SUPPORT_UNCLEAR; [proposal] and
+[unknown] count as unverified for CHECK_ONLY_UNVERIFIED_EVIDENCE. Tags classify and prove nothing.
 
 ### Host question hygiene and outcome evidence — owner accepted 2026-10-06
 
@@ -98,19 +160,34 @@ other sessions' records or infer success from agreement. Truth labels must addre
 in the exact request-time state: a later fix passing does not make an earlier missing-proof claim true.
 Normative architecture preferences need an adjudicated acceptable option set, not an invented binary gold.
 
-Report schemaVersion 3 exposes requestedAt, selectedProbability, separate confidence and sufficiency,
+Report schemaVersion 4 (since JEV-114; 3 before) exposes requestedAt, selectedProbability, separate confidence and sufficiency,
 decisionRecorded/outcomeRecorded, labeledNoulAnswers and followUp coverage. Missing decision/outcome
 records are visible gaps; they are not overdue/failure or evidence of omission rather than pending work.
 Brier uses boolean labels on verified outcomes only; missing labels yield null, never fabricated accuracy.
 
 Before claiming improved quality, freeze different evidence-backed cases and author labels before model
 calls; keep development and validation sets separate and record label author/independence limits. A first
-20-case pilot is not general calibration proof. Pin the observed model version only in evaluation config;
-leave the ordinary provider configuration unchanged. Compare all attempts, failures, high-probability
+20-case pilot is not general calibration proof. Pin evaluation models in evaluation config; the ordinary
+provider configuration changes only by a recorded owner/lead promotion with a rollback note. Compare all attempts, failures, high-probability
 wrong answers, abstentions, input tokens and p50/p95; measure operator effort separately when available.
 Evaluate shorter authored observations against the same claim/options with the full charter preserved.
 Perturb option ordering, missing evidence and adversarial data in explicit controls. No hidden retries,
 training, threshold changes or automatic promotion from a pilot.
+
+Model promotion (owner 2026-10-17, JEV-114): `jev.config.json` uses the exact ID `jev-1.14.0` (never an
+alias). Basis: proof/JEV-114-2026-10-17/eval-model-stored (same choice 19/20; 1.14 about 0.06 lower on
+selected probability and 0.07 on sufficiency; thresholds met 6 -> 4). Thresholds stay 0.85/0.67.
+Rollback: set `jev.config.json` model back to `jev-1.13.0` (the previous value was the alias `jev-latest`,
+which then served `jev-1.13.0`; use the exact ID, not the alias) in a logged commit; nothing else changes.
+Comparison configs: `jev.eval.config.json` pins `jev-1.14.0`, `jev.eval.baseline.config.json` `jev-1.13.0`.
+`node .agents/refactor/jev-eval-compare.mjs --config CONFIG (--cases N | --call-ids A,B) [--source-root DIR]
+[--baseline-config CONFIG] [--input stored|reprepare] [--review-config PATH]` prints a read-only plan
+(selection, call count, list-price estimate; no credential, network or writes). Adding `--execute --out
+NEW_DIR --max-calls K` replays each selected case once, sequentially, into NEW_DIR/journal (purpose
+evaluation, relation evaluation-replay) and writes plan.json, report.json and report.md side by side.
+`stored` replays the exact stored state and questions with only the model changed; `reprepare` compiles
+the stored case with the current templates and charter and is flagged contextChanged. Aliases are refused,
+the source journal is never written, and agreement or a higher score is not correctness or promotion.
 
 Verified official guidance (2026-10-06): https://docs.typesafe.ai/primitives/noul,
 https://docs.typesafe.ai/patterns/fan-out, https://docs.typesafe.ai/models.

@@ -1,4 +1,4 @@
-export { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_SHELL_HEAD_MAX_CHARS, AUDIT_TRACKED_PATHS_MAX, auditCounterSchema, auditEventSchema, auditPrincipalSchema, auditRecordSchema,
+export { AUDIT_EVENT_SCHEMA_VERSION, DISPATCH_PREPARATION_PHASES, AUDIT_SHELL_HEAD_MAX_CHARS, AUDIT_TRACKED_PATHS_MAX, auditCounterSchema, auditEventSchema, auditPrincipalSchema, auditRecordSchema,
   auditSubjectSchema, auditSummarySchema, AuditError } from './internal/contract.js';
 export { auditCheckpointSchema, auditWitnessSchema, auditVerifyQuerySchema, auditVerificationSchema, auditRebaselineCommandSchema } from './internal/checkpoint.js';
 export type { AuditCheckpoint, AuditWitness, AuditVerifyQuery, AuditVerification } from './internal/checkpoint.js';

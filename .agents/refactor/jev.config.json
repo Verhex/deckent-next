@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "endpoint": "https://api.typesafe.ai/v1/systemone",
-  "model": "jev-latest",
+  "model": "jev-1.14.0",
   "credentialEnv": "TYPESAFE_API_KEY",
   "credentialFileEnv": "TYPESAFE_API_KEY_FILE",
   "timeoutMs": 30000,

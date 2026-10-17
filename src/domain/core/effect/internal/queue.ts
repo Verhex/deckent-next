@@ -3,6 +3,8 @@ import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { counterSchema, identitySchema, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { targetBindingSchema, candidateBindingSchema, candidateEvidenceSchema } from './candidate.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
+/** A typed error code (never a message or an arbitrary error text). */
+export const queueReasonSchema = z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/);
 const actor = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
 export const targetQueueRequestSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   operation: z.enum(['delivery', 'rollback']).optional(), sourceCommandId: identitySchema.optional(), replacesCommandId: identitySchema.optional(), identity: attemptIdentitySchema, target: targetBindingSchema, actor, payloadDigest: digest, policyRevision: identitySchema,
@@ -15,7 +17,9 @@ export const targetQueueRecordSchema = z.object({ schemaVersion: z.literal(1), r
   key: digest, ordinal: counterSchema.positive(), revision: counterSchema, state: targetQueueStateSchema,
   ownerInstance: identitySchema.nullable(), epoch: counterSchema, leaseDeadline: counterSchema.nullable(),
   candidate: candidateBindingSchema.nullable(), verification: candidateEvidenceSchema.nullable(), batchDigest: digest.nullable(),
-  effectCommandIds: z.array(identitySchema), evidenceRefs: z.array(digest), outcome: targetQueueOutcomeSchema.nullable() }).strict().readonly();
+  effectCommandIds: z.array(identitySchema), evidenceRefs: z.array(digest), outcome: targetQueueOutcomeSchema.nullable(),
+  /** Additive (BENIMSEME-DEPO-KIMLIGI): the typed code of the failure an effect stopped on, or why a started ticket parked as not applied. */
+  reason: queueReasonSchema.nullable().optional() }).strict().readonly();
 export type TargetQueueRecord = z.infer<typeof targetQueueRecordSchema>;
 export type TargetQueueState = z.infer<typeof targetQueueStateSchema>;
 export type TargetQueueOutcome = z.infer<typeof targetQueueOutcomeSchema>;

@@ -4,16 +4,22 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { validateRecipe, parseVersionHistory, assertVersionAdvances } from './history.mjs';
+import { validateRecipe, parseVersionHistory, assertVersionAdvances, heldVersion } from './history.mjs';
 
 // Explicit build/update operation. Never mutates runtime profiles, running containers or old images.
 // Each recipe.imageVersion maps to exactly one immutable imageId, tagged <repository>:<imageVersion>.
 // Old images, tags and receipts are retained for active Runs and rollback; nothing here deletes them.
+// F4 (TEMIZ-KURULUM-2026-10-16): a known refusal is one `Error: WORKER_<CODE>: <detail>` line and exit 1, never a stack trace. The
+// product maps that line to its localized EN/TR error (WorkerImageBuildError); anything else is a defect and keeps its stack.
+process.on('uncaughtException', error => {
+  process.stderr.write(/^WORKER_[A-Z_]+(?::|$)/.test(error?.message ?? '') ? `Error: ${error.message}\n` : `${error?.stack ?? error}\n`);
+  process.exit(1);
+});
 const root = dirname(fileURLToPath(import.meta.url));
 const [receipt, option, existingImage, ...extra] = process.argv.slice(2);
-const versionCheck = receipt === '--check-version';
-if (versionCheck && (!option || existingImage !== undefined || extra.length)) throw new Error('WORKER_RECIPE_VERSION');
-if (!versionCheck) {
+const heldCheck = receipt === '--held-version';
+if (heldCheck && (option !== undefined || existingImage !== undefined || extra.length)) throw new Error('WORKER_RECIPE_VERSION: --held-version takes no arguments.');
+if (!heldCheck) {
   if (!receipt || extra.length || !isAbsolute(receipt) || existsSync(receipt)
     || (option !== undefined && (option !== '--image-id' || !/^sha256:[a-f0-9]{64}$/.test(existingImage ?? '')))) {
     throw new Error('WORKER_RECEIPT_INVALID: provide an absolute path to a new JSON file inside an existing writable directory.');
@@ -37,12 +43,13 @@ const run = (args, timeout, inherit = false) => {
   if (result.error || result.status !== 0) throw new Error(`WORKER_IMAGE_COMMAND_FAILED:${args[0]}`);
   return result.stdout?.trim();
 };
-// Read-only admission preflight: run from installed assets before any plan artifact/build context exists.
-// The same history owner also guards the eventual build, covering changes after this observation.
-if (versionCheck) {
+// Read-only preflight: run from installed assets before any plan artifact/build context exists. It reports the highest revision the
+// daemon holds so the planner floors its counter on it; the same history owner still guards the eventual build (a later tag by another
+// installation is refused there, never adopted).
+if (heldCheck) {
   const endpoint = JSON.parse(run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'], 20_000));
   const tags = run(['--host', endpoint, 'image', 'ls', recipe.repository, '--format', '{{.Tag}}'], 20_000).split('\n');
-  assertVersionAdvances(option, tags);
+  console.log(JSON.stringify({ heldVersion: heldVersion(tags) }));
   process.exit(0);
 }
 const sourceRevision = (() => {
@@ -71,7 +78,7 @@ try {
   const daemonId = command(['info', '--format', '{{.ID}}'], 20_000);
   const alreadyTagged = tagged();
   if (alreadyTagged && alreadyTagged !== existingImage) {
-    throw new Error(`WORKER_VERSION_TAKEN: ${tag} already names ${alreadyTagged}. Add a new "# version" line and recipe.imageVersion instead of rebuilding a published version.`);
+    throw new Error(`WORKER_VERSION_TAKEN: ${tag} already names ${alreadyTagged}. Add a new "# version" line and recipe.imageVersion instead of rebuilding a published version, or re-verify that image with --image-id ${alreadyTagged}.`);
   }
   if (!existingImage) {
     assertVersionAdvances(recipe.imageVersion, command(['image', 'ls', recipe.repository, '--format', '{{.Tag}}'], 20_000).split('\n'));

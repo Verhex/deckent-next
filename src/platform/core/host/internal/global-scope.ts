@@ -3,6 +3,7 @@ import { resolveProductLayout, productResourcePath } from './layout/resolve.js';
 import { PRODUCT_LAYOUT_REGISTRY } from '#platform/core/common/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { envValue, productRootOverride, type Environment } from './env.js';
+import { detectWslLinux, type KernelIdentityReader } from './wsl-detect.js';
 
 export type GlobalScopePlatform = 'linux' | 'wsl' | 'darwin' | 'win32';
 export interface GlobalScopePaths {
@@ -14,8 +15,8 @@ export interface GlobalScopePaths {
   readonly cacheDir: string | null;
   readonly stateDir: string;
 }
-export function normalizeGlobalScopePlatform(platform: string, env: Environment): GlobalScopePlatform {
-  if (platform === 'linux') return envValue(env, 'WSL_DISTRO_NAME') || envValue(env, 'WSL_INTEROP') ? 'wsl' : 'linux';
+export function normalizeGlobalScopePlatform(platform: string, env: Environment, kernel?: KernelIdentityReader): GlobalScopePlatform {
+  if (platform === 'linux') return detectWslLinux(env, kernel) ? 'wsl' : 'linux';
   if (platform === 'win32' || platform === 'darwin' || platform === 'wsl') return platform;
   throw ErrorRegistry.createError('UNSUPPORTED_PLATFORM', { params: { platform } });
 }

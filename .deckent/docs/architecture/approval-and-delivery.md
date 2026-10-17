@@ -426,6 +426,20 @@ Live checkout/runtime activation (B07) is separate. Git writers outside
 Deckent under the same OS user and a checkout racing the observe→update-ref window are not fenced; a record that can no longer
 complete keeps the target blocked until operator recovery (no abandon command yet).
 
+**Repository identity (BENIMSEME-DEPO-KIMLIGI, ledger v58).** The journal numbers adoptions per (repository, target), not per ref
+name: the repository identity is the SHA-256 of the canonical Git common directory and its inode (not the device number, which some
+hosts renumber across restarts). A `git clone` is a new directory and never copies `refs/deckent/*`, so a re-registered clone starts
+its own chain at sequence 1. v58 rebuilds `workspace_adoptions` with a `repository` column and `UNIQUE(repository,target_ref,sequence)`
+over unreleased rows; every older row is kept byte for byte with repository `pre-v58`, because a ledger migration cannot observe Git and
+"the project repository" is false on real data (N1's stuck sequence 20 was claimed in the clone). A `pre-v58` chain is attributed by
+the only evidence that exists: the repository whose fence names its latest applied record continues it under its own identity; an
+unsettled `pre-v58` row blocks every repository of that target until resolved; no claim ever writes `pre-v58`. A claim, and the queue
+before publication, refuse with `ADOPTION_FENCE_MISMATCH` when the repository's fence does not name the journal's latest applied record
+there (no fence = no record). `settled = 2` marks an intent released as not applied; it never settles, resumes (`ADOPTION_RELEASED`) or
+counts as a chain head. A claimed intent moves only in the repository it was claimed in: a resume, the re-observation after the human
+answer and a replayed claim refuse another repository with `ADOPTION_REPOSITORY_CHANGED` (Astra 2616 F2); a `pre-v58` intent recorded no
+repository and so never starts a new move (it can still settle where its own fence proves the move). Downgrade = restore the pre-switch backup.
+
 **Delivery-pinned Run (B06-2a, no version change).** `createDeliveryRun` (SDK; composition `createConfiguredDeliveryRun`, not a
 runtime-service operation) admits the same Run contract as `createRun` plus `deliveryCommandId`. After `run:create`, trusted
 composition resolves the completed delivery of the same scope with its reference still naming the delivered commit (the
@@ -521,12 +535,17 @@ profile revision, in-flight Runs keep their imageId) and API capability snapshot
 npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
 under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; landed, `97590485`): the packaged lineage is reconciled
 to r4-20260930 using the retained recipe/Dockerfile hashes in its build receipt. In `auto` mode or with explicit apply,
-before writing a plan artifact or creating a build context, the installed builder runs its read-only `--check-version` mode
-against the exact repository on the selected daemon. The shared `assertVersionAdvances` history guard refuses a counter
-at or below any held r<N> tag with `WORKER_VERSION_COUNTER_TAKEN`; missing lineage must be reconciled rather than invented
-from tags. A failed/unavailable/timed-out check creates no context. Propose-only stays recipe-based without Docker access.
-The builder repeats that same guard before its actual build, retaining protection against intervening daemon changes;
-preflight is an observation, not a lock or a promise of build success. Known builder failures are shared `DeckentError`
+before writing a plan artifact or creating a build context, the installed builder runs its read-only `--held-version` mode
+against the exact repository on the selected daemon and reports the highest held r<N> tag. ISCI-IMAJ-SAYAC (2026-10-17):
+installations sharing one daemon share its `deckent/worker:r<N>-<day>` tag namespace, so the planned counter is
+`max(own lineage, daemon-held) + 1`, while `previousVersion`/`supersedes` stay the installation's own lineage and the history
+line records `counter past daemon-held <tag>`; another installation's image is skipped, never adopted, and each installation
+pins only the imageId of its own verified receipt. A failed/unavailable/timed-out/malformed check creates no context.
+Propose-only stays recipe-based without Docker access. The builder's shared `assertVersionAdvances` guard still refuses a
+counter at or below any held tag before its actual build (`WORKER_VERSION_COUNTER_TAKEN`, for a tag another installation took
+after the check; the next check plans past it), and an inconsistent recipe/Dockerfile history still fails closed;
+preflight is an observation, not a lock or a promise of build success. A builder refusal prints one `Error: WORKER_<CODE>: …`
+line without a stack, also when `npm run worker:image` is run directly. Known builder failures are shared `DeckentError`
 codes across SDK/MCP/CLI, localized EN/TR; CLI JSON carries a maximum 512-byte redacted `params.detail` excerpt, never raw
 process buffers or a full stack. Unrecognized reasons retain typed build/check failure codes; timeout retains precedence.
 After a successful preflight, the shipped builder files are copied into an
@@ -927,28 +946,32 @@ Author proof lives in external MCP-AI-AKTOR-2026-10-15. Targeted checks, real SQ
 
 TESLIM-KUYRUGU phase 2 round 2 connects the retained ledger v57 queue to runtime protocol v29. It does not rewrite historical sealed
 integration/delivery/adoption records. Config `targetQueue` supplies bounded policy; `execution.adoption.protectedTargets` extends
-main/master, repository default and remote-HEAD protection. A registered target/common-directory producer supplies physical identity.
+main/master, repository default and remote-HEAD protection. A registered target/common-directory producer supplies physical identity:
+the adoption journal's repository identity (canonical common directory + inode, no device number; QUEUE-SMALL). A queue generation
+written under the earlier device-bound key is refused for the new key; with that target's queue terminal, delete it once at upgrade.
 Scope-local positions count only authorized tickets; physical ordinals and other scopes are never read projections.
 
 A ticket pins the exact accepted Attempt and retained patch. Revalidation examines every intervening commit, conservatively including
 rename endpoints, mode changes, directory prefixes and changed-then-restored paths. It never rebases/merges a user's branch. An allowed
 drift creates a new integration command (optional `replacesCommandId` must resolve the same retained patch). Private prefix objects
 move through bounded object-only transport between private repositories, without publishing source refs. Zero configured revalidation
-budget refuses drift. An unresolved preparation/admission is not automatically retried with a new identity.
+budget refuses drift. An unresolved preparation/admission is not automatically retried with a new identity. A failed verification
+admission parks the ticket at once with its typed code (`QUEUE_VERIFICATION_NOT_ADMITTED` when untyped) and next action `prepare-current`.
 
 The private-candidate Run uses normal create/reserve/execute/evaluate authority. Its graph retains original evaluator definitions and
 pinned evaluator implementations and conjunctively adds the current adoption bar; a verification profile must be installed. A policy
-that requires Run-create approval can leave preparation waiting; inspect the normal approval and replay the same admitted command,
-never weaken that policy. Missing/failed/cancelled/unknown verification cannot publish. The exact private commit, original source,
+that requires Run-create approval refuses that admission (`RUN_APPROVAL_REQUIRED`); the ticket parks with that reason (QUEUE-SMALL).
+The queue does not yet replay an approved verification admission (open); never weaken that policy. Missing/failed/cancelled/unknown verification cannot publish. The exact private commit, original source,
 criteria/profile and receipt are checked again before effects. Legacy delivery-pinned Run admission stays readable.
 
 `deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`.
 Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
-`integration-queue-confirm` obtains separate publish and adoption cards; the second card is derived from the first frozen prefix,
+`integration-queue-confirm` obtains separate publish and adoption cards (the adoption card asks "Move <branch> to the verified commit?";
+each action refuses flags it does not take; output follows `--lang`, then config `language`, then LANG); the second card is derived from the first frozen prefix,
 so a later arrival never enters its consent. Capability values are service-issued and never printed as product output. MCP exposes
 only `inspect_delivery_queue`/`list_delivery_queue`; submission, rollback, decision and execution RPC on the MCP channel are refused
 before opening a scope or writer. The SDK runtime client carries inspect/list only; the CLI/Terminal composition installs submission.
-The registered-target `/deliver` flow enqueues; `r` offers current-base preparation after drift or reads last-known queue state.
+The registered-target `/deliver` flow enqueues (no work target: `QUEUE_WORK_TARGET_REQUIRED` names `execution.workTargets`); `r` offers current-base preparation after drift or reads last-known queue state.
 `/runs` detail projects authorized positions, ownership and outcome. Neither view is acceptance authority.
 
 A Git generation ref lives in the target repository's namespace, keyed by the full target ref; its payload binds queue key, instance
@@ -967,8 +990,19 @@ Startup raises durable ownership in the ledger. The CAS that enters publishing o
 so a ticket without one never started an effect: it is parked in the same single ledger transition that raises its owner/epoch, with
 no target write. A failed or interrupted recovery therefore leaves it unchanged, or (after an older two-step recovery) reconciling
 without a batch digest, which the next start also parks from the ledger. Work whose effect may have started (a batch digest is
-present) is physically fenced before its exact adoption/rollback fence lookup. An unattributed publication/move stays reconciling and blocks that target. TTL never proves a writer dead. A failed
+present) is physically fenced before its exact adoption/rollback fence lookup. An unattributed publication/move stays reconciling and blocks that target.
+BENIMSEME-DEPO-KIMLIGI: a failed publish/adopt keeps its typed code on the ticket (`reason`, also in its `target-queue` audit event) and is
+reconciled at once; the first item's fence/journal agreement is checked before the generation is written. Reconciliation runs at start
+and periodically from `tick()` (per target, backoff doubling from the batch window up to the lease). `adoptionNotApplied` decides: a ticket
+with no journal intent was never claimed and so never moved, whatever the tip (QUEUE-SMALL); with an intent, the fenced observation must
+show the branch still at the ticket's base, no fence of this record and the intent unsettled or released, and the observation must come
+from the repository the intent was claimed in (Astra 2616 F1): its recorded repository, or for a `pre-v58` intent the ticket's revalidated
+target binding (current formula or the pre-QUEUE-SMALL 2 binding with the device number). Another repository's state proves nothing about
+the one that may have moved, so without that evidence the ticket stays reconciling (re-registering the claiming repository settles it). Then the
+intent (if any) is released (receipt in the artifact store) and the ticket parks with a typed reason and next action
+`new-attempt`; release precedes the park and both are idempotent. A settled record, this record's fence or a moved branch under a recorded intent never releases.
+TTL never proves a writer dead. A failed
 fence leaves an open reconciliation blocker. No historical record is turned into a successful new effect. Native process kill/restart,
-actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57 switch, use and verify the
+actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57/v58 switch, use and verify the
 existing ledger backup. Rollback of the schema requires stopping the service and restoring the pre-switch backup, not starting older
 source against the upgraded ledger. This lane does not switch live or N1.

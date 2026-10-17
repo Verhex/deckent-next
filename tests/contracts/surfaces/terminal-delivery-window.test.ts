@@ -13,6 +13,7 @@ import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 import { homeEnv } from '../support/host-platform.js';
+import { ErrorRegistry, type DeckentError } from '#platform/index.js';
 
 // TESLIM-PENCERESI (owner 2026-10-14): "bu teslimleri neden CLI'dan yapıyorum; … bana sorulması gerekiyorsa terminalden bana sorsun".
 // The real Workline on an in-memory TTY with a recording port that calls the window's answer exactly where the production confirmation port
@@ -170,6 +171,29 @@ describe('verification candidates (cli-terminal port, read-only)', () => {
   it('says why instead of "none exists": no configured kind, or no Run reader in this terminal', async () => {
     await expect(port(project(null), [['v-ok']], { 'v-ok': [task('verify', 'accepted')] }).port.verificationRuns(preview)).rejects.toMatchObject({ code: 'ADOPTION_VERIFICATION_NOT_CONFIGURED' });
     await expect(port(project(bar), [['v-ok']], {}, false).port.verificationRuns(preview)).rejects.toMatchObject({ code: 'INVENTORY_UNAVAILABLE' });
+  });
+});
+
+describe('queue preparation without a work target (cli-terminal port)', () => {
+  it('refuses with its own work-target message, in English and Turkish, before anything is queued', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-queue-no-target-')); mkdirSync(join(root, '.deckent'));
+    writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
+      logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: ['refs/heads/main'] } } }));
+    const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 }, enqueued: unknown[] = [];
+    const handlers = { inspectInventory: async () => ({ schemaVersion: 1, layout: {}, page: { entries: [{ identity }], nextAfter: null } }),
+      previewWorkspacePatch: async () => ({}), checkWorkspaceIntegration: async () => ({}), prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: () => '', interactiveDelivery: () => ({}),
+      deliveryQueue: { async enqueueTargetQueue(input: unknown) { enqueued.push(input); throw new Error('must-not-enqueue'); } }, confirmDeliveryQueue: async () => { throw new Error('must-not-confirm'); } };
+    const subject = terminalDeliveryPort(root, handlers as never, { env: homeEnv(join(root, 'home')) })!;
+    const refusal = await subject.queue!.prepareCurrent({ scopeId: 's', runId: 'r', taskId: 'task' } as never, 'terminal-queue-1').catch((error: unknown) => error as DeckentError);
+    expect(refusal).toMatchObject({ code: 'QUEUE_WORK_TARGET_REQUIRED' }); expect(enqueued).toEqual([]);
+    // Not the verified-terminal text: it names the missing setting, the command and the /config panel.
+    const [en, tr] = (['en', 'tr'] as const).map(locale => ErrorRegistry.get('QUEUE_WORK_TARGET_REQUIRED', locale)!.message);
+    for (const message of [en!, tr!]) {
+      expect(message).toContain('deckent config set execution.workTargets'); expect(message).toContain('/config');
+      expect(message).not.toBe(ErrorRegistry.get('QUEUE_AUTHORITY_REQUIRED', 'en')!.message);
+    }
+    expect(en).toContain('No work target is configured'); expect(tr).toContain('çalışma hedefi');
+    expect(tr).not.toContain('doğrulanmış gerçek terminal'); expect(en).not.toContain('verified controlling terminal');
   });
 });
 

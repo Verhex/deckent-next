@@ -1,4 +1,7 @@
 import layoutResources from './layout-resources.json' with { type: 'json' };
+import hostLimits from './host-limits.json' with { type: 'json' };
+/** Host sizing inputs (a registry, not code): the bounded kernel-identity read and the per-worker memory estimate behind the recommended worker count. */
+export const HOST_LIMITS_REGISTRY = Object.freeze({ ...hostLimits });
 export const PRODUCT_LAYOUT_REGISTRY = Object.freeze({ ...layoutResources, resources: Object.freeze(layoutResources.resources) });
 /** Paths and schema identities; execution policy belongs to the owning package. */
 export const DECKENT_DIR = PRODUCT_LAYOUT_REGISTRY.rootName;

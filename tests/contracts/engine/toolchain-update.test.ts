@@ -24,6 +24,23 @@ it('advances the version counter with the planning day and inserts the newest hi
   expect(lines[0]).toMatch(/^# version r5-20261003/); expect(lines[1]).toMatch(/^# version r4-20260930/); expect(lines[2]).toMatch(/^# version r3-20260922/);
   expect(() => insertHistoryLine('FROM x\n', '# version r3-20260923 | ...')).toThrow('TOOLCHAIN_HISTORY_INVALID');
 });
+// ISCI-IMAJ-SAYAC: installations sharing one Docker daemon share its `deckent/worker:r<N>-<day>` tag namespace. The counter floors on the
+// highest revision the daemon holds, while `previousVersion`/`supersedes` stay this installation's own lineage (never another's image).
+it('floors the next counter on the daemon-held revision and keeps the lineage the plan supersedes', () => {
+  expect(nextImageVersion('r4-20260930', '2026-10-17T08:00:00.000Z', 'r16-20261016')).toBe('r17-20261017');
+  expect(nextImageVersion('r16-20261016', '2026-10-17T08:00:00.000Z', 'r16-20261016')).toBe('r17-20261017');
+  expect(nextImageVersion('r16-20261016', '2026-10-17T08:00:00.000Z', 'r9-20261008')).toBe('r17-20261017');
+  expect(nextImageVersion('r16-20261016', '2026-10-17T08:00:00.000Z', null)).toBe('r17-20261017');
+  expect(() => nextImageVersion('r4-20260930', '2026-10-17T08:00:00.000Z', 'latest')).toThrow('TOOLCHAIN_RECIPE_INVALID');
+  const floored = planToolchainUpdate({ report: report('0.156.0'), recipe, plannedAt: '2026-10-17T08:00:00.000Z', affectedProfiles: affected, heldVersion: 'r16-20261016' });
+  expect(floored).toMatchObject({ current: { imageVersion: 'r2-20260922' }, next: { imageVersion: 'r17-20261017', previousVersion: 'r2-20260922', recipe: { imageVersion: 'r17-20261017', previousVersion: 'r2-20260922' } } });
+  expect(floored.next!.historyLine).toBe('# version r17-20261017 | 2026-10-17 | base node:24-trixie-slim | supersedes r2-20260922 | toolchain currency: codex 0.155.1 -> 0.156.0; counter past daemon-held r16-20261016');
+  // A held revision at or below this lineage (its own newest image included) changes nothing, the history line included.
+  for (const heldVersion of ['r1-20260921', 'r2-20260922']) {
+    const unfloored = planToolchainUpdate({ report: report('0.156.0'), recipe, plannedAt: '2026-09-23T08:00:00.000Z', affectedProfiles: affected, heldVersion });
+    expect(unfloored.next).toEqual(planToolchainUpdate({ report: report('0.156.0'), recipe, plannedAt: '2026-09-23T08:00:00.000Z', affectedProfiles: affected }).next);
+  }
+});
 it('plans no change when nothing is stale and a single next version when an npm provider is stale', () => {
   const fresh = planToolchainUpdate({ report: report('0.155.1'), recipe, plannedAt: '2026-09-23T08:00:00.000Z', affectedProfiles: affected });
   expect(fresh).toMatchObject({ decision: 'no-change', staleProviders: [], next: null, affectedProfiles: [] });

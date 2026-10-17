@@ -7,6 +7,8 @@ import { followup, report } from './jev-review.mjs';
 import { createScorer, sha256, validateLocalConfig } from './qwen-decision-client.mjs';
 import { requireIdle } from './qwen-decision-idle.mjs';
 
+// The host Jev shadow sufficiency question (review config v4) is not part of the local engine's question set.
+const LOCAL_QUESTIONS = { shadow: false, shadowOmittedReason: 'disabled' };
 export function errorCode(e) {
   return /^(?:QWEN|JEV)_[A-Z0-9_]+$/.test(e.message) ? e.message : 'QWEN_RESULT_UNKNOWN';
 }
@@ -25,9 +27,9 @@ export function createDecisionEngine({ config, policy, root, transport, secret }
       acceptance: 'not-assessed', error: (await optional(directory, 'failure.json'))?.error ?? 'QWEN_RESULT_UNKNOWN', directory };
   }
   return {
-    prepare: c => prepare(c, policy),
+    prepare: c => prepare(c, policy, undefined, LOCAL_QUESTIONS),
     async ask(c, { id = callId(), signal } = {}) {
-      validateCallId(id); const prepared = prepare(c, policy); safeData(prepared, secret);
+      validateCallId(id); const prepared = prepare(c, policy, undefined, LOCAL_QUESTIONS); safeData(prepared, secret);
       ensure(Object.keys(prepared.input.questions).length <= config.maxQuestions, 'QWEN_QUESTION_LIMIT');
       const digest = sha256({ input: prepared.input, config });
       const directory = join(await privateDirectory(root), id);

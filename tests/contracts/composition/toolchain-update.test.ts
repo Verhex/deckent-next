@@ -1,6 +1,7 @@
-import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { prepareNativeCodingProfile, updateToolchains } from '../../../src/index.js';
 import { main as cliMain, toolchainsCommand } from '#surfaces/core/cli/index.js';
@@ -8,6 +9,7 @@ import { clearConfigCache } from '#platform/index.js';
 import type { WorkerImageBuildRunner } from '#adapters/index.js';
 
 const roots: string[] = [];
+const heldAnswer = (heldVersion: string | null) => Buffer.from(JSON.stringify({ heldVersion }) + '\n').toString('base64');
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const imageId = 'sha256:' + 'a'.repeat(64);
 const bounds = { imageId, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
@@ -27,9 +29,9 @@ async function fixture(update: Record<string, unknown>) {
   const options = { env: { HOME: join(root, 'home'), PATH: process.env.PATH ?? '/usr/bin' } };
   const runs: string[] = []; const checks: string[][] = [];
   const runner: WorkerImageBuildRunner = async command => {
-    if (command.args[1] === '--check-version') {
+    if (command.args[1] === '--held-version') {
       checks.push([...command.args]);
-      return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
+      return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: heldAnswer(null), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
     }
     runs.push(command.args.join(' '));
     const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
@@ -41,34 +43,39 @@ async function fixture(update: Record<string, unknown>) {
 }
 
 describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', () => {
-  it('refuses a lagging recipe against daemon r4 before writing a plan or creating a build context', async () => {
+  // ISCI-IMAJ-SAYAC (live r4 lineage, no receipts; N1 built r16 on the same daemon): the counter floors on the daemon-held revision before any
+  // artifact, the plan still supersedes this installation's own r4, and the build's history chain validates in the shipped history owner.
+  it('advances past a revision another installation holds on the shared daemon, superseding its own lineage', async () => {
     const f = await fixture({});
-    const packageRoot = join(f.project, 'package');
-    await cp(join(process.cwd(), 'assets/worker-image'), join(packageRoot, 'assets/worker-image'), { recursive: true });
-    const recipePath = join(packageRoot, 'assets/worker-image/recipe.json');
-    const recipe = JSON.parse(await readFile(recipePath, 'utf8'));
-    await writeFile(recipePath, JSON.stringify({ ...recipe, imageVersion: 'r3-20260922', previousVersion: 'r2-20260922' }));
-    const dockerfilePath = join(packageRoot, 'assets/worker-image/Dockerfile');
-    await writeFile(dockerfilePath, (await readFile(dockerfilePath, 'utf8')).replace(/^# version r4[^\n]*\n/m, ''));
     const seen: string[][] = [];
     const runner: WorkerImageBuildRunner = async command => {
       seen.push([...command.args]);
-      if (command.args[1] !== '--check-version') return f.runner(command);
-      return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 1, signal: null,
-        stdoutBase64: '', stderrBase64: Buffer.from('Error: WORKER_VERSION_COUNTER_TAKEN: r4-20261003 does not advance past r4-20260930 already held by the daemon.').toString('base64'),
-        stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
+      if (command.args[1] !== '--held-version') return f.runner(command);
+      return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: heldAnswer('r16-20261016'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
     };
-    await expect(updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner, packageRoot, now: () => '2026-10-03T12:00:00.000Z' }))
-      .rejects.toMatchObject({ code: 'WORKER_VERSION_COUNTER_TAKEN', params: { detail: expect.stringContaining('r4-20260930') } });
-    expect(seen).toEqual([[join(packageRoot, 'assets/worker-image/build.mjs'), '--check-version', 'r4-20261003']]);
-    expect(f.runs).toEqual([]); expect(f.checks).toEqual([]);
-    await expect(readdir(f.home)).rejects.toMatchObject({ code: 'ENOENT' });
+    const built = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner, now: () => '2026-10-17T08:00:00.000Z' });
+    expect(seen[0]).toEqual([join(process.cwd(), 'assets/worker-image/build.mjs'), '--held-version']);
+    expect(built).toMatchObject({ decision: 'built', build: { tag: 'deckent/worker:r17-20261017' }, plan: { current: { imageVersion: 'r4-20260930' }, next: { imageVersion: 'r17-20261017', previousVersion: 'r4-20260930' } } });
+    expect(JSON.parse(await readFile(built.planPath!, 'utf8'))).toMatchObject({ next: { imageVersion: 'r17-20261017' } });
+    const { parseVersionHistory } = await import(pathToFileURL(join(process.cwd(), 'assets/worker-image/history.mjs')).href) as { parseVersionHistory(dockerfile: string, recipe: unknown): { id: string; supersedes: string; reason: string }[] };
+    const context = join(f.home, 'builds', 'r17-20261017');
+    const history = parseVersionHistory(await readFile(join(context, 'Dockerfile'), 'utf8'), JSON.parse(await readFile(join(context, 'recipe.json'), 'utf8')));
+    expect(history[0]).toMatchObject({ id: 'r17-20261017', supersedes: 'r4-20260930', reason: expect.stringMatching(/counter past daemon-held r16-20261016$/) });
+    // An unreadable daemon answer stops before any plan artifact or build context.
+    const g = await fixture({});
+    const broken: WorkerImageBuildRunner = async command => command.args[1] === '--held-version'
+      ? { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 1, signal: null, stdoutBase64: '', stderrBase64: Buffer.from('Error: WORKER_IMAGE_COMMAND_FAILED:image').toString('base64'), stdoutTruncated: false, stderrTruncated: false, durationMs: 1 }
+      : g.runner(command);
+    await expect(updateToolchains(g.project, { apply: true }, g.options, { fetcher: g.fetcher, runner: broken, now: () => '2026-10-17T08:00:00.000Z' })).rejects.toMatchObject({ code: 'WORKER_IMAGE_COMMAND_FAILED' });
+    expect(g.runs).toEqual([]);
+    await expect(readdir(join(g.home, 'plans'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readdir(join(g.home, 'builds'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it.each(['en', 'tr'])('surfaces the builder typed counter reason and a bounded redacted excerpt in CLI JSON (%s)', async language => {
     const f = await fixture({});
     const runner: WorkerImageBuildRunner = async command => ({ schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit',
-      exitCode: command.args[1] === '--check-version' ? 0 : 1, signal: null, stdoutBase64: '',
-      stderrBase64: command.args[1] === '--check-version' ? '' : Buffer.from('Error: WORKER_VERSION_COUNTER_TAKEN: r5-20261003 blocked; token=fixture-secret Bearer fixture-bearer sk-ant-fixturekey ' + 'x'.repeat(2000) + '\n    at builder (/private/path:1:1)').toString('base64'),
+      exitCode: command.args[1] === '--held-version' ? 0 : 1, signal: null, stdoutBase64: command.args[1] === '--held-version' ? heldAnswer(null) : '',
+      stderrBase64: command.args[1] === '--held-version' ? '' : Buffer.from('Error: WORKER_VERSION_COUNTER_TAKEN: r5-20261003 blocked; token=fixture-secret Bearer fixture-bearer sk-ant-fixturekey ' + 'x'.repeat(2000) + '\n    at builder (/private/path:1:1)').toString('base64'),
       stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
     const errors: string[] = [];
     const exitCode = await cliMain(['toolchains', 'update', '--apply', '--json', '--lang', language], { root: f.project, env: f.options.env,
@@ -96,7 +103,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     const built = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:05:00.000Z' });
     expect(built).toMatchObject({ decision: 'built', build: { imageId: 'sha256:' + 'b'.repeat(64), tag: 'deckent/worker:r5-20260923' },
       proposal: { imageVersion: 'r5-20260923', application: 'not-applied', profiles: [{ profile: { id: 'codex-pinned' }, changes: { cliVersion: { from: 'codex-cli 0.155.1', to: 'codex-cli 0.156.0' }, imageId: { from: imageId, to: 'sha256:' + 'b'.repeat(64) } } }] } });
-    expect(f.checks).toEqual([[join(process.cwd(), 'assets/worker-image/build.mjs'), '--check-version', 'r5-20260923']]);
+    expect(f.checks).toEqual([[join(process.cwd(), 'assets/worker-image/build.mjs'), '--held-version']]);
     expect(f.runs).toHaveLength(1); expect(f.runs[0]).toMatch(/builds\/r5-20260923\/build\.mjs .*receipts\/r5-20260923\.json$/);
     expect((await readdir(join(f.home, 'builds', 'r5-20260923'))).sort()).toEqual(['Dockerfile', 'build.mjs', 'history.mjs', 'inspect.mjs', 'install.mjs', 'recipe.json']);
     expect(JSON.parse(await readFile(built.proposalPath!, 'utf8'))).toEqual(built.proposal);

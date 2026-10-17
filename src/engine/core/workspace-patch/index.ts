@@ -15,8 +15,8 @@ export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDe
 export type { WorkspacePatchLimitDetail } from './internal/contract.js';
 export { pinRunToDelivery } from './internal/delivery-run.js';
 export type { DeliveryRunPinRequest } from './internal/delivery-run.js';
-export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, requireDelivered, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema } from './internal/adoption.js';
-export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, AdoptionFence, WorkspaceAdoptionErrorCode } from './internal/adoption.js';
+export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, requireDelivered, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema, adoptionNotApplied } from './internal/adoption.js';
+export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, AdoptionFence, AdoptionClaimObservation, WorkspaceAdoptionErrorCode } from './internal/adoption.js';
 export { adoptionVerificationSchema, adoptionVerificationPhaseOutcome, executionProfileFingerprint, verifyDeliveredCommit, verifyAdoption,
   adoptionCriteriaMeet } from './internal/verification.js';
 export type { AdoptionVerification, AdoptionVerificationPolicy, AdoptionVerificationStore, AdoptionVerificationRequest,
@@ -36,7 +36,7 @@ export { patchPathsIntersect, changedHistoryPaths, assertDisjointHistory } from 
 export { gitFailure } from './internal/snapshot.js';
 export { parseIntegrationDiffStats } from './internal/snapshot.js';
 export { assertIntegrationSnapshot } from './internal/snapshot.js';
-export { adoptionFenceRef, adoptionFenceText, adoptionFenceObjectSchema } from './internal/git-fence.js';
+export { adoptionFenceRef, adoptionFenceText, adoptionFenceObjectSchema, adoptionRepositoryIdentity, legacyQueueBinding } from './internal/git-fence.js';
 export { assertIntegrationBefore } from './internal/snapshot.js';
 export { capturedWorkspacePatch } from './internal/snapshot.js';
 export { prepareIntegrationSnapshot } from './internal/snapshot.js';

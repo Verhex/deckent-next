@@ -6,7 +6,7 @@ import { SqliteExecutionPools } from './pools.js';
 import type { RunAdmissionFilter } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { releaseWorkerCustody, verifiedPrincipalSchema, readWorkerModelPin, identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, reconcileRunLifecycle, observeRunAttempt, closesAttemptWithoutExit, RunError, TaskEvaluationError } from '#domain/index.js';
-import { assertLostDispatchReleaseReplay, assertLostDispatchReleaseAudit, dispatchReleaseReceiptId, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
+import { assertLostDispatchReleaseReplay, assertLostDispatchReleaseAudit, dispatchReleaseReceiptId, encodeLostDispatchWrite, proposeLostDispatchFence, assertLostDispatchAudit, assertLostDispatchReplay, DispatchError, type LostDispatchWrite, type LostDispatchAudit, runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, planSchedulingWave,
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
@@ -14,7 +14,7 @@ import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { assertEvaluationDigests, readEvaluationDigests, bindOperationEvidenceUse } from './evaluation-evidence.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
-import { quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { quotaHeldTasks, persistQuotaAttempt, recordAcceptanceMetric, sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { matchRunLifecycleCommand, proposeRunLifecycleWrite, runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 // Shared reads have no writer timing dependency and expose no mutation path.
@@ -47,14 +47,7 @@ export async function readRunSnapshot(db: DatabaseSync, scopeId: string, runId: 
 export class SqliteRunJournal {
   constructor(private readonly db: DatabaseSync, private readonly admission: Pick<RunAdmissionFilter, 'excluded'> | undefined,
     private readonly timing: { now: () => number; timeoutMs: number }, private readonly poolCeiling?: number) {}
-  private transaction<T>(work: () => T): T {
-    let active = false;
-    try { this.db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); this.db.exec('COMMIT'); return value; }
-    catch (error) {
-      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
-      throw sqliteFailure(error);
-    }
-  }
+  private transaction<T>(work: () => T): T { return ledgerTransaction(this.db, work); }
   private receipt(scopeId: string, runId: string, commandId: string, command: string, matches: (prior: string) => boolean = prior => prior === command): RunReceipt | null {
     const row = this.db.prepare('SELECT command,snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     if (!row) return null;

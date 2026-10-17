@@ -8,3 +8,12 @@ export const adoptionFenceText = (target: string, fence: AdoptionFence) => JSON.
   sequence: fence.sequence, scopeId: fence.scopeId, commandId: fence.commandId }) + '\n';
 export const adoptionFenceObjectSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('deckent-adoption-fence'), target: z.string(),
   sequence: z.number().int().positive().safe(), scopeId: identitySchema, commandId: identitySchema }).strict();
+/** Adoption journal identity of a physical repository: its canonical Git common directory and that directory's inode. `git clone` makes a
+ * new directory (and never copies refs/deckent/*), so a clone starts its own chain. The device number is deliberately left out: block
+ * device numbering is not stable across reboots on some hosts (WSL2 attaches distribution disks in start order). A move or a same-path
+ * re-clone that reuses the inode changes or keeps it; the fence agreement check then refuses before any write, it never misnumbers. */
+export const adoptionRepositoryIdentity = (common: { readonly path: string; readonly inode: number }) =>
+  createHash('sha256').update(JSON.stringify({ path: common.path, inode: common.inode })).digest('hex');
+/** The queue binding builds before QUEUE-SMALL 2 recorded (common directory path, st_dev, inode). Recognition of tickets bound then only. */
+export const legacyQueueBinding = (common: { readonly path: string; readonly device: number; readonly inode: number }) =>
+  createHash('sha256').update(JSON.stringify({ path: common.path, device: common.device, inode: common.inode })).digest('hex');

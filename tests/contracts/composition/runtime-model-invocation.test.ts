@@ -380,7 +380,7 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
   const transport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
   const mcpClient = new Client({ name: 'runtime-model-invocation-cancellation-proof', version: '1' });
   try {
-    await within(mcpClient.connect(transport), 'MCP_MODEL_CANCELLATION_CONNECT_TIMEOUT');
+    await within(mcpClient.connect(transport), 'MCP_MODEL_CANCELLATION_CONNECT_TIMEOUT', 10_000); // a cold MCP server process start, bounded like the compiled CLI above
     const tool = (await within(mcpClient.listTools(), 'MCP_MODEL_CANCELLATION_LIST_TIMEOUT')).tools.find(value => value.name === 'cancel_model_invocation');
     expect(tool?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
     const recorded = await within(mcpClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }), 'MCP_MODEL_CANCELLATION_TIMEOUT');
@@ -420,7 +420,7 @@ it.skipIf(process.platform !== 'linux')('rejects an MCP cancellation before effe
   const boundedTransport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
   const boundedClient = new Client({ name: 'runtime-model-invocation-bounded-cancellation-proof', version: '1' });
   try {
-    await within(boundedClient.connect(boundedTransport), 'MCP_BOUNDED_CANCELLATION_CONNECT_TIMEOUT');
+    await within(boundedClient.connect(boundedTransport), 'MCP_BOUNDED_CANCELLATION_CONNECT_TIMEOUT', 10_000); // a cold MCP server process start, bounded like the compiled CLI above
     const rejected = await within(boundedClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }),
       'MCP_BOUNDED_CANCELLATION_TIMEOUT');
     expect(rejected.isError).toBe(true);

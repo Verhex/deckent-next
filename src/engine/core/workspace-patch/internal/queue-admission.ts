@@ -19,7 +19,7 @@ export function createWorkspaceQueueAdmission(queue: TargetQueueStore, authoriza
     new AuditApplication(store, integrity).record({ schemaVersion: 1, eventId: `queue-${digest([record.request.identity.scopeId, record.request.commandId, record.revision])}`,
       scopeId: record.request.identity.scopeId, principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision, atMs: ports.now(),
       subject: { kind: 'target-queue', commandId: record.request.commandId, targetKey: record.key, ordinal: record.ordinal,
-        revision: record.revision, state: record.state, payloadDigest: record.request.payloadDigest, recordDigest: digest(record) } });
+        revision: record.revision, state: record.state, payloadDigest: record.request.payloadDigest, recordDigest: digest(record), ...(record.reason ? { reason: record.reason } : {}) } });
   };
   const accepted = async (identity: AttemptIdentity) => {
     const { run, outputDigest } = await ports.read(identity);

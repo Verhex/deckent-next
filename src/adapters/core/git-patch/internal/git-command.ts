@@ -32,4 +32,11 @@ export class GitCommand {
       if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o022) || await realpath(path) !== path) throw new WorkspacePatchError('PATCH_UNSAFE');
     }
   }
+  /** The canonical, owned, not group/other-writable Git common directory. Identity uses path and inode only; the device number is
+   * returned solely to recognize a ticket bound before QUEUE-SMALL 2 (`legacyQueueBinding`). */
+  async common(unsafe: () => Error = () => new WorkspacePatchError('PATCH_UNSAFE')) {
+    const path = await realpath(await this.run(['rev-parse', '--path-format=absolute', '--git-common-dir'])), stat = await lstat(path);
+    if (!stat.isDirectory() || stat.uid !== process.getuid?.() || stat.mode & 0o022) throw unsafe();
+    return { path, inode: stat.ino, device: stat.dev };
+  }
 }

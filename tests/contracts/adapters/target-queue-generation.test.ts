@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,8 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { GitQueueTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 import { migrateLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { createTargetQueueService, targetQueueKey, RUNTIME_SERVICE_SCHEMA_VERSION, TargetQueueApplication, type QueueServiceContext, type TargetBatchEffects,
-  type TargetQueuePreparation } from '#engine/index.js';
+import { createTargetQueueService, targetQueueKey, RUNTIME_SERVICE_SCHEMA_VERSION, TargetQueueApplication, GitQueueTargetApplication, adoptionRepositoryIdentity,
+  queueGenerationRef, type QueueServiceContext, type TargetBatchEffects, type TargetQueuePreparation } from '#engine/index.js';
 import { candidateBindingSchema, candidateEvidenceSchema, type TargetQueueRecord } from '#domain/index.js';
 
 // Astra 2607 F1/F2 at the real boundary: a real Git target repository with the shipped generation producer (GitQueueTarget) and a
@@ -47,9 +48,13 @@ async function fixture() {
   /** Candidate per ticket: version and Git commit are the same value, so the effect stubs move real refs to real objects. */
   const candidates = new Map<string, string>(), conflicts = new Set<string>();
   const ttl = { ms: 60_000 };
+  /** What the effect lookup observes for a reconciling ticket, and how often the service asked. */
+  const reconciliation: { calls: number; result: 'unknown' | 'not-applied' } = { calls: 0, result: 'unknown' };
+  /** What verification admission throws for each ticket (none: admitted). */
+  const admission = new Map<string, Error>();
   /** One service process: its own instance id and ledger connection, like a restart of the runtime service. */
   /** `failAudit` makes the audit of the first write entering that state fail inside its ledger transaction (an audit/storage error). */
-  const service = (instanceId: string, failAudit?: { state: TargetQueueRecord['state'] }) => {
+  const service = (instanceId: string, failAudit?: { state: TargetQueueRecord['state'] }, windowMs = 1) => {
     const db = new DatabaseSync(ledger), queue = new SqliteTargetQueue(db);
     const app = new TargetQueueApplication(queue, { async authorize() {}, async validate() {} }, bounds, (_store, written) => {
       if (failAudit && written.state === failAudit.state) { failAudit = undefined; throw new Error('audit-storage-failure'); } });
@@ -64,7 +69,7 @@ async function fixture() {
           outputDigest: record.request.outputDigest, observedVersion: from, effectiveVersion: from, candidateVersion: to, candidateDigest: 'd'.repeat(64),
           custodyReceipt: 'e'.repeat(64), criteria: ['f'.repeat(64)], profileFingerprint: 'a'.repeat(64), replacesCommandId: null });
       },
-      async admitVerification() {},
+      async admitVerification(record) { const error = admission.get(record.request.commandId); if (error) throw error; },
       async evidence(record) {
         const c = record.candidate!;
         return candidateEvidenceSchema.parse({ schemaVersion: 1, identity: record.request.identity, sourceBinding: c.sourceBinding, candidateVersion: c.candidateVersion,
@@ -87,9 +92,10 @@ async function fixture() {
         await runTransaction(`verify ${ref} ${value}\nupdate ${TARGET} ${record.candidate!.candidateVersion} ${record.candidate!.effectiveVersion}\n`);
         return { state: 'settled', evidenceRefs: ['2'.repeat(64)] };
       },
-      async lookup() { return { state: 'unknown' }; },
+      async lookup() { reconciliation.calls++; return { state: reconciliation.result }; },
+      async release() { return reconciliation.result === 'not-applied' ? { state: 'refused', evidenceRefs: ['3'.repeat(64)] } : { state: 'unknown' }; },
     };
-    const instance = createTargetQueueService({ instanceId, config: { targetQueue: { capacity: 8, candidateSlots: 2, batchWindowMs: 1 } },
+    const instance = createTargetQueueService({ instanceId, config: { targetQueue: { capacity: 8, candidateSlots: 2, batchWindowMs: windowMs } },
       async withScope(_scope, _peer, _read, work) { return work(context()); }, snapshot: async () => queue.pending(8), withActor: async (_record, work) => work(),
       effects: async () => effects, preparation: async () => preparation, captureProcess: async () => ({ processStart: 'start', terminal: 'tty' }),
       isMcp: () => false, record: async () => {} });
@@ -114,7 +120,7 @@ async function fixture() {
     const child = execFile('/usr/bin/git', ['-C', sourceRoot, 'update-ref', '--stdin'], error => error ? reject(error) : resolve());
     child.stdin!.end(`start\noption no-deref\n${body}prepare\ncommit\n`);
   });
-  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget };
+  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget, reconciliation, sourceRoot, options, admission };
 }
 
 describe.skipIf(process.platform !== 'linux')('queue generation fence: no target write before consent, durable ownership across restart (Astra 2607 F1/F2)', () => {
@@ -271,5 +277,95 @@ describe.skipIf(process.platform !== 'linux')('queue generation fence: no target
       expect(() => d.app.transition(pending, { state: 'adopting' })).toThrow('QUEUE_CONFIRMATION_REQUIRED');
       expect(d.record('q3')).toEqual(pending);
     } finally { d.close(); }
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('queue reconciliation after a started effect (BENIMSEME-DEPO-KIMLIGI)', () => {
+  it('a reconciling head is reconciled periodically with bounded backoff, and parks only with a typed reason and new evidence (BENIMSEME-DEPO-KIMLIGI)', async () => {
+    const f = await fixture();
+    f.candidates.set('q1', await f.commit(f.base, 'candidate-1'));
+    const s = f.service('service-a', undefined, 200);
+    try {
+      await s.enqueue('q1', 1); await s.advance();
+      const started = s.app.transition(s.record('q1'), { state: 'publishing', batchDigest: '9'.repeat(64) });
+      const reconciling = s.app.transition(started, { state: 'reconciling' });
+      // F2-R amended: a started effect never parks without a typed reason, nor without new evidence.
+      expect(() => s.app.transition(reconciling, { state: 'parked', evidenceRefs: ['4'.repeat(64)] })).toThrow('QUEUE_CONFLICT');
+      expect(() => s.app.transition(reconciling, { state: 'parked', reason: 'ADOPTION_NOT_APPLIED' })).toThrow('QUEUE_CONFLICT');
+      expect(s.record('q1')).toEqual(reconciling);
+      // Not only at start: tick reconciles the head, then waits out its backoff before asking again.
+      await s.instance.tick(); expect(f.reconciliation.calls).toBe(1);
+      await s.instance.tick(); expect(f.reconciliation.calls).toBe(1);
+      await new Promise(resolve => setTimeout(resolve, 450)); await s.instance.tick(); expect(f.reconciliation.calls).toBe(2);
+      expect(s.record('q1').state).toBe('reconciling');
+      // The effect is observed not applied: the ticket parks for a new attempt with the release receipt and a typed reason.
+      f.reconciliation.result = 'not-applied';
+      await new Promise(resolve => setTimeout(resolve, 850)); await s.instance.tick();
+      expect(s.record('q1')).toMatchObject({ state: 'parked', reason: 'ADOPTION_NOT_APPLIED', evidenceRefs: ['3'.repeat(64)] });
+      expect(await f.target()).toMatchObject({ tip: f.base });
+    } finally { s.close(); }
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('verification admission failure is a typed, visible outcome', () => {
+  it('a refused admission parks the ticket with its typed code and its suffix; an untyped failure gets the admission code; nothing is written', async () => {
+    const f = await fixture();
+    for (const ticket of ['q1', 'q2', 'q3']) f.candidates.set(ticket, await f.commit(f.base, `candidate-${ticket}`));
+    f.admission.set('q1', Object.assign(new Error('workspace refused'), { code: 'CANDIDATE_MISMATCH' }));
+    const s = f.service('service-a', undefined, 50);
+    try {
+      const quiet = await f.target();
+      await s.enqueue('q1', 1); await s.enqueue('q2', 2);
+      await new Promise(resolve => setTimeout(resolve, 60)); await s.instance.tick();
+      // Not a silent `verifying` with a candidate and no Run until the timeout: parked at once, with the reason on the ticket and its view.
+      expect(s.record('q1')).toMatchObject({ state: 'parked', reason: 'CANDIDATE_MISMATCH' });
+      expect(s.record('q1').candidate).not.toBeNull();
+      expect(s.record('q2').state).toBe('parked');
+      const view = await s.call('inspectTargetQueue', { schemaVersion: 1, scopeId: SCOPE, commandId: 'q1' }) as { record: { reason: string; nextAction: string } };
+      expect(view.record).toMatchObject({ reason: 'CANDIDATE_MISMATCH', nextAction: 'prepare-current' });
+      f.admission.set('q3', new Error('provider unavailable'));
+      await s.enqueue('q3', 3); await new Promise(resolve => setTimeout(resolve, 60)); await s.instance.tick();
+      expect(s.record('q3')).toMatchObject({ state: 'parked', reason: 'QUEUE_VERIFICATION_NOT_ADMITTED' });
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
+    } finally { s.close(); }
+  });
+});
+
+// WSL2 renumbers block devices after a restart: a queue identity that hashed st_dev changed under every queued ticket (QUEUE_CONFLICT).
+describe.skipIf(process.platform !== 'linux')('queue target identity is the adoption repository identity (no device number)', () => {
+  it('the binding is the realpath+inode repository identity and stays the same when only the device number changes', async () => {
+    const f = await fixture();
+    const path = await realpath(await f.git('rev-parse', '--path-format=absolute', '--git-common-dir')), { ino: inode, dev } = await stat(path);
+    const binding = await f.gitTarget.resolveTarget({ kind: 'git-ref', id: TARGET });
+    expect(binding.resourceBinding).toBe(adoptionRepositoryIdentity({ path, inode }));
+    // The same repository observed under two device numbers (before and after a WSL2 restart) is one queue.
+    const run = (args: string[], input = '') => new Promise<string>((resolve, reject) => {
+      const child = execFile('/usr/bin/git', ['-C', f.sourceRoot, ...args], (error, stdout) => error ? reject(error) : resolve(stdout.trim()));
+      child.stdin!.end(input);
+    });
+    const observed = (device: number) => new GitQueueTargetApplication(f.options, 'installation', 'registered', [TARGET], [],
+      { custody: async () => {}, run, common: async () => ({ path, inode, device }) as { path: string; inode: number } }).binding(TARGET);
+    const [before, after] = [await observed(dev), await observed(dev + 31)];
+    expect(after).toEqual(before); expect(targetQueueKey(after)).toBe(targetQueueKey(binding));
+  });
+
+  it('a generation written under the pre-change identity is refused until the operator removes it; then the queue takes the new identity', async () => {
+    const f = await fixture();
+    const path = await realpath(await f.git('rev-parse', '--path-format=absolute', '--git-common-dir')), { ino: inode, dev: device } = await stat(path);
+    const binding = await f.gitTarget.resolveTarget({ kind: 'git-ref', id: TARGET });
+    const legacy = targetQueueKey({ ...binding, resourceBinding: createHash('sha256').update(JSON.stringify({ path, device, inode })).digest('hex') });
+    expect(legacy).not.toBe(targetQueueKey(binding));
+    const ref = queueGenerationRef(TARGET), blob = await new Promise<string>((resolve, reject) => {
+      const child = execFile('/usr/bin/git', ['-C', f.sourceRoot, 'hash-object', '-w', '--stdin'], (error, stdout) => error ? reject(error) : resolve(stdout.trim()));
+      child.stdin!.end(JSON.stringify({ schemaVersion: 1, key: legacy, owner: 'service-a', epoch: 1 }) + '\n');
+    });
+    await f.git('update-ref', ref, blob);
+    // The key check is not weakened: a generation of another queue identity is never taken over silently.
+    await expect(f.gitTarget.fence(targetQueueKey(binding), 'service-a', 2)).rejects.toMatchObject({ code: 'QUEUE_CONFLICT' });
+    expect(await f.generation()).toMatchObject({ owner: 'service-a', epoch: 1 });
+    // Upgrade step (queue terminal on that target): delete the generation once; the next fence writes the new identity.
+    await f.git('update-ref', '-d', ref, blob);
+    await f.gitTarget.fence(targetQueueKey(binding), 'service-b', 1);
+    expect(await f.generation()).toMatchObject({ key: targetQueueKey(binding), owner: 'service-b', epoch: 1 });
   });
 });

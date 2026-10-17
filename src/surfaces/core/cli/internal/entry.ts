@@ -19,7 +19,7 @@ import { secretCommand } from './secret.js';
 import { poolCommand } from './pool.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -86,6 +86,11 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (interactive) {
       await (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
+    }
+    // Installation on a Node.js below the supported floor is allowed to proceed, but never silently (a known heap overrun in older 24.x).
+    if (argv[0] === 'init') {
+      const node = assessNodeSupport(process.version, NODE_ENGINE_RANGE);
+      if (node.status === 'unsupported') emit(t('doctor.nodeUnsupported.init', { version: node.version, floor: node.floor ?? NODE_ENGINE_RANGE }, locale), { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });
     }
     const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
     if (command) return (await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;

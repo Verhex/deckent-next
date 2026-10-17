@@ -1,0 +1,5 @@
+{
+  "kernelIdentityReadBytes": 512,
+  "workerMemoryEstimateMB": 400,
+  "workerCountCap": 30
+}

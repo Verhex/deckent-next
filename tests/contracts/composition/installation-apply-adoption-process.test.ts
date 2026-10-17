@@ -6,6 +6,7 @@ import { immutableJsonObjectSchema } from '#domain/index.js';
 import { validateConfig, versionedConfig } from '#platform/index.js';
 import { applyInstallation, inspectInstallation } from '../../../src/index.js';
 import { fixture, unsupported } from './installation-apply-process.fixture.js';
+import { hostBound } from '../support/host-bounds.js';
 
 
 it.skipIf(unsupported)('adopts exact approved config and policy bytes without replacing their files', async () => {
@@ -34,4 +35,4 @@ it.skipIf(unsupported)('adopts exact approved config and policy bytes without re
     expect(journal.resources).toContainEqual(expect.objectContaining({ resource: target.resource,
       preimageDigest: target.digest, targetDigest: target.digest, state: 'published' }));
   }
-});
+}, hostBound(90_000)); // a real compiled installer run: 11–29 s on hosted Linux runners, above the 30 s default on a slow one

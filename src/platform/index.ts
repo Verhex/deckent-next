@@ -21,10 +21,10 @@ export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
 export { ENVIRONMENT_KEYS, envValue } from '#platform/core/host/index.js';
 export { isMainModule } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
-export { globalStateRoot, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
+export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
 export { resolveProductPaths } from '#platform/core/host/index.js';
-export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile } from '#platform/core/host/index.js';
+export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
 export { readBuildIdentity, type BuildIdentity } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
@@ -35,7 +35,7 @@ export { isStandardSchemaV1, validateStandardSchemaSync } from '#platform/core/v
 // Deckent's own JSON Schema validator (MCP-SCHEMA-VALIDATOR): the MCP SDK's jsonSchemaValidator provider for every SDK Client and Server.
 export { DeckentJsonSchemaValidator, JsonSchemaRefusal, JSON_SCHEMA_LIMITS, JSON_SCHEMA_ANNOTATIONS } from '#platform/core/validate/index.js';
 export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSchemaResult, JsonSchemaValidatorOptions } from '#platform/core/validate/index.js';
-export { deepMerge, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic } from '#platform/core/utils/index.js';
+export { deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from '#platform/core/config/index.js';
