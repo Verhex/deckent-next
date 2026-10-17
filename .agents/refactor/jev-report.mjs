@@ -116,13 +116,14 @@ export async function pendingOutcomes(root, limit, options = {}) {
     const noul = Object.entries(request.input.questions).filter(([, q]) => q.type === 'noul').map(([id]) => id);
     pending.push({ callId: row.callId, requestedAt: row.requestedAt, scope: row.scope, objective: String(request.case.objective).slice(0, 200),
       selectedOption: row.selectedOption, recommendation: row.recommendation, adviceDisposition: row.adviceDisposition,
+      command: `node .agents/refactor/jev-review.mjs outcome ${row.callId} --actor <you> --status <verified|failed|inconclusive> --observation "<what actually happened>" --evidence <proof path, SHA or log>`,
       outcomeTemplate: { actor: '', status: 'verified|failed|inconclusive', observation: '', evidenceRefs: [],
         labels: noul.map(questionId => ({ questionId, expected: 'true|false (verified status only; omit unless evidence decides it)', evidenceRef: '' })),
         inputQuality: '', outputQuality: '' } });
   }
   return { schemaVersion: 1, journalRootPresent: summary.journalRootPresent, sampledCalls: summary.sampledCalls, truncated: summary.truncated,
     decisionsWithoutOutcome: pending.length, adviceWithoutDecision: summary.followUp.adviceWithoutDecision, pending,
-    usage: 'fill the template from real evidence, then: node .agents/refactor/jev-review.mjs outcome CALL_ID FILE (or - for stdin); leave it absent while validation is pending' };
+    usage: 'when the decided action\'s result is known, run the row command with real evidence (labels: fill outcomeTemplate and pass FILE or - for stdin); leave it absent while validation is pending' };
 }
 export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LIMIT, limit), reviewPolicy = null, pricing = null } = {}) {
   ensure(Number.isSafeInteger(limit) && limit > 0 && Number.isSafeInteger(scanLimit) && scanLimit >= limit && scanLimit <= 1048576, 'JEV_REPORT_LIMIT');

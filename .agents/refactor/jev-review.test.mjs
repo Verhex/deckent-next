@@ -592,9 +592,12 @@ journalTest('legacy request records report unknown lineage and use the current p
   assert.equal(none.rows[0].adviceDisposition, 'thresholds-unknown'); assert.equal(none.rows[0].thresholdSource, 'none');
 }));
 
-test('ask lineage flags parse strictly', () => {
+test('ask lineage flags and outcome flags parse strictly', () => {
   assert.deepEqual(parseArgs(['ask', 'case.json', '--relation', 'context-revision', '--parent', 'p', '--reason', 'Added evidence', '--purpose', 'control', '--case-id', 'q1']),
-    { positional: ['ask', 'case.json'], meta: { relation: 'context-revision', parentCallId: 'p', reason: 'Added evidence', purpose: 'control', caseId: 'q1' } });
+    { positional: ['ask', 'case.json'], meta: { relation: 'context-revision', parentCallId: 'p', reason: 'Added evidence', purpose: 'control', caseId: 'q1' }, outcome: {} });
+  assert.deepEqual(parseArgs(['outcome', 'id', '--actor', 'a', '--status', 'failed', '--observation', 'o', '--evidence', 'r1', '--evidence', 'r2']).outcome,
+    { actor: 'a', status: 'failed', observation: 'o', evidenceRefs: ['r1', 'r2'] });
+  assert.throws(() => parseArgs(['outcome', 'id', '--status', 'a', '--status', 'b']), /JEV_REVIEW_USAGE/);
   for (const args of [['ask', 'c', '--unknown', 'x'], ['ask', 'c', '--relation'], ['ask', 'c', '--purpose', 'a', '--purpose', 'b']]) assert.throws(() => parseArgs(args), /JEV_REVIEW_USAGE/);
 });
 
@@ -659,6 +662,22 @@ journalTest('pending lists decisions awaiting an outcome; the CLI records an out
   assert.equal((await readEvent(join(journal, decided.callId), 'outcome.json')).status, 'inconclusive');
   assert.equal(JSON.parse(cli(['pending'])).decisionsWithoutOutcome, 0);
   assert.throws(() => cli(['outcome', decided.callId, '-'], JSON.stringify(outcome)));
+  // Flag shorthand for the lead's routine, on a second decided call.
+  const second = await consult(config, policy, fixture(), journal, key, transport);
+  await followup(journal, second.callId, 'decision', { actor: 'lead', selectedOption: 'investigate', rationale: 'Investigate first.', actions: ['Inspect'], evidenceRefs: [] }, key);
+  const row = JSON.parse(cli(['pending'])).pending.find(p => p.callId === second.callId);
+  assert.match(row.command, new RegExp(`outcome ${second.callId} --actor`));
+  // Missing evidence for verified, an unknown status or a stray file argument are refused; nothing is written.
+  assert.throws(() => cli(['outcome', second.callId, '--actor', 'lead', '--status', 'verified', '--observation', 'Fixed.']));
+  assert.throws(() => cli(['outcome', second.callId, '--actor', 'lead', '--status', 'done', '--observation', 'x', '--evidence', 'r']));
+  assert.throws(() => cli(['outcome', second.callId, 'file.json', '--actor', 'lead', '--status', 'failed', '--observation', 'x']));
+  assert.throws(() => cli(['report', '--actor', 'lead']));
+  await assert.rejects(readEvent(join(journal, second.callId), 'outcome.json'), { code: 'ENOENT' });
+  assert.deepEqual(JSON.parse(cli(['outcome', second.callId, '--actor', 'lead', '--status', 'verified', '--observation', 'Investigation found the cause; fix landed.',
+    '--evidence', 'proof/X/run.log', '--evidence', 'abc1234'])), { callId: second.callId, recorded: 'outcome' });
+  const recorded = await readEvent(join(journal, second.callId), 'outcome.json');
+  assert.deepEqual(recorded.evidenceRefs, ['proof/X/run.log', 'abc1234']); assert.deepEqual(recorded.labels, []);
+  assert.equal(recorded.inputQuality, 'not-assessed'); assert.equal(recorded.outputQuality, 'not-assessed');
 }));
 
 const shadowAnswer = (gating, shadow, selected = 0.9) => async (_url, options) => {

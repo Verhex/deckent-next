@@ -75,22 +75,39 @@ export async function followup(root, id, type, value, key) {
 // Lineage flags for ask: --relation new-decision|context-revision|transport-retry, --parent CALL_ID,
 // --case-id ID, --reason TEXT, --purpose development|evaluation|control|pilot.
 const LINEAGE_FLAGS = { '--relation': 'relation', '--parent': 'parentCallId', '--case-id': 'caseId', '--reason': 'reason', '--purpose': 'purpose' };
+// Outcome shorthand for the lead's routine: outcome CALL_ID --actor A --status verified|failed|inconclusive
+// --observation TEXT --evidence REF [--evidence REF...] [--input-quality T] [--output-quality T].
+// Labels still need a JSON file; unspecified qualities are recorded as 'not-assessed', never invented.
+const OUTCOME_FLAGS = { '--actor': 'actor', '--status': 'status', '--observation': 'observation', '--evidence': 'evidenceRefs', '--input-quality': 'inputQuality', '--output-quality': 'outputQuality' };
 export function parseArgs(args) {
-  const positional = []; const meta = {};
+  const positional = []; const meta = {}; const outcome = {};
   for (let i = 0; i < args.length; i++) {
     if (!args[i].startsWith('--')) { positional.push(args[i]); continue; }
-    const field = LINEAGE_FLAGS[args[i]];
-    ensure(field && !Object.hasOwn(meta, field) && i + 1 < args.length, 'JEV_REVIEW_USAGE');
-    meta[field] = args[++i];
+    ensure(i + 1 < args.length, 'JEV_REVIEW_USAGE');
+    if (LINEAGE_FLAGS[args[i]]) {
+      const field = LINEAGE_FLAGS[args[i]];
+      ensure(!Object.hasOwn(meta, field), 'JEV_REVIEW_USAGE'); meta[field] = args[++i]; continue;
+    }
+    const field = OUTCOME_FLAGS[args[i]];
+    ensure(field, 'JEV_REVIEW_USAGE');
+    if (field === 'evidenceRefs') { (outcome.evidenceRefs ??= []).push(args[++i]); continue; }
+    ensure(!Object.hasOwn(outcome, field), 'JEV_REVIEW_USAGE'); outcome[field] = args[++i];
   }
-  return { positional, meta };
+  return { positional, meta, outcome };
+}
+export function outcomeFromFlags(flags) {
+  return { actor: flags.actor, status: flags.status, observation: flags.observation, evidenceRefs: flags.evidenceRefs ?? [], labels: [],
+    inputQuality: flags.inputQuality ?? 'not-assessed', outputQuality: flags.outputQuality ?? 'not-assessed' };
 }
 async function main(argv) {
-  const { positional: args, meta } = parseArgs(argv);
+  const { positional: args, meta, outcome: outcomeFlags } = parseArgs(argv);
   const [mode, first, second, ...extra] = args;
+  const flagOutcome = mode === 'outcome' && Object.keys(outcomeFlags).length > 0;
   ensure(['prepare', 'ask', 'decision', 'outcome', 'report', 'pending'].includes(mode) && extra.length === 0, 'JEV_REVIEW_USAGE');
   ensure(mode === 'ask' || Object.keys(meta).length === 0, 'JEV_REVIEW_USAGE');
-  ensure(['report', 'pending'].includes(mode) ? !second && (first === undefined || /^[1-9][0-9]{0,5}$/.test(first)) : ['decision', 'outcome'].includes(mode) ? first && second : first && !second, 'JEV_REVIEW_USAGE');
+  ensure(mode === 'outcome' || Object.keys(outcomeFlags).length === 0, 'JEV_REVIEW_USAGE');
+  ensure(['report', 'pending'].includes(mode) ? !second && (first === undefined || /^[1-9][0-9]{0,5}$/.test(first))
+    : flagOutcome ? first && !second : ['decision', 'outcome'].includes(mode) ? first && second : first && !second, 'JEV_REVIEW_USAGE');
   const policyPath = process.env.DECKENT_JEV_REVIEW_CONFIG || join(here, 'jev.review.config.json');
   const policy = validateReviewConfig(JSON.parse(await readFile(policyPath, 'utf8')));
   const root = resolve(dirname(resolve(policyPath)), policy.journalRoot);
@@ -101,7 +118,7 @@ async function main(argv) {
     const options = { scanLimit: policy.reportScanLimit ?? Math.max(DEFAULT_SCAN_LIMIT, policy.reportLimit), reviewPolicy: policy.reviewPolicy, pricing: policy.pricing };
     return mode === 'report' ? report(root, limit, options) : pendingOutcomes(root, limit, options);
   }
-  const value = await readInput(['decision', 'outcome'].includes(mode) ? second : first, policy.maxCaseBytes);
+  const value = flagOutcome ? outcomeFromFlags(outcomeFlags) : await readInput(['decision', 'outcome'].includes(mode) ? second : first, policy.maxCaseBytes);
   if (mode === 'prepare') return { network: false, ...prepare(value, policy), authoringGuidance: policy.authoringGuidance ?? null };
   const config = validateConfig(JSON.parse(await readFile(process.env.DECKENT_JEV_CONFIG || join(here, 'jev.config.json'), 'utf8')));
   const key = await readCredential(config);

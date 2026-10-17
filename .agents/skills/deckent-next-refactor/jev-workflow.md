@@ -18,8 +18,14 @@ Use the logged preparation layer from Next only (host tooling, not a product fea
   (verified/failed/inconclusive), observation, evidenceRefs, labels, inputQuality and outputQuality.
   Outcome is a final immutable assessment: leave absent while validation is pending.
   `node .agents/refactor/jev-review.mjs pending [COUNT]` (read-only, no credential) lists recorded
-  decisions still without an outcome, each with an outcome skeleton that is rejected if submitted
-  unedited; fill it from real evidence and pass it as a file or `-` (stdin). Noul labels require
+  decisions still without an outcome, each with a ready `command` and a skeleton that is rejected if
+  submitted unedited. Shorthand: `outcome CALL_ID --actor A --status verified|failed|inconclusive
+  --observation TEXT --evidence REF [--evidence REF]` (qualities default to `not-assessed`; labels need a
+  file or `-` for stdin). Verified needs at least one evidence reference.
+  Lead routine (owner 2026-10-17): when a decided action's result is known (landing, closure, review
+  verdict, failed attempt, abandonment), run `pending` and record that decision's outcome with the real
+  evidence the same day; leave it absent while the result is pending. Never backfill another session's
+  record or label with Jev's own answer. Noul labels require
   verified evidence and contain questionId, expected boolean, evidenceRef. Never label using Jev's own answer.
 - `node .agents/refactor/jev-review.mjs report [COUNT]` reports the latest dated requests within a
   bounded scan, usage, latency, decisions, outcomes and Brier score only where evidence-backed labels
