@@ -55,9 +55,10 @@ async function sourceJournal(root) {
   return { src, old, a2, b, bResend, d, legacy, pending };
 }
 
-test('the evaluation config pins jev-1.14.0 exactly while the default config is unchanged', () => {
+test('the default and evaluation configs pin jev-1.14.0 exactly; the baseline config pins jev-1.13.0', () => {
   assert.equal(evalConfig.model, 'jev-1.14.0');
-  assert.equal(config.model, 'jev-latest');
+  assert.equal(config.model, 'jev-1.14.0'); // owner promotion 2026-10-17; no alias
+  assert.ok(!/-(?:latest|preview)$/.test(config.model));
   assert.deepEqual({ ...evalConfig, model: null }, { ...config, model: null });
   const baselineConfig = JSON.parse(readFileSync(new URL('./jev.eval.baseline.config.json', import.meta.url), 'utf8'));
   assert.equal(baselineConfig.model, 'jev-1.13.0'); assert.deepEqual({ ...baselineConfig, model: null }, { ...config, model: null });

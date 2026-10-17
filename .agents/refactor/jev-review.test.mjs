@@ -577,11 +577,12 @@ test('ask lineage flags parse strictly', () => {
 
 journalTest('report slices by served/requested model and purpose with known-token subtotals, unknown counts, dated price estimates and split timing', async () => sandbox(async root => {
   const served = (model, usage) => async (...args) => { const r = await (await answerWith(0.9, 0.8)(...args)).json(); return Response.json({ ...r, model, usage }); };
-  await consult(config, policy, fixture(), root, key, served('jev-1.13.0', { input_tokens: 1000000, output_tokens: 50 }));
+  const older = { ...config, model: 'jev-1.13.0' };
+  await consult(older, policy, fixture(), root, key, served('jev-1.13.0', { input_tokens: 1000000, output_tokens: 50 }));
   await consult({ ...config, model: 'jev-1.14.0' }, policy, fixture(), root, key, served('jev-1.14.0', { input_tokens: 500000, output_tokens: null }), { purpose: 'evaluation' });
   await consult({ ...config, model: 'jev-1.14.0' }, policy, fixture(), root, key, served('jev-1.14.0', { input_tokens: null, output_tokens: 3 }), { purpose: 'evaluation' });
-  await consult(config, policy, fixture(), root, key, served('unpriced-model', { input_tokens: 10, output_tokens: 0 }), { purpose: 'control' });
-  await consult(config, policy, fixture(), root, key, async () => new Response('', { status: 503 }));
+  await consult(older, policy, fixture(), root, key, served('unpriced-model', { input_tokens: 10, output_tokens: 0 }), { purpose: 'control' });
+  await consult(older, policy, fixture(), root, key, async () => new Response('', { status: 503 }));
   const summary = await report(root, 10, { reviewPolicy: policy.reviewPolicy, pricing: policy.pricing });
   const { byServedModel, byRequestedModel, byPurpose } = summary.slices;
   assert.deepEqual(Object.keys(byServedModel), ['jev-1.13.0', 'jev-1.14.0', 'no-advice:failed', 'unpriced-model']);
@@ -591,7 +592,7 @@ journalTest('report slices by served/requested model and purpose with known-toke
   assert.equal(byServedModel['jev-1.14.0'].usage.inputTokens, 500000); assert.equal(byServedModel['jev-1.14.0'].usage.coverage.inputUnknown, 1);
   assert.equal(byServedModel['unpriced-model'].cost.costUnknownAttempts, 1); assert.equal(byServedModel['no-advice:failed'].cost.costUnknownAttempts, 1);
   assert.deepEqual(byServedModel['no-advice:failed'].failureErrors, { JEV_HTTP_503: 1 });
-  assert.deepEqual(Object.keys(byRequestedModel), ['jev-1.14.0', config.model]); assert.equal(byRequestedModel['jev-1.14.0'].calls, 2);
+  assert.deepEqual(Object.keys(byRequestedModel), ['jev-1.13.0', 'jev-1.14.0']); assert.equal(byRequestedModel['jev-1.14.0'].calls, 2); assert.equal(byRequestedModel['jev-1.13.0'].calls, 3);
   assert.deepEqual(Object.fromEntries(Object.entries(byPurpose).map(([k, v]) => [k, v.calls])), { control: 1, development: 2, evaluation: 2 });
   assert.ok(Math.abs(summary.cost.estimatedUsd - 0.063) < 1e-12); assert.equal(summary.cost.pricedAttempts, 2); assert.equal(summary.cost.costUnknownAttempts, 3);
   assert.equal(summary.cost.prices['jev-1.14.0'].accessedAt, '2026-10-17'); assert.match(summary.cost.basis, /not an invoice/);

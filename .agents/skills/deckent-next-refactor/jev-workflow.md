@@ -152,15 +152,19 @@ Brier uses boolean labels on verified outcomes only; missing labels yield null, 
 
 Before claiming improved quality, freeze different evidence-backed cases and author labels before model
 calls; keep development and validation sets separate and record label author/independence limits. A first
-20-case pilot is not general calibration proof. Pin the observed model version only in evaluation config;
-leave the ordinary provider configuration unchanged. Compare all attempts, failures, high-probability
+20-case pilot is not general calibration proof. Pin evaluation models in evaluation config; the ordinary
+provider configuration changes only by a recorded owner/lead promotion with a rollback note. Compare all attempts, failures, high-probability
 wrong answers, abstentions, input tokens and p50/p95; measure operator effort separately when available.
 Evaluate shorter authored observations against the same claim/options with the full charter preserved.
 Perturb option ordering, missing evidence and adversarial data in explicit controls. No hidden retries,
 training, threshold changes or automatic promotion from a pilot.
 
-Model comparison (JEV-114): `jev.eval.config.json` pins `jev-1.14.0` and `jev.eval.baseline.config.json`
-pins `jev-1.13.0`; the default `jev.config.json` stays unchanged until the lead promotes after a comparison.
+Model promotion (owner 2026-10-17, JEV-114): `jev.config.json` uses the exact ID `jev-1.14.0` (never an
+alias). Basis: proof/JEV-114-2026-10-17/eval-model-stored (same choice 19/20; 1.14 about 0.06 lower on
+selected probability and 0.07 on sufficiency; thresholds met 6 -> 4). Thresholds stay 0.85/0.67.
+Rollback: set `jev.config.json` model back to `jev-1.13.0` (the previous value was the alias `jev-latest`,
+which then served `jev-1.13.0`; use the exact ID, not the alias) in a logged commit; nothing else changes.
+Comparison configs: `jev.eval.config.json` pins `jev-1.14.0`, `jev.eval.baseline.config.json` `jev-1.13.0`.
 `node .agents/refactor/jev-eval-compare.mjs --config CONFIG (--cases N | --call-ids A,B) [--source-root DIR]
 [--baseline-config CONFIG] [--input stored|reprepare] [--review-config PATH]` prints a read-only plan
 (selection, call count, list-price estimate; no credential, network or writes). Adding `--execute --out
