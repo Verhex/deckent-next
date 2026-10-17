@@ -21,7 +21,8 @@ afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { rec
 const TARGET = 'refs/heads/integration', SCOPE = 's';
 const principal = { id: 'human', issuer: 'os', subject: '1000', assurance: 'os-user', scopeIds: [SCOPE] } as const;
 const bounds = { capacity: 8, perTarget: 4, activeTargets: 2, batchSize: 2, batchWindowMs: 1, leaseMs: 60_000, verificationTimeoutMs: 60_000, revalidations: 2 };
-const peer = { pid: process.pid, uid: process.getuid!() };
+/** The local peer, read when a service runs (Linux only), never at collection: Windows has no process.getuid. */
+const peer = () => ({ pid: process.pid, uid: process.getuid!() });
 const delivery = { maxResultBytes: 65_536 };
 const identity = (n: number) => ({ scopeId: SCOPE, runId: `r${n}`, taskId: 't', attemptId: `a${n}`, generation: 1, layoutRevision: 'l' });
 
@@ -102,7 +103,7 @@ async function fixture() {
       async withScope(_scope, _peer, _read, work) { return work(context()); }, snapshot: async () => queue.pending(8), withActor: async (_record, work) => work(),
       effects: async () => effects, preparation: async () => preparation, captureProcess: async () => ({ processStart: 'start', terminal: 'tty' }),
       isMcp: () => false, record: async () => {} });
-    const call = (operation: string, input: unknown) => instance.execute({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'rpc', operation, input, delivery } as never, peer, 131_072);
+    const call = (operation: string, input: unknown) => instance.execute({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'rpc', operation, input, delivery } as never, peer(), 131_072);
     const enqueue = (commandId: string, n: number) => call('enqueueTargetQueue', { schemaVersion: 1, commandId, identity: identity(n), target: { kind: 'git-ref', id: TARGET } });
     const challenge = async (commandId: string, operation: 'publish' | 'adopt', publishDigest?: string) =>
       await call('challengeTargetQueue', { schemaVersion: 1, scopeId: SCOPE, commandId, operation, ...(publishDigest ? { publishDigest } : {}) }) as { digest: string; capability: string };
