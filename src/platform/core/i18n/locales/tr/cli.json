@@ -621,7 +621,7 @@
   "cli.workers.empty": "  Worker yok.",
   "cli.workers.model": "  Görev {task}: {line}",
   "cli.run.inspect.handoffReceived": "  {source} görevinden devir alındı (deneme {attempt}, özet {digest})",
-  "cli.run.inspect.configExcluded": "  Yapılandırmayla hariç: {count} yol sır kapısından yalnız execution.secretGate listelerinde olduğu için geçti (denetim kaydında)",
+  "cli.run.inspect.configExcluded": "  Yapılandırmayla hariç: {count} yol sır kapısından yalnız denetim kaydına geçen istisna olarak geçti (bir execution.secretGate girdisi ya da görev profilinin bildirdiği bir bağımlılık ağacı)",
   "cli.run.inspect.configExcludedEntry": "    {path} ({rule}) — kaldıran: {by}",
   "cli.workers.usage": "  Kullanım: {turns} tur · süre {duration}s · token {input} giriş / {output} çıkış · maliyet ${cost} · {outcome}",
   "cli.workers.usageRejected": "  Kullanım alınamıyor: {reason}",

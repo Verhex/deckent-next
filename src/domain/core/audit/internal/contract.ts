@@ -212,8 +212,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     code: z.enum(['WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE']), count: counterSchema,
     findings: z.array(z.object({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600) }).strict()).max(AUDIT_TRACKED_PATHS_MAX),
     limit: z.enum(['files', 'file-bytes', 'total-bytes', 'time']).nullable() }).strict(),
-  /** S6 (owner 2026-10-15): hits the operator's `execution.secretGate` lists lifted for a dispatched worker: path, rule and the exact config entry
-   * (`allowPatternPaths:<glob>` / `acknowledgedDenyPaths:<path>`) that lifted it; at most `AUDIT_TRACKED_PATHS_MAX` entries, never a value. */
+  /** S6 (owner 2026-10-15, 2026-10-17): hits lifted for a dispatched worker: path, rule and the exact entry that lifted it (`allowPatternPaths:<glob>` /
+   * `acknowledgedDenyPaths:<path>` / `dependencyTree:<target>`, a declared dependency bind); at most `AUDIT_TRACKED_PATHS_MAX` entries, never a value. */
   z.object({ kind: z.literal('worker-tree-excluded'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, count: counterSchema.positive(),
     entries: z.array(z.object({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600), by: z.string().min(1).max(600) }).strict()).min(1).max(AUDIT_TRACKED_PATHS_MAX) }).strict(),
 ]);

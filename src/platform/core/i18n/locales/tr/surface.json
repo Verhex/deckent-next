@@ -429,7 +429,7 @@
   "monitor.detail.attempt": "deneme {attempt} nesil {generation} · başlatma {launch} · {started} → {ended} ({duration}) · çıkış {exit} · {provider}/{model}",
   "monitor.detail.evaluation": "değerlendirme: {verdict} {when}",
   "monitor.detail.handoffReceived": "{source} görevinden devir alındı (deneme {attempt}, özet {digest})",
-  "monitor.detail.configExcluded": "yapılandırmayla hariç: {count} yol sır kapısından yalnız execution.secretGate listelerinde olduğu için geçti (denetim kaydında)",
+  "monitor.detail.configExcluded": "yapılandırmayla hariç: {count} yol sır kapısından yalnız denetim kaydına geçen istisna olarak geçti (bir execution.secretGate girdisi ya da görev profilinin bildirdiği bir bağımlılık ağacı)",
   "monitor.detail.configExcludedEntry": "      {path} ({rule}) — kaldıran: {by}",
   "monitor.detail.dependencies": "bağlı olduğu: {list}",
   "monitor.graph.summary": "Graf: {tasks} görev, {edges} kenar, derinlik {depth}; bekleyen {pending}, çalışan {running}, ilgi bekleyen {attention}, kabul edilen {accepted}, başarısız {failed}, durdurulan {stopped}",
