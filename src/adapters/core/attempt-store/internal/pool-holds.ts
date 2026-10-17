@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 import { AttemptStoreError, decidePoolHold, poolHoldReceiptSchema, RunStoreError, type AuditStore, type PoolHoldReceipt, type PoolHoldTransition,
   type PoolHoldWrite } from '#engine/index.js';
 import { SqliteExecutionPools } from './pools.js';
@@ -17,14 +17,7 @@ const fingerprint = (write: PoolHoldWrite) => JSON.stringify({ command: write.co
  */
 export class SqlitePoolHoldJournal {
   constructor(private readonly db: DatabaseSync) {}
-  private transaction<T>(work: () => T): T {
-    let active = false;
-    try { this.db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); this.db.exec('COMMIT'); return value; }
-    catch (error) {
-      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
-      throw sqliteFailure(error);
-    }
-  }
+  private transaction<T>(work: () => T): T { return ledgerTransaction(this.db, work); }
   /** Sol 2210 K5-R1: the hold and the occupancy come from one read snapshot (a deferred transaction keeps the snapshot of its first
    * read, so another connection's commit between the two reads is invisible): `drained` never combines two ledger moments. */
   async readPoolHold(poolId: string) {

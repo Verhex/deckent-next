@@ -4,9 +4,9 @@ import { SqliteRunDispatch } from './run-dispatch.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity, type LostDispatchAction } from '#domain/index.js';
-import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
+import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError,
   projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
-import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/index.js';
 
 export class SqliteDispatchJournal {
   constructor(private readonly db: DatabaseSync, private readonly profiles?: SupervisorProfileValidator) {}
@@ -22,14 +22,7 @@ export class SqliteDispatchJournal {
   private assertNotFenced(record: DispatchRecord, action: Exclude<LostDispatchAction, 'release-slot'>): void {
     void action; if (readDispatchFence(this.db, record)) throw new DispatchError('DISPATCH_FENCED');
   }
-  private transaction<T>(work: () => T): T {
-    let active = false;
-    try { this.db.exec('BEGIN IMMEDIATE'); active = true; const result = work(); this.db.exec('COMMIT'); return result; }
-    catch (error) {
-      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
-      throw sqliteFailure(error);
-    }
-  }
+  private transaction<T>(work: () => T): T { return ledgerTransaction(this.db, work); }
   async listDispatches(input: DispatchInventoryQuery) {
     const query = dispatchInventoryQuerySchema.parse(input);
     try {
