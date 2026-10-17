@@ -39,24 +39,26 @@ function failureDetail(evidence: ProcessEvidence): string {
   const safe = redactSensitive(stripVTControlCharacters(text)).replace(/\p{Cc}/gu, ' ');
   return Buffer.from(safe).subarray(0, 512).toString('utf8').replace(/\uFFFD$/, '');
 }
-function processFailure(evidence: ProcessEvidence, fallback: WorkerImageBuildErrorCode): WorkerImageBuildError {
+function assertBuilderExited(evidence: ProcessEvidence, timeout: WorkerImageBuildErrorCode, fallback: WorkerImageBuildErrorCode): void { // timeout keeps precedence
+  if (evidence.reason === 'timeout') throw new WorkerImageBuildError(timeout, evidence);
+  if (evidence.reason === 'exit' && evidence.exitCode === 0) return;
   const reason = /^Error: (WORKER_[A-Z_]+)(?::|$)/.exec(errorLine(evidence) ?? '')?.[1];
-  const code = BUILDER_REASONS.find(code => code === reason) ?? fallback;
-  return new WorkerImageBuildError(code, evidence);
+  throw new WorkerImageBuildError(BUILDER_REASONS.find(code => code === reason) ?? fallback, evidence);
 }
 const allowedEnvironment = (input: Readonly<Record<string, string | undefined>>) => Object.fromEntries(Object.entries(input)
   .filter((entry): entry is [string, string] => ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(entry[0]) && typeof entry[1] === 'string'));
-/** Checks the proposed counter against this repository's daemon tags through the installed builder's shared guard.
- * No build context, receipt, tag or image is created. A lagging lineage must be reconciled, never invented. */
-export async function assertWorkerImageVersionAvailable(input: Readonly<{ packageRoot: string; imageVersion: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
-  runner: WorkerImageBuildRunner = runNodeProcess): Promise<void> {
-  if (!isAbsolute(input.packageRoot) || !/^r[1-9][0-9]*-\d{8}$/.test(input.imageVersion)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
+/** Reads the highest revision this repository's daemon tags hold (null for none) through the installed builder's shared history owner, so the
+ * planner floors its counter on it. No build context, receipt, tag or image is created; anything but one well-formed answer is a failed check. */
+export async function readWorkerImageHeldVersion(input: Readonly<{ packageRoot: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
+  runner: WorkerImageBuildRunner = runNodeProcess): Promise<string | null> {
+  if (!isAbsolute(input.packageRoot)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   const directory = join(input.packageRoot, WORKER_IMAGE_ASSET_DIRECTORY);
-  const evidence = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath,
-    args: [join(directory, 'build.mjs'), '--check-version', input.imageVersion], cwd: directory,
+  const evidence = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(directory, 'build.mjs'), '--held-version'], cwd: directory,
     env: allowedEnvironment(input.env ?? process.env), timeoutMs: input.timeoutMs, outputBytes: input.outputBytes }, input.signal); // a stopping service ends the daemon check too
-  if (evidence.reason === 'timeout') throw new WorkerImageBuildError('WORKER_IMAGE_VERSION_CHECK_TIMEOUT', evidence);
-  if (evidence.reason !== 'exit' || evidence.exitCode !== 0) throw processFailure(evidence, 'WORKER_IMAGE_VERSION_CHECK_FAILED');
+  assertBuilderExited(evidence, 'WORKER_IMAGE_VERSION_CHECK_TIMEOUT', 'WORKER_IMAGE_VERSION_CHECK_FAILED');
+  const answer = /^\{"heldVersion":(null|"r[1-9][0-9]*-\d{8}")\}\n?$/.exec(Buffer.from(evidence.stdoutBase64, 'base64').toString('utf8')); // a truncated answer never matches
+  if (!answer) throw new WorkerImageBuildError('WORKER_IMAGE_VERSION_CHECK_FAILED', evidence);
+  return JSON.parse(answer[1]!) as string | null;
 }
 /** The builder reads its inputs from its own directory, so a build context is a private copy of exactly these files. */
 export const WORKER_IMAGE_BUILDER_FILES = Object.freeze(['build.mjs', 'history.mjs', 'install.mjs', 'inspect.mjs'] as const);
@@ -106,8 +108,7 @@ export async function runWorkerImageBuild(input: Readonly<{ context: string; rec
     cwd: input.context, env, timeoutMs: input.timeoutMs, outputBytes: input.outputBytes };
   // An aborted signal ends the builder process through the runner's own termination (reason `cancelled`); it is a failed build, never a receipt.
   const evidence = await runner(command, input.signal);
-  if (evidence.reason === 'timeout') throw new WorkerImageBuildError('WORKER_IMAGE_BUILD_TIMEOUT', evidence);
-  if (evidence.reason !== 'exit' || evidence.exitCode !== 0) throw processFailure(evidence, 'WORKER_IMAGE_BUILD_FAILED');
+  assertBuilderExited(evidence, 'WORKER_IMAGE_BUILD_TIMEOUT', 'WORKER_IMAGE_BUILD_FAILED');
   let receipt: unknown;
   try { receipt = JSON.parse(await readFile(input.receiptPath, 'utf8')); } catch { throw new WorkerImageBuildError('WORKER_IMAGE_RECEIPT_MISSING', evidence); }
   return Object.freeze({ receipt, evidence });

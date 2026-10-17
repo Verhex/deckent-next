@@ -28,11 +28,14 @@ export class ToolchainUpdateError extends Error {
   constructor(readonly code: 'TOOLCHAIN_RECIPE_INVALID' | 'TOOLCHAIN_HISTORY_INVALID' | 'TOOLCHAIN_RECEIPT_INVALID' | 'TOOLCHAIN_PLAN_INVALID') { super(code); this.name = 'ToolchainUpdateError'; }
 }
 const HISTORY_LINE = /^# version r[1-9][0-9]*-\d{8} \| /m;
-/** Next version id: the numeric counter advances; the date is the planning day. The builder still refuses a taken tag. */
-export function nextImageVersion(current: string, plannedAt: string): string {
-  const match = /^r([1-9][0-9]*)-\d{8}$/.exec(current);
-  if (!match) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID');
-  return `r${Number(match[1]) + 1}-${plannedAt.slice(0, 10).replaceAll('-', '')}`;
+const counterOf = (version: string) => { const match = /^r([1-9][0-9]*)-\d{8}$/.exec(version); if (!match) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID'); return Number(match[1]); };
+/**
+ * Next version id: the counter advances past this lineage and past the highest revision the daemon holds (`held`), the date is the planning
+ * day. Installations sharing one daemon share its tag namespace (ISCI-IMAJ-SAYAC): a counter another installation holds is skipped, never
+ * adopted, while the plan still supersedes this lineage's own version. The builder still refuses a counter taken after this read.
+ */
+export function nextImageVersion(current: string, plannedAt: string, held: string | null = null): string {
+  return `r${Math.max(counterOf(current), held === null ? 0 : counterOf(held)) + 1}-${plannedAt.slice(0, 10).replaceAll('-', '')}`;
 }
 /** Inserts the newest history line before the first recorded version line; the builder validates the result against the recipe. */
 export function insertHistoryLine(dockerfile: string, line: string): string {
@@ -41,7 +44,7 @@ export function insertHistoryLine(dockerfile: string, line: string): string {
   return dockerfile.slice(0, index) + line + '\n' + dockerfile.slice(index);
 }
 /** Pure plan: a build is proposed only when an npm provider is stale; nothing here touches packages, images or config. */
-export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyReport; recipe: unknown; plannedAt: string; affectedProfiles: readonly AffectedProfile[] }>): ToolchainUpdatePlan {
+export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyReport; recipe: unknown; plannedAt: string; affectedProfiles: readonly AffectedProfile[]; heldVersion?: string | null }>): ToolchainUpdatePlan {
   const recipe = workerImageRecipeSchema.safeParse(input.recipe);
   if (!recipe.success) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID');
   const stale = input.report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm').map(entry => entry.provider).sort();
@@ -49,9 +52,10 @@ export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyR
   const current = { imageVersion: recipe.data.imageVersion, repository: recipe.data.repository };
   const basis = 'stale means an admitted preflight pin is older than the published npm latest tag; the plan proposes one new image version and never edits installed config, package assets or running work';
   if (!stale.length) return toolchainUpdatePlanSchema.parse({ schemaVersion: 1, kind: 'toolchain-update-plan', plannedAt: input.plannedAt, decision: 'no-change', staleProviders: [], report: input.report, current, next: null, affectedProfiles: [], basis });
-  const version = nextImageVersion(recipe.data.imageVersion, input.plannedAt);
+  const version = nextImageVersion(recipe.data.imageVersion, input.plannedAt, input.heldVersion ?? null);
+  const skipped = input.heldVersion && counterOf(input.heldVersion) > counterOf(recipe.data.imageVersion) ? `; counter past daemon-held ${input.heldVersion}` : '';
   const reasons = stale.map(provider => { const entry = input.report.providers.find(item => item.provider === provider)!; return `${provider} ${entry.admitted.map(item => item.version ?? item.cliVersion).join('/')} -> ${entry.latest?.version ?? '?'}`; }).join('; ');
-  const historyLine = `# version ${version} | ${input.plannedAt.slice(0, 10)} | base ${recipe.data.baseImage} | supersedes ${recipe.data.imageVersion} | toolchain currency: ${reasons}`;
+  const historyLine = `# version ${version} | ${input.plannedAt.slice(0, 10)} | base ${recipe.data.baseImage} | supersedes ${recipe.data.imageVersion} | toolchain currency: ${reasons}${skipped}`;
   const nextRecipe = workerImageRecipeSchema.parse({ ...recipe.data, imageVersion: version, previousVersion: recipe.data.imageVersion });
   return toolchainUpdatePlanSchema.parse({ schemaVersion: 1, kind: 'toolchain-update-plan', plannedAt: input.plannedAt, decision: 'build', staleProviders: stale, report: input.report, current,
     next: { imageVersion: version, previousVersion: recipe.data.imageVersion, historyLine, recipe: nextRecipe }, affectedProfiles: affected, basis });

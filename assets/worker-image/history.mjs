@@ -33,12 +33,18 @@ export function parseVersionHistory(dockerfile, recipe) {
   return entries;
 }
 
-/** A new build must advance past every revision the daemon already holds for the repository (tags in the r<N>-<date> scheme);
- * this refuses a second rN when the packaged recipe lags an image built elsewhere. Other tags are ignored. */
+/** The highest revision the daemon holds for the repository (tags in the r<N>-<date> scheme), or null. Other tags are ignored.
+ * Installations sharing one daemon share this namespace, so the planner floors its next counter on it (ISCI-IMAJ-SAYAC). */
+export function heldVersion(existingTags) {
+  return existingTags.filter(tag => VERSION.test(tag)).sort((a, b) => counter(b) - counter(a))[0] ?? null;
+}
+
+/** A new build must advance past every revision the daemon already holds for the repository; this refuses a second rN (an image tagged
+ * by another installation between the planner's read and this build). A higher held counter is never adopted, only advanced past. */
 export function assertVersionAdvances(imageVersion, existingTags) {
   if (!VERSION.test(imageVersion)) fail('WORKER_RECIPE_VERSION');
-  const held = existingTags.filter(tag => VERSION.test(tag)).sort((a, b) => counter(b) - counter(a))[0];
+  const held = heldVersion(existingTags);
   if (held && counter(held) >= counter(imageVersion)) {
-    throw new Error(`WORKER_VERSION_COUNTER_TAKEN: ${imageVersion} does not advance past ${held} already held by the daemon. Reconcile the recipe/Dockerfile history to the newest built version first.`);
+    throw new Error(`WORKER_VERSION_COUNTER_TAKEN: ${imageVersion} does not advance past ${held} already held by the daemon. Plan a counter past it; the automatic toolchain update does so on its next check.`);
   }
 }
