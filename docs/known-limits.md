@@ -54,12 +54,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   checkout is third-party content (without a separate work target the project root is the checkout, so a bind inside it
   keeps the normal rules): credential-shaped text in it (test fixtures, type
   definitions, READMEs) passes as an audited exception instead of refusing, and a native binary above
-  `execution.secretGate.maxFileBytes` is identified by its SHA-256 digest instead of being read for patterns. Deny-listed
+  `execution.secretGate.maxFileBytes` is read in bounded windows and listed by its SHA-256 digest. In a file whose header
+  claims a native format, private keys and provider or cloud tokens refuse. Deny-listed
   files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; archives and any other oversized file
   are still unscannable; oversized binaries are read only in 1 MiB windows. Pattern results are cached per file content under the product's `state/secret-gate-cache`; a changed lockfile
   or release starts over, and the unsigned cache can change only which exceptions are listed, never a decision.
-  Such a binary is listed by digest but its text is not matched against patterns, so pattern-shaped text after a native
-  header in an oversized file is not listed. The tree is scanned on the host and bound live, read-only: a change made on
+  The tree is scanned on the host and bound live, read-only: a change made on
   the host after the scan reaches the worker unscanned (as for any bind).
   *Impact:* a real token planted in a dependency package as plain text reaches the worker, visible only as an exception.
   *Workaround:* declare only trees installed from a lockfile you trust, and review the exceptions on the Run card.

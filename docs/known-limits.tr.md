@@ -54,13 +54,13 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `node_modules`) üçüncü taraf içeriktir (ayrı bir iş hedefi yoksa proje kökü o kopyadır; içindeki bağlama normal kurallarla
   taranır): içindeki kimlik bilgisine benzeyen metin (test
   verileri, tip tanımları, README'ler) reddedilmez, denetime yazılan istisna olarak geçer; `execution.secretGate.maxFileBytes`
-  üstündeki yerel ikili dosya kalıp için okunmaz, SHA-256 özetiyle tanımlanır. Yasak listedeki dosyalar (`.npmrc`, `.env`,
+  üstündeki yerel ikili dosya sınırlı pencerelerle okunur ve SHA-256 özetiyle listelenir. Başlığı yerel ikili olduğunu söyleyen
+  bir dosyada özel anahtarlar ve sağlayıcı/bulut anahtarları reddedilir. Yasak listedeki dosyalar (`.npmrc`, `.env`,
   anahtarlar) ve yapılandırılmış sır değerleri orada da reddedilir; arşivler ve sınırı aşan başka her dosya yine taranamaz
   sayılır; büyük ikili dosyalar yalnız 1 MiB'lik pencerelerle okunur. Kalıp
   sonuçları dosya içeriğine göre ürünün `state/secret-gate-cache` alanında saklanır; değişen kilit dosyası (lockfile) ya da
   sürüm baştan başlatır, imzasız önbellek yalnız hangi istisnaların listelendiğini değiştirebilir, hiçbir kararı değiştiremez.
-  Böyle bir ikili dosya özetiyle listelenir ama metni kalıplarla karşılaştırılmaz; büyük bir dosyada yerel ikili başlığından
-  sonra gelen kalıp biçimli metin listelenmez. Ağaç ana makinede taranır ve canlı, salt okunur bağlanır: taramadan sonra ana
+  Ağaç ana makinede taranır ve canlı, salt okunur bağlanır: taramadan sonra ana
   makinede yapılan bir değişiklik işçiye taranmadan ulaşır (her bağlamada olduğu gibi).
   *Etki:* bir bağımlılık paketine düz metin olarak konmuş gerçek bir anahtar işçiye ulaşır, yalnız istisna olarak görünür.
   *Yol:* yalnız güvendiğiniz bir kilit dosyasından kurulan ağaçları bildirin ve Run kartındaki istisnaları gözden geçirin.

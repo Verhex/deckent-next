@@ -37,7 +37,7 @@ describe('the dependency class', () => {
   it('accepts a 20 MB native binding and a third-party URL-userinfo fixture as audited exceptions, naming the binary by its digest', async () => {
     const binary = elf(), deps = await tree(dependencies(binary)), cache = await tree({});
     const scan = await scanWorkerTree(declared(deps), options(cache));
-    const excluded = [{ path: `node_modules/${BINDING}`, rule: `unscanned-binary:elf:sha256=${sha256(binary)}`, by },
+    const excluded = [{ path: `node_modules/${BINDING}`, rule: `native-binary:elf:sha256=${sha256(binary)}`, by },
       { path: `node_modules/${ZOD_TEST}`, rule: 'pattern:url-userinfo', by }];
     expect(scan).toEqual({ status: 'clean', excluded, dependencyTrees: [{ label: '/node_modules', reused: 0, evaluated: 3, saved: true }] });
     // The exceptions are the audited, journalled form the Run card shows (path, rule, lifting entry; never a value).
@@ -90,8 +90,9 @@ describe('the dependency class', () => {
   });
 });
 
-describe('parser parity for an oversized file in the class (polyglot: native header, text body)', () => {
+describe('parser parity for a native-claimed file in the class (polyglot: native header, text body)', () => {
   const edge = 1 << 20, value = 'erp-hunter2-value', known = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value }]);
+  const { [BINDING]: _unused, ...text } = dependencies(); void _unused;
   const place = (bytes: Buffer, offset: number) => { const body = elf(); bytes.copy(body, offset); return body; };
   const utf32 = (text: string) => Buffer.concat([...text].map(char => { const bytes = Buffer.alloc(4); bytes.writeUInt32LE(char.codePointAt(0)!); return bytes; }));
   const escaped = Buffer.from([...value.slice(0, 3)].map(char => `\\u00${char.charCodeAt(0).toString(16)}`).join('') + value.slice(3));
@@ -102,11 +103,26 @@ describe('parser parity for an oversized file in the class (polyglot: native hea
       expect(await scanWorkerTree(declared(await tree(dependencies(bytes))), options(), known), name).toMatchObject({ status: 'refused', findings: [{ path: `node_modules/${BINDING}`, rule: 'known-secret' }] });
     }
   });
-  it('a deny-listed name refuses before any read; pattern text in the body is not decoded — the file is listed by its digest instead (the documented loss)', async () => {
+  it('a deny-listed name refuses before any read; third-party pattern text in the body is listed as an exception', async () => {
     expect(await scanWorkerTree(declared(await tree({ ...dependencies(), 'pkg/.env': elf() })), options())).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/pkg/.env', rule: 'deny-path:**/.env' }] });
-    const polyglot = place(Buffer.from(USERINFO), 2 * edge), scan = await scanWorkerTree(declared(await tree(dependencies(polyglot))), options());
-    expect(scan).toMatchObject({ status: 'clean', excluded: [{ path: `node_modules/${BINDING}`, rule: `unscanned-binary:elf:sha256=${sha256(polyglot)}`, by },
-      { path: `node_modules/${ZOD_TEST}`, rule: 'pattern:url-userinfo', by }] });
+    const polyglot = place(Buffer.from(` ${USERINFO} `), 2 * edge + 3), scan = await scanWorkerTree(declared(await tree(dependencies(polyglot))), options());
+    expect(scan).toEqual({ status: 'clean', excluded: [{ path: `node_modules/${BINDING}`, rule: `native-binary:elf:sha256=${sha256(polyglot)}`, by },
+      { path: `node_modules/${BINDING}`, rule: 'pattern:url-userinfo', by }, { path: `node_modules/${ZOD_TEST}`, rule: 'pattern:url-userinfo', by }],
+      dependencyTrees: [{ label: '/node_modules', reused: 0, evaluated: 3, saved: false }] });
+  });
+  it('a provider token or a PEM private key in a native-claimed file refuses — in an oversized body, across a window edge, or in a small binary; text fixtures stay exceptions', async () => {
+    const token = ['sk', 'ant', 'api03', 'Zx9'.repeat(12)].join('-'), pem = ['-----BEGIN ', 'PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END ', 'PRIVATE KEY-----\n'].join('');
+    for (const [name, files, rule] of [['token deep in the body', dependencies(place(Buffer.from(` ${token} `), 9 * edge + 77)), 'pattern:provider-token'],
+      ['PEM block deep in the body', dependencies(place(Buffer.from(pem), 3 * edge + 11)), 'pattern:private-key-block'],
+      ['token across a window edge', dependencies(place(Buffer.from(` ${token} `), 4 * edge - 20)), 'pattern:provider-token'],
+      ['PEM header across a window edge', dependencies(place(Buffer.from(pem), 6 * edge - 13)), 'pattern:private-key-block'],
+      ['PEM block in a small native file', { ...text, 'pkg/addon.node': place(Buffer.from(pem), 900).subarray(0, 4096) }, 'pattern:private-key-block']] as const) {
+      expect(await scanWorkerTree(declared(await tree(files)), options()), name).toMatchObject({ status: 'refused', findings: [{ rule }] });
+    }
+    // The same shapes in ordinary text files of the tree (jose's import.js test key, a README token sample) stay audited exceptions.
+    expect(await scanWorkerTree(declared(await tree({ ...text, 'jose/dist/import.js': `const key = \`${pem}\`;\n`, 'pkg/README.md': `export TOKEN=${token}\n` })), options()))
+      .toMatchObject({ status: 'clean', excluded: expect.arrayContaining([{ path: 'node_modules/jose/dist/import.js', rule: 'pattern:private-key-block', by },
+        { path: 'node_modules/pkg/README.md', rule: 'pattern:provider-token', by }]) });
   });
 });
 

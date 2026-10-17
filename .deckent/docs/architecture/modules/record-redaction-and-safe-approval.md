@@ -74,9 +74,11 @@ in it can reach the model provider through the worker's one egress. The terminal
   `maxTotalBytes` checked before any read) is never allocated whole: its 1 KiB header is read first and only a native signature with a
   NUL-bearing header (ELF, Mach-O, PE, wasm; engine data `dependency-binaries.json`) is read further, in 1 MiB windows that are hashed and
   checked for configured values (carrying the bytes that may begin one), with the deadline checked per window; it is recorded as
-  `unscanned-binary:<kind>:sha256=<digest>`; any other oversized file stays `incomplete`. Parser differential, accepted: such a file's
-  body (a polyglot) is checked for configured values in every reading (windows carry `pendingStart` × 24 bytes, a trailing partial escape
-  set aside, no early exit except a refusal) but not for patterns; the lockfile only scopes the cache (node loads files, not the lockfile,
+  `native-binary:<kind>:sha256=<digest>`; any other oversized file stays `incomplete`. Review 4: such a file's body (a polyglot) is
+  checked per window for configured values and all pattern rows in every reading (carry: `pendingStart` × 24 bytes with a trailing partial
+  escape set aside, at least `patternCarryBytes` 64 KiB; no early exit except a refusal); in any native-claimed file of the class (any size)
+  the credential families of `refuseInNativeFiles` (private-key blocks, provider and cloud tokens) refuse, while the same shapes in text files
+  stay exceptions (zod url-userinfo, jose private-key-block); native-claimed files bypass the pattern cache, so the cache never decides; the lockfile only scopes the cache (node loads files, not the lockfile,
   and every reuse is keyed by the file's own bytes); the bind is live, so a host change after the scan is not seen (as for any bind). Cache keys longer than 4096 characters are not
   stored and a cache document above 16 MiB is not written. Pattern results are cached
   per file (path + SHA-256 of the bytes read on this dispatch) inside a scope of the lockfile bytes, the rule table, the product version
