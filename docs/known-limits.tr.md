@@ -57,8 +57,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   her şeyi yapabilir. *Etkisi:* onaylar ve policy Deckent'in kendi kum havuzundaki işçilerine karşı korur, sizin adınıza
   çalıştırdığınız başka ajanlara karşı korumaz. Denetim kontrol noktaları (`deckent audit verify`) değişen policy'yi ya da
   üretici kümesini ve kesilen ya da silinen denetim kaydını gösterir; iki yerel geçmişin kendi hesabınızda birlikte geri
-  alınmasını yalnız ayrı bir cihazda saklanan kontrol noktası dışa aktarımı yakalar. Donanım anahtarıyla imzalı policy ve
-  onaylar beta sonrası gelir.
+  alınmasını yalnız ayrı bir cihazda saklanan kontrol noktası dışa aktarımı yakalar. Ayrı bir onay kanalı, sabit bir denetim tabanı ve uzak karar tasarımı beta sürecinde ele alınır; donanım anahtarıyla
+  imzalı policy ve onaylar beta sonrası gelir.
   *Çözüm:* başka yapay zekâ ajanlarını Docker ya da sudo yetkisi olmayan ayrı bir hesapta çalıştırın, Deckent işçilerini
   kum havuzunda tutun.
 
@@ -69,7 +69,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   planlaması için bir Anthropic API anahtarı kullanın.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
-- **ChatGPT ile giriş henüz yok.** `/provider` bunu kullanılamıyor olarak listeler. *Yol:* bir OpenAI API anahtarı ya da kendi
+- **ChatGPT ile giriş henüz yok.** `/provider` bunu kullanılamıyor olarak listeler; görünür giriş beta sürecinde ele alınır. *Yol:* bir OpenAI API anahtarı ya da kendi
   girişiyle bir Codex işçisi.
 - **Aboneliklerden API modeline henüz otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli
   bir API'ye geçmez; bildirilen aday listesi üzerinden yönlendirme planlı. *Yol:* bir API modelini kendiniz bağlayın ve seçin.
@@ -95,7 +95,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Teslim ve dala alma
 
-- **Hedef kuyruğu kaynak adayıdır; çalışan ürün kabulü verilmedi.** Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
+- **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
   yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve ledger v58 yeniden build edilmiş
   binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek terminal/socket/crash ve N1 yük kabulü ayrı kapılardır;
   ölçülmüş kapasite iddiası yoktur. Konum yalnız yetkili kapsamı sayar; görünüm son bilinen durumdur. Teslim penceresi şu an

@@ -59,7 +59,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   practice do anything. *Impact:* approvals and policy hold against Deckent's own sandboxed workers, not against other
   agents you run as yourself. Audit checkpoints (`deckent audit verify`) show a changed policy or producer set and a cut
   or wiped audit trail; undoing both local histories together on your own account is only caught by a checkpoint export
-  kept on a separate device. Hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
+  kept on a separate device. A separate approval channel, a fixed audit floor and the design for remote decisions are worked on during the beta process; hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
   separate account without Docker or sudo, and keep Deckent's workers in their sandbox.
 
 ## Providers and subscriptions
@@ -69,7 +69,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use an Anthropic API key for terminal chat and `/do` planning.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
-- **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available. *Workaround:* an OpenAI API key, or a
+- **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available; a visible sign-in is worked on during the beta process. *Workaround:* an OpenAI API key, or a
   Codex worker with its own login.
 - **No automatic fallback from a subscription to an API model yet.** Deckent does not switch to a paid API by itself when a
   subscription window is used up; routing across a declared candidate list is planned. *Workaround:* connect an API model
@@ -97,7 +97,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Delivery and adoption
 
-- **The target queue is a source candidate, not accepted runtime behavior.** It connects registered Git targets, private
+- **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
   v29 and ledger v58 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
