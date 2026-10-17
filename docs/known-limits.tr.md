@@ -58,7 +58,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   bir dosyada özel anahtarlar ve sağlayıcı/bulut anahtarları reddedilir. Yasak listedeki dosyalar (`.npmrc`, `.env`,
   anahtarlar) ve yapılandırılmış sır değerleri orada da reddedilir; arşivler ve sınırı aşan başka her dosya yine taranamaz
   sayılır; büyük ikili dosyalar yalnız 1 MiB'lik pencerelerle okunur. Kalıp
-  sonuçları dosya içeriğine göre ürünün `state/secret-gate-cache` alanında saklanır; değişen kilit dosyası (lockfile) ya da
+  sonuçları dosya içeriğine göre ürünün `state/tree-scan-cache` alanında saklanır; değişen kilit dosyası (lockfile) ya da
   sürüm baştan başlatır, imzasız önbellek yalnız hangi istisnaların listelendiğini değiştirebilir, hiçbir kararı değiştiremez.
   Ağaç ana makinede taranır ve canlı, salt okunur bağlanır: taramadan sonra ana
   makinede yapılan bir değişiklik işçiye taranmadan ulaşır (her bağlamada olduğu gibi).

@@ -82,7 +82,7 @@ in it can reach the model provider through the worker's one egress. The terminal
   and every reuse is keyed by the file's own bytes); the bind is live, so a host change after the scan is not seen (as for any bind). Cache keys longer than 4096 characters are not
   stored and a cache document above 16 MiB is not written. Pattern results are cached
   per file (path + SHA-256 of the bytes read on this dispatch) inside a scope of the lockfile bytes, the rule table, the product version
-  and the bind target, in the product resource `secretGateCache` (`state/secret-gate-cache`, one file per bind, atomic 0600 writes). A
+  and the bind target, in the product resource `treeScanCache` (`state/tree-scan-cache`, one file per bind, atomic 0600 writes). A
   changed lockfile, rule table or release starts empty; a changed file is evaluated again. The cache never decides: deny paths and configured
   values are evaluated in full each time, so a stale, corrupt or forged entry can only change which pattern exceptions are listed. An
   unreadable cache reuses nothing; a failed save is reported in the scan (`dependencyTrees[].saved`) and costs the next dispatch time only.
