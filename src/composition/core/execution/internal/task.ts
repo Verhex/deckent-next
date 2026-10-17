@@ -24,7 +24,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
     const audit = async (event: unknown) => { const ledger = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(ledger, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { ledger.close(); } };
     const preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
-      now: Date.now, record: audit, parked: async commandId => !!await store.loadRunReceipt(identity.scopeId, commandId), park: command => parkConfiguredRunProgression(projectRoot, command, options) });
+      now: Date.now, record: audit, parked: async commandId => !!await store.loadRunReceipt(identity.scopeId, commandId), loadRun: () => store.loadRun(identity.scopeId, identity.runId), park: command => parkConfiguredRunProgression(projectRoot, command, options) });
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     // Set immediately before the dispatch application may claim; a refusal after this point is never a pre-launch refusal.
     let dispatching = false;

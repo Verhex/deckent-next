@@ -7,12 +7,14 @@ import { ErrorRegistry, type JsonRecordFile } from '#platform/index.js';
 export type DispatchPreparationPhase = (typeof DISPATCH_PREPARATION_PHASES)[number];
 const phaseSchema = z.enum(DISPATCH_PREPARATION_PHASES), instanceSchema = z.object({ id: z.string().uuid(), pid: counterSchema, startedAt: counterSchema }).strict();
 /** v1 per-Attempt dispatch preparation record: one product-directory file written atomically before workspace acquisition (no ledger table,
- * no migration). Present without `park` = a preparation began in `instance` and was not settled; `park` names the progression park this
- * breaker committed at the bound and stays until a resume of that park is observed. `starts` and `lastAbort` are evidence only. */
+ * no migration). Present without `park` = a preparation began in `instance` and was not settled. `park` holds this Attempt at the bound until
+ * a resume is observed: `own` names the progression park command this guard sent, `joined` the Run revision at which another Attempt's
+ * breaker park was found holding the Run. `starts` and `lastAbort` are evidence only. */
 export const dispatchPreparationRecordSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, instance: instanceSchema,
   starts: counterSchema, aborts: counterSchema, phase: phaseSchema, at: counterSchema,
   lastAbort: z.object({ phase: phaseSchema.nullable(), instanceId: z.string().uuid().nullable(), at: counterSchema }).strict().nullable(),
-  park: z.object({ commandId: identitySchema, at: counterSchema }).strict().nullable() }).strict();
+  park: z.discriminatedUnion('kind', [z.object({ kind: z.literal('own'), commandId: identitySchema, at: counterSchema }).strict(),
+    z.object({ kind: z.literal('joined'), revision: counterSchema, at: counterSchema }).strict()]).nullable() }).strict();
 export type DispatchPreparationRecord = z.infer<typeof dispatchPreparationRecordSchema>;
 export type DispatchPreparationInstance = z.infer<typeof instanceSchema>;
 /** This process. In the runtime service one start is one instance: a record another instance never settled means that process died in it. */
@@ -30,6 +32,8 @@ export interface DispatchPreparationContext {
   readonly record: (event: AuditEvent) => Promise<unknown>;
   /** Whether the ledger holds the receipt of this park command (it committed). */
   readonly parked: (commandId: string) => Promise<boolean>;
+  /** The Run as it is now (after a park that did not commit: did another Attempt's breaker park it first?). */
+  readonly loadRun: () => Promise<RunSnapshot | null>;
   /** The existing progression park (`progression-failed`, failure code DISPATCH_PREPARATION_ABORTED, the operator resumes it explicitly). */
   readonly park: (command: DispatchPreparationPark) => Promise<unknown>;
 }
@@ -40,9 +44,10 @@ export interface DispatchPreparationContext {
  * `begin` writes it before workspace acquisition, `enter` names each later phase, and `settle` removes it whenever the preparation ends in
  * this process (dispatch claimed and run, gate refusal recorded, prevented-before-launch, any typed refusal). Only a process death leaves it
  * unsettled. The next `begin` in another instance counts that as one abnormal end (audited with the last phase); at the bound it parks the
- * Run through the existing progression park and refuses with DISPATCH_PREPARATION_ABORTED instead of preparing again. A failed or
- * conflicting park changes nothing but the refusal: the record keeps its park command, so no later start dispatches until the park commits
- * and an explicit resume of it is observed (the Run is no longer parked `progression-failed`); the count then starts from zero.
+ * Run through the existing progression park and refuses with DISPATCH_PREPARATION_ABORTED instead of preparing again. Several Attempts of one
+ * Run may trip together: the first park holds the Run and the others join it (one park, one resume releases all). Any other failed park
+ * changes nothing but the refusal: the record keeps its park command, so no later start dispatches until the park commits. Once the Run is
+ * no longer in this breaker park (an explicit operator resume), the count starts from zero.
  */
 export class DispatchPreparationGuard {
   private readonly file: JsonRecordFile;
@@ -61,6 +66,10 @@ export class DispatchPreparationGuard {
     const parsed = read.kind === 'ready' ? dispatchPreparationRecordSchema.safeParse(read.value) : null;
     return parsed?.success && sameAttemptIdentity(parsed.data.identity, this.context.identity) ? { prior: parsed.data, invalid: false } : { prior: null, invalid: true };
   }
+  /** Leaving a progression park takes an explicit operator transition; while this one holds, nothing starts. */
+  private static holds(run: RunSnapshot) {
+    return run.state.kind === 'parked' && run.state.reason === 'progression-failed' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED';
+  }
   private refusal(aborts: number, lastAbort: DispatchPreparationRecord['lastAbort']) {
     const { identity, bound } = this.context;
     return ErrorRegistry.createError('DISPATCH_PREPARATION_ABORTED', { params: { task: identity.taskId, attempt: identity.attemptId, phase: lastAbort?.phase ?? 'unknown', aborts, bound } });
@@ -69,9 +78,8 @@ export class DispatchPreparationGuard {
   async begin(run: RunSnapshot): Promise<void> {
     const { identity, principal, bound, now } = this.context, { prior, invalid } = await this.load();
     let aborts = prior?.aborts ?? 0, lastAbort = prior?.lastAbort ?? null, park = prior?.park ?? null;
-    if (park && await this.context.parked(park.commandId)) {
-      // Leaving a progression park takes an explicit operator transition; while it holds (a direct execute), nothing starts.
-      if (run.state.kind === 'parked' && run.state.reason === 'progression-failed') throw this.refusal(aborts, lastAbort);
+    if (park && (park.kind === 'joined' || await this.context.parked(park.commandId))) {
+      if (DispatchPreparationGuard.holds(run)) throw this.refusal(aborts, lastAbort);
       aborts = 0; lastAbort = null; park = null;
     } else if (invalid || (prior && !park && prior.instance.id !== this.instance.id)) {
       aborts++; lastAbort = { phase: prior?.phase ?? null, instanceId: prior?.instance.id ?? null, at: prior?.at ?? now() };
@@ -81,10 +89,18 @@ export class DispatchPreparationGuard {
     }
     const base = { schemaVersion: 1 as const, identity, instance: this.instance, starts: prior?.starts ?? 0, aborts, at: now(), lastAbort };
     if (aborts >= bound) {
+      const hold = (marker: NonNullable<DispatchPreparationRecord['park']>) => this.file.write(dispatchPreparationRecordSchema.parse({ ...base, phase: prior?.phase ?? 'prepare', park: marker }));
+      if (DispatchPreparationGuard.holds(run)) { await hold({ kind: 'joined', revision: run.revision, at: now() }); throw this.refusal(aborts, lastAbort); }
       // The park command is durable before it is sent: a conflict, denial or crash retries the same command, never a dispatch.
-      park ??= { commandId: randomUUID(), at: now() };
-      await this.file.write(dispatchPreparationRecordSchema.parse({ ...base, phase: prior?.phase ?? 'prepare', park }));
-      await this.context.park({ schemaVersion: 1, scopeId: identity.scopeId, runId: identity.runId, commandId: park.commandId, expectedRevision: run.revision, failureCode: 'DISPATCH_PREPARATION_ABORTED' });
+      const own = park?.kind === 'own' ? park : { kind: 'own' as const, commandId: randomUUID(), at: now() };
+      await hold(own);
+      try {
+        await this.context.park({ schemaVersion: 1, scopeId: identity.scopeId, runId: identity.runId, commandId: own.commandId, expectedRevision: run.revision, failureCode: 'DISPATCH_PREPARATION_ABORTED' });
+      } catch (error) {
+        const current = await this.context.loadRun().catch(() => null);
+        if (!current || !DispatchPreparationGuard.holds(current)) throw error;
+        await hold({ kind: 'joined', revision: current.revision, at: now() });
+      }
       throw this.refusal(aborts, lastAbort);
     }
     const started = dispatchPreparationRecordSchema.parse({ ...base, starts: base.starts + 1, phase: 'prepare', park: null });

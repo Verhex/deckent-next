@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
@@ -21,7 +21,7 @@ const exec = promisify(execFile), roots: string[] = [];
 const program = resolve('tests/fixtures/dispatch-preparation-abort.mjs');
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(context: TestContext) {
+async function fixture(context: TestContext, taskIds: readonly string[] = ['a']) {
   if (process.platform !== 'linux') context.skip('the private ledger and the killed child process are Linux-only here');
   const root = await mkdtemp(join(tmpdir(), 'dispatch-preparation-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -31,10 +31,11 @@ async function fixture(context: TestContext) {
   await writeFile(join(project, 'README.md'), '# clean project\n'); await git('add', '--', 'README.md'); await git('commit', '-q', '-m', 'base');
   const env = { ...process.env, HOME: home, USERPROFILE: home }, options = { env }, registry = fixtureDockerRegistry(['fixture']);
   const { argv: _argv, ...docker } = registry.profiles[0]!.parameters; void _argv;
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
+  const slots = taskIds.length;
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: slots, inFlightSlots: slots,
     ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options), store = opened.store;
-  await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
+  await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: slots, inFlightSlots: slots } });
   const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] }, principals = [{ issuer: principal.issuer, subject: principal.subject }];
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'fixture', restrictions: [], grants: [
     // `cancel` is the authority every progression park needs (the runtime loop's own park included); `run-decision resume` is the operator's.
@@ -44,12 +45,12 @@ async function fixture(context: TestContext) {
     { id: 'monitor', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
     { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } },
   ] }), { mode: 0o600 });
-  const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 'a', kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] }],
+  const graph = { schemaVersion: 4 as const, revision: 1, tasks: taskIds.map(id => ({ id, kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] })),
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
   await createConfiguredRun(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'create', graph }, options);
-  const identity = (await reserveConfiguredRunTasks(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve', expectedRevision: 0 }, options)).reservation.identities[0]!;
+  const identities = (await reserveConfiguredRunTasks(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve', expectedRevision: 0 }, options)).reservation.identities, identity = identities[0]!;
   /** One service start: its start-up progression turn in a fresh process (a fresh instance). */
-  const start = (mode: 'abort' | 'clean') => new Promise<{ code: number | null; signal: NodeJS.Signals | null; result: unknown }>((done, fail) => {
+  const start = (mode: 'abort' | 'abort-2' | 'clean') => new Promise<{ code: number | null; signal: NodeJS.Signals | null; result: unknown }>((done, fail) => {
     const child = spawn(process.execPath, [program, mode], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] }); let out = '';
     child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); }); child.on('error', fail);
     child.on('close', (code, signal) => done({ code, signal, result: out.trim() ? JSON.parse(out.trim()) : null }));
@@ -58,8 +59,10 @@ async function fixture(context: TestContext) {
     const store = await openSqliteAuditStore(productResourcePath(opened.layout, 'ledger'), { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' });
     try { return store.page('s', 0, 100).map(record => record.event.subject).filter(subject => subject.kind === kind); } finally { store.close(); }
   };
-  const records = () => readdir(join(productResourcePath(opened.layout, 'crashes'), 'dispatch-preparation')).then(names => names.filter(name => name.endsWith('.json')), () => []);
-  return { project, options, store, identity, start, audit, records };
+  const directory = join(productResourcePath(opened.layout, 'crashes'), 'dispatch-preparation');
+  const records = () => readdir(directory).then(names => names.filter(name => name.endsWith('.json')), () => []);
+  const contents = async () => Promise.all((await records()).map(async name => JSON.parse(await readFile(join(directory, name), 'utf8')) as { identity: { taskId: string }; aborts: number; phase: string; park: unknown }));
+  return { project, options, store, identity, identities, start, audit, records, contents };
 }
 
 it('two service starts die in the secret gate; the third parks the Run with DISPATCH_PREPARATION_ABORTED, nothing is dispatched again until an explicit resume', async context => {
@@ -117,5 +120,28 @@ it('an ordinary refusal settles the record: a later start in another process cou
     expect(await f.start('clean')).toMatchObject({ code: 0, signal: null, result: { ok: false } });
     expect(await f.records()).toEqual([]); expect(await f.audit('dispatch-preparation-aborted')).toEqual([]);
     expect((await f.store.loadRun('s', 'r'))!.state).toEqual({ kind: 'running' });
+  } finally { f.store.close(); }
+}, 120_000);
+
+it('two Attempts of one Run trip in the same start: one park holds both, and one explicit resume releases both (pilot1 had three)', async context => {
+  const f = await fixture(context, ['a', 'b']);
+  try {
+    expect(f.identities.map(identity => identity.taskId).sort()).toEqual(['a', 'b']);
+    // Both attempts prepare concurrently and both die inside the gate, twice.
+    for (let start = 0; start < 2; start++) expect(await f.start('abort-2')).toMatchObject({ code: null, signal: 'SIGKILL', result: null });
+    expect(await f.start('abort-2')).toMatchObject({ code: 0, signal: null, result: { ok: false, code: 'DISPATCH_PREPARATION_ABORTED' } });
+    const parked = (await f.store.loadRun('s', 'r'))!;
+    expect(parked.state).toMatchObject({ kind: 'parked', reason: 'progression-failed', failureCode: 'DISPATCH_PREPARATION_ABORTED' });
+    expect((await f.audit('dispatch-preparation-aborted')).map(event => 'phase' in event ? event.phase : null)).toEqual(Array(4).fill('secret-gate'));
+    const parks = async () => (await f.audit('run-lifecycle')).filter(event => 'action' in event && event.action === 'park-progression');
+    expect(await parks()).toHaveLength(1);
+    expect((await f.contents()).map(record => [record.identity.taskId, record.aborts, record.park !== null]).sort()).toEqual([['a', 2, true], ['b', 2, true]]);
+    // One resume; each attempt then prepares again and reaches the supervisor. No second park.
+    await applyConfiguredRunLifecycle(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'resume', action: 'resume', expectedRevision: parked.revision }, f.options);
+    const capture = vi.spyOn(DockerSupervisor.prototype, 'captureProfile').mockRejectedValue(Object.assign(new Error('reached the supervisor'), { code: 'FIXTURE_REACHED' }));
+    for (const identity of f.identities) await expect(executeConfiguredTask(f.project, identity, f.options)).rejects.toMatchObject({ code: expect.not.stringMatching(/^DISPATCH_PREPARATION_ABORTED$/) });
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect((await f.store.loadRun('s', 'r'))!.state).toEqual({ kind: 'running' });
+    expect(await parks()).toHaveLength(1); expect(await f.records()).toEqual([]);
   } finally { f.store.close(); }
 }, 120_000);
