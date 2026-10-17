@@ -47,6 +47,8 @@ async function fixture() {
   const db0 = new DatabaseSync(ledger); migrateLedger(db0, 'allow'); db0.close();
   /** Candidate per ticket: version and Git commit are the same value, so the effect stubs move real refs to real objects. */
   const candidates = new Map<string, string>(), conflicts = new Set<string>();
+  /** What re-preparation throws for each ticket (none: prepared). */
+  const refusals = new Map<string, Error>();
   const ttl = { ms: 60_000 };
   /** What the effect lookup observes for a reconciling ticket, and how often the service asked. */
   const reconciliation: { calls: number; result: 'unknown' | 'not-applied' } = { calls: 0, result: 'unknown' };
@@ -64,6 +66,7 @@ async function fixture() {
     const preparation: TargetQueuePreparation = {
       async prepare(record, predecessor) {
         if (conflicts.has(record.request.commandId)) throw Object.assign(new Error('overlap'), { code: 'PATCH_BASE_ADVANCED' });
+        const refusal = refusals.get(record.request.commandId); if (refusal) throw refusal;
         const from = predecessor?.candidate?.candidateVersion ?? await git('rev-parse', TARGET), to = candidates.get(record.request.commandId)!;
         return candidateBindingSchema.parse({ schemaVersion: 1, target: record.request.target, identity: record.request.identity, sourceBinding: 'b'.repeat(64),
           outputDigest: record.request.outputDigest, observedVersion: from, effectiveVersion: from, candidateVersion: to, candidateDigest: 'd'.repeat(64),
@@ -120,7 +123,7 @@ async function fixture() {
     const child = execFile('/usr/bin/git', ['-C', sourceRoot, 'update-ref', '--stdin'], error => error ? reject(error) : resolve());
     child.stdin!.end(`start\noption no-deref\n${body}prepare\ncommit\n`);
   });
-  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget, reconciliation, sourceRoot, options, admission };
+  return { git, base, commit, target, generation, service, candidates, conflicts, refusals, ttl, gitTarget, reconciliation, sourceRoot, options, admission };
 }
 
 describe.skipIf(process.platform !== 'linux')('queue generation fence: no target write before consent, durable ownership across restart (Astra 2607 F1/F2)', () => {
@@ -133,7 +136,7 @@ describe.skipIf(process.platform !== 'linux')('queue generation fence: no target
       expect(await s.enqueue('q1', 1)).toMatchObject({ state: 'queued' });
       expect(await f.target()).toEqual(before);
       await s.advance();
-      expect(s.record('q1')).toMatchObject({ state: 'settled', outcome: 'conflict-needs-reattempt' });
+      expect(s.record('q1')).toMatchObject({ state: 'settled', outcome: 'conflict-needs-reattempt', reason: 'PATCH_BASE_ADVANCED' });
       expect(await f.target()).toEqual(before); expect(await f.generation()).toBeNull();
 
       // A verified candidate reaches the publication card; the human declines it. The execution that follows has no consent.
@@ -326,6 +329,27 @@ describe.skipIf(process.platform !== 'linux')('verification admission failure is
       f.admission.set('q3', new Error('provider unavailable'));
       await s.enqueue('q3', 3); await new Promise(resolve => setTimeout(resolve, 60)); await s.instance.tick();
       expect(s.record('q3')).toMatchObject({ state: 'parked', reason: 'QUEUE_VERIFICATION_NOT_ADMITTED' });
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
+    } finally { s.close(); }
+  });
+});
+
+// DOGFOOD-50 friction 14: a re-preparation refusal settled as `stale-refused` with `reason: null`, so the cause was only found by hand.
+describe.skipIf(process.platform !== 'linux')('re-preparation refusals keep their typed code on the ticket', () => {
+  it('a typed refusal settles stale-refused with its code on the ticket and view; an untyped failure gets the preparation code; nothing is written', async () => {
+    const f = await fixture();
+    for (const ticket of ['q1', 'q2']) f.candidates.set(ticket, await f.commit(f.base, `candidate-${ticket}`));
+    f.refusals.set('q1', Object.assign(new Error('unsafe history'), { code: 'PATCH_UNSAFE' }));
+    f.refusals.set('q2', new Error('preparation crashed'));
+    const s = f.service('service-a', undefined, 50);
+    try {
+      const quiet = await f.target();
+      await s.enqueue('q1', 1); await new Promise(resolve => setTimeout(resolve, 60)); await s.instance.tick();
+      expect(s.record('q1')).toMatchObject({ state: 'settled', outcome: 'stale-refused', reason: 'PATCH_UNSAFE' });
+      const view = await s.call('inspectTargetQueue', { schemaVersion: 1, scopeId: SCOPE, commandId: 'q1' }) as { record: { reason: string; nextAction: string } };
+      expect(view.record).toMatchObject({ reason: 'PATCH_UNSAFE', nextAction: 'prepare-current' });
+      await s.enqueue('q2', 2); await new Promise(resolve => setTimeout(resolve, 60)); await s.instance.tick();
+      expect(s.record('q2')).toMatchObject({ state: 'settled', outcome: 'stale-refused', reason: 'QUEUE_PREPARATION_REFUSED' });
       expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
     } finally { s.close(); }
   });
