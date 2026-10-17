@@ -159,6 +159,17 @@ Evaluate shorter authored observations against the same claim/options with the f
 Perturb option ordering, missing evidence and adversarial data in explicit controls. No hidden retries,
 training, threshold changes or automatic promotion from a pilot.
 
+Model comparison (JEV-114): `jev.eval.config.json` pins `jev-1.14.0` and `jev.eval.baseline.config.json`
+pins `jev-1.13.0`; the default `jev.config.json` stays unchanged until the lead promotes after a comparison.
+`node .agents/refactor/jev-eval-compare.mjs --config CONFIG (--cases N | --call-ids A,B) [--source-root DIR]
+[--baseline-config CONFIG] [--input stored|reprepare] [--review-config PATH]` prints a read-only plan
+(selection, call count, list-price estimate; no credential, network or writes). Adding `--execute --out
+NEW_DIR --max-calls K` replays each selected case once, sequentially, into NEW_DIR/journal (purpose
+evaluation, relation evaluation-replay) and writes plan.json, report.json and report.md side by side.
+`stored` replays the exact stored state and questions with only the model changed; `reprepare` compiles
+the stored case with the current templates and charter and is flagged contextChanged. Aliases are refused,
+the source journal is never written, and agreement or a higher score is not correctness or promotion.
+
 Verified official guidance (2026-10-06): https://docs.typesafe.ai/primitives/noul,
 https://docs.typesafe.ai/patterns/fan-out, https://docs.typesafe.ai/models.
 Research and accepted scope: external proof/JEV-USAGE-RESEARCH-2026-10-06/REPORT.md and

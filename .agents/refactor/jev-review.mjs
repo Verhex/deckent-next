@@ -2,7 +2,7 @@ import { open, readFile, realpath } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { ask, readCredential, validateConfig, failureDiagnostics } from './jev.mjs';
+import { ask, readCredential, validateConfig, validateInput, failureDiagnostics } from './jev.mjs';
 import { ensure, prepare, validateReviewConfig, validateFollowup } from './jev-context.mjs';
 import { callId, validateCallId, safeData, privateDirectory, writeEvent, readEvent } from './jev-journal.mjs';
 import { report, pendingOutcomes, DEFAULT_SCAN_LIMIT } from './jev-report.mjs';
@@ -24,7 +24,12 @@ async function readInput(path, limit) {
 }
 export async function consult(config, policy, authoredCase, root, key, transport, meta = {}) {
   const requestAt = new Date().toISOString();
-  const prepared = prepare(authoredCase, policy, requestAt);
+  return consultPrepared(config, policy, { authoredCase, prepared: prepare(authoredCase, policy, requestAt), requestAt }, root, key, transport, meta);
+}
+// Shared by consult and evaluation replay. `inputSource` says whether the questions were compiled now
+// or replayed byte-for-byte from a stored request (whose templates and charter then govern).
+export async function consultPrepared(config, policy, { authoredCase, prepared, requestAt, inputSource = 'prepared' }, root, key, transport, meta = {}) {
+  validateInput(prepared.input);
   safeData(prepared, key);
   const wire = { model: config.model, state: prepared.input.state, questions: prepared.input.questions };
   ensure(Buffer.byteLength(JSON.stringify(wire)) <= config.maxRequestBytes, 'JEV_REQUEST_TOO_LARGE');
@@ -32,7 +37,7 @@ export async function consult(config, policy, authoredCase, root, key, transport
   // Lineage is validated (parent read-only) before any journal write or network work.
   const lineage = await resolveLineage(meta, { root, id, requestSha256, reviewPolicy: policy.reviewPolicy });
   const versions = { schemaVersion: 1, reviewConfigSchemaVersion: policy.schemaVersion, reviewConfigSha256: digest(policy),
-    providerConfigSha256: digest(config), templates: prepared.diagnostics.templates, reviewPolicy: policy.reviewPolicy ?? null };
+    providerConfigSha256: digest(config), templates: prepared.diagnostics?.templates ?? 'unknown', reviewPolicy: policy.reviewPolicy ?? null, inputSource };
   const directory = join(await privateDirectory(root), id);
   const request = { schemaVersion: 2, callId: id, at: requestAt, case: authoredCase, ...prepared, endpoint: config.endpoint, requestedModel: config.model, policySha256: versions.reviewConfigSha256, requestSha256, lineage, versions };
   await writeEvent(directory, 'request.json', request, key);

@@ -3,7 +3,7 @@
 import { join } from 'node:path';
 import { ensure } from './jev-context.mjs';
 import { validateCallId, readEvent } from './jev-journal.mjs';
-export const RELATIONS = ['new-decision', 'context-revision', 'transport-retry'];
+export const RELATIONS = ['new-decision', 'context-revision', 'transport-retry', 'evaluation-replay'];
 export const PURPOSES = ['development', 'evaluation', 'control', 'pilot'];
 const text = v => typeof v === 'string' && v.trim().length > 0;
 const caseIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -15,11 +15,21 @@ const next = value => Number.isSafeInteger(value) ? value + 1 : 'unknown';
 // meta: { relation, parentCallId, caseId, reason, purpose }. Reads the parent read-only; old parents
 // without lineage are unknown-lineage and their counters stay 'unknown' rather than being guessed.
 export async function resolveLineage(meta, { root, id, requestSha256, reviewPolicy }) {
-  const { relation = 'new-decision', parentCallId = null, caseId = null, reason = null, purpose = 'development', ...extra } = meta ?? {};
+  const { relation = 'new-decision', parentCallId = null, caseId = null, reason = null, purpose = 'development', replayOf = null, ...extra } = meta ?? {};
   ensure(Object.keys(extra).length === 0 && RELATIONS.includes(relation) && PURPOSES.includes(purpose), 'JEV_LINEAGE');
   ensure(caseId === null || (typeof caseId === 'string' && caseIdPattern.test(caseId)), 'JEV_LINEAGE');
   ensure(reason === null || text(reason), 'JEV_LINEAGE');
   let lineage;
+  // An evaluation replay re-asks a stored case from another journal; it is not part of that decision chain.
+  ensure((relation === 'evaluation-replay') === (replayOf !== null), 'JEV_LINEAGE');
+  if (relation === 'evaluation-replay') {
+    ensure(purpose === 'evaluation' && parentCallId === null && replayOf && typeof replayOf === 'object'
+      && Object.keys(replayOf).every(k => ['callId', 'requestSha256', 'inputMode'].includes(k))
+      && /^[0-9a-f]{64}$/.test(replayOf.requestSha256 ?? '') && ['stored', 'reprepare'].includes(replayOf.inputMode), 'JEV_LINEAGE');
+    validateCallId(replayOf.callId);
+    return { schemaVersion: 1, relation, purpose, reason, caseId: caseId ?? replayOf.callId, parentCallId: null, contextRevision: null,
+      transportAttempt: 1, parentLineage: null, replayOf: { ...replayOf, journal: 'source' }, exceedsRevisionPolicy: null };
+  }
   if (relation === 'new-decision') {
     ensure(parentCallId === null, 'JEV_LINEAGE');
     lineage = { caseId: caseId ?? id, parentCallId: null, contextRevision: 0, transportAttempt: 1, parentLineage: null };

@@ -35,7 +35,7 @@ function lineageSummary(rows) {
   const repeated = [...digests.values()].filter(n => n > 1);
   const revisions = known.map(r => r.lineage.contextRevision).filter(Number.isSafeInteger);
   return { known: known.length, unknown: rows.length - known.length,
-    relations: Object.fromEntries(['new-decision', 'context-revision', 'transport-retry'].map(rel => [rel, count(known, r => r.lineage.relation === rel)])),
+    relations: Object.fromEntries(['new-decision', 'context-revision', 'transport-retry', 'evaluation-replay'].map(rel => [rel, count(known, r => r.lineage.relation === rel)])),
     cases: new Set(known.map(r => r.lineage.caseId)).size, maxContextRevision: revisions.length ? Math.max(...revisions) : null,
     exceedsRevisionPolicy: count(known, r => r.lineage.exceedsRevisionPolicy === true),
     repeatedRequestDigests: { groups: repeated.length, extraAttempts: repeated.reduce((sum, n) => sum + n - 1, 0) },

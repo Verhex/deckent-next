@@ -537,7 +537,7 @@ journalTest('lineage separates a new decision, a context revision and a transpor
   assert.equal(row(second.callId).adviceDisposition, 'thresholds-met');
   assert.equal(row(third.callId).adviceDisposition, 'unavailable'); assert.equal(row(retry.callId).adviceDisposition, 'thresholds-met');
   assert.equal(row(pendingId).adviceDisposition, 'response-unknown'); assert.equal(row(pendingId).lineage, 'unknown'); assert.equal(row(pendingId).purpose, 'unknown');
-  assert.deepEqual(summary.lineage.relations, { 'new-decision': 1, 'context-revision': 3, 'transport-retry': 1 });
+  assert.deepEqual(summary.lineage.relations, { 'new-decision': 1, 'context-revision': 3, 'transport-retry': 1, 'evaluation-replay': 0 });
   assert.equal(summary.lineage.unknown, 1); assert.equal(summary.lineage.exceedsRevisionPolicy, 2); assert.equal(summary.lineage.maxContextRevision, 2);
   assert.deepEqual(summary.lineage.repeatedRequestDigests, { groups: 1, extraAttempts: 1 });
   assert.equal(summary.adviceDispositions.revisionPolicyExceeded, 2);
