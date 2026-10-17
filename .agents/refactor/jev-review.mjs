@@ -5,13 +5,19 @@ import { createHash } from 'node:crypto';
 import { ask, readCredential, validateConfig, failureDiagnostics } from './jev.mjs';
 import { ensure, prepare, validateReviewConfig, validateFollowup } from './jev-context.mjs';
 import { callId, validateCallId, safeData, privateDirectory, writeEvent, readEvent } from './jev-journal.mjs';
-import { report, DEFAULT_SCAN_LIMIT } from './jev-report.mjs';
+import { report, pendingOutcomes, DEFAULT_SCAN_LIMIT } from './jev-report.mjs';
 import { resolveLineage } from './jev-lineage.mjs';
 export { report } from './jev-report.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const errorCode = e => /^JEV_[A-Z0-9_]+$/.test(e.message) ? e.message : 'JEV_REQUEST_FAILED';
+async function readStdin(limit) {
+  const chunks = []; let size = 0;
+  for await (const chunk of process.stdin) { size += chunk.length; ensure(size <= limit, 'JEV_INPUT_SIZE'); chunks.push(chunk); }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
 async function readInput(path, limit) {
+  if (path === '-') return readStdin(limit);
   const h = await open(path, 'r');
   try { const stat = await h.stat(); ensure(stat.isFile() && stat.size <= limit, 'JEV_INPUT_SIZE'); return JSON.parse(await h.readFile('utf8')); }
   finally { await h.close(); }
@@ -72,16 +78,18 @@ export function parseArgs(args) {
 async function main(argv) {
   const { positional: args, meta } = parseArgs(argv);
   const [mode, first, second, ...extra] = args;
-  ensure(['prepare', 'ask', 'decision', 'outcome', 'report'].includes(mode) && extra.length === 0, 'JEV_REVIEW_USAGE');
+  ensure(['prepare', 'ask', 'decision', 'outcome', 'report', 'pending'].includes(mode) && extra.length === 0, 'JEV_REVIEW_USAGE');
   ensure(mode === 'ask' || Object.keys(meta).length === 0, 'JEV_REVIEW_USAGE');
-  ensure(mode === 'report' ? !second && (first === undefined || /^[1-9][0-9]{0,5}$/.test(first)) : ['decision', 'outcome'].includes(mode) ? first && second : first && !second, 'JEV_REVIEW_USAGE');
+  ensure(['report', 'pending'].includes(mode) ? !second && (first === undefined || /^[1-9][0-9]{0,5}$/.test(first)) : ['decision', 'outcome'].includes(mode) ? first && second : first && !second, 'JEV_REVIEW_USAGE');
   const policyPath = process.env.DECKENT_JEV_REVIEW_CONFIG || join(here, 'jev.review.config.json');
   const policy = validateReviewConfig(JSON.parse(await readFile(policyPath, 'utf8')));
   const root = resolve(dirname(resolve(policyPath)), policy.journalRoot);
-  if (mode === 'report') {
+  if (mode === 'report' || mode === 'pending') {
+    // Read-only: no credential, no network, no journal directory creation.
     const limit = first === undefined ? policy.reportLimit : Number(first);
     ensure(limit <= policy.reportLimit, 'JEV_REPORT_LIMIT');
-    return report(root, limit, { scanLimit: policy.reportScanLimit ?? Math.max(DEFAULT_SCAN_LIMIT, policy.reportLimit), reviewPolicy: policy.reviewPolicy });
+    const options = { scanLimit: policy.reportScanLimit ?? Math.max(DEFAULT_SCAN_LIMIT, policy.reportLimit), reviewPolicy: policy.reviewPolicy, pricing: policy.pricing };
+    return mode === 'report' ? report(root, limit, options) : pendingOutcomes(root, limit, options);
   }
   const value = await readInput(['decision', 'outcome'].includes(mode) ? second : first, policy.maxCaseBytes);
   if (mode === 'prepare') return { network: false, ...prepare(value, policy), authoringGuidance: policy.authoringGuidance ?? null };

@@ -29,5 +29,24 @@
     "minSufficiency": 0.67,
     "maxContextRevisions": 1,
     "role": "advice-disposition-only"
+  },
+  "pricing": {
+    "schemaVersion": 1,
+    "currency": "USD",
+    "basis": "list-price-estimate-not-invoice",
+    "models": {
+      "jev-1.13.0": {
+        "inputPerMillionTokens": 0.042,
+        "outputPerMillionTokens": 0,
+        "source": "https://docs.typesafe.ai/models",
+        "accessedAt": "2026-10-17"
+      },
+      "jev-1.14.0": {
+        "inputPerMillionTokens": 0.042,
+        "outputPerMillionTokens": 0,
+        "source": "https://docs.typesafe.ai/models",
+        "accessedAt": "2026-10-17"
+      }
+    }
   }
 }

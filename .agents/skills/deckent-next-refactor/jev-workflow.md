@@ -16,12 +16,20 @@ Use the logged preparation layer from Next only (host tooling, not a product fea
   rationale, actions and evidenceRefs; explicitly explain disagreement or missing evidence.
 - `node .agents/refactor/jev-review.mjs outcome CALL_ID OUTCOME.json` records actor, status
   (verified/failed/inconclusive), observation, evidenceRefs, labels, inputQuality and outputQuality.
-  Outcome is a final immutable assessment: leave absent while validation is pending. Noul labels require
+  Outcome is a final immutable assessment: leave absent while validation is pending.
+  `node .agents/refactor/jev-review.mjs pending [COUNT]` (read-only, no credential) lists recorded
+  decisions still without an outcome, each with an outcome skeleton that is rejected if submitted
+  unedited; fill it from real evidence and pass it as a file or `-` (stdin). Noul labels require
   verified evidence and contain questionId, expected boolean, evidenceRef. Never label using Jev's own answer.
 - `node .agents/refactor/jev-review.mjs report [COUNT]` reports the latest dated requests within a
   bounded scan, usage, latency, decisions, outcomes and Brier score only where evidence-backed labels
   exist. Usage is a known-token subtotal plus coverage counts: null/missing provider metering, failed
-  attempts and unrecorded responses stay `unknown`, never zero. COUNT defaults to reportLimit (200); `report 100` selects 100. The scan defaults to 10,000
+  attempts and unrecorded responses stay `unknown`, never zero. `cost` and per-row `estimatedUsd` apply
+  the dated list prices in review config `pricing` (exact served model ID, source, access date) to known
+  usage only; an unpriced model or unknown usage is cost-unknown. Estimates are not invoices.
+  `latencyByResult` separates success and failure timing. `slices` group rows by served model, requested
+  model and purpose (unknown for old records), each with usage coverage, cost, timing, follow-up,
+  dispositions and failure codes. Never pool models or purposes for calibration claims. COUNT defaults to reportLimit (200); `report 100` selects 100. The scan defaults to 10,000
   directories (optional review config reportScanLimit). Scan truncation and undated requests are
   disclosed; global recency then remains unknown. Agreement is not correctness. Reading is non-mutating:
   `report` and follow-up lookups never create a journal root or call directory (a missing root reports
@@ -137,7 +145,7 @@ other sessions' records or infer success from agreement. Truth labels must addre
 in the exact request-time state: a later fix passing does not make an earlier missing-proof claim true.
 Normative architecture preferences need an adjudicated acceptable option set, not an invented binary gold.
 
-Report schemaVersion 3 exposes requestedAt, selectedProbability, separate confidence and sufficiency,
+Report schemaVersion 4 (since JEV-114; 3 before) exposes requestedAt, selectedProbability, separate confidence and sufficiency,
 decisionRecorded/outcomeRecorded, labeledNoulAnswers and followUp coverage. Missing decision/outcome
 records are visible gaps; they are not overdue/failure or evidence of omission rather than pending work.
 Brier uses boolean labels on verified outcomes only; missing labels yield null, never fabricated accuracy.

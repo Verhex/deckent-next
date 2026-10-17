@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm, symlink, readdir, mkdir, chmod, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, rm, symlink, readdir, mkdir, chmod, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepare, validateReviewConfig, templateIdentity } from './jev-context.mjs';
 import { consult, followup, report, parseArgs } from './jev-review.mjs';
-import { adviceDisposition } from './jev-report.mjs';
+import { adviceDisposition, pendingOutcomes } from './jev-report.mjs';
+import { execFileSync } from 'node:child_process';
 import { readEvent, writeEvent, callId, entries, existingPrivateDirectory } from './jev-journal.mjs';
 
 function journalTest(name, fn) {
@@ -573,3 +574,65 @@ test('ask lineage flags parse strictly', () => {
     { positional: ['ask', 'case.json'], meta: { relation: 'context-revision', parentCallId: 'p', reason: 'Added evidence', purpose: 'control', caseId: 'q1' } });
   for (const args of [['ask', 'c', '--unknown', 'x'], ['ask', 'c', '--relation'], ['ask', 'c', '--purpose', 'a', '--purpose', 'b']]) assert.throws(() => parseArgs(args), /JEV_REVIEW_USAGE/);
 });
+
+journalTest('report slices by served/requested model and purpose with known-token subtotals, unknown counts, dated price estimates and split timing', async () => sandbox(async root => {
+  const served = (model, usage) => async (...args) => { const r = await (await answerWith(0.9, 0.8)(...args)).json(); return Response.json({ ...r, model, usage }); };
+  await consult(config, policy, fixture(), root, key, served('jev-1.13.0', { input_tokens: 1000000, output_tokens: 50 }));
+  await consult({ ...config, model: 'jev-1.14.0' }, policy, fixture(), root, key, served('jev-1.14.0', { input_tokens: 500000, output_tokens: null }), { purpose: 'evaluation' });
+  await consult({ ...config, model: 'jev-1.14.0' }, policy, fixture(), root, key, served('jev-1.14.0', { input_tokens: null, output_tokens: 3 }), { purpose: 'evaluation' });
+  await consult(config, policy, fixture(), root, key, served('unpriced-model', { input_tokens: 10, output_tokens: 0 }), { purpose: 'control' });
+  await consult(config, policy, fixture(), root, key, async () => new Response('', { status: 503 }));
+  const summary = await report(root, 10, { reviewPolicy: policy.reviewPolicy, pricing: policy.pricing });
+  const { byServedModel, byRequestedModel, byPurpose } = summary.slices;
+  assert.deepEqual(Object.keys(byServedModel), ['jev-1.13.0', 'jev-1.14.0', 'no-advice:failed', 'unpriced-model']);
+  assert.ok(Math.abs(byServedModel['jev-1.13.0'].cost.estimatedUsd - 0.042) < 1e-12); // output is free at the listed price
+  assert.ok(Math.abs(byServedModel['jev-1.14.0'].cost.estimatedUsd - 0.021) < 1e-12);
+  assert.equal(byServedModel['jev-1.14.0'].cost.costUnknownAttempts, 1);
+  assert.equal(byServedModel['jev-1.14.0'].usage.inputTokens, 500000); assert.equal(byServedModel['jev-1.14.0'].usage.coverage.inputUnknown, 1);
+  assert.equal(byServedModel['unpriced-model'].cost.costUnknownAttempts, 1); assert.equal(byServedModel['no-advice:failed'].cost.costUnknownAttempts, 1);
+  assert.deepEqual(byServedModel['no-advice:failed'].failureErrors, { JEV_HTTP_503: 1 });
+  assert.deepEqual(Object.keys(byRequestedModel), ['jev-1.14.0', config.model]); assert.equal(byRequestedModel['jev-1.14.0'].calls, 2);
+  assert.deepEqual(Object.fromEntries(Object.entries(byPurpose).map(([k, v]) => [k, v.calls])), { control: 1, development: 2, evaluation: 2 });
+  assert.ok(Math.abs(summary.cost.estimatedUsd - 0.063) < 1e-12); assert.equal(summary.cost.pricedAttempts, 2); assert.equal(summary.cost.costUnknownAttempts, 3);
+  assert.equal(summary.cost.prices['jev-1.14.0'].accessedAt, '2026-10-17'); assert.match(summary.cost.basis, /not an invoice/);
+  assert.equal(summary.latencyByResult.success.samples, 4); assert.equal(summary.latencyByResult.failure.samples, 1);
+  assert.equal(byPurpose.development.followUp.adviceWithoutDecision, 1);
+  const failedRow = summary.rows.find(r => r.status === 'unavailable');
+  assert.deepEqual(failedRow.failure, { error: 'JEV_HTTP_503', stage: 'http' }); assert.equal(failedRow.estimatedUsd, null);
+  // Without pricing every attempt is cost-unknown, never zero-cost.
+  const unpriced = await report(root, 10);
+  assert.equal(unpriced.cost.pricedAttempts, 0); assert.equal(unpriced.cost.costUnknownAttempts, 5);
+}));
+test('pricing must be dated, sourced, exact-model keyed and labelled as an estimate', () => {
+  for (const change of [p => { p.pricing.basis = 'invoice'; }, p => { delete p.pricing.models['jev-1.14.0'].accessedAt; }, p => { p.pricing.models['jev-1.14.0'].source = 'docs'; },
+    p => { p.pricing.models['jev-1.14.0'].inputPerMillionTokens = -1; }, p => { p.pricing.models['bad model'] = p.pricing.models['jev-1.14.0']; }]) {
+    const variant = structuredClone(policy); change(variant);
+    assert.throws(() => validateReviewConfig(variant), /JEV_REVIEW_PRICING/);
+  }
+  assert.equal(policy.pricing.models['jev-1.14.0'].inputPerMillionTokens, 0.042); assert.equal(policy.pricing.models['jev-1.14.0'].outputPerMillionTokens, 0);
+});
+journalTest('pending lists decisions awaiting an outcome; the CLI records an outcome from stdin without touching TypeSafe credentials', async () => sandbox(async root => {
+  const journal = join(root, 'journal');
+  const decided = await consult(config, policy, fixture(), journal, key, transport);
+  await consult(config, policy, fixture(), journal, key, transport); // advice without decision
+  await followup(journal, decided.callId, 'decision', { actor: 'test', selectedOption: 'investigate', rationale: 'Await validation.', actions: [], evidenceRefs: [] }, key);
+  const listed = await pendingOutcomes(journal, 10, { reviewPolicy: policy.reviewPolicy });
+  assert.equal(listed.decisionsWithoutOutcome, 1); assert.equal(listed.adviceWithoutDecision, 1);
+  assert.equal(listed.pending[0].callId, decided.callId);
+  assert.deepEqual(listed.pending[0].outcomeTemplate.labels.map(l => l.questionId), ['supported', 'sufficiency']);
+  // The unedited skeleton is rejected: nothing is fabricated.
+  await assert.rejects(followup(journal, decided.callId, 'outcome', listed.pending[0].outcomeTemplate, key), /JEV_OUTCOME|JEV_LABEL/);
+  // CLI: review config and provider config point at the sandbox; the credential env names are test-only.
+  const reviewPath = join(root, 'review.json'); const providerPath = join(root, 'provider.json');
+  await writeFile(reviewPath, JSON.stringify({ ...policy, journalRoot: './journal' }));
+  const provider = { ...config, credentialEnv: 'JEV_TEST_ONLY_KEY', credentialFileEnv: 'JEV_TEST_ONLY_KEY_FILE' }; delete provider.credentialFile;
+  await writeFile(providerPath, JSON.stringify(provider));
+  const env = { PATH: process.env.PATH, DECKENT_JEV_REVIEW_CONFIG: reviewPath, DECKENT_JEV_CONFIG: providerPath, JEV_TEST_ONLY_KEY: key };
+  const cli = (args, input) => execFileSync(process.execPath, [new URL('./jev-review.mjs', import.meta.url).pathname, ...args], { env, input, encoding: 'utf8' });
+  assert.equal(JSON.parse(cli(['pending'])).decisionsWithoutOutcome, 1);
+  const outcome = { actor: 'test-reviewer', status: 'inconclusive', observation: 'Validation ran without a decisive signal.', evidenceRefs: ['fixture-log'], labels: [], inputQuality: 'Explicit.', outputQuality: 'Not assessed.' };
+  assert.deepEqual(JSON.parse(cli(['outcome', decided.callId, '-'], JSON.stringify(outcome))), { callId: decided.callId, recorded: 'outcome' });
+  assert.equal((await readEvent(join(journal, decided.callId), 'outcome.json')).status, 'inconclusive');
+  assert.equal(JSON.parse(cli(['pending'])).decisionsWithoutOutcome, 0);
+  assert.throws(() => cli(['outcome', decided.callId, '-'], JSON.stringify(outcome)));
+}));

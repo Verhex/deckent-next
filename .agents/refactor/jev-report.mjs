@@ -41,6 +41,44 @@ function lineageSummary(rows) {
     repeatedRequestDigests: { groups: repeated.length, extraAttempts: repeated.reduce((sum, n) => sum + n - 1, 0) },
     basis: 'recorded lineage only; legacy records are unknown-lineage and are never linked by inference' };
 }
+// Dated list-price estimate from review config pricing. Not an invoice: failed or unrecorded usage,
+// credits, taxes and historical tariff changes are unknown. Unknown usage or an unpriced model -> null.
+export function estimateUsd(model, usage, pricing) {
+  const price = pricing?.models && Object.hasOwn(pricing.models, model) ? pricing.models[model] : null;
+  if (!price) return null;
+  const part = (tokens, rate) => rate === 0 ? 0 : knownCount(tokens) ? tokens * rate / 1e6 : null;
+  const input = part(usage.inputTokens, price.inputPerMillionTokens); const output = part(usage.outputTokens, price.outputPerMillionTokens);
+  return input === null || output === null ? null : input + output;
+}
+const latencyOf = rows => { const v = rows.filter(r => Number.isFinite(r.latencyMs)).map(r => r.latencyMs).sort((a, b) => a - b);
+  return { samples: v.length, p50Ms: quantile(v, 0.5), p95Ms: quantile(v, 0.95) }; };
+export function latencyByResult(rows) {
+  return { success: latencyOf(rows.filter(r => r.status === 'advice')), failure: latencyOf(rows.filter(r => r.status === 'unavailable')),
+    basis: 'success: transport start to validated reply; failure: around the attempt; different boundaries, reported separately' };
+}
+export function costSummary(rows, pricing) {
+  const priced = rows.filter(r => r.estimatedUsd !== null);
+  return { estimatedUsd: priced.reduce((sum, r) => sum + r.estimatedUsd, 0), pricedAttempts: priced.length, costUnknownAttempts: rows.length - priced.length,
+    currency: pricing?.currency ?? null, prices: pricing?.models ?? null, basis: 'list-price estimate from review config pricing applied to known usage; not an invoice' };
+}
+export function followUpSummary(rows) {
+  return { adviceCalls: count(rows, r => r.status === 'advice'), decisionsRecorded: count(rows, r => r.decisionRecorded),
+    adviceWithoutDecision: count(rows, r => r.status === 'advice' && !r.decisionRecorded),
+    outcomesRecorded: count(rows, r => r.outcomeRecorded), decisionsWithoutOutcome: count(rows, r => r.decisionRecorded && !r.outcomeRecorded),
+    callsWithoutOutcome: count(rows, r => !r.outcomeRecorded),
+    outcomeCounts: Object.fromEntries(['verified', 'failed', 'inconclusive', 'unobserved'].map(status => [status, count(rows, r => r.outcome === status)])),
+    recordingGapIsFailure: false, pendingOrOmittedIsUnknown: true };
+}
+function slice(rows, keyOf, pricing) {
+  const groups = new Map();
+  for (const r of rows) { const k = keyOf(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+  return Object.fromEntries([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, group]) => [k, {
+    calls: group.length, advice: count(group, r => r.status === 'advice'), unavailable: count(group, r => r.status === 'unavailable'),
+    responseUnknown: count(group, r => r.status === 'response-unknown'), usage: usageSummary(group), cost: costSummary(group, pricing),
+    latency: latencyByResult(group), followUp: followUpSummary(group),
+    adviceDispositions: Object.fromEntries(DISPOSITIONS.map(d => [d, count(group, r => r.adviceDisposition === d)])),
+    failureErrors: Object.fromEntries([...new Set(group.filter(r => r.failure).map(r => r.failure.error))].sort().map(e => [e, count(group, r => r.failure?.error === e)])) }]));
+}
 export function usageSummary(rows) {
   const known = field => rows.filter(r => knownCount(r.usage[field]));
   const sum = field => known(field).reduce((total, r) => total + r.usage[field], 0);
@@ -51,7 +89,24 @@ export function usageSummary(rows) {
       failedAttemptsUnknownUsage: count(rows, r => r.status === 'unavailable'), responseUnknownAttempts: count(rows, r => r.status === 'response-unknown') },
     excludesFailedAndUnrecordedUsage: true, unknownIsNotZero: true };
 }
-export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LIMIT, limit), reviewPolicy = null } = {}) {
+// Decisions still awaiting an outcome, with an outcome skeleton that cannot be recorded unedited.
+export async function pendingOutcomes(root, limit, options = {}) {
+  const summary = await report(root, limit, options);
+  const pending = [];
+  for (const row of summary.rows.filter(r => r.decisionRecorded && !r.outcomeRecorded)) {
+    const request = await readEvent(join(root, row.callId), 'request.json');
+    const noul = Object.entries(request.input.questions).filter(([, q]) => q.type === 'noul').map(([id]) => id);
+    pending.push({ callId: row.callId, requestedAt: row.requestedAt, scope: row.scope, objective: String(request.case.objective).slice(0, 200),
+      selectedOption: row.selectedOption, recommendation: row.recommendation, adviceDisposition: row.adviceDisposition,
+      outcomeTemplate: { actor: '', status: 'verified|failed|inconclusive', observation: '', evidenceRefs: [],
+        labels: noul.map(questionId => ({ questionId, expected: 'true|false (verified status only; omit unless evidence decides it)', evidenceRef: '' })),
+        inputQuality: '', outputQuality: '' } });
+  }
+  return { schemaVersion: 1, journalRootPresent: summary.journalRootPresent, sampledCalls: summary.sampledCalls, truncated: summary.truncated,
+    decisionsWithoutOutcome: pending.length, adviceWithoutDecision: summary.followUp.adviceWithoutDecision, pending,
+    usage: 'fill the template from real evidence, then: node .agents/refactor/jev-review.mjs outcome CALL_ID FILE (or - for stdin); leave it absent while validation is pending' };
+}
+export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LIMIT, limit), reviewPolicy = null, pricing = null } = {}) {
   ensure(Number.isSafeInteger(limit) && limit > 0 && Number.isSafeInteger(scanLimit) && scanLimit >= limit && scanLimit <= 1048576, 'JEV_REPORT_LIMIT');
   const listing = await entries(root, scanLimit);
   const requests = [];
@@ -85,7 +140,8 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
     const sufficiency = response?.answers.sufficiency?.noul ?? null;
     const lineage = request.lineage && typeof request.lineage === 'object' ? request.lineage : 'unknown';
     rows.push({ callId: id, requestedAt: time === null ? null : request.at, scope: request.case.scope, revision: request.case.revision,
-      status, model: response?.model ?? null, requestSha256: request.requestSha256 ?? null,
+      status, model: response?.model ?? null, requestedModel: request.requestedModel ?? null, requestSha256: request.requestSha256 ?? null,
+      failure: failure ? { error: typeof failure.error === 'string' ? failure.error : 'unknown', stage: failure.diagnostics?.stage ?? 'not-recorded' } : null,
       lineage, purpose: lineage === 'unknown' ? 'unknown' : lineage.purpose,
       adviceDisposition: adviceDisposition({ status, recommendation: answer?.choice ?? null, selectedProbability, sufficiency }, thresholds),
       thresholdSource: recordedPolicy ? 'request' : thresholds ? 'current-config' : 'none',
@@ -98,6 +154,8 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
       abstentionProbabilities: Object.fromEntries(['none_of_the_above', 'insufficient_information', 'defer'].map(option => [option, answer?.probabilities?.[option] ?? null])),
       agreement: response && decision ? answer.choice === decision.selectedOption : null, outcome: outcome?.status ?? 'unobserved',
       inputQuality: outcome?.inputQuality ?? null, outputQuality: outcome?.outputQuality ?? null });
+    const row = rows[rows.length - 1];
+    row.estimatedUsd = response ? estimateUsd(response.model, row.usage, pricing) : null;
   }
   const times = rows.filter(r => r.latencyMs !== null).map(r => r.latencyMs).sort((a, b) => a - b);
   return { schemaVersion: 4, measuredAt: new Date().toISOString(), sampledCalls: rows.length,
@@ -112,12 +170,12 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
     abstentions: Object.fromEntries(['none_of_the_above', 'insufficient_information', 'defer'].map(option => [option, { offered: count(rows, r => r.offeredChoiceIds.includes(option)), selected: count(rows, r => r.recommendation === option) }])),
     usage: usageSummary(rows),
     latency: { samples: times.length, p50Ms: quantile(times, 0.5), p95Ms: quantile(times, 0.95), basis: 'recorded attempts, including failures with latency' },
-    followUp: { adviceCalls: count(rows, r => r.status === 'advice'), decisionsRecorded: count(rows, r => r.decisionRecorded),
-      adviceWithoutDecision: count(rows, r => r.status === 'advice' && !r.decisionRecorded),
-      outcomesRecorded: count(rows, r => r.outcomeRecorded), decisionsWithoutOutcome: count(rows, r => r.decisionRecorded && !r.outcomeRecorded),
-      callsWithoutOutcome: count(rows, r => !r.outcomeRecorded),
-      outcomeCounts: Object.fromEntries(['verified', 'failed', 'inconclusive', 'unobserved'].map(status => [status, count(rows, r => r.outcome === status)])),
-      recordingGapIsFailure: false, pendingOrOmittedIsUnknown: true },
+    latencyByResult: latencyByResult(rows),
+    cost: costSummary(rows, pricing),
+    followUp: followUpSummary(rows),
+    slices: { byServedModel: slice(rows, r => r.model ?? (r.status === 'unavailable' ? 'no-advice:failed' : 'no-advice:unknown'), pricing),
+      byRequestedModel: slice(rows, r => r.requestedModel ?? 'unknown', pricing), byPurpose: slice(rows, r => r.purpose, pricing),
+      calibrationPooling: 'never pool models or purposes for calibration claims' },
     quality: { labeledNoulAnswers: labels, labeledCalls: count(rows, r => r.labeledNoulAnswers > 0), brierScore: labels ? brierSum / labels : null,
       basis: 'operator-provided evidence-backed labels on verified outcomes; not independently verified or a representative benchmark', agreementIsCorrectness: false }, rows };
 }

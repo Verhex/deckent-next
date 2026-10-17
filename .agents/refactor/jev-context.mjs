@@ -32,13 +32,20 @@ const validReviewPolicy = p => exact(p, POLICY_KEYS) && POLICY_KEYS.every(k => O
   && [p.version, p.decidedBy, p.source].every(text) && /^\d{4}-\d{2}-\d{2}$/.test(p.decidedAt)
   && threshold(p.minSelectedProbability) && threshold(p.minSufficiency)
   && Number.isSafeInteger(p.maxContextRevisions) && p.maxContextRevisions >= 0 && p.role === 'advice-disposition-only';
+// Dated list prices for report estimates, keyed by exact served model ID; never an invoice or spend authority.
+const rate = v => Number.isFinite(v) && v >= 0 && v <= 1e6;
+const validPricing = p => exact(p, ['schemaVersion', 'currency', 'basis', 'models']) && p.schemaVersion === 1 && /^[A-Z]{3}$/.test(p.currency)
+  && p.basis === 'list-price-estimate-not-invoice' && object(p.models) && Object.entries(p.models).every(([model, m]) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(model)
+    && exact(m, ['inputPerMillionTokens', 'outputPerMillionTokens', 'source', 'accessedAt']) && rate(m.inputPerMillionTokens) && rate(m.outputPerMillionTokens)
+    && /^https:\/\/\S+$/.test(m.source) && /^\d{4}-\d{2}-\d{2}$/.test(m.accessedAt));
 const LEGACY_TEMPLATES = ['sufficiency', 'selection', 'none_of_the_above', 'insufficient_information'];
 const GUIDANCE = ['observationClass', 'counterevidence', 'optionSupport', 'remainingUnknowns'];
 // schemaVersion 2 (legacy compound sufficiency question) stays readable for overrides and old journals;
 // schemaVersion 3 requires one sufficiency proposition, a non-interrogative rubric, a template version
 // and authoring guidance.
 export function validateReviewConfig(c) {
-  ensure(exact(c, ['schemaVersion', 'journalRoot', 'maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit', 'reportScanLimit', 'templateVersion', 'templates', 'authoringGuidance', 'reviewPolicy']), 'JEV_REVIEW_CONFIG');
+  ensure(exact(c, ['schemaVersion', 'journalRoot', 'maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit', 'reportScanLimit', 'templateVersion', 'templates', 'authoringGuidance', 'reviewPolicy', 'pricing']), 'JEV_REVIEW_CONFIG');
+  ensure(c.pricing === undefined || validPricing(c.pricing), 'JEV_REVIEW_PRICING');
   ensure([2, 3].includes(c.schemaVersion) && text(c.journalRoot), 'JEV_REVIEW_CONFIG');
   for (const k of ['maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit']) ensure(Number.isSafeInteger(c[k]) && c[k] > 0 && c[k] <= 1048576, 'JEV_REVIEW_CONFIG');
   ensure(c.reportScanLimit === undefined || (Number.isSafeInteger(c.reportScanLimit) && c.reportScanLimit >= c.reportLimit && c.reportScanLimit <= 1048576), 'JEV_REVIEW_CONFIG');
