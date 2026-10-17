@@ -939,28 +939,32 @@ Author proof lives in external MCP-AI-AKTOR-2026-10-15. Targeted checks, real SQ
 
 TESLIM-KUYRUGU phase 2 round 2 connects the retained ledger v57 queue to runtime protocol v29. It does not rewrite historical sealed
 integration/delivery/adoption records. Config `targetQueue` supplies bounded policy; `execution.adoption.protectedTargets` extends
-main/master, repository default and remote-HEAD protection. A registered target/common-directory producer supplies physical identity.
+main/master, repository default and remote-HEAD protection. A registered target/common-directory producer supplies physical identity:
+the adoption journal's repository identity (canonical common directory + inode, no device number; QUEUE-SMALL). A queue generation
+written under the earlier device-bound key is refused for the new key; with that target's queue terminal, delete it once at upgrade.
 Scope-local positions count only authorized tickets; physical ordinals and other scopes are never read projections.
 
 A ticket pins the exact accepted Attempt and retained patch. Revalidation examines every intervening commit, conservatively including
 rename endpoints, mode changes, directory prefixes and changed-then-restored paths. It never rebases/merges a user's branch. An allowed
 drift creates a new integration command (optional `replacesCommandId` must resolve the same retained patch). Private prefix objects
 move through bounded object-only transport between private repositories, without publishing source refs. Zero configured revalidation
-budget refuses drift. An unresolved preparation/admission is not automatically retried with a new identity.
+budget refuses drift. An unresolved preparation/admission is not automatically retried with a new identity. A failed verification
+admission parks the ticket at once with its typed code (`QUEUE_VERIFICATION_NOT_ADMITTED` when untyped) and next action `prepare-current`.
 
 The private-candidate Run uses normal create/reserve/execute/evaluate authority. Its graph retains original evaluator definitions and
 pinned evaluator implementations and conjunctively adds the current adoption bar; a verification profile must be installed. A policy
-that requires Run-create approval can leave preparation waiting; inspect the normal approval and replay the same admitted command,
-never weaken that policy. Missing/failed/cancelled/unknown verification cannot publish. The exact private commit, original source,
+that requires Run-create approval refuses that admission (`RUN_APPROVAL_REQUIRED`); the ticket parks with that reason (QUEUE-SMALL).
+The queue does not yet replay an approved verification admission (open); never weaken that policy. Missing/failed/cancelled/unknown verification cannot publish. The exact private commit, original source,
 criteria/profile and receipt are checked again before effects. Legacy delivery-pinned Run admission stays readable.
 
 `deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`.
 Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
-`integration-queue-confirm` obtains separate publish and adoption cards; the second card is derived from the first frozen prefix,
+`integration-queue-confirm` obtains separate publish and adoption cards (the adoption card asks "Move <branch> to the verified commit?";
+each action refuses flags it does not take; output follows `--lang`, then config `language`, then LANG); the second card is derived from the first frozen prefix,
 so a later arrival never enters its consent. Capability values are service-issued and never printed as product output. MCP exposes
 only `inspect_delivery_queue`/`list_delivery_queue`; submission, rollback, decision and execution RPC on the MCP channel are refused
 before opening a scope or writer. The SDK runtime client carries inspect/list only; the CLI/Terminal composition installs submission.
-The registered-target `/deliver` flow enqueues; `r` offers current-base preparation after drift or reads last-known queue state.
+The registered-target `/deliver` flow enqueues (no work target: `QUEUE_WORK_TARGET_REQUIRED` names `execution.workTargets`); `r` offers current-base preparation after drift or reads last-known queue state.
 `/runs` detail projects authorized positions, ownership and outcome. Neither view is acceptance authority.
 
 A Git generation ref lives in the target repository's namespace, keyed by the full target ref; its payload binds queue key, instance
@@ -982,10 +986,11 @@ without a batch digest, which the next start also parks from the ledger. Work wh
 present) is physically fenced before its exact adoption/rollback fence lookup. An unattributed publication/move stays reconciling and blocks that target.
 BENIMSEME-DEPO-KIMLIGI: a failed publish/adopt keeps its typed code on the ticket (`reason`, also in its `target-queue` audit event) and is
 reconciled at once; the first item's fence/journal agreement is checked before the generation is written. Reconciliation runs at start
-and periodically from `tick()` (per target, backoff doubling from the batch window up to the lease). When the fenced observation shows the
-branch still at the ticket's base, no fence of this record and the journal intent absent, unsettled or released in this repository
-(`adoptionNotApplied`), the intent is released (receipt in the artifact store) and the ticket parks with a typed reason and next action
-`new-attempt`; release precedes the park and both are idempotent. A settled record, this record's fence or a moved branch never releases.
+and periodically from `tick()` (per target, backoff doubling from the batch window up to the lease). `adoptionNotApplied` decides: a ticket
+with no journal intent was never claimed and so never moved, whatever the tip (QUEUE-SMALL); with an intent, the fenced observation must
+show the branch still at the ticket's base, no fence of this record and the intent unsettled or released in this repository. Then the
+intent (if any) is released (receipt in the artifact store) and the ticket parks with a typed reason and next action
+`new-attempt`; release precedes the park and both are idempotent. A settled record, this record's fence or a moved branch under a recorded intent never releases.
 TTL never proves a writer dead. A failed
 fence leaves an open reconciliation blocker. No historical record is turned into a successful new effect. Native process kill/restart,
 actual terminal-to-effect, hosted CI and N1 load acceptance remain separate evidence gates. Before a live v57/v58 switch, use and verify the
