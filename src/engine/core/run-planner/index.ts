@@ -19,7 +19,9 @@ export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: 
     kinds: order(selections?.kinds ?? registry.kinds.map(row => ({ kind: row.kind, profile: row.profile, type: 'prepared' as const })), row => row.kind),
     workerModels: order(selections?.workerModels ?? [], row => JSON.stringify([row.profile.id, row.profile.version, row.channelId, row.modelId])),
     evaluators: order(registry.evaluators.map(row => ({ id: row.id, version: row.version, parameters: prepareBrainEvaluatorParameters(row) })), row => JSON.stringify([row.id, row.version])),
-    permissions: getPolicyVocabulary().resources, budget, scopePaths: { state: 'not-inspected' } }, limits);
+    // Only stable budget facts enter the prompt: the remaining money moves with every charge (this call's own included), and a retried
+    // plan must resend the byte-identical request; the system caps the ceiling at the remaining money after the call instead.
+    permissions: getPolicyVocabulary().resources, budget: budget && { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits }, scopePaths: { state: 'not-inspected' } }, limits);
   const prompt = prepareBrainPrompt(command, workClasses, context, config, known);
   const bytes = new TextEncoder().encode(JSON.stringify(prompt.messages)).length;
   if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
@@ -50,6 +52,8 @@ export interface BrainPlanPorts {
   text(result: ModelInvocationResult): string | null;
   stoppedAtLength(result: ModelInvocationResult): boolean;
   propose(proposal: RunProposal): Promise<RunProposalResult>;
+  /** The scope's remaining money after the planning call, when observable; null when no budget is readable. */
+  remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
 }
 const assertActive = (signal?: AbortSignal) => { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); };
 /** One model step; no tool loop, retry, Run writer or approval decision. */
@@ -95,8 +99,14 @@ export class BrainPlanApplication {
       throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
     }
     const prompt = prepared.prompt, limit = prompt.summaryChars;
+    // The system, not the model, bounds the declared ceiling: at most the money left after this planning call (live 2026-10-17: a copied
+    // 100 USD limit refused every plan once 12.17 USD was spent). The model's number can only narrow it; the source check enforces that.
+    const left = await this.ports.remainingBudget?.(command.scopeId), asked = draft.budgetCeiling;
+    // Nothing left (zero or less) keeps the model's number, so admission refuses it naming the remaining money: never a zero ceiling.
+    const budgetCeiling = left && left.currency === asked.currency && left.remainingMinorUnits > 0 && left.remainingMinorUnits < asked.limitMinorUnits
+      ? { currency: asked.currency, limitMinorUnits: left.remainingMinorUnits } : asked;
     const proposal: RunProposal = { schemaVersion: 1, commandId: command.commandId, proposalId: runId, scopeId: command.scopeId, runId,
-      proposer, ...draft, source: { kind: 'model', receipt: { commandId: invocation.commandId, invocationId: receipt.claim.invocationId,
+      proposer, ...draft, budgetCeiling, source: { kind: 'model', receipt: { commandId: invocation.commandId, invocationId: receipt.claim.invocationId,
         reference: receipt.request.reference, responseDigest: receipt.outcome.content.digest }, contribution: { schemaVersion: 2, billingAxis: modelInvocationBillingAxis(receipt.profile),
         template: prompt.template, inputDigest: prompt.inputDigest, contextDigest: prompt.contextDigest, outputDigest: brainOutputDigest(draft),
         requestDigest: receipt.request.requestDigest, activationRevision: receipt.activationRevision, bindingDigest: receipt.request.expectedBinding.digest,

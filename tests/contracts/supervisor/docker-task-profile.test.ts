@@ -42,3 +42,11 @@ it.each(['executable', 'workspaceRoot', 'uid', 'gid', 'secret'])('strictly rejec
   const value = profile(); Object.assign(value.parameters, { [field]: field === 'uid' || field === 'gid' ? 1000 : '/host/value' });
   expect(() => validateDockerTaskProfile(value)).toThrow('DOCKER_TASK_PROFILE_INVALID');
 });
+
+it('accepts a local billing declaration and keeps it out of the Docker options; refuses it with a subscription binding or any other value', () => {
+  const value = profile(), local = { ...value, parameters: { ...value.parameters, billingAxis: 'local' } };
+  expect(validateDockerTaskProfile(local)).toBeUndefined();
+  expect(resolveDockerTaskProfile(local).options).not.toHaveProperty('billingAxis');
+  for (const billingAxis of ['metered', 'subscription', null]) expect(() => validateDockerTaskProfile({ ...value, parameters: { ...value.parameters, billingAxis } })).toThrow('DOCKER_TASK_PROFILE_INVALID');
+  expect(() => validateDockerTaskProfile({ ...local, parameters: { ...local.parameters, nativeSubscription: { schemaVersion: 1, provider: 'claude' } } })).toThrow('DOCKER_TASK_PROFILE_INVALID');
+});
