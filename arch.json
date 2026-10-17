@@ -2991,6 +2991,7 @@
     },
     "src/surfaces/core/run-planning": {
       "dependencies": [
+        "src/domain/core/run",
         "src/engine/core/runs",
         "src/platform/core/i18n",
         "src/platform/core/errors",

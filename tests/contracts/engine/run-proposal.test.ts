@@ -127,7 +127,9 @@ it('a verified MCP proposer produces the same durable plan for the authorized hu
   const approval = await f.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: pending.proposal.approval!.approvalId });
   expect(approval!.request.requester).toEqual(input.proposer);
   expect(approval!.request.summary).toContain('business-process'); expect(approval!.request.summary).toContain('business');
-  expect(approval!.request.summary).toContain('task / execute / task'); expect(approval!.request.summary).toContain('$2.00');
+  // The declared task/execute/task is the derived requirement itself: shown as checked, not repeated as advisory.
+  expect(approval!.request.summary).toContain('Checked by policy at admission: task / execute for each of the 1 tasks'); expect(approval!.request.summary).not.toContain('task / execute / task');
+  expect(approval!.request.summary).toContain('$2.00');
   expect(approval!.request.summary).toContain('only at admission');
 });
 it('policy deny seals a denial and never persists an executable proposal or Run', async () => {
@@ -137,6 +139,28 @@ it('policy deny seals a denial and never persists an executable proposal or Run'
 it('registered permissions still pass current policy; deny cannot be bypassed by standing admission', async () => {
   const f = await fixture(); f.state.permissionEffect = 'deny';
   expect((await f.app().propose({ ...proposal, requiredPermissions: [{ kind: 'task', action: 'execute', resourceId: 'task' }] })).proposal).toMatchObject({ status: 'rejected', reason: 'POLICY_DENIED' }); noRun(f);
+});
+it('the proposer list is advisory: invented entries are not evaluated and an ungranted task restriction is not a refusal (live 2026-10-18)', async () => {
+  const f = await fixture(); const policy = await f.source.load();
+  // Only Run create is granted: no task, scope or model-invocation grant (the first-run template grants no task/execute either).
+  f.source.load = async () => ({ ...policy, grants: policy.grants.filter(row => row.id !== 'permission') });
+  const input = { ...proposal, requiredPermissions: [{ kind: 'task', action: 'execute', resourceId: 'task' }, { kind: 'scope', action: 'inspect', resourceId: 'live' },
+    { kind: 'model-invocation', action: 'invoke', resourceId: 'gpt-6.1-sol' }, { kind: 'run', action: 'reserve', resourceId: 'elsewhere' }] };
+  const accepted = await f.app().propose(input);
+  expect(accepted.proposal).toMatchObject({ status: 'accepted', reason: null }); expect(accepted.proposal.binding.requiredPermissions).toEqual(input.requiredPermissions);
+  expect(f.audit.list('s', 0, 10)[0]!.event.subject).toMatchObject({ verdict: { decision: 'allow' } });
+});
+it('the system-derived task restriction is evaluated even when the proposer lists nothing; require-approval still asks', async () => {
+  const f = await fixture(); f.state.permissionEffect = 'deny';
+  expect((await f.app().propose(proposal)).proposal).toMatchObject({ status: 'rejected', reason: 'POLICY_DENIED' }); noRun(f);
+  expect(f.audit.list('s', 0, 10)[0]!.event.subject).toMatchObject({ verdict: { decision: 'deny', reason: 'DENIED', ruleId: 'permission' }, basisDigest: null });
+  const asks = await fixture(); asks.state.permissionEffect = 'require-approval';
+  expect((await asks.app().propose(proposal)).proposal.status).toBe('pending'); noRun(asks);
+});
+it('a plain Run create without a proposal keeps its single create decision (no derived proposal check)', async () => {
+  const f = await fixture(); f.state.permissionEffect = 'deny';
+  const created = await f.runs().create({ schemaVersion: 1, commandId: 'plain', scopeId: 's', runId: 'plain-run', graph: proposal.graph });
+  expect(created.run.runId).toBe('plain-run');
 });
 it.each(['cycle', 'missing-criterion', 'unknown-class', 'unknown-permission', 'no-class'] as const)('retains a typed %s rejection and never admits a Run', async failure => {
   const f = await fixture(); let input: RunProposal = proposal;

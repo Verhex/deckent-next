@@ -1,4 +1,4 @@
-import type { PolicyDecision } from '#domain/index.js';
+import { advisoryProposalPermissions, type PolicyDecision } from '#domain/index.js';
 import { currencyAmountText, redactForRecord, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import type { RunCreate } from './store.js';
@@ -14,7 +14,8 @@ const field = (raw: string, max: number, known?: KnownSecretSnapshot): string =>
 /** One producer renderer for all approval observers; derived only from the input and basis the authority decision seals. */
 export function renderRunCreateApprovalSummary(command: BoundRunAdmission, create: RunCreate, verdict: PolicyDecision,
   locale: Locale = 'en', known?: KnownSecretSnapshot): string {
-  const tasks = create.graph.tasks, permissions = command.proposal?.requiredPermissions;
+  // A proposal's checked set is system-derived from the graph; its own list is advisory only (live 2026-10-18) and shown as such.
+  const tasks = create.graph.tasks, permissions = command.proposal ? advisoryProposalPermissions(command.proposal.requiredPermissions, command.graph) : undefined;
   const unknown = t('approval.plan.undeclared', {}, locale);
   const taskRows = tasks.slice(0, limits.taskRows).map(task => t('approval.plan.task', {
     title: field(task.workInput?.title ?? task.workInput?.task ?? task.id, limits.titleChars, known),
@@ -25,6 +26,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     kind: field(permission.kind, limits.permissionKindChars, known), action: field(permission.action, limits.permissionActionChars, known), resource: field(permission.resourceId, limits.permissionResourceChars, known),
   }, locale));
   const ceiling = command.proposal?.budgetCeiling;
+  const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale)] : [];
   const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale), t('approval.plan.authorityNotice', {}, locale),
     t('approval.plan.budget', { ceiling: ceiling ? currencyAmountText(ceiling.limitMinorUnits, ceiling.currency, locale) : unknown }, locale),
     command.proposal?.admission?.budgetSemantics === 'not-metered' ? t('proposal.budget.notMetered', {}, locale) : t('approval.plan.budgetNotice', {}, locale),
@@ -33,7 +35,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     t('approval.plan.run', { run: field(command.runId, limits.runChars, known) }, locale)];
   const render = () => [t('approval.plan.tasks', { count: tasks.length }, locale), ...taskRows,
     ...(tasks.length > taskRows.length ? [t('approval.plan.moreTasks', { count: tasks.length - taskRows.length }, locale)] : []),
-    footer[0]!, ...permissionRows,
+    ...checked, footer[0]!, ...permissionRows,
     ...(permissions && permissions.length > permissionRows.length ? [t('approval.plan.morePermissions', { count: permissions.length - permissionRows.length }, locale)] : []),
     ...footer.slice(1)].join('\n');
   // Preserve the budget/decision and explicit omitted counts even with unusually long catalog text. Task titles are
