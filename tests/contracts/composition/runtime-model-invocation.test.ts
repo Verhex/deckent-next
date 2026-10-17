@@ -447,7 +447,7 @@ it.skipIf(process.platform !== 'linux')('rejects an MCP cancellation before effe
   const normalTransport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
   const normalClient = new Client({ name: 'runtime-model-invocation-normal-cancellation-proof', version: '1' });
   try {
-    await within(normalClient.connect(normalTransport), 'MCP_NORMAL_CANCELLATION_CONNECT_TIMEOUT');
+    await within(normalClient.connect(normalTransport), 'MCP_NORMAL_CANCELLATION_CONNECT_TIMEOUT', 10_000); // a cold MCP server process start, bounded like the compiled CLI above
     const recorded = await within(normalClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }),
       'MCP_NORMAL_CANCELLATION_TIMEOUT');
     expect(recorded.isError).not.toBe(true);
