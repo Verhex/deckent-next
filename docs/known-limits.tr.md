@@ -62,7 +62,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   Arşiv tespiti her biçimin en hoşgörülü yaygın açıcısını izler (dosya sonuna yakın bir zip bitiş kaydı, ofsetleri ne derse desin;
   ayrılmış bayrak bitli gzip; işaretli tar sağlama toplamı), ama kapsayıcı başlığı olmayan sıkıştırılmış ya da kodlanmış veri (ham
   deflate, zlib, brotli, LZMA-alone, lz4, özel bir kodlama) makine kodundan ayırt edilemez: ikili dosyanın özet istisnası içinde geçer
-  ve işçi onu bilinen bir ofsetten açabilir (örneğin Node'un kendi zlib'iyle). Kalıp
+  ve işçi onu bilinen bir ofsetten açabilir (örneğin Node'un kendi zlib'iyle). `maxFileBytes` sınırında ya da altındaki yerel ikili dosya bütün okunur ve arşiv yalnız dosyanın başında tanınır; böyle bir dosyanın ilerisine gömülü arşiv geçer (kapatmak esbuild gibi yaygın bağımlılık dosyalarını reddettirir; beta sürecinde her ofsetin taranmasına ve kilit dosyasına sabitlenmiş özet istisnalarına geçilir). Kalıp
   sonuçları dosya içeriğine göre ürünün `state/tree-scan-cache` alanında saklanır; değişen kilit dosyası (lockfile) ya da
   sürüm baştan başlatır, imzasız önbellek yalnız hangi istisnaların listelendiğini değiştirebilir, hiçbir kararı değiştiremez.
   Ağaç ana makinede taranır ve canlı, salt okunur bağlanır: taramadan sonra ana

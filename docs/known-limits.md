@@ -63,7 +63,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   Archive detection follows each container's most lenient common extractor (a zip end record near the file's end whatever its
   offsets, gzip with reserved flag bits, a signed tar checksum), but compressed or encoded data without a container header (raw
   deflate, zlib, brotli, LZMA-alone, lz4, a custom encoding) cannot be told apart from machine code: it passes inside the
-  binary's digest exception, and a worker can decompress it at a known offset (for example with Node's own zlib). Pattern results are cached per file content under the product's `state/tree-scan-cache`; a changed lockfile
+  binary's digest exception, and a worker can decompress it at a known offset (for example with Node's own zlib). A native binary at or below `maxFileBytes` is read whole and an archive is recognised only at its start, so an archive embedded later in such a binary passes (closing it would refuse common dependency binaries such as esbuild; during beta this moves to scanning every offset with lockfile-pinned digest exceptions). Pattern results are cached per file content under the product's `state/tree-scan-cache`; a changed lockfile
   or release starts over, and the unsigned cache can change only which exceptions are listed, never a decision.
   The tree is scanned on the host and bound live, read-only: a change made on
   the host after the scan reaches the worker unscanned (as for any bind).
