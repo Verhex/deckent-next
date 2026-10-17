@@ -8,7 +8,7 @@ import { DECKENT_DIR, resolveLocale, t } from '#platform/index.js';
 import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
 export { BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
-import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, ancestorPins, type BubblewrapView } from './arguments.js';
+import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_ARGUMENT_MAX_BYTES, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, bubblewrapArgumentsOverBound, ancestorPins, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
 /** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
@@ -44,9 +44,13 @@ const MAX_DEPTH = 32;
 /** PATH entries under these prefixes are never bound: drives and mounts (WSL `/mnt/c`), sockets, devices, kernel views. */
 const NEVER_BOUND_PREFIXES = ['/mnt', '/media', '/run', '/dev', '/proc', '/sys', '/var'];
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+/** SANDBOX-SPAWN (2026-10-18): a read-only path inside another adds nothing (`--ro-bind` is recursive; read-only paths mount after every writable one), so
+ * only the outermost is bound; deny masks inside stay. Before, a floored tree cost a mount per file (13 430 on the owner's checkout, over ARG_MAX). */
+const outermost = (paths: ReadonlySet<string>): string[] => [...paths].filter(path => { for (let up = dirname(path); up !== dirname(up); up = dirname(up)) if (paths.has(up)) return false; return true; });
 
 export interface BubblewrapOptions {
   readonly maxEntries?: number;
+  readonly maxArgumentBytes?: number; // default BUBBLEWRAP_ARGUMENT_MAX_BYTES; tests lower it
   /** The reads used per directory (default: synchronous on a local file system, asynchronous otherwise — `fsOpsFor`); tests inject one. */
   readonly fsOps?: (path: string) => FsOps;
 }
@@ -367,7 +371,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     const over = overMasks(); if (over) return { ok: false, reason: over };
     if (openView) {
       const view: BubblewrapView = Object.freeze({ projectRoot: root, open: { sealed: seal.sealed, hidden: seal.hidden }, scratchDir, home: homeDir, systemPaths: [], toolchainPaths: [],
-        readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
+        readOnlyPaths: outermost(readOnly), ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
       const refusedPins = await canPinAncestors(view);
       return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
     }
@@ -377,7 +381,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
     // Astra 2486 P1: an overlay keeps the in-project sealed roots inside the write set (a read-only host bind over it would hide `.deckent/docs`
     // from the overlay); its entries there are decided after the call (`sealedEntryRefused`), the product state stays masked or read-only.
-    ...(seal?.ok ? { sealedPaths: overlay ? seal.sealed.filter(path => !nested(path, root) && path !== root) : seal.sealed, hiddenPaths: seal.hidden } : {}), toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
+    ...(seal?.ok ? { sealedPaths: overlay ? seal.sealed.filter(path => !nested(path, root) && path !== root) : seal.sealed, hiddenPaths: seal.hidden } : {}), toolchainPaths, readOnlyPaths: outermost(readOnly), ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
   // R7 follow-up: a closed view with a writable project pins the in-project ancestors of its masks and read-only paths too.
   const refusedPins = await canPinAncestors(view);
   return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
@@ -399,7 +403,9 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${'code' in view && view.code ? `${view.code}: ` : ''}${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
     }
-    const prefix = bubblewrapArguments(view.view);
+    const prefix = bubblewrapArguments(view.view), tooLarge = bubblewrapArgumentsOverBound(prefix, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES);
+    if (tooLarge) return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${tooLarge}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
+      durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
     return runShellProcess({ file: bwrap, args: command => [...prefix, '--', BASH_LAUNCH.file, ...BASH_LAUNCH.args(command)] }, request);
   } });
   return Object.freeze({ kind: 'bubblewrap',
@@ -424,7 +430,9 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
         // K4: the profile's HOME replaces the empty one at the same path (no HOME to replace: refused, never a server with the user's HOME).
         if (profile && !view.view.home) return { ok: false as const, reason: 'no HOME to give the server its own' };
         const shaped = profile ? { ...view.view, homeBind: profile.home, ...(profile.network ? { network: true, networkFiles: resolverFiles() } : {}) } : view.view;
-        return { ok: true as const, file: binary.path, args: bubblewrapArguments(shaped), view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null, profile) };
+        const args = bubblewrapArguments(shaped), tooLarge = bubblewrapArgumentsOverBound(args, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES);
+        if (tooLarge) return { ok: false as const, reason: tooLarge };
+        return { ok: true as const, file: binary.path, args, view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null, profile) };
       };
       // SHELL-OVERLAY × BWRAP-SELECT: write sets are offered exactly when the selected launcher's measured version has the overlay options
       // (`launcher.overlay`, ≥ 0.11.0: the bundled 0.13 always, a system ≥ 0.12 too); otherwise a write-set request is refused (nothing runs).

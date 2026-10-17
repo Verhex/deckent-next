@@ -6,7 +6,9 @@ import type { ToolchainCurrencyReport } from '#engine/index.js';
 /** One realm resolution as doctor shows it (the adapter's `ShellRealmReport` shape; surfaces keep their own view). */
 interface ShellRealmSelection { readonly selected: string | null; readonly marker: string | null; readonly notice: string | null; readonly code: string | null;
   readonly rejected: readonly { readonly kind: string; readonly reason: string }[] }
-export interface ShellRealmDoctorView extends ShellRealmSelection { readonly mode: string; readonly preferSandbox: ShellRealmSelection | null }
+export interface ShellRealmDoctorView extends ShellRealmSelection { readonly mode: string; readonly preferSandbox: ShellRealmSelection | null;
+  /** SANDBOX-SPAWN (2026-10-18): one real command through the selected sandbox with a turn's own layout (absent from an older service). */
+  readonly selfTest?: { readonly status: 'ok' | 'failed' | 'not-run'; readonly detail: string | null; readonly durationMs: number | null } }
 /** The worker image refresh status as doctor shows it (WORKER-AUTO-REFRESH). */
 export interface ImageRefreshDoctorView { readonly status: string; readonly reason: string | null; readonly imageVersion: string | null }
 /** Doctor's installation binding view: strength and source kind only, never a machine value, digest or configured path. */
@@ -59,6 +61,14 @@ function shellRealmLines(report: ShellRealmDoctorView): string[] {
   return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, 'sandbox-net (MCP default: network, own HOME)') : [])];
 }
 
+/** SANDBOX-SPAWN (2026-10-18): the sandbox self-test in the owner's words — a failure names its reason once, here, instead of every call failing silently. */
+function shellSelfTestLines(report: ShellRealmDoctorView, locale: Locale): string[] {
+  const test = report.selfTest;
+  if (!test || test.status === 'not-run') return [];
+  return [test.status === 'ok' ? t('doctor.sandboxSelfTest.ok', { ms: test.durationMs ?? '-' }, locale)
+    : t('doctor.sandboxSelfTest.failed', { detail: test.detail ?? '-' }, locale)];
+}
+
 /** SECRET-AT-REST transparency (owner 2026-10-08): who can read the keys in each Core backend, in plain words; another backend has its own. */
 function secretStoreCustodyLine(backend: string, locale: Locale): readonly string[] {
   if (backend === 'core.secret-store.env@1') return [t('doctor.secretStore.custody.env', {}, locale)];
@@ -102,5 +112,5 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
     model: `${finding.reference.providerId}@${finding.reference.providerVersion}/${finding.reference.modelId}@${finding.reference.modelVersion}`,
     scope: finding.scopeId, surface: finding.surface, required: finding.requiredBytes, available: finding.availableBytes,
     setting: finding.surface === 'mcp' ? t('doctor.modelInvocationDelivery.config.mcp', {}, locale) : t('doctor.modelInvocationDelivery.config.runtime-service', {}, locale) }, locale)),
-  ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n');
+  ...(result.shellRealm ? shellRealmLines(result.shellRealm) : []), ...(result.shellRealm ? shellSelfTestLines(result.shellRealm, locale) : [])].join('\n');
 }

@@ -609,6 +609,8 @@
   "doctor.imageRefresh": "Worker image: {status}",
   "doctor.imageRefresh.updating": "being updated in the background; Runs use the current image",
   "doctor.imageRefresh.failed": "refresh failed ({reason}); the previous image stays in use",
+  "doctor.sandboxSelfTest.ok": "sandbox self-test: ok (a command ran in this project's real sandbox view; {ms} ms from start to exit, view preparation not counted)",
+  "doctor.sandboxSelfTest.failed": "sandbox self-test FAILED: {detail}. Shell calls that need no approval cannot run in this project until it passes (approved calls are not affected); nothing falls back to the host shell.",
   "doctor.imageRefresh.current": "current ({version})",
   "cli.runtime.toolchainsFailed": "Toolchain currency report failed at startup (advisory; service unaffected).",
   "cli.runtime.recovery": "Cancellation recovery examined {count} records.",

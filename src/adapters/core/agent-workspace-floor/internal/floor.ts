@@ -1,10 +1,12 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { globalStateRoot, productResourcePath, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
-import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
+import { createGlobMatcher, createWorkspaceScope, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { MCP_PROJECT_REGISTRY_PATH } from '#adapters/core/mcp-client/index.js';
+import { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { agentTurnWriteFloor, isSelfSourceProject } from './self-source.js';
 
 /**
  * The only product resources the agent tools may read (TERM-FEEDBACK-1): the installation's configuration, which the model is told
@@ -104,4 +106,18 @@ export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel:
 export function agentDataRootRel(projectRoot: string, layout: ProductLayout): string | undefined {
   const rel = relative(projectRoot, layout.root);
   return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? undefined : rel.split(sep).join('/');
+}
+/** SANDBOX-SPAWN (2026-10-18): a turn's shell sandbox layout — one derivation for the turn and doctor's self-test, so doctor runs the view a call gets. */
+export function agentShellSandboxLayout(projectRoot: string, layout: ProductLayout, scope: WorkspaceScope, writeFloor: (rel: string) => boolean, fullAccess: boolean, scratchDir: string | null,
+  env: Readonly<Record<string, string | undefined>>): ShellSandboxLayout & { readonly hardFloor: NonNullable<ShellSandboxLayout['hardFloor']> } {
+  const dataRoot = agentDataRootRel(projectRoot, layout);
+  return { project: scope, scratchDir, writeFloor, ...(dataRoot ? { dataRoot } : {}), ...(fullAccess ? { repositoryWritable: true } : {}), hardFloor: agentShellHardFloor(projectRoot, layout, [env, process.env]) };
+}
+/** Doctor's realm report and sandbox self-test with a standart turn's own layout (no scratch area); the test runs only once every state root exists (the view creates missing ones; doctor writes nothing). */
+export async function inspectAgentShellRealm(input: { readonly mode: ShellRealmReport['mode']; readonly stateDir: string | null; readonly projectRoot: string; readonly layout: ProductLayout;
+  readonly env: Readonly<Record<string, string | undefined>> }): Promise<ShellRealmReport> {
+  const { projectRoot, layout, env } = input, scope = await createWorkspaceScope(projectRoot, agentWorkspaceDeny(projectRoot, layout, false));
+  const writeFloor = agentTurnWriteFloor(agentAuthorityPaths(projectRoot, layout), false, await isSelfSourceProject(projectRoot));
+  const sandbox = agentShellSandboxLayout(projectRoot, layout, scope, writeFloor, false, null, env);
+  return inspectShellRealmSelection({ mode: input.mode, stateDir: input.stateDir, project: scope, sandboxes: shippedShellSandboxes(sandbox), ...(sandbox.hardFloor.roots.every(root => existsSync(root)) ? { selfTest: { environment: env } } : {}) });
 }

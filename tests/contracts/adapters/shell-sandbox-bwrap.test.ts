@@ -379,3 +379,17 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     expect(existsSync(join(f.project, 'must-not-exist'))).toBe(false);
   });
 });
+
+describe.skipIf(!sandboxReady)('bubblewrap argument bound with the real bwrap (SANDBOX-SPAWN 2026-10-18)', () => {
+  it('refuses a view whose arguments exceed their bound by name, instead of an errno-less spawn failure (SANDBOX-SPAWN 2026-10-18)', async () => {
+    const f = await fixture();
+    // A long-lived launch needs the write floor's matcher (fail closed); the fixture's layout gets an empty one.
+    const usable = bubblewrapShellSandbox({ ...f.layout, writeFloor: () => false }, { maxArgumentBytes: 512 }).usable(capabilities);
+    if (!usable.ok) throw new Error(usable.reason);
+    const result = await usable.realm.run({ command: 'echo ran > must-not-exist', cwd: f.scope.root, environment: f.environment });
+    expect(result).toMatchObject({ status: 'spawn-failed', output: expect.stringMatching(/^\[deckent\] sandbox: SANDBOX_VIEW_TOO_LARGE: \d+ mounts need \d+ bytes of arguments, over the bound of 512 .*; nothing was run\.$/u) });
+    expect(existsSync(join(f.project, 'must-not-exist'))).toBe(false);
+    const launched = await usable.launch!(f.environment);
+    expect(launched).toMatchObject({ ok: false, reason: expect.stringContaining('SANDBOX_VIEW_TOO_LARGE') });
+  });
+});
