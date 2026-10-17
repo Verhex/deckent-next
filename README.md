@@ -279,7 +279,7 @@ policy revision and the runtime service identity, so a change of either in betwe
    The window then asks `Adopt commit <commit> into a branch? This moves the branch and needs its own y.` and ends with
    `Adopted: refs/heads/deckent/first-job <from> → <to>`. Your checkout, index and working files are unchanged; look at
    the result with `git log deckent/first-job` and merge it yourself.
-9. **Inspect or undo queued adoption** (source candidate; native acceptance pending). A registered integration target uses
+9. **Inspect or undo queued adoption** (in live use since 1.0.0-alpha.43; beta acceptance pending). A registered integration target uses
    the service queue. `/deliver` prepares on the current base; after a base/target refusal, `r` offers re-preparation.
    Inspect last-known state with `r`; publish and adopt each show their exact frozen batch and ask a separate `y/N`.
    `/runs` details show authorized scope position, responsibility and outcome. Main/default/protected/checked-out/foreign
@@ -296,7 +296,7 @@ policy revision and the runtime service identity, so a change of either in betwe
    The rollback card covers one settled item. A failure stops the batch suffix and keeps the adopted prefix; unknown effects
    hold that target for reconciliation. Legacy direct integration commands keep historical receipts, but cannot write through
    an activated queue generation. Queue bounds/TTL come from `targetQueue`; a verification profile and policy are required.
-   This source candidate is not evidence of packaged, hosted, live, platform or N1 load acceptance.
+   The queue has been in live use since 1.0.0-alpha.43 and has settled real deliveries; that is not evidence of packaged, hosted, platform or N1 load acceptance, which the beta acceptance still has to show.
 
    ```text
    Source <source> · affected files match base · proposal <proposal>

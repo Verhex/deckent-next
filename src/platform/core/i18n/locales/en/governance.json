@@ -397,6 +397,7 @@
   "error.WORKSPACE_ALLOCATION_INCOMPLETE": "Workspace allocation is incomplete; execution cannot continue.",
   "error.WORKSPACE_GIT_FAILED": "The Git workspace operation failed.",
   "error.LOCAL_RUNTIME_UNSUPPORTED": "This local runtime transport currently requires Linux.",
+  "error.LOCAL_RUNTIME_NATIVE_UNAVAILABLE": "The local runtime's native component could not be loaded or the filesystem lacks an operation it needs, although this is Linux. Rebuild it with `npm run build` or check the filesystem; the cause is attached.",
   "error.LOCAL_RUNTIME_OPTIONS": "The local runtime connection settings are invalid.",
   "error.INFERENCE_METRICS_UNREAD": "Inference metrics were not read ({reason}) at {url}. Deckent does not start the server.",
   "error.RUNTIME_SHUTDOWN_UNAVAILABLE": "This runtime service has no configured identity, so it cannot be stopped through governed shutdown. On a first-run installation, deckent init policy --scope <id> --upgrade --preview (then --apply) sets service.identity and your shutdown grant; otherwise set service.identity ({scopeId, serviceId}) and grant shutdown on that service in policy. A running service reads it only at its next start: stop it once by hand (Ctrl+C on deckent runtime serve; a terminal-started service also stops after its idle time).",

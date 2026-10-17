@@ -8,7 +8,7 @@ ile yürütmeyi birleştirir: kişi, model veya araç iş önerir; yetki politik
 Açık Core Apache-2.0 lisanslıdır ve tek başına çalışabilir. Tescilli Enterprise paketleri,
 Core'un herkese açık sözleşmelerini genişletecek biçimde tasarlanır ve ayrı dağıtılır.
 
-Bu rehber, 2026-10-15 tarihindeki kaynak mimarisini açıklar; paket `1.0.0-alpha.39`.
+Bu rehber, 2026-10-15 tarihindeki kaynak mimarisini açıklar; paket `1.0.0-alpha.45`.
 Mekanizmaları ve sınırları anlatır; kurulu/canlı kabulü, güvenlik sertifikası veya
 kapasite ölçümü değildir. [ARCHITECTURE.md](../ARCHITECTURE.md)
 ayrıntılı sözleşmeleri, uygulama notlarını ve kabul edilmiş gelecek yönünü içerir;

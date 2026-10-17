@@ -37,7 +37,7 @@ etkinleştirmez. Aynı rapor MCP `inspect_toolchain_currency` aracı ve SDK
 `inspectToolchainCurrency` fonksiyonuyla alınabilir.
 
 `deckent toolchains update [--apply]`, eski sürüm raporundan bir sonraki worker image sürümünü
-hazırlar. `toolchains.update.mode` değerleri `off | propose | auto`, varsayılan `propose`'dur.
+hazırlar. `toolchains.update.mode` değerleri `off | propose | auto`, varsayılan `auto`'dur.
 Tipli plan `<data root>/workspaces/toolchains/plans/` altına yazılır. `auto` ya da `--apply` ile paketli
 builder `workspaces/toolchains/builds/<version>/` altına kopyalanır ve sınırlı sürede derlenir;
 makbuzundan uygulanmamış (`not-applied`) profil revizyon önerisi (`proposals/<version>.json`) oluşur.

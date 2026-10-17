@@ -34,7 +34,7 @@ is reported `unsupported`. The report never updates, rebuilds or activates a wor
 the MCP tool `inspect_toolchain_currency` and the SDK function `inspectToolchainCurrency`.
 
 `deckent toolchains update [--apply]` turns a stale report into the next worker image version under
-`toolchains.update.mode` (`off | propose | auto`, default `propose`): a typed plan is written under
+`toolchains.update.mode` (`off | propose | auto`, default `auto`): a typed plan is written under
 `<data root>/workspaces/toolchains/plans/`; with `auto` or `--apply` the shipped builder is copied into
 `workspaces/toolchains/builds/<version>/`, built with a bounded timeout, and its receipt produces a
 `not-applied` profile-revision proposal (`proposals/<version>.json`). Installed config is never rewritten;

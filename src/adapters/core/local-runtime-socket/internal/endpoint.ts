@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, realpath, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, normalize, resolve } from 'node:path';
 
-export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_OPTIONS'
+export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_NATIVE_UNAVAILABLE' | 'LOCAL_RUNTIME_OPTIONS'
   | 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG' | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
 export class LocalRuntimeSocketError extends Error {
   constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string) {

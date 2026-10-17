@@ -530,7 +530,7 @@ profile revision, in-flight Runs keep their imageId) and API capability snapshot
 
 ### Worker toolchain update policy — owner 2026-09-22 (propose/auto slice implemented)
 
-`toolchains.update` is policy data: `mode off | propose | auto` (default propose), `buildTimeoutMs`, `outputBytes`, `atStartup`.
+`toolchains.update` is policy data: `mode off | propose | auto` (default auto), `buildTimeoutMs`, `outputBytes`, `atStartup`.
 `toolchains update [--apply]` (CLI), `update_toolchains` (MCP) and `updateToolchains` (SDK) run the currency report and, when an
 npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
 under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; landed, `97590485`): the packaged lineage is reconciled
