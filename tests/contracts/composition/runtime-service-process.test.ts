@@ -132,9 +132,16 @@ it.skipIf(!imageId || process.platform !== 'linux')('keeps execution across clie
     expect((await exec('/usr/bin/docker', ['--host', endpoint, 'inspect', '--format', '{{.State.Running}}', handle])).stdout.trim()).toBe('true');
 
     await requestRunCancellation(project, { schemaVersion: 1, commandId: 'cancel', action: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 }, options);
-    const changed = structuredClone(baseConfig) as Record<string, unknown>; delete changed.execution;
+    // The restarted service must stop clean. Its stop awaits a reconciliation page already admitted (by design; abortableRuntimeWait), which
+    // takes ~100-300 ms on a loaded runner: the first instance's 50 ms grace (chosen to force the incomplete exit above) made a clean stop a
+    // race against the poll (PR #97 hosted node 24: "stopped incomplete, recoveryPending"). A grace well below the 15 s bound keeps a stuck
+    // page a failure (exit 1, stderr below) without racing an ordinary one.
+    const changed = structuredClone(baseConfig) as Record<string, unknown> & { service: Record<string, unknown> }; delete changed.execution;
+    changed.service.shutdownGraceMs = 5_000;
     await writeFile(configPath, JSON.stringify(changed)); clearConfigCache();
     service = startCli(cli, project, env, ['runtime', 'serve', '--json']);
+    let restartedErr = ''; service.stderr.on('data', chunk => { restartedErr += String(chunk); });
+    let restartedOut = ''; service.stdout.on('data', chunk => { restartedOut += String(chunk); });
     await bounded(waitForJson(service, value => value.event === 'ready'), service, 'RESTART_READY_TIMEOUT');
     await poll(async () => {
       const value = (await exec('/usr/bin/docker', ['--host', endpoint!, 'inspect', '--format', '{{.State.Running}}', handle!])).stdout.trim();
@@ -162,7 +169,8 @@ it.skipIf(!imageId || process.platform !== 'linux')('keeps execution across clie
     }, 'CANCELLATION_DELIVERY_FINALIZATION_TIMEOUT');
     expect(delivery).toMatchObject({ identity, state: 'terminal' });
     const restartedClosed = childClosed(service); service.kill('SIGTERM');
-    expect(await bounded(restartedClosed, service, 'SERVICE_CLEAN_EXIT_TIMEOUT')).toBe(0);
+    expect(await bounded(restartedClosed, service, 'SERVICE_CLEAN_EXIT_TIMEOUT'), `stderr:\n${restartedErr}\nstdout:\n${restartedOut}`).toBe(0);
+    expect(restartedOut).toContain('"event":"stopped","state":"clean"');
   } finally {
     for (const child of [execution, service]) if (child && child.exitCode === null && child.signalCode === null) {
       const closing = childClosed(child); child.kill('SIGKILL'); await closing.catch(() => null);
