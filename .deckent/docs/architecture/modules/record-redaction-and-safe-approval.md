@@ -73,8 +73,11 @@ in it can reach the model provider through the worker's one egress. The terminal
   journal and the Run card); archives stay `unscannable` (liftable only by `allowPatternPaths`), decided before and never by a pattern
   result or a cache entry (Astra 2626 F1), and an oversized native header that is also an archive signature stays `incomplete`, as does
   an oversized native body holding an archive start or end anywhere (engine `embeddedArchive`: zip local/central/end records, gzip
-  members, xz, 7z, rar, bzip2, zstd, ustar), each judged by the structure its extractor enforces (zip method and offsets, gzip flags and a
-  deflate stream that yields output, xz header CRC, tar checksum) so chance signatures in machine code do not count. A file above `maxFileBytes` (size and
+  members, xz, 7z, rar, bzip2, zstd, ustar), each judged by the structure its most lenient common extractor enforces (zip method and
+  offsets, but an end record in the last 65,558 bytes whatever its offsets because Python zipfile re-bases them; gzip method 8 and a
+  deflate stream that yields output, reserved flags ignored as Python's gzip does; xz header CRC; tar checksum unsigned or signed as GNU tar
+  accepts) so chance signatures in machine code do not count. Compressed data without a container header (raw deflate, zlib, brotli,
+  LZMA-alone, lz4) cannot be told from machine code and is a documented residual (`docs/known-limits.md`). A file above `maxFileBytes` (size and
   `maxTotalBytes` checked before any read) is never allocated whole: its 1 KiB header is read first and only a native signature with a
   NUL-bearing header (ELF, Mach-O, PE, wasm; engine data `dependency-binaries.json`) is read further, in 1 MiB windows that are hashed and
   checked for configured values (carrying the bytes that may begin one), with the deadline checked per window; it is recorded as

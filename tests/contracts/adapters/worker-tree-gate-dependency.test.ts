@@ -159,6 +159,27 @@ describe('parser parity for a native-claimed file in the class (polyglot: native
     const machine = elf(); chance.forEach((row, index) => row.copy(machine, (5 + index) * edge + 64 * index));
     expect(await scanWorkerTree(declared(await tree(dependencies(machine))), options())).toMatchObject({ status: 'clean', excluded: [{ rule: `native-binary:elf:sha256=${sha256(machine)}` }, { path: `node_modules/${ZOD_TEST}` }] });
   });
+  it('an archive the most lenient real extractor reads stays unclassifiable, whatever field a stricter reader rejects (embedded-archive parser differential)', async () => {
+    const bound = { status: 'incomplete', limit: 'file-bytes', observed: BINARY_BYTES, bound: DEFAULT_FILE_BYTES }, text = 'neutral compressed payload '.repeat(40);
+    // Python zipfile takes the end record it finds in the last 64 KiB, re-bases every stated offset from it (either sign) and the method from
+    // the central entry: offsets shifted past their records and an unknown local method fail every offset and method rule, yet it extracts.
+    const plain = Buffer.from(text), data = deflateRawSync(plain), file = Buffer.from('payload.json'), shift = 0x4000_0000, block = (size: number) => Buffer.alloc(size);
+    const local = block(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(0xffff, 8); local.writeUInt32LE(data.length, 18); local.writeUInt16LE(file.length, 26);
+    const central = block(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(8, 10); central.writeUInt32LE(crc32(plain), 16); central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(plain.length, 24); central.writeUInt16LE(file.length, 28); central.writeUInt32LE(shift, 42);
+    const end = block(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(46 + file.length, 12); end.writeUInt32LE(30 + file.length + data.length + shift, 16);
+    const shifted = Buffer.concat([local, file, data, central, file, end]);
+    // Python gzip ignores the reserved flag bits GNU gzip and zlib refuse; GNU tar accepts the signed-char header sum when the unsigned one differs.
+    const reserved = gzipSync(plain); reserved[3]! |= 0xe0;
+    const header = block(512); header.write('payload\xff\xfe.txt', 0, 'latin1'); header.write('0000644\0', 100); header.write('00000000020\0', 124); header[156] = 0x30; header.write('ustar\0' + '00', 257);
+    let signed = 0; for (let index = 0; index < 512; index++) signed += index >= 148 && index < 156 ? 32 : (header[index]! << 24) >> 24;
+    header.write(`${signed.toString(8).padStart(6, '0')}\0 `, 148, 'latin1');
+    const tar = Buffer.concat([header, Buffer.from('neutral tar payload\n'.padEnd(512, '\0'))]), into = (bytes: Buffer, offset: number) => { const body = elf(); bytes.copy(body, offset); return body; };
+    const rows = [['a zip with shifted offsets and an unknown local method appended at the end', into(shifted, BINARY_BYTES - shifted.length)],
+      ['a gzip member with reserved flag bits mid-body', into(reserved, 9 * edge + 41)], ['a ustar header with a signed checksum mid-body', into(tar, 17 * edge + 5)]] as const;
+    const seen: Record<string, unknown> = {}; for (const [name, bytes] of rows) seen[name] = await scanWorkerTree(declared(await tree(dependencies(bytes))), options());
+    expect(seen).toEqual(Object.fromEntries(rows.map(([name]) => [name, bound])));
+  });
   it('a deny-listed name refuses before any read; third-party pattern text in the body is listed as an exception', async () => {
     expect(await scanWorkerTree(declared(await tree({ ...dependencies(), 'pkg/.env': elf() })), options())).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/pkg/.env', rule: 'deny-path:**/.env' }] });
     const polyglot = place(Buffer.from(` ${USERINFO} `), 2 * edge + 3), scan = await scanWorkerTree(declared(await tree(dependencies(polyglot))), options());
