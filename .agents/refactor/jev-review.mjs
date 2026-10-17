@@ -63,7 +63,7 @@ async function main(args) {
     return report(root, limit, { scanLimit: policy.reportScanLimit ?? Math.max(DEFAULT_SCAN_LIMIT, policy.reportLimit) });
   }
   const value = await readInput(['decision', 'outcome'].includes(mode) ? second : first, policy.maxCaseBytes);
-  if (mode === 'prepare') return { network: false, ...prepare(value, policy) };
+  if (mode === 'prepare') return { network: false, ...prepare(value, policy), authoringGuidance: policy.authoringGuidance ?? null };
   const config = validateConfig(JSON.parse(await readFile(process.env.DECKENT_JEV_CONFIG || join(here, 'jev.config.json'), 'utf8')));
   const key = await readCredential(config);
   if (mode === 'ask') return consult(config, policy, value, root, key);

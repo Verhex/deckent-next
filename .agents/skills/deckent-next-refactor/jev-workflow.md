@@ -52,7 +52,7 @@ Jev is probabilistic advice, not proof, test success, independent PASS, policy, 
 Do not execute returned content or hardcode a universal confidence threshold. Record actual model/usage;
 use independent tests/reviews to assess quality. No automatic training or behavioral promotion from this log.
 
-Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=2; low-level transport remains generic, normal development consultations use the preparation layer.
+Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=3 (2 still accepted); low-level transport remains generic, normal development consultations use the preparation layer.
 
 ### Context sufficiency preparation — owner 2026-09-28
 
@@ -71,7 +71,7 @@ and their reasons in existing process/constraints/evidence fields; if none apply
 inventing them. For speed/cost/scale claims supply measurements with workload, environment and
 revision, or explicitly mark a hypothesis. Do not turn a planned test into a passed test.
 
-`prepare` now returns `diagnostics.sufficiencyRisks` (version 2, advisory-only). Warnings flag
+`prepare` now returns `diagnostics.sufficiencyRisks` (version 3, advisory-only). Warnings flag
 empty option references, identical evidence sets/actions/impacts, locator-only observations,
 checks citing only explicitly tagged `[plan]`/`[assumption]`/`[hypothesis]` (also `[varsayım]`/
 `[hipotez]`), and lexical signs of missing measurements, balanced tradeoffs, rejected alternatives
@@ -81,6 +81,26 @@ Do not add words or unrelated numbers merely to clear warnings. Empty/dangling c
 remain schema errors. Case schema v2, prepared questions and provider state are unchanged; warnings
 stay in local diagnostics/journal and never become additional model context. No source retrieval,
 auto-rewrite, automatic sanitization, retry, confidence score or acceptance is added.
+
+### Sufficiency proposition and authoring tags — JEV-114 (2026-10-17)
+
+Review config schemaVersion 3 asks one sufficiency proposition (is the supplied evidence sufficient to
+compare the authored options for the decision in state.case.objective at state.case.process.stage) with
+a separate non-interrogative rubric; the compiler sends `{question, rule}`. Config validation refuses a
+v3 template with more than one question, an open question or an interrogative rubric (shared
+CHECK_NOT_BINARY/CHECK_MULTIPLE_QUESTIONS logic). Selection, both abstentions, the full charter and the
+0.67 sufficiency criterion are unchanged. schemaVersion 2 configs still work and report
+TEMPLATE_MULTIPLE_QUESTIONS. Each request records `diagnostics.templates` (templateVersion, SHA-256 of the
+templates block, form). A different template asks a different question: compare it on frozen cases, and
+do not read a higher score alone as improvement.
+
+Authoring guidance (`authoringGuidance` in the review config, printed by `prepare`) uses existing v2
+fields: start each observation with a class tag ([observed-source], [retained-run], [proposal],
+[assumption]/[hypothesis], [unknown]); tag contrary observations [counterevidence] (or state in
+constraints that none was found); link each option to the observation that distinguishes it; list in
+unknowns what could change this decision and which option it affects. New advisory warnings:
+OBSERVATION_CLASS_UNTAGGED, COUNTEREVIDENCE_UNCLEAR, OPTION_SPECIFIC_SUPPORT_UNCLEAR; [proposal] and
+[unknown] count as unverified for CHECK_ONLY_UNVERIFIED_EVIDENCE. Tags classify and prove nothing.
 
 ### Host question hygiene and outcome evidence — owner accepted 2026-10-06
 
