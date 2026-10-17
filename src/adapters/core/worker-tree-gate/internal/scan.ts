@@ -1,15 +1,15 @@
 import { constants } from 'node:fs';
-import { lstat, open, readdir, readlink } from 'node:fs/promises';
+import { lstat, open, readdir, readlink, realpath } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { DECKENT_VERSION, EMPTY_KNOWN_SECRETS, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic, type KnownSecretSnapshot } from '#platform/index.js';
-import { classifyDependencyBinary, DependencyTreePatternCache, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan } from '#engine/index.js';
+import { classifyDependencyBinary, dependencyTreeEligible, DependencyTreePatternCache, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan } from '#engine/index.js';
 import { archiveKind, contentRule, decodedTexts, WORKER_TREE_PATTERN_RULES } from './content.js';
 import { createGlobMatcher, createRegexRunner, CREDENTIAL_WORKSPACE_DENY, RegexCancelled } from '#adapters/core/workspace-read/index.js';
 
-/** Bounds and the operator acknowledgement (`execution.secretGate`); every bound fails closed as an incomplete scan. `cacheDirectory`: product data keeping declared dependency trees' pattern results. */
+/** Bounds and the operator acknowledgement (`execution.secretGate`); every bound fails closed as an incomplete scan. `cacheDirectory`: product data keeping declared dependency trees' pattern results; `checkoutRoot`: the work-target checkout (a bind sharing its tree, or the workspace's, never takes the dependency class). */
 export interface WorkerTreeGateOptions {
   readonly allowPatternPaths: readonly string[]; readonly acknowledgedDenyPaths: readonly string[];
-  readonly maxFiles: number; readonly maxFileBytes: number; readonly maxTotalBytes: number; readonly timeoutMs: number; readonly cacheDirectory?: string;
+  readonly maxFiles: number; readonly maxFileBytes: number; readonly maxTotalBytes: number; readonly timeoutMs: number; readonly cacheDirectory?: string; readonly checkoutRoot?: string;
 }
 /** S6: the deny paths the gate refuses are the terminal's credential floor (`CREDENTIAL_WORKSPACE_DENY`) — the same list, never a copy. */
 export const WORKER_TREE_DENY: readonly string[] = CREDENTIAL_WORKSPACE_DENY;
@@ -57,24 +57,27 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const denyHit = (...paths: readonly string[]) => { const forms = paths.flatMap(workerTreeDenyForms); return deny.find(entry => forms.some(form => entry.match(form)))?.pattern; };
   const shown = (rel: string) => redactForRecord(rel.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`), known);
   const time = () => { if (now() >= deadline) throw new Incomplete('time', now() - started, options.timeoutMs); };
-  const read = async (path: string): Promise<Buffer> => {
+  /** Bounds before work (size, total on the open file); above `maxFileBytes` (dependency class only) never allocated whole: classified in bounded windows (rule, `known-secret`, null = unscannable). */
+  const read = async (path: string): Promise<Buffer | string | null> => {
     const handle = await open(path, FILE_FLAGS);
     try {
       const info = await handle.stat();
       if (!info.isFile()) throw new Error('WORKER_TREE_ENTRY_CHANGED');
       if (info.size > options.maxFileBytes && !tree) throw new Incomplete('file-bytes', info.size, options.maxFileBytes);
       if ((total += info.size) > options.maxTotalBytes) throw new Incomplete('total-bytes', total, options.maxTotalBytes);
-      const bytes = Buffer.alloc(info.size); let offset = 0;
-      while (offset < bytes.length) { const chunk = await handle.read(bytes, offset, bytes.length - offset, offset); if (!chunk.bytesRead) break; offset += chunk.bytesRead; }
+      const bytes = info.size > options.maxFileBytes ? null : Buffer.alloc(info.size); let offset = 0;
+      while (bytes && offset < bytes.length) { const chunk = await handle.read(bytes, offset, bytes.length - offset, offset); if (!chunk.bytesRead) break; offset += chunk.bytesRead; }
+      const classified = bytes ? null : await classifyDependencyBinary({ size: info.size, read: async (at, length) => { const chunk = await handle.read(Buffer.alloc(length), 0, length, at); return chunk.buffer.subarray(0, chunk.bytesRead); } },
+        window => { const texts = decodedTexts(window); return { hit: texts.some(text => known.spans(text).length), carry: Math.max(0, ...texts.map(text => (text.length - known.pendingStart(text)) * 6)) }; }, time);
       const after = await handle.stat();
       // A file that grew, shrank or changed while it was read is never passed on a partial view.
-      if (offset !== info.size || after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs) throw new Error('WORKER_TREE_ENTRY_CHANGED');
-      return bytes;
+      if ((bytes && offset !== info.size) || after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs) throw new Error('WORKER_TREE_ENTRY_CHANGED');
+      return bytes ?? classified;
     } finally { await handle.close(); }
   };
-  /** A liftable hit: refused, or an audited exclusion in a declared dependency tree or under an operator glob. Configured values never are. */
-  const liftable = (rel: string, rule: string) => {
-    const by = tree?.by ?? allowed.find(entry => entry.match(rel))?.by;
+  /** A liftable hit: refused, or an audited exclusion in a declared dependency tree (`lifting`; text patterns and classified binaries only) or under an operator glob. */
+  const liftable = (rel: string, rule: string, lifting: string | null | undefined = tree?.by) => {
+    const by = lifting ?? allowed.find(entry => entry.match(rel))?.by;
     if (by) excluded.push({ path: shown(rel), rule, by }); else findings.push({ path: shown(rel), rule });
   };
   // Pattern rows run in a terminable worker bound to the scan deadline: a backtracking expression ends the scan as `incomplete` (time).
@@ -83,9 +86,8 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const keepAlive = setInterval(() => undefined, options.timeoutMs);
   const inspect = async (rel: string, texts: readonly string[], bytes?: Buffer) => {
     if (texts.some(text => known.spans(text).length)) { findings.push({ path: shown(rel), rule: 'known-secret' }); return; }
-    if (tree && bytes && bytes.length > options.maxFileBytes) return liftable(rel, classifyDependencyBinary(bytes, () => { throw new Incomplete('file-bytes', bytes.length, options.maxFileBytes); }));
     const rule = tree && bytes ? await tree.rule(rel, bytes, () => contentRule(runner, rel, texts)) : await contentRule(runner, rel, texts), archive = bytes ? archiveKind(bytes) : null;
-    if (rule !== null) liftable(rel, `pattern:${rule}`); else if (archive !== null) liftable(rel, `unscannable:archive-${archive}`);
+    if (rule !== null) liftable(rel, `pattern:${rule}`); else if (archive !== null) liftable(rel, `unscannable:archive-${archive}`, null);
   };
   /** `display` is the path as the worker sees it, without a leading slash (the checkout's own paths are unchanged); rules match on it. */
   const entry = async (path: string, display: string, inner: string): Promise<void> => {
@@ -104,7 +106,8 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
       const target = await readlink(path), hit = target.startsWith('/') ? denyHit(target) : denyHit(posix.join(posix.dirname(display), target), posix.join(posix.dirname(inner), target));
       if (hit !== undefined) findings.push({ path: shown(display), rule: `deny-path:${hit}` }); else await inspect(display, decodedTexts(Buffer.from(target)));
     }
-    else if (info.isFile()) { const bytes = await read(path); await inspect(display, decodedTexts(bytes), bytes); time(); }
+    else if (info.isFile()) { const bytes = await read(path); if (bytes === null) throw new Incomplete('file-bytes', info.size, options.maxFileBytes);
+      if (typeof bytes !== 'string') await inspect(display, decodedTexts(bytes), bytes); else if (bytes === 'known-secret') findings.push({ path: shown(display), rule: bytes }); else liftable(display, bytes); time(); }
     else findings.push({ path: shown(display), rule: 'unscannable:special-file' });
   };
   const visit = async (directory: string, prefix: string, innerPrefix = prefix): Promise<void> => {
@@ -113,11 +116,12 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   };
   const views: readonly WorkerTreeView[] = typeof input === 'string' ? [{ source: input, label: '' }] : input;
   try {
+    const roots = await Promise.all([...views.flatMap(view => 'source' in view && view.label === '' ? [view.source] : []), ...(options.checkoutRoot ? [options.checkoutRoot] : [])].map(root => realpath(root).catch(() => root)));
     for (const view of views) {
       const label = view.label === '' ? '' : posix.normalize(view.label).replace(/^(?:\.?\/)+/u, '').replace(/\/+$/u, '');
       tree = undefined; const file = 'source' in view && options.cacheDirectory !== undefined ? join(options.cacheDirectory, DependencyTreePatternCache.fileName(view.source, view.label)) : null;
-      tree = 'source' in view && view.dependencyTree && label !== '' ? await DependencyTreePatternCache.open({ label: view.label, rules: [DECKENT_VERSION, WORKER_TREE_PATTERN_RULES, REDACTION_CONFIG_SECRET],
-        lockfile: await read(join(view.source, view.dependencyTree.lockfile)).catch(() => null), store: file === null ? null : { read: () => readJsonFile(file), write: text => writeTextAtomic(file, text) } }) : undefined;
+      tree = 'source' in view && view.dependencyTree && label !== '' && dependencyTreeEligible(await realpath(view.source).catch(() => view.source), roots) ? await DependencyTreePatternCache.open({ label: view.label, rules: [DECKENT_VERSION, WORKER_TREE_PATTERN_RULES, REDACTION_CONFIG_SECRET],
+        lockfile: await read(join(view.source, view.dependencyTree.lockfile)).then(lock => typeof lock === 'string' ? null : lock, () => null), store: file === null ? null : { read: () => readJsonFile(file), write: text => writeTextAtomic(file, text) } }) : undefined;
       if ('text' in view) {
         const bytes = Buffer.byteLength(view.text); time();
         if (bytes > options.maxFileBytes) throw new Incomplete('file-bytes', bytes, options.maxFileBytes);

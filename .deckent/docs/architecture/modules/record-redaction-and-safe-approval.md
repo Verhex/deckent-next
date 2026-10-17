@@ -62,12 +62,17 @@ in it can reach the model provider through the worker's one egress. The terminal
   scanned. Bounds `maxFiles`, `maxFileBytes`, `maxTotalBytes`, `timeoutMs` fail closed as `WORKER_TREE_SCAN_INCOMPLETE` naming the setting.
 - **Dependency class (owner 2026-10-17, before beta; replaces the live/N1 interim `allowPatternPaths: ["node_modules/**"]` + 32 MiB):**
   the signal is profile data, never a path string: a `readOnlyMounts` entry declares `dependencyTree: { lockfile }` (a path inside the
-  bind), pinned with the Run and its profile fingerprint; the checkout, task inputs, handoff files and prompt text never take the class.
-  In such a bind deny paths (with `acknowledgedDenyPaths`) and configured values refuse exactly as elsewhere, on every dispatch; content and
-  archive hits are audited exceptions `dependencyTree:<target>` (the `worker-tree-excluded` subject, the attempt journal and the Run card);
-  a file above `maxFileBytes` is read (still bounded by `maxTotalBytes`), checked for configured values and, when it carries a native
-  signature with a NUL-bearing header (ELF, Mach-O, PE, wasm; engine data `dependency-binaries.json`), recorded as
-  `unscanned-binary:<kind>:sha256=<digest>` without pattern decoding; any other oversized file stays `incomplete`. Pattern results are cached
+  bind), pinned with the Run and its profile fingerprint; the checkout, task inputs, handoff files and prompt text never take the class,
+  and a declared bind keeps it only when its real path shares no tree with the attempt workspace or the work-target checkout
+  (`checkoutRoot`; without a work target that is the project root, so the class then never applies to project-relative binds).
+  In such a bind deny paths (with `acknowledgedDenyPaths`) and configured values refuse exactly as elsewhere, on every dispatch; text-pattern
+  hits (`pattern:*`, `config-secret`) are audited exceptions `dependencyTree:<target>` (the `worker-tree-excluded` subject, the attempt
+  journal and the Run card); archives stay `unscannable` (liftable only by `allowPatternPaths`). A file above `maxFileBytes` (size and
+  `maxTotalBytes` checked before any read) is never allocated whole: its 1 KiB header is read first and only a native signature with a
+  NUL-bearing header (ELF, Mach-O, PE, wasm; engine data `dependency-binaries.json`) is read further, in 1 MiB windows that are hashed and
+  checked for configured values (carrying the bytes that may begin one), with the deadline checked per window; it is recorded as
+  `unscanned-binary:<kind>:sha256=<digest>`; any other oversized file stays `incomplete`. Cache keys longer than 4096 characters are not
+  stored and a cache document above 16 MiB is not written. Pattern results are cached
   per file (path + SHA-256 of the bytes read on this dispatch) inside a scope of the lockfile bytes, the rule table, the product version
   and the bind target, in the product resource `secretGateCache` (`state/secret-gate-cache`, one file per bind, atomic 0600 writes). A
   changed lockfile, rule table or release starts empty; a changed file is evaluated again. The cache never decides: deny paths and configured

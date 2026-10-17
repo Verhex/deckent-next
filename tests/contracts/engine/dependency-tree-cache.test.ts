@@ -1,0 +1,50 @@
+import { expect, it } from 'vitest';
+import { classifyDependencyBinary, dependencyTreeEligible, DependencyTreePatternCache } from '#engine/index.js';
+
+// S6 dependency class (owner 2026-10-17): the engine half — bounded cache keys and document, bounded binary windows, tree eligibility.
+const WINDOW = 1 << 20;
+const memoryStore = (stored: string | null, writes: string[]) => ({ read: async () => stored === null ? { kind: 'absent' } : { kind: 'ready', value: JSON.parse(stored) as unknown },
+  write: async (text: string) => { writes.push(text); } });
+
+it('keeps bounded keys only, reuses a result only for the same bytes, and never writes a document above the reader cap', async () => {
+  const writes: string[] = [];
+  let evaluations = 0; const evaluate = async () => { evaluations++; return 'url-userinfo'; };
+  const first = await DependencyTreePatternCache.open({ label: '/d', lockfile: Buffer.from('lock'), rules: ['r'], store: memoryStore(null, writes) });
+  await first.rule('x'.repeat(4097), Buffer.from('a'), evaluate); await first.rule('ok', Buffer.from('a'), evaluate);
+  expect(await first.save()).toEqual({ label: '/d', reused: 0, evaluated: 2, saved: true });
+  expect(Object.keys((JSON.parse(writes[0]!) as { files: object }).files)).toEqual(['ok']);
+  const second = await DependencyTreePatternCache.open({ label: '/d', lockfile: Buffer.from('lock'), rules: ['r'], store: memoryStore(writes[0]!, writes) });
+  expect(await second.rule('ok', Buffer.from('a'), evaluate)).toBe('url-userinfo'); await second.rule('x'.repeat(4097), Buffer.from('a'), evaluate);
+  expect(evaluations).toBe(3); expect(await second.save()).toMatchObject({ reused: 1, evaluated: 1 });
+  // Changed bytes, another lockfile or another rule table: evaluated again.
+  for (const [lockfile, rules, bytes] of [['lock', ['r'], 'b'], ['lock2', ['r'], 'a'], ['lock', ['r2'], 'a']] as const) {
+    const cache = await DependencyTreePatternCache.open({ label: '/d', lockfile: Buffer.from(lockfile), rules, store: memoryStore(writes[0]!, []) });
+    await cache.rule('ok', Buffer.from(bytes), evaluate); expect(await cache.save(), `${lockfile} ${rules[0]} ${bytes}`).toMatchObject({ reused: 0, evaluated: 1 });
+  }
+  const big = await DependencyTreePatternCache.open({ label: '/d', lockfile: null, rules: [], store: memoryStore(null, writes) }), count = writes.length;
+  for (let index = 0; index < 120_000; index++) await big.rule(`node_modules/${'p'.repeat(100)}/${index}`, Buffer.from(String(index)), async () => null);
+  expect(await big.save()).toMatchObject({ saved: false, evaluated: 120_000 }); expect(writes).toHaveLength(count);
+});
+
+it('classifies a native binary through bounded windows; reads only the header of anything else; a short read is a changed file', async () => {
+  const size = 3 * WINDOW + 5, body = Buffer.alloc(size, 0x41); body.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]);
+  const requests: number[] = [];
+  const source = (bytes: Buffer, shrink = false) => ({ size, read: async (offset: number, length: number) => { requests.push(length);
+    return bytes.subarray(offset, offset + (shrink && offset > 0 ? length - 1 : length)); } });
+  const none = () => ({ hit: false, carry: 0 });
+  expect(await classifyDependencyBinary(source(body), none, () => undefined)).toMatch(/^unscanned-binary:elf:sha256=[0-9a-f]{64}$/u);
+  expect(Math.max(...requests)).toBeLessThanOrEqual(WINDOW);
+  requests.length = 0;
+  expect(await classifyDependencyBinary(source(Buffer.alloc(size, 0x41)), none, () => undefined)).toBeNull();
+  expect(requests).toEqual([1024]);
+  await expect(classifyDependencyBinary(source(body, true), none, () => undefined)).rejects.toThrow('WORKER_TREE_ENTRY_CHANGED');
+  // The deadline is checked per window; a value check that reports a hit stops the read.
+  let ticks = 0; await classifyDependencyBinary(source(body), none, () => { ticks++; }); expect(ticks).toBe(4);
+  await expect(classifyDependencyBinary(source(body), () => ({ hit: true, carry: 0 }), () => undefined)).resolves.toBe('known-secret');
+});
+
+it('grants the class only to a real source that shares no tree with the workspace or the checkout', () => {
+  expect(dependencyTreeEligible('/deps/node_modules', ['/work/a', '/repo'])).toBe(true);
+  expect(dependencyTreeEligible('/repo-node_modules', ['/repo'])).toBe(true);
+  for (const source of ['/repo', '/repo/node_modules', '/', '/work', '/work/a/x']) expect(dependencyTreeEligible(source, ['/work/a', '/repo']), source).toBe(false);
+});

@@ -1,12 +1,20 @@
 import { createHash } from 'node:crypto';
+import { isAbsolute, relative, sep } from 'node:path';
 import { z } from 'zod';
 import BINARIES from './dependency-binaries.json' with { type: 'json' };
 
 const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const cacheSchema = z.object({ schemaVersion: z.literal(1), scope: digestSchema,
-  files: z.record(z.string().min(1).max(4096), z.tuple([digestSchema, z.string().min(1).max(600).nullable()])) }).strict();
+  files: z.record(z.string().min(1).max(BINARIES.maxCachePathLength), z.tuple([digestSchema, z.string().min(1).max(600).nullable()])) }).strict();
 const signatures = BINARIES.signatures.map(row => ({ kind: row.kind, bytes: Buffer.from(row.hex, 'hex') }));
+/** Whether two real (symlink-resolved) host paths share a tree: one is the other or lies inside it. */
+const overlaps = (a: string, b: string) => [relative(a, b), relative(b, a)].some(path => path === '' || (path !== '..' && !path.startsWith('..' + sep) && !isAbsolute(path)));
+/**
+ * A declared dependency bind keeps the class only when its real source shares no tree with the attempt workspace or the work-target
+ * checkout (both real paths): content the repository or the worker can shape is never third-party content. Otherwise the normal rules apply.
+ */
+export const dependencyTreeEligible = (source: string, roots: readonly string[]) => !roots.some(root => overlaps(root, source));
 /** The lifting entry of every exception a declared dependency tree records: `dependencyTree:<container target>`. */
 export const dependencyTreeLifting = (target: string) => `dependencyTree:${target}`;
 /** Per declared dependency tree of one scan: pattern results reused from the cache and evaluated anew, and whether the cache was saved. */
@@ -30,7 +38,7 @@ export class DependencyTreePatternCache {
   readonly by: string;
   readonly #reuse: ReadonlyMap<string, readonly [string, string | null]>;
   readonly #next = new Map<string, readonly [string, string | null]>();
-  #reused = 0;
+  #reused = 0; #overlong = 0;
   private constructor(readonly label: string, readonly scope: string, reuse: ReadonlyMap<string, readonly [string, string | null]>, readonly store: DependencyTreeCacheStore | null) {
     this.by = dependencyTreeLifting(label); this.#reuse = reuse;
   }
@@ -46,23 +54,44 @@ export class DependencyTreePatternCache {
   async rule(path: string, bytes: Uint8Array, evaluate: () => Promise<string | null>): Promise<string | null> {
     const digest = sha256(bytes), cached = this.#reuse.get(path);
     const rule = cached?.[0] === digest ? (this.#reused++, cached[1]) : await evaluate();
-    this.#next.set(path, [digest, rule]);
+    // Bounded keys: a path longer than the stored bound is evaluated on every dispatch, never kept.
+    if (path.length <= BINARIES.maxCachePathLength) this.#next.set(path, [digest, rule]); else if (cached === undefined) this.#overlong++;
     return rule;
   }
   /** Saves this dispatch's results (only the files seen now) and reports the reuse. */
   async save(): Promise<DependencyTreeStatistics> {
+    // Bounded store: a document above `maxCacheBytes` (the reader's cap) is not written; the next dispatch evaluates again.
     const text = JSON.stringify({ schemaVersion: 1, scope: this.scope, files: Object.fromEntries(this.#next) });
-    const saved = this.store !== null && await this.store.write(text).then(() => true, () => false);
-    return Object.freeze({ label: this.label, reused: this.#reused, evaluated: this.#next.size - this.#reused, saved });
+    const saved = this.store !== null && Buffer.byteLength(text) <= BINARIES.maxCacheBytes && await this.store.write(text).then(() => true, () => false);
+    return Object.freeze({ label: this.label, reused: this.#reused, evaluated: this.#next.size - this.#reused + this.#overlong, saved });
   }
 }
 
+/** One open file above the text bound, read only through bounded windows (fewer bytes than asked means the file changed: refused). */
+export interface DependencyBinarySource { readonly size: number; readonly read: (offset: number, length: number) => Promise<Buffer> }
+/** A configured-value check of one window: whether a value is in it, and how many trailing bytes may begin one (carried into the next window). */
+export type DependencyBinaryValueCheck = (window: Buffer) => Readonly<{ hit: boolean; carry: number }>;
+
 /**
- * A dependency-tree file above the text scan bound: `unscanned-binary:<kind>:sha256=<digest>` when it is a listed native format (signature
- * and a NUL byte in its header); anything else is unclassifiable and `unclassified` fails the scan closed.
+ * A dependency-tree file above the text scan bound, never allocated whole: the header (`headerBytes`) is read first, and only a listed native
+ * format (signature and a NUL byte in the header) is read further, in `windowBytes` windows, each hashed and checked for configured values
+ * with the bytes that may begin one carried over (bounded by the longest configured value). Returns `unscanned-binary:<kind>:sha256=<digest>`,
+ * `known-secret` (refused) or null (unclassifiable: the caller fails closed before any further read). `tick` enforces the scan deadline.
  */
-export function classifyDependencyBinary(bytes: Uint8Array, unclassified: () => never): string {
-  const header = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.length, BINARIES.headerBytes));
+export async function classifyDependencyBinary(source: DependencyBinarySource, values: DependencyBinaryValueCheck, tick: () => void): Promise<string | null> {
+  const header = await source.read(0, Math.min(source.size, BINARIES.headerBytes));
   const kind = header.includes(0) ? signatures.find(row => header.subarray(0, row.bytes.length).equals(row.bytes))?.kind : undefined;
-  return kind === undefined ? unclassified() : `unscanned-binary:${kind}:sha256=${sha256(bytes)}`;
+  if (kind === undefined) return null;
+  const hash = createHash('sha256');
+  let carry = Buffer.alloc(0);
+  for (let offset = 0; offset < source.size; offset += BINARIES.windowBytes) {
+    tick();
+    const length = Math.min(BINARIES.windowBytes, source.size - offset), chunk = await source.read(offset, length);
+    if (chunk.length !== length) throw new Error('WORKER_TREE_ENTRY_CHANGED');
+    hash.update(chunk);
+    const window = Buffer.concat([carry, chunk]), check = values(window);
+    if (check.hit) return 'known-secret';
+    carry = window.subarray(Math.max(0, window.length - Math.min(window.length, check.carry)));
+  }
+  return `unscanned-binary:${kind}:sha256=${hash.digest('hex')}`;
 }
