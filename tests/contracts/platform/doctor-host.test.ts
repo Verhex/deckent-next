@@ -78,3 +78,12 @@ describe('recommended workers show both the CPU and the memory limit', () => {
     expect(renderDoctorReport({ ...base }, [], 'en')).toContain('Recommended workers: 1\n');
   });
 });
+
+describe('human doctor output states the overall status first', () => {
+  it('prints degraded and ready in English and Turkish, and nothing when the report has no verdict', () => {
+    expect(renderDoctorReport({ ...base, status: 'degraded' }, [], 'en').split('\n')[0]).toBe('Status: degraded (see the findings below)');
+    expect(renderDoctorReport({ ...base, status: 'ready' }, [], 'en').split('\n')[0]).toBe('Status: ready');
+    expect(renderDoctorReport({ ...base, status: 'degraded' }, [], 'tr').split('\n')[0]).toContain('Durum: degraded');
+    expect(renderDoctorReport({ ...base }, [], 'en').split('\n')[0]).toBe('Platform: linux');
+  });
+});

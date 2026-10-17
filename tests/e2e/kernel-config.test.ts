@@ -91,6 +91,9 @@ describe('K1 real binary journeys', () => {
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
+    // F12: the human text carries the same overall verdict as the JSON (here degraded: startability is blocked).
+    expect((await f.run(['doctor']).catch(error => error)).stdout).toContain('Status: degraded');
+    expect(result.host.workerBasis).toMatchObject({ cpuBased: expect.any(Number), memoryBased: expect.any(Number), workerMemoryEstimateMB: expect.any(Number), recommended: result.host.recommendedMaxWorkers });
     expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen worker');
     expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
     expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');

@@ -183,7 +183,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const node = assessNodeSupport(process.version, NODE_ENGINE_RANGE);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host: { ...host, workerBasis: describeWorkerRecommendation(host.freeMemMB, host.cpuCores) }, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' as const : 'ready' as const, poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');
