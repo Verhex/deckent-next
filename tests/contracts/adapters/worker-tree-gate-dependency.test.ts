@@ -116,6 +116,22 @@ describe('parser parity for a native-claimed file in the class (polyglot: native
       expect(await scanWorkerTree(declared(await tree(dependencies(bytes))), options(), known), name).toMatchObject({ status: 'refused', findings: [{ path: `node_modules/${BINDING}`, rule: 'known-secret' }] });
     }
   });
+  it('a NUL run of any length between the parts of a configured value or a refusing family, across a window edge, still refuses (Astra 2626 F2)', async () => {
+    const gap = (head: Buffer, tail: Buffer, at: number, nuls: number) => { const body = elf(); head.copy(body, at); body.fill(0, at + head.length, at + head.length + nuls); tail.copy(body, at + head.length + nuls); return body; };
+    const pem = ['-----BEGIN ', 'PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END ', 'PRIVATE KEY-----\n'].join('');
+    for (const [name, bytes, rule] of [
+      // Astra's layout: "erp" at W-100003, then 100000 NULs to the window edge, the rest at the start of the next window.
+      ['the review layout', gap(Buffer.from('erp'), Buffer.from('-hunter2-value'), edge - 100_003, 100_000), 'known-secret'],
+      ['a NUL run longer than a whole window', gap(Buffer.from('erp'), Buffer.from('-hunter2-value'), 2 * edge + 10, edge + (edge >> 1)), 'known-secret'],
+      ['UTF-16LE split by a NUL run', gap(Buffer.from('erp', 'utf16le'), Buffer.from('-hunter2-value', 'utf16le'), 5 * edge - 70_006, 70_000), 'known-secret'],
+      ['an escaped value split by a NUL run', gap(Buffer.from('\\u0065rp'), Buffer.from('-hunter2-value'), 7 * edge - 150_008, 150_000), 'known-secret'],
+      ['a PEM header split by a NUL run', gap(Buffer.from(pem.slice(0, 15)), Buffer.from(pem.slice(15)), 9 * edge - 100_015, 100_000), 'pattern:private-key-block']] as const) {
+      expect(await scanWorkerTree(declared(await tree(dependencies(bytes))), options(), known), name).toMatchObject({ status: 'refused', findings: [{ path: `node_modules/${BINDING}`, rule }] });
+    }
+    // A pending start the carry arithmetic cannot bound (a value prefix before megabytes of folded line breaks) is incomplete, never an unbounded carry.
+    const lines = elf(); lines.write('erp', 3 * edge - 10, 'latin1'); lines.fill(0x0a, 3 * edge - 7, 3 * edge - 7 + ((5 * edge) >> 1));
+    expect(await scanWorkerTree(declared(await tree(dependencies(lines))), options(), known)).toEqual({ status: 'incomplete', limit: 'file-bytes', observed: BINARY_BYTES, bound: DEFAULT_FILE_BYTES });
+  });
   it('a deny-listed name refuses before any read; third-party pattern text in the body is listed as an exception', async () => {
     expect(await scanWorkerTree(declared(await tree({ ...dependencies(), 'pkg/.env': elf() })), options())).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/pkg/.env', rule: 'deny-path:**/.env' }] });
     const polyglot = place(Buffer.from(` ${USERINFO} `), 2 * edge + 3), scan = await scanWorkerTree(declared(await tree(dependencies(polyglot))), options());

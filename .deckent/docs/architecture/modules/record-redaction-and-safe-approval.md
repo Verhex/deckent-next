@@ -77,7 +77,9 @@ in it can reach the model provider through the worker's one egress. The terminal
   checked for configured values (carrying the bytes that may begin one), with the deadline checked per window; it is recorded as
   `native-binary:<kind>:sha256=<digest>`; any other oversized file stays `incomplete`. Review 4: such a file's body (a polyglot) is
   checked per window for configured values and all pattern rows in every reading (carry: `pendingStart` × 24 bytes with a trailing partial
-  escape set aside, at least `patternCarryBytes` 64 KiB; no early exit except a refusal); in any native-claimed file of the class (any size)
+  escape set aside, at least `patternCarryBytes` 64 KiB, kept per stream — raw bytes, and NUL-dropped bytes counted in their own
+  coordinates, so a NUL run of any length cannot split a value or a family across windows (Astra 2626 F2); a carry above
+  `maxCarryBytes` 1 MiB makes the file `incomplete`; no early exit except a refusal); in any native-claimed file of the class (any size)
   the credential families of `refuseInNativeFiles` (private-key blocks, provider and cloud tokens) refuse, while the same shapes in text files
   stay exceptions (zod url-userinfo, jose private-key-block); native-claimed files bypass the pattern cache, so the cache never decides; the lockfile only scopes the cache (node loads files, not the lockfile,
   and every reuse is keyed by the file's own bytes); the bind is live, so a host change after the scan is not seen (as for any bind). Cache keys longer than 4096 characters are not

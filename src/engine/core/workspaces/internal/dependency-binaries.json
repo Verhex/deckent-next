@@ -4,6 +4,7 @@
   "windowBytes": 1048576,
   "carryBytesPerChar": 24,
   "patternCarryBytes": 65536,
+  "maxCarryBytes": 1048576,
   "refuseInNativeFiles": ["provider-token", "private-key-block", "gitlab-token", "aws-temporary-key", "aws-secret-key", "stripe-key", "slack-token", "pypi-token", "azure-account-key"],
   "maxCachePathLength": 4096,
   "maxCacheBytes": 16777216,

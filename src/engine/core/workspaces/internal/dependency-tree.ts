@@ -65,9 +65,12 @@ export class DependencyTreePatternCache {
 export interface DependencyBinarySource { readonly size: number; readonly read: (offset: number, length: number) => Promise<Buffer> }
 /** What the class needs of the configured-value snapshot (platform `KnownSecretSnapshot`); never the values themselves. */
 export interface DependencyValueSnapshot { readonly spans: (text: string) => readonly unknown[]; readonly pendingStart: (text: string) => number }
-/** The gate's own readers for one file: its decoder (`decodedTexts`), archive signatures (`archiveKind`), configured values, pattern rows, terminable regex runner and first-rule evaluator. */
+/**
+ * The gate's own readers for one file: its decoder (`decodedTexts`), the bytes of its reading that drops bytes (`withoutNul`; a projection, so
+ * windows stream it in its own coordinates), archive signatures (`archiveKind`), configured values, pattern rows, terminable regex runner and first-rule evaluator.
+ */
 export interface DependencyTextChecks {
-  readonly decode: (bytes: Buffer) => readonly string[]; readonly archive: (bytes: Buffer) => string | null; readonly known: DependencyValueSnapshot;
+  readonly decode: (bytes: Buffer, dropped?: boolean) => readonly string[]; readonly dropped: (bytes: Buffer) => Buffer; readonly archive: (bytes: Buffer) => string | null; readonly known: DependencyValueSnapshot;
   readonly rows: readonly Readonly<{ id: string; source: string; flags: string }>[];
   readonly match: (source: string, flags: string, texts: readonly string[]) => Promise<readonly number[]>;
   readonly first: (texts: readonly string[]) => Promise<string | null>;
@@ -107,26 +110,32 @@ export async function dependencyNativeRefusal(bytes: Uint8Array, texts: readonly
  * format, or a native header that is also an archive signature, returns null (unclassifiable: the caller fails closed). A native file is read in `windowBytes` windows, each hashed and given every
  * reading of the gate's decoder: configured values and `refuseInNativeFiles` families refuse (stopping the read), other pattern hits are kept
  * as exceptions. The carry joins a value or pattern split at a window edge: `pendingStart` × `carryBytesPerChar` (with a trailing partial
- * escape set aside) and at least `patternCarryBytes`. `tick` enforces the deadline per window. Hits: `native-binary:<kind>:sha256=<digest>` first.
+ * escape set aside) and at least `patternCarryBytes`, kept per stream (Astra 2626 F2): the raw bytes, decoded without the NUL-dropped reading (UTF-8,
+ * UTF-16 in both alignments and escapes take at most 24 raw bytes per decoded character), and the NUL-dropped bytes (`dropped`), whose reading skips NUL runs of any length,
+ * so its carry is counted in its own bytes, never in raw distance. A carry above `maxCarryBytes` (a pending start the arithmetic cannot bound,
+ * e.g. folded line breaks) returns null. `tick` enforces the deadline per window. Hits: `native-binary:<kind>:sha256=<digest>` first.
  */
 export async function classifyDependencyBinary(source: DependencyBinarySource, checks: DependencyTextChecks, tick: () => void): Promise<readonly DependencyHit[] | null> {
   // A header that is also an archive's (a tar whose first member is named like a native magic) is never classified (Astra 2626 F1).
   const header = await source.read(0, Math.min(source.size, BINARIES.headerBytes)), kind = nativeBinaryKind(header);
   if (kind === null || checks.archive(header) !== null) return null;
   const hash = createHash('sha256'), listed = new Set<string>();
-  let carry = Buffer.alloc(0);
+  const tail = (bytes: Buffer, texts: readonly string[]) => bytes.subarray(Math.max(0, bytes.length - Math.max(BINARIES.patternCarryBytes,
+    ...texts.map(text => (text.length - checks.known.pendingStart(text.replace(partialEscape, ''))) * BINARIES.carryBytesPerChar))));
+  let carry: Buffer = Buffer.alloc(0), carried: Buffer = Buffer.alloc(0);
   for (let offset = 0; offset < source.size; offset += BINARIES.windowBytes) {
     tick();
     const length = Math.min(BINARIES.windowBytes, source.size - offset), chunk = await source.read(offset, length);
     if (chunk.length !== length) throw new Error('WORKER_TREE_ENTRY_CHANGED');
     hash.update(chunk);
-    const window = Buffer.concat([carry, chunk]), texts = checks.decode(window);
+    const window = Buffer.concat([carry, chunk]), stream = Buffer.concat([carried, checks.dropped(chunk)]), own = checks.decode(window, false), joined = checks.decode(stream);
+    const texts = [...new Set([...own, ...joined])];
     if (texts.some(text => checks.known.spans(text).length > 0)) return [{ rule: 'known-secret', refuse: true }];
     const refused = await refusingRule(texts, checks);
     if (refused !== null) return [{ rule: `pattern:${refused}`, refuse: true }];
     const rule = await checks.first(texts); if (rule !== null) listed.add(`pattern:${rule}`);
-    const pending = Math.max(0, ...texts.map(text => (text.length - checks.known.pendingStart(text.replace(partialEscape, ''))) * BINARIES.carryBytesPerChar));
-    carry = window.subarray(Math.max(0, window.length - Math.min(window.length, Math.max(pending, BINARIES.patternCarryBytes))));
+    carry = tail(window, own); carried = tail(stream, joined);
+    if (Math.max(carry.length, carried.length) > BINARIES.maxCarryBytes) return null;
   }
   return [{ rule: `native-binary:${kind}:sha256=${hash.digest('hex')}`, refuse: false }, ...[...listed].map(rule => ({ rule, refuse: false }))];
 }

@@ -3,7 +3,7 @@ import { lstat, open, readdir, readlink } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { DECKENT_VERSION, EMPTY_KNOWN_SECRETS, pathsShareTree, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic, type KnownSecretSnapshot } from '#platform/index.js';
 import { classifyDependencyBinary, dependencyNativeRefusal, DependencyTreePatternCache, type DependencyHit, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan } from '#engine/index.js';
-import { archiveKind, contentRule, decodedTexts, WORKER_TREE_PATTERN_RULES } from './content.js';
+import { archiveKind, contentRule, decodedTexts, withoutNul, WORKER_TREE_PATTERN_RULES } from './content.js';
 import { createGlobMatcher, createRegexRunner, CREDENTIAL_WORKSPACE_DENY, RegexCancelled } from '#adapters/core/workspace-read/index.js';
 
 /** Bounds and the operator acknowledgement (`execution.secretGate`); every bound fails closed as an incomplete scan. `cacheDirectory`: product data keeping declared dependency trees' pattern results; `checkoutRoot`: the work-target checkout (a bind sharing its tree, or the workspace's, never takes the dependency class). */
@@ -58,7 +58,7 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const shown = (rel: string) => redactForRecord(rel.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`), known);
   const time = () => { if (now() >= deadline) throw new Incomplete('time', now() - started, options.timeoutMs); };
   /** `checks`: the gate's own readers for a dependency-tree file (engine `DependencyTextChecks`). `read`: bounds before work (size, total on the open file); above `maxFileBytes` (dependency class only) never allocated whole: classified in bounded windows (hits, null = unscannable). */
-  const checks = (rel: string) => ({ decode: decodedTexts, archive: archiveKind, known, rows: WORKER_TREE_PATTERN_RULES, match: (source: string, flags: string, texts: readonly string[]) => runner.match(source, flags, texts), first: (texts: readonly string[]) => contentRule(runner, rel, texts) });
+  const checks = (rel: string) => ({ decode: decodedTexts, dropped: withoutNul, archive: archiveKind, known, rows: WORKER_TREE_PATTERN_RULES, match: (source: string, flags: string, texts: readonly string[]) => runner.match(source, flags, texts), first: (texts: readonly string[]) => contentRule(runner, rel, texts) });
   const read = async (path: string): Promise<Buffer | readonly DependencyHit[] | null> => {
     const handle = await open(path, FILE_FLAGS);
     try {

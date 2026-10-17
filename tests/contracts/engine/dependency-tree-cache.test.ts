@@ -36,7 +36,7 @@ it('classifies a native binary through bounded windows; reads only the header of
   const requests: number[] = [];
   const source = (bytes: Buffer, shrink = false) => ({ size, read: async (offset: number, length: number) => { requests.push(length);
     return bytes.subarray(offset, offset + (shrink && offset > 0 ? length - 1 : length)); } });
-  const checks = (known = false) => ({ decode: (bytes: Buffer) => [bytes.toString('latin1')], archive: () => null, known: { spans: () => known ? [1] : [], pendingStart: (text: string) => text.length },
+  const checks = (known = false) => ({ decode: (bytes: Buffer) => [bytes.toString('latin1')], dropped: (bytes: Buffer) => bytes, archive: () => null, known: { spans: () => known ? [1] : [], pendingStart: (text: string) => text.length },
     rows: [], match: async () => [], first: async () => null });
   expect(await classifyDependencyBinary(source(body), checks(), () => undefined)).toEqual([{ rule: expect.stringMatching(/^native-binary:elf:sha256=[0-9a-f]{64}$/u), refuse: false }]);
   expect(Math.max(...requests)).toBeLessThanOrEqual(WINDOW);
