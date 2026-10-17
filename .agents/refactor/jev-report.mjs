@@ -65,7 +65,7 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
   }
   const times = rows.filter(r => r.latencyMs !== null).map(r => r.latencyMs).sort((a, b) => a - b);
   return { schemaVersion: 4, measuredAt: new Date().toISOString(), sampledCalls: rows.length,
-    scannedCalls: requests.length, scanLimit, scanTruncated: listing.truncated, undatedScannedCalls: count(requests, r => r.time === null),
+    journalRootPresent: listing.rootPresent, scannedCalls: requests.length, scanLimit, scanTruncated: listing.truncated, undatedScannedCalls: count(requests, r => r.time === null),
     truncated: listing.truncated || requests.length > limit,
     selection: 'request-time descending among bounded scanned directories; undated requests last; scan truncation or undated requests leave global recency unknown',
     abstentions: Object.fromEntries(['none_of_the_above', 'insufficient_information', 'defer'].map(option => [option, { offered: count(rows, r => r.offeredChoiceIds.includes(option)), selected: count(rows, r => r.recommendation === option) }])),

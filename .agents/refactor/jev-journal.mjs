@@ -11,20 +11,24 @@ export function safeData(data, key) {
   ensure((key === undefined || !encoded.includes(key)) && !/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(encoded), 'JEV_SECRET_IN_JOURNAL');
   return encoded;
 }
-export async function privateDirectory(path) {
+// Writers create missing private components; readers only validate. Both refuse symlinked components
+// and a final directory that is not owner-only, so a read can never create or repair journal state.
+async function walkPrivate(path, create) {
   ensure(process.platform !== 'win32' && typeof process.getuid === 'function' && constants.O_NOFOLLOW > 0, 'JEV_JOURNAL_UNSUPPORTED');
   const absolute = resolve(path);
   let current = parse(absolute).root;
   for (const component of absolute.slice(current.length).split(sep)) {
     current = join(current, component);
-    try { await mkdir(current, { mode: 0o700 }); } catch (e) { if (e.code !== 'EEXIST') throw e; }
-    const stat = await lstat(current);
+    if (create) try { await mkdir(current, { mode: 0o700 }); } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    const stat = await lstat(current); // missing component on read: ENOENT, nothing created
     ensure(stat.isDirectory() && !stat.isSymbolicLink(), 'JEV_JOURNAL_PATH');
   }
   const stat = await lstat(absolute);
   ensure(stat.uid === process.getuid() && (stat.mode & 0o077) === 0, 'JEV_JOURNAL_PERMISSIONS');
   return absolute;
 }
+export const privateDirectory = path => walkPrivate(path, true);
+export const existingPrivateDirectory = path => walkPrivate(path, false);
 export async function writeEvent(directory, name, data, key) {
   ensure(/^[a-z0-9-]+\.json$/.test(name), 'JEV_EVENT_NAME');
   const bytes = safeData(data, key);
@@ -39,7 +43,7 @@ export async function writeEvent(directory, name, data, key) {
   } finally { await handle.close(); await unlink(temp); }
 }
 export async function readEvent(directory, name) {
-  await privateDirectory(directory);
+  await existingPrivateDirectory(directory);
   const handle = await open(join(directory, name), constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await handle.stat();
@@ -48,7 +52,8 @@ export async function readEvent(directory, name) {
   } finally { await handle.close(); }
 }
 export async function entries(root, limit) {
-  await privateDirectory(root);
+  try { await existingPrivateDirectory(root); }
+  catch (e) { if (e.code === 'ENOENT') return { ids: [], truncated: false, rootPresent: false }; throw e; }
   const result = []; let truncated = false;
   for await (const entry of await opendir(root)) {
     if (!entry.isDirectory()) continue;
@@ -56,5 +61,5 @@ export async function entries(root, limit) {
     if (result.length === limit) { truncated = true; break; }
     result.push(entry.name);
   }
-  return { ids: result, truncated };
+  return { ids: result, truncated, rootPresent: true };
 }

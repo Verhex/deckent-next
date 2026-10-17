@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm, symlink, readdir } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, symlink, readdir, mkdir, chmod, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepare, validateReviewConfig } from './jev-context.mjs';
 import { consult, followup, report } from './jev-review.mjs';
-import { readEvent, writeEvent, callId, entries } from './jev-journal.mjs';
+import { readEvent, writeEvent, callId, entries, existingPrivateDirectory } from './jev-journal.mjs';
 
 function journalTest(name, fn) {
   const reason = process.platform === 'win32' && 'JEV_JOURNAL_UNSUPPORTED: private UID/mode/no-follow journal custody has no Windows implementation';
@@ -379,4 +379,30 @@ journalTest('failure records keep safe diagnostics, and a hostile request id can
   }));
   const te = await readEvent(timeout.directory, 'failure.json');
   assert.equal(te.error, 'JEV_REQUEST_FAILED'); assert.equal(te.diagnostics.stage, 'transport'); assert.equal(te.diagnostics.errorName, 'TimeoutError');
+}));
+
+journalTest('journal readers never create roots or call directories, and keep symlink and privacy refusals', async () => sandbox(async root => {
+  const absent = join(root, 'missing', 'jev');
+  const summary = await report(absent, 10);
+  assert.equal(summary.journalRootPresent, false); assert.equal(summary.sampledCalls, 0); assert.equal(summary.scannedCalls, 0);
+  assert.deepEqual(await entries(absent, 10), { ids: [], truncated: false, rootPresent: false });
+  await assert.rejects(readEvent(join(absent, callId()), 'request.json'), { code: 'ENOENT' });
+  await assert.rejects(existingPrivateDirectory(absent), { code: 'ENOENT' });
+  assert.deepEqual(await readdir(root), []);
+  // An outcome or decision for an unknown call leaves no directory behind.
+  const journal = join(root, 'journal'); await mkdir(journal, { mode: 0o700 });
+  await assert.rejects(followup(journal, callId(), 'decision', { actor: 'x', selectedOption: 'investigate', rationale: 'x', actions: [], evidenceRefs: [] }, key), { code: 'ENOENT' });
+  assert.deepEqual(await readdir(journal), []);
+  // Existing journal: the report reads it without changing its listing or modes.
+  const call = await consult(config, policy, fixture(), journal, key, transport);
+  const before = { names: await readdir(journal), files: await readdir(call.directory), mode: (await stat(journal)).mode };
+  assert.equal((await report(journal, 10)).journalRootPresent, true);
+  assert.deepEqual({ names: await readdir(journal), files: await readdir(call.directory), mode: (await stat(journal)).mode }, before);
+  // Symlinked root and a group-readable root still refuse on the read path.
+  await symlink(journal, join(root, 'link'));
+  await assert.rejects(report(join(root, 'link'), 10), /JEV_JOURNAL_PATH/);
+  await assert.rejects(readEvent(join(root, 'link', call.callId), 'request.json'), /JEV_JOURNAL_PATH/);
+  await chmod(journal, 0o750);
+  await assert.rejects(report(journal, 10), /JEV_JOURNAL_PERMISSIONS/);
+  await chmod(journal, 0o700);
 }));

@@ -17,7 +17,9 @@ Use the logged preparation layer from Next only (host tooling, not a product fea
   exist. Usage is a known-token subtotal plus coverage counts: null/missing provider metering, failed
   attempts and unrecorded responses stay `unknown`, never zero. COUNT defaults to reportLimit (200); `report 100` selects 100. The scan defaults to 10,000
   directories (optional review config reportScanLimit). Scan truncation and undated requests are
-  disclosed; global recency then remains unknown. Agreement is not correctness.
+  disclosed; global recency then remains unknown. Agreement is not correctness. Reading is non-mutating:
+  `report` and follow-up lookups never create a journal root or call directory (a missing root reports
+  `journalRootPresent: false`), and still refuse symlinked or non-owner-only directories.
 
 Case schema: schemaVersion=2, objective, scope, exact revision (identify dirty changes), constraints[],
 unknowns[], evidence[{id,source,observedAt,observation}], options[{id,action,tradeoffs[],northStarImpact,evidenceIds[]}],
