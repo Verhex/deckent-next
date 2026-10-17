@@ -66,7 +66,7 @@ Jev is probabilistic advice, not proof, test success, independent PASS, policy, 
 Do not execute returned content or hardcode a universal confidence threshold. Record actual model/usage;
 use independent tests/reviews to assess quality. No automatic training or behavioral promotion from this log.
 
-Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=3 (2 still accepted); low-level transport remains generic, normal development consultations use the preparation layer.
+Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=4 (2 and 3 still accepted); low-level transport remains generic, normal development consultations use the preparation layer.
 
 ### Context sufficiency preparation — owner 2026-09-28
 
@@ -102,17 +102,26 @@ remain schema errors. Case schema v2, prepared questions and provider state are 
 stay in local diagnostics/journal and never become additional model context. No source retrieval,
 auto-rewrite, automatic sanitization, retry, confidence score or acceptance is added.
 
-### Sufficiency proposition and authoring tags — JEV-114 (2026-10-17)
+### Sufficiency gating and shadow proposition — JEV-114, owner 2026-10-17
 
-Review config schemaVersion 3 asks one sufficiency proposition (is the supplied evidence sufficient to
-compare the authored options for the decision in state.case.objective at state.case.process.stage) with
-a separate non-interrogative rubric; the compiler sends `{question, rule}`. Config validation refuses a
-v3 template with more than one question, an open question or an interrogative rubric (shared
-CHECK_NOT_BINARY/CHECK_MULTIPLE_QUESTIONS logic). Selection, both abstentions, the full charter and the
-0.67 sufficiency criterion are unchanged. schemaVersion 2 configs still work and report
-TEMPLATE_MULTIPLE_QUESTIONS. Each request records `diagnostics.templates` (templateVersion, SHA-256 of the
-templates block, form). A different template asks a different question: compare it on frozen cases, and
-do not read a higher score alone as improvement.
+Review config schemaVersion 4. Gating stays on the previous compound sufficiency question, byte-identical
+and compiled as before (`sufficiency`, a string). The single proposition (is the supplied evidence
+sufficient to compare the authored options for the decision in state.case.objective at
+state.case.process.stage) runs as a SHADOW: a separate Noul `sufficiency_shadow` in the same request,
+`{question, rule}` with a non-interrogative rubric. It is journaled (`diagnostics.shadow`, the answer in
+response.json) and reported (row `sufficiencyShadow`, summary and per-slice `shadowSufficiency`: means,
+shadow-minus-gating deltas, threshold crossings), but it never becomes the row's sufficiency and never
+enters adviceDisposition or the 0.85/0.67 criteria. It costs one extra question per call. It is omitted,
+recorded as `omittedReason`, when the 12-question cap is reached (`question-limit`) or when it would push the
+request over maxRequestBytes (`request-size`); the gating questions are never dropped. Measured on the
+latest 100 v2 host cases re-prepared with v4 (2026-10-17): +1,152 bytes per request, p50 27,022 / p95
+31,579 / max 33,223 bytes against the 32,768 cap (p50 margin 5,746 bytes); 3 of 100 (9 of 879 overall)
+would omit the shadow; none becomes unaskable (gating-only maximum 32,071, overall 32,750). Basis for
+the shadow: proof/JEV-114-2026-10-17/eval-template-reprepare (sufficiency dropped sharply on both models).
+v3 configs (single proposition gating, the JEV-114 evaluation form) and v2 configs remain accepted and send
+no shadow. Each request records `diagnostics.templates` (version, SHA-256, forms, risks). Config validation
+refuses a compound/open shadow proposition or an interrogative rubric (shared CHECK_* hygiene logic).
+Promoting the shadow to gating is a separate owner decision.
 
 Authoring guidance (`authoringGuidance` in the review config, printed by `prepare`) uses existing v2
 fields: start each observation with a class tag ([observed-source], [retained-run], [proposal],

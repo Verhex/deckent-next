@@ -24,7 +24,12 @@ async function readInput(path, limit) {
 }
 export async function consult(config, policy, authoredCase, root, key, transport, meta = {}) {
   const requestAt = new Date().toISOString();
-  return consultPrepared(config, policy, { authoredCase, prepared: prepare(authoredCase, policy, requestAt), requestAt }, root, key, transport, meta);
+  let prepared = prepare(authoredCase, policy, requestAt);
+  // The non-gating shadow question must never make a case unaskable: drop it, recorded, if the wire is too large.
+  if (prepared.diagnostics.shadow?.included && Buffer.byteLength(JSON.stringify({ model: config.model, state: prepared.input.state, questions: prepared.input.questions })) > config.maxRequestBytes) {
+    prepared = prepare(authoredCase, policy, requestAt, { shadow: false, shadowOmittedReason: 'request-size' });
+  }
+  return consultPrepared(config, policy, { authoredCase, prepared, requestAt }, root, key, transport, meta);
 }
 // Shared by consult and evaluation replay. `inputSource` says whether the questions were compiled now
 // or replayed byte-for-byte from a stored request (whose templates and charter then govern).

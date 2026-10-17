@@ -69,7 +69,10 @@ export async function planComparison({ sourceRoot, candidate, baseline = null, p
       if (callIds) throw error;
       skipped.push({ callId: e.id, reason: `not-preparable:${/^JEV_[A-Z0-9_]+$/.test(error.message) ? error.message : 'JEV_CASE'}` }); continue;
     }
-    const fits = [candidate, baseline].filter(Boolean).every(c => Buffer.byteLength(JSON.stringify(wireFor(c.model, prepared.input))) <= c.maxRequestBytes);
+    const fitsAll = input => [candidate, baseline].filter(Boolean).every(c => Buffer.byteLength(JSON.stringify(wireFor(c.model, input))) <= c.maxRequestBytes);
+    // As in consult: the non-gating shadow is dropped (recorded) rather than making a case unaskable.
+    if (!fitsAll(prepared.input) && prepared.diagnostics?.shadow?.included) prepared = prepare(e.request.case, policy, now, { shadow: false, shadowOmittedReason: 'request-size' });
+    const fits = fitsAll(prepared.input);
     if (!fits) { ensure(!callIds, 'JEV_REQUEST_TOO_LARGE'); skipped.push({ callId: e.id, reason: 'request-too-large-for-config' }); continue; }
     selected.push({ ...e, prepared });
   }
@@ -105,6 +108,7 @@ function side(result, policy) {
   const selectedProbability = answer?.probabilities?.[answer.choice] ?? null; const sufficiency = result.answers?.sufficiency?.noul ?? null;
   const usage = { inputTokens: knownCount(result.usage?.input_tokens) ? result.usage.input_tokens : 'unknown', outputTokens: knownCount(result.usage?.output_tokens) ? result.usage.output_tokens : 'unknown' };
   return { status, callId: result.callId ?? null, model: result.model ?? null, choice: answer?.choice ?? null, selectedProbability, confidence: answer?.confidence ?? null, sufficiency,
+    sufficiencyShadow: result.answers?.sufficiency_shadow?.noul ?? null,
     disposition: adviceDisposition({ status, recommendation: answer?.choice ?? null, selectedProbability, sufficiency }, policy.reviewPolicy), usage,
     estimatedUsd: status === 'advice' ? estimateUsd(result.model, usage, policy.pricing) : null, latencyMs: result.latencyMs ?? null,
     error: result.error ?? null, stage: result.stage ?? null,

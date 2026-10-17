@@ -142,9 +142,18 @@ journalTest('a live baseline doubles the calls and failures stay failures; repre
   assert.equal(calls, 2);
   assert.equal(report.rows[0].candidate.status, 'unavailable'); assert.equal(report.rows[0].candidate.error, 'JEV_HTTP_529');
   assert.equal(report.rows[0].delta.comparable, false); assert.deepEqual(report.summary.candidate.failures, { JEV_HTTP_529: 1 });
-  const legacyPolicy = structuredClone(policy); legacyPolicy.templateVersion = 'other'; legacyPolicy.templates.sufficiencyRubric += ' Changed.';
+  const legacyPolicy = structuredClone(policy); legacyPolicy.templateVersion = 'other'; legacyPolicy.templates.sufficiencyShadowRubric += ' Changed.';
   const re = await runComparison({ sourceRoot: j.src, candidate: evalConfig, policy: legacyPolicy, cases: 1, inputMode: 'reprepare' }, { key, transport: answering(undefined), out: join(root, 'out2'), maxCalls: 1 });
   assert.equal(re.rows[0].contextChanged, true); assert.notEqual(re.rows[0].templates.baseline, re.rows[0].templates.candidate);
+  // Reprepare under the v4 config adds the shadow, and drops only the shadow when the cap is tight.
+  const stored = await readEvent(join(j.src, j.d.callId), 'request.json');
+  const gatingOnly = prepare(stored.case, policy, undefined, { shadow: false }).input;
+  const cap = Buffer.byteLength(JSON.stringify({ model: evalConfig.model, state: gatingOnly.state, questions: gatingOnly.questions }));
+  const tight = await planComparison({ sourceRoot: j.src, candidate: { ...evalConfig, maxRequestBytes: cap }, policy, callIds: [j.d.callId], inputMode: 'reprepare' });
+  assert.equal(tight.selection.selected, 1);
+  assert.equal(tight.selected[0].prepared.diagnostics.shadow.omittedReason, 'request-size');
+  const roomy = await planComparison({ sourceRoot: j.src, candidate: evalConfig, policy, callIds: [j.d.callId], inputMode: 'reprepare' });
+  assert.equal(roomy.selected[0].prepared.diagnostics.shadow.included, true);
 }));
 
 test('CLI arguments: planning is the default; execution requires an output directory and a call budget', () => {

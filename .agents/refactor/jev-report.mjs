@@ -69,6 +69,23 @@ export function followUpSummary(rows) {
     outcomeCounts: Object.fromEntries(['verified', 'failed', 'inconclusive', 'unobserved'].map(status => [status, count(rows, r => r.outcome === status)])),
     recordingGapIsFailure: false, pendingOrOmittedIsUnknown: true };
 }
+// Shadow sufficiency (review config v4) beside the gating answer. Descriptive only: the shadow never
+// enters adviceDisposition, the row's sufficiency or any threshold decision.
+export function shadowSummary(rows) {
+  const pairs = rows.filter(r => r.status === 'advice' && Number.isFinite(r.sufficiency) && Number.isFinite(r.sufficiencyShadow));
+  const mean = values => values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
+  const deltas = pairs.map(r => r.sufficiencyShadow - r.sufficiency);
+  const judged = pairs.filter(r => Number.isFinite(r.sufficiencyThreshold));
+  const meets = (v, r) => v >= r.sufficiencyThreshold;
+  return { role: 'shadow-never-gating', questionId: 'sufficiency_shadow', requestsWithShadow: count(rows, r => r.shadowIncluded === true),
+    shadowOmitted: count(rows, r => r.shadowIncluded === false), pairs: pairs.length,
+    meanGating: mean(pairs.map(r => r.sufficiency)), meanShadow: mean(pairs.map(r => r.sufficiencyShadow)), meanDelta: mean(deltas),
+    minDelta: deltas.length ? Math.min(...deltas) : null, maxDelta: deltas.length ? Math.max(...deltas) : null,
+    crossings: { bothMeet: count(judged, r => meets(r.sufficiency, r) && meets(r.sufficiencyShadow, r)), bothBelow: count(judged, r => !meets(r.sufficiency, r) && !meets(r.sufficiencyShadow, r)),
+      gatingMeetsShadowBelow: count(judged, r => meets(r.sufficiency, r) && !meets(r.sufficiencyShadow, r)),
+      gatingBelowShadowMeets: count(judged, r => !meets(r.sufficiency, r) && meets(r.sufficiencyShadow, r)), thresholdUnknown: pairs.length - judged.length },
+    basis: 'delta = shadow - gating on the same request; raw >= against the sufficiency threshold used for that row; never applied to disposition' };
+}
 function slice(rows, keyOf, pricing) {
   const groups = new Map();
   for (const r of rows) { const k = keyOf(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
@@ -77,6 +94,7 @@ function slice(rows, keyOf, pricing) {
     responseUnknown: count(group, r => r.status === 'response-unknown'), usage: usageSummary(group), cost: costSummary(group, pricing),
     latency: latencyByResult(group), followUp: followUpSummary(group),
     adviceDispositions: Object.fromEntries(DISPOSITIONS.map(d => [d, count(group, r => r.adviceDisposition === d)])),
+    shadowSufficiency: shadowSummary(group),
     failureErrors: Object.fromEntries([...new Set(group.filter(r => r.failure).map(r => r.failure.error))].sort().map(e => [e, count(group, r => r.failure?.error === e)])) }]));
 }
 export function usageSummary(rows) {
@@ -150,6 +168,8 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
       selectedOption: decision?.selectedOption ?? null, recommendation: answer?.choice ?? null,
       selectedProbability, confidence: answer?.confidence ?? null,
       sufficiency, labeledNoulAnswers,
+      sufficiencyShadow: response?.answers.sufficiency_shadow?.noul ?? null, shadowIncluded: request.diagnostics?.shadow?.included ?? null,
+      sufficiencyThreshold: thresholds?.minSufficiency ?? null,
       offeredChoiceIds: Object.keys(request.input.questions.next_action.criteria),
       abstentionProbabilities: Object.fromEntries(['none_of_the_above', 'insufficient_information', 'defer'].map(option => [option, answer?.probabilities?.[option] ?? null])),
       agreement: response && decision ? answer.choice === decision.selectedOption : null, outcome: outcome?.status ?? 'unobserved',
@@ -167,6 +187,7 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
       currentPolicy: policyThresholds(reviewPolicy), thresholdSources: Object.fromEntries(['request', 'current-config', 'none'].map(src => [src, count(rows, r => r.thresholdSource === src)])),
       adviceOnly: true, executionGate: false, approvalGate: false, basis: 'selected probability and sufficiency compared with >= to owner review criteria; confidence is reported separately' },
     lineage: lineageSummary(rows),
+    shadowSufficiency: shadowSummary(rows),
     abstentions: Object.fromEntries(['none_of_the_above', 'insufficient_information', 'defer'].map(option => [option, { offered: count(rows, r => r.offeredChoiceIds.includes(option)), selected: count(rows, r => r.recommendation === option) }])),
     usage: usageSummary(rows),
     latency: { samples: times.length, p50Ms: quantile(times, 0.5), p95Ms: quantile(times, 0.95), basis: 'recorded attempts, including failures with latency' },
