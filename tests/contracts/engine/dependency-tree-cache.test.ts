@@ -36,16 +36,17 @@ it('classifies a native binary through bounded windows; reads only the header of
   const requests: number[] = [];
   const source = (bytes: Buffer, shrink = false) => ({ size, read: async (offset: number, length: number) => { requests.push(length);
     return bytes.subarray(offset, offset + (shrink && offset > 0 ? length - 1 : length)); } });
-  const none = () => ({ hit: false, carry: 0 });
-  expect(await classifyDependencyBinary(source(body), none, () => undefined)).toMatch(/^unscanned-binary:elf:sha256=[0-9a-f]{64}$/u);
+  const checks = (known = false) => ({ decode: (bytes: Buffer) => [bytes.toString('latin1')], known: { spans: () => known ? [1] : [], pendingStart: (text: string) => text.length },
+    rows: [], match: async () => [], first: async () => null });
+  expect(await classifyDependencyBinary(source(body), checks(), () => undefined)).toEqual([{ rule: expect.stringMatching(/^native-binary:elf:sha256=[0-9a-f]{64}$/u), refuse: false }]);
   expect(Math.max(...requests)).toBeLessThanOrEqual(WINDOW);
   requests.length = 0;
-  expect(await classifyDependencyBinary(source(Buffer.alloc(size, 0x41)), none, () => undefined)).toBeNull();
+  expect(await classifyDependencyBinary(source(Buffer.alloc(size, 0x41)), checks(), () => undefined)).toBeNull();
   expect(requests).toEqual([1024]);
-  await expect(classifyDependencyBinary(source(body, true), none, () => undefined)).rejects.toThrow('WORKER_TREE_ENTRY_CHANGED');
-  // The deadline is checked per window; a value check that reports a hit stops the read.
-  let ticks = 0; await classifyDependencyBinary(source(body), none, () => { ticks++; }); expect(ticks).toBe(4);
-  await expect(classifyDependencyBinary(source(body), () => ({ hit: true, carry: 0 }), () => undefined)).resolves.toBe('known-secret');
+  await expect(classifyDependencyBinary(source(body, true), checks(), () => undefined)).rejects.toThrow('WORKER_TREE_ENTRY_CHANGED');
+  // The deadline is checked per window; a configured value stops the read with a refusal.
+  let ticks = 0; await classifyDependencyBinary(source(body), checks(), () => { ticks++; }); expect(ticks).toBe(4);
+  await expect(classifyDependencyBinary(source(body), checks(true), () => undefined)).resolves.toEqual([{ rule: 'known-secret', refuse: true }]);
 });
 
 it('judges tree overlap by device and inode along real paths: a linked spelling is the same tree, an unresolvable path fails closed', async () => {

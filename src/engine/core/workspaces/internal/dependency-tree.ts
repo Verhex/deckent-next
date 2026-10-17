@@ -44,6 +44,8 @@ export class DependencyTreePatternCache {
   static fileName(source: string, target: string): string { return `${sha256(`${source}\0${target}`)}.json`; }
   /** The file's pattern result: reused when the same path held the same bytes in this scope, otherwise evaluated; kept for the next save. */
   async rule(path: string, bytes: Uint8Array, evaluate: () => Promise<string | null>): Promise<string | null> {
+    // A native-claimed file's patterns can refuse (`refuseInNativeFiles`): never served from the cache, so the cache still never decides.
+    if (nativeBinaryKind(bytes) !== null) return evaluate();
     const digest = sha256(bytes), cached = this.#reuse.get(path);
     const rule = cached?.[0] === digest ? (this.#reused++, cached[1]) : await evaluate();
     // Bounded keys: a path longer than the stored bound is evaluated on every dispatch, never kept.
@@ -61,43 +63,69 @@ export class DependencyTreePatternCache {
 
 /** One open file above the text bound, read only through bounded windows (fewer bytes than asked means the file changed: refused). */
 export interface DependencyBinarySource { readonly size: number; readonly read: (offset: number, length: number) => Promise<Buffer> }
-/** A configured-value check of one window: whether a value is in it, and how many trailing bytes may begin one (carried into the next window). */
-export type DependencyBinaryValueCheck = (window: Buffer) => Readonly<{ hit: boolean; carry: number }>;
-/** What the value check needs of the configured-value snapshot (platform `KnownSecretSnapshot`); never the values themselves. */
+/** What the class needs of the configured-value snapshot (platform `KnownSecretSnapshot`); never the values themselves. */
 export interface DependencyValueSnapshot { readonly spans: (text: string) => readonly unknown[]; readonly pendingStart: (text: string) => number }
-const partialEscape = /\\(?:u[0-9a-fA-F]{0,3}|x[0-9a-fA-F]?)?$/u;
+/** The gate's own readers for one file: its decoder (`decodedTexts`), configured values, pattern rows, terminable regex runner and first-rule evaluator. */
+export interface DependencyTextChecks {
+  readonly decode: (bytes: Buffer) => readonly string[]; readonly known: DependencyValueSnapshot;
+  readonly rows: readonly Readonly<{ id: string; source: string; flags: string }>[];
+  readonly match: (source: string, flags: string, texts: readonly string[]) => Promise<readonly number[]>;
+  readonly first: (texts: readonly string[]) => Promise<string | null>;
+}
+/** A dependency-class hit: `refuse` findings stop the dispatch; the others are audited exceptions. */
+export type DependencyHit = Readonly<{ rule: string; refuse: boolean }>;
+const partialEscape = /\\(?:u[0-9a-fA-F]{0,3}|x[0-9a-fA-F]?)?$/u, refusing = new Set(BINARIES.refuseInNativeFiles);
+/** The native format a header claims (a listed signature and a NUL byte within `headerBytes`), or null. */
+export function nativeBinaryKind(bytes: Uint8Array): string | null {
+  const header = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.length, BINARIES.headerBytes));
+  return header.includes(0) ? signatures.find(row => header.subarray(0, row.bytes.length).equals(row.bytes))?.kind ?? null : null;
+}
+/** The first credential family of `refuseInNativeFiles` any reading matches (one combined expression per flag set screens, then attribution). */
+async function refusingRule(texts: readonly string[], checks: DependencyTextChecks): Promise<string | null> {
+  const rows = checks.rows.filter(row => refusing.has(row.id));
+  for (const flags of new Set(rows.map(row => row.flags))) {
+    const group = rows.filter(row => row.flags === flags);
+    if ((await checks.match(group.map(row => `(?:${row.source})`).join('|'), flags, texts)).length) {
+      for (const row of group) if ((await checks.match(row.source, row.flags, texts)).length) return row.id;
+    }
+  }
+  return null;
+}
 /**
- * The configured-value check of one window in every reading `decode` takes of it (the gate's `decodedTexts`: UTF-8, NUL-stripped, UTF-16 at
- * both alignments, JSON/YAML escapes): a hit anywhere, and the carry — the trailing characters that may begin a value (`pendingStart`, judged
- * with a trailing partial escape set aside so an escaped value split at the edge is still joined) times `carryBytesPerChar`, the widest byte
- * form one decoded character takes (a six-character escape in a four-byte encoding).
+ * S6 dependency class, review 4 (2026-10-17): a file whose header claims a native format (any size) is not third-party text. A credential
+ * family of `refuseInNativeFiles` (private-key blocks, provider and cloud tokens) in it refuses; text fixtures stay exceptions (zod
+ * url-userinfo, jose private-key-block). Returns `pattern:<id>` or null.
  */
-export const dependencyValueCheck = (decode: (bytes: Buffer) => readonly string[], known: DependencyValueSnapshot): DependencyBinaryValueCheck => window => {
-  const texts = decode(window);
-  return { hit: texts.some(text => known.spans(text).length > 0),
-    carry: Math.max(0, ...texts.map(text => (text.length - known.pendingStart(text.replace(partialEscape, ''))) * BINARIES.carryBytesPerChar)) };
-};
+export async function dependencyNativeRefusal(bytes: Uint8Array, texts: readonly string[], checks: DependencyTextChecks): Promise<string | null> {
+  if (nativeBinaryKind(bytes) === null) return null;
+  const rule = await refusingRule(texts, checks);
+  return rule === null ? null : `pattern:${rule}`;
+}
 
 /**
- * A dependency-tree file above the text scan bound, never allocated whole: the header (`headerBytes`) is read first, and only a listed native
- * format (signature and a NUL byte in the header) is read further, in `windowBytes` windows, each hashed and checked for configured values
- * with the bytes that may begin one carried over (bounded by the longest configured value). Returns `unscanned-binary:<kind>:sha256=<digest>`,
- * `known-secret` (refused) or null (unclassifiable: the caller fails closed before any further read). `tick` enforces the scan deadline.
+ * A dependency-tree file above the text scan bound, never allocated whole: the header (`headerBytes`) is read first; anything but a native
+ * format returns null (unclassifiable: the caller fails closed). A native file is read in `windowBytes` windows, each hashed and given every
+ * reading of the gate's decoder: configured values and `refuseInNativeFiles` families refuse (stopping the read), other pattern hits are kept
+ * as exceptions. The carry joins a value or pattern split at a window edge: `pendingStart` × `carryBytesPerChar` (with a trailing partial
+ * escape set aside) and at least `patternCarryBytes`. `tick` enforces the deadline per window. Hits: `native-binary:<kind>:sha256=<digest>` first.
  */
-export async function classifyDependencyBinary(source: DependencyBinarySource, values: DependencyBinaryValueCheck, tick: () => void): Promise<string | null> {
-  const header = await source.read(0, Math.min(source.size, BINARIES.headerBytes));
-  const kind = header.includes(0) ? signatures.find(row => header.subarray(0, row.bytes.length).equals(row.bytes))?.kind : undefined;
-  if (kind === undefined) return null;
-  const hash = createHash('sha256');
+export async function classifyDependencyBinary(source: DependencyBinarySource, checks: DependencyTextChecks, tick: () => void): Promise<readonly DependencyHit[] | null> {
+  const kind = nativeBinaryKind(await source.read(0, Math.min(source.size, BINARIES.headerBytes)));
+  if (kind === null) return null;
+  const hash = createHash('sha256'), listed = new Set<string>();
   let carry = Buffer.alloc(0);
   for (let offset = 0; offset < source.size; offset += BINARIES.windowBytes) {
     tick();
     const length = Math.min(BINARIES.windowBytes, source.size - offset), chunk = await source.read(offset, length);
     if (chunk.length !== length) throw new Error('WORKER_TREE_ENTRY_CHANGED');
     hash.update(chunk);
-    const window = Buffer.concat([carry, chunk]), check = values(window);
-    if (check.hit) return 'known-secret';
-    carry = window.subarray(Math.max(0, window.length - Math.min(window.length, check.carry)));
+    const window = Buffer.concat([carry, chunk]), texts = checks.decode(window);
+    if (texts.some(text => checks.known.spans(text).length > 0)) return [{ rule: 'known-secret', refuse: true }];
+    const refused = await refusingRule(texts, checks);
+    if (refused !== null) return [{ rule: `pattern:${refused}`, refuse: true }];
+    const rule = await checks.first(texts); if (rule !== null) listed.add(`pattern:${rule}`);
+    const pending = Math.max(0, ...texts.map(text => (text.length - checks.known.pendingStart(text.replace(partialEscape, ''))) * BINARIES.carryBytesPerChar));
+    carry = window.subarray(Math.max(0, window.length - Math.min(window.length, Math.max(pending, BINARIES.patternCarryBytes))));
   }
-  return `unscanned-binary:${kind}:sha256=${hash.digest('hex')}`;
+  return [{ rule: `native-binary:${kind}:sha256=${hash.digest('hex')}`, refuse: false }, ...[...listed].map(rule => ({ rule, refuse: false }))];
 }

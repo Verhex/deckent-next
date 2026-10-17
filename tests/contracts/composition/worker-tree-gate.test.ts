@@ -170,7 +170,7 @@ it('passes a declared dependency tree outside the checkout with a 20 MB native b
     await expect(executeConfiguredTask(f.project, f.identity, f.options)).rejects.toBeTruthy();
     expect(capture).toHaveBeenCalledTimes(1); expect(await f.auditPage()).toEqual([]);
     const digest = createHash('sha256').update(binding).digest('hex'), by = 'dependencyTree:/deps';
-    const entries = [{ path: 'deps/native/binding.node', rule: `unscanned-binary:elf:sha256=${digest}`, by }, { path: 'deps/zod/tests/string.test.ts', rule: 'pattern:url-userinfo', by }];
+    const entries = [{ path: 'deps/native/binding.node', rule: `native-binary:elf:sha256=${digest}`, by }, { path: 'deps/zod/tests/string.test.ts', rule: 'pattern:url-userinfo', by }];
     expect(await f.auditPage('worker-tree-excluded')).toEqual([{ kind: 'worker-tree-excluded', runId: 'r', taskId: 'a', attemptId: f.identity.attemptId, count: 2, entries }]);
     expect((await inspectConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks[0]!.configExclusions).toEqual({ count: 2, entries });
     // The tree's pattern results are kept as product data for the next dispatch.
