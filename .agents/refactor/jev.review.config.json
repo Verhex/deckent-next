@@ -19,5 +19,15 @@
     "counterevidence": "Include the observations that weaken the leading option or support another, tagged [counterevidence] before the class tag, or state in constraints that none was found. Do not omit contrary receipts to raise sufficiency.",
     "optionSupport": "Link each option to the observation that distinguishes it from the others and name its behavior difference, gain and loss. Shared evidence is valid when you explain how it separates the options; paths and IDs alone are not support.",
     "remainingUnknowns": "List in unknowns each missing fact that could change this decision and the option it affects. Keep facts needed only for a later stage, such as implementation acceptance, separate from this decision's stage."
+  },
+  "reviewPolicy": {
+    "version": "owner-2026-10-09",
+    "decidedBy": "owner",
+    "decidedAt": "2026-10-09",
+    "source": ".deckent/docs/core-memory/law_second_opinion_jev.md",
+    "minSelectedProbability": 0.85,
+    "minSufficiency": 0.67,
+    "maxContextRevisions": 1,
+    "role": "advice-disposition-only"
   }
 }

@@ -6,6 +6,12 @@ do not call for every mechanical edit or repeat the same unchanged question to o
 Use the logged preparation layer from Next only (host tooling, not a product feature):
 - `node .agents/refactor/jev-review.mjs prepare CASE.json` validates/compiles context offline.
 - `node .agents/refactor/jev-review.mjs ask CASE.json` records request before the bounded external call.
+  Lineage flags (recorded beside the request, never sent): `--relation new-decision` (default) |
+  `context-revision --parent CALL_ID --reason TEXT` (changed context for the same decision; an unchanged
+  request is refused) | `transport-retry --parent CALL_ID` (identical request after a recorded failure
+  only; refused when the parent has advice or is response-unknown); `--case-id ID`; `--purpose
+  development|evaluation|control|pilot`. A context revision is not `process.reopenReason`, which reopens
+  an accepted decision.
 - `node .agents/refactor/jev-review.mjs decision CALL_ID DECISION.json` records actor, selectedOption,
   rationale, actions and evidenceRefs; explicitly explain disagreement or missing evidence.
 - `node .agents/refactor/jev-review.mjs outcome CALL_ID OUTCOME.json` records actor, status
@@ -60,6 +66,12 @@ For this development workflow, report selection probability against 0.85 and con
 against 0.67 (owner 2026-10-09; was 0.90/0.75); aim for at least 0.85 sufficiency on the first well-prepared call. These are owner
 review criteria, not automatic tool gates or evidence of decision correctness. Never repeat an
 unchanged question to chase a score. Preserve option meaning in context-only comparisons.
+The criteria live in review config `reviewPolicy` (version, decider, date, source, 0.85, 0.67, one
+context revision, role advice-disposition-only) and each request records the policy in force. Report
+rows carry `adviceDisposition` (thresholds-met, below-choice, below-sufficiency, below-both, abstained,
+incomplete, unavailable, response-unknown, thresholds-unknown; raw `>=`, so 0.66 stays below 0.67) and
+`lineage` (unknown for pre-lineage records); exceeding one context revision is flagged for lead/owner
+disposition. None of this blocks, approves or executes anything.
 
 Before asking: pin the decision-time revision and scope; state accepted decisions and why any
 reopening is justified; distinguish observed facts, proposals, assumptions and unknowns. Supply

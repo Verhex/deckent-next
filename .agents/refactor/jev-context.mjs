@@ -25,24 +25,32 @@ export const instant = value => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+// Owner review criteria for advice disposition (law 8). They describe advice, never gate execution or approval.
+const POLICY_KEYS = ['version', 'decidedBy', 'decidedAt', 'source', 'minSelectedProbability', 'minSufficiency', 'maxContextRevisions', 'role'];
+const threshold = v => Number.isFinite(v) && v > 0 && v <= 1;
+const validReviewPolicy = p => exact(p, POLICY_KEYS) && POLICY_KEYS.every(k => Object.hasOwn(p, k))
+  && [p.version, p.decidedBy, p.source].every(text) && /^\d{4}-\d{2}-\d{2}$/.test(p.decidedAt)
+  && threshold(p.minSelectedProbability) && threshold(p.minSufficiency)
+  && Number.isSafeInteger(p.maxContextRevisions) && p.maxContextRevisions >= 0 && p.role === 'advice-disposition-only';
 const LEGACY_TEMPLATES = ['sufficiency', 'selection', 'none_of_the_above', 'insufficient_information'];
 const GUIDANCE = ['observationClass', 'counterevidence', 'optionSupport', 'remainingUnknowns'];
 // schemaVersion 2 (legacy compound sufficiency question) stays readable for overrides and old journals;
 // schemaVersion 3 requires one sufficiency proposition, a non-interrogative rubric, a template version
 // and authoring guidance.
 export function validateReviewConfig(c) {
-  ensure(exact(c, ['schemaVersion', 'journalRoot', 'maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit', 'reportScanLimit', 'templateVersion', 'templates', 'authoringGuidance']), 'JEV_REVIEW_CONFIG');
+  ensure(exact(c, ['schemaVersion', 'journalRoot', 'maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit', 'reportScanLimit', 'templateVersion', 'templates', 'authoringGuidance', 'reviewPolicy']), 'JEV_REVIEW_CONFIG');
   ensure([2, 3].includes(c.schemaVersion) && text(c.journalRoot), 'JEV_REVIEW_CONFIG');
   for (const k of ['maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit']) ensure(Number.isSafeInteger(c[k]) && c[k] > 0 && c[k] <= 1048576, 'JEV_REVIEW_CONFIG');
   ensure(c.reportScanLimit === undefined || (Number.isSafeInteger(c.reportScanLimit) && c.reportScanLimit >= c.reportLimit && c.reportScanLimit <= 1048576), 'JEV_REVIEW_CONFIG');
   if (c.schemaVersion === 2) {
-    ensure(c.templateVersion === undefined && c.authoringGuidance === undefined, 'JEV_REVIEW_CONFIG');
+    ensure(c.templateVersion === undefined && c.authoringGuidance === undefined && c.reviewPolicy === undefined, 'JEV_REVIEW_CONFIG');
     ensure(exact(c.templates, LEGACY_TEMPLATES) && LEGACY_TEMPLATES.every(k => text(c.templates[k])), 'JEV_REVIEW_CONFIG');
     return c;
   }
   const keys = [...LEGACY_TEMPLATES, 'sufficiencyRubric'];
   ensure(text(c.templateVersion) && exact(c.templates, keys) && keys.every(k => text(c.templates[k])), 'JEV_REVIEW_CONFIG');
   ensure(exact(c.authoringGuidance, GUIDANCE) && GUIDANCE.every(k => text(c.authoringGuidance[k])), 'JEV_REVIEW_CONFIG');
+  ensure(c.reviewPolicy === undefined || validReviewPolicy(c.reviewPolicy), 'JEV_REVIEW_POLICY');
   ensure(propositionRisks(c.templates.sufficiency).length === 0 && (c.templates.sufficiency.match(/\?/g) || []).length === 1
     && c.templates.sufficiency.trim().endsWith('?') && !c.templates.sufficiencyRubric.includes('?'), 'JEV_REVIEW_CONFIG_TEMPLATE');
   return c;
