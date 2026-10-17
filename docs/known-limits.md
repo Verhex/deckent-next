@@ -59,6 +59,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; archives and any other oversized file
   are still unscannable; oversized binaries are read only in 1 MiB windows. Pattern results are cached per file content under the product's `state/secret-gate-cache`; a changed lockfile
   or release starts over, and the unsigned cache can change only which exceptions are listed, never a decision.
+  Such a binary is listed by digest but its text is not matched against patterns, so pattern-shaped text after a native
+  header in an oversized file is not listed. The tree is scanned on the host and bound live, read-only: a change made on
+  the host after the scan reaches the worker unscanned (as for any bind).
   *Impact:* a real token planted in a dependency package as plain text reaches the worker, visible only as an exception.
   *Workaround:* declare only trees installed from a lockfile you trust, and review the exceptions on the Run card.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not

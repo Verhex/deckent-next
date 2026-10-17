@@ -1,8 +1,8 @@
 import { constants } from 'node:fs';
-import { lstat, open, readdir, readlink, realpath } from 'node:fs/promises';
+import { lstat, open, readdir, readlink } from 'node:fs/promises';
 import { join, posix } from 'node:path';
-import { DECKENT_VERSION, EMPTY_KNOWN_SECRETS, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic, type KnownSecretSnapshot } from '#platform/index.js';
-import { classifyDependencyBinary, dependencyTreeEligible, DependencyTreePatternCache, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan } from '#engine/index.js';
+import { DECKENT_VERSION, EMPTY_KNOWN_SECRETS, pathsShareTree, readJsonFile, redactForRecord, REDACTION_CONFIG_SECRET, writeTextAtomic, type KnownSecretSnapshot } from '#platform/index.js';
+import { classifyDependencyBinary, DependencyTreePatternCache, dependencyValueCheck, workerTreeDenyForms, type DependencyTreeStatistics, type WorkerTreeExclusion, type WorkerTreeFinding, type WorkerTreeLimit, type WorkerTreeScan } from '#engine/index.js';
 import { archiveKind, contentRule, decodedTexts, WORKER_TREE_PATTERN_RULES } from './content.js';
 import { createGlobMatcher, createRegexRunner, CREDENTIAL_WORKSPACE_DENY, RegexCancelled } from '#adapters/core/workspace-read/index.js';
 
@@ -68,7 +68,7 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
       const bytes = info.size > options.maxFileBytes ? null : Buffer.alloc(info.size); let offset = 0;
       while (bytes && offset < bytes.length) { const chunk = await handle.read(bytes, offset, bytes.length - offset, offset); if (!chunk.bytesRead) break; offset += chunk.bytesRead; }
       const classified = bytes ? null : await classifyDependencyBinary({ size: info.size, read: async (at, length) => { const chunk = await handle.read(Buffer.alloc(length), 0, length, at); return chunk.buffer.subarray(0, chunk.bytesRead); } },
-        window => { const texts = decodedTexts(window); return { hit: texts.some(text => known.spans(text).length), carry: Math.max(0, ...texts.map(text => (text.length - known.pendingStart(text)) * 6)) }; }, time);
+        dependencyValueCheck(decodedTexts, known), time);
       const after = await handle.stat();
       // A file that grew, shrank or changed while it was read is never passed on a partial view.
       if ((bytes && offset !== info.size) || after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs) throw new Error('WORKER_TREE_ENTRY_CHANGED');
@@ -116,11 +116,11 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   };
   const views: readonly WorkerTreeView[] = typeof input === 'string' ? [{ source: input, label: '' }] : input;
   try {
-    const roots = await Promise.all([...views.flatMap(view => 'source' in view && view.label === '' ? [view.source] : []), ...(options.checkoutRoot ? [options.checkoutRoot] : [])].map(root => realpath(root).catch(() => root)));
+    const roots = [...views.flatMap(view => 'source' in view && view.label === '' ? [view.source] : []), ...(options.checkoutRoot ? [options.checkoutRoot] : [])];
     for (const view of views) {
       const label = view.label === '' ? '' : posix.normalize(view.label).replace(/^(?:\.?\/)+/u, '').replace(/\/+$/u, '');
       tree = undefined; const file = 'source' in view && options.cacheDirectory !== undefined ? join(options.cacheDirectory, DependencyTreePatternCache.fileName(view.source, view.label)) : null;
-      tree = 'source' in view && view.dependencyTree && label !== '' && dependencyTreeEligible(await realpath(view.source).catch(() => view.source), roots) ? await DependencyTreePatternCache.open({ label: view.label, rules: [DECKENT_VERSION, WORKER_TREE_PATTERN_RULES, REDACTION_CONFIG_SECRET],
+      tree = 'source' in view && view.dependencyTree && label !== '' && !(await Promise.all(roots.map(root => pathsShareTree(root, view.source)))).includes(true) ? await DependencyTreePatternCache.open({ label: view.label, rules: [DECKENT_VERSION, WORKER_TREE_PATTERN_RULES, REDACTION_CONFIG_SECRET],
         lockfile: await read(join(view.source, view.dependencyTree.lockfile)).then(lock => typeof lock === 'string' ? null : lock, () => null), store: file === null ? null : { read: () => readJsonFile(file), write: text => writeTextAtomic(file, text) } }) : undefined;
       if ('text' in view) {
         const bytes = Buffer.byteLength(view.text); time();

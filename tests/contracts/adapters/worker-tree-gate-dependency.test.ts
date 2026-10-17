@@ -90,6 +90,26 @@ describe('the dependency class', () => {
   });
 });
 
+describe('parser parity for an oversized file in the class (polyglot: native header, text body)', () => {
+  const edge = 1 << 20, value = 'erp-hunter2-value', known = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value }]);
+  const place = (bytes: Buffer, offset: number) => { const body = elf(); bytes.copy(body, offset); return body; };
+  const utf32 = (text: string) => Buffer.concat([...text].map(char => { const bytes = Buffer.alloc(4); bytes.writeUInt32LE(char.codePointAt(0)!); return bytes; }));
+  const escaped = Buffer.from([...value.slice(0, 3)].map(char => `\\u00${char.charCodeAt(0).toString(16)}`).join('') + value.slice(3));
+  it('reads the body to its end: a configured value deep inside, across a window edge and in every reading a worker tool can take still refuses', async () => {
+    for (const [name, bytes] of [['deep UTF-8', place(Buffer.from(value), 5 * edge + 123)], ['UTF-16LE at an odd offset across an edge', place(Buffer.from(value, 'utf16le'), 2 * edge - 9)],
+      ['UTF-16LE with a BOM', place(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(value, 'utf16le')]), 7 * edge + 1)], ['UTF-32 across an edge', place(utf32(value), 3 * edge - 30)],
+      ['a JSON escape split inside an escape', place(escaped, 4 * edge - 4)], ['a JSON escape split after one escape', place(escaped, 6 * edge - 6)]] as const) {
+      expect(await scanWorkerTree(declared(await tree(dependencies(bytes))), options(), known), name).toMatchObject({ status: 'refused', findings: [{ path: `node_modules/${BINDING}`, rule: 'known-secret' }] });
+    }
+  });
+  it('a deny-listed name refuses before any read; pattern text in the body is not decoded — the file is listed by its digest instead (the documented loss)', async () => {
+    expect(await scanWorkerTree(declared(await tree({ ...dependencies(), 'pkg/.env': elf() })), options())).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/pkg/.env', rule: 'deny-path:**/.env' }] });
+    const polyglot = place(Buffer.from(USERINFO), 2 * edge), scan = await scanWorkerTree(declared(await tree(dependencies(polyglot))), options());
+    expect(scan).toMatchObject({ status: 'clean', excluded: [{ path: `node_modules/${BINDING}`, rule: `unscanned-binary:elf:sha256=${sha256(polyglot)}`, by },
+      { path: `node_modules/${ZOD_TEST}`, rule: 'pattern:url-userinfo', by }] });
+  });
+});
+
 describe('only an owner-declared bind outside the workspace and the checkout takes the class', () => {
   const views = (workspace: string, source: string, checkoutRoot?: string) => ({ views: workerTreeViews(workspace, [{ source, target: '/node_modules', dependencyTree: { lockfile: '.package-lock.json' } }],
     { inputs: [], handoffInputs: [] }), options: { ...options(), ...(checkoutRoot ? { checkoutRoot } : {}) } });

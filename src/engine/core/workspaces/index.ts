@@ -12,8 +12,8 @@ export { enforceWorkerTreeGate, workerTreeDenyForms, WORKER_TREE_SHOWN_PATHS } f
 export type { WorkerTreeFinding, WorkerTreeGateContext, WorkerTreeLimit, WorkerTreeScan } from './internal/secret-gate.js';
 export { readWorkerTreeExclusions, recordWorkerTreeExclusions, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, workerTreeExclusionSchema } from './internal/exclusion-receipt.js';
 export type { WorkerTreeExclusion, WorkerTreeExclusionRecord } from './internal/exclusion-receipt.js';
-export { DependencyTreePatternCache, classifyDependencyBinary, dependencyTreeEligible, dependencyTreeLifting } from './internal/dependency-tree.js';
-export type { DependencyBinarySource, DependencyBinaryValueCheck, DependencyTreeCacheStore, DependencyTreeStatistics } from './internal/dependency-tree.js';
+export { DependencyTreePatternCache, classifyDependencyBinary, dependencyTreeLifting, dependencyValueCheck } from './internal/dependency-tree.js';
+export type { DependencyBinarySource, DependencyBinaryValueCheck, DependencyValueSnapshot, DependencyTreeCacheStore, DependencyTreeStatistics } from './internal/dependency-tree.js';
 
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from './internal/git-source-base.js';
 export type { GitSourcePreimage, GitSourceBase } from './internal/git-source-base.js';
