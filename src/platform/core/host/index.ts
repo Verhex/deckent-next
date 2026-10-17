@@ -9,3 +9,4 @@ export * from './internal/layout/resolve.js';
 export * from './internal/layout/inspect.js';
 export * from './internal/build-identity.js';
 export * from './internal/node-support.js';
+export * from './internal/wsl-detect.js';
