@@ -351,3 +351,32 @@ journalTest('report keeps known-token subtotals and counts unknown usage from nu
   assert.equal(summary.rows.find(r => r.status === 'unavailable').usage.basis, 'failed-attempt');
   assert.equal(summary.rows.find(r => r.status === 'response-unknown').usage.basis, 'response-unknown');
 }));
+
+journalTest('failure records keep safe diagnostics, and a hostile request id cannot cost the failure record', async () => sandbox(async root => {
+  const sum = async (_url, options) => {
+    const { questions } = JSON.parse(options.body);
+    return Response.json({ model: 'jev-1.13.0', answers: Object.fromEntries(Object.entries(questions).map(([id, q]) => [id, q.type === 'noul' ? { type: 'noul', noul: 0.4 }
+      : { type: 'choice', choice: 'investigate', confidence: 0.5, probabilities: { investigate: 0.6, accept: 0.2, none_of_the_above: 0.1, insufficient_information: 0.05 } }])),
+    usage: { input_tokens: 4000, output_tokens: 0 } }, { headers: { 'x-typesafe-request-id': 'req-123' } });
+  };
+  const failed = await consult(config, policy, fixture(), root, key, sum);
+  assert.equal(failed.status, 'unavailable'); assert.equal(failed.error, 'JEV_DISTRIBUTION_SUM'); assert.equal(failed.stage, 'validate');
+  const event = await readEvent(failed.directory, 'failure.json');
+  assert.equal(event.schemaVersion, 2); assert.equal(event.usage, 'unknown'); assert.equal(event.rawResponseRetained, false);
+  assert.equal(event.diagnostics.requestId, 'req-123');
+  assert.deepEqual(event.diagnostics.usage, { input_tokens: 4000, output_tokens: 0 });
+  const dist = event.diagnostics.distributions.find(d => d.questionId === 'next_action');
+  assert.equal(dist.count, 4); assert.ok(Math.abs(dist.sum - 0.95) < 1e-12);
+  // Header equal to the key: redacted, failure still recorded, no secret on disk.
+  const hostile = await consult(config, policy, fixture(), root, key, async () => new Response(key, { status: 500, headers: { 'x-typesafe-request-id': key } }));
+  assert.equal(hostile.status, 'unavailable');
+  const stored = await readFile(join(hostile.directory, 'failure.json'), 'utf8');
+  assert.ok(!stored.includes(key)); assert.equal(JSON.parse(stored).diagnostics.requestId, 'redacted');
+  // Timeout is distinguishable from other generic failures by stage and error name.
+  const timeout = await consult({ ...config, timeoutMs: 5 }, policy, fixture(), root, key, async (_url, { signal }) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(new Response('{}')), 1000);
+    signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+  }));
+  const te = await readEvent(timeout.directory, 'failure.json');
+  assert.equal(te.error, 'JEV_REQUEST_FAILED'); assert.equal(te.diagnostics.stage, 'transport'); assert.equal(te.diagnostics.errorName, 'TimeoutError');
+}));

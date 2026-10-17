@@ -39,7 +39,11 @@ immutable request/response-or-failure/decision/outcome files linked by callId; n
 No recorded response after a crash means response-unknown, not failure or permission to repeat a billed call.
 Credential: TYPESAFE_API_KEY, TYPESAFE_API_KEY_FILE, or configured ~/.config/typesafe/api-key reference.
 Never print/source credentials or put them into state/commands/evidence. Private file storage is not a keyring.
-One bounded call, no hidden retry; failure means unavailable advice. The low-level jev.mjs client is for
+One bounded call, no hidden retry; failure means unavailable advice. failure.json (schemaVersion 2) keeps
+safe diagnostics only: stage (request/transport/http/body/parse/validate/secret-echo), HTTP status,
+shape-checked `x-typesafe-request-id`, Retry-After and served model, response bytes/SHA-256, per Choice/Score
+distribution sum/count/min/max/key match and independently valid usage. Error bodies, messages, other
+headers and response strings are never kept. Diagnostics are not a cause verdict, retry or normalization. The low-level jev.mjs client is for
 transport tests; normal development consultations use jev-review.mjs so preparation and journaling apply.
 
 Jev is probabilistic advice, not proof, test success, independent PASS, policy, owner permission or acceptance.

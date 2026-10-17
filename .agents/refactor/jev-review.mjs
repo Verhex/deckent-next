@@ -2,7 +2,7 @@ import { open, readFile, realpath } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { ask, readCredential, validateConfig } from './jev.mjs';
+import { ask, readCredential, validateConfig, failureDiagnostics } from './jev.mjs';
 import { ensure, prepare, validateReviewConfig, validateFollowup } from './jev-context.mjs';
 import { callId, validateCallId, safeData, privateDirectory, writeEvent, readEvent } from './jev-journal.mjs';
 import { report, DEFAULT_SCAN_LIMIT } from './jev-report.mjs';
@@ -28,8 +28,15 @@ export async function consult(config, policy, authoredCase, root, key, transport
   let response;
   try { response = await ask(config, prepared.input, key, transport); }
   catch (e) {
-    await writeEvent(directory, 'failure.json', { schemaVersion: 1, callId: id, at: new Date().toISOString(), error: errorCode(e), latencyMs: Math.round(performance.now() - start), usage: 'unknown', rawResponseRetained: false }, key);
-    return { callId: id, directory, status: 'unavailable', error: errorCode(e), advisoryOnly: true };
+    const failure = { schemaVersion: 2, callId: id, at: new Date().toISOString(), error: errorCode(e), latencyMs: Math.round(performance.now() - start), usage: 'unknown', rawResponseRetained: false };
+    const diagnostics = failureDiagnostics(e, key);
+    try { await writeEvent(directory, 'failure.json', { ...failure, diagnostics }, key); }
+    catch (journal) {
+      // Diagnostics must never cost the failure record itself.
+      if (journal.message !== 'JEV_SECRET_IN_JOURNAL') throw journal;
+      await writeEvent(directory, 'failure.json', { ...failure, diagnostics: { schemaVersion: 1, stage: diagnostics.stage, withheld: 'secret-containment' } }, key);
+    }
+    return { callId: id, directory, status: 'unavailable', error: errorCode(e), stage: diagnostics.stage, advisoryOnly: true };
   }
   await writeEvent(directory, 'response.json', { ...response, callId: id }, key);
   return { callId: id, directory, status: 'advice', ...response };
