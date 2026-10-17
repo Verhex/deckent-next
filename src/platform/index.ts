@@ -24,7 +24,7 @@ export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
 export { resolveProductPaths } from '#platform/core/host/index.js';
-export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile } from '#platform/core/host/index.js';
+export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
 export { readBuildIdentity, type BuildIdentity } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';

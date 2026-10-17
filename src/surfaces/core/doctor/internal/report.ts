@@ -28,6 +28,7 @@ export interface DoctorRenderInput {
   readonly startability?: InstallationStartabilityView | null;
   readonly auditIntegrity?: import('#domain/index.js').AuditVerification | null;
   readonly platform: string;
+  readonly node?: { readonly version: string; readonly floor: string | null; readonly status: 'supported' | 'unsupported' | 'unknown' };
   readonly host: { readonly cpuCores: number; readonly totalMemMB: number; readonly recommendedMaxWorkers: number };
   readonly company: { readonly companyId: string };
   readonly principal: { readonly id: string };
@@ -67,6 +68,7 @@ function secretStoreCustodyLine(backend: string, locale: Locale): readonly strin
 export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale): string {
   return [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
+  ...(result.node?.status === 'unsupported' ? [t('doctor.nodeUnsupported', { version: result.node.version, floor: result.node.floor ?? '-' }, locale)] : []),
   ...(result.auditIntegrity ? [t('doctor.auditIntegrity', { status: renderAuditStatus(result.auditIntegrity.status, locale),
     reason: renderAuditReason(result.auditIntegrity.reason, locale) }, locale)] : []),
   ...(result.startability ? [t('doctor.startability', { status: result.startability.status, endpoint: result.startability.endpoint ?? '-' }, locale),

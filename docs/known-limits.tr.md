@@ -12,7 +12,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 ## Platformlar: denenenler ve denenmeyenler
 
 - **Denenen:** Linux ve WSL2 üzerinden Windows (desteklenen yürütme yolu). Barındırılan (hosted) kontroller Ubuntu'da Node 24 ve
-  Node 26 ile çalışır.
+  Node 26 ile çalışır. Node.js 24.22.0 veya daha yenisi gerekir (24.21 ve eski 24.x sürümlerinde UTF-16LE çözümlemede heap taşması vardır).
   *Etki:* davranışın gözlendiği tek yerler bunlardır.
 - **Desteklenmeyen: native Windows runtime.** Servis taşıması orada çalışmaz ve dosya tabanlı gizli depolar orada yoktur.
   İşletim sistemi kullanıcı kimliği okunamaz ve özel ledger dosyaları açılamaz; bu yüzden yedekleme, izleme ekranı, model

@@ -600,6 +600,8 @@
   "cli.runtime.toolchainRefreshUpdated": "Worker image updated to {version}; {count} profile revision(s) apply to new Runs only.",
   "cli.runtime.toolchainRefreshUnverified": "Worker image currency could not be verified ({code}); the current image stays in use and the next check retries.",
   "cli.runtime.toolchainRefreshCurrent": "Worker image is current.",
+  "doctor.nodeUnsupported": "Node.js: {version} is older than the supported {floor}; update Node.js (older 24.x has a heap overrun in UTF-16LE decoding)",
+  "doctor.nodeUnsupported.init": "Node.js {version} is older than the supported {floor}: update Node.js before relying on this installation.",
   "doctor.serviceConfigStale": "Runtime service: restart required, it started before a restart-apply configuration change (deckent runtime restart)",
   "doctor.imageRefresh": "Worker image: {status}",
   "doctor.imageRefresh.updating": "being updated in the background; Runs use the current image",
