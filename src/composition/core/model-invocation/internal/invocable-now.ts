@@ -10,8 +10,9 @@ import { configuredModelInvocationDeliverySurfaces } from './delivery-audit.js';
 /** One fresh scoped read, using invocation's exact target, native preparation, tariff and read-only account capacity.
  * No model send, activation refresh, state initialization or network acquisition. Credentials stay inside their resolver. */
 export async function inspectConfiguredInvocableModels(root: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<InvocableModels> {
-  const context = await loadInvocationContext(root, scopeId, { ...options, heal: false }, 'read');
-  const config = await context.freshConfig(), catalog = await new DeclaredModelsApplication({ async read() { return config['provider_catalog']; } }).inspect();
+  // One read-only snapshot: every model is checked against the same config and policy document (re-reading both per model took ~1 s for 16).
+  const loaded = await loadInvocationContext(root, scopeId, { ...options, heal: false }, 'read'), config = await loaded.freshConfig();
+  const context = { ...loaded, policy: { load: async () => loaded.document }, freshConfig: async () => config }, catalog = await new DeclaredModelsApplication({ async read() { return config['provider_catalog']; } }).inspect();
   if (catalog.status !== 'declared') return { schemaVersion: 1, scopeId, models: [] };
   const bindings = new ModelBindingApplication({ read: async () => (await context.freshConfig())['provider_catalog'] });
   const targets: Omit<InvocableModel, 'availability'>[] = [];

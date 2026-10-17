@@ -35,7 +35,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
     readLedger: async target => { const installed = await loadComposedConfig(target.path, { ...options, heal: false });
       const captured = await prepareMonitorInstall(installed, options.env, identity => granted(async () => {
-        const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c).authorizeIdentity('read-output', identity, c.principal); }));
+        const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c, c.document).authorizeIdentity('read-output', identity, c.principal); }));
       const reading = captured.reading; const ceiling = installed.max_workers === 'auto' ? Infinity : installed.max_workers;
       const modelScopes = [...new Set([...reading.scopeIds, ...(installed.service.identity?.scopeId ? [installed.service.identity.scopeId] : []),
         ...((installed['terminal'] as { scopeId?: string } | undefined)?.scopeId ? [(installed['terminal'] as { scopeId: string }).scopeId] : [])])];

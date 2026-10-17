@@ -6,7 +6,7 @@ import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelC
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
-import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, readAcceptanceEvaluationRows, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
@@ -77,7 +77,7 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
   const rows = db.prepare(`SELECT scope_id,run_id,revision,snapshot,policy,CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
     CASE WHEN json_valid(snapshot) THEN EXISTS(SELECT 1 FROM json_each(snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ${OPEN_PHASES}) ELSE 1 END AS open
     FROM runs ${selected ? 'WHERE scope_id=? AND run_id=?' : ''} ORDER BY open DESC,rowid DESC LIMIT ?`).all(...(selected ? [selected.scopeId, selected.runId, maxRuns] : [maxRuns]));
-  const runs: MonitorLedgerRun[] = []; const deliveries = readDeliveryReceipts(db, version);
+  const runs: MonitorLedgerRun[] = []; const deliveries = readDeliveryReceipts(db, version), evaluationRows = readAcceptanceEvaluationRows(db);
   for (const row of rows) {
     const key = `${row.scope_id}/${row.run_id}`;
     try {
@@ -98,7 +98,7 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
       let costMetrics: MonitorLedgerRun['costMetrics'];
       try { costMetrics = readRunAcceptanceMetrics(db, snapshot); }
       catch (error) { recordOnly(error); diagnostics.push('run-cost-unavailable:' + key); }
-      runs.push(Object.freeze({ snapshot, quotaHolds: readQuotaHolds(db, snapshot, 0), ...(costMetrics ? { costMetrics } : {}), evaluations: readRunAcceptanceEvaluations(db, snapshot), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
+      runs.push(Object.freeze({ snapshot, quotaHolds: readQuotaHolds(db, snapshot, 0), ...(costMetrics ? { costMetrics } : {}), evaluations: readRunAcceptanceEvaluations(db, snapshot, evaluationRows.get(key) ?? []), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
         createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts),
         deliveryReceipts: Object.freeze(snapshot.revision === current.revision ? deliveries.get(key) ?? [] : []),
         delivery: snapshot.revision === current.revision ? aggregateDelivery(deliveries.get(key) ?? []) : null }));

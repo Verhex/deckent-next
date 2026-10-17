@@ -1,5 +1,6 @@
 {
   "kernelIdentityReadBytes": 512,
   "workerMemoryEstimateMB": 400,
-  "workerCountCap": 30
+  "workerCountCap": 30,
+  "observationConcurrency": 8
 }

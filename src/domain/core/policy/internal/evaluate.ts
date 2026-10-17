@@ -2,7 +2,7 @@ import { aiAuthorityFloor } from './ai-floor.js';
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { verifiedPrincipalSchema, isMcpPrincipal } from '#domain/core/principal/index.js';
-import { includes, policySchema, principalGrants, PolicyError, type PolicyRule } from './schema.js';
+import { includes, policySchema, principalGrants, PolicyError, type Policy, type PolicyRule } from './schema.js';
 export { includes, policySchema, PolicyError } from './schema.js';
 export type { Policy } from './schema.js';
 /** Role is never a request field: authority comes from the principal's bindings in trusted policy data, not from the caller. */
@@ -15,9 +15,20 @@ function matches(rule: PolicyRule, request: PolicyRequest) {
     && includes(rule.resource.ids, request.resource.id) && (rule.principals === 'all' ? !('effect' in rule && rule.effect === 'allow' && isMcpPrincipal(request.principal)) : rule.principals.some(principal =>
       principal.issuer === request.principal.issuer && principal.subject === request.principal.subject));
 }
+/** A deep-frozen document (every policy schema level is readonly, so a parsed document is one) is validated once per object: one monitor
+ * snapshot evaluates the same loaded document for hundreds of attempts. Any other input is validated on every call, as before. */
+const validated = new WeakMap<object, Policy>(), unfrozen = new WeakSet<object>();
+const deepFrozen = (value: unknown): boolean => value === null || typeof value !== 'object' || (Object.isFrozen(value) && Object.values(value).every(deepFrozen));
+function parsePolicy(input: unknown): ReturnType<typeof policySchema.safeParse> {
+  const object = input !== null && typeof input === 'object' ? input : null, known = object ? validated.get(object) : undefined;
+  if (known) return { success: true, data: known };
+  const parsed = policySchema.safeParse(input);
+  if (object && parsed.success && !unfrozen.has(object)) { if (deepFrozen(object)) validated.set(object, parsed.data); else unfrozen.add(object); }
+  return parsed;
+}
 /** Order is fixed and version-independent: scope → deny/restriction → require-approval → allow → NO_GRANT. Roles only add candidates. */
 export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDecision {
-  const parsed = policySchema.safeParse(input); const checked = policyRequestSchema.safeParse(requestInput);
+  const parsed = parsePolicy(input); const checked = policyRequestSchema.safeParse(requestInput);
   if (!parsed.success || !checked.success) throw new PolicyError();
   const policy = parsed.data; const request = checked.data;
   if (!request.principal.scopeIds.includes(request.scopeId)) return Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'SCOPE' });

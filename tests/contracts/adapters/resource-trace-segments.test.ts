@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { FileResourceTraceStore } from '#adapters/index.js';
 import { projectResourceView, resourceGap, ResourceCollector, type ExecutionSupervisor } from '#engine/index.js';
 import { getConfigFieldDefault, type ResourceObservationSettings } from '#platform/index.js';
+import { hostBound } from '../support/host-bounds.js';
 vi.mock('node:fs/promises', async importOriginal => ({ ...await importOriginal<typeof import('node:fs/promises')>() }));
 const roots: string[] = [], identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
 const linux = it.skipIf(process.platform !== 'linux');
@@ -197,4 +198,23 @@ linux('collector stop returns immediately while its real file write waits for an
   expect(observed.stop()).toBeUndefined(); await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   expect(await fs.readFile(join(lock, 'owner.json'), 'utf8')).toBe(owner);
   expect(await files(root)).toEqual([]);
+});
+linux('one snapshot reads each segment once for many attempts, with the exact per-attempt result, within a host-scaled bound', async () => {
+  // Monitor 2026-10-17: N1 had 231 attempts × 21 segments and re-read and re-parsed every segment per attempt (5.8 s for one source).
+  const { root, settings, store } = await fixture({ maxStoreEntries: 20000, segmentMaxEntries: 2048, segmentMaxBytes: 1048576 });
+  const attempts = Array.from({ length: 200 }, (_, index) => ({ ...identity, attemptId: `a${index}` })), header = JSON.stringify({ schemaVersion: 2, createdAtMs: 1000 }) + '\n';
+  for (let segment = 1; segment <= 20; segment++) {
+    const lines = attempts.filter((_, index) => index % 20 === segment - 1 || index % 7 === segment % 7).map((value, index) => JSON.stringify(resourceGap(value, 100 * segment + index, 'starting')) + '\n');
+    // The last segment ends in a crash tail: its gap reaches only the attempts it holds, exactly as a single read reports it.
+    const name = `${settings.fileName}.segment-${String(segment).padStart(16, '0')}-00000000-0000-0000-0000-${String(segment).padStart(12, '0')}.jsonl`;
+    await fs.writeFile(join(root, name), header + lines.join('') + (segment === 20 ? '{"partial' : ''), { mode: 0o600 });
+  }
+  const original = fs.open; let segmentOpens = 0;
+  vi.spyOn(fs, 'open').mockImplementation(async (...args: Parameters<typeof fs.open>) => { if (String(args[0]).includes('.segment-')) segmentOpens++; return original(...args); });
+  const started = performance.now(), many = await store.readMany(attempts), elapsed = performance.now() - started;
+  expect(segmentOpens).toBe(20); expect(elapsed).toBeLessThan(hostBound(1000));
+  vi.restoreAllMocks();
+  for (const index of [0, 1, 7, 19, 20, 199]) expect(many[index]).toEqual(await store.read(attempts[index]!));
+  expect(many[19]!.samples.some(sample => sample.gap === 'invalid')).toBe(true); expect(many[0]!.samples.some(sample => sample.gap === 'invalid')).toBe(false);
+  expect(many.map(trace => trace.samples.length).every(count => count > 0)).toBe(true);
 });
