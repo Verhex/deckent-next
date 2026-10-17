@@ -366,7 +366,8 @@ describe.skipIf(process.platform !== 'linux')('queue target identity is the adop
     // The same repository observed under two device numbers (before and after a WSL2 restart) is one queue.
     const run = (args: string[], input = '') => new Promise<string>((resolve, reject) => {
       const child = execFile('/usr/bin/git', ['-C', f.sourceRoot, ...args], (error, stdout) => error ? reject(error) : resolve(stdout.trim()));
-      child.stdin!.end(input);
+      // A git command that never reads stdin may exit first; the write then fails with EPIPE, which is not a test outcome.
+      child.stdin!.on('error', () => {}); child.stdin!.end(input);
     });
     const observed = (device: number) => new GitQueueTargetApplication(f.options, 'installation', 'registered', [TARGET], [],
       { custody: async () => {}, run, common: async () => ({ path, inode, device }) as { path: string; inode: number } }).binding(TARGET);
