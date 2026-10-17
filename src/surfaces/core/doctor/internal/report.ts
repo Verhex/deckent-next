@@ -29,7 +29,8 @@ export interface DoctorRenderInput {
   readonly auditIntegrity?: import('#domain/index.js').AuditVerification | null;
   readonly platform: string;
   readonly node?: { readonly version: string; readonly floor: string | null; readonly status: 'supported' | 'unsupported' | 'unknown' };
-  readonly host: { readonly cpuCores: number; readonly totalMemMB: number; readonly recommendedMaxWorkers: number };
+  readonly host: { readonly cpuCores: number; readonly totalMemMB: number; readonly recommendedMaxWorkers: number;
+    readonly workerBasis?: { readonly cpuBased: number; readonly memoryBased: number; readonly workerMemoryEstimateMB: number } };
   readonly company: { readonly companyId: string };
   readonly principal: { readonly id: string };
   readonly toolchains?: ToolchainCurrencyReport;
@@ -67,7 +68,8 @@ function secretStoreCustodyLine(backend: string, locale: Locale): readonly strin
 /** The human `doctor` text; `poolLines` are the pool readiness lines the caller (which owns the pool port) already rendered. */
 export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale): string {
   return [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
-    workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
+    workers: result.host.recommendedMaxWorkers + (result.host.workerBasis ? t('doctor.workerBasis', { cpu: result.host.workerBasis.cpuBased, memory: result.host.workerBasis.memoryBased,
+      estimate: result.host.workerBasis.workerMemoryEstimateMB }, locale) : ''), company: result.company.companyId, principal: result.principal.id }, locale),
   ...(result.node?.status === 'unsupported' ? [t('doctor.nodeUnsupported', { version: result.node.version, floor: result.node.floor ?? '-' }, locale)] : []),
   ...(result.auditIntegrity ? [t('doctor.auditIntegrity', { status: renderAuditStatus(result.auditIntegrity.status, locale),
     reason: renderAuditReason(result.auditIntegrity.reason, locale) }, locale)] : []),

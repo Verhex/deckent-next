@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assessNodeSupport, NODE_ENGINE_RANGE, normalizeGlobalScopePlatform, isWslHost, detectWslLinux } from '../../../src/platform/index.js';
+import { assessNodeSupport, NODE_ENGINE_RANGE, normalizeGlobalScopePlatform, isWslHost, detectWslLinux, describeWorkerRecommendation, calcRecommendedMaxWorkers } from '../../../src/platform/index.js';
+import { HOST_LIMITS_REGISTRY } from '../../../src/platform/core/common/index.js';
 import { renderDoctorReport } from '../../../src/surfaces/core/doctor/index.js';
 import manifest from '../../../package.json' with { type: 'json' };
 
@@ -55,5 +56,25 @@ describe('WSL detection without the WSL environment variables (systemd user serv
   });
   it('does not let a real /proc leak into an injected environment', () => {
     expect(normalizeGlobalScopePlatform('linux', {})).toBe('linux');
+  });
+});
+
+describe('recommended workers show both the CPU and the memory limit', () => {
+  it('takes the smaller of the two and reports each, with the estimate from the registry', () => {
+    expect(describeWorkerRecommendation(36_000, 16)).toEqual({ cpuBased: 15, memoryBased: 90, workerMemoryEstimateMB: HOST_LIMITS_REGISTRY.workerMemoryEstimateMB, cap: HOST_LIMITS_REGISTRY.workerCountCap, recommended: 15 });
+    expect(describeWorkerRecommendation(3_000, 16)).toMatchObject({ cpuBased: 15, memoryBased: 7, recommended: 7 });
+    expect(describeWorkerRecommendation(100, 16)).toMatchObject({ memoryBased: 1, recommended: 1 });
+    expect(describeWorkerRecommendation(999_999, 128).recommended).toBe(HOST_LIMITS_REGISTRY.workerCountCap);
+  });
+  it('honours an explicit per-worker estimate and fails closed to one on bad input', () => {
+    expect(describeWorkerRecommendation(36_000, 16, 4_000)).toMatchObject({ memoryBased: 9, recommended: 9 });
+    for (const bad of [[NaN, 8, 400], [1000, NaN, 400], [1000, 8, 0], [1000, 8, -5]] as const) expect(describeWorkerRecommendation(...bad).recommended).toBe(1);
+    expect(calcRecommendedMaxWorkers(8000, 8)).toBe(7);
+  });
+  it('prints both factors in the human doctor line when the report carries them', () => {
+    const host = { cpuCores: 16, totalMemMB: 36_000, recommendedMaxWorkers: 15, workerBasis: { cpuBased: 15, memoryBased: 59, workerMemoryEstimateMB: 400 } };
+    expect(renderDoctorReport({ ...base, host }, [], 'en')).toContain('Recommended workers: 15 (CPU allows 15, free memory allows 59 at 400 MB per worker)');
+    expect(renderDoctorReport({ ...base, host }, [], 'tr')).toContain('Önerilen worker: 15 (CPU 15 izin verir');
+    expect(renderDoctorReport({ ...base }, [], 'en')).toContain('Recommended workers: 1\n');
   });
 });

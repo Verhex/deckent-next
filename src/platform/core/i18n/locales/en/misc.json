@@ -602,6 +602,7 @@
   "cli.runtime.toolchainRefreshCurrent": "Worker image is current.",
   "doctor.nodeUnsupported": "Node.js: {version} is older than the supported {floor}; update Node.js (older 24.x has a heap overrun in UTF-16LE decoding)",
   "doctor.nodeUnsupported.init": "Node.js {version} is older than the supported {floor}: update Node.js before relying on this installation.",
+  "doctor.workerBasis": " (CPU allows {cpu}, free memory allows {memory} at {estimate} MB per worker)",
   "doctor.serviceConfigStale": "Runtime service: restart required, it started before a restart-apply configuration change (deckent runtime restart)",
   "doctor.imageRefresh": "Worker image: {status}",
   "doctor.imageRefresh.updating": "being updated in the background; Runs use the current image",
