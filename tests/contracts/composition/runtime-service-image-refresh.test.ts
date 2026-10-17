@@ -32,11 +32,11 @@ async function installation(update: Record<string, unknown>, docker = true) {
   let honorStop = false, hangPreflight = false;
   const runner: WorkerImageBuildRunner = async (command, signal) => {
     // A daemon check that never answers by itself (a hung Docker daemon): only the stopping service's signal ends it, like the real runner.
-    if (command.args[1] === '--check-version' && hangPreflight) {
+    if (command.args[1] === '--held-version' && hangPreflight) {
       await new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }));
       return { ...ok(command.requestId), reason: 'cancelled' as const, exitCode: null };
     }
-    if (command.args[1] === '--check-version') return ok(command.requestId);
+    if (command.args[1] === '--held-version') return { ...ok(command.requestId), stdoutBase64: Buffer.from('{"heldVersion":null}\n').toString('base64') };
     builds++;
     // The real runner ends the builder process on the signal; this one takes a while to do so, like a process that exits on SIGTERM.
     if (honorStop) await new Promise<never>((_, reject) => signal?.addEventListener('abort', () => { setTimeout(() => reject(Object.assign(new Error('stopped'), { code: 'PROCESS_ABORTED' })), 300); }, { once: true }));

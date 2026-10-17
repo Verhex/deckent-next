@@ -9,7 +9,7 @@ import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRef
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import type { WorkerImageBuildRunner } from '#adapters/index.js';
 
 beforeEach(context => { if (process.platform !== 'linux') context.skip('configured policy/integrity flows need a verified POSIX UID'); });
@@ -19,9 +19,9 @@ const bounds = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pi
 const nativeProfile = (id: string, provider: 'codex' | 'claude', cliVersion: string) => structuredClone(prepareNativeCodingProfile({ schemaVersion: 1,
   template: { id, version: 1, adapter: { id: 'docker', version: 2 }, parameters: { ...bounds, argv: ['unused'] } },
   invocation: { schemaVersion: 2, provider, cliVersion, discovery: { schemaVersion: 1, mode: provider === 'claude' ? 'disabled' : 'repository' }, permissionMode: 'unattended', model: 'fixture-model', prompt: 'fixture task' } }).profile);
-/** The shipped history owner, so the fake daemon refuses exactly what the real builder refuses (counter guard, history chain). */
+/** The shipped history owner, so the fake daemon answers and refuses exactly what the real builder does (held revision, counter guard, history chain). */
 const historyOwner = async () => await import(pathToFileURL(join(process.cwd(), 'assets/worker-image/history.mjs')).href) as {
-  assertVersionAdvances(version: string, tags: string[]): void; parseVersionHistory(dockerfile: string, recipe: unknown): unknown[] };
+  heldVersion(tags: string[]): string | null; assertVersionAdvances(version: string, tags: string[]): void; parseVersionHistory(dockerfile: string, recipe: unknown): unknown[] };
 const ok = (requestId: string) => ({ schemaVersion: 1 as const, requestId, started: true, reason: 'exit' as const, exitCode: 0, signal: null, stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
 
 /** A real policy/ledger installation (config writes are governed), a stale codex pin, and a fake builder; Docker is never reached. */
@@ -39,14 +39,11 @@ async function fixture(update: Record<string, unknown> = {}) {
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
   const fetcher = async (request: { package: string }) => ({ version: latest[request.package]!, source: `fixture/${request.package}`, observedAt: new Date().toISOString() });
-  const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null, tags: ['r4-20260930'], checks: [] as string[] };
+  const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null, tags: ['r4-20260930'], checks: [] as string[], fill: null as string | null };
   const runner: WorkerImageBuildRunner = async (command, signal) => {
-    if (command.args[1] === '--check-version') {
-      state.checks.push(command.args[2]!);
-      try { (await historyOwner()).assertVersionAdvances(command.args[2]!, state.tags); } catch (error) {
-        return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from(`Error: ${(error as Error).message}`).toString('base64') };
-      }
-      return ok(command.requestId);
+    if (command.args[1] === '--held-version') {
+      const heldVersion = (await historyOwner()).heldVersion(state.tags); state.checks.push(heldVersion ?? 'none');
+      return { ...ok(command.requestId), stdoutBase64: Buffer.from(JSON.stringify({ heldVersion }) + '\n').toString('base64') };
     }
     state.builds++;
     if (state.gate) await Promise.race([state.gate, new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }))]);
@@ -54,8 +51,9 @@ async function fixture(update: Record<string, unknown> = {}) {
     if (state.failFirst > 0) { state.failFirst--; return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from('Error: WORKER_IMAGE_BUILD_FAILED fixture').toString('base64') }; }
     const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
     (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'Dockerfile'), 'utf8'), recipe); // the context's own history chain must validate
+    (await historyOwner()).assertVersionAdvances(recipe.imageVersion, state.tags); // the builder's own guard before it tags
     state.tags.push(recipe.imageVersion);
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.builds % 2 ? 'b' : 'c').repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.fill ?? (state.builds % 2 ? 'b' : 'c')).repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
       manifest: { providers: [{ id: 'codex', version: `codex-cli ${latest['@openai/codex']}` }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return ok(command.requestId);
   };
@@ -212,7 +210,7 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
 });
 
 describe('version lineage across refreshes (Astra 2371 P1-1)', () => {
-  it('P1-1: two consecutive genuinely new CLI releases on different days each build the next counter (r5, then r6), and a daemon holding a higher counter is still refused', async () => {
+  it('P1-1: two consecutive genuinely new CLI releases on different days each build the next counter (r5, then r6), and a daemon holding a higher counter is advanced past', async () => {
     const f = await fixture(); const day = (d: string) => () => `2026-10-${d}T08:00:00.000Z`;
     expect((await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: day('06') }, f.observer)).outcome).toBe('current');
     expect(f.state.tags).toEqual(['r4-20260930', 'r5-20261006']);
@@ -225,17 +223,33 @@ describe('version lineage across refreshes (Astra 2371 P1-1)', () => {
     const registry = await f.registry();
     expect(registry.profiles.filter(profile => profile.id === 'codex-pinned').map(profile => profile.version)).toEqual([1, 2, 3, 4]);
     expect(registry.profiles.find(profile => profile.id === 'codex-pinned' && profile.version === 4)!.parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.158.0');
-    // Negative: the daemon already holds a higher counter than this installation built; the guard stays and the refresh fails typed.
+    // ISCI-IMAJ-SAYAC: the daemon already holds a higher counter (another installation's build); the next build takes the counter past it and
+    // still supersedes this installation's own r7, so the lineage continues from its own verified receipt.
     f.state.tags.push('r12-20261010'); f.latest['@openai/codex'] = '0.159.0';
-    const refused = await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('11') }, f.observer);
-    expect(refused.outcome).toBe('failed'); expect(refused.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN');
-    expect(f.state.builds).toBe(3);
+    const advanced = await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('11') }, f.observer);
+    expect(advanced.outcome).toBe('current'); expect(advanced.event!.imageVersion).toBe('r13-20261011');
+    expect(f.state.builds).toBe(4);
+    const builds = join(productResourcePath((await loadConfig(f.root, f.options)).productLayout, 'workspaces'), 'toolchains/builds');
+    const lineage = JSON.parse(await readFile(join(builds, 'r13-20261011/recipe.json'), 'utf8'));
+    expect(lineage).toMatchObject({ imageVersion: 'r13-20261011', previousVersion: 'r7-20261009' });
   });
 
-  it('P1-1 control: without the persisted lineage the packaged recipe would be refused (the fake preflight really checks)', async () => {
-    const f = await fixture(); f.state.tags.push('r5-20261006'); // an r5 already exists on the daemon
-    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: () => '2026-10-07T08:00:00.000Z' }, f.observer);
-    expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN'); expect(f.state.builds).toBe(0);
+  it('ISCI-IMAJ-SAYAC: two installations on one daemon never collide; each builds and adopts only its own verified image', async () => {
+    const n1 = await fixture(), live = await fixture(); live.state.tags = n1.state.tags; // one daemon, one tag namespace
+    n1.state.fill = 'd'; live.state.fill = 'e'; // distinct image ids per installation's own build
+    n1.state.tags.push(...Array.from({ length: 12 }, (_, i) => `r${i + 5}-20261005`)); // N1's own r5..r16 history on the shared daemon
+    // live: packaged r4 lineage and no receipts of its own. Before the fix every check failed with WORKER_VERSION_COUNTER_TAKEN.
+    const first = await refreshConfiguredToolchains(live.root, 'startup', live.options, { ...live.deps, now: () => '2026-10-17T08:00:00.000Z' }, live.observer);
+    expect(first.outcome).toBe('current'); expect(first.event!.imageVersion).toBe('r17-20261017');
+    const liveImage = first.event!.imageId; expect(liveImage).toBe('sha256:' + 'e'.repeat(64));
+    expect((await live.registry()).profiles.find(profile => profile.id === 'codex-pinned' && profile.version === 2)!.parameters.imageId).toBe(liveImage);
+    // N1 (lineage via the shared tags only: no receipts in this fixture) plans past live's r17; the image ids each one pins are their own builds.
+    const second = await refreshConfiguredToolchains(n1.root, 'interval', n1.options, { ...n1.deps, now: () => '2026-10-17T09:00:00.000Z' }, n1.observer);
+    expect(second.outcome).toBe('current'); expect(second.event!.imageVersion).toBe('r18-20261017');
+    expect(n1.state.tags.slice(-2)).toEqual(['r17-20261017', 'r18-20261017']);
+    expect(second.event!.imageId).toBe('sha256:' + 'd'.repeat(64));
+    expect((await n1.registry()).profiles.find(profile => profile.id === 'codex-pinned' && profile.version === 2)!.parameters.imageId).toBe(second.event!.imageId);
+    expect(new Set(n1.state.tags).size).toBe(n1.state.tags.length);
   });
 
 });

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { selectWorkerLineage, workerImageRecipeSchema, failedContextsToPrune, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
-import { assertWorkerImageVersionAvailable, localPrincipalChannel, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { readWorkerImageHeldVersion, localPrincipalChannel, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
@@ -41,7 +41,7 @@ async function readBuiltLineage(home: string): Promise<{ recipe: unknown; docker
   } catch { /* no receipts yet */ }
   return null;
 }
-/** Plan/build with a daemon preflight before artifacts; config/package bytes and running work stay unchanged. */
+/** Plan/build. A build floors its counter on the daemon-held revision (installations sharing a daemon share its tags), read before any artifact; config/package bytes and running work stay unchanged. */
 export async function updateConfiguredToolchains(projectRoot: string, input: Readonly<{ apply?: boolean | undefined }> = {}, options: ConfigLoadOptions = {},
   dependencies: ToolchainUpdateDependencies = {}): Promise<ToolchainUpdateResult> {
   // Owner 2026-10-09 (MCP read-only by default): the `<host>/mcp` actor may only check. A build/apply is refused before anything is read
@@ -57,13 +57,13 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const plannedAt = now();
   const home = join(mcpCheckOnly ? productResourcePath(config.productLayout, 'workspaces') : await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const lineage = selectWorkerLineage(sources, await readBuiltLineage(home));
-  const plan = planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config) });
-  if (plan.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan, planPath: null, build: null, proposal: null, proposalPath: null });
+  const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config), heldVersion });
+  const proposed = planFor(null);
+  if (proposed.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
-  if (mcpCheckOnly) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath: null, build: null, proposal: null, proposalPath: null });
-  const apply = toolchainUpdateApplies(input.apply);
-  if (apply) await assertWorkerImageVersionAvailable({ packageRoot: root, imageVersion: plan.next!.imageVersion,
-    timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env, ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, dependencies.runner);
+  if (mcpCheckOnly) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
+  const apply = toolchainUpdateApplies(input.apply), signal = dependencies.signal ? { signal: dependencies.signal } : {};
+  const plan = apply ? planFor(await readWorkerImageHeldVersion({ packageRoot: root, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env, ...signal }, dependencies.runner)) : proposed;
   const planPath = await writeArtifact(join(home, 'plans'), `${plan.next!.imageVersion}-${plannedAt.replace(/[:.]/g, '-')}.json`, plan);
   if (!apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
   await dependencies.onBuild?.(plan);
@@ -73,7 +73,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const receiptPath = join(home, 'receipts', `${plan.next!.imageVersion}.json`);
   // A failed build keeps its context as evidence under another name, so the next attempt may reuse the planned version.
   const built = await runWorkerImageBuild({ context: prepared.context, receiptPath, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes,
-    env, ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, dependencies.runner).catch(async (error: unknown) => {
+    env, ...signal }, dependencies.runner).catch(async (error: unknown) => {
       await rename(prepared.context, `${prepared.context}.failed-${Date.now()}`).catch(() => undefined);
       const builds = join(home, 'builds'); // bounded retention: the newest failed contexts stay as evidence
       for (const name of failedContextsToPrune(await readdir(builds).catch(() => []), policy.failedContextsKept)) await rm(join(builds, name), { recursive: true, force: true }).catch(() => undefined);

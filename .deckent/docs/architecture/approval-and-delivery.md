@@ -521,12 +521,17 @@ profile revision, in-flight Runs keep their imageId) and API capability snapshot
 npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
 under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; landed, `97590485`): the packaged lineage is reconciled
 to r4-20260930 using the retained recipe/Dockerfile hashes in its build receipt. In `auto` mode or with explicit apply,
-before writing a plan artifact or creating a build context, the installed builder runs its read-only `--check-version` mode
-against the exact repository on the selected daemon. The shared `assertVersionAdvances` history guard refuses a counter
-at or below any held r<N> tag with `WORKER_VERSION_COUNTER_TAKEN`; missing lineage must be reconciled rather than invented
-from tags. A failed/unavailable/timed-out check creates no context. Propose-only stays recipe-based without Docker access.
-The builder repeats that same guard before its actual build, retaining protection against intervening daemon changes;
-preflight is an observation, not a lock or a promise of build success. Known builder failures are shared `DeckentError`
+before writing a plan artifact or creating a build context, the installed builder runs its read-only `--held-version` mode
+against the exact repository on the selected daemon and reports the highest held r<N> tag. ISCI-IMAJ-SAYAC (2026-10-17):
+installations sharing one daemon share its `deckent/worker:r<N>-<day>` tag namespace, so the planned counter is
+`max(own lineage, daemon-held) + 1`, while `previousVersion`/`supersedes` stay the installation's own lineage and the history
+line records `counter past daemon-held <tag>`; another installation's image is skipped, never adopted, and each installation
+pins only the imageId of its own verified receipt. A failed/unavailable/timed-out/malformed check creates no context.
+Propose-only stays recipe-based without Docker access. The builder's shared `assertVersionAdvances` guard still refuses a
+counter at or below any held tag before its actual build (`WORKER_VERSION_COUNTER_TAKEN`, for a tag another installation took
+after the check; the next check plans past it), and an inconsistent recipe/Dockerfile history still fails closed;
+preflight is an observation, not a lock or a promise of build success. A builder refusal prints one `Error: WORKER_<CODE>: …`
+line without a stack, also when `npm run worker:image` is run directly. Known builder failures are shared `DeckentError`
 codes across SDK/MCP/CLI, localized EN/TR; CLI JSON carries a maximum 512-byte redacted `params.detail` excerpt, never raw
 process buffers or a full stack. Unrecognized reasons retain typed build/check failure codes; timeout retains precedence.
 After a successful preflight, the shipped builder files are copied into an
