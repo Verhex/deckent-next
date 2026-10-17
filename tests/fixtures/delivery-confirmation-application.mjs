@@ -17,7 +17,7 @@ const store = {
   async finishDelivery(intent) { return save('delivery.json', { intent, delivered: true }); },
   // One adoption (`adopt`, sequence 1) and one rollback of it (`rollback`, sequence 2) on the one configured target.
   async loadAdoption(_scope, commandId) { return load(commandId === 'rollback' ? 'rollback.json' : 'adoption.json'); },
-  async claimAdoption(intent) { return save(`${intent.kind === 'rollback' ? 'rollback' : 'adoption'}.json`, { intent, sequence: intent.kind === 'rollback' ? 2 : 1, settled: false }); },
+  async claimAdoption(intent, observed) { return save(`${intent.kind === 'rollback' ? 'rollback' : 'adoption'}.json`, { intent, sequence: intent.kind === 'rollback' ? 2 : 1, settled: false, repository: observed.repository }); },
   async finishAdoption(intent) { return save(`${intent.kind === 'rollback' ? 'rollback' : 'adoption'}.json`, { intent, sequence: intent.kind === 'rollback' ? 2 : 1, settled: true }); },
 };
 let revoked = false;

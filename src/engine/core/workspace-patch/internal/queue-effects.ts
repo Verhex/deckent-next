@@ -57,7 +57,9 @@ export function createWorkspaceQueueEffects(c: QueueEffectContext, ports: QueueE
     const found = await store.loadAdoption(record.request.identity.scopeId, rollback ? record.request.commandId : queueCommandIds(record).adoption);
     const adoption = found && found.intent.kind === (rollback ? 'rollback' : 'adopt') ? found : null;
     const observed = await ports.adoption().observe(record.request.target.target.id);
-    return { adoption, observed, notApplied: (found === null || adoption !== null) && from !== undefined && adoptionNotApplied(observed, adoption, from) };
+    // The ticket's target binding is revalidated before every adoption it makes, so it names the repository its intent was claimed in.
+    return { adoption, observed,
+      notApplied: (found === null || adoption !== null) && from !== undefined && adoptionNotApplied(observed, adoption, from, record.request.target.resourceBinding) };
   };
   return {
     async fence(target, owner, epoch) { return ports.fence(target, owner, epoch); },

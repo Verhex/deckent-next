@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify, stripVTControlCharacters } from 'node:util';
@@ -12,7 +12,7 @@ import { executeConfiguredTask } from '../../../src/composition/core/execution/i
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { DockerSupervisor, GitIntegrationAdoption } from '#adapters/index.js';
-import { adoptionFenceRef, adoptionFenceText, queueCommandIds, TargetBatchExecutor, WorkspaceAdoptionApplication, type TargetQueueView } from '#engine/index.js';
+import { adoptionFenceRef, adoptionFenceText, queueCommandIds, queueGenerationRef, targetQueueKey, TargetBatchExecutor, WorkspaceAdoptionApplication, type TargetQueueView } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
@@ -155,6 +155,27 @@ const journal = (f: Fixture, commandId: string) => {
   const db = new DatabaseSync(f.ledger, { readOnly: true });
   try { return db.prepare('SELECT * FROM workspace_adoptions WHERE command_id=?').get(commandId) as Record<string, unknown> | undefined; } finally { db.close(); }
 };
+/** Rebinds a ticket the way a build before QUEUE-SMALL 2 recorded it (resourceBinding = sha256 of the common directory's path, st_dev and
+ * inode) and rewrites the target's queue generation to that key, which is how N1's teslim-n1 ticket and generation ref look today. */
+async function bindLegacy(f: Fixture, commandId: string) {
+  const path = await realpath(join(f.target, '.git')), stat = await lstat(path);
+  const resourceBinding = createHash('sha256').update(JSON.stringify({ path, device: stat.dev, inode: stat.ino })).digest('hex');
+  const db = new DatabaseSync(f.ledger);
+  try {
+    const record = JSON.parse(String(db.prepare('SELECT record FROM target_queue WHERE command_id=?').get(commandId)!.record)) as { key: string; request: { target: Parameters<typeof targetQueueKey>[0] } };
+    expect(record.request.target.resourceBinding).not.toBe(resourceBinding);
+    record.request.target = { ...record.request.target, resourceBinding }; record.key = targetQueueKey(record.request.target);
+    db.prepare('UPDATE target_queue SET record=?,target_key=? WHERE command_id=?').run(JSON.stringify(record), record.key, commandId);
+    const ref = queueGenerationRef(TARGET), generation = JSON.parse(await git(f.target, 'cat-file', 'blob', ref)) as Record<string, unknown>;
+    const blob = execFileSync('/usr/bin/git', ['-C', f.target, 'hash-object', '-w', '--stdin'], { input: JSON.stringify({ ...generation, key: record.key }) + '\n', encoding: 'utf8' }).trim();
+    await git(f.target, 'update-ref', ref, blob);
+  } finally { db.close(); }
+}
+/** Points the registered work target at another repository (the operator re-registers a clone). */
+async function registerTarget(f: Fixture, path: string) {
+  const file = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(file, 'utf8'));
+  config.execution.workTargets.targets[0].path = path; await writeFile(file, JSON.stringify(config)); clearConfigCache();
+}
 const fenceOf = async (repository: string) => {
   const oid = await git(repository, 'for-each-ref', '--format=%(objectname)', adoptionFenceRef(TARGET));
   return oid ? JSON.parse(await git(repository, 'cat-file', 'blob', oid)) as Record<string, unknown> : null;
@@ -396,6 +417,9 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
       expect(db.prepare('SELECT sequence,settled FROM workspace_adoptions WHERE command_id=?').get(ids.adoption)).toEqual({ sequence: 4, settled: 0 });
       expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 57 });
     } finally { db.close(); }
+    // N1's ticket was bound by the build before QUEUE-SMALL 2 (binding with the device number). That recorded binding is the evidence that
+    // the clone observed now is the repository the pre-v58 row was claimed in (Astra 2616 F1): the executor revalidates it before adopting.
+    await bindLegacy(f, 'q1');
     expect(await git(f.target, 'for-each-ref', '--format=%(refname)', 'refs/deckent/deliveries/')).not.toBe('');
     expect(await git(f.target, 'rev-parse', TARGET)).toBe(f.base); expect(await fenceOf(f.target)).toBeNull();
 
@@ -407,11 +431,51 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(journal(f, 'legacy-3')).toMatchObject({ sequence: 3, settled: 1, repository: 'pre-v58' });
     expect(await git(f.target, 'rev-parse', TARGET)).toBe(f.base); expect(await fenceOf(f.target)).toBeNull();
     expect(await fenceOf(f.project)).toMatchObject({ sequence: 3, commandId: 'legacy-3' });
+    // QUEUE-SMALL 2's documented one-time operator step: with the target's queue terminal, delete the generation written under the old key.
+    await git(f.target, 'update-ref', '-d', queueGenerationRef(TARGET));
     // The target is no longer frozen: the next ticket adopts as sequence 1 of the clone.
     await s.toConfirmation('q2', second);
     expect((await s.confirm('q2')).output).toContain('"settledPrefix":1');
     const q2 = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q2' } } as never);
     expect(journal(f, q2.adoption)).toMatchObject({ sequence: 1, settled: 1 });
     expect(await fenceOf(f.target)).toMatchObject({ sequence: 1, commandId: q2.adoption });
+  });
+
+  it('an adoption committed in the old repository is never released through a re-registered clone, at v58 or as a pre-v58 row (Astra 2616 F1)', { timeout: 900_000 }, async () => {
+    const f = await fixture();
+    const attempt = await f.coding('r1', 'write-a');
+    const ids = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q1' } } as never);
+    let s = await queueSession(f);
+    await s.toConfirmation('q1', attempt);
+    // The Git move commits in A (branch and fence), then the process dies before the journal records it and before any reconciliation.
+    const commit = GitIntegrationAdoption.prototype.move;
+    vi.spyOn(GitIntegrationAdoption.prototype, 'move').mockImplementation(async function (this: GitIntegrationAdoption, ...args: Parameters<typeof commit>) {
+      await commit.apply(this, args); throw new Error('process died'); });
+    vi.spyOn(TargetBatchExecutor.prototype, 'reconcile').mockRejectedValue(new Error('process died'));
+    await s.confirm('q1');
+    await s.stop(); vi.restoreAllMocks();
+    const moved = await git(f.target, 'rev-parse', TARGET);
+    expect(moved).not.toBe(f.base); expect(await fenceOf(f.target)).toMatchObject({ sequence: 1, commandId: ids.adoption });
+    expect(journal(f, ids.adoption)).toMatchObject({ sequence: 1, settled: 0 });
+    // The operator re-registers a fresh clone B at the base: no adoption fence, no queue generation, the branch at the base.
+    const clone = join(f.root, 'clone');
+    await exec('/usr/bin/git', ['clone', '-q', f.project, clone]); await git(clone, 'branch', 'dogfood/adopted', f.base); await git(clone, 'checkout', '-q', '--detach', f.base);
+    await registerTarget(f, clone);
+    const unresolved = async () => {
+      expect((await s.view('q1'))?.state).toBe('reconciling');
+      expect(journal(f, ids.adoption)).toMatchObject({ sequence: 1, settled: 0 });
+      expect(await git(f.target, 'rev-parse', TARGET)).toBe(moved); expect(await git(clone, 'rev-parse', TARGET)).toBe(f.base); expect(await fenceOf(clone)).toBeNull();
+    };
+    // v58 row: it names A; B's observation proves nothing about A, so recovery leaves it open.
+    s = await queueSession(f); await unresolved(); await s.stop();
+    // The same row as a pre-v58 ledger left it (no repository): B is not the repository the ticket was bound to, so it stays open too.
+    const db = new DatabaseSync(f.ledger);
+    try { db.exec(DOWNGRADE_TO_V57_LEDGER_SQL); db.prepare("UPDATE target_queue SET record=json_remove(record,'$.reason') WHERE command_id='q1'").run(); } finally { db.close(); }
+    s = await queueSession(f); await unresolved(); await s.stop();
+    // Re-registering A, where the move happened, lets the exact fence lookup settle it as adopted.
+    await registerTarget(f, f.target);
+    s = await queueSession(f);
+    expect(await s.view('q1')).toMatchObject({ state: 'settled', outcome: 'adopted' });
+    expect(journal(f, ids.adoption)).toMatchObject({ sequence: 1, settled: 1, repository: 'pre-v58' });
   });
 });

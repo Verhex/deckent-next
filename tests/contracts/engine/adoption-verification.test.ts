@@ -52,7 +52,16 @@ it('no journal row means not applied whatever the tip; a recorded intent keeps e
     ownFence: adoptionNotApplied(observed(from, { sequence: 2, scopeId: 's', commandId: 'c' }), record(), from),
     settled: adoptionNotApplied(observed(from), record({ settled: true }), from),
     otherRepository: adoptionNotApplied(observed(from), record({ repository: 'o'.repeat(64) }), from),
-    preV58: adoptionNotApplied(observed(from), record({ repository: null }), from),
     otherBase: adoptionNotApplied(observed(moved), record(), moved),
-  }).toEqual({ unsettled: true, moved: false, ownFence: false, settled: false, otherRepository: false, preV58: true, otherBase: false });
+  }).toEqual({ unsettled: true, moved: false, ownFence: false, settled: false, otherRepository: false, otherBase: false });
+  // Astra 2616 F1: a pre-v58 intent recorded no repository. Only independent evidence of the claiming repository (a queue ticket's target
+  // binding, current or pre-QUEUE-SMALL 2 formula) attributes it; another repository's base/no-fence state proves nothing.
+  const legacy = { ...observed(from), legacyBinding: 'l'.repeat(64) };
+  expect({
+    noEvidence: adoptionNotApplied(observed(from), record({ repository: null }), from),
+    claimedHere: adoptionNotApplied(observed(from), record({ repository: null }), from, repository),
+    claimedHereBeforeQueueSmall: adoptionNotApplied(legacy, record({ repository: null }), from, 'l'.repeat(64)),
+    claimedElsewhere: adoptionNotApplied(legacy, record({ repository: null }), from, 'o'.repeat(64)),
+    recordedWins: adoptionNotApplied(observed(from), record({ repository: 'o'.repeat(64) }), from, repository),
+  }).toEqual({ noEvidence: false, claimedHere: true, claimedHereBeforeQueueSmall: true, claimedElsewhere: false, recordedWins: false });
 });

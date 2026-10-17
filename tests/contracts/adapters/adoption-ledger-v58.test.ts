@@ -85,6 +85,9 @@ it('after the upgrade a fresh clone starts at 1, the old repository continues it
     // The fresh clone (no fence) starts its own chain; a fence there that the journal does not name is refused before any row.
     await store.assertAdoptionFence(TARGET, { repository: B, fence: null });
     expect(await store.claimAdoption(adopt('fresh'), { repository: B, fence: null })).toMatchObject({ sequence: 1, settled: false, repository: B });
+    // Astra 2616 F2: replaying an existing claim against another repository is refused; the same repository replays it.
+    await expect(store.claimAdoption(adopt('fresh'), { repository: C, fence: null })).rejects.toMatchObject({ code: 'ADOPTION_REPOSITORY_CHANGED' });
+    expect(await store.claimAdoption(adopt('fresh'), { repository: B, fence: null })).toMatchObject({ sequence: 1, settled: false, repository: B });
     expect(await store.finishAdoption(adopt('fresh'))).toMatchObject({ sequence: 1, settled: true });
     await expect(store.claimAdoption(adopt('fresh-2'), { repository: B, fence: null })).rejects.toMatchObject({ code: 'ADOPTION_FENCE_MISMATCH' });
     await expect(store.assertAdoptionFence(TARGET, { repository: C, fence: fence(5, 'elsewhere') })).rejects.toMatchObject({ code: 'ADOPTION_FENCE_MISMATCH' });

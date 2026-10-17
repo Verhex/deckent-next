@@ -36,7 +36,7 @@ export { patchPathsIntersect, changedHistoryPaths, assertDisjointHistory } from 
 export { gitFailure } from './internal/snapshot.js';
 export { parseIntegrationDiffStats } from './internal/snapshot.js';
 export { assertIntegrationSnapshot } from './internal/snapshot.js';
-export { adoptionFenceRef, adoptionFenceText, adoptionFenceObjectSchema, adoptionRepositoryIdentity } from './internal/git-fence.js';
+export { adoptionFenceRef, adoptionFenceText, adoptionFenceObjectSchema, adoptionRepositoryIdentity, legacyQueueBinding } from './internal/git-fence.js';
 export { assertIntegrationBefore } from './internal/snapshot.js';
 export { capturedWorkspacePatch } from './internal/snapshot.js';
 export { prepareIntegrationSnapshot } from './internal/snapshot.js';

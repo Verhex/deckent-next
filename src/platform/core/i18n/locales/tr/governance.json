@@ -714,6 +714,7 @@
   "error.ADOPTION_FENCE_MISMATCH": "Hedef deponun benimseme çiti, Deckent'in bu depo için tuttuğu benimseme kaydıyla uyuşmuyor (örneğin kopyalanmış, geri yüklenmiş veya yeniden oluşturulmuş bir depo); hiçbir şey yayımlanmadı veya benimsenmedi. Bu depoya benimsemeden önce refs/deckent/adoption-fences referanslarını inceleyin.",
   "error.ADOPTION_RELEASED": "Bu benimseme komutu uygulanmadı olarak sonuçlandırıldı (dal hiç taşınmadı); sürdürülemez. Yeni bir komutla yeni bir deneme başlatın.",
   "error.ADOPTION_NOT_APPLIED": "Benimsemenin uygulanmadığı kanıtlandı: dal hâlâ önceki commit'i gösteriyor ve bu taşımayı kaydeden bir Deckent çiti yok. Kayıt serbest bırakıldı; yeni bir deneme oluşturun.",
+  "error.ADOPTION_REPOSITORY_CHANGED": "Bu benimseme, şu an gözlenen yapılandırılmış hedeften farklı bir depoda kaydedildi (örneğin iş hedefi bir klona yeniden kaydedildikten sonra); yalnız kaydedildiği depoda taşınabilir veya sonuçlandırılabilir. Hiçbir şey taşınmadı. O depoyu yeniden kaydedin veya yeni bir deneme başlatın.",
   "error.ADOPTION_VERIFICATION_NOT_CONFIGURED": "Benimseme doğrulaması yapılandırılmamış (execution.adoption.verification); doğrulayan görev türü bilinmiyor.",
   "error.PATCH_CORRUPT": "Workspace patch artifact veya üretici bağı bozuk.",
   "error.WORKER_OBSERVATION_INVALID": "Worker gözlem sorgusu veya kaynak seçimi geçersiz.",

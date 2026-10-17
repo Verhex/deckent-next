@@ -14,3 +14,6 @@ export const adoptionFenceObjectSchema = z.object({ schemaVersion: z.literal(1),
  * re-clone that reuses the inode changes or keeps it; the fence agreement check then refuses before any write, it never misnumbers. */
 export const adoptionRepositoryIdentity = (common: { readonly path: string; readonly inode: number }) =>
   createHash('sha256').update(JSON.stringify({ path: common.path, inode: common.inode })).digest('hex');
+/** The queue binding builds before QUEUE-SMALL 2 recorded (common directory path, st_dev, inode). Recognition of tickets bound then only. */
+export const legacyQueueBinding = (common: { readonly path: string; readonly device: number; readonly inode: number }) =>
+  createHash('sha256').update(JSON.stringify({ path: common.path, device: common.device, inode: common.inode })).digest('hex');

@@ -1,12 +1,12 @@
 import { verifiedDeliveryConfirmation } from '#composition/core/workspace-patch/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { GitIntegrationTarget, fingerprintGitSource } from '#adapters/index.js';
-import { integrationManifestSchema, integrationDeliveryCommandSchema, integrationAdoptionCommandSchema, patchDigest, patchExclusions, patchFile, workspacePatchSchema } from '#engine/index.js';
+import { adoptionRepositoryIdentity, integrationManifestSchema, integrationDeliveryCommandSchema, integrationAdoptionCommandSchema, patchDigest, patchExclusions, patchFile, workspacePatchSchema } from '#engine/index.js';
 import { terminalProgram } from '../support/approval-terminal.js';
 const exec = promisify(execFile), roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -152,13 +152,15 @@ describe.skipIf(process.platform !== 'linux')('delivery/adoption verified human 
     const { f, commit } = await adopted(), adoption = JSON.parse(await readFile(join(f.root, 'adoption.json'), 'utf8'));
     const intent = { schemaVersion: 1, kind: 'rollback', command: { schemaVersion: 1, commandId: 'rollback', identity: adoption.intent.command.identity, adoptionCommandId: 'adopt' },
       targetRef: f.target, fromCommit: commit, toCommit: f.base, actor: adoption.intent.actor };
-    await writeFile(join(f.root, 'rollback.json'), JSON.stringify({ intent, sequence: 2, settled: false }));
+    // The claim names the repository it was made in (this one); a move may only happen there (Astra 2616 F2).
+    const common = await realpath(join(f.sourceRoot, '.git')), repository = adoptionRepositoryIdentity({ path: common, inode: (await lstat(common)).ino });
+    await writeFile(join(f.root, 'rollback.json'), JSON.stringify({ intent, sequence: 2, settled: false, repository }));
     const before = await f.refs();
     expect(await f.execute('rollback-sdk', '', 'piped-input')).toMatchObject({ ok: false, error: { code: 'DELIVERY_INTERACTIVE_REQUIRED' } });
     expect(await f.refs()).toBe(before); expect(await f.git('rev-parse', f.target)).toBe(commit);
     const resumed = await f.execute('rollback', 'y'); expect(resumed.ok, resumed.output).toBe(true); expect(resumed.output).toContain('Roll back an adoption');
     expect(await f.git('rev-parse', f.target)).toBe(f.base);
-    await writeFile(join(f.root, 'rollback.json'), JSON.stringify({ intent, sequence: 2, settled: false }));
+    await writeFile(join(f.root, 'rollback.json'), JSON.stringify({ intent, sequence: 2, settled: false, repository }));
     const settled = await f.execute('rollback-sdk', '', 'piped-input'); expect(settled.ok, settled.output).toBe(true); expect(settled.result).toEqual(resumed.result);
   });
 });
