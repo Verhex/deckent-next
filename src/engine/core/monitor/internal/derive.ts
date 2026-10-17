@@ -90,7 +90,7 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBloc
 export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   const snapshot = e.run.snapshot;
   if (snapshot.state.kind === 'terminal') return null;
-  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.reason), deadlineMs: snapshot.state.deadline };
+  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.failureCode ?? snapshot.state.reason), deadlineMs: snapshot.state.deadline };
   if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];

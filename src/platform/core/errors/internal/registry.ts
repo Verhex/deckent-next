@@ -516,6 +516,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   SUPERVISOR_RELEASE_UNCONFIRMED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_RELEASE_UNCONFIRMED', p, l) }) },
   QUERY_UNEXPECTED_FAILURE: { category: 'error', render: (p, l) => ({ message: t('error.QUERY_UNEXPECTED_FAILURE', p, l) }) },
   RUN_PROGRESSION_PARKED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROGRESSION_PARKED', p, l) }) },
+  // Crash-loop breaker: params task, attempt, phase (last preparation phase entered, or 'unknown'), aborts, bound. Without params (the parked
+  // Run's recorded failure code seen later) the summary sentence stands.
+  DISPATCH_PREPARATION_ABORTED: { category: 'error', render: (p, l) => ({ message: p['aborts'] === undefined ? t('error.DISPATCH_PREPARATION_ABORTED.summary', p, l) : t('error.DISPATCH_PREPARATION_ABORTED', p, l),
+    suggestion: t('remedy.DISPATCH_PREPARATION_ABORTED', p, l) }) },
   RUN_PROGRESSION_PARK_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROGRESSION_PARK_UNAVAILABLE', p, l) }) },
   INVENTORY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INVENTORY_UNAVAILABLE', p, l) }) },
   MONITOR_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MONITOR_UNAVAILABLE', p, l) }) },

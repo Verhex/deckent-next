@@ -112,6 +112,8 @@ export const CONFIG_FIELDS = Object.freeze({
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
     failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),
     maxConsecutiveFailures: z.number().int().positive().safe().default(3),
+    /** Crash-loop breaker: abnormal ends (process death) of one Attempt's dispatch preparation before its Run is parked instead of dispatched again. */
+    maxPreparationAborts: z.number().int().positive().safe().default(2),
     pageSize: z.number().int().positive().max(2147483646).default(64),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellationRuntime: field('config.field.cancellationRuntime', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ scopeIds: z.array(z.string().min(1)).min(1),
