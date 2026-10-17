@@ -25,7 +25,7 @@ const baseVerifyJob = `  verify:
           persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with: { node-version: '\${{ matrix.node }}', cache: npm }
+        with: { node-version: '\${{ matrix.node }}', check-latest: true, cache: npm }
       - name: Canonical temporary parent for every fixture runner
         id: temporary_parent
         run: node scripts/ci-temporary-environment.mjs
