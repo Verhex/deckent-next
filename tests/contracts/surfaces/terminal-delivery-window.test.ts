@@ -106,7 +106,7 @@ async function admit(h: Harness) {
   await settle(80); await press(h, '/do process order\r');
   await until(() => frame(h).includes('PLAN-RESULT'), 'result window'); await press(h, CTRL_O); await press(h, ESC);
   await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks'); await press(h, CTRL_O); await press(h, ESC);
-  await until(() => frame(h).includes(`ORDER-TASK · ${EN.jobs!.runStates['running']}`), 'running row');
+  await until(() => frame(h).includes(`ORDER-TASK · r · ${EN.jobs!.runStates['running']}`), 'running row');
 }
 const windowTitle = 'Delivery · ORDER-TASK';
 

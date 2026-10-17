@@ -19,15 +19,26 @@ export interface JobWindowLabels {
   /** I-5: the opening line when work is running: `{runs}`, `{workers}`. */
   readonly opening: string;
   readonly runStates: Readonly<Record<string, string>>;
+  /** Owner 2026-10-17: why a parked Run waits (`parked` state reasons), and the window's `{code}` / `{note}` lines. */
+  readonly parkReasons?: Readonly<Record<string, string>>; readonly parkCode?: string; readonly parkNote?: string;
 }
 export type JobWindowPresentation = Readonly<{ kind: 'job-window'; title: string; lines: readonly WindowLine[] }>
   | Readonly<{ kind: 'job-picker'; title: string; rows: readonly (readonly Span[])[] }>;
 
 /** Only projections, not hashes or command text, provide a run's human title. */
-function displayId(value: string): string { return value.length > 12 ? shortId(value).slice(0, 8) : value; }
+export function displayId(value: string): string { return value.length > 12 ? shortId(value).slice(0, 8) : value; }
 
+/** The Brain-authored title when a task carries one, else the first line of the task text with its whitespace collapsed (owner 2026-10-17:
+ * a row showed the whole multi-line task). */
 export function runTitle(run: RunView, labels: JobWindowLabels): string {
-  return run.tasks.find(task => task.taskBrief?.task)?.taskBrief?.task ?? labels.runFallback;
+  const titled = run.tasks.find(task => task.taskBrief?.title)?.taskBrief?.title;
+  if (titled) return titled;
+  const task = run.tasks.find(task => task.taskBrief?.task?.trim())?.taskBrief?.task;
+  return task ? task.trim().split(/\r?\n/u)[0]!.replace(/\s+/gu, ' ').trim() : labels.runFallback;
+}
+/** A parked Run's reason in the catalog's words, or null when the Run is not parked or the words are absent. */
+export function parkReasonText(run: RunView, labels: JobWindowLabels): string | null {
+  return run.state?.kind === 'parked' ? labels.parkReasons?.[run.state.reason] ?? null : null;
 }
 export function runStateText(run: RunView, labels: JobWindowLabels): string {
   const value = run.state?.kind === 'terminal' ? run.state.outcome : run.state?.kind ?? 'unknown';
@@ -46,7 +57,10 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels): WindowLin
   const section = (title: string): WindowLine => ({ spans: [span(title, { bold: true, role: 'accent' })] });
   const field = (label: string, text: string, muted = false): WindowLine => ({ label: [span(label, { bold: true })], spans: [span(text, muted ? { role: 'muted' } : {})] });
   const taskLabel = (task: RunView['tasks'][number], index: number) => (task.resultBrief ? task.taskBrief?.task : undefined) ?? `${labels.tasks} ${index + 1}`;
+  const parked = run.state?.kind === 'parked' ? run.state : null, reason = parkReasonText(run, labels), note = parked?.operatorHold?.note ?? parked?.note;
   return [section(labels.state), { spans: [span(`[${runStateText(run, labels)}]`, { role: run.cancellationRequested ? 'warning' : 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] },
+    ...(parked ? [{ spans: [span(reason ?? parked.reason, { role: 'warning' }), ...(parked.failureCode && labels.parkCode ? [span(` · ${fillTemplate(labels.parkCode, { code: parked.failureCode })}`, { role: 'muted' })] : []),
+      ...(note && labels.parkNote ? [span(` · ${fillTemplate(labels.parkNote, { note })}`)] : [])] }] : []),
     section(labels.tasks), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: [span(`[${fillTemplate(work.workerLine.card?.runPhases[task.phase] ?? task.phase, { count: 1 })}]`, { role: 'accent' }), span(` · ${displayId(task.id)}`, { role: 'muted' })] })),
     section(labels.attempts), ...run.tasks.map((task, index) => field(taskLabel(task, index), task.resultBrief?.attemptId ? displayId(task.resultBrief.attemptId) : labels.unknown, true)),
     section(labels.delivery), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: task.resultBrief?.runDelivery
@@ -87,7 +101,9 @@ export async function pickRun(panel: WorklinePanel, execution: LocalExecution, l
   return selected && (!cancellable || (selected.state?.kind !== 'terminal' && !selected.cancellationRequested)) ? selected : null;
 }
 
-export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transcript', panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels): Promise<string> {
+/** `onSeen`: the person opened a Run window (its id) or the Run list (no id); the session's active-work strip drops finished Runs then. */
+export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transcript', panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels,
+  onSeen?: (runId?: string) => void): Promise<string> {
   const labels = work.jobs!;
   if (command === 'workers' || command === 'runs') {
     const workers = command === 'workers' ? (await ledgerEntriesForWorkers(ledger, 'list')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker') : [];
@@ -96,11 +112,12 @@ export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transc
       : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runStateText(run, labels)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
     const title = command === 'workers' ? work.panel.title : work.live!.runsTitle;
     await panel.pick(execution, { kind: 'job-window', title, lines }, ['close']);
+    if (command === 'runs') onSeen?.();
     return `${title}: ${command === 'workers' ? workers.length : runs.length}`;
   }
   if (command === 'run') {
     const run = await pickRun(panel, execution, ledger, work);
-    if (run && !execution.signal.aborted) await panel.pick(execution, { kind: 'job-window', title: runTitle(run, labels), lines: runDetailLines(run, work) }, ['close']);
+    if (run && !execution.signal.aborted) { await panel.pick(execution, { kind: 'job-window', title: runTitle(run, labels), lines: runDetailLines(run, work) }, ['close']); onSeen?.(run.runId); }
     return run ? `${labels.runTitle}: ${runTitle(run, labels)} [${runStateText(run, labels)}]` : fillTemplate(labels.closed, { title: labels.runTitle });
   }
   const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker' && Boolean(row.attempt));

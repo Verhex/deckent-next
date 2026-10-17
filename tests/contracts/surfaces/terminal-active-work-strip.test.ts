@@ -4,7 +4,8 @@ import { render } from 'ink';
 import { Writable } from 'node:stream';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow } from '#surfaces/core/terminal-work/index.js';
+import { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow, runDetailLines } from '#surfaces/core/terminal-work/index.js';
+import { formatDuration } from '#surfaces/core/terminal-ledger/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
@@ -20,7 +21,7 @@ afterEach(() => { for (const view of mounted.splice(0)) view.unmount(); });
 
 function run(state: RunView['state'], task: { phase: string; title?: string } = { phase: 'active' }, id = 'r'): RunView {
   return { schemaVersion: 3, scopeId: 's', runId: id, revision: 1, cancellationRequested: false, state,
-    tasks: [{ id: 'task', phase: task.phase, taskBrief: { schemaVersion: 1, task: task.title ?? 'ORDER-TASK', scopePaths: [], acceptance: null, criteria: [], profile: null, model: null, effort: null, contextRefs: [] } }] } as unknown as RunView;
+    tasks: [{ id: 'task', kind: 'order', phase: task.phase, taskBrief: { schemaVersion: 1, task: task.title ?? 'ORDER-TASK', scopePaths: [], acceptance: null, criteria: [], profile: null, model: null, effort: null, contextRefs: [] } }] } as unknown as RunView;
 }
 const RUNNING = { kind: 'running' } as const, COMPLETED = { kind: 'terminal', outcome: 'completed', reason: 'completed' } as const;
 const NEEDS = { kind: 'parked', reason: 'needs-input', since: 0, deadline: 1 } as const;
@@ -68,6 +69,46 @@ describe('active work items (pure projection)', () => {
   });
 });
 
+describe('active work rows: one line per Run (owner 2026-10-17)', () => {
+  const brief = (task: string, extra: Record<string, unknown> = {}) => ({ schemaVersion: 1, task, scopePaths: [], acceptance: null, criteria: [], profile: null, model: null, effort: null, contextRefs: [], ...extra });
+  const view = (id: string, state: RunView['state'], tasks: readonly Record<string, unknown>[], extra: Record<string, unknown> = {}) =>
+    ({ schemaVersion: 3, scopeId: 's', runId: id, revision: 1, cancellationRequested: false, state, tasks, ...extra }) as unknown as RunView;
+  const NOW = 2 * 3_600_000 + 18 * 60_000;
+  const items = (labels: typeof EN, runs: readonly { run: RunView; sinceMs: number }[]) => activeWorkItems({ labels: labels.activeWork!, jobs: labels.jobs!, duration: labels.workerLine, nowMs: NOW, active: null, runs });
+  it('shows the Brain title or the first task line, the short run id, model or kind, state and the age with hours and minutes', () => {
+    const long = view('0123456789abcdef0123456789abcdef', RUNNING, [{ id: 't', kind: 'coding', phase: 'active',
+      taskBrief: brief('Fix   the\tlogin flow\nSecond line with every detail of the task', { model: { channelId: 'c', modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] } }) }]);
+    const titled = view('r2', RUNNING, [{ id: 't', kind: 'verify', phase: 'active', taskBrief: brief('A long instruction', { title: 'Verify release' }) },
+      { id: 'u', kind: 'verify', phase: 'pending', taskBrief: brief('x') }]);
+    for (const [labels, hours] of [[EN, '2h 18m'], [TR, '2 sa 18 dk']] as const) {
+      const rows = items(labels, [{ run: long, sinceMs: 0 }, { run: titled, sinceMs: NOW - 5 * 60_000 }]);
+      // Most recently registered first.
+      expect(rows[0]).toMatchObject({ title: 'Verify release', detail: 'r2 · verify +1', elapsed: labels.workerLine.durationMinutes.replace('{n}', '5') });
+      expect(rows[1]).toMatchObject({ title: 'Fix the login flow', detail: '01234567 · claude-sonnet-5-5', elapsed: hours });
+    }
+    expect(formatDuration(3_600_000, EN.workerLine)).toBe('1h 0m'); expect(formatDuration(26 * 3_600_000 + 60_000, TR.workerLine)).toBe('26 sa 1 dk');
+  });
+  it('keeps every unfinished Run and only the three most recent finished ones', () => {
+    const runs = [...Array.from({ length: 5 }, (_, index) => ({ run: view(`done${index}`, COMPLETED, [{ id: 't', kind: 'k', phase: 'accepted', taskBrief: brief(`DONE${index}`) }]), sinceMs: index })),
+      ...Array.from({ length: 2 }, (_, index) => ({ run: view(`open${index}`, RUNNING, [{ id: 't', kind: 'k', phase: 'active', taskBrief: brief(`OPEN${index}`) }]), sinceMs: index }))];
+    expect(items(EN, runs).map(row => row.title)).toEqual(['OPEN1', 'OPEN0', 'DONE4', 'DONE3', 'DONE2']);
+  });
+  it('names the park reason on the row and the reason, failure code and note in the Run window', () => {
+    const held = view('h', { kind: 'parked', reason: 'operator-hold', since: 0, deadline: 1, operatorHold: { schemaVersion: 1, note: 'waiting for the vendor' } },
+      [{ id: 't', kind: 'k', phase: 'pending', dependencies: [], acceptanceCriteria: [], taskBrief: brief('HELD') }]);
+    const failed = view('f', { kind: 'parked', reason: 'progression-failed', failureCode: 'RUN_STORE_CONFLICT', since: 0, deadline: 1 },
+      [{ id: 't', kind: 'k', phase: 'pending', dependencies: [], acceptanceCriteria: [], taskBrief: brief('STUCK') }]);
+    for (const labels of [EN, TR]) {
+      const rows = items(labels, [{ run: held, sinceMs: 0 }, { run: failed, sinceMs: 0 }]);
+      expect(rows.map(row => row.state)).toEqual([`${labels.jobs!.runStates['parked']} · ${labels.jobs!.parkReasons!['operator-hold']}`,
+        `${labels.jobs!.runStates['parked']} · ${labels.jobs!.parkReasons!['progression-failed']}`]);
+      const window = (run: RunView) => runDetailLines(run, labels).map(line => [...(line.label ?? []), ...line.spans].map(part => part.text).join('')).join('\n');
+      expect(window(held)).toContain(labels.jobs!.parkReasons!['operator-hold']); expect(window(held)).toContain('waiting for the vendor');
+      expect(window(failed)).toContain('RUN_STORE_CONFLICT');
+    }
+  });
+});
+
 /** A real Workline with a /do whose run-create approval is pending until the person decides it on the card. */
 function harness() {
   let current: RunView = run(RUNNING), release: (() => void) | undefined, decided = false, plans = 0;
@@ -106,7 +147,7 @@ describe('active work strip on the real Workline', () => {
     await press(h, '\r'); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(h.decisions).toEqual([]); // Enter on /do = focus transfer only
     await press(h, 'y'); // the explicit key on the focused original card
     await until(() => h.decisions.length === 1, 'decision on the card'); expect(h.decisions).toEqual(['allow']);
-    await until(() => h.plans() === 2 && frame(h).includes(`ORDER-TASK · ${EN.jobs!.runStates['running']}`), 'admitted Run row');
+    await until(() => h.plans() === 2 && frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['running']}`), 'admitted Run row');
   });
 
   it('follows the Run state, opens its existing window from the strip and drops a finished Run once opened', async () => {
@@ -118,11 +159,11 @@ describe('active work strip on the real Workline', () => {
     await press(h, CTRL_O); await press(h, ESC); // close the automatic /do result
     await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks');
     await press(h, CTRL_O); await press(h, ESC);
-    await until(() => frame(h).includes(`ORDER-TASK · ${EN.jobs!.runStates['running']}`), 'running row');
+    await until(() => frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['running']}`), 'running row');
     h.set({ ...run(NEEDS, { phase: 'pending' }), revision: 2 });
-    await until(() => frame(h).includes(`ORDER-TASK · ${EN.activeWork!.needsYou}`), 'needs-you row');
+    await until(() => frame(h).includes(`ORDER-TASK · r · order · ${EN.activeWork!.needsYou}`), 'needs-you row');
     h.set({ ...run(COMPLETED, { phase: 'accepted' }), revision: 3 });
-    await until(() => frame(h).includes(`ORDER-TASK · ${EN.jobs!.runStates['completed']}`), 'completed row');
+    await until(() => frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['completed']}`), 'completed row');
     await press(h, 'draft stays');
     await press(h, CTRL_T); await press(h, '\r');
     await until(() => frame(h).includes(`[${EN.jobs!.runStates['completed']}] · r`), 'run detail window (the /run read model)');
@@ -130,6 +171,25 @@ describe('active work strip on the real Workline', () => {
     await press(h, ESC, 100);
     expect(frame(h)).not.toContain('Active work'); // the finished Run left the strip once the person opened it
     await press(h, ' more'); expect(frame(h)).toContain('draft stays more'); // the composer holds input again
+  });
+
+  it.each(['/run', '/runs'])('a finished Run also leaves the strip once the person opens it with %s', async command => {
+    const h = harness(); await settle(80);
+    await press(h, '/do process order\r'); h.release();
+    await until(() => frame(h).includes('Create proposed Run'), 'card');
+    await press(h, CTRL_O); await press(h, 'y');
+    await until(() => frame(h).includes('PLAN-RESULT'), 'result window');
+    await press(h, CTRL_O); await press(h, ESC);
+    await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks');
+    await press(h, CTRL_O); await press(h, ESC);
+    h.set({ ...run(COMPLETED, { phase: 'accepted' }), revision: 3 });
+    await until(() => frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['completed']}`), 'completed row');
+    await press(h, `${command}\r`, 120);
+    if (command === '/run') { await until(() => frame(h).includes(EN.live!.runsTitle), 'run picker'); await press(h, '\r', 120); }
+    await until(() => frame(h).includes(command === '/run' ? `[${EN.jobs!.runStates['completed']}] · r` : EN.live!.runsTitle), 'run window');
+    if (!frame(h).includes('WINDOW-FOCUS')) await press(h, CTRL_O);
+    await press(h, ESC, 120);
+    await until(() => !frame(h).includes('Active work'), 'finished Run left the strip');
   });
 
   it('Esc and Ctrl+T give input back to the composer; arrows move the selection only while the strip holds input', async () => {

@@ -6,7 +6,8 @@ const safe = (value: string) => redactSensitive(terminalSafeText(value));
 const profileSchema = z.object({ id: text, version: z.number().int().positive() }).strict().readonly();
 const contextRefSchema = z.object({ id: text, version: z.number().int().positive(), sha256: text.regex(/^[a-f0-9]{64}$/) }).strict().readonly();
 /** Human read projections only. No prompt parsing, live catalog lookup, inferred business purpose or transition authority. */
-export const taskBriefSchema = z.object({ schemaVersion: z.literal(1), task: text.nullable(), scopePaths: z.array(text).readonly().nullable(),
+/** `title`: the Brain-authored work-input title (M1, ≤240 bytes), present only when the task carries one; the strip and windows prefer it. */
+export const taskBriefSchema = z.object({ schemaVersion: z.literal(1), task: text.nullable(), title: text.optional(), scopePaths: z.array(text).readonly().nullable(),
   acceptance: text.nullable(), criteria: z.array(z.object({ id: text, description: text, evaluator: profileSchema }).strict().readonly()).readonly(),
   profile: profileSchema.nullable(), model: workerModelPinSchema.nullable(), effort: text.nullable(), contextRefs: z.array(contextRefSchema).readonly(),
 }).strict().readonly();
@@ -39,7 +40,7 @@ export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
   }) : [];
   const pin = profile ? readWorkerModelPin(profile.parameters)?.pin : null;
   const model = pin ?? input?.model ?? null;
-  return taskBriefSchema.parse({ schemaVersion: 1, task: input ? safe(input.task) : null, scopePaths: input?.scope.paths.map(safe) ?? null,
+  return taskBriefSchema.parse({ schemaVersion: 1, task: input ? safe(input.task) : null, ...(input?.title ? { title: safe(input.title) } : {}), scopePaths: input?.scope.paths.map(safe) ?? null,
     acceptance: input ? safe(input.acceptance) : null, criteria: run.graph.criterionDefinitions.filter(item => definition.acceptanceCriteria.includes(item.id))
       .map(item => ({ id: safe(item.id), description: safe(item.description), evaluator: { id: safe(item.evaluator.id), version: item.evaluator.version } })),
     profile: profile ? { id: safe(profile.id), version: profile.version } : null,
