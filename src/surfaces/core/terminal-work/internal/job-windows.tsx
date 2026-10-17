@@ -2,12 +2,10 @@ import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { RunView } from '#engine/index.js';
 import { renderBriefLines } from '#surfaces/core/monitor/index.js';
 import { shortId, t, type Locale } from '#platform/index.js';
-import { loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
+import { fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { liveWindowLines } from './live-windows.js';
-import type { LocalExecution, WorklinePanel } from './workline-panel.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
 
 export interface JobWindowLabels {
@@ -85,51 +83,4 @@ export function JobWindow({ value, work, onAnswer }: { readonly value: JobWindow
   }
   return <Window title={title} body={value.lines.map(line => ({ ...line, spans: projectSpans(line.spans), ...(line.label ? { label: projectSpans(line.label) } : {}) }))}
     hints={work.jobs?.hints ?? work.window.pick} position={work.window.position} onClose={() => onAnswer(null)} />;
-}
-
-export async function pickRun(panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels, cancellable = false): Promise<RunView | null> {
-  const runs = (await loadRunViewsForWatch(ledger)).filter(run => !cancellable || (run.state?.kind !== 'terminal' && !run.cancellationRequested));
-  if (execution.signal.aborted) return null;
-  if (!runs.length) {
-    await panel.pick(execution, { kind: 'job-window', title: work.jobs!.runTitle, lines: [{ spans: [span(work.live!.empty, { role: 'muted' })] }] }, ['close']); return null;
-  }
-  const choice = await panel.pick(execution, { kind: 'job-picker', title: cancellable ? work.jobs!.cancelPickerTitle : work.live!.runsTitle,
-    rows: runs.map(run => [span(runTitle(run, work.jobs!), { bold: true }), span(` [${runStateText(run, work.jobs!)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })]) }, runs.map((_, index) => String(index)));
-  if (choice === null || execution.signal.aborted) return null;
-  // Refresh revision and cancellation eligibility after the choice; the service remains the authority at mutation time.
-  const selected = await ledger.inspectRun(runs[Number(choice)]!.runId);
-  return selected && (!cancellable || (selected.state?.kind !== 'terminal' && !selected.cancellationRequested)) ? selected : null;
-}
-
-/** `onSeen`: the person opened a Run window (its id) or the Run list (no id); the session's active-work strip drops finished Runs then. */
-export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transcript', panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels,
-  onSeen?: (runId?: string) => void): Promise<string> {
-  const labels = work.jobs!;
-  if (command === 'workers' || command === 'runs') {
-    const workers = command === 'workers' ? (await ledgerEntriesForWorkers(ledger, 'list')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker') : [];
-    const runs = command === 'runs' ? await loadRunViewsForWatch(ledger) : [];
-    const lines = command === 'workers' ? liveWindowLines('workers', { workers, runs: [] }, { live: work.live!, panel: work.panel, workerLine: work.workerLine }, Number.POSITIVE_INFINITY)
-      : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runStateText(run, labels)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
-    const title = command === 'workers' ? work.panel.title : work.live!.runsTitle;
-    await panel.pick(execution, { kind: 'job-window', title, lines }, ['close']);
-    if (command === 'runs') onSeen?.();
-    return `${title}: ${command === 'workers' ? workers.length : runs.length}`;
-  }
-  if (command === 'run') {
-    const run = await pickRun(panel, execution, ledger, work);
-    if (run && !execution.signal.aborted) { await panel.pick(execution, { kind: 'job-window', title: runTitle(run, labels), lines: runDetailLines(run, work) }, ['close']); onSeen?.(run.runId); }
-    return run ? `${labels.runTitle}: ${runTitle(run, labels)} [${runStateText(run, labels)}]` : fillTemplate(labels.closed, { title: labels.runTitle });
-  }
-  const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker' && Boolean(row.attempt));
-  if (!workers.length) {
-    await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(work.live!.empty, { role: 'muted' })] }] }, ['close']);
-    return fillTemplate(labels.closed, { title: labels.transcriptTitle });
-  }
-  const choice = await panel.pick(execution, { kind: 'job-picker', title: labels.transcriptTitle, rows: workers.map(worker => [span(fillTemplate(work.workerLine.ordinal, { n: worker.ordinal ?? 1 }), { bold: true }),
-    span(` · ${worker.live?.model ?? worker.provider}`), span(` · ${displayId(worker.attempt!.attemptId)}`, { role: 'muted' })]) }, workers.map((_, index) => String(index)));
-  if (choice === null || execution.signal.aborted) return fillTemplate(labels.closed, { title: labels.transcriptTitle });
-  const worker = workers[Number(choice)]!, text = await ledger.inspectTranscript!(worker.attempt!);
-  await panel.pick(execution, { kind: 'job-window', title: labels.transcriptTitle, lines: [{ spans: [span(fillTemplate(work.transcriptHeader, { n: worker.ordinal ?? 1, attempt: displayId(worker.attempt!.attemptId), task: displayId(worker.taskId) }), { role: 'muted' })] },
-    ...text.split(/\r?\n/u).map(line => ({ spans: [span(line)], exact: true }))] }, ['close']);
-  return `${labels.transcriptTitle}: ${fillTemplate(work.workerLine.ordinal, { n: worker.ordinal ?? 1 })}`;
 }

@@ -9,8 +9,9 @@ import { shortId } from '#platform/index.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
-import { JobWindow, pickRun } from './job-windows.js';
-import { RunControlDecisionCard, RunsControlWindow, runRunsControl } from './run-control.js';
+import { JobWindow } from './job-windows.js';
+import { RunControlDecisionCard, runControlAction } from './run-control.js';
+import type { RunControlAction } from '#surfaces/core/terminal-ledger/index.js';
 import { systemSummaryEntry } from './system-summary.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
@@ -46,7 +47,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const presentation = panel.presentation(state);
   const modal = presentation?.kind === 'approval' || presentation?.kind === 'cancel' || presentation?.kind === 'window' || presentation?.kind === 'job-window' || presentation?.kind === 'job-picker'
-    || presentation?.kind === 'runs-window' || presentation?.kind === 'run-control' ? presentation : null;
+    || presentation?.kind === 'run-control' ? presentation : null;
   // A list window's decision carries the reason typed on the approval window it opened (the picker answer itself is only allow/deny).
   const pickedReason = useRef<string | undefined>(undefined);
   const picker = presentation?.kind === 'approvals' && state.picker ? presentation.rows : null;
@@ -70,16 +71,15 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     approvalWatch.current = state;
     if (fresh.length) setApprovalStatus(fillTemplate(work!.approvalNotify, { count: fresh.length }));
   }, error => setApprovalStatus(`${work!.approvalPollFailed}: ${errorText(error)}`));
-  const run = async (command: 'approvals' | 'cancel' | 'runs', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string, preview?: string): Promise<void> => {
+  /** `cancel` always names its Run (K4: `x` on a Runs window row); the Run is read again and its refreshed revision is what the card confirms. */
+  const run = async (command: 'approvals' | 'cancel', _args: string, execution: LocalExecution, selectedApprovalId?: string, selectedRunId?: string, preview?: string): Promise<void> => {
     if (!work || !ledger) return;
-    const title = command === 'approvals' ? work.window.approvalsTitle : command === 'runs' ? work.live!.runsTitle : work.jobs!.runTitle;
+    const title = command === 'approvals' ? work.window.approvalsTitle : work.jobs!.runTitle;
     slashSummary.current = [];
     try {
-      // Y1: the Runs window with its hold/resume/close keys (only when the port and its words are both there); each key has its own y/N card.
-      if (command === 'runs') { output(await runRunsControl(panel, execution, ledger, work, errorText, () => pickedReason.current)); return; }
       if (command === 'cancel') {
         const selected = selectedRunId ? await ledger.inspectRun(selectedRunId) : null;
-        const view = selectedRunId ? selected && selected.state?.kind !== 'terminal' && !selected.cancellationRequested ? selected : null : await pickRun(panel, execution, ledger, work, true);
+        const view = selected && selected.state?.kind !== 'terminal' && !selected.cancellationRequested ? selected : null;
         if (!view || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }
         const answer = await panel.pick(execution, { kind: 'cancel', run: view }, ['allow', 'deny']);
         if (!execution.signal.aborted) await cancelRun(view, answer === 'allow');
@@ -127,6 +127,13 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       if (!execution.signal.aborted) push([systemSummaryEntry(summary?.length ? summary.join(' · ') : fillTemplate(work.jobs!.closed, { title }))]);
     }
   };
+  /** Y1 from the Runs window (`h`/`r`/`c` on a row): its own y/N card, then one transcript line (the result, the refusal or nothing sent). */
+  const control = async (execution: LocalExecution, runId: string, action: RunControlAction): Promise<void> => {
+    if (!work?.runControl || !ledger?.controlRun) return;
+    pickedReason.current = undefined;
+    const line = await runControlAction(panel, execution, ledger, work, runId, action, errorText, () => pickedReason.current).catch((error: unknown) => errorText(error));
+    pickedReason.current = undefined; if (line && !execution.signal.aborted) push([systemSummaryEntry(line)]);
+  };
   // T2 integration: a decision notice names the approval by its short id; the full id is a detail line under it (never the primary line).
   const identified = useCallback((template: string, approvalId: string) => fillTemplate(template, { id: shortId(approvalId) }), []);
   const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope, reason?: string) => {
@@ -169,8 +176,6 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
         if (state.approval) panel.decide(state.approval.cardHandle, yes, standing, reason ?? '');
         else { pickedReason.current = reason; panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }
       }} />;
-  } else if (work?.runControl && modal?.kind === 'runs-window') {
-    card = <RunsControlWindow key={state.picker?.pickerHandle} value={modal} labels={work.runControl} position={work.window.position} onAnswer={choice => { panel.choose(state.picker?.pickerHandle, choice); }} />;
   } else if (work?.runControl && modal?.kind === 'run-control') {
     card = <RunControlDecisionCard key={`run-control:${state.picker?.pickerHandle}`} value={modal} work={work} labels={labels.render ?? {}} pending={!state.picker}
       onDecide={(yes, reason) => { pickedReason.current = reason; panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }} />;
@@ -191,7 +196,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       {card}
     </>
   );
-  return { openApproval: (approvalId: string, execution: LocalExecution) => run('approvals', '', execution, approvalId), approvalStatus, observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, workers };
+  return { openApproval: (approvalId: string, execution: LocalExecution) => run('approvals', '', execution, approvalId), approvalStatus, observeWorkers, observeApprovals, run, control, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, workers };
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {

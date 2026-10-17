@@ -703,7 +703,7 @@
   "brain.waiting": "TTY onayınız bekleniyor: {id}, son tarih {expires}. Model bu işe yetki veremez.",
   "brain.revise": "Düzeltmek için bu öneriyi N ile reddedin, ardından yeni isteğinizle /do yazın.",
   "brain.contribution": "Model {model} · çağrı {invocation} · şablon v{template}; maskeli katkı özeti kayıtlı.",
-  "brain.next": "Run {run} kabul edildi. /tasks veya /monitor ile izleyin.",
+  "brain.next": "Run {run} kabul edildi. /runs veya /monitor ile izleyin.",
   "brain.planning": "Brain seçilen modelle plan hazırlıyor. Henüz Run kabul edilmedi.",
   "brain.cancelHint": "Esc / Ctrl+C: planlamayı iptal et",
   "brain.requestHint": "/do ardından planlanmasını istediğiniz işi yazın.",

@@ -753,8 +753,8 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   Preview, refusal, conflict and current do not record a change. No audit, no policy write; an event alone does not prove publication.
 - **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
   `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
-  `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
-  bounded live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
+  `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor` and `/runs` (K1–K8: one Runs window, tabs and row
+  keys opening the existing cards; old names moved, not aliased) are bounded live windows (L5; one visible window at a time). Full access shows a standing
   warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
 - **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; alpha.15 `4d6f1582`, PR #46):** in the TTY terminal every
   informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` erases the screen and the terminal's

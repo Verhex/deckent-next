@@ -98,7 +98,7 @@ it('applies the registry defaults and the absolute threshold independently of th
   expect(agentCompactionExpected(messages, { promptTokens: 100000, windowTokens: 1_000_000 }, admission)).toBe(true);
   expect(agentCompactionExpected(messages, { promptTokens: 100000, windowTokens: null }, admission)).toBe(true);
   expect(terminalPanelLabels('tr').budget.belowSettled).toContain('kayıtlı harcama');
-  expect(workSurfaceLabels('tr').live!.tasksHints).toContain('x iptal (onay)');
+  expect(workSurfaceLabels('tr').live!.keys.cancel).toBe('x iptal');
   expect(PACKAGE_VERSION).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/u); // the running version, not a pinned release (survives each bump)
 });
 

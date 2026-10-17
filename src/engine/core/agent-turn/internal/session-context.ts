@@ -11,9 +11,10 @@ import type { AgentTurnShellPosture } from './system-prompt.js';
  * and is never an input of any decision. Nothing reads the ledger or configuration for it, and the model never has to.
  *
  * Text is protocol, like the system prompt it joins: English, in code; the reply-language rule carries the person's locale.
- * Version 1; any change of the rendered wording or the tool's JSON shape is a new version.
+ * Version 1; any change of the rendered wording or the tool's JSON shape is a new version. Version 2 (K1, owner 2026-10-14): `/cancel` left the
+ * surfaces; the one Runs window stops, holds, delivers and answers from a row.
  */
-export const AGENT_SESSION_CONTEXT_VERSION = 1;
+export const AGENT_SESSION_CONTEXT_VERSION = 2;
 
 /** The read-only tool that returns the same snapshot fresh (the mode may change while a turn runs). Offered only where policy allows it. */
 export const SESSION_STATE_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: 'session_state', version: 1, toolClass: 'read' as const,
@@ -48,9 +49,9 @@ const effectOf = (decision: AgentSessionDecision): AgentSessionEffect => decisio
 
 /** The slash surfaces a model may suggest to the person (they open them; the model cannot). Pinned against the terminal registry by a test. */
 export const AGENT_SESSION_SURFACES = Object.freeze([
-  ['/do <goal>', 'plan a goal as a Run; the person approves it before anything runs'], ['/runs', 'the Runs and their state'],
+  ['/do <goal>', 'plan a goal as a Run; the person approves it before anything runs'], ['/runs', 'the Runs and their workers; stop, hold, deliver or answer from a row (the person confirms each)'],
   ['/approvals', 'pending approval cards; only the person decides them'], ['/deliver', 'finished work awaiting the person\'s delivery decision'],
-  ['/cancel', 'stop a Run (the person confirms)'], ['/mode', 'the permission mode (Shift+Tab cycles it)'], ['/model', 'the model of this session'],
+  ['/mode', 'the permission mode (Shift+Tab cycles it)'], ['/model', 'the model of this session'],
   ['/reasoning', 'thinking on or off'], ['/context', 'what this conversation sends'], ['/mcp', 'the MCP servers'], ['/status', 'the service and session status'],
 ] as const);
 /** What no context, tool result or message changes (hard rules; the policy engine enforces them, the model is told them). */

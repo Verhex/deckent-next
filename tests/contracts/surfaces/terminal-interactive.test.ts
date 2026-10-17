@@ -4,7 +4,7 @@ import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
 // Owner report 2026-09-27: "/ shows the commands but Enter does not select one". Keystrokes go through the real Ink WorklineApp.
 const HELP_NOTICE = 'info\n  /status';
-const DOWN = '\u001b[B', ESC = '\u001b';
+const DOWN = '\u001b[B', UP = '\u001b[A', ESC = '\u001b';
 const views: Array<ReturnType<typeof mountWorkline>> = [];
 afterEach(() => { for (const view of views.splice(0)) view.instance.unmount(); });
 
@@ -38,11 +38,13 @@ describe('slash palette keys through the real workline', () => {
     await until(() => view.stdout.text.includes('> /status'), 'palette');
     await view.type('\r');
     await until(() => view.stdout.text.includes('STATUS-LINE'), 'status executed');
-    // '/wa' offers watch-workers, watch-runs, watch-stop; Down highlights watch-runs and Enter runs exactly that one.
-    await view.type('/wa', DOWN);
-    await until(() => view.stdout.text.includes('> /watch-runs'), 'second row highlighted');
+    // '/r' offers runs, resume, reasoning; Down highlights resume, Up returns to runs and Enter runs exactly that one.
+    await view.type('/r', DOWN);
+    await until(() => view.stdout.text.includes('> /resume'), 'second row highlighted');
+    await view.type(UP);
+    await until(() => view.stdout.frame.includes('> /runs'), 'first row highlighted again');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('Watching · polling'), 'watch-runs executed');
+    await until(() => view.stdout.text.includes('Watching · polling'), '/runs executed');
     expect(view.stdout.text).not.toContain('WATCH-ON');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
@@ -52,11 +54,11 @@ describe('slash palette keys through the real workline', () => {
     const view = await open({ ledger: { workerHeartbeatMs: 60_000, inspectWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }) as never,
       inspectRun: async runId => { inspected.push(runId); return null; } } as never });
     await view.type('/ru');
-    await until(() => view.stdout.text.includes('RUN-DESC') || view.stdout.text.includes('> /run'), 'palette');
+    await until(() => view.stdout.text.includes('> /runs'), 'palette');
     await view.type('\r');
-    // SW-2: the bare command opens its window at once (here the "not wired" window: the test ledger cannot list runs); nothing waits for typed text.
-    await until(() => view.stdout.frame.includes('UNWIRED'), 'bare /run answered at once in its window');
-    expect(view.stdout.text).not.toContain('> /run |');
+    // SW-2/K1: the bare command opens its window at once (its runs tab says "not wired": the test ledger cannot list runs); nothing waits for typed text.
+    await until(() => view.stdout.frame.includes('UNWIRED'), 'bare /runs answered at once in its window');
+    expect(view.stdout.text).not.toContain('> /runs |');
     expect(inspected).toEqual([]);
   });
 
@@ -74,10 +76,10 @@ describe('slash palette keys through the real workline', () => {
 
   it('typing filters by prefix first, then by fuzzy subsequence', async () => {
     const view = await open();
-    await view.type('/wwk');
-    await until(() => view.stdout.text.includes('> /watch-workers'), 'fuzzy match offered');
+    await view.type('/rns');
+    await until(() => view.stdout.text.includes('> /runs'), 'fuzzy match offered');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('UNWIRED'), 'watch-workers ran (no ledger wired)');
+    await until(() => view.stdout.text.includes('UNWIRED'), '/runs ran (no ledger wired)');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });

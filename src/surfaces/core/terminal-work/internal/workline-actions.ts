@@ -1,12 +1,10 @@
-import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
+import { type WorkLedgerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import type { JobWindowLabels } from './job-windows.js';
 import type { RunControlLabels } from './run-control.js';
 import type { ActiveWorkLabels } from './active-work.js';
 import type { LiveWindowKind, LiveWindowLabels, WorkerPanelLabels } from './live-windows.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
-import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
-import { shortId } from '#platform/index.js';
-import { slashHelpText, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
+import { movedSlashCommand, slashHelpText, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 
 export interface WorklineActionLabels {
   readonly ledgerUnavailable: string;
@@ -28,6 +26,8 @@ export interface WorklineActionLabels {
   readonly watchAccessStopped?: string;
   readonly statusLine: string;
   readonly unknownCommand: string;
+  /** K2: `{old}` moved to `{new}` (a rename; the old name never runs). Absent: the unknown-command notice. */
+  readonly movedCommand?: string;
   /** The same registry-derived labels as the palette; optional for callers without a composer. */
   readonly composer?: { readonly slash: Readonly<Record<string, string>> };
   /** Worker live line, transcript, approvals and run control; absent means those commands are not offered. */
@@ -41,7 +41,7 @@ export interface WorkSurfaceLabels {
   readonly runControl?: RunControlLabels;
   /** TERMINAL-SABIT slice 2: the active work strip above the composer; absent means no strip. */
   readonly activeWork?: ActiveWorkLabels;
-  /** Live windows (`/monitor`, `/watch-*`, `/tasks`); absent means those commands are not offered as windows. */
+  /** Live windows (`/monitor`, the Runs window); absent means those commands are not offered as windows. */
   readonly live?: LiveWindowLabels;
   readonly workerLine: WorkerLineLabels;
   readonly panel: WorkerPanelLabels;
@@ -50,8 +50,6 @@ export interface WorkSurfaceLabels {
   readonly transcriptNotFound: string;
   readonly transcriptNoAttempt: string;
   readonly transcriptHeader: string;
-  /** Paging of a long transcript; absent means the whole transcript is shown. */
-  readonly transcriptPage?: TranscriptPageLabels;
   /** `{task}` and `{attempt}` in full: the headline carries their short forms. */
   readonly transcriptDetail?: string;
   readonly sessionStandingClear?: { readonly cleared: string; readonly unconfirmed: string };
@@ -109,7 +107,7 @@ export interface WorkSurfaceLabels {
 }
 
 /** Commands owned by the work surface; they need its labels and their port. */
-export const WORK_SURFACE_COMMANDS = Object.freeze(['transcript', 'approvals', 'cancel'] as const);
+export const WORK_SURFACE_COMMANDS = Object.freeze(['approvals'] as const);
 export type WorkSurfaceCommand = typeof WORK_SURFACE_COMMANDS[number];
 export function isWorkSurfaceCommand(command: string): command is WorkSurfaceCommand {
   return (WORK_SURFACE_COMMANDS as readonly string[]).includes(command);
@@ -131,70 +129,25 @@ export interface WorklineActionContext {
 /** `window`: the live window the command opens (`null` closes the open one). */
 export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'> | null; exit?: true }>;
 
-/** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
+/** Pure dispatch for immediate commands; a command that needs its window or port returns null and runs in the view. */
 export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {
   const { labels, watch, ledger } = context;
-  if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
+  if (command === 'exit') return { entries: [], exit: true };
   if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS))] };
-  if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
-  if (command === 'watch-workers' || command === 'watch-runs' || command === 'tasks') {
-    const runs = command === 'watch-runs', tasks = command === 'tasks', kind = tasks ? 'tasks' as const : runs ? 'runs' as const : 'workers' as const;
-    if (!ledger || (runs && !ledger.listRunIds) || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
-    // `/tasks` follows both feeds (runs only where the ledger can list them); a feed already on is not announced again, its window just opens.
-    const next: WatchState = { workers: watch.workers || !runs, runs: watch.runs || runs || (tasks && Boolean(ledger.listRunIds)) };
-    if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: kind };
-    return { entries: [], watch: next, window: kind };
-  }
-  if (command === 'watch-stop') {
-    return watch.workers || watch.runs ? { entries: [], watch: { workers: false, runs: false }, window: null } : { entries: [] };
-  }
+  if (command === 'status') return { entries: [notice('info', labels.statusLine)] };
+  // K1: `/runs` is the one Runs window over both feeds (runs only where the ledger can list them); a feed already on is not announced again.
   if (command === 'runs') {
-    if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    return null;
+    if (!ledger || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
+    const next: WatchState = { workers: true, runs: watch.runs || Boolean(ledger.listRunIds) };
+    if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: 'runs' };
+    return { entries: [], watch: next, window: 'runs' };
   }
-  if (command === 'workers' || command === 'run') return ledger ? null : { entries: [notice('error', labels.ledgerUnavailable)] };
+  const moved = movedSlashCommand(command);
+  if (moved) return { entries: [notice('error', labels.movedCommand ? fillTemplate(labels.movedCommand, { old: `/${command}`, new: `/${moved}` }) : `${labels.unknownCommand}: /${command}`)] };
   if (command === 'service-restart') return context.canRestartService ? null : { entries: [notice('error', labels.serviceRestartUnavailable)] };
   if (isWorkSurfaceCommand(command)) {
-    const wired = command === 'transcript' ? ledger?.inspectTranscript : command === 'approvals' ? ledger?.listApprovalPage && ledger.decideApproval : ledger?.cancelRun;
+    const wired = ledger?.listApprovalPage && ledger.decideApproval;
     return labels.work && wired ? null : { entries: [notice('error', labels.work?.unavailable ?? labels.ledgerUnavailable)] };
   }
   return { entries: [notice('error', `${labels.unknownCommand}: /${command}`)] };
-}
-
-/** `n` is the worker number shown by `/workers` and the live panel; anything else is an attempt id. */
-export function resolveWorkerRef(ref: string, workers: readonly WorkLedgerWorkerEntry[]): WorkLedgerWorkerEntry | null {
-  if (/^[1-9][0-9]*$/.test(ref)) return workers.find(worker => worker.ordinal === Number(ref)) ?? null;
-  return workers.find(worker => worker.attempt?.attemptId === ref) ?? null;
-}
-
-/** Read-only: resolves the worker on a fresh observation and shows its sealed transcript; never prompts. */
-async function runTranscript(ref: string, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels): Promise<readonly WorkLedgerEntry[]> {
-  const [name, pageText, ...extra] = ref.split(/\s+/u), page = pageText === undefined ? 1 : /^[1-9][0-9]{0,5}$/u.test(pageText) ? Number(pageText) : 0;
-  if (!name || page === 0 || extra.length > 0) return [notice('error', work.transcriptUsage)];
-  const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker');
-  const target = resolveWorkerRef(name, workers);
-  if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref: name }))];
-  if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref: name }))];
-  const text = await ledger.inspectTranscript!(target.attempt);
-  const header = [fillTemplate(work.transcriptHeader, { n: target.ordinal ?? name, attempt: shortId(target.attempt.attemptId), task: shortId(target.taskId) }),
-    ...(work.transcriptDetail ? [fillTemplate(work.transcriptDetail, { attempt: target.attempt.attemptId, task: target.taskId })] : [])].join('\n');
-  const shown = work.transcriptPage ? transcriptPage(text, page, name, work.transcriptPage) : { ok: true as const, text };
-  return [notice(shown.ok ? 'info' : 'error', shown.ok ? `${header}\n${shown.text}` : shown.text)];
-}
-
-export async function runLedgerCommand(command: 'workers' | 'run' | 'runs' | 'transcript', args: string, ledger: WorklineLedgerPorts,
-  labels: WorklineActionLabels): Promise<readonly WorkLedgerEntry[]> {
-  if (command === 'transcript') return labels.work ? runTranscript(args.trim(), ledger, labels.work) : [notice('error', labels.ledgerUnavailable)];
-  if (command === 'runs') {
-    const cards = await ledgerEntriesForRuns(ledger, 'runs');
-    return cards.length ? cards : [notice('info', labels.runsEmpty)];
-  }
-  if (command === 'workers') {
-    const cards = await ledgerEntriesForWorkers(ledger, 'workers');
-    return cards.length ? cards : [notice('info', labels.workersEmpty)];
-  }
-  const runId = args.trim();
-  if (!runId) return [notice('error', labels.runUsage)];
-  const card = await ledgerEntryForRun(ledger, runId, 'run');
-  return [card ?? notice('error', labels.runNotFound)];
 }

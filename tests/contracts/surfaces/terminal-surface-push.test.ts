@@ -83,8 +83,8 @@ describe('surface push on the workline', () => {
     const view = mountWorkline({ labels: { ...labels, watchAccessStopped: 'ACCESS-STOPPED {kinds}' }, pollMs: 30, approvalPollMs: 30,
       ledger: { scopeId: 'scope-a', followEvents, followWorkers, followRuns, listWorkers, listRunIds, listApprovalPage, async inspectRun() { return null; } } });
     mounted.push(view.instance);
-    // The first watch window owns the keyboard, so both feeds are started by the one command that shows both (`/tasks`).
-    await type(view.stdin, '/tasks\r');
+    // K1: the one Runs window starts both feeds.
+    await type(view.stdin, '/runs\r');
     await until(() => view.stdout.text.includes('Watching · live feed'), 'worker and run watch');
     expect(listWorkers).not.toHaveBeenCalled();
     expect(listRunIds).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('surface push on the workline', () => {
     const view = mountWorkline({ labels, pollMs: 5, ledger: { scopeId: 'scope-a', async listWorkers() { polls += 1; return emptyWorkers; },
       async inspectRun() { return null; } } });
     mounted.push(view.instance);
-    await type(view.stdin, '/watch-workers\r');
+    await type(view.stdin, '/runs\r'); await settle(40); view.stdin.write('\t');
     await until(() => view.stdout.text.includes('Watching · polling'), 'poll mark');
     await until(() => polls > 0, 'poll ran');
     expect(view.stdout.text).not.toContain('DELIVERY push');
@@ -128,7 +128,7 @@ describe('surface push on the workline', () => {
     const view = mountWorkline({ labels, pollMs: 5, ledger: { scopeId: 'scope-a', followEvents, async listWorkers() { polls += 1; return emptyWorkers; },
       async inspectRun() { return null; } } });
     mounted.push(view.instance);
-    await type(view.stdin, '/watch-workers\r');
+    await type(view.stdin, '/runs\r'); await settle(40); view.stdin.write('\t');
     await until(() => view.stdout.text.includes('Watching · live feed'), 'push mark');
     release();
     await until(() => view.stdout.text.includes('pushed-worker-1') && view.stdout.text.includes('STEP gap') && view.stdout.text.includes('pushed-approval-1'), 'push surface');
@@ -162,7 +162,7 @@ describe('surface push on the workline', () => {
     const view = mountWorkline({ labels, pollMs: 5, ledger: { scopeId: 'scope-a', followEvents, async listWorkers() { polls += 1; return emptyWorkers; },
       async inspectRun() { return null; } } });
     mounted.push(view.instance);
-    await type(view.stdin, '/watch-workers\r');
+    await type(view.stdin, '/runs\r'); await settle(40); view.stdin.write('\t');
     await until(() => view.stdout.text.includes('Watching · live feed'), 'push mark');
     releaseYield();
     await until(() => view.stdout.text.includes('pushed-worker-1'), 'first push');
@@ -195,7 +195,7 @@ describe('surface push on the workline', () => {
       const view = mountWorkline({ labels: { ...labels, ...catalog(locale) }, pollMs: 5, ledger: { scopeId: 'scope-a', followEvents,
         async listWorkers() { return emptyWorkers; }, async inspectRun() { return null; } } });
       mounted.push(view.instance);
-      await type(view.stdin, '/watch-workers\r');
+      await type(view.stdin, '/runs\r'); await settle(40); view.stdin.write('\t');
       await until(() => view.stdout.text.includes('Watching · live feed'), `${locale} push mark`);
       releaseYield();
       await until(() => view.stdout.text.includes('pushed-worker-1'), `${locale} push`);

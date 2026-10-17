@@ -1,5 +1,5 @@
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
-import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
+import { movedSlashCommand, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -144,7 +144,8 @@ function slashWindowLabels(locale: Locale): SlashWindowLabels {
       clear: t('terminal.window.scratch.clear', {}, locale), clearDetail: t('terminal.window.scratch.clearDetail', {}, locale), clearTitle: t('terminal.window.scratch.clearTitle', {}, locale), clearBody: t('terminal.window.scratch.clearBody', {}, locale), clearPrompt: t('terminal.window.scratch.clearPrompt', {}, locale),
       pathTitle: t('terminal.window.scratch.pathTitle', {}, locale) },
     unknown: { title: t('terminal.window.unknown.title', {}, locale), body: t('terminal.window.unknown.body', {}, locale), closest: t('terminal.window.unknown.closest', {}, locale), none: t('terminal.window.unknown.none', {}, locale),
-      all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale) } };
+      all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale),
+      movedBody: t('terminal.window.unknown.movedBody', {}, locale), movedRow: t('terminal.window.unknown.movedRow', {}, locale) } };
 }
 
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
@@ -167,7 +168,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     queued: t('terminal.workline.queued', {}, locale),
     runUsage: t('terminal.slash.runUsage', {}, locale), watchStarted: t('terminal.workline.watchStarted', {}, locale),
     watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
-    unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
+    unknownCommand: t('terminal.workline.unknownCommand', {}, locale), movedCommand: t('terminal.workline.movedCommand', {}, locale), statusLine,
     render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale),
     mentions: { attached: t('terminal.mention.attached', {}, locale), truncated: t('terminal.mention.truncated', {}, locale),
       refused: t('terminal.mention.refused', {}, locale) },
@@ -230,11 +231,16 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
   try {
     for await (const line of rl) {
       const trimmed = line.trim();
-      if (trimmed === '/exit' || trimmed === '/quit') break;
+      if (trimmed === '/exit') break;
       if (trimmed === '/context') { for (const line of instructionSources?.() ?? []) emit(line, sinks); }
       else if (trimmed === '/status') { emit(await status(), sinks); }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
-      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
+      else if (trimmed.startsWith('/')) {
+        // K2: a moved name says where it went (a rename; the old name never runs), any other slash input is unknown.
+        const moved = movedSlashCommand(trimmed.slice(1).split(/\s/u)[0]!.toLowerCase());
+        emit(t('terminal.notice.error', { text: moved ? t('terminal.workline.movedCommand', { old: trimmed.split(/\s/u)[0]!, new: `/${moved}` }, locale)
+          : `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
+      }
       else if (trimmed.length > 0) {
         if (stream) {
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);

@@ -31,7 +31,8 @@ const WINDOWS: SlashWindowLabels = { picker: pickerLabels('en'), position: '{fro
   scratch: { title: 'Scratch', status: '{count} {bytes} {limit}', folder: 'Folder', more: '+{count}', empty: 'empty', fileDetail: '{bytes}', clear: 'Clear', clearDetail: '',
     clearTitle: 'Clear?', clearBody: '{count} {bytes} {path}', clearPrompt: 'y/n', pathTitle: 'Path' },
   unknown: { title: words('terminal.window.unknown.title'), body: words('terminal.window.unknown.body'), closest: words('terminal.window.unknown.closest'),
-    none: words('terminal.window.unknown.none'), all: words('terminal.window.unknown.all'), allDetail: words('terminal.window.unknown.allDetail') } };
+    none: words('terminal.window.unknown.none'), all: words('terminal.window.unknown.all'), allDetail: words('terminal.window.unknown.allDetail'),
+    movedBody: words('terminal.window.unknown.movedBody'), movedRow: words('terminal.window.unknown.movedRow') } };
 const SESSIONS = { started: 'New conversation started.', entry: '{index} {session} {count} {preview}', none: 'none', notFound: 'nf', unavailable: 'np', saveFailed: 'sf',
   resumed: 'resumed {count} {session}', context: 'ctx', contextNone: 'ctx {count}' };
 const LEDGER: WorklineLedgerPorts = { scopeId: 's', async inspectRun() { return null; },
@@ -60,22 +61,22 @@ async function open(extra: Partial<WorklineProps> = {}) {
 const summaries = () => captured.entries.filter(entry => entry.kind === 'notice' && entry.id === 'system-summary');
 
 describe('slash windows integrated on one workline', () => {
-  it('/status → close → /workers → close → /clear leaves exactly three framed system lines and nothing in the chat stream', async () => {
+  it('/status → close → /runs → close → /clear leaves exactly three framed system lines and nothing in the chat stream', async () => {
     const { view, completeTurn } = await open();
     await type(view, '/status\r');
     await until(() => view.stdout.frame.includes('▸ Runtime service'), 'status window');
     expect(captured.entries).toEqual([]);
     view.stdin.write(ESC); await until(() => summaries().length === 1, 'status summary');
-    await settle(40); await type(view, '/workers\r');
-    await until(() => view.stdout.frame.includes('worker 1'), 'workers window');
+    await settle(40); await type(view, '/runs\r'); await settle(40); view.stdin.write('\t');
+    await until(() => view.stdout.frame.includes('worker 1'), 'Runs window workers tab');
     expect(summaries()).toHaveLength(1);
-    view.stdin.write(ESC); await until(() => summaries().length === 2, 'workers summary');
+    view.stdin.write(ESC); await until(() => summaries().length === 2, 'Runs window summary');
     await settle(40); await type(view, '/clear\r');
     await until(() => summaries().length === 3, 'clear summary');
     await settle(60);
     // Exactly the three closed-window lines, in order, and no other scrollback row at all: no `Info:` notice, no chat row, no card.
     expect(captured.entries.map(entry => entry.kind === 'notice' ? `${entry.id}:${entry.level}:${entry.text}` : entry.kind)).toEqual([
-      expect.stringMatching(/^system-summary:info:Status: /u), 'system-summary:info:Workers (live, worker-reported activity): 1', 'system-summary:info:New conversation started.']);
+      expect.stringMatching(/^system-summary:info:Status: /u), expect.stringMatching(/^system-summary:info:Runs window closed — 1 workers and \d+ runs at the last read; watch stopped\.$/u), 'system-summary:info:New conversation started.']);
     expect(view.stdout.text).not.toContain('Info:');
     expect(view.stdout.frame).toContain(`${MARK} · New conversation started.`);
     expect(completeTurn).not.toHaveBeenCalled();

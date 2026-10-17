@@ -9,8 +9,8 @@ import type { WindowSlot } from './workline-windows.js';
 
 /** SW-1: the typed information-window ports and their words (`terminalAdminPorts(...).info`). */
 export type WorklineInfo = Readonly<{ ports: InfoViewPorts; labels: InfoSurfaceLabels }>;
-/** The bare commands that answer in an information window; `chat-backend` is the hidden alias of `/status`. */
-export const INFO_WINDOW_COMMANDS: ReadonlySet<string> = new Set(['help', 'status', 'chat-backend', 'usage', 'doctor', 'scope', 'context']);
+/** The bare commands that answer in an information window. */
+export const INFO_WINDOW_COMMANDS: ReadonlySet<string> = new Set(['help', 'status', 'usage', 'doctor', 'scope', 'context']);
 
 /** `/help` as a window: the registry's commands under their group headings, each a row to pick (picking runs it; no typed argument). */
 export function helpInfoModel(slash: Readonly<Record<string, string>>, labels: InfoSurfaceLabels, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): InfoWindowModel {
@@ -55,7 +55,7 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
   latest.current = host;
   /** `handled: false` when no port answers the command here (the text path answers it); `picked` is `/help`'s chosen command. */
   const run = useCallback(async (command: string, execution: LocalExecution): Promise<Readonly<{ handled: boolean; picked: string | null }>> => {
-    const current = latest.current, labels = current.info!.labels, name = command === 'chat-backend' ? 'status' : command;
+    const current = latest.current, labels = current.info!.labels, name = command;
     let view: InfoView;
     try {
       if (name === 'help') view = { model: helpInfoModel(current.slash, labels) };

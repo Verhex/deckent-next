@@ -1,17 +1,16 @@
-export { immediateSlashAction, resolveWorkerRef, runLedgerCommand, type WatchState, type WorklineActionLabels, type WorkSurfaceLabels } from './internal/workline-actions.js';
+export { immediateSlashAction, type WatchState, type WorklineActionLabels, type WorkSurfaceLabels } from './internal/workline-actions.js';
 export { approvalCardLines, useWorkSurface } from './internal/work-surface.js';
 export { diffRows, type ApprovalWindowLabels } from './internal/approval-window.js';
 export { useWorklinePanel, type LocalExecution, type ResumePickerItem, type WorklinePanel, type SettingsPanelPresentation } from './internal/workline-panel.js';
 export { LedgerEntryRow, type LedgerEntryLabels } from './internal/ledger-entry.js';
-export { liveRunEntry, LIVE_WINDOW_MAX_ROWS, LiveWatchWindow, MonitorWindow, liveWindowClosedText, liveWindowLines, liveWindowStatus, liveWindowTitle, type TaskWindowAction, type LiveWindowData, type LiveWindowKind,
-  type LiveWindowLabels, type LiveWindowRenderLabels, type LiveWindowView, type MonitorWindowLoader, type MonitorWindowRender, type WorkerPanelLabels } from './internal/live-windows.js';
-export { TRANSCRIPT_PAGE_LINES, type TranscriptPageLabels } from './internal/transcript-page.js';
+export { liveRunEntry, LIVE_WINDOW_MAX_ROWS, RunsLiveWindow, RUNS_WINDOW_INITIAL, MonitorWindow, liveWindowClosedText, liveWindowLines, liveWindowStatus, needsInputTask, runsRowKey, runsRowKeys, runsTabLine, runsWindowHints,
+  type TaskWindowAction, type LiveWindowData, type LiveWindowKind, type RunsRowKey, type RunsRowOffer, type RunsTab, type RunsWindowView, type LiveWindowLabels, type LiveWindowRenderLabels, type LiveWindowView, type MonitorWindowLoader, type MonitorWindowRender, type WorkerPanelLabels } from './internal/live-windows.js';
 
 export { systemSummaryEntry } from './internal/system-summary.js';
-export { JobWindow, openingWorkText, runDetailLines, runJobWindow, type JobWindowLabels } from './internal/job-windows.js';
+export { JobWindow, openingWorkText, runDetailLines, runTitle, type JobWindowLabels } from './internal/job-windows.js';
 export { dispatchWorkCommand } from './internal/job-command.js';
 export { runControlActions } from './internal/run-control.js';
-export { openTaskAction } from './internal/task-actions.js';
+export { openTaskAction, type TaskActionCards } from './internal/task-actions.js';
 
 export { useRunCompletion, runCompletionText, type TrackedRun } from './internal/run-completion.js';
 export { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow, useActiveWorkClock, type ActiveDelivery, type ActiveDo, type ActiveWorkItem, type ActiveWorkLabels } from './internal/active-work.js';

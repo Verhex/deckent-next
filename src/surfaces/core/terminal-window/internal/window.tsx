@@ -86,16 +86,18 @@ export interface WindowProps {
   readonly reveal?: number;
   /** A decision window: while it is on top but the composer keeps focus, it says how to reach the decision (Ctrl+O). */
   readonly decision?: boolean;
+  /** An observation window that holds no decision (the live Runs window): with the composer focused, Shift+Tab still steps the mode. */
+  readonly passive?: boolean;
 }
 
 /**
  * A bounded modal window in the live area (owner 2026-10-07): frame, title left and status right, a body capped to the terminal's rows
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
-export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false }: WindowProps) {
+export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false, passive = false }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
-  const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
+  const id = useId(), focused = useWindowLayer(id, interactive, priority, passive), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const acceptsInput = useWindowLayerGuard(id);
   const owner = useFocusOwner();
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.

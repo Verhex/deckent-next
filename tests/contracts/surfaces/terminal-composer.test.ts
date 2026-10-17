@@ -119,9 +119,9 @@ describe('composer multiline, history and search', () => {
   });
 
   it('keeps walking history through recalled slash commands instead of moving the popup selection', () => {
-    const entries: ComposerHistoryEntry[] = ['/workers', '/runs', 'hello'].map(value => ({ text: value, pastes: [] }));
+    const entries: ComposerHistoryEntry[] = ['/deliver', '/runs', 'hello'].map(value => ({ text: value, pastes: [] }));
     let { state } = run([{ type: 'history', entries }, K.up, K.up, K.up]);
-    expect(state.text).toBe('/workers');
+    expect(state.text).toBe('/deliver');
     state = run([K.down, K.down], state).state;
     expect(state.text).toBe('hello');
     expect(run([K.down], state).state.text).toBe('');
@@ -187,22 +187,22 @@ describe('composer paste and chunked input', () => {
 
 describe('composer completion, shortcuts panel and mentions', () => {
   it('opens the slash popup on a bare prefix; arrows select, Tab completes, Enter runs the highlighted command', () => {
-    let { state } = run(typed('/wa'));
-    expect(composerMenu(state)!.items.map(command => command.name)).toEqual(['watch-workers', 'watch-runs', 'watch-stop']);
+    let { state } = run(typed('/mo'));
+    expect(composerMenu(state)!.items.map(command => command.name)).toEqual(['mode', 'monitor', 'model']);
     state = run([K.down, K.tab], state).state;
-    expect(state.text).toBe('/watch-runs ');
+    expect(state.text).toBe('/monitor ');
     expect(composerMenu(state)).toBeNull();
     // SLASH-WINDOWS (owner 2026-10-08): Enter on a palette row always runs `/name`; no command completes and waits for typed text.
-    expect(submitted(run([...typed('/wa'), K.down, K.submit]).intents)).toEqual(['/watch-runs']);
+    expect(submitted(run([...typed('/mo'), K.down, K.submit]).intents)).toEqual(['/monitor']);
     const ran = run([...typed('/ru'), K.submit]);
-    expect([submitted(ran.intents), ran.state.text]).toEqual([['/run'], '']);
-    for (const name of ['run', 'transcript', 'approvals', 'cancel', 'resume', 'mode']) expect(submitted(run([...typed(`/${name}`), K.submit]).intents)).toEqual([`/${name}`]);
+    expect([submitted(ran.intents), ran.state.text]).toEqual([['/runs'], '']);
+    for (const name of ['runs', 'deliver', 'approvals', 'resume', 'mode']) expect(submitted(run([...typed(`/${name}`), K.submit]).intents)).toEqual([`/${name}`]);
     expect(submitted(run([text('/sta\r')]).intents)).toEqual(['/status']);
-    expect(composerMenu(run(typed('/wwk')).state)!.items.map(command => command.name)).toEqual(['watch-workers']);
+    expect(composerMenu(run(typed('/rns')).state)!.items.map(command => command.name)).toEqual(['runs']);
     expect(submitted(run([...typed('/zz'), K.submit]).intents)).toEqual(['/zz']);
-    const dismissed = run([...typed('/wa'), K.esc]).state;
+    const dismissed = run([...typed('/mo'), K.esc]).state;
     expect(composerMenu(dismissed)).toBeNull();
-    expect(composerMenu(run(typed('tch-w'), dismissed).state)!.items.map(command => command.name)).toEqual(['watch-workers']);
+    expect(composerMenu(run(typed('nit'), dismissed).state)!.items.map(command => command.name)).toEqual(['monitor']);
   });
 
   it('toggles the shortcuts panel with ? only on an empty draft', () => {
@@ -288,7 +288,7 @@ describe('composer key mapping (Ink key events)', () => {
 });
 
 const labels: ComposerLabels = { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS',
-  slash: { 'terminal.slash.watchRuns': 'WATCH-RUNS-DESC', 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } };
+  slash: { 'terminal.slash.runs': 'RUNS-DESC', 'terminal.slash.approvals': 'APPROVALS-DESC', 'terminal.slash.approvalsArgument': '<APPROVAL-ID>' } };
 class Screen extends Writable {
   text = '';
   readonly isTTY = true; readonly rows = 60;
@@ -351,12 +351,12 @@ describe('composer rendered by Ink (no colour tier)', () => {
 
   it('lists slash commands with descriptions but no argument hint, and Enter runs the selection at once', async () => {
     const view = mount();
-    await view.type('/ru');
-    await until(() => view.stdout.text.includes('> /run ') && view.stdout.text.includes('RUN-DESC'), 'popup');
-    expect(view.stdout.text).not.toContain('<RUN-ID>');
+    await view.type('/ap');
+    await until(() => view.stdout.text.includes('> /approvals ') && view.stdout.text.includes('APPROVALS-DESC'), 'popup');
+    expect(view.stdout.text).not.toContain('<APPROVAL-ID>');
     await view.keys('\r');
     await until(() => view.sent.length === 1, 'submit');
-    expect(view.sent[0]).toBe('/run');
+    expect(view.sent[0]).toBe('/approvals');
   });
 
   it('recalls history with Up, searches with Ctrl+R and wires the history port', async () => {

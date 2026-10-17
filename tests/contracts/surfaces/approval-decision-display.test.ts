@@ -7,6 +7,7 @@ import { redactForDecision, snapshotKnownSecrets } from '#platform/index.js';
 import type { RunView } from '#engine/index.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { appendLedger, compactLedger, EMPTY_LEDGER, buildWorklineBridgeSnapshot, ledgerEntrySummary,
   WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineApproval, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import { approvalSummarySpans, projectApprovalDecisionText, approvalTemplateLine, assembleApprovalCard } from '#surfaces/core/approval-presentation/index.js';
@@ -44,8 +45,14 @@ async function type(view: ReturnType<typeof mountWorkline>, text: string) {
 function mount(props: Partial<WorklineProps>, width = 220) {
   const view = mountWorkline({ labels: labels(), pollMs: 10_000, ...props }, width); mounted.push(view.instance); return view;
 }
-/** SLASH-WINDOWS (SW-2): `/approvals` and `/cancel` take no typed reference; the card opens from the command's picker (first row). */
-async function pickFirst(view: ReturnType<typeof mountWorkline>, command: '/approvals' | '/cancel', row: string, label: string) {
+/** SLASH-WINDOWS (SW-2): `/approvals` takes no typed reference; the card opens from its picker (first row). K4: cancellation is `x` on the
+ * Runs window's selected (first) row; an open Runs window takes `x` directly. */
+async function pickFirst(view: ReturnType<typeof mountWorkline>, command: '/approvals' | 'x', row: string, label: string) {
+  if (command === 'x') {
+    if (!view.stdout.frame.includes(workSurfaceLabels('en').live!.runsHints)) await type(view, '/runs\r');
+    await until(() => view.stdout.frame.includes(workSurfaceLabels('en').live!.keys.cancel), `${label} row`);
+    await view.instance.waitUntilRenderFlush(); await settle(40); view.stdin.write('x'); return;
+  }
   await type(view, `${command}\r`); await until(() => view.stdout.frame.includes(row), `${label} picker`);
   await view.instance.waitUntilRenderFlush(); await settle(40); view.stdin.write('\r');
 }
@@ -237,9 +244,10 @@ describe('A1 cancellation private projection -> public completed card', () => {
     const before = hash(JSON.stringify(original)), seen: Array<[string, number]> = [];
     const gate = deferred();
     const work = { ...WORKLINE_TEST_LABELS.work!, cancelDetail: 'C-DETAIL {revision} {scope} {phases}' };
-    const view = mount({ knownSecrets: known, labels: { ...labels(), work }, ledger: { ...ledger([]), async listRunIds() { return [runId]; }, async inspectRun() { return original; },
+    // K4: a Runs window row acts only inside its own scope, so this fixture's ledger reads the run's (secret-bearing) scope.
+    const view = mount({ knownSecrets: known, labels: { ...labels(), work }, ledger: { ...ledger([]), scopeId, async listRunIds() { return [runId]; }, async inspectRun() { return original; },
       async cancelRun(id, revision) { seen.push([id, revision]); await gate.promise; return 'C-OUTCOME'; } } });
-    await pickFirst(view, '/cancel', '> ', 'cancellation'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'private cancellation child'); await settle(40);
+    await pickFirst(view, 'x', '> ', 'cancellation'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'private cancellation child'); await settle(40);
     expect(view.stdout.frame).toContain('C-TITLE run-‹secret:FIXTURE_ONLY›<U+200B>');
     expect(view.stdout.frame).toContain('C-DETAIL 19 ‹secret:FIXTURE_ONLY›<U+FEFF> active<U+E0061><U+200B>:1');
     expect(view.stdout.frame).not.toContain(SECRET);
@@ -255,12 +263,12 @@ describe('A1 cancellation private projection -> public completed card', () => {
       cancellationRequested: false, tasks: [{ phase: 'active' }] } as unknown as RunView;
     const seen: Array<[string, number]> = [], gate = deferred(), view = mount({ ledger: { ...ledger([]), async listRunIds() { return [runId]; }, async inspectRun() { return original; },
       async cancelRun(id, revision) { seen.push([id, revision]); await gate.promise; return 'C-OUTCOME'; } } });
-    await pickFirst(view, '/cancel', '> ', 'unknown cancellation'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'unknown cancellation card'); await settle(40);
+    await pickFirst(view, 'x', '> ', 'unknown cancellation'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'unknown cancellation card'); await settle(40);
     expect(view.stdout.frame).toContain('C-TITLE token=fictitious-cancel-value;echo-next<U+200B><U+200B>');
     expect(view.stdout.frame).toContain('1 hidden characters'); expect(view.stdout.frame).not.toContain('2 hidden characters');
     expect(view.stdout.frame).toContain('Credential-like matches: 1'); view.stdin.write('n');
     await until(() => !view.stdout.frame.includes('C-PROMPT'), 'cancellation kept'); expect(seen).toEqual([]); await settle(60);
-    await pickFirst(view, '/cancel', '> ', 'remount'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'same original cancellation remount');
+    await pickFirst(view, 'x', '> ', 'remount'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'same original cancellation remount');
     await duplicateWhilePending(view, () => seen.length === 1, 'C-PENDING'); observe('cancel-unknown-remounted-inflight-duplicate', view);
     expect(seen).toEqual([[runId, 23]]); expect(original.runId).toBe(runId); expect(original.revision).toBe(23);
     gate.release(); await until(() => !view.stdout.frame.includes('C-PENDING'), 'remounted cancellation settled');

@@ -10,7 +10,13 @@ operation. Ctrl+O switches between input and the top window. Automatic approvals
 before their decision keys work (the waiting card says "Ctrl+O to decide this card"); typing y/n/s/a in input never answers a card. Existing decision, reason and verified-TTY requirements apply in the focused approval.
 Escape closes or declines in a focused window; from input it retains the draft/cancel behavior. Long window
 bodies scroll internally with arrows, PageUp/PageDown and Home/End, with a visible row range. Multiline input
-follows its caret within a height budget. `/watch-stop` closes observation. Above input, an "Active work" strip lists
+follows its caret within a height budget. `/runs` is the one Runs window (K1, owner 2026-10-14): a runs tab and a workers
+tab (Tab switches); Enter opens a Run's detail or a worker's sealed transcript; `x` cancels, `h`/`r`/`c` hold, resume or close and
+`d` opens the same delivery window as `/deliver` — each after its own y/N card, and a row shows only the keys its state offers.
+Opened after /do it waits in the background; Ctrl+X closes it from input (Escape when it is focused), and Shift+Tab still steps the
+mode while it waits behind input (a waiting card still owns Shift+Tab). The old names `/workers`, `/watch-workers`, `/watch-runs`,
+`/watch-stop`, `/tasks`, `/run`, `/transcript`, `/cancel` and `/quit` are renamed, never aliased: typed, the unknown-command window
+offers the new command as its first, selected row (Enter runs it) and line mode names it; the table goes at 1.0.0-beta.1. Above input, an "Active work" strip lists
 this session's running /do (planning, or waiting for you with the approval time left) and the Runs it started, with title,
 state and elapsed time; it never takes input by itself. Ctrl+T selects it (↑↓, Esc back): Enter on /do focuses its window, Enter on a
 Run opens that Run's window; a finished Run leaves the strip once opened. Pipe and line-mode output is unchanged.

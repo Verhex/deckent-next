@@ -4,7 +4,7 @@ import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js
 import { usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
 import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
 import type { ScratchView } from '#domain/index.js';
-import type { SlashCommand } from '#surfaces/core/terminal-kit/index.js';
+import { WORKLINE_SLASH_COMMANDS, type SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 
 /**
  * SLASH-WINDOWS (owner 2026-10-08): the small windows of the session and palette commands (`/reasoning`, `/scratch`, an unknown command).
@@ -28,6 +28,8 @@ export interface SlashWindowLabels {
     readonly clear: string; readonly clearDetail: string; readonly clearTitle: string; /** `{count}` `{bytes}` `{path}` */ readonly clearBody: string;
     readonly clearPrompt: string; readonly pathTitle: string };
   readonly unknown: { readonly title: string; /** `{command}` */ readonly body: string; readonly closest: string; readonly none: string;
+    /** K2: `{old}` moved to `{new}` (the window's body line) and the first row's label `{new}` (Enter runs it). */
+    readonly movedBody: string; readonly movedRow: string;
     /** The last row: every command (opens `/help`). */ readonly all: string; readonly allDetail: string };
 }
 
@@ -141,12 +143,17 @@ export function pathSpec(words: SlashWindowLabels, path: string): SlashPickSpec 
 
 /**
  * The unknown-command window: the commands closest to what was typed (prefix, then subsequence) to pick one, and always a last row with every
- * command (its id `help` opens the `/help` window).
+ * command (its id `help` opens the `/help` window). K2: a moved name (`moved`, its new command) says so and puts the new command first, so
+ * it is the selected row and Enter runs it.
  */
-export function unknownCommandSpec(words: SlashWindowLabels, command: string, matches: readonly SlashCommand[], describe: (command: SlashCommand) => string): SlashPickSpec {
-  const u = words.unknown;
-  const all = matches.some(match => match.name === 'help') ? [] : [{ id: 'help', label: u.all, detail: u.allDetail }];
+export function unknownCommandSpec(words: SlashWindowLabels, command: string, matches: readonly SlashCommand[], describe: (command: SlashCommand) => string,
+  moved?: string | null): SlashPickSpec {
+  const u = words.unknown, rest = moved ? matches.filter(match => match.name !== moved) : matches;
+  const all = rest.some(match => match.name === 'help') || moved === 'help' ? [] : [{ id: 'help', label: u.all, detail: u.allDetail }];
+  const target = moved ? WORKLINE_SLASH_COMMANDS.find(item => item.name === moved) : undefined;
+  const first = moved ? [{ id: moved, label: fillTemplate(u.movedRow, { new: `/${moved}` }), ...(target ? { detail: describe(target) } : {}) }] : [];
   return { title: u.title, hints: words.hints, bodyRows: 2,
-    body: () => [{ spans: [span(fillTemplate(u.body, { command: `/${command}` }), { bold: true })] }, { spans: [span(matches.length ? u.closest : u.none)] }],
-    tree: { title: u.title, items: [...matches.map(match => ({ id: match.name, label: `/${match.name}`, detail: describe(match) })), ...all] } };
+    body: () => moved ? [{ spans: [span(fillTemplate(u.movedBody, { old: `/${command}`, new: `/${moved}` }), { bold: true })] }, { spans: [span(rest.length ? u.closest : '')] }]
+      : [{ spans: [span(fillTemplate(u.body, { command: `/${command}` }), { bold: true })] }, { spans: [span(matches.length ? u.closest : u.none)] }],
+    tree: { title: u.title, items: [...first, ...rest.map(match => ({ id: match.name, label: `/${match.name}`, detail: describe(match) })), ...all] } };
 }

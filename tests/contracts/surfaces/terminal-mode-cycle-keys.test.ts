@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PermissionModeKeys } from '#surfaces/core/terminal/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
-import { Window, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowOpeningContext, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
 // T2 T-MODE-CYCLE on the real interactive workline (in-memory TTY): Shift+Tab and Alt+M step the mode through the port only while the composer
@@ -105,5 +105,41 @@ describe('Shift+Tab and the window stack (T2 integration)', () => {
     await settle(30);
     mountedView.stdin.write('\u001b[Z');
     await until(() => calls.length === 1, 'step after the window');
+  });
+});
+
+// K7 (owner 2026-10-14): the Runs window stays open in the background, so a passive (decision-free) window behind the focused composer must not
+// lock the mode cycle; any other window — a card waiting behind the composer, or the passive window once focused (Ctrl+O) — still owns Shift+Tab.
+describe('Shift+Tab with a background passive window (K7, /runs open)', () => {
+  function mountStack(passive: boolean) {
+    const cycled: string[] = [];
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    const tree = createElement(Box, { flexDirection: 'column' },
+      createElement(PermissionModeKeys, { active: true, onCycle: () => { cycled.push('cycled'); } }),
+      createElement(WindowOpeningContext.Provider, { value: 'background' },
+        createElement(Window, { title: [span('BACKGROUND')], hints: 'HINTS', position: '{from}-{to}/{total}', body: [{ spans: [span('body')] }], passive, onClose: () => undefined })));
+    const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
+      children: createElement(WindowStackProvider, { composerDefault: true }, tree) }),
+    { stdout: new Sink() as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
+    mounted.push(instance);
+    return { cycled, stdin };
+  }
+  it('a passive window behind the focused composer leaves Shift+Tab and Alt+M to the mode; Ctrl+O focusing it takes them', async () => {
+    const { cycled, stdin } = mountStack(true);
+    await settle(40);
+    stdin.write('\u001b[Z'); await until(() => cycled.length === 1, 'step with the passive window in the background');
+    stdin.write('\u001bm'); await until(() => cycled.length === 2, 'Alt+M step');
+    stdin.write('\u000f'); await settle(40);
+    stdin.write('\u001b[Z'); await settle(60);
+    expect(cycled).toHaveLength(2);
+    stdin.write('\u000f'); await settle(40);
+    stdin.write('\u001b[Z'); await until(() => cycled.length === 3, 'step after focus returns to the composer');
+  });
+  it('a non-passive window (a card) waiting behind the focused composer still owns Shift+Tab: the mode never changes behind a decision', async () => {
+    const { cycled, stdin } = mountStack(false);
+    await settle(40);
+    stdin.write('\u001b[Z'); await settle(60);
+    stdin.write('\u001bm'); await settle(60);
+    expect(cycled).toEqual([]);
   });
 });

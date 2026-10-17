@@ -206,11 +206,12 @@ export function useWorklineMode(port: WorklinePermissionModePort | undefined, pu
 
 /**
  * T2 T-MODE-CYCLE + TS-WINDOW: Shift+Tab (Alt+M where the console cannot report Shift+Tab) steps the mode only while the base layer owns the
- * keyboard — `active` (no card, picker or running turn) and the window stack idle. Any open window, including one that is neither a card
- * nor a picker, owns Shift+Tab, so the mode never changes behind a window. Rendered inside the `WindowStackProvider`.
+ * keyboard — `active` (no card, picker or running turn) and the stack's `modeKeys`: no window, or (K7) the composer holds input and only
+ * passive windows are open (the live Runs window). A card, picker or any other window owns Shift+Tab, so the mode never changes behind a
+ * decision. Rendered inside the `WindowStackProvider`.
  */
 export function PermissionModeKeys({ active, onCycle }: { readonly active: boolean; readonly onCycle: () => void }): null {
   const owner = useFocusOwner();
-  useInput((input, key) => { if ((key.tab && key.shift) || (key.meta && !key.ctrl && input === 'm')) onCycle(); }, { isActive: active && owner.idle });
+  useInput((input, key) => { if ((key.tab && key.shift) || (key.meta && !key.ctrl && input === 'm')) onCycle(); }, { isActive: active && owner.modeKeys });
   return null;
 }

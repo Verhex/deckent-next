@@ -200,13 +200,13 @@ async function governedChat() {
 }
 
 describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo-terminal', () => {
-  it('renders the workline, routes /workers through policy, surfaces a typed chat block and exits on /exit', async () => {
+  it('renders the workline, routes /runs through policy, surfaces a typed chat block and exits on /exit', async () => {
     const f = await project();
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [
-      ['Deckent workline', '/workers\r'],
-      // SLASH-WINDOWS (SW-2): the policy refusal is shown in the /workers window; Esc closes it and leaves the one system line.
+      ['Deckent workline', '/runs\r'],
+      // SLASH-WINDOWS (SW-2) / K1: the policy refusal is shown in the Runs window; Esc closes it and leaves the one system line.
       ['POLICY_UNAVAILABLE', '\u001b'],
-      ['◆ Deckent system · The trusted policy', 'hello\r'],
+      ['◆ Deckent system · ', 'hello\r'],
       ['TERMINAL_CHAT_NOT_CONFIGURED', '/nope\r'],
       // SLASH-WINDOWS: an unknown command is a small window naming it (no error line in the chat); Esc closes it.
       ['is not a Deckent command', '\u001b'],

@@ -10,7 +10,14 @@ arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağ�
 karar tuşları ancak bu odak geçişinden sonra çalışır (bekleyen kart "Bu kartta karar için Ctrl+O" der); girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
 Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut taslak/iptal davranışı sürer. Uzun pencere
 içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
-yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin üstündeki "Aktif iş" şeridi bu
+yükseklik bütçesi içinde imleci takip eder. `/runs` tek İşler penceresidir (K1, owner 2026-10-14): bir işler sekmesi ve bir
+işçiler sekmesi (Tab değiştirir); Enter bir Run'ın ayrıntısını ya da bir işçinin mühürlü dökümünü açar; `x` iptal eder, `h`/`r`/`c`
+bekletir, sürdürür ya da kapatır, `d` `/deliver` ile aynı teslim penceresini açar — her biri kendi y/N kartından sonra; satır yalnız
+durumunun sunduğu tuşları gösterir. /do sonrası arka planda açılır; Ctrl+X girişten kapatır (odaktayken Escape), arka planda
+beklerken Shift+Tab modu değiştirmeye devam eder (bekleyen bir kart Shift+Tab'ı yine kendine alır). Eski adlar `/workers`,
+`/watch-workers`, `/watch-runs`, `/watch-stop`, `/tasks`, `/run`, `/transcript`, `/cancel` ve `/quit` takma ad değil, yeniden
+adlandırmadır: yazıldığında bilinmeyen-komut penceresi yeni komutu ilk ve seçili satır olarak sunar ("Taşındı: /runs", Enter
+çalıştırır), satır modu yeni adı söyler; tablo 1.0.0-beta.1'de kalkar. Girişin üstündeki "Aktif iş" şeridi bu
 oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum ve geçen
 süreyle listeler; kendiliğinden odak almaz. Ctrl+T ile seçilir (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
 Enter o Run'ın penceresini açar; biten Run açıldıktan sonra şeritten çıkar. Pipe ve satır modu çıktısı değişmez.

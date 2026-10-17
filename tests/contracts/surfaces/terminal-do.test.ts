@@ -81,5 +81,5 @@ it('a cancellation crossing an already-started admission does not hide its retur
   await settle(40); view.stdin.write('/do Prepare purchase\r'); await until(() => view.stdout.frame.includes('PLANNING'), 'handoff');
   await settle(40); view.stdin.write('\u0003'); await until(() => signal?.aborted === true, 'local cancellation');
   release!({ ...pending, run, proposal: { ...pending.proposal, status: 'accepted', reason: null, approval: null } });
-  await until(() => view.stdout.text.includes('Run r admitted. Follow /tasks or /monitor.'), 'returned admission remains visible');
+  await until(() => view.stdout.text.includes('Run r admitted. Follow /runs or /monitor.'), 'returned admission remains visible');
 });

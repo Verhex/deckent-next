@@ -172,7 +172,7 @@ flowchart LR
   E --> A["3 · Pool and kinds<br/><sub>init registry · init pool</sub>"]
   A --> R["4 · Restart service"]
   R --> D["5 · /do<br/><sub>plan · approval card</sub>"]
-  D --> T["6 · Watch<br/><sub>/tasks</sub>"]
+  D --> T["6 · Watch<br/><sub>/runs</sub>"]
   T --> L["7 · /deliver"]
   L --> B["8 · Adopt into a branch"]
   B --> U["9 · Undo<br/><sub>command line</sub>"]
@@ -257,9 +257,9 @@ policy revision and the runtime service identity, so a change of either in betwe
 
    A card opens asking you to approve creating the Run. Today its Risk and Undo lines read "not classified by the
    tool" and "not declared by the tool"; judge the plan and the acceptance line. The card expires after 10 minutes
-   (`approvals.requestTtlMs`). Press `y` once to approve; the model cannot approve for you. Then: `Run <run-id> admitted. Follow /tasks or /monitor.` "Admitted" means the work
+   (`approvals.requestTtlMs`). Press `y` once to approve; the model cannot approve for you. Then: `Run <run-id> admitted. Follow /runs or /monitor.` "Admitted" means the work
    started, not that its result was accepted.
-6. **Watch it** with `/tasks` (or `/monitor`; `deckent monitor` outside the terminal). When the worker's result is
+6. **Watch it** with `/runs` (or `/monitor`; `deckent monitor` outside the terminal). When the worker's result is
    accepted, the task waits for delivery.
 7. **Deliver it** with `/deliver`: the picker is titled "/deliver · tasks awaiting delivery". The window checks the
    patch against the current source and lists the changed files. Press `y` to write it; it only writes a dedicated
@@ -355,7 +355,7 @@ may become an approval.
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/15-system-line.png" alt="Framed system lines left by closed windows"><br><sub><b>System lines.</b> Each closed window leaves one framed summary line.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/16-tasks.png" alt="/tasks live window with no work yet"><br><sub><b>/tasks.</b> Workers and runs in one live, read-only window (empty here: no background work yet).</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/16-tasks.png" alt="The earlier /tasks live window with no work yet"><br><sub><b>/runs.</b> Runs and workers in one live window with row keys; this screenshot still shows the earlier read-only /tasks window that /runs replaced (new screenshot pending).</sub></td>
   </tr>
 </table>
 

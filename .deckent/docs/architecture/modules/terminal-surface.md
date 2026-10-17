@@ -255,7 +255,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   card); the typed text is never shown, and it is stripped before the queue, the "queued" notice and the composer's input history (recall and
   the persistent port keep only `/command`; Astra 2456). Without window words SW-1/SW-3 keep the text command, SW-2 job windows open bare and `/monitor <args>`
   stays the text command. Line mode and the CLI keep arguments. **Opening (owner I-5, Jev 59f75361):** the first surface snapshot leaves one
-  system line when runs or workers are active ("Work running: N runs, M workers · /runs /workers"), nothing when idle; the approval count
+  system line when runs or workers are active ("Work running: N runs, M workers · /runs"), nothing when idle; the approval count
   stays in the status row. Settings windows (`/model` pin, `/config`, `/mcp`, `/provider`) report through the same system line.
   Proof: external `proof/SLASH-WINDOWS-2026-10-08/` (`SW1/2/3-WORKER.md`, `INTEGRATION-WORKER.md`, `INTEGRATION-DECISIONS.md`).
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
@@ -382,3 +382,35 @@ Older ports without push snapshots poll only admitted identities. Completed reco
 can make room at the configured limit; when all records are open, a new admitted Run
 gets a visible tracking-limit notice and remains inspectable with `/run`. Tracking
 ends with the terminal process and is not durable notification, acceptance or delivery.
+
+## Command consolidation (KOMUT-BIRLESTIRME K1–K8, owner 2026-10-14; branch `feat/k1-k8-komut`, beta work)
+
+Supersedes the older per-command paragraphs above for `/workers`, `/watch-workers`, `/watch-runs`, `/watch-stop`, `/tasks`, `/run`,
+`/transcript`, `/cancel` and `/quit`; their decisions and failure paths are kept, only the entry point changed. Gap analysis and
+evidence: external `proof/K1-K8-2026-10-18/GAP.md`.
+
+- **One Runs window (K1).** `/runs` opens the one live window (`RunsLiveWindow`, `terminal-work/internal/live-windows.tsx`) over both
+  feeds; it owns its watch (closing it stops both feeds and leaves one system line). Tabs: runs (default) and workers; Tab switches. Every
+  row stays reachable (the body scrolls and follows the selection; no `+N more` cut here). Without a Run listing the runs tab says the part
+  is unavailable and the workers tab still works. The tab and selection live in the host (`useLiveWindows`), so a card that covers the
+  window does not reset them. `/do` opens it in the background; typed, it takes focus.
+- **Row keys (K1, K4, K6, Y1).** Enter: a Run's detail window (the read model `/run` had) or a worker's sealed transcript under its
+  worker/attempt/task header; a read refusal stays inside that window. `x` opens the existing y/N cancellation card against the refreshed
+  revision (`work.run('cancel', …, runId)`); `h`/`r`/`c` open the Y1 control cards (`runControlAction`, the same lifecycle command as
+  `deckent run hold|resume|close`); `d` opens the same delivery window as `/deliver` for that Run only (no picker for one task). A row
+  shows only the keys its observed state and this terminal's ports offer (`runsRowKeys`); the service still authorizes at the confirmed
+  revision. Keys travel out of band (`taskActionRef` → `openTaskAction`); no typed text selects a Run, and a row acts only in its own scope.
+  Results and refusals are transcript system lines; the window stays open.
+- **Unfocused close (K5).** Ctrl+X closes the open live window while input is focused (`LiveWindowCloseKey`, inside the window stack; a
+  focused card owns the keyboard), and inside the focused Runs window; Escape still closes a focused window. Ctrl+O and Ctrl+T keep their
+  meaning. Ctrl+X is not composer text: a draft stays.
+- **Shift+Tab with `/runs` open (K7).** A window may register as `passive` (holds no decision). The stack's `modeKeys` is true when no window
+  is open, or input is focused and every open window is passive; `PermissionModeKeys` listens on that instead of `idle`. A card waiting behind
+  input, any other window, or the Runs window once focused still owns Shift+Tab.
+- **One name registry (K2, K8).** `WORKLINE_SLASH_COMMANDS` holds the live names; `SLASH_MOVED` maps each removed name to its new command
+  (rename, never alias) and `SLASH_RESERVED` holds `/plan`. The rich terminal's unknown-command window puts "Moved: /new" first and selected
+  (Enter runs the new command); without window words and in line mode a typed moved name prints "{old} moved to {new}" and never runs. A
+  contract test fails when terminal sources dispatch on a name outside the registry. The moved table goes at 1.0.0-beta.1. The hidden
+  `/chat-backend` alias and the unused text-mode `/transcript`/`/run` path (`runLedgerCommand`, transcript paging) are removed.
+- **Model-facing surfaces.** The session context lists `/runs` with its row actions and no longer `/cancel` (session context v2).
+

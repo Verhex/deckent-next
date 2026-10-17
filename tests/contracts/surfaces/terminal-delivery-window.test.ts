@@ -101,11 +101,11 @@ const transcript = (h: Harness) => h.view.stdout.text;
 /** Window rows hard-wrap long exact lines at the frame width: compare without whitespace and frame borders. */
 const squeeze = (text: string) => text.replace(/[│┃\s]+/gu, '');
 const press = async (h: Harness, keys: string, ms = 60) => { h.view.stdin.write(keys); await settle(ms); };
-/** /do admits the Run; its automatic result and /tasks windows are closed explicitly, as a person would. */
+/** /do admits the Run; its automatic result and Runs windows are closed explicitly, as a person would. */
 async function admit(h: Harness) {
   await settle(80); await press(h, '/do process order\r');
   await until(() => frame(h).includes('PLAN-RESULT'), 'result window'); await press(h, CTRL_O); await press(h, ESC);
-  await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks'); await press(h, CTRL_O); await press(h, ESC);
+  await until(() => frame(h).includes(EN.live!.runsTitle), 'automatic /runs'); await press(h, CTRL_O); await press(h, ESC);
   await until(() => frame(h).includes(`ORDER-TASK · r · ${EN.jobs!.runStates['running']}`), 'running row');
 }
 const windowTitle = 'Delivery · ORDER-TASK';
@@ -456,6 +456,19 @@ describe('delivery window on the real Workline', () => {
     await press(h, DOWN); await press(h, '\r', 150);
     await until(() => frame(h).includes('Delivery · SECOND-TASK') && frame(h).includes(WORDS.hints), 'chosen window');
     expect(frame(h)).toContain('WINDOW-FOCUS'); expect(h.calls).toEqual(['preview:r2']);
+  });
+
+  it('K6: d on a Runs window row opens the same delivery window for that Run only; a Run with nothing to deliver offers no d', async () => {
+    const h = harness({ scopeRuns: [awaiting('r1', 'FIRST-TASK'), awaiting('r2', 'SECOND-TASK'), run(COMPLETED, 'accepted', 'none', 'r3', 'NOTHING-TASK')] });
+    await settle(80); await press(h, '/runs\r', 150);
+    await until(() => frame(h).includes('› FIRST-TASK') && frame(h).includes(EN.live!.keys.deliver), 'Runs window with d on the first row');
+    await press(h, DOWN); await press(h, DOWN); await until(() => frame(h).includes('› NOTHING-TASK'), 'the run with nothing to deliver');
+    expect(frame(h)).not.toContain(EN.live!.keys.deliver); await press(h, 'd', 120); expect(frame(h)).not.toContain('Delivery ·'); expect(h.calls).toEqual([]);
+    await press(h, DOWN); await press(h, DOWN); await until(() => frame(h).includes('› SECOND-TASK'), 'second run');
+    await press(h, 'd', 150);
+    // No picker: d names its Run; the window is the same one /deliver opens, and nothing is delivered before its own y.
+    await until(() => frame(h).includes('Delivery · SECOND-TASK') && frame(h).includes(WORDS.hints), 'delivery window for the selected Run');
+    expect(frame(h)).not.toContain(WORDS.pickerTitle); expect(h.calls).toEqual(['preview:r2']);
   });
 
   it('/deliver says the part is unavailable without the trusted delivery port', async () => {

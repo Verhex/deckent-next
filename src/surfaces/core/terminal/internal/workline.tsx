@@ -4,14 +4,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, cre
 import { render, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem } from '#surfaces/core/terminal-work/index.js';
-import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
+import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, movedSlashCommand, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
-import type { RunProposalResult } from '#engine/index.js';
+import type { RunProposalResult, RunView } from '#engine/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { freshContextHistory } from './workline-history.js';
@@ -261,7 +261,10 @@ export function WorklineApp(props: WorklineProps) {
     context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(props.homeDirectory ? { home: props.homeDirectory } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   workRef.current = work; decide.current = work.decideApproval;
-  const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}', onTaskAction: action => taskActionRef.current(action) });
+  // K1/K4/K6/K7: the row keys this terminal can offer in the Runs window (each still opens its own card; the service authorizes).
+  const rowOffer = { cancel: Boolean(ledger?.cancelRun), control: Boolean(ledger?.controlRun && labels.work?.runControl), answer: false,
+    deliverable: (run: RunView) => deliveries.available && Boolean(labels.delivery) && deliveries.candidates([run]).length > 0 };
+  const liveWin = useLiveWindows({ offer: rowOffer, work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}', onTaskAction: action => taskActionRef.current(action) });
   liveRef.current = liveWin;
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
@@ -378,6 +381,19 @@ export function WorklineApp(props: WorklineProps) {
     }
   }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
+  /** TESLIM-PENCERESI / K6: the delivery window of one of `runs`' tasks awaiting delivery (`/deliver`, or `d` on a Runs window row); several:
+   * the person picks; none: a window saying so. The chosen window takes focus. */
+  const openDelivery = async (execution: LocalExecution, runs: readonly RunView[]) => {
+    const words = labels.delivery!, targets = deliveries.candidates(runs);
+    if (!targets.length) {
+      await panel.pick(execution, { kind: 'window', title: words.pickerTitle, body: [words.none], hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
+      push([systemSummaryEntry(words.none)]); return;
+    }
+    const picked = targets.length === 1 ? '0' : await panel.pick(execution, { kind: 'job-picker', title: words.pickerTitle, rows: targets.map(target =>
+      [span(projectHumanPickerText(target.title, props.knownSecrets).label, { bold: true }), span(` · ${shortId(target.runId)} · ${target.taskId}`, { role: 'muted' })]) },
+    targets.map((_, index) => String(index)));
+    if (picked !== null && !execution.signal.aborted) deliveries.open(targets[Number(picked)]!, 'foreground');
+  };
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
@@ -405,7 +421,7 @@ export function WorklineApp(props: WorklineProps) {
         }
         setActiveDo(null);
         await show(props.doPlan.lines(result));
-        if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
+        if (result.run && !execution.signal.aborted) await performRef.current('/runs', [], execution);
       } catch (error) {
         setPlanning(false);
         if (!execution.signal.aborted) await show([errorText(error)]);
@@ -416,26 +432,17 @@ export function WorklineApp(props: WorklineProps) {
     }
     if (slash.command === 'deliver') {
       // TESLIM-PENCERESI: a picker of tasks awaiting delivery (fresh /runs read model plus this session's Runs); the chosen window takes focus.
-      const words = labels.delivery;
-      if (!deliveries.available || !words || !ledger) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
-      try {
-        const targets = deliveries.candidates([...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)]);
-        if (!targets.length) {
-          await panel.pick(execution, { kind: 'window', title: words.pickerTitle, body: [words.none], hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
-          push([systemSummaryEntry(words.none)]); return true;
-        }
-        const picked = targets.length === 1 ? '0' : await panel.pick(execution, { kind: 'job-picker', title: words.pickerTitle, rows: targets.map(target =>
-          [span(projectHumanPickerText(target.title, props.knownSecrets).label, { bold: true }), span(` · ${shortId(target.runId)} · ${target.taskId}`, { role: 'muted' })]) },
-        targets.map((_, index) => String(index)));
-        if (picked !== null && !execution.signal.aborted) deliveries.open(targets[Number(picked)]!, 'foreground');
-      } catch (error) { push([notice('error', errorText(error))]); }
+      if (!deliveries.available || !labels.delivery || !ledger) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
+      try { await openDelivery(execution, [...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)]); }
+      catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
     const rich = labels.windows;
     if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
-      const typed = slash.command;
-      const choice = await windows.ask(unknownCommandSpec(rich, typed, slashMatches(`/${typed}`).slice(0, 8), command => labels.composer.slash[command.descriptionKey] ?? ''));
+      const typed = slash.command, moved = movedSlashCommand(typed);
+      // K2: a moved name's new command is the first, selected row (Enter runs it); the old name itself never runs.
+      const choice = await windows.ask(unknownCommandSpec(rich, typed, slashMatches(`/${typed}`).slice(0, 8), command => labels.composer.slash[command.descriptionKey] ?? '', moved));
       if (choice !== null && !execution.signal.aborted) return performRef.current(`/${choice}`, [], execution);
       return true;
     }
@@ -535,8 +542,16 @@ export function WorklineApp(props: WorklineProps) {
     const action = taskActions.current.get(execution.input.inputId);
     taskActions.current.delete(execution.input.inputId);
     if (action && ledger && labels.work) {
-      try { await openTaskAction(action, panel, execution, ledger, labels.work,
-        runId => work.run('cancel', '', execution, undefined, runId)); }
+      try {
+        // K6: `d` opens the same delivery window as `/deliver`, for this Run's tasks only (read again here).
+        if (action.action === 'deliver') {
+          const run = action.target.kind === 'run' ? await ledger.inspectRun(action.target.runId) : null;
+          if (run && deliveries.available && labels.delivery && !execution.signal.aborted) await openDelivery(execution, [run]);
+          return;
+        }
+        await openTaskAction(action, panel, execution, ledger, labels.work, { cancel: runId => work.run('cancel', '', execution, undefined, runId),
+          control: (runId, control) => work.control(execution, runId, control), errorText });
+      }
       catch (error) { push([notice('error', errorText(error))]); }
       return;
     }
@@ -546,7 +561,8 @@ export function WorklineApp(props: WorklineProps) {
   taskActionRef.current = action => {
     const inputId = `input-${++inputSequence.current}`, snapshot = panel.controller.snapshot();
     taskActions.current.set(inputId, action);
-    if (!panel.controller.send({ kind: 'submit', context: snapshot.context, inputId, text: `/${action.action}`, mentions: [] })) taskActions.current.delete(inputId);
+    // The queued line names the window the action came from; the action itself travels out of band (no typed text can select it).
+    if (!panel.controller.send({ kind: 'submit', context: snapshot.context, inputId, text: '/runs', mentions: [] })) taskActions.current.delete(inputId);
   };
   // I-1 (Astra 2456): in the rich terminal a slash argument is dropped before the line is queued, shown as queued or remembered in the
   // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
@@ -617,6 +633,7 @@ export function WorklineApp(props: WorklineProps) {
       {!pinned || size.rows >= 5 ? <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} /> : null}
       </>}>
       <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
+      {liveWin.keys}
       {instructions.window}
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}

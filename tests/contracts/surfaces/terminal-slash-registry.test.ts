@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
-import { slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
+import { movedSlashCommand, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY, SLASH_MOVED, SLASH_RESERVED } from '#surfaces/core/terminal-kit/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 import { paletteCommand } from '#surfaces/core/terminal-composer/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { snapshotKnownSecrets, t } from '#platform/index.js';
@@ -38,9 +40,35 @@ describe('terminal slash registry', () => {
 
   it('lists core commands', () => {
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'help')).toBe(true);
-    expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'workers')).toBe(true);
-    expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'run')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'runs')).toBe(true);
+    expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'deliver')).toBe(true);
+  });
+
+  it('K1/K2/K8: one name registry — moved and reserved names are disjoint from live ones, every move lands on a live command, names are unique', () => {
+    const live = new Set(WORKLINE_SLASH_COMMANDS.map(command => command.name));
+    expect(live.size).toBe(WORKLINE_SLASH_COMMANDS.length);
+    expect(Object.keys(SLASH_MOVED).sort()).toEqual(['cancel', 'quit', 'run', 'tasks', 'transcript', 'watch-runs', 'watch-stop', 'watch-workers', 'workers']);
+    for (const [old, now] of Object.entries(SLASH_MOVED)) { expect(live.has(old)).toBe(false); expect(live.has(now)).toBe(true); expect(movedSlashCommand(old)).toBe(now); }
+    for (const name of SLASH_RESERVED) { expect(live.has(name)).toBe(false); expect(movedSlashCommand(name)).toBeNull(); }
+    expect(SLASH_RESERVED).toContain('plan');
+    expect(movedSlashCommand('runs')).toBeNull(); expect(movedSlashCommand('constructor')).toBeNull(); expect(movedSlashCommand('__proto__')).toBeNull();
+  });
+
+  it('every slash name the terminal sources dispatch on is a registry name, a moved name, or a named internal one (no surface name outside the registry)', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const roots = ['src/surfaces/core/terminal/internal', 'src/surfaces/core/terminal-work/internal', 'src/surfaces/core/terminal-delivery/internal'];
+    const names = new Set<string>();
+    for (const root of roots) for (const file of await readdir(root)) {
+      if (!/\.tsx?$/u.test(file)) continue;
+      const text = await readFile(join(root, file), 'utf8');
+      for (const match of text.matchAll(/(?:slash\.command|command) === '([a-z][a-z-]*)'/gu)) names.add(match[1]!);
+      for (const match of text.matchAll(/performRef\.current\('\/([a-z][a-z-]*)'/gu)) names.add(match[1]!);
+    }
+    // The work surface's own card flow (`run('cancel', …)`, K4's `x`) is not a slash name.
+    const internal = new Set(['cancel']), live = new Set(WORKLINE_SLASH_COMMANDS.map(command => command.name));
+    expect([...names].filter(name => !live.has(name) && !internal.has(name)).sort()).toEqual([]);
+    expect(names.has('runs')).toBe(true);
   });
 
   it.each(['en', 'tr'] as const)('%s labels cover exactly the registry description and argument keys, including mcp/config', locale => {
@@ -58,21 +86,16 @@ describe('terminal slash registry', () => {
   });
 
   it('formats presentation only: arguments and aliases retain their registry identity', () => {
-    expect(parseSlashLine(' /RUN  r-1  extra ')).toEqual({ command: 'run', args: 'r-1  extra' });
+    expect(parseSlashLine(' /APPROVALS  a-1  extra ')).toEqual({ command: 'approvals', args: 'a-1  extra' });
     expect(parseSlashLine('/QuIt now')).toEqual({ command: 'quit', args: 'now' });
-    const run = WORKLINE_SLASH_COMMANDS.find(command => command.name === 'run')!;
-    expect(slashCommandRow(run, {})).toEqual({ name: '/run', detail: '' });
+    const approvals = WORKLINE_SLASH_COMMANDS.find(command => command.name === 'approvals')!;
+    expect(slashCommandRow(approvals, {})).toEqual({ name: '/approvals', detail: '' });
     const en = terminalComposerLabels('en').slash, tr = terminalComposerLabels('tr').slash;
-    expect(slashCommandRow(run, en).name).toBe('/run <runId>');
-    expect(slashCommandRow(run, tr).name).toBe('/run <run-kimliği>');
-    for (const locale of ['en', 'tr'] as const) {
-      const labels = terminalComposerLabels(locale).slash;
-      const exit = slashCommandRow(WORKLINE_SLASH_COMMANDS.find(command => command.name === 'exit')!, labels);
-      const quit = slashCommandRow(WORKLINE_SLASH_COMMANDS.find(command => command.name === 'quit')!, labels);
-      expect(quit.detail).toBe(exit.detail);
-      expect(quit.name).toBe('/quit');
-    }
-    expect(run).toEqual({ name: 'run', group: 'work', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' });
+    expect(slashCommandRow(approvals, en).name).toBe(`/approvals ${en['terminal.slash.approvalsArgument']}`);
+    expect(slashCommandRow(approvals, tr).name).toBe(`/approvals ${tr['terminal.slash.approvalsArgument']}`);
+    // K8: `/quit` left the registry (its row duplicated `/exit`); typed, it is a moved name.
+    expect(WORKLINE_SLASH_COMMANDS.find(command => command.name === 'quit')).toBeUndefined();
+    expect(approvals).toEqual({ name: 'approvals', group: 'approvals', descriptionKey: 'terminal.slash.approvals', argumentKey: 'terminal.slash.approvalsArgument' });
   });
 
   it.each(['en', 'tr'] as const)('%s actual palette and /help show the same registry rows', async locale => {
@@ -109,7 +132,7 @@ describe('terminal slash registry', () => {
     expect(completeTurn).not.toHaveBeenCalled();
   });
 
-  it.each(WORKLINE_SLASH_COMMANDS.filter(command => !['exit', 'quit', 'registered-unhandled'].includes(command.name)))('existing /$name dispatch remains handled, even with unavailable ports', async command => {
+  it.each(WORKLINE_SLASH_COMMANDS.filter(command => !['exit', 'registered-unhandled'].includes(command.name)))('existing /$name dispatch remains handled, even with unavailable ports', async command => {
     const completeTurn = vi.fn(async () => 'unexpected');
     const view = await open({ completeTurn });
     // A trailing space closes the palette, so arg-less commands submit literally rather than selecting a different row. A command that answers in
@@ -126,22 +149,49 @@ describe('terminal slash registry', () => {
     expect(completeTurn).not.toHaveBeenCalled();
   });
 
-  it.each(['exit', 'quit'])('/%s closes through the existing exit handler without a chat turn', async command => {
+});
+
+describe('terminal slash registry: exit and moved names (K2/K8)', () => {
+  it('/exit closes through the existing exit handler without a chat turn', async () => {
     const completeTurn = vi.fn(async () => 'unexpected');
     const view = await open({ completeTurn });
-    await type(view, `/${command}\r`);
+    await type(view, '/exit\r');
     await view.instance.waitUntilExit();
     expect(completeTurn).not.toHaveBeenCalled();
   });
 
-  it('Enter on a bare /run runs it at once (no typed argument) and /config and /mcp still forward typed arguments in text mode', async () => {
+  it.each([['quit', 'exit'], ['tasks', 'runs'], ['cancel', 'runs']])('K2 without window words: /%s names its new command, never runs and never reaches the chat producer', async (old, now) => {
+    const completeTurn = vi.fn(async () => 'unexpected');
+    const view = await open({ completeTurn });
+    let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
+    await type(view, `/${old}\r`);
+    await until(() => view.stdout.text.includes(`MOVED /${old} /${now}`), 'moved notice');
+    await settle(60); expect(exited).toBe(false); expect(completeTurn).not.toHaveBeenCalled();
+  });
+
+  it.each([['tasks', 'runs', 'Runs (live)'], ['quit', 'exit', null]])('K2 rich terminal: /%s opens the unknown window with "Moved: /%s" as the selected first row; Enter runs it', async (old, now, opened) => {
+    const completeTurn = vi.fn(async () => 'unexpected');
+    const view = await open({ completeTurn, labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, work: workSurfaceLabels('en'),
+      composer: { ...WORKLINE_TEST_LABELS.composer, slash: terminalComposerLabels('en').slash } },
+      ledger: { scopeId: 's', async listWorkers() { return { schemaVersion: 1, scopeId: 's', sources: [] } as never; }, async inspectRun() { return null; } } });
+    let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
+    await type(view, `/${old}\r`);
+    await until(() => view.stdout.frame.includes(`/${old} moved to /${now}.`) && view.stdout.frame.includes(`Moved: /${now}`), 'moved window');
+    expect(view.stdout.frame).toMatch(new RegExp(`[›>]\\s+Moved: /${now}`, 'u'));
+    await settle(60); view.stdin.write('\r');
+    if (opened) await until(() => view.stdout.frame.includes(opened), 'the new command ran');
+    else await until(() => exited, 'the new command ran');
+    expect(completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a bare /runs runs it at once (no typed argument) and /config and /mcp still forward typed arguments in text mode', async () => {
     const config = vi.fn(async (args: string) => [`CONFIG-READ ${args}`]), mcp = vi.fn(async (args: string) => [`MCP-READ ${args}`]);
     const inspectRun = vi.fn(async () => null);
     const view = await open({ config, mcp, labels: { ...WORKLINE_TEST_LABELS, composer: terminalComposerLabels('tr') },
       ledger: { scopeId: 's', async listWorkers() { return { schemaVersion: 1, scopeId: 's', sources: [] } as never; }, inspectRun } });
     await type(view, '/ru\r');
-    // SW-2: the bare command answers at once in its window (here "not wired": this ledger cannot list runs); Esc closes it.
-    await until(() => view.stdout.frame.includes('UNWIRED'), 'bare /run runs at once and answers in its window');
+    // SW-2/K1: the bare command answers at once in its window (its runs tab says "not wired": this ledger cannot list runs); Esc closes it.
+    await until(() => view.stdout.frame.includes('UNWIRED'), 'bare /runs runs at once and answers in its window');
     expect(view.stdout.frame).not.toContain('<run-kimliği>');
     expect(inspectRun).not.toHaveBeenCalled();
     await settle(40); view.stdin.write('\u001B'); await settle(60);

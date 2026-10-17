@@ -41,9 +41,7 @@ const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en
 };
 const choose = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('\r'); };
 const close = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write(ESC); await until(() => captured.entries.length > 0, 'summary'); };
-// FIRST-TEST-FIXES (760c906e): a watch frame takes no focus (Esc stays with the composer); /watch-stop closes it with its one summary.
-const closeWatch = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('/watch-stop\r'); await until(() => captured.entries.length > 0, 'summary'); };
-const closes = (command: string) => command.startsWith('/watch-') ? closeWatch : close;
+const TAB = '\t';
 async function snapshot(name: string, view: ReturnType<typeof mountWorkline>) {
   await writeFile(join(renderDir, `${name}.txt`), view.stdout.frame);
   const captureRoot = process.env['SW2_CAPTURE_DIR'];
@@ -51,44 +49,53 @@ async function snapshot(name: string, view: ReturnType<typeof mountWorkline>) {
 }
 function onlySummary() { expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary' }); }
 
-describe('SW-2 job windows', () => {
-  it.each(['/workers', '/runs'] as const)('%s opens a list, never appends cards, and closes with one labelled line', async command => {
-    const view = await open(command);
-    await until(() => view.stdout.frame.includes(command === '/workers' ? 'worker 1' : 'Fix checkout'), 'list');
+describe('SW-2 job windows (K1: the one Runs window)', () => {
+  it('/runs opens the runs and workers tabs, never appends cards, and closes with one labelled line', async () => {
+    const view = await open('/runs');
+    await until(() => view.stdout.frame.includes('Fix checkout'), 'runs tab');
+    view.stdin.write(TAB); await until(() => view.stdout.frame.includes('worker 1'), 'workers tab');
     expect(captured.entries).toEqual([]); expect(view.stdout.frame).not.toContain('Info:');
-    await snapshot(command.slice(1), view);
-    await close(view); onlySummary(); await snapshot(`${command.slice(1)}-summary`, view); expect(view.stdout.frame).toContain('◆ Deckent system ·'); expect(view.stdout.frame).not.toContain('rows 1');
+    await snapshot('runs', view);
+    await close(view); onlySummary(); await snapshot('runs-summary', view); expect(view.stdout.frame).toContain('◆ Deckent system ·'); expect(view.stdout.frame).not.toContain('rows 1');
   });
-  it.each(['en', 'tr'] as const)('%s: run picker opens sections with human titles and muted short IDs', async locale => {
-    const work = workSurfaceLabels(locale), view = await open('/run', ports(), locale);
-    await until(() => view.stdout.frame.includes('> Fix checkout'), 'run picker'); await snapshot(`run-picker-${locale}`, view); expect(view.stdout.frame).not.toContain(runId);
+  it.each(['en', 'tr'] as const)('%s: Enter on a Run row opens its sections with human titles and muted short IDs', async locale => {
+    const work = workSurfaceLabels(locale), view = await open('/runs', ports(), locale);
+    await until(() => view.stdout.frame.includes('› Fix checkout'), 'run row'); await snapshot(`run-picker-${locale}`, view); expect(view.stdout.frame).not.toContain(runId);
     await choose(view); await until(() => view.stdout.frame.includes(work.jobs!.delivery), 'detail');
     for (const label of [work.jobs!.state, work.jobs!.tasks, work.jobs!.attempts, work.jobs!.delivery]) expect(view.stdout.frame).toContain(label);
     expect(view.stdout.frame).toContain('4b0c9811'); expect(view.stdout.frame).not.toContain(attemptId);
     await snapshot(`run-detail-${locale}`, view);
     expect(runDetailLines(run, work).some(line => line.spans.some(item => item.role === 'muted'))).toBe(true);
-    await close(view); onlySummary();
+    await settle(40); view.stdin.write(ESC); await until(() => view.stdout.frame.includes(work.live!.runsHints), 'back to the Runs window');
+    expect(captured.entries).toEqual([]); await close(view); onlySummary();
   });
-  it('picks the worker and pages the complete transcript by keys in a short terminal', async () => {
-    const inspect = vi.fn(ports().inspectTranscript!), view = await open('/transcript', ports({ inspectTranscript: inspect }), 'en', 24);
-    await until(() => view.stdout.frame.includes('> worker 1'), 'worker picker'); await choose(view);
+  it('Enter on a worker pages the complete transcript by keys in a short terminal', async () => {
+    const inspect = vi.fn(ports().inspectTranscript!), view = await open('/runs', ports({ inspectTranscript: inspect }), 'en', 24);
+    await until(() => view.stdout.frame.includes(EN.live!.runsHints), 'Runs window'); await settle(40); view.stdin.write(TAB);
+    await until(() => view.stdout.frame.includes('worker 1'), 'workers tab'); await choose(view);
     await until(() => view.stdout.frame.includes('TRANSCRIPT 0'), 'transcript'); await snapshot('transcript', view); expect(view.stdout.frame).not.toContain('TRANSCRIPT 89');
     await settle(40); view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('TRANSCRIPT 89'), 'last page');
-    expect(inspect.mock.calls[0]![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    expect(inspect.mock.calls[0]![0].attemptId).toBe(attemptId); expect(captured.entries).toEqual([]);
+    await settle(40); view.stdin.write(ESC); await until(() => view.stdout.frame.includes(EN.live!.runsHints), 'back'); await close(view); onlySummary();
   });
-  it.each(['y', 'n', ESC])('cancel picker excludes terminal/already cancelling runs; %s preserves revision authority', async key => {
+  it.each(['y', 'n', ESC])('x is offered only on runs that are not finished or cancelling; %s preserves revision authority (K4)', async key => {
     const cancel = vi.fn(async () => 'Cancellation requested');
     const ledger = ports({ listRunIds: async () => [runId, 'done', 'cancelling'], inspectRun: async id => id === runId ? run : { ...run, runId: id, cancellationRequested: id === 'cancelling', state: id === 'done' ? { kind: 'terminal', outcome: 'completed', reason: 'completed' } : { kind: 'running' }, tasks: [{ ...run.tasks[0]!, taskBrief: { ...run.tasks[0]!.taskBrief!, task: id } }] } as RunView, cancelRun: cancel });
-    const view = await open('/cancel', ledger); await until(() => view.stdout.frame.includes('> Fix checkout'), 'cancel picker');
-    expect(view.stdout.frame).not.toContain('> done'); expect(view.stdout.frame).not.toContain('cancelling'); await choose(view);
-    await until(() => view.stdout.frame.includes('Cancel run 3f2a9c1e?'), 'card'); await snapshot('cancel', view); expect(captured.entries).toEqual([]);
+    const view = await open('/runs', ledger); await until(() => view.stdout.frame.includes('› Fix checkout') && view.stdout.frame.includes('cancelling'), 'run rows');
+    expect(view.stdout.frame).toContain(EN.live!.keys.cancel);
+    for (const id of ['done', 'cancelling']) {
+      await settle(40); view.stdin.write('\u001B[B'); await until(() => view.stdout.frame.includes(`› ${id}`), `${id} row`);
+      expect(view.stdout.frame).not.toContain(EN.live!.keys.cancel); view.stdin.write('x'); await settle(40); expect(view.stdout.frame).not.toContain('Cancel run');
+    }
+    await settle(40); view.stdin.write('\u001B[B'); await until(() => view.stdout.frame.includes('› Fix checkout'), 'back to the running row');
+    await settle(40); view.stdin.write('x'); await until(() => view.stdout.frame.includes('Cancel run 3f2a9c1e?'), 'card'); await snapshot('cancel', view); expect(captured.entries).toEqual([]);
     await settle(40); view.stdin.write(key); await until(() => captured.entries.length > 0, 'result'); onlySummary();
     expect(cancel.mock.calls).toEqual(key === 'y' ? [[runId, 7]] : []);
   });
   it('refreshes a chosen run and refuses cancellation if it became terminal', async () => {
     const inspect = vi.fn().mockResolvedValueOnce(run).mockResolvedValue({ ...run, state: { kind: 'terminal', outcome: 'completed' } }), cancel = vi.fn();
-    const view = await open('/cancel', ports({ inspectRun: inspect, cancelRun: cancel }));
-    await until(() => view.stdout.frame.includes('> Fix checkout'), 'picker'); await choose(view);
+    const view = await open('/runs', ports({ inspectRun: inspect, cancelRun: cancel }));
+    await until(() => view.stdout.frame.includes('› Fix checkout') && view.stdout.frame.includes(EN.live!.keys.cancel), 'run row'); await settle(40); view.stdin.write('x');
     await until(() => captured.entries.length > 0, 'closed'); expect(cancel).not.toHaveBeenCalled(); onlySummary();
   });
   it('approvals picker opens the unchanged card and aggregates its result into one line', async () => {
@@ -105,17 +112,17 @@ describe('SW-2 job windows', () => {
   });
   // SLASH-WINDOWS I-1 (owner 2026-10-08): in the rich terminal a typed argument opens the same window as the bare command; that window notes once
   // that the terminal takes no typed argument, and the typed text is never shown or used.
-  it.each(['/run ARG-TYPED', '/transcript ARG-TYPED 2', '/cancel ARG-TYPED', '/approvals ARG-TYPED', '/approvals clear-session', '/workers ARG-TYPED', '/watch-runs ARG-TYPED', '/monitor --scope ARG-TYPED'])('%s opens the bare window with the one-time note, never the typed text', async command => {
+  it.each(['/runs ARG-TYPED', '/approvals ARG-TYPED', '/approvals clear-session', '/monitor --scope ARG-TYPED'])('%s opens the bare window with the one-time note, never the typed text', async command => {
     const decide = vi.fn(), inspect = vi.fn(), view = await open(command, ports({ decideApproval: decide, inspectTranscript: inspect }), 'en', 60, true);
     await until(() => view.stdout.frame.includes(TYPED_ARGUMENT_NOTE), 'window with the note'); expect(captured.entries).toEqual([]);
     expect(view.stdout.frame).not.toContain('ARG-TYPED'); expect(decide).not.toHaveBeenCalled(); expect(inspect).not.toHaveBeenCalled();
-    await closes(command)(view); onlySummary(); await settle(40);
+    await close(view); onlySummary(); await settle(40);
     expect(view.stdout.frame).not.toContain(TYPED_ARGUMENT_NOTE);
   });
-  it.each(['/watch-workers', '/watch-runs', '/tasks'] as const)('%s keeps started/delivery words inside the window and leaves one summary when closed (Esc; /watch-stop for a watch frame)', async command => {
-    const view = await open(command);
-    await until(() => view.stdout.frame.includes('Watching · polling'), 'window status'); await snapshot(command.slice(1), view);
-    expect(captured.entries).toEqual([]); await closes(command)(view); onlySummary();
+  it('/runs keeps started/delivery words inside the window and leaves one summary when closed', async () => {
+    const view = await open('/runs');
+    await until(() => view.stdout.frame.includes('Watching · polling'), 'window status'); await snapshot('runs-watch', view);
+    expect(captured.entries).toEqual([]); await close(view); onlySummary();
   });
   it('monitor uses one close summary and does not print its body', async () => {
     const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: EN }, monitorWindow: async () => () => createElement(Text, null, 'MONITOR-BODY') }); mounted.push(view);
@@ -127,15 +134,18 @@ describe('SW-2 job windows', () => {
       yield { control: 'start', scopeId: 'scope-a', cursors: { worker: 0, run: 0, approval: 0 } };
       await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
     }, readSurfaceSnapshot: async () => ({ scopeId: 'scope-a', denied: [], runs: [run], workers: await ports().listWorkers(), approvals: [] }) });
-    const view = await open('/tasks', ledger);
-    await until(() => view.stdout.frame.includes('Fix checkout') && view.stdout.frame.includes('worker 1'), 'snapshot window');
-    expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary', text: 'Work running: 1 runs, 1 workers · /runs /workers' });
+    const view = await open('/runs', ledger);
+    await until(() => view.stdout.frame.includes('Fix checkout'), 'snapshot window'); await settle(40); view.stdin.write(TAB);
+    await until(() => view.stdout.frame.includes('worker 1'), 'workers tab');
+    expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary', text: 'Work running: 1 runs, 1 workers · /runs' });
     view.stdin.write(ESC); await until(() => captured.entries.length === 2, 'close summary');
     expect(captured.entries.every(entry => entry.kind === 'notice' && entry.id === 'system-summary')).toBe(true);
   });
   it('keeps policy refusal inside a transcript window and leaves only one summary after close', async () => {
-    const view = await open('/transcript', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));
-    await until(() => view.stdout.frame.includes('> worker 1'), 'picker'); await choose(view);
-    await until(() => view.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    const view = await open('/runs', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));
+    await until(() => view.stdout.frame.includes(EN.live!.runsHints), 'Runs window'); await settle(40); view.stdin.write(TAB);
+    await until(() => view.stdout.frame.includes('worker 1'), 'workers tab'); await choose(view);
+    await until(() => view.stdout.frame.includes('ERR:POLICY_DENIED'), 'refusal window'); expect(captured.entries).toEqual([]);
+    await settle(40); view.stdin.write(ESC); await until(() => view.stdout.frame.includes(EN.live!.runsHints), 'back'); await close(view); onlySummary();
   });
 });

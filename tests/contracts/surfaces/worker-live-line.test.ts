@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approvalWatchStep, compactCount, decisionKey, EMPTY_APPROVAL_WATCH, formatWorkerLine, ledgerEntrySummary, resolveWorkerRef, scanPendingApprovals,
+import { approvalWatchStep, compactCount, decisionKey, EMPTY_APPROVAL_WATCH, formatWorkerLine, ledgerEntrySummary, scanPendingApprovals,
   workerReportToLedgerEntries, type WorkerLineLabels, type WorkLedgerWorkerEntry, type WorklineApproval } from '#surfaces/core/terminal/index.js';
 import type { WorkerObservationReport } from '#engine/index.js';
 import { WORKER_LINE_EN } from '../support/worker-line-labels.js';
@@ -74,9 +74,6 @@ describe('worker live line', () => {
     expect(legacy!.live).toBeUndefined();
     expect(next).toMatchObject({ ordinal: 2, attempt: identity, live: { phase: 'reading', target: 'a.ts', receivedAt: 900, tokens: 100, cacheReadRatio: 0.75, dropped: 1 } });
     expect(JSON.stringify(next)).not.toContain('"atMs"');
-    expect(resolveWorkerRef('2', [legacy!, next!])).toBe(next);
-    expect(resolveWorkerRef('a-1', [legacy!, next!])).toBe(next);
-    expect(resolveWorkerRef('3', [legacy!, next!])).toBeNull();
   });
 });
 

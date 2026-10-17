@@ -172,7 +172,7 @@ flowchart LR
   E --> A["3 · Havuz ve iş türleri<br/><sub>init registry · init pool</sub>"]
   A --> R["4 · Servisi yeniden başlat"]
   R --> D["5 · /do<br/><sub>plan · onay kartı</sub>"]
-  D --> T["6 · İzle<br/><sub>/tasks</sub>"]
+  D --> T["6 · İzle<br/><sub>/runs</sub>"]
   T --> L["7 · /deliver"]
   L --> B["8 · Bir dala al"]
   B --> U["9 · Geri al<br/><sub>komut satırı</sub>"]
@@ -258,9 +258,9 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    Run'ı oluşturmayı onaylamanızı isteyen bir kart açılır. Bugün Risk ve Geri alma satırları "araç sınıflandırmadı" ve
    "araç bildirmedi" der; planı ve kabul satırını değerlendirin. Kart 10 dakika sonra sona erer
    (`approvals.requestTtlMs`). Onaylamak için bir kez `y`; model sizin yerinize onaylayamaz. Sonra:
-   `Run <run-id> kabul edildi. /tasks veya /monitor ile izleyin.` Burada "kabul edildi" işin başladığı demektir;
+   `Run <run-id> kabul edildi. /runs veya /monitor ile izleyin.` Burada "kabul edildi" işin başladığı demektir;
    sonucunun kabul edildiği demek değildir.
-6. **İzleyin**: `/tasks` ile (ya da `/monitor`; terminal dışında `deckent monitor`). İşçinin sonucu kabul edilince
+6. **İzleyin**: `/runs` ile (ya da `/monitor`; terminal dışında `deckent monitor`). İşçinin sonucu kabul edilince
    görev teslimi bekler.
 7. **Teslim edin**: `/deliver` ile; seçici "/deliver · teslim bekleyen görevler" başlığını taşır. Pencere yamayı güncel
    kaynakla karşılaştırır ve değişen dosyaları listeler. Yazmak için `y`; yalnız `refs/deckent/deliveries/` altında ayrı
@@ -356,7 +356,7 @@ değişiklik policy'den geçer ve bir onaya dönüşebilir.
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/tr/15-sistem-satiri.png" alt="Kapanan pencerelerin bıraktığı çerçeveli sistem satırları"><br><sub><b>Sistem satırları.</b> Kapanan her pencere tek bir çerçeveli özet satırı bırakır.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/16-gorevler.png" alt="Henüz iş olmayan canlı /tasks penceresi"><br><sub><b>/tasks.</b> İşçiler ve işler tek bir canlı, salt okunur pencerede (burada boş: henüz arka plan işi yok).</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/16-gorevler.png" alt="Henüz iş olmayan eski canlı /tasks penceresi"><br><sub><b>/runs.</b> İşler ve işçiler satır tuşlarıyla tek canlı pencerede; bu ekran görüntüsü /runs'ın yerini aldığı eski salt okunur /tasks penceresini gösteriyor (yeni görüntü bekliyor).</sub></td>
   </tr>
 </table>
 

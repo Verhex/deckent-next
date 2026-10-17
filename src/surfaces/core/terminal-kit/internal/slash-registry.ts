@@ -19,21 +19,14 @@ export type SlashGroupId = typeof SLASH_GROUPS[number]['id'];
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'do', group: 'work', descriptionKey: 'terminal.slash.do', argumentKey: 'terminal.slash.doArgument' },
   { name: 'status', group: 'info', descriptionKey: 'terminal.slash.status' },
-  { name: 'workers', group: 'work', descriptionKey: 'terminal.slash.workers' },
-  { name: 'watch-workers', group: 'work', descriptionKey: 'terminal.slash.watchWorkers' },
-  { name: 'watch-runs', group: 'work', descriptionKey: 'terminal.slash.watchRuns' },
-  { name: 'watch-stop', group: 'work', descriptionKey: 'terminal.slash.watchStop' },
-  // T3 L5: one window over the observed workers and runs (read-only; stopping a Run stays `/cancel`'s confirmation window).
-  { name: 'tasks', group: 'work', descriptionKey: 'terminal.slash.tasks' },
-  { name: 'run', group: 'work', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
-  // Y1 (owner 2026-10-14): the Runs window carries h hold / r resume / c close (parked) keys, each after its own y/N card (policy decides).
+  // K1 (owner 2026-10-14): the one Runs window (runs and workers tabs) replaces /workers, /watch-workers, /watch-runs, /watch-stop, /tasks, /run,
+  // /transcript and /cancel. Row keys: Enter detail/transcript, x cancel, h hold / r resume / c close (Y1), d deliver (K6), a answer (K7), each
+  // after its own y/N card (policy decides).
   { name: 'runs', group: 'work', descriptionKey: 'terminal.slash.runs' },
   // TESLIM-PENCERESI: tasks awaiting delivery; the window checks, prepares and delivers after its own y (verified terminal only); Y1: adoption
   // chooses an accepted verification Run when the installation configures one.
   { name: 'deliver', group: 'work', descriptionKey: 'terminal.slash.deliver' },
-  { name: 'transcript', group: 'work', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },
   { name: 'approvals', group: 'approvals', descriptionKey: 'terminal.slash.approvals', argumentKey: 'terminal.slash.approvalsArgument' },
-  { name: 'cancel', group: 'work', descriptionKey: 'terminal.slash.cancel', argumentKey: 'terminal.slash.cancelArgument' },
   { name: 'service-restart', group: 'settings', descriptionKey: 'terminal.slash.serviceRestart' },
   { name: 'context', group: 'info', descriptionKey: 'terminal.slash.context' },
   { name: 'resume', group: 'session', descriptionKey: 'terminal.slash.resume', argumentKey: 'terminal.slash.resumeArgument' },
@@ -57,9 +50,23 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'doctor', group: 'info', descriptionKey: 'terminal.slash.doctor' },
   { name: 'scope', group: 'info', descriptionKey: 'terminal.slash.scope' },
   { name: 'exit', group: 'session', descriptionKey: 'terminal.slash.exit' },
-  { name: 'quit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
 ]);
+
+/**
+ * K2 (owner 2026-10-14): names that moved. A rename, never an alias: an old name does not run; the unknown-command window offers its new name
+ * as the first, selected row (Enter runs it) and line mode names it. The table goes at 1.0.0-beta.1.
+ */
+export const SLASH_MOVED: Readonly<Record<string, string>> = Object.freeze({
+  workers: 'runs', 'watch-workers': 'runs', 'watch-runs': 'runs', 'watch-stop': 'runs', tasks: 'runs', run: 'runs', transcript: 'runs', cancel: 'runs',
+  quit: 'exit',
+});
+/** Names held for an accepted future meaning (K8: `/plan`, plan mode is its own card); typed, they answer as unknown. */
+export const SLASH_RESERVED: readonly string[] = Object.freeze(['plan']);
+/** The new name of a moved command, or null. */
+export function movedSlashCommand(command: string): string | null {
+  return Object.hasOwn(SLASH_MOVED, command) ? SLASH_MOVED[command]! : null;
+}
 
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
 export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope'] as const);

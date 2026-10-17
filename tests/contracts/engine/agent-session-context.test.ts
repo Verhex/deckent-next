@@ -92,9 +92,9 @@ describe('session context block per mode', () => {
       model: { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1, nativeId: 'Qwen3.8-27B' } };
     const without = renderAgentTurnSystemPrompt(base), withSession = renderAgentTurnSystemPrompt({ ...base, session: await snapshot('standart') });
     expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(10);
-    expect(without).not.toContain('Session context v1');
-    expect(withSession.indexOf('Session context v1')).toBeGreaterThan(withSession.indexOf('\nTools:\n'));
-    expect(withSession.indexOf('Session context v1')).toBeLessThan(withSession.indexOf('\nWorking style:\n'));
+    expect(without).not.toContain('Session context v2');
+    expect(withSession.indexOf('Session context v2')).toBeGreaterThan(withSession.indexOf('\nTools:\n'));
+    expect(withSession.indexOf('Session context v2')).toBeLessThan(withSession.indexOf('\nWorking style:\n'));
     expect(withSession).toContain('- Keep your reasoning out of the answer');
     expect(withSession.split('\n').at(-1)).toBe('- Write every reply to the user in Turkish (Türkçe).');
   });

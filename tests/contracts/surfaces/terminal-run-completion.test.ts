@@ -53,18 +53,18 @@ async function admit(h: ReturnType<typeof harness>) {
   await settle(); h.view.stdin.write('/do process order\r');
   await until(() => h.view.stdout.frame.includes('ADMITTED-PREVIEW'), 'admission preview');
   h.view.stdin.write('\u000f'); await settle(40); h.view.stdin.write('\u001b'); // R2: focus the automatic /do result before closing.
-  await until(() => h.view.stdout.frame.includes(EN.live!.tasksTitle), 'tasks window');
-  h.view.stdin.write('\u000f'); await settle(40); h.view.stdin.write('\u001b'); await settle(); // Automatic /tasks keeps the composer focused.
+  await until(() => h.view.stdout.frame.includes(EN.live!.runsTitle), 'Runs window');
+  h.view.stdin.write('\u000f'); await settle(40); h.view.stdin.write('\u001b'); await settle(); // The automatic Runs window keeps the composer focused.
 }
 
-describe('session /do completion and shared /run briefs', () => {
-  it('notifies through the real Workline with /tasks closed, once across duplicate snapshots', async () => {
+describe('session /do completion and shared Run briefs', () => {
+  it('notifies through the real Workline with the Runs window closed, once across duplicate snapshots', async () => {
     const h = harness(); await admit(h);
-    expect(h.view.stdout.frame).not.toContain(EN.live!.tasksTitle); h.finish();
+    expect(h.view.stdout.frame).not.toContain(EN.live!.runsHints); h.finish();
     await until(() => completions().length === 1, 'completion');
     expect(completions()[0]).toMatchObject({ kind: 'notice', id: 'system-summary', level: 'info' });
     const text = (completions()[0] as Extract<WorkLedgerEntry, { kind: 'notice' }>).text;
-    expect(text).toContain(`[${EN.jobs!.runStates['completed']}]`); expect(text).toContain('accepted 1'); expect(text).toContain('awaiting delivery 1'); expect(text).toContain(`/run ${runId}`);
+    expect(text).toContain(`[${EN.jobs!.runStates['completed']}]`); expect(text).toContain('accepted 1'); expect(text).toContain('awaiting delivery 1'); expect(text).toContain('d on its row in /runs');
     await until(() => h.view.stdout.text.includes(text), 'completion scrollback');
     if (process.env['DONGU_FRAME_PROOF']) appendFileSync(process.env['DONGU_FRAME_PROOF'], `\n## Completion, tasks closed\n${h.view.stdout.frame}\n`);
     const before = h.reads(); h.pulse(); await until(() => h.reads() > before, 'repeated snapshot'); await settle();
@@ -108,13 +108,13 @@ describe('session /do completion and shared /run briefs', () => {
     const h = harness(true, 2, false); await admit(h); h.finish(); await until(() => completions().length === 1, 'poll completion');
     await settle(60); expect(completions()).toHaveLength(1);
   });
-  it.each(['en', 'tr'] as const)('%s /run renders shared CLAIM, open issues, failed tests and delivery outlook', async locale => {
+  it.each(['en', 'tr'] as const)('%s Enter on a /runs row renders shared CLAIM, open issues, failed tests and delivery outlook', async locale => {
     const work = workSurfaceLabels(locale), current = run(runId, true);
     const text = runDetailLines(current, work).map(line => line.spans.map(item => item.text).join('')).join('\n');
     for (const detail of ['CLAIM-SENTINEL', 'ISSUE-SENTINEL', 'TEST-SENTINEL', 'verify-order']) expect(text).toContain(detail);
     const h = harness(); h.view.instance.unmount();
     const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work }, ledger: { ...h.ledger, followEvents: undefined, readSurfaceSnapshot: undefined, inspectRun: async () => current } }, 220, { rows: 100 });
-    mounted.push(view); await settle(); view.stdin.write('/run\r'); await until(() => view.stdout.frame.includes('> TASK-SENTINEL'), 'run picker');
+    mounted.push(view); await settle(); view.stdin.write('/runs\r'); await until(() => view.stdout.frame.includes('› TASK-SENTINEL'), 'run row'); await settle(40);
     view.stdin.write('\r'); await until(() => view.stdout.frame.includes('CLAIM-SENTINEL'), 'rendered brief');
     expect(view.stdout.frame).toContain('ISSUE-SENTINEL'); expect(view.stdout.frame).toContain('TEST-SENTINEL');
     if (process.env['DONGU_FRAME_PROOF']) appendFileSync(process.env['DONGU_FRAME_PROOF'], `\n## /run ${locale}\n${view.stdout.frame}\n`);

@@ -157,7 +157,7 @@ describe('active work strip on the real Workline', () => {
     await press(h, CTRL_O); await press(h, 'y');
     await until(() => frame(h).includes('PLAN-RESULT'), 'result window');
     await press(h, CTRL_O); await press(h, ESC); // close the automatic /do result
-    await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks');
+    await until(() => frame(h).includes(EN.live!.runsTitle), 'automatic /runs');
     await press(h, CTRL_O); await press(h, ESC);
     await until(() => frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['running']}`), 'running row');
     h.set({ ...run(NEEDS, { phase: 'pending' }), revision: 2 });
@@ -166,27 +166,26 @@ describe('active work strip on the real Workline', () => {
     await until(() => frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['completed']}`), 'completed row');
     await press(h, 'draft stays');
     await press(h, CTRL_T); await press(h, '\r');
-    await until(() => frame(h).includes(`[${EN.jobs!.runStates['completed']}] · r`), 'run detail window (the /run read model)');
+    await until(() => frame(h).includes(`[${EN.jobs!.runStates['completed']}] · r`), 'run detail window (the Runs window read model)');
     expect(frame(h)).toContain('WINDOW-FOCUS');
     await press(h, ESC, 100);
     expect(frame(h)).not.toContain('Active work'); // the finished Run left the strip once the person opened it
     await press(h, ' more'); expect(frame(h)).toContain('draft stays more'); // the composer holds input again
   });
 
-  it.each(['/run', '/runs'])('a finished Run also leaves the strip once the person opens it with %s', async command => {
+  it.each(['/runs'])('a finished Run also leaves the strip once the person opens it with %s', async command => {
     const h = harness(); await settle(80);
     await press(h, '/do process order\r'); h.release();
     await until(() => frame(h).includes('Create proposed Run'), 'card');
     await press(h, CTRL_O); await press(h, 'y');
     await until(() => frame(h).includes('PLAN-RESULT'), 'result window');
     await press(h, CTRL_O); await press(h, ESC);
-    await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks');
+    await until(() => frame(h).includes(EN.live!.runsTitle), 'automatic /runs');
     await press(h, CTRL_O); await press(h, ESC);
     h.set({ ...run(COMPLETED, { phase: 'accepted' }), revision: 3 });
     await until(() => frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['completed']}`), 'completed row');
     await press(h, `${command}\r`, 120);
-    if (command === '/run') { await until(() => frame(h).includes(EN.live!.runsTitle), 'run picker'); await press(h, '\r', 120); }
-    await until(() => frame(h).includes(command === '/run' ? `[${EN.jobs!.runStates['completed']}] · r` : EN.live!.runsTitle), 'run window');
+    await until(() => frame(h).includes(EN.live!.runsHints), 'Runs window');
     if (!frame(h).includes('WINDOW-FOCUS')) await press(h, CTRL_O);
     await press(h, ESC, 120);
     await until(() => !frame(h).includes('Active work'), 'finished Run left the strip');

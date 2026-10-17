@@ -39,11 +39,12 @@ describe('Runs window control keys', () => {
   it('lists the runs with a selection and offers only the keys each state allows', async () => {
     const h = await open(ports(vi.fn()));
     expect(h.stdout.frame).toMatch(/› Fix checkout \[running\]/u);
-    expect(h.stdout.frame).toContain(`${EN.runControl!.hints} · ${EN.runControl!.keyHold}`); expect(h.stdout.frame).not.toContain(EN.runControl!.keyResume);
+    const base = `${EN.live!.runsHints} · ${EN.live!.keys.detail}`;
+    expect(h.stdout.frame).toContain(`${base} · ${EN.runControl!.keyHold}`); expect(h.stdout.frame).not.toContain(EN.runControl!.keyResume);
     await press(h, DOWN);
-    expect(h.stdout.frame).toContain(`${EN.runControl!.hints} · ${EN.runControl!.keyResume} · ${EN.runControl!.keyClose}`);
+    expect(h.stdout.frame).toContain(`${base} · ${EN.runControl!.keyResume} · ${EN.runControl!.keyClose}`);
     await press(h, DOWN);
-    expect(h.stdout.frame).toContain(`${EN.runControl!.hints} · ${EN.runControl!.noKeys}`);
+    expect(h.stdout.frame).toMatch(new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\s*│`, 'u'));
   });
 
   it('h opens the hold card (Alt+h, Ctrl+H, coalesced hh do not); Ctrl+Y, Alt+y, Ctrl+O y never hold; a single typed y holds at the shown revision', async () => {
@@ -55,17 +56,16 @@ describe('Runs window control keys', () => {
     for (const keys of [CTRL_Y, `${ESC}y`, `${CTRL_O}y`]) { await press(h, keys, 100); expect(control).not.toHaveBeenCalled(); }
     expect(h.stdout.frame).toContain('Hold run 3f2a9c1e');
     await press(h, 'y', 150);
-    await until(() => h.stdout.frame.includes('HELD-RESULT'), 'result as window status');
+    await until(() => h.stdout.text.includes('HELD-RESULT'), 'result as a transcript summary');
     expect(control).toHaveBeenCalledTimes(1); expect(control).toHaveBeenCalledWith(RUNNING, 'hold', 7, undefined);
-    await press(h, ESC, 120);
-    await until(() => h.stdout.text.includes('HELD-RESULT'), 'transcript summary');
+    await until(() => h.stdout.frame.includes('› Fix checkout'), 'the Runs window stays open');
   });
 
   it.each([['n'], ['\r'], [ESC], ['\u0003']])('%j on the card keeps the run and sends nothing', async key => {
     const control = vi.fn(async () => 'SENT'), h = await open(ports(control));
     await press(h, 'h', 120); await until(() => h.stdout.frame.includes('Hold run 3f2a9c1e'), 'card');
     await press(h, key, 150);
-    await until(() => h.stdout.frame.includes('Run 3f2a9c1e unchanged; nothing was sent.'), 'kept status');
+    await until(() => h.stdout.text.includes('Run 3f2a9c1e unchanged; nothing was sent.'), 'kept summary');
     expect(control).not.toHaveBeenCalled(); expect(h.stdout.frame).toContain('› Fix checkout');
   });
 
@@ -94,23 +94,22 @@ describe('Runs window control keys', () => {
     expect(h.stdout.frame).not.toMatch(/Hold run|Resume run|Close parked run/u); expect(control).not.toHaveBeenCalled();
   });
 
-  it('a policy refusal is the typed reason in the window and in the summary; the list stays open', async () => {
+  it('a policy refusal is the typed reason in the summary; the Runs window stays open', async () => {
     const denied = Object.assign(new Error('Policy denied run:cancel for this principal'), { code: 'POLICY_DENIED' });
     const h = await open(ports(vi.fn(async () => { throw denied; })));
     await press(h, 'h', 120); await until(() => h.stdout.frame.includes('Hold run'), 'card'); await press(h, 'y', 150);
-    await until(() => h.stdout.frame.includes('ERR:Policy denied run:cancel'), 'refusal in the window');
-    expect(h.stdout.frame).toContain('› Fix checkout');
-    await press(h, ESC, 120); await until(() => h.stdout.text.includes('ERR:Policy denied run:cancel'), 'refusal summary');
+    await until(() => h.stdout.text.includes('ERR:Policy denied run:cancel'), 'refusal summary');
+    await until(() => h.stdout.frame.includes('› Fix checkout'), 'the Runs window stays open');
   });
 
   it('the TR window and card speak Turkish', async () => {
     const h = await open(ports(vi.fn(async () => 'TAMAM')), 'tr');
-    expect(h.stdout.frame).toContain(`${TR.runControl!.hints} · ${TR.runControl!.keyHold}`);
+    expect(h.stdout.frame).toContain(`${TR.live!.runsHints} · ${TR.live!.keys.detail} · ${TR.runControl!.keyHold}`);
     await press(h, 'h', 120); await until(() => h.stdout.frame.includes('3f2a9c1e işi bekletilsin mi: Fix checkout?'), 'TR card');
     expect(squeeze(h.stdout.frame)).toContain(squeeze(TR.runControl!.holdPrompt));
   });
 
-  it('without the lifecycle port /runs stays the read-only list (no keys, no cards)', async () => {
+  it('without the lifecycle port /runs offers no control keys and opens no control card', async () => {
     const h = await open(ports());
     expect(h.stdout.frame).not.toContain(EN.runControl!.keyHold); await press(h, 'h', 120);
     expect(h.stdout.frame).not.toContain('Hold run');

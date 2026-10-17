@@ -47,7 +47,7 @@ reconstructed prompt trace. A full prompt/response trace store is separate work.
 CLI and MCP return pending approvals without deciding them. The terminal previews
 the original approval card and uses existing interactive TTY authority; rejecting
 then submitting a revised request creates a new command. Registry standing
-admission remains subject to scope and policy gates. Admitted Runs link to `/tasks`.
+admission remains subject to scope and policy gates. Admitted Runs link to `/runs`.
 Graphs and durable acceptance criteria serve both dogfood and customer business
 processes; the planner introduces no Git/ERP-specific execution or acceptance flow.
 
