@@ -146,6 +146,11 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   time left) and the Runs `useRunCompletion` registered (state from the same snapshots; finished rows leave once opened). It owns no
   execution, poll or authority; its clock ticks at the inspection heartbeat. Ctrl+T moves the one input owner to it while no window
   holds input; Enter on /do is the Ctrl+O transfer to its window, Enter on a Run opens the `/run` window via the task-action FIFO.
+  Rows (owner 2026-10-17): one line each — title (the work input's Brain title, else the first task line with whitespace collapsed,
+  cut to 48 cells after secret masking) · short run id · model or task kind (+N tasks) · state (a parked Run adds its reason) · age
+  since this session registered the Run (RunView carries no admission time; adding one is an open cross-producer contract decision).
+  Every unfinished Run stays; at most the three most recent finished ones show, and a finished Run also leaves once `/run` opens it
+  or `/runs` lists it. Hours carry minutes ("2 sa 18 dk" / "2h 18m"). The `/run` window names a park reason, failure code and note.
   NATIVE-BAGLAM (2026-10-14): the strip's records (/do, waiting deliveries, admitted Runs) also reach the model as a bounded note on the
   latest sent message only (`terminal-work/active-work-note.ts`, English protocol text, marker stripped from resume/fresh-context displays);
   the strip itself is unchanged and the note grants nothing.

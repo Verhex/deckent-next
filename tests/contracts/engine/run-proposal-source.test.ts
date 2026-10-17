@@ -72,3 +72,16 @@ it('binds a v2 Brain billing axis to the invocation profile while continuing to 
   expect(() => assertRunProposalSource({ ...modelProposal, source: { ...source, contribution: { ...contribution, billingAxis: 'subscription' } } }, receipt, JSON.stringify(draft)))
     .toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
 });
+
+it('accepts a system-narrowed Brain ceiling and refuses one the model never authored as wider, in another currency or with a changed graph', () => {
+  const draft = { graph: modelProposal.graph, budgetCeiling: { currency: 'USD', limitMinorUnits: 10_000 }, requiredPermissions: modelProposal.requiredPermissions };
+  if (modelProposal.source.kind !== 'model') throw new Error('fixture');
+  const contribution = { schemaVersion: 2 as const, billingAxis: 'metered' as const, template: { id: 'fixture', version: 1, digest: sha256('template') },
+    inputDigest: sha256('input'), contextDigest: sha256('context'), outputDigest: brainOutputDigest(draft), requestDigest,
+    activationRevision: 1, bindingDigest: binding.digest, inputSummary: 'Plan a purchase', outputSummary: 'Readback', usage: null };
+  const brain = (limitMinorUnits: number, currency = 'USD'): RunProposal => ({ ...modelProposal, budgetCeiling: { currency, limitMinorUnits },
+    source: { ...modelProposal.source as Extract<RunProposal['source'], { kind: 'model' }>, contribution } });
+  for (const limit of [10_000, 8_783, 0]) expect(() => assertRunProposalSource(brain(limit), receipt, JSON.stringify(draft))).not.toThrow();
+  for (const altered of [brain(10_001), brain(100, 'EUR'), { ...brain(100), graph: { ...modelProposal.graph, revision: 2 } }])
+    expect(() => assertRunProposalSource(altered, receipt, JSON.stringify(draft))).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_SOURCE_INVALID' }));
+});

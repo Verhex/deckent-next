@@ -6,7 +6,7 @@ import { openSqliteRunProposalStore, openSqliteAttemptStore, type SqliteAttemptS
 import { ApprovalApplication, RunAdmissionApplication, RunProposalApplication, RunProposalInspectionApplication,
   createProviderSpendAccount, createProviderSpendCheckpoint, validateRunProposal, type RunProposalStore } from '#engine/index.js';
 import { mcpPrincipalRef, workClassRegistrySchema, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
-import { ErrorRegistry, sha256 } from '#platform/index.js';
+import { ErrorRegistry, sha256, type DeckentError } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { fixtureRunAuthority } from '../support/run-authority.js';
 const fixtures: { root: string; close(): void }[] = [];
@@ -157,11 +157,21 @@ it.each(['missing', 'over-ceiling', 'currency', 'frozen'] as const)('budget %s r
   if (failure === 'frozen') f.budget(createProviderSpendCheckpoint({ ...f.checkpoint().account, frozen: true }, 2, 0));
   expect((await f.app().propose(input)).proposal.status).toBe('rejected'); noRun(f);
 });
+it('an over-ceiling refusal returns the remaining money with the rejected record, without storing it', async () => {
+  const f = await fixture(), refused = await f.app().propose({ ...proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 1001 } });
+  expect(refused).toMatchObject({ proposal: { status: 'rejected', reason: 'RUN_PROPOSAL_BUDGET_EXCEEDED' }, reasonParams: { remaining: 1000, ceiling: 1001, currency: 'USD' } });
+  expect(refused.proposal).not.toHaveProperty('reasonParams'); noRun(f);
+});
 it('budget gates subtract reserved and settled money, accept equality using exact integer arithmetic', async () => {
   const f = await fixture(), account = { ...f.checkpoint().account, reservedMinorUnits: 700, settledMinorUnits: 100, settledExactMinorUnits: '100' };
   const cp = createProviderSpendCheckpoint(account, 2, 0);
   expect(validateRunProposal(proposal, f.state.registry, cp, 100).budget!.remainingMinorUnits).toBe(200);
-  expect(() => validateRunProposal({ ...proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 201 } }, f.state.registry, cp, 100)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_BUDGET_EXCEEDED' }));
+  expect(() => validateRunProposal({ ...proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 201 } }, f.state.registry, cp, 100)).toThrow(expect.objectContaining({ code: 'RUN_PROPOSAL_BUDGET_EXCEEDED',
+    params: { remaining: 200, ceiling: 201, currency: 'USD' } }));
+  // The refusal names the remaining money in both languages (owner 2026-10-17: a refused plan says what is left).
+  const refused = (() => { try { validateRunProposal({ ...proposal, budgetCeiling: { currency: 'USD', limitMinorUnits: 201 } }, f.state.registry, cp, 100); } catch (error) { return error as DeckentError; } throw new Error('NOT_REFUSED'); })();
+  expect(refused.localize('en').message).toContain('$2.00'); expect(refused.localize('en').message).toContain('$2.01');
+  expect(refused.localize('tr').message).toContain('2,00'); expect(refused.localize('tr').message).toContain('kalan');
 });
 it.each(['budget', 'registry'] as const)('a pending proposal parks after %s drift rather than consuming its old approval', async changed => {
   const f = await fixture(false); await f.app().propose(proposal); await f.decide();

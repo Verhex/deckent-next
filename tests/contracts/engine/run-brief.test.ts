@@ -26,3 +26,12 @@ it('keeps reported success and open issues as redacted claims beside a rejected 
   expect(brief).toMatchObject({ claimLabel: 'CLAIM', evaluation: { verdict: 'rejected', reason: 'no-change-produced' }, openIssues: ['still pending'], runDelivery: { state: 'adopting' } });
   expect(JSON.stringify(brief)).not.toContain('private-value'); expect(brief).not.toHaveProperty('workerPatchLanded');
 });
+it('projects the Brain-authored work-input title (redacted) when present and stays without one otherwise', () => {
+  const input = { schemaVersion: 1 as const, task: 'Implement the change\nwith many details', scope: { paths: ['src'] }, acceptance: 'tests pass',
+    model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] } };
+  const withTitle = { ...base, graph: { ...base.graph, tasks: [{ ...base.graph.tasks[0]!, workInput: { ...input, title: 'Short title token=private-value' } }] } };
+  const brief = projectTaskBrief(withTitle, 't');
+  expect(brief.title).toMatch(/^Short title /u); expect(brief.title).not.toContain('private-value'); expect(brief.task).toBe(input.task);
+  expect(taskBriefSchema.safeParse(projectTaskBrief(withTitle, 't')).success).toBe(true);
+  expect(projectTaskBrief({ ...base, graph: { ...base.graph, tasks: [{ ...base.graph.tasks[0]!, workInput: input }] } }, 't')).not.toHaveProperty('title');
+});

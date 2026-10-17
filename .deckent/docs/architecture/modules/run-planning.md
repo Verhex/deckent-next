@@ -18,10 +18,18 @@ and no automatic retry. Before metered invocation, the ledger-first scope budget
 (with configured fallback) must exist and have available capacity. A literal-zero
 tariff on exclusively literal-loopback endpoints needs no money budget; the
 invocation still owns validation, quote, freeze checks and reservations.
-Prompt context carries a budget only when applicable. Selected subscription-only
-worker bindings carry `budgetSemantics: not-metered` into the sealed admission;
-unknown/mixed/API profiles keep the admission ceiling check. No total Run spending
-ceiling is enforced during execution. Native subscription planning transport is
+Prompt context carries a budget (currency and limit, never the moving remaining
+amount, so a retried plan resends the identical request) only when applicable.
+The system, not the model, bounds the declared ceiling (owner 2026-10-17): after
+the planning call the Brain application caps it at the scope's remaining money;
+the model's number can only narrow it, and source verification accepts a
+proposal ceiling at most the retained draft's in the same currency with the
+exact graph and permissions. A ceiling refusal names the money left (EN/TR) on
+the response that recorded it. Selected subscription-only or explicitly local
+(`billingAxis: 'local'` on a Docker task profile without a subscription binding,
+Jev d8b2a0ce) worker bindings carry `budgetSemantics: not-metered` into the
+sealed admission; undeclared/unknown/mixed/API profiles keep the admission
+ceiling check. No total Run spending ceiling is enforced during execution. Native subscription planning transport is
 not installed; its future binding must reuse these gates without bypassing invocation authority.
 
 A successful repeated command/input reads its recorded proposal and sends no

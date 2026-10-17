@@ -2063,6 +2063,7 @@
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/platform/core/managed-files",
+        "src/platform/core/common",
         "src/composition/core/resource-observation"
       ],
       "plan": "EXECUTION"

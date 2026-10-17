@@ -3,7 +3,7 @@ import { TaskGraphError, validateTaskGraph, resolveTaskWorkClass, getPolicyVocab
   type RunProposalBinding, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { brainOutputDigest, parseBrainDraft } from '#capabilities/index.js';
-import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
+import { parseProviderSpendCheckpoint, providerSpendRemaining, type ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 /** Pure gates. Registry metadata advertises permissions; evaluatePolicy still decides each permission. */
 export function validateRunProposal(proposal: RunProposal, registry: WorkClassRegistry | undefined, checkpointInput: ProviderSpendCheckpoint | null,
   now: number, spending?: Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>, budgetSource?: 'configured'): NonNullable<RunProposalBinding['admission']> {
@@ -35,11 +35,12 @@ export function validateRunProposal(proposal: RunProposal, registry: WorkClassRe
   const checkpoint = parseProviderSpendCheckpoint(checkpointInput), account = checkpoint.account, budget = account.budget;
   if (budget.scopeId !== proposal.scopeId) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_SCOPE');
   if (budget.currency !== proposal.budgetCeiling.currency) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_CURRENCY');
-  const remaining = BigInt(budget.limitMinorUnits) - BigInt(account.reservedMinorUnits) - BigInt(account.settledMinorUnits);
-  if (account.frozen || remaining < BigInt(proposal.budgetCeiling.limitMinorUnits)) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED');
+  const remaining = providerSpendRemaining(checkpoint)!.remainingMinorUnits, ceiling = proposal.budgetCeiling.limitMinorUnits;
+  // The refusal names the money left so the person sees what a plan may still declare (owner 2026-10-17).
+  if (account.frozen || remaining < ceiling) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED', { params: { remaining, ceiling, currency: budget.currency } });
   return Object.freeze({ ...basis,
     budget: { budgetId: budget.budgetId, budgetRevision: budget.revision, checkpointDigest: checkpoint.digest,
-      remainingMinorUnits: Number(remaining), checkedAt: now, ...(budgetSource ? { source: budgetSource } : {}) } });
+      remainingMinorUnits: remaining, checkedAt: now, ...(budgetSource ? { source: budgetSource } : {}) } });
 }
 
 export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInvocationReceipt | null, text?: string | null, known?: KnownSecretSnapshot): void {
@@ -54,8 +55,9 @@ export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInv
   if (contribution) {
     if ((contribution.schemaVersion === 2 && contribution.billingAxis !== modelInvocationBillingAxis(receipt.profile)) || contribution.requestDigest !== receipt.request.requestDigest || contribution.activationRevision !== receipt.activationRevision
       || contribution.bindingDigest !== receipt.request.expectedBinding.digest || !text) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
-    const draft = parseBrainDraft(text, known);
-    if (brainOutputDigest(draft) !== contribution.outputDigest || brainOutputDigest({ graph: proposal.graph,
-      budgetCeiling: proposal.budgetCeiling, requiredPermissions: proposal.requiredPermissions }) !== contribution.outputDigest) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+    // The system may only narrow the model's ceiling (BrainPlanApplication caps it at the remaining money); graph and permissions are exact.
+    const draft = parseBrainDraft(text, known), ceiling = proposal.budgetCeiling;
+    if (brainOutputDigest(draft) !== contribution.outputDigest || ceiling.currency !== draft.budgetCeiling.currency || ceiling.limitMinorUnits > draft.budgetCeiling.limitMinorUnits
+      || brainOutputDigest({ graph: proposal.graph, budgetCeiling: draft.budgetCeiling, requiredPermissions: proposal.requiredPermissions }) !== contribution.outputDigest) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
   }
 }

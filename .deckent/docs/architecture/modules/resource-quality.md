@@ -39,14 +39,15 @@ New segments and rotation boundaries sync; subsequent writes sync at the configu
 power failure; telemetry always remains partial and is never an acceptance ledger. The existing
 shared lock still syncs its small owner record per append. Trace writes are proportional to the
 new sample, plus bounded segment/checkpoint overhead at rotation/eviction; reading and replay
-checking still scan retained bounded storage. No latency or OFF/ON pilot improvement is claimed.
+checking still scan retained bounded storage, once per worker page for all of its Attempts (`readMany`;
+2026-10-17 the per-Attempt re-scan made one N1 page set take 5.8 s). No OFF/ON pilot improvement is claimed.
 Replay deduplicates samples; unknown/dropped writes never imply complete coverage.
 A failed write is buffered as a gap for the next successful write. If the process or disk prevents
 that marker, the reader still reports partial/unavailable/stale, never full recording.
 
 The current scoped worker inspect contract carries `resources` to CLI, SDK, MCP and monitor.
-Per-Attempt `read-output` authority precedes the trace read, including finished workers; denied
-workers carry no resource values. Text carries state, sample age, null values and gap reason;
+Per-Attempt `read-output` authority precedes disclosure of trace values, including finished workers;
+the page's single trace read is never attached to a denied worker, which carries no resource values. Text carries state, sample age, null values and gap reason;
 JSON has the same typed values. Narrow monitor rows retain full values in selected-worker detail.
 Observation is unrelated to acceptance or worker health.
 
