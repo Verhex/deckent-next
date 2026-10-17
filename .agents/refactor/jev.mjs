@@ -40,8 +40,23 @@ export function validateInput(input) {
   return input;
 }
 
+// Metering is independent of advice validity: a null or missing count is 'unknown', never zero.
+// Present counts must be safe nonnegative integers; any other value still rejects the reply.
+export function normalizeUsage(usage) {
+  if (usage === undefined || usage === null) return { input_tokens: 'unknown', output_tokens: 'unknown' };
+  check(object(usage), 'JEV_USAGE');
+  const count = k => {
+    const v = usage[k];
+    if (v === undefined || v === null) return 'unknown';
+    check(Number.isSafeInteger(v) && v >= 0, 'JEV_USAGE');
+    return v;
+  };
+  return { input_tokens: count('input_tokens'), output_tokens: count('output_tokens') };
+}
+
 export function validateResponse(response, questions) {
   check(object(response) && text(response.model) && object(response.answers) && sameKeys(response.answers, questions), 'JEV_RESPONSE');
+  const usage = normalizeUsage(response.usage);
   const answers = {};
   for (const [id, q] of Object.entries(questions)) {
     const a = response.answers[id];
@@ -68,8 +83,7 @@ export function validateResponse(response, questions) {
     }
     Object.defineProperty(answers, id, { value: normalized, enumerable: true });
   }
-  check(object(response.usage) && ['input_tokens', 'output_tokens'].every(k => Number.isSafeInteger(response.usage[k]) && response.usage[k] >= 0), 'JEV_USAGE');
-  return { model: response.model, answers, usage: { input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens } };
+  return { model: response.model, answers, usage };
 }
 
 export async function readCredential(config, env = process.env) {

@@ -8,6 +8,23 @@ async function optional(directory, name) {
 }
 const count = (rows, predicate) => rows.filter(predicate).length;
 const quantile = (values, fraction) => values.length ? values[Math.ceil(values.length * fraction) - 1] : null;
+// Known counts only; 'unknown' (null/missing metering), failures and unrecorded responses are counted, never zero-filled.
+export const knownCount = v => Number.isSafeInteger(v) && v >= 0;
+export function rowUsage(response, failure) {
+  if (response) return { inputTokens: knownCount(response.usage?.input_tokens) ? response.usage.input_tokens : 'unknown',
+    outputTokens: knownCount(response.usage?.output_tokens) ? response.usage.output_tokens : 'unknown' };
+  return { inputTokens: 'unknown', outputTokens: 'unknown', basis: failure ? 'failed-attempt' : 'response-unknown' };
+}
+export function usageSummary(rows) {
+  const known = field => rows.filter(r => knownCount(r.usage[field]));
+  const sum = field => known(field).reduce((total, r) => total + r.usage[field], 0);
+  return { inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'), knownTokensOnly: true,
+    coverage: { attempts: rows.length, inputKnown: known('inputTokens').length, inputUnknown: rows.length - known('inputTokens').length,
+      outputKnown: known('outputTokens').length, outputUnknown: rows.length - known('outputTokens').length,
+      adviceWithUnknownUsage: count(rows, r => r.status === 'advice' && (!knownCount(r.usage.inputTokens) || !knownCount(r.usage.outputTokens))),
+      failedAttemptsUnknownUsage: count(rows, r => r.status === 'unavailable'), responseUnknownAttempts: count(rows, r => r.status === 'response-unknown') },
+    excludesFailedAndUnrecordedUsage: true, unknownIsNotZero: true };
+}
 export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LIMIT, limit) } = {}) {
   ensure(Number.isSafeInteger(limit) && limit > 0 && Number.isSafeInteger(scanLimit) && scanLimit >= limit && scanLimit <= 1048576, 'JEV_REPORT_LIMIT');
   const listing = await entries(root, scanLimit);
@@ -19,7 +36,7 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
   // Unknown request times rank after dated entries; their global chronological position is unknown.
   requests.sort((a, b) => (b.time ?? -Infinity) - (a.time ?? -Infinity) || a.id.localeCompare(b.id));
   const selected = requests.slice(0, limit);
-  const rows = []; let inputTokens = 0; let outputTokens = 0; let brierSum = 0; let labels = 0;
+  const rows = []; let brierSum = 0; let labels = 0;
   for (const { id, request, time } of selected) {
     const directory = join(root, id);
     const response = await optional(directory, 'response.json');
@@ -28,7 +45,6 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
     const outcome = await optional(directory, 'outcome.json');
     let labeledNoulAnswers = 0;
     if (response) {
-      inputTokens += response.usage.input_tokens; outputTokens += response.usage.output_tokens;
       for (const label of outcome?.status === 'verified' ? outcome.labels || [] : []) {
         const p = response.answers[label.questionId]?.noul;
         if (Number.isFinite(p) && typeof label.expected === 'boolean') { brierSum += (p - Number(label.expected)) ** 2; labels++; labeledNoulAnswers++; }
@@ -37,6 +53,7 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
     const answer = response?.answers.next_action;
     rows.push({ callId: id, requestedAt: time === null ? null : request.at, scope: request.case.scope, revision: request.case.revision,
       status: response ? 'advice' : failure ? 'unavailable' : 'response-unknown', model: response?.model ?? null,
+      usage: rowUsage(response, failure),
       latencyMs: response?.latencyMs ?? failure?.latencyMs ?? null, decisionRecorded: Boolean(decision), outcomeRecorded: Boolean(outcome),
       selectedOption: decision?.selectedOption ?? null, recommendation: answer?.choice ?? null,
       selectedProbability: answer?.probabilities?.[answer.choice] ?? null, confidence: answer?.confidence ?? null,
@@ -47,12 +64,12 @@ export async function report(root, limit, { scanLimit = Math.max(DEFAULT_SCAN_LI
       inputQuality: outcome?.inputQuality ?? null, outputQuality: outcome?.outputQuality ?? null });
   }
   const times = rows.filter(r => r.latencyMs !== null).map(r => r.latencyMs).sort((a, b) => a - b);
-  return { schemaVersion: 3, measuredAt: new Date().toISOString(), sampledCalls: rows.length,
+  return { schemaVersion: 4, measuredAt: new Date().toISOString(), sampledCalls: rows.length,
     scannedCalls: requests.length, scanLimit, scanTruncated: listing.truncated, undatedScannedCalls: count(requests, r => r.time === null),
     truncated: listing.truncated || requests.length > limit,
     selection: 'request-time descending among bounded scanned directories; undated requests last; scan truncation or undated requests leave global recency unknown',
     abstentions: Object.fromEntries(['none_of_the_above', 'insufficient_information', 'defer'].map(option => [option, { offered: count(rows, r => r.offeredChoiceIds.includes(option)), selected: count(rows, r => r.recommendation === option) }])),
-    usage: { inputTokens, outputTokens, excludesFailedAndUnrecordedUsage: true },
+    usage: usageSummary(rows),
     latency: { samples: times.length, p50Ms: quantile(times, 0.5), p95Ms: quantile(times, 0.95), basis: 'recorded attempts, including failures with latency' },
     followUp: { adviceCalls: count(rows, r => r.status === 'advice'), decisionsRecorded: count(rows, r => r.decisionRecorded),
       adviceWithoutDecision: count(rows, r => r.status === 'advice' && !r.decisionRecorded),

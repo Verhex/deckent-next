@@ -87,3 +87,25 @@ test('environment credentials stay portable while Windows credential-file custod
     await assert.rejects(readCredential(config, { [config.credentialFileEnv]: 'missing-do-not-open' }), /JEV_CREDENTIAL_FILE_UNSUPPORTED/);
   } finally { Object.defineProperty(process, 'platform', original); }
 });
+
+test('null or missing usage counts normalize to unknown, never zero; invalid counts and invalid answers stay rejected', async () => {
+  for (const [usage, expected] of [
+    [undefined, { input_tokens: 'unknown', output_tokens: 'unknown' }],
+    [null, { input_tokens: 'unknown', output_tokens: 'unknown' }],
+    [{ input_tokens: null, output_tokens: null }, { input_tokens: 'unknown', output_tokens: 'unknown' }],
+    [{ input_tokens: 12 }, { input_tokens: 12, output_tokens: 'unknown' }],
+    [{ input_tokens: null, output_tokens: 0 }, { input_tokens: 'unknown', output_tokens: 0 }],
+  ]) {
+    const response = { ...reply, usage }; if (usage === undefined) delete response.usage;
+    assert.deepEqual(validateResponse(response, input.questions).usage, expected);
+  }
+  for (const usage of [{ input_tokens: -1, output_tokens: 0 }, { input_tokens: '10', output_tokens: 0 }, { input_tokens: 1.5, output_tokens: 0 },
+    { input_tokens: 1, output_tokens: Number.MAX_SAFE_INTEGER + 1 }, 'unknown', [10, 2], 0]) {
+    assert.throws(() => validateResponse({ ...reply, usage }, input.questions), /JEV_USAGE/);
+  }
+  // Unknown metering does not make an invalid answer acceptable.
+  assert.throws(() => validateResponse({ ...reply, usage: null, answers: { proven: { type: 'noul', noul: 1.2 } } }, input.questions), /JEV_ANSWER/);
+  const result = await ask(config, input, key, async () => Response.json({ ...reply, usage: { input_tokens: null, output_tokens: null } }));
+  assert.deepEqual(result.usage, { input_tokens: 'unknown', output_tokens: 'unknown' });
+  assert.equal(result.advisoryOnly, true);
+});

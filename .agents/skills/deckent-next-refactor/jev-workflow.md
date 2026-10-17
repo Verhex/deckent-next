@@ -14,7 +14,8 @@ Use the logged preparation layer from Next only (host tooling, not a product fea
   verified evidence and contain questionId, expected boolean, evidenceRef. Never label using Jev's own answer.
 - `node .agents/refactor/jev-review.mjs report [COUNT]` reports the latest dated requests within a
   bounded scan, usage, latency, decisions, outcomes and Brier score only where evidence-backed labels
-  exist. COUNT defaults to reportLimit (200); `report 100` selects 100. The scan defaults to 10,000
+  exist. Usage is a known-token subtotal plus coverage counts: null/missing provider metering, failed
+  attempts and unrecorded responses stay `unknown`, never zero. COUNT defaults to reportLimit (200); `report 100` selects 100. The scan defaults to 10,000
   directories (optional review config reportScanLimit). Scan truncation and undated requests are
   disclosed; global recency then remains unknown. Agreement is not correctness.
 

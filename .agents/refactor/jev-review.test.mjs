@@ -223,7 +223,7 @@ journalTest('report orders by request time, exposes follow-up gaps and discloses
   }, key);
   const selected = await report(root, 2);
   assert.deepEqual(selected.rows.map(r => r.callId), [latest.id, items[2].id]);
-  assert.equal(selected.schemaVersion, 3);
+  assert.equal(selected.schemaVersion, 4);
   assert.equal(selected.scannedCalls, 3); assert.equal(selected.scanTruncated, false); assert.equal(selected.truncated, true);
   assert.equal(selected.followUp.adviceWithoutDecision, 1);
   assert.equal(selected.followUp.callsWithoutOutcome, 2);
@@ -329,4 +329,25 @@ test('secret-bearing case is rejected before journal custody or transport on eve
   let calls = 0; const c = fixture(); c.objective = key;
   await assert.rejects(consult(config, policy, c, root, key, async () => { calls++; throw new Error('unexpected transport'); }), /JEV_SECRET_IN_JOURNAL/);
   assert.equal(calls, 0); assert.deepEqual(await readdir(root), []);
+}));
+
+journalTest('report keeps known-token subtotals and counts unknown usage from null metering, failures and missing responses', async () => sandbox(async root => {
+  const metered = (usage) => async (...args) => { const r = await (await transport(...args)).json(); return Response.json({ ...r, usage }); };
+  await consult(config, policy, fixture(), root, key, transport); // 10 / 5
+  await consult(config, policy, fixture(), root, key, metered({ input_tokens: 7, output_tokens: null }));
+  await consult(config, policy, fixture(), root, key, metered(null));
+  await consult(config, policy, fixture(), root, key, async () => new Response('', { status: 503 }));
+  const pending = callId();
+  await writeEvent(join(root, pending), 'request.json', { at: new Date().toISOString(), case: fixture(), input: prepare(fixture(), policy).input }, key);
+  const summary = await report(root, 10);
+  assert.equal(summary.usage.inputTokens, 17); assert.equal(summary.usage.outputTokens, 5);
+  assert.deepEqual(summary.usage.coverage, { attempts: 5, inputKnown: 2, inputUnknown: 3, outputKnown: 1, outputUnknown: 4,
+    adviceWithUnknownUsage: 2, failedAttemptsUnknownUsage: 1, responseUnknownAttempts: 1 });
+  assert.equal(summary.usage.unknownIsNotZero, true);
+  const nullRow = summary.rows.find(r => r.status === 'advice' && r.usage.inputTokens === 'unknown');
+  assert.deepEqual(nullRow.usage, { inputTokens: 'unknown', outputTokens: 'unknown' });
+  const stored = await readEvent(join(root, nullRow.callId), 'response.json');
+  assert.deepEqual(stored.usage, { input_tokens: 'unknown', output_tokens: 'unknown' });
+  assert.equal(summary.rows.find(r => r.status === 'unavailable').usage.basis, 'failed-attempt');
+  assert.equal(summary.rows.find(r => r.status === 'response-unknown').usage.basis, 'response-unknown');
 }));
