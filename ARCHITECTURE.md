@@ -86,8 +86,8 @@ transaction; domain `workerCustody` (absent = held) moved only by `releaseWorker
 
 - **Roles are proposals on one ledger, not engines.** The Run ledger is the single source of truth; each transition keeps
   one owner (scheduler, evaluator, approval broker); roles write proposals, never state.
-  - Brain proposes a versioned RunProposal (task graph, criterion, WorkClass, budget ceiling, permissions). K-A: with the
-    owner's standing admission, low-risk WorkClass proposals pass the deterministic gate directly; others ask.
+  - Brain proposes a versioned RunProposal (task graph, criterion, WorkClass, budget ceiling, advisory permissions: admission evaluates
+    only the system-derived task set). K-A: with the owner's standing admission, low-risk WorkClass proposals pass directly; others ask.
   - Auditor is a deterministic, LLM-free evaluator (`unknown` is never `pass`) plus an advisory independent verifier
     (other provider/model, cannot approve its own work, result is a recorded recommendation).
   - Nervous is proposals-only (one per situation, never watches its own events). K-B: a broker-effected no-retry standing

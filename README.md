@@ -251,7 +251,7 @@ policy revision and the runtime service identity, so a change of either in betwe
    Plan for Run <run-id> · <status>
    Task t1: <what the task does> · kind coding · WorkClass <class>
      Acceptance: <the criterion the result must meet>
-   Required permissions: <the permissions this Run needs>
+   Permissions checked by policy at admission: <one task/execute per task>
    Waiting for your TTY approval <approval-id>, expires <time>. The model cannot authorize this work.
    ```
 

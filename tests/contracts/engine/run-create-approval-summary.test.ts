@@ -24,7 +24,8 @@ it('raw create reports undeclared permissions/ceiling/class; a registry gate is 
   const graph = { ...raw.graph, tasks: raw.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: task.dependencies, acceptanceCriteria: task.acceptanceCriteria })) };
   const noRule = { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason };
   const text = renderRunCreateApprovalSummary({ ...raw, graph }, { ...create, graph }, noRule);
-  expect(text).toContain('work class: not declared'); expect(text).toContain('Declared permissions: not declared');
+  expect(text).toContain('work class: not declared'); expect(text).toContain('Also mentioned by the proposal (advisory, not evaluated, grants nothing): not declared');
+  expect(text).not.toContain('Checked by policy at admission');
   expect(text).toContain('Declared budget ceiling: not declared'); expect(text).toContain('work-class registry');
 });
 it('redacts complete fields before cutting and again after ANSI/control reconstruction, including known secrets', () => {
@@ -77,4 +78,12 @@ it('proposer-authored long titles cannot push declared permissions off the card;
     expect(text).toContain(locale === 'tr' ? 'yine politikayla yetkilendirilir' : 'still authorized by policy');
     expect(text).toContain(locale === 'tr' ? '2,00 $' : '$2.00'); expect(text).toContain('owner-purchase');
   }
+});
+it.each(['en', 'tr'] as const)('a proposal card shows the system-checked task set apart from the advisory list it never evaluates (%s)', locale => {
+  const permissions = [{ kind: 'task', action: 'execute', resourceId: 'task' }, { kind: 'scope', action: 'inspect', resourceId: 'live' },
+    { kind: 'model-invocation', action: 'invoke', resourceId: 'gpt-6.1-sol' }];
+  const text = renderRunCreateApprovalSummary({ ...command, proposal: { ...command.proposal!, requiredPermissions: permissions } }, create, verdict, locale);
+  expect(text).toContain(locale === 'tr' ? 'Kabulde politikayla denetlenen: 1 görevin her biri için task / execute' : 'Checked by policy at admission: task / execute for each of the 1 tasks');
+  expect(text).toContain(locale === 'tr' ? 'Önerinin ayrıca andığı izinler (yalnız bilgi, değerlendirilmedi, yetki vermez): 2' : 'Also mentioned by the proposal (advisory, not evaluated, grants nothing): 2');
+  expect(text).toContain('scope / inspect / live'); expect(text).toContain('model-invocation / invoke / gpt-6.1-sol'); expect(text).not.toContain('task / execute / task');
 });

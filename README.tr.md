@@ -251,7 +251,7 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    Run <run-id> için plan · <durum>
    Görev t1: <görevin yaptığı iş> · tür coding · iş sınıfı <sınıf>
      Kabul: <sonucun karşılaması gereken ölçüt>
-   Gereken izinler: <bu Run'ın izinleri>
+   Kabulde politikayla denetlenen izinler: <her görev için bir task/execute>
    TTY onayınız bekleniyor: <onay-kimliği>, son tarih <saat>. Model bu işe yetki veremez.
    ```
 

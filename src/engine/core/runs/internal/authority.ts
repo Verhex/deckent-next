@@ -1,4 +1,4 @@
-import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema, AuditError,
+import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, policySchema, AuditError,
   type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 import { AuditApplication, AuthorityDecisionRecords } from '#engine/core/audit/index.js';
@@ -26,10 +26,15 @@ export class RunCreationAuthority {
     }
     return { policy, verdict };
   }
+  /** A proposal's requirements come from the system, never from the proposer's list (live 2026-10-18: a model's invented entries refused
+   * its plan): the graph-derived task restriction only, read as TaskApprovalAdmission reads it at execution, where NO_GRANT means the
+   * optional task restriction is absent. An explicit deny refuses and require-approval asks. The proposer's list stays stored as advisory.
+   * A plain Run create (no proposal) keeps its single create decision. */
   evaluatePermissions(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): RunAdmissionEvaluation {
     let verdict = evaluation.verdict;
-    for (const permission of command.proposal?.requiredPermissions ?? []) {
+    for (const permission of command.proposal ? deriveProposalPermissions(command.graph) : []) {
       const checked = evaluatePolicy(evaluation.policy, { principal, scopeId: command.scopeId, action: permission.action, resource: { kind: permission.kind, id: permission.resourceId } });
+      if (checked.reason === 'NO_GRANT') continue;
       if (verdict.decision !== 'deny' && (checked.decision === 'deny' || (checked.decision === 'require-approval' && verdict.decision === 'allow'))) verdict = checked;
     }
     if (verdict.decision === 'deny') { this.seal(command, principal, { ...evaluation, verdict }, null); throw new PolicyAuthorizationError('POLICY_DENIED'); }

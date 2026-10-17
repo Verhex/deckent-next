@@ -19,6 +19,17 @@ export const runProposalSchema = z.object({ schemaVersion: z.literal(1), command
 }).strict().readonly();
 export type RunProposal = z.infer<typeof runProposalSchema>;
 export type ProposalPermission = z.infer<typeof proposalPermissionSchema>;
+/** What Run admission evaluates for a proposal, derived by the system from the validated graph and never from a proposer's list (live
+ * 2026-10-18: a model's invented entries refused its plan). One `task/execute` per task: the only per-task gate whose resource is known now.
+ * Run create is the create decision itself; reserve, attempt execute, pool and work-target use keep their own gates at the real action. */
+export function deriveProposalPermissions(graph: RunProposal['graph']): readonly ProposalPermission[] {
+  return Object.freeze(graph.tasks.map(task => Object.freeze({ kind: 'task', action: 'execute', resourceId: task.id })));
+}
+/** The proposer's entries outside the derived set: shown as advisory on the card, never evaluated as a requirement and never a grant. */
+export function advisoryProposalPermissions(declared: readonly ProposalPermission[], graph: RunProposal['graph']): readonly ProposalPermission[] {
+  const derived = new Set(deriveProposalPermissions(graph).map(row => JSON.stringify([row.kind, row.action, row.resourceId])));
+  return Object.freeze(declared.filter(row => !derived.has(JSON.stringify([row.kind, row.action, row.resourceId]))));
+}
 /** Trusted deterministic admission basis, retained by the Run and its sealed decision. Never accepted by run create ingress. */
 export const runProposalBindingSchema = z.object({ schemaVersion: z.literal(1), proposalId: identitySchema, digest,
   budgetCeiling: runProposalSchema.unwrap().shape.budgetCeiling,
