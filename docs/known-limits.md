@@ -48,8 +48,17 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   masked. *Workaround:* keep such files out of the home folder the sandbox sees, or isolate separately.
 - **The secret gate does not scan Git history.** Before dispatch it scans everything the worker receives (checkout, `.git`
   metadata, binds, task inputs, prompt context) and refuses on a hit; past commits in the object store are not scanned.
-  Exclusions are configured paths only, audited and shown on the Run card. *Workaround:* remove committed secrets from
-  history and rotate them; never put credentials into a request, a prompt or `DECKENT.md`.
+  Exclusions are configured paths or a declared dependency tree only, audited and shown on the Run card. *Workaround:*
+  remove committed secrets from history and rotate them; never put credentials into a request, a prompt or `DECKENT.md`.
+- **A declared dependency tree is trusted for content patterns.** A read-only bind the task profile declares
+  `dependencyTree` (for example `node_modules`) is third-party content: credential-shaped text in it (test fixtures, type
+  definitions, READMEs) passes as an audited exception instead of refusing, and a native binary above
+  `execution.secretGate.maxFileBytes` is identified by its SHA-256 digest instead of being read for patterns. Deny-listed
+  files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; any other oversized file is still
+  unscannable. Pattern results are cached per file content under the product's `state/secret-gate-cache`; a changed lockfile
+  or release starts over, and the unsigned cache can change only which exceptions are listed, never a decision.
+  *Impact:* a real token planted in a dependency package as plain text reaches the worker, visible only as an exception.
+  *Workaround:* declare only trees installed from a lockfile you trust, and review the exceptions on the Run card.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
   detected. *Workaround:* keep secrets in a secret store, never in source.
 

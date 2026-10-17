@@ -60,6 +60,20 @@ in it can reach the model provider through the worker's one egress. The terminal
 - **Acknowledgements (`execution.secretGate`, v1, empty by default):** `allowPatternPaths` (≤ 64 globs) lifts content-pattern hits only;
   `acknowledgedDenyPaths` (≤ 64 exact paths) lifts the deny-path rule for a settings-only file such as `.npmrc`, whose content is still
   scanned. Bounds `maxFiles`, `maxFileBytes`, `maxTotalBytes`, `timeoutMs` fail closed as `WORKER_TREE_SCAN_INCOMPLETE` naming the setting.
+- **Dependency class (owner 2026-10-17, before beta; replaces the live/N1 interim `allowPatternPaths: ["node_modules/**"]` + 32 MiB):**
+  the signal is profile data, never a path string: a `readOnlyMounts` entry declares `dependencyTree: { lockfile }` (a path inside the
+  bind), pinned with the Run and its profile fingerprint; the checkout, task inputs, handoff files and prompt text never take the class.
+  In such a bind deny paths (with `acknowledgedDenyPaths`) and configured values refuse exactly as elsewhere, on every dispatch; content and
+  archive hits are audited exceptions `dependencyTree:<target>` (the `worker-tree-excluded` subject, the attempt journal and the Run card);
+  a file above `maxFileBytes` is read (still bounded by `maxTotalBytes`), checked for configured values and, when it carries a native
+  signature with a NUL-bearing header (ELF, Mach-O, PE, wasm; engine data `dependency-binaries.json`), recorded as
+  `unscanned-binary:<kind>:sha256=<digest>` without pattern decoding; any other oversized file stays `incomplete`. Pattern results are cached
+  per file (path + SHA-256 of the bytes read on this dispatch) inside a scope of the lockfile bytes, the rule table, the product version
+  and the bind target, in the product resource `secretGateCache` (`state/secret-gate-cache`, one file per bind, atomic 0600 writes). A
+  changed lockfile, rule table or release starts empty; a changed file is evaluated again. The cache never decides: deny paths and configured
+  values are evaluated in full each time, so a stale, corrupt or forged entry can only change which pattern exceptions are listed. An
+  unreadable cache reuses nothing; a failed save is reported in the scan (`dependencyTrees[].saved`) and costs the next dispatch time only.
+  Existing profiles without the field keep the full workspace rules; adding it changes the profile fingerprint (template upgrade path).
 - **Refusal:** both codes are permanent launch refusals (the Run base is pinned; a fix needs a new Run). The checkout is released; no
   container, connection or claim exists. The text (EN/TR, shared renderer) names up to 16 `path (rule)` pairs and the omitted count; paths
   pass through the record redactor and never carry a value. The `worker-tree-refused` audit subject keeps up to 50 findings, the full
