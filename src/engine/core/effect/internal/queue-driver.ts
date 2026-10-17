@@ -33,9 +33,10 @@ export class TargetQueueDriver {
         let candidate: CandidateBinding;
         try { candidate = await this.preparation.prepare(record, previous); }
         catch (error) {
-          const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
-          const outcome = code === 'PATCH_BASE_ADVANCED' ? 'conflict-needs-reattempt' : code === 'QUEUE_AUTHORITY_REQUIRED' ? 'target-protected' : 'stale-refused';
-          this.app.transition(record, { state: 'settled', outcome }); this.parkSuffix(records, record.ordinal + 1); return;
+          // Every refusal keeps its typed code on the ticket (view and audit); an untyped failure gets the preparation code, never null.
+          const reason = reasonOf(error) ?? 'QUEUE_PREPARATION_REFUSED';
+          const outcome = reason === 'PATCH_BASE_ADVANCED' ? 'conflict-needs-reattempt' : reason === 'QUEUE_AUTHORITY_REQUIRED' ? 'target-protected' : 'stale-refused';
+          this.app.transition(record, { state: 'settled', outcome, reason }); this.parkSuffix(records, record.ordinal + 1); return;
         }
         record = this.app.transition(record, { state: 'verifying', candidate, effectCommandIds: [...this.preparation.effectIds(record)] });
         // The immutable candidate is durable BEFORE a verification Run can acquire it. Interrupted admission is not silently repeated:

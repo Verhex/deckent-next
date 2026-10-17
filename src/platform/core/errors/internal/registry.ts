@@ -366,6 +366,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   QUEUE_CONFIRMATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CONFIRMATION_REQUIRED', p, l) }) },
   QUEUE_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_EXPIRED', p, l) }) },
   QUEUE_VERIFICATION_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_VERIFICATION_NOT_ADMITTED', p, l) }) },
+  QUEUE_PREPARATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_PREPARATION_REFUSED', p, l) }) },
   CANDIDATE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_MISMATCH', p, l) }) },
   CANDIDATE_NOT_ACCEPTED: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_NOT_ACCEPTED', p, l) }) },
   DELIVERY_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTERACTIVE_REQUIRED', p, l) }) },

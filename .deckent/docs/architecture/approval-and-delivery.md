@@ -952,11 +952,15 @@ written under the earlier device-bound key is refused for the new key; with that
 Scope-local positions count only authorized tickets; physical ordinals and other scopes are never read projections.
 
 A ticket pins the exact accepted Attempt and retained patch. Revalidation examines every intervening commit, conservatively including
-rename endpoints, mode changes, directory prefixes and changed-then-restored paths. It never rebases/merges a user's branch. An allowed
+rename endpoints, mode changes, directory prefixes and changed-then-restored paths. History paths are checked for shape only: a path the
+patch may never write (such as a tracked `.deckent/` file) changed by others is touched, and conflicts (`PATCH_BASE_ADVANCED`) only when it
+intersects a patch path; the patch's own paths keep the full exclusion rules (`PATCH_UNSAFE`). It never rebases/merges a user's branch. An allowed
 drift creates a new integration command (optional `replacesCommandId` must resolve the same retained patch). Private prefix objects
 move through bounded object-only transport between private repositories, without publishing source refs. Zero configured revalidation
 budget refuses drift. An unresolved preparation/admission is not automatically retried with a new identity. A failed verification
 admission parks the ticket at once with its typed code (`QUEUE_VERIFICATION_NOT_ADMITTED` when untyped) and next action `prepare-current`.
+A refused re-preparation settles with its outcome and its typed code on the ticket, view and audit (`QUEUE_PREPARATION_REFUSED` when
+untyped); the status window shows that code's text next to the outcome.
 
 The private-candidate Run uses normal create/reserve/execute/evaluate authority. Its graph retains original evaluator definitions and
 pinned evaluator implementations and conjunctively adds the current adoption bar; a verification profile must be installed. A policy

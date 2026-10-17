@@ -1,8 +1,10 @@
 import { changedHistoryPaths, assertDisjointHistory } from './path-history.js';
-import { WorkspacePatchError, type WorkspacePatch } from './contract.js';
+import { WorkspacePatchError, patchPathSchema, type WorkspacePatch } from './contract.js';
 import { gitBlobOid, hashAlgorithmOf, type SnapshotBudget } from './snapshot.js';
 /** A forward base move is safe only when every touched path still has its approved before identity. */
 export async function assertIntegrationBase(git: (args: string[]) => Promise<string>, patch: WorkspacePatch, head: string, budget: SnapshotBudget) {
+  // The patch's own write rule comes first: a path it may never write (e.g. `.deckent/`) is PATCH_UNSAFE, whatever history touched.
+  if (patch.changes.some(change => !patchPathSchema.safeParse(change.path).success)) throw new WorkspacePatchError('PATCH_UNSAFE');
   if (head === patch.baseCommit) return;
   // The caller disables replacement objects and grafts: ancestry must come from the actual immutable commits.
   await git(['merge-base', '--is-ancestor', patch.baseCommit, head]);
@@ -12,7 +14,7 @@ export async function assertIntegrationBase(git: (args: string[]) => Promise<str
     budget.entry();
     if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new WorkspacePatchError('PATCH_CORRUPT');
     const paths = changedHistoryPaths(await git(['diff-tree', '--root', '-m', '-r', '--no-commit-id', '--name-only', '-z', '--no-renames', commit]));
-    for (const path of paths) { budget.entry(); budget.path(path); }
+    for (const path of paths) { budget.entry(); budget.path(path, 'history'); }
     assertDisjointHistory(paths, patch.changes.map(change => change.path));
   }
   for (const change of patch.changes) {
