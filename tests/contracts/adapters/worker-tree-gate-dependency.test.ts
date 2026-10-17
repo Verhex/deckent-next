@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { crc32, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { scanWorkerTree, workerTreeViews } from '#adapters/index.js';
 import { workerTreeExclusionSchema } from '#engine/index.js';
@@ -32,6 +33,18 @@ const dependencies = (binary = elf()) => ({ '.package-lock.json': '{"lockfileVer
 const declared = (source: string, dependencyTree: { lockfile: string } | null = { lockfile: '.package-lock.json' }) =>
   workerTreeViews('/nonexistent-checkout', [{ source, target: '/node_modules', ...(dependencyTree ? { dependencyTree } : {}) }], { inputs: [], handoffInputs: [] }).slice(1);
 const by = 'dependencyTree:/node_modules';
+/** Real archives a worker can extract whose stored bytes carry `text` as is: gzip with stored deflate blocks, and a one-entry stored (method 0) zip. */
+const gzip = (text: string) => gzipSync(Buffer.from(text), { level: 0 });
+function zip(name: string, text: string) {
+  const data = Buffer.from(text), file = Buffer.from(name), header = (size: number) => Buffer.alloc(size);
+  const local = header(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt32LE(crc32(data), 14);
+  local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(file.length, 26);
+  const central = header(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt32LE(crc32(data), 16);
+  central.writeUInt32LE(data.length, 20); central.writeUInt32LE(data.length, 24); central.writeUInt16LE(file.length, 28);
+  const end = header(22), offset = 30 + file.length + data.length; end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(46 + file.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([local, file, data, central, file, end]);
+}
 
 describe('the dependency class', () => {
   it('accepts a 20 MB native binding and a third-party URL-userinfo fixture as audited exceptions, naming the binary by its digest', async () => {
@@ -163,6 +176,20 @@ describe('only an owner-declared bind outside the workspace and the checkout tak
     const archive = { ...text, 'pkg/fixture.tgz': Buffer.from([0x1f, 0x8b, 8, 0, 0, 0, 0, 0]) };
     expect(await scanWorkerTree(declared(await tree(archive)), options())).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/pkg/fixture.tgz', rule: 'unscannable:archive-gzip' }] });
   });
+  it('an archive is a finding whatever its readable bytes match: a real gzip or zip carrying a pattern is refused, liftable only by an operator glob (Astra 2626 F1)', async () => {
+    const archives = { 'pkg/fixture.json.gz': gzip(`{"url":"${USERINFO}"}`), 'pkg/fixture.zip': zip('fixture.json', `{"url":"${USERINFO}"}`) };
+    for (const [path, bytes] of Object.entries(archives)) expect(bytes.includes(USERINFO), path).toBe(true);
+    expect(await scanWorkerTree(declared(await tree({ ...text, ...archives })), options())).toEqual({ status: 'refused', count: 2, findings: [
+      { path: 'node_modules/pkg/fixture.json.gz', rule: 'unscannable:archive-gzip' }, { path: 'node_modules/pkg/fixture.zip', rule: 'unscannable:archive-zip' }],
+    excluded: [{ path: `node_modules/${ZOD_TEST}`, rule: 'pattern:url-userinfo', by }], dependencyTrees: [{ label: '/node_modules', reused: 0, evaluated: 3, saved: false }] });
+    const glob = { ...options(), allowPatternPaths: ['node_modules/pkg/fixture.*'] };
+    expect(await scanWorkerTree(declared(await tree({ ...text, ...archives })), glob)).toMatchObject({ status: 'clean', excluded: expect.arrayContaining([
+      { path: 'node_modules/pkg/fixture.json.gz', rule: 'unscannable:archive-gzip', by: 'allowPatternPaths:node_modules/pkg/fixture.*' },
+      { path: 'node_modules/pkg/fixture.zip', rule: 'unscannable:archive-zip', by: 'allowPatternPaths:node_modules/pkg/fixture.*' }]) });
+    // Above the text bound a native header that is also an archive (a tar whose first member name is the ELF magic) is never classified.
+    const tar = elf(); tar.write('ustar', 257, 'latin1');
+    expect(await scanWorkerTree(declared(await tree(dependencies(tar))), options())).toEqual({ status: 'incomplete', limit: 'file-bytes', observed: BINARY_BYTES, bound: DEFAULT_FILE_BYTES });
+  });
 });
 
 describe('the pattern cache of a declared dependency tree', () => {
@@ -197,8 +224,14 @@ describe('the pattern cache of a declared dependency tree', () => {
     await writeFile(join(cache, file!), JSON.stringify(stored));
     await writeFile(join(deps, 'zod/.npmrc'), `//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n`);
     expect(await scanWorkerTree(declared(deps), options(cache))).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/zod/.npmrc', rule: 'deny-path:**/.npmrc' }] });
+    // A forged entry with the right scope, path and content digest saying "pattern" cannot turn an archive into an exception (Astra 2626 F1).
+    await rm(join(deps, 'zod/.npmrc')); await writeFile(join(deps, 'zod/data.gz'), gzip('{"neutral":true}'));
+    expect(await scanWorkerTree(declared(deps), options(cache))).toMatchObject({ status: 'refused', count: 1, findings: [{ path: 'node_modules/zod/data.gz', rule: 'unscannable:archive-gzip' }] });
+    const saved = JSON.parse(await readFile(join(cache, file!), 'utf8')) as { files: Record<string, [string, string | null]> };
+    saved.files['node_modules/zod/data.gz'] = [sha256(gzip('{"neutral":true}')), 'url-userinfo']; await writeFile(join(cache, file!), JSON.stringify(saved));
+    expect(await scanWorkerTree(declared(deps), options(cache))).toMatchObject({ status: 'refused', count: 1, findings: [{ path: 'node_modules/zod/data.gz', rule: 'unscannable:archive-gzip' }] });
+    await rm(join(deps, 'zod/data.gz'));
     // Without a cache directory, or with one that cannot be written, the scan is complete and the same; the save is reported as failed.
-    await rm(join(deps, 'zod/.npmrc'));
     const unwritable = await tree({}); await chmod(unwritable, 0o500);
     for (const directory of [undefined, join(unwritable, 'cache')]) {
       expect(await scanWorkerTree(declared(deps), options(directory))).toEqual({ ...first, dependencyTrees: [{ label: '/node_modules', reused: 0, evaluated: 3, saved: false }] });

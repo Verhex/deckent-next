@@ -70,7 +70,8 @@ in it can reach the model provider through the worker's one egress. The terminal
   and proves the created container's mount set (`assertDockerMountsMatch`).
   In such a bind deny paths (with `acknowledgedDenyPaths`) and configured values refuse exactly as elsewhere, on every dispatch; text-pattern
   hits (`pattern:*`, `config-secret`) are audited exceptions `dependencyTree:<target>` (the `worker-tree-excluded` subject, the attempt
-  journal and the Run card); archives stay `unscannable` (liftable only by `allowPatternPaths`). A file above `maxFileBytes` (size and
+  journal and the Run card); archives stay `unscannable` (liftable only by `allowPatternPaths`), decided before and never by a pattern
+  result or a cache entry (Astra 2626 F1), and an oversized native header that is also an archive signature stays `incomplete`. A file above `maxFileBytes` (size and
   `maxTotalBytes` checked before any read) is never allocated whole: its 1 KiB header is read first and only a native signature with a
   NUL-bearing header (ELF, Mach-O, PE, wasm; engine data `dependency-binaries.json`) is read further, in 1 MiB windows that are hashed and
   checked for configured values (carrying the bytes that may begin one), with the deadline checked per window; it is recorded as

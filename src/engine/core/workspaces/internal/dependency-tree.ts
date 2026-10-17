@@ -18,7 +18,7 @@ export interface DependencyTreeCacheStore { readonly read: () => Promise<Readonl
 /**
  * S6 dependency class (owner 2026-10-17). A read-only bind its pinned task profile declares as a dependency tree (`dependencyTree`) is
  * third-party content: deny paths and configured secret values refuse it as everywhere (the adapter evaluates both on every dispatch), while
- * content and archive hits become audited exceptions (`dependencyTree:<target>`), never refusals. Each file's pattern result is evaluated
+ * text-pattern hits become audited exceptions (`dependencyTree:<target>`), never refusals; archives stay findings only an operator glob lifts. Each file's pattern result is evaluated
  * once per tree identity and reused:
  * - identity: the scope (the declared lockfile's bytes, `rules` — the rule table and product release —, the view label) plus each file's path and the
  *   SHA-256 of the bytes the gate read on this dispatch. A changed lockfile, rule table or release starts empty; a changed file is evaluated
@@ -65,9 +65,9 @@ export class DependencyTreePatternCache {
 export interface DependencyBinarySource { readonly size: number; readonly read: (offset: number, length: number) => Promise<Buffer> }
 /** What the class needs of the configured-value snapshot (platform `KnownSecretSnapshot`); never the values themselves. */
 export interface DependencyValueSnapshot { readonly spans: (text: string) => readonly unknown[]; readonly pendingStart: (text: string) => number }
-/** The gate's own readers for one file: its decoder (`decodedTexts`), configured values, pattern rows, terminable regex runner and first-rule evaluator. */
+/** The gate's own readers for one file: its decoder (`decodedTexts`), archive signatures (`archiveKind`), configured values, pattern rows, terminable regex runner and first-rule evaluator. */
 export interface DependencyTextChecks {
-  readonly decode: (bytes: Buffer) => readonly string[]; readonly known: DependencyValueSnapshot;
+  readonly decode: (bytes: Buffer) => readonly string[]; readonly archive: (bytes: Buffer) => string | null; readonly known: DependencyValueSnapshot;
   readonly rows: readonly Readonly<{ id: string; source: string; flags: string }>[];
   readonly match: (source: string, flags: string, texts: readonly string[]) => Promise<readonly number[]>;
   readonly first: (texts: readonly string[]) => Promise<string | null>;
@@ -104,14 +104,15 @@ export async function dependencyNativeRefusal(bytes: Uint8Array, texts: readonly
 
 /**
  * A dependency-tree file above the text scan bound, never allocated whole: the header (`headerBytes`) is read first; anything but a native
- * format returns null (unclassifiable: the caller fails closed). A native file is read in `windowBytes` windows, each hashed and given every
+ * format, or a native header that is also an archive signature, returns null (unclassifiable: the caller fails closed). A native file is read in `windowBytes` windows, each hashed and given every
  * reading of the gate's decoder: configured values and `refuseInNativeFiles` families refuse (stopping the read), other pattern hits are kept
  * as exceptions. The carry joins a value or pattern split at a window edge: `pendingStart` × `carryBytesPerChar` (with a trailing partial
  * escape set aside) and at least `patternCarryBytes`. `tick` enforces the deadline per window. Hits: `native-binary:<kind>:sha256=<digest>` first.
  */
 export async function classifyDependencyBinary(source: DependencyBinarySource, checks: DependencyTextChecks, tick: () => void): Promise<readonly DependencyHit[] | null> {
-  const kind = nativeBinaryKind(await source.read(0, Math.min(source.size, BINARIES.headerBytes)));
-  if (kind === null) return null;
+  // A header that is also an archive's (a tar whose first member is named like a native magic) is never classified (Astra 2626 F1).
+  const header = await source.read(0, Math.min(source.size, BINARIES.headerBytes)), kind = nativeBinaryKind(header);
+  if (kind === null || checks.archive(header) !== null) return null;
   const hash = createHash('sha256'), listed = new Set<string>();
   let carry = Buffer.alloc(0);
   for (let offset = 0; offset < source.size; offset += BINARIES.windowBytes) {

@@ -58,7 +58,7 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const shown = (rel: string) => redactForRecord(rel.replace(/\p{Cc}/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`), known);
   const time = () => { if (now() >= deadline) throw new Incomplete('time', now() - started, options.timeoutMs); };
   /** `checks`: the gate's own readers for a dependency-tree file (engine `DependencyTextChecks`). `read`: bounds before work (size, total on the open file); above `maxFileBytes` (dependency class only) never allocated whole: classified in bounded windows (hits, null = unscannable). */
-  const checks = (rel: string) => ({ decode: decodedTexts, known, rows: WORKER_TREE_PATTERN_RULES, match: (source: string, flags: string, texts: readonly string[]) => runner.match(source, flags, texts), first: (texts: readonly string[]) => contentRule(runner, rel, texts) });
+  const checks = (rel: string) => ({ decode: decodedTexts, archive: archiveKind, known, rows: WORKER_TREE_PATTERN_RULES, match: (source: string, flags: string, texts: readonly string[]) => runner.match(source, flags, texts), first: (texts: readonly string[]) => contentRule(runner, rel, texts) });
   const read = async (path: string): Promise<Buffer | readonly DependencyHit[] | null> => {
     const handle = await open(path, FILE_FLAGS);
     try {
@@ -87,8 +87,9 @@ export async function scanWorkerTree(input: string | readonly WorkerTreeView[], 
   const inspect = async (rel: string, texts: readonly string[], bytes?: Buffer) => {
     if (texts.some(text => known.spans(text).length)) { findings.push({ path: shown(rel), rule: 'known-secret' }); return; }
     const refused = tree && bytes ? await dependencyNativeRefusal(bytes, texts, checks(rel)) : null; if (refused !== null) { findings.push({ path: shown(rel), rule: refused }); return; }
-    const rule = tree && bytes ? await tree.rule(rel, bytes, () => contentRule(runner, rel, texts)) : await contentRule(runner, rel, texts), archive = bytes ? archiveKind(bytes) : null;
-    if (rule !== null) liftable(rel, `pattern:${rule}`); else if (archive !== null) liftable(rel, `unscannable:archive-${archive}`, null);
+    // An archive is a finding only an operator glob lifts, decided before (never by) a pattern result or the dependency cache (Astra 2626 F1).
+    const archive = bytes ? archiveKind(bytes) : null; if (archive !== null) { liftable(rel, `unscannable:archive-${archive}`, null); return; }
+    const rule = tree && bytes ? await tree.rule(rel, bytes, () => contentRule(runner, rel, texts)) : await contentRule(runner, rel, texts); if (rule !== null) liftable(rel, `pattern:${rule}`);
   };
   /** `display` is the path as the worker sees it, without a leading slash (the checkout's own paths are unchanged); rules match on it. */
   const entry = async (path: string, display: string, inner: string): Promise<void> => {
