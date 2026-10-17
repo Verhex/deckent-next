@@ -714,6 +714,7 @@
   "error.ADOPTION_FENCE_MISMATCH": "The target repository's adoption fence does not agree with Deckent's adoption journal for this repository (for example a copied, restored or re-created repository); nothing was published or adopted. Inspect the repository's refs/deckent/adoption-fences before adopting into it.",
   "error.ADOPTION_RELEASED": "This adoption command was settled as not applied (the branch never moved); it cannot be resumed. Start a new attempt with a new command.",
   "error.ADOPTION_NOT_APPLIED": "The adoption was proven not applied: the branch still names its previous commit and no Deckent fence records this move. The journal entry was released; create a new attempt.",
+  "error.ADOPTION_REPOSITORY_CHANGED": "This adoption was claimed in another repository than the configured target observed now (for example after the work target was re-registered to a clone); it can move or settle only where it was claimed. Nothing was moved. Re-register that repository, or start a new attempt.",
   "error.ADOPTION_VERIFICATION_NOT_CONFIGURED": "No adoption verification is configured (execution.adoption.verification), so the verifying task kind is unknown.",
   "error.PATCH_CORRUPT": "Workspace patch artifact or producer binding is corrupt.",
   "error.WORKER_OBSERVATION_INVALID": "Worker observation query or source selection is invalid.",

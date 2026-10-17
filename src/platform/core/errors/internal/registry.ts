@@ -447,6 +447,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   ADOPTION_FENCE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_FENCE_MISMATCH', p, l) }) },
   ADOPTION_RELEASED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_RELEASED', p, l) }) },
   ADOPTION_NOT_APPLIED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_NOT_APPLIED', p, l) }) },
+  ADOPTION_REPOSITORY_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_REPOSITORY_CHANGED', p, l) }) },
   ADOPTION_VERIFICATION_NOT_CONFIGURED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_VERIFICATION_NOT_CONFIGURED', p, l) }) },
   PATCH_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSUPPORTED', p, l) }) },
   PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: patchLimit(p, l) }) },

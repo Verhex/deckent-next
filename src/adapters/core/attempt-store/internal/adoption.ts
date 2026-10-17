@@ -46,6 +46,7 @@ export class SqliteAdoptionJournal {
       const existing = this.read(scopeId, commandId);
       if (existing) {
         if (JSON.stringify(existing.intent) !== JSON.stringify(intent)) throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
+        if (existing.repository !== observed.repository) throw new WorkspaceAdoptionError('ADOPTION_REPOSITORY_CHANGED'); // Astra 2616 F2
         this.db.exec('COMMIT'); return existing;
       }
       const latest = this.head(intent.targetRef, observed);

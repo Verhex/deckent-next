@@ -3,15 +3,16 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
-  GitQueueTarget, type GitWorkspaceOptions } from '#adapters/index.js';
+  GitQueueTarget, openSqliteAttemptStore, type GitWorkspaceOptions } from '#adapters/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
   targetQueueKey, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
 
 const exec = promisify(execFile), roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const limits = { maxBytes: 65536, maxEntries: 1000, maxDepth: 32, maxPathBytes: 1024 };
 const confirmation = { async assertAvailable() {}, async confirm(card: import('#engine/index.js').EffectConfirmationView) {
   expect(card.resource).toMatch(/^refs\//); expect(card.to).toMatch(/^[a-f0-9]{40,64}$/); return async () => {};
@@ -68,7 +69,7 @@ async function fixture(refOnly: boolean, format = 'sha1') {
     const store: IntegrationAdoptionStore = { async findDelivery() { return record; }, async loadAdoption() { return held; },
       async loadRun() { return { graph: { tasks: [{ id: identity.taskId, acceptanceCriteria: ['exit'] }] }, revision: 1, progress: [{ taskId: identity.taskId, phase: 'accepted' }], bindings: [{ identity }] } as RunSnapshot; },
       async loadRunWorkspaceCustody() { return null; },
-      async claimAdoption(intent) { return held = { intent, sequence: (observation.fence?.sequence ?? 0) + 1, settled: false }; },
+      async claimAdoption(intent, observed) { return held = { intent, sequence: (observation.fence?.sequence ?? 0) + 1, settled: false, repository: observed.repository }; },
       async finishAdoption(intent) { return held = { intent, sequence: held!.sequence, settled: true }; } };
     const clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, sessions = await LocalOsSessionAuthority.create(['s'], 10000, clock);
     const source = new GitRunWorkspaceProvider(new GitWorkspaceBroker(options));
@@ -276,5 +277,52 @@ describe.skipIf(process.platform !== 'linux')('queue private prefixes and physic
     await expect(make(f.options).binding(f.targetRef)).rejects.toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
     await f.git('config', '--unset', 'init.defaultBranch'); await f.git('checkout', 'adopted');
     await expect(make(f.options).binding(f.targetRef)).rejects.toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
+  });
+});
+
+// Astra 2616 F2: a claim records the repository it was made in. An interrupted claim may resume (move and settle) only in that repository;
+// a re-registered clone that holds the same base and candidate objects, no fence and the branch at the base is refused, never moved.
+describe.skipIf(process.platform !== 'linux')('adoption custody stays with the claiming repository (BENIMSEME-DEPO-KIMLIGI, Astra 2616 F2)', () => {
+  it('an adoption interrupted before its move resumes in its own repository only; a pre-v58 claim never starts a new move', async () => {
+    const f = await fixture(true), { record, plan } = await f.deliver(f.patch('a', 'a.txt', 'a before\n', 'a after\n'));
+    const identity = record.intent.command.identity, ledger = join(f.workspaceRoot, '..', 'ledger.db');
+    const journal = await openSqliteAttemptStore(ledger, { busyTimeoutMs: 1_000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86_400_000 });
+    try {
+      const store: IntegrationAdoptionStore = { async findDelivery() { return record; }, async loadRunWorkspaceCustody() { return null; },
+        async loadRun() { return { graph: { tasks: [{ id: identity.taskId, acceptanceCriteria: ['exit'] }] }, revision: 1, progress: [{ taskId: identity.taskId, phase: 'accepted' }], bindings: [{ identity }] } as RunSnapshot; },
+        loadAdoption: (scopeId, commandId) => journal.loadAdoption(scopeId, commandId), claimAdoption: (intent, observed) => journal.claimAdoption(intent, observed),
+        assertAdoptionFence: (targetRef, observed) => journal.assertAdoptionFence(targetRef, observed), finishAdoption: intent => journal.finishAdoption(intent),
+        releaseAdoption: intent => journal.releaseAdoption(intent) };
+      const clock = { sample: () => ({ wallMs: 1000, monotonicMs: 1 }) }, sessions = await LocalOsSessionAuthority.create(['s'], 10000, clock);
+      const app = (options: GitWorkspaceOptions) => new WorkspaceAdoptionApplication(store, new GitIntegrationDelivery(options), new GitIntegrationAdoption(options), [f.targetRef], sessions,
+        { async authorizeIdentity() {} }, clock, { requirement: null, criterionWithin: () => false, async authorizeRun() {}, registry: null, source: new GitRunWorkspaceProvider(new GitWorkspaceBroker(options)) }, confirmation);
+      const command = { schemaVersion: 2 as const, commandId: 'adopt-a', identity, deliveryCommandId: record.intent.command.commandId, targetRef: f.targetRef };
+      // A: the journal claim is written, then the process dies before the Git move.
+      vi.spyOn(GitIntegrationAdoption.prototype, 'move').mockRejectedValueOnce(new Error('crash before move'));
+      await expect(app(f.options).adopt(command)).rejects.toThrow('crash before move');
+      const claimed = (await journal.loadAdoption('s', 'adopt-a'))!;
+      expect(claimed).toMatchObject({ sequence: 1, settled: false, repository: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+      // B: an independent clone of A carrying the base and the candidate objects, the branch at the base, no fence.
+      const other = join(f.workspaceRoot, '..', 'clone');
+      await exec('/usr/bin/git', ['clone', '-q', f.sourceRoot, other]);
+      await f.git('push', '-q', other, `${plan.commit}:refs/heads/candidate-copy`);
+      const gitB = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', other, ...args])).stdout.trim();
+      await gitB('branch', '-D', 'candidate-copy'); await gitB('branch', '-f', 'adopted', f.base);
+      expect(await gitB('cat-file', '-t', plan.commit)).toBe('commit');
+      const optionsB = { ...f.options, sourceRoot: other }, fenceB = () => gitB('for-each-ref', 'refs/deckent/adoption-fences/');
+      await expect(app(optionsB).adopt(command)).rejects.toMatchObject({ code: 'ADOPTION_REPOSITORY_CHANGED' });
+      expect(await gitB('rev-parse', f.targetRef)).toBe(f.base); expect(await fenceB()).toBe('');
+      expect(await journal.loadAdoption('s', 'adopt-a')).toEqual(claimed);
+      // A claim recorded before ledger v58 names no repository: no observation can attribute it, so it never starts a new move, here or there.
+      const db = new DatabaseSync(ledger);
+      db.prepare("UPDATE workspace_adoptions SET repository='pre-v58' WHERE command_id='adopt-a'").run();
+      for (const options of [f.options, optionsB]) await expect(app(options).adopt(command)).rejects.toMatchObject({ code: 'ADOPTION_REPOSITORY_CHANGED' });
+      expect(await f.git('rev-parse', f.targetRef)).toBe(f.base); expect(await gitB('rev-parse', f.targetRef)).toBe(f.base);
+      db.prepare('UPDATE workspace_adoptions SET repository=? WHERE command_id=?').run(claimed.repository!, 'adopt-a'); db.close();
+      // The legitimate crash replay in A still moves and settles the same record.
+      expect(await app(f.options).adopt(command)).toMatchObject({ status: 'adopted', sequence: 1, toCommit: plan.commit });
+      expect(await f.git('rev-parse', f.targetRef)).toBe(plan.commit); expect(await gitB('rev-parse', f.targetRef)).toBe(f.base);
+      expect(await journal.loadAdoption('s', 'adopt-a')).toMatchObject({ settled: true, repository: claimed.repository });
+    } finally { journal.close(); }
   });
 });

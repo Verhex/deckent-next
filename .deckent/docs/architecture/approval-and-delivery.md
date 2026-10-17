@@ -436,7 +436,9 @@ the only evidence that exists: the repository whose fence names its latest appli
 unsettled `pre-v58` row blocks every repository of that target until resolved; no claim ever writes `pre-v58`. A claim, and the queue
 before publication, refuse with `ADOPTION_FENCE_MISMATCH` when the repository's fence does not name the journal's latest applied record
 there (no fence = no record). `settled = 2` marks an intent released as not applied; it never settles, resumes (`ADOPTION_RELEASED`) or
-counts as a chain head. Downgrade = restore the pre-switch backup.
+counts as a chain head. A claimed intent moves only in the repository it was claimed in: a resume, the re-observation after the human
+answer and a replayed claim refuse another repository with `ADOPTION_REPOSITORY_CHANGED` (Astra 2616 F2); a `pre-v58` intent recorded no
+repository and so never starts a new move (it can still settle where its own fence proves the move). Downgrade = restore the pre-switch backup.
 
 **Delivery-pinned Run (B06-2a, no version change).** `createDeliveryRun` (SDK; composition `createConfiguredDeliveryRun`, not a
 runtime-service operation) admits the same Run contract as `createRun` plus `deliveryCommandId`. After `run:create`, trusted
@@ -988,7 +990,10 @@ BENIMSEME-DEPO-KIMLIGI: a failed publish/adopt keeps its typed code on the ticke
 reconciled at once; the first item's fence/journal agreement is checked before the generation is written. Reconciliation runs at start
 and periodically from `tick()` (per target, backoff doubling from the batch window up to the lease). `adoptionNotApplied` decides: a ticket
 with no journal intent was never claimed and so never moved, whatever the tip (QUEUE-SMALL); with an intent, the fenced observation must
-show the branch still at the ticket's base, no fence of this record and the intent unsettled or released in this repository. Then the
+show the branch still at the ticket's base, no fence of this record and the intent unsettled or released, and the observation must come
+from the repository the intent was claimed in (Astra 2616 F1): its recorded repository, or for a `pre-v58` intent the ticket's revalidated
+target binding (current formula or the pre-QUEUE-SMALL 2 binding with the device number). Another repository's state proves nothing about
+the one that may have moved, so without that evidence the ticket stays reconciling (re-registering the claiming repository settles it). Then the
 intent (if any) is released (receipt in the artifact store) and the ticket parks with a typed reason and next action
 `new-attempt`; release precedes the park and both are idempotent. A settled record, this record's fence or a moved branch under a recorded intent never releases.
 TTL never proves a writer dead. A failed
