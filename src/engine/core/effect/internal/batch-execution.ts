@@ -7,7 +7,7 @@ import { targetBatchDigest, type TargetBatch, type TargetBatchItem } from './tar
 export type QueueEffectResult = Readonly<{ state: 'settled'; evidenceRefs: readonly string[] } | { state: 'unknown' } | { state: 'not-applied' }
   | { state: 'refused'; evidenceRefs?: readonly string[] }>;
 /** The typed code an effect failed with; an untyped failure keeps no text (messages may carry paths or secrets). */
-const reasonOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code;
+export const reasonOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(code) ? code : null; };
 /** Calls existing delivery/adoption or EffectApplication owners; this scheduler is not an external effect engine. */
 export interface TargetBatchEffects {

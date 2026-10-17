@@ -1017,6 +1017,7 @@
   "error.QUEUE_RECOVERY_REQUIRED": "The target has an unresolved effect or custody record. Reconcile it before continuing.",
   "error.QUEUE_CONFIRMATION_REQUIRED": "No valid consent covers this exact batch and operation. Show a fresh card in the authorized terminal.",
   "error.QUEUE_EXPIRED": "The queue wait or confirmation expired. Inspect the target before preparing a fresh candidate.",
+  "error.QUEUE_VERIFICATION_NOT_ADMITTED": "The verification Run for this candidate could not be admitted, so the ticket was parked. Nothing was written to the target; queue the delivery again.",
   "error.CANDIDATE_MISMATCH": "Candidate source, output, criteria or verification identity does not match. Inspect the exact retained candidate.",
   "error.CANDIDATE_NOT_ACCEPTED": "The combined candidate is not accepted. Inspect verification evidence; no publication is permitted.",
   "queue.git.target": "Integration target",

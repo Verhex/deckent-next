@@ -1017,6 +1017,7 @@
   "error.QUEUE_RECOVERY_REQUIRED": "Hedefin çözülmemiş etki veya custody kaydı var. Devam etmeden önce uzlaştırın.",
   "error.QUEUE_CONFIRMATION_REQUIRED": "Bu parti ve işlemi kapsayan geçerli rıza yok. Yetkili terminalde yeni kart gösterin.",
   "error.QUEUE_EXPIRED": "Kuyruk beklemesi veya onay süresi doldu. Yeni adaydan önce hedefi inceleyin.",
+  "error.QUEUE_VERIFICATION_NOT_ADMITTED": "Bu aday için doğrulama Run'ı kabul edilemedi; kayıt park edildi. Hedefe hiçbir şey yazılmadı; teslimi yeniden kuyruğa alın.",
   "error.CANDIDATE_MISMATCH": "Aday kaynağı, çıktısı, kriteri veya doğrulama kimliği eşleşmiyor. Saklanan tam adayı inceleyin.",
   "error.CANDIDATE_NOT_ACCEPTED": "Birleşik aday kabul edilmedi. Doğrulama kanıtını inceleyin; yayımlama yapılamaz.",
   "queue.git.target": "Entegrasyon hedefi",

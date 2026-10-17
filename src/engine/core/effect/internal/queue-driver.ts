@@ -1,5 +1,6 @@
 import { TargetQueueError, queueTerminal, type TargetQueueRecord, type CandidateBinding, type CandidateEvidence } from '#domain/index.js';
 import type { TargetQueueApplication, TargetQueueBounds } from './target-queue.js';
+import { reasonOf } from './batch-execution.js';
 export interface TargetQueuePreparation {
   /** Trusted producer checks source, accepted Task and live target, then prepares on the preceding verified candidate. */
   prepare(record: TargetQueueRecord, predecessor: TargetQueueRecord | null): Promise<CandidateBinding>;
@@ -37,8 +38,13 @@ export class TargetQueueDriver {
           this.app.transition(record, { state: 'settled', outcome }); this.parkSuffix(records, record.ordinal + 1); return;
         }
         record = this.app.transition(record, { state: 'verifying', candidate, effectCommandIds: [...this.preparation.effectIds(record)] });
-        // The immutable candidate is durable BEFORE a verification Run can acquire it. Interrupted admission is not silently repeated.
-        await this.preparation.admitVerification(record);
+        // The immutable candidate is durable BEFORE a verification Run can acquire it. Interrupted admission is not silently repeated:
+        // a failed admission parks the ticket with its typed code (view and audit), instead of waiting silently for the verification timeout.
+        try { await this.preparation.admitVerification(record); }
+        catch (error) {
+          this.app.transition(record, { state: 'parked', reason: reasonOf(error) ?? 'QUEUE_VERIFICATION_NOT_ADMITTED' });
+          this.parkSuffix(records, record.ordinal + 1); return;
+        }
       }
       if (record.state === 'verifying') {
         const proof = await this.preparation.evidence(record);

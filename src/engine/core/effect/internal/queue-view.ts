@@ -17,7 +17,7 @@ export function projectTargetQueue(input: TargetQueueRecord, descriptor: TargetD
   let nextAction: QueueNextAction = 'wait-service';
   if (record.state === 'reconciling') nextAction = 'watch-reconciliation';
   else if (record.state === 'awaiting-confirmation') nextAction = 'confirm-batch';
-  else if (record.outcome === 'conflict-needs-reattempt' || record.outcome === 'verification-failed' || (record.state === 'parked' && record.reason)) nextAction = 'new-attempt';
+  else if (record.outcome === 'conflict-needs-reattempt' || record.outcome === 'verification-failed' || (record.state === 'parked' && record.reason && record.batchDigest !== null)) nextAction = 'new-attempt';
   else if (record.outcome === 'target-protected') nextAction = 'select-target';
   else if (record.outcome === 'stale-refused' || ['parked', 'cancelled', 'expired'].includes(record.state)) nextAction = 'prepare-current';
   else if (record.state === 'settled') nextAction = 'inspect-receipt';

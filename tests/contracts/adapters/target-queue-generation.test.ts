@@ -50,6 +50,8 @@ async function fixture() {
   const ttl = { ms: 60_000 };
   /** What the effect lookup observes for a reconciling ticket, and how often the service asked. */
   const reconciliation: { calls: number; result: 'unknown' | 'not-applied' } = { calls: 0, result: 'unknown' };
+  /** What verification admission throws for each ticket (none: admitted). */
+  const admission = new Map<string, Error>();
   /** One service process: its own instance id and ledger connection, like a restart of the runtime service. */
   /** `failAudit` makes the audit of the first write entering that state fail inside its ledger transaction (an audit/storage error). */
   const service = (instanceId: string, failAudit?: { state: TargetQueueRecord['state'] }, windowMs = 1) => {
@@ -67,7 +69,7 @@ async function fixture() {
           outputDigest: record.request.outputDigest, observedVersion: from, effectiveVersion: from, candidateVersion: to, candidateDigest: 'd'.repeat(64),
           custodyReceipt: 'e'.repeat(64), criteria: ['f'.repeat(64)], profileFingerprint: 'a'.repeat(64), replacesCommandId: null });
       },
-      async admitVerification() {},
+      async admitVerification(record) { const error = admission.get(record.request.commandId); if (error) throw error; },
       async evidence(record) {
         const c = record.candidate!;
         return candidateEvidenceSchema.parse({ schemaVersion: 1, identity: record.request.identity, sourceBinding: c.sourceBinding, candidateVersion: c.candidateVersion,
@@ -118,7 +120,7 @@ async function fixture() {
     const child = execFile('/usr/bin/git', ['-C', sourceRoot, 'update-ref', '--stdin'], error => error ? reject(error) : resolve());
     child.stdin!.end(`start\noption no-deref\n${body}prepare\ncommit\n`);
   });
-  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget, reconciliation, sourceRoot, options };
+  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget, reconciliation, sourceRoot, options, admission };
 }
 
 describe.skipIf(process.platform !== 'linux')('queue generation fence: no target write before consent, durable ownership across restart (Astra 2607 F1/F2)', () => {
@@ -301,6 +303,30 @@ describe.skipIf(process.platform !== 'linux')('queue reconciliation after a star
       await new Promise(resolve => setTimeout(resolve, 850)); await s.instance.tick();
       expect(s.record('q1')).toMatchObject({ state: 'parked', reason: 'ADOPTION_NOT_APPLIED', evidenceRefs: ['3'.repeat(64)] });
       expect(await f.target()).toMatchObject({ tip: f.base });
+    } finally { s.close(); }
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('verification admission failure is a typed, visible outcome', () => {
+  it('a refused admission parks the ticket with its typed code and its suffix; an untyped failure gets the admission code; nothing is written', async () => {
+    const f = await fixture();
+    for (const ticket of ['q1', 'q2', 'q3']) f.candidates.set(ticket, await f.commit(f.base, `candidate-${ticket}`));
+    f.admission.set('q1', Object.assign(new Error('workspace refused'), { code: 'CANDIDATE_MISMATCH' }));
+    const s = f.service('service-a', undefined, 50);
+    try {
+      const quiet = await f.target();
+      await s.enqueue('q1', 1); await s.enqueue('q2', 2);
+      await new Promise(resolve => setTimeout(resolve, 60)); await s.instance.tick();
+      // Not a silent `verifying` with a candidate and no Run until the timeout: parked at once, with the reason on the ticket and its view.
+      expect(s.record('q1')).toMatchObject({ state: 'parked', reason: 'CANDIDATE_MISMATCH' });
+      expect(s.record('q1').candidate).not.toBeNull();
+      expect(s.record('q2').state).toBe('parked');
+      const view = await s.call('inspectTargetQueue', { schemaVersion: 1, scopeId: SCOPE, commandId: 'q1' }) as { record: { reason: string; nextAction: string } };
+      expect(view.record).toMatchObject({ reason: 'CANDIDATE_MISMATCH', nextAction: 'prepare-current' });
+      f.admission.set('q3', new Error('provider unavailable'));
+      await s.enqueue('q3', 3); await new Promise(resolve => setTimeout(resolve, 60)); await s.instance.tick();
+      expect(s.record('q3')).toMatchObject({ state: 'parked', reason: 'QUEUE_VERIFICATION_NOT_ADMITTED' });
+      expect(await f.target()).toEqual(quiet); expect(await f.generation()).toBeNull();
     } finally { s.close(); }
   });
 });
