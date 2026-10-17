@@ -13,7 +13,7 @@ async function openQueueContext(root: string, scopeId: string, options: ConfigLo
   if (!config.execution || !installationId) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
   const selected = selectWorkTarget(config.execution);
   const resolved = await resolveGitWorkTarget(resolve(root), config.execution, layout);
-  if (!selected || resolved.id !== selected.id) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+  if (!selected || resolved.id !== selected.id) throw selected ? new TargetQueueError('QUEUE_AUTHORITY_REQUIRED') : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
   const git = { ...config.execution.git, ...resolved.git, workspaceRoot: await inspectProductDirectory(layout, 'workspaces') };
   const limits = { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes };
   const target = new GitQueueTarget(git, installationId, selected.id, config.execution.adoption.targets, config.execution.adoption.protectedTargets);

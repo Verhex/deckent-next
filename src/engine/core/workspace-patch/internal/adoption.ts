@@ -84,13 +84,14 @@ type AdoptionResult = Readonly<{ schemaVersion: 2; status: 'adopted' | 'rolled-b
   verification: Readonly<{ status: 'not-verified' }> | Readonly<{ status: 'verified' } & AdoptionVerification>; application: 'branch-reference' }>;
 
 const sameFence = (a: AdoptionFence | null, b: AdoptionFence) => a !== null && a.sequence === b.sequence && a.scopeId === b.scopeId && a.commandId === b.commandId;
-/** A Deckent branch move provably did not happen: the branch still names `fromCommit` and the repository's fence names another record
- * (the move advances branch and fence in one Git transaction), and the intent is absent, unsettled or already released and was claimed in
- * this repository (a pre-v58 intent has no recorded repository; its fence chain is the only attribution). A settled record, this record's
- * fence or a moved branch never counts as not applied. The caller holds the target's current physical generation. */
+/** A Deckent branch move provably did not happen. No journal record: never claimed, so never moved, whatever the tip (every move claims
+ * first, and a target with a queue generation refuses an unfenced adoption). With a record: the branch still names `fromCommit` and the
+ * repository's fence names another record (the move advances branch and fence in one Git transaction), and the intent is unsettled or
+ * already released and was claimed in this repository (a pre-v58 intent has no recorded repository; its fence chain is the only
+ * attribution). A settled record, this record's fence or a moved branch never counts. The caller holds the target's current physical generation. */
 export function adoptionNotApplied(observed: AdoptionTargetObservation, record: IntegrationAdoptionRecord | null, fromCommit: string): boolean {
-  if (observed.tip !== fromCommit) return false;
   if (!record) return true;
+  if (observed.tip !== fromCommit) return false;
   const { intent } = record, mine = sameFence(observed.fence, { sequence: record.sequence, scopeId: intent.command.identity.scopeId, commandId: intent.command.commandId });
   return !mine && !record.settled && intent.fromCommit === fromCommit && (record.repository == null || record.repository === observed.repository);
 }

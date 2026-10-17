@@ -8,7 +8,9 @@ export interface QueueCommandContext extends CliBaseContext { deliveryQueue?: Qu
 /** Queue admission is non-interactive; the exact publish and adoption batch each need the verified TTY. */
 export async function queueCommand(argv: readonly string[], context: QueueCommandContext) {
   const action = argv[1], values = new Map<string, string>(); let json = false;
-  const allowed = action === 'integration-queue-enqueue' ? ['--input', '--lang'] : action === 'integration-queue-list' ? ['--scope', '--after', '--limit', '--lang'] : ['--scope', '--command-id', '--source-command-id', '--lang'];
+  // Each action accepts only its own flags: --source-command-id names the rollback's source ticket, nothing else.
+  const allowed = action === 'integration-queue-enqueue' ? ['--input', '--lang'] : action === 'integration-queue-list' ? ['--scope', '--after', '--limit', '--lang']
+    : ['--scope', '--command-id', '--lang', ...(action === 'integration-queue-rollback' ? ['--source-command-id'] : [])];
   for (let index = 2; index < argv.length; index++) {
     const flag = argv[index]!;
     if (flag === '--json' && !json) { json = true; continue; }
@@ -17,8 +19,10 @@ export async function queueCommand(argv: readonly string[], context: QueueComman
   }
   const client = context.deliveryQueue, root = context.root ?? process.cwd(), env = context.env ?? process.env;
   if (!client) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const locale = resolveLocale(values.get('--lang'), env); context.onLocale?.(locale);
+  let locale = resolveLocale(values.get('--lang'), env); context.onLocale?.(locale);
   const config = await loadConfig(root, { env }), sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
+  // The installation's configured language outranks LANG/LC_ALL (a C locale must not turn the owner's cards English); --lang wins.
+  locale = resolveLocale(values.get('--lang'), env, config.language); context.onLocale?.(locale);
   let result: unknown;
   if (action === 'integration-queue-enqueue') {
     const source = values.get('--input'); if (!source) throw ErrorRegistry.createError('CLI_USAGE');
