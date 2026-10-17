@@ -5,6 +5,13 @@
   "carryBytesPerChar": 24,
   "patternCarryBytes": 65536,
   "maxCarryBytes": 1048576,
+  "embeddedArchives": {
+    "note": "Astra 2626 follow-up: an archive start or end anywhere in an oversized native-claimed body makes it unclassifiable. probeBytes: bytes read after a gzip signature to judge its deflate stream (a stream still running error-free past it counts as a member). zipMethods: the compression methods zip readers know (APPNOTE 4.4.5); bzip2Blocks: the block and end-of-stream magics that follow BZh1-9.",
+    "probeBytes": 65536,
+    "overlapBytes": 16,
+    "zipMethods": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 19, 20, 93, 94, 95, 96, 97, 98, 99],
+    "bzip2Blocks": ["314159265359", "177245385090"]
+  },
   "refuseInNativeFiles": ["provider-token", "private-key-block", "gitlab-token", "aws-temporary-key", "aws-secret-key", "stripe-key", "slack-token", "pypi-token", "azure-account-key"],
   "maxCachePathLength": 4096,
   "maxCacheBytes": 16777216,

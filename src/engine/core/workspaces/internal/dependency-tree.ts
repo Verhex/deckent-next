@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import BINARIES from './dependency-binaries.json' with { type: 'json' };
+import { embeddedArchive } from './embedded-archive.js';
 
 const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -113,7 +114,8 @@ export async function dependencyNativeRefusal(bytes: Uint8Array, texts: readonly
  * escape set aside) and at least `patternCarryBytes`, kept per stream (Astra 2626 F2): the raw bytes, decoded without the NUL-dropped reading (UTF-8,
  * UTF-16 in both alignments and escapes take at most 24 raw bytes per decoded character), and the NUL-dropped bytes (`dropped`), whose reading skips NUL runs of any length,
  * so its carry is counted in its own bytes, never in raw distance. A carry above `maxCarryBytes` (a pending start the arithmetic cannot bound,
- * e.g. folded line breaks) returns null. `tick` enforces the deadline per window. Hits: `native-binary:<kind>:sha256=<digest>` first.
+ * e.g. folded line breaks) returns null, and so does an archive start or end anywhere in the body (`embeddedArchive`: an appended zip, an
+ * embedded gzip member, xz/7z/rar/bzip2/zstd/tar). `tick` enforces the deadline per window and per archive candidate. Hits: `native-binary:<kind>:sha256=<digest>` first.
  */
 export async function classifyDependencyBinary(source: DependencyBinarySource, checks: DependencyTextChecks, tick: () => void): Promise<readonly DependencyHit[] | null> {
   // A header that is also an archive's (a tar whose first member is named like a native magic) is never classified (Astra 2626 F1).
@@ -134,6 +136,7 @@ export async function classifyDependencyBinary(source: DependencyBinarySource, c
     const refused = await refusingRule(texts, checks);
     if (refused !== null) return [{ rule: `pattern:${refused}`, refuse: true }];
     const rule = await checks.first(texts); if (rule !== null) listed.add(`pattern:${rule}`);
+    if (await embeddedArchive(window, offset - carry.length, Math.max(0, carry.length - BINARIES.embeddedArchives.overlapBytes), source.size, source.read, tick) !== null) return null;
     carry = tail(window, own); carried = tail(stream, joined);
     if (Math.max(carry.length, carried.length) > BINARIES.maxCarryBytes) return null;
   }

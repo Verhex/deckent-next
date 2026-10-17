@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { crc32, gzipSync } from 'node:zlib';
+import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { scanWorkerTree, workerTreeViews } from '#adapters/index.js';
 import { workerTreeExclusionSchema } from '#engine/index.js';
@@ -131,6 +131,33 @@ describe('parser parity for a native-claimed file in the class (polyglot: native
     // A pending start the carry arithmetic cannot bound (a value prefix before megabytes of folded line breaks) is incomplete, never an unbounded carry.
     const lines = elf(); lines.write('erp', 3 * edge - 10, 'latin1'); lines.fill(0x0a, 3 * edge - 7, 3 * edge - 7 + ((5 * edge) >> 1));
     expect(await scanWorkerTree(declared(await tree(dependencies(lines))), options(), known)).toEqual({ status: 'incomplete', limit: 'file-bytes', observed: BINARY_BYTES, bound: DEFAULT_FILE_BYTES });
+  });
+  it('an archive appended to or embedded anywhere in an oversized native body is unclassifiable; chance signatures in machine code are not (Astra 2626 F1 follow-up)', async () => {
+    const bound = { status: 'incomplete', limit: 'file-bytes', observed: BINARY_BYTES, bound: DEFAULT_FILE_BYTES };
+    const pe = () => { const body = elf(); body.set([0x4d, 0x5a, 0x90, 0, 3, 0, 0, 0, 4, 0, 0, 0, 0xff, 0xff, 0, 0], 0); return body; };
+    const into = (body: Buffer, bytes: Buffer, offset: number) => { bytes.copy(body, offset); return body; };
+    const stored = zip('payload.json', '{"neutral":true}'), member = gzipSync(Buffer.from('neutral compressed payload '.repeat(40)));
+    const xz = Buffer.from('fd377a585a000004e6d6b446', 'hex'), sevenZip = Buffer.from('377abcaf271c0004', 'hex');
+    // A member whose stream breaks after some output (gunzip has already written it), and one hidden behind empty stored blocks past the probe.
+    const broken = Buffer.from(member); broken.fill(0xff, broken.length - 40, broken.length - 8);
+    const padded = Buffer.concat([Buffer.from('1f8b08000000000000ff', 'hex'), ...Array.from({ length: 14_000 }, () => Buffer.from('000000ffff', 'hex')), deflateRawSync(Buffer.from('neutral'))]);
+    for (const [name, bytes] of [['ELF + a stored zip appended at the end', into(elf(), stored, BINARY_BYTES - stored.length)],
+      ['PE + a stored zip appended at the end', into(pe(), stored, BINARY_BYTES - stored.length)], ['ELF + a gzip member mid-body', into(elf(), member, 7 * edge + 333)],
+      ['PE + a gzip member across a window edge', into(pe(), member, 3 * edge - 5)], ['an xz stream header mid-body', into(elf(), xz, 11 * edge + 7)],
+      ['a 7z signature mid-body', into(elf(), sevenZip, 13 * edge + 1)], ['a gzip member broken after output', into(elf(), broken, 9 * edge + 17)],
+      ['a gzip member behind 70 KB of empty stored blocks', into(elf(), padded, 15 * edge + 3)]] as const) {
+      expect(await scanWorkerTree(declared(await tree(dependencies(bytes))), options()), name).toEqual(bound);
+    }
+    // Byte rows copied from esbuild 0.25 and the rolldown binding (x86 immediates, Go's content-sniffing table): each format's own structure
+    // rule rejects them, so these real bindings still classify.
+    const chance = ['504b0304740c488b4c2450b801000000eb5b440fb742084d85c0740c488b4c2450b801000000eb45440fb7421a488b4c',
+      '504b010248c78424000100002a00000048c78424080100002a0000004889b424f80000000f8550050000488d7206488d',
+      '504b05060f84e100000031c0488d1d6d6e5d00b911000000488bbc2458010000488bb42460010000e8d035faff48899c',
+      '526172211a0700000000000000000000ffff100009000000000000000f00000000000000080000000000000000000800',
+      '526172211a07010000ca9a3b000000000065cd1d00000000400000000000000008000000000000002800000000000000',
+      '1f8b080066c7407a000048837810006690740a0fb6507583ca048850754883784800740a0fb6507583ca088850754883'].map(row => Buffer.from(row, 'hex'));
+    const machine = elf(); chance.forEach((row, index) => row.copy(machine, (5 + index) * edge + 64 * index));
+    expect(await scanWorkerTree(declared(await tree(dependencies(machine))), options())).toMatchObject({ status: 'clean', excluded: [{ rule: `native-binary:elf:sha256=${sha256(machine)}` }, { path: `node_modules/${ZOD_TEST}` }] });
   });
   it('a deny-listed name refuses before any read; third-party pattern text in the body is listed as an exception', async () => {
     expect(await scanWorkerTree(declared(await tree({ ...dependencies(), 'pkg/.env': elf() })), options())).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/pkg/.env', rule: 'deny-path:**/.env' }] });

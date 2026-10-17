@@ -59,7 +59,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   claims a native format, private keys and provider or cloud tokens refuse. Deny-listed
   files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; archives and any other oversized file
   are still unscannable; oversized binaries are read only in 1 MiB windows, and one whose window carry cannot be bounded
-  (more than 1 MiB) is unscannable. Pattern results are cached per file content under the product's `state/tree-scan-cache`; a changed lockfile
+  (more than 1 MiB) or that holds an archive anywhere in its body (an appended zip, an embedded gzip member) is unscannable. Pattern results are cached per file content under the product's `state/tree-scan-cache`; a changed lockfile
   or release starts over, and the unsigned cache can change only which exceptions are listed, never a decision.
   The tree is scanned on the host and bound live, read-only: a change made on
   the host after the scan reaches the worker unscanned (as for any bind).
