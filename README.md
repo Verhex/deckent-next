@@ -29,7 +29,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.43`** (released 2026-10-16). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.44`** (released 2026-10-17). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
