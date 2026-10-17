@@ -609,6 +609,8 @@
   "doctor.imageRefresh": "Worker imajı: {status}",
   "doctor.imageRefresh.updating": "arka planda güncelleniyor; Run'lar mevcut imajı kullanıyor",
   "doctor.imageRefresh.failed": "yenileme başarısız ({reason}); önceki imaj kullanılıyor",
+  "doctor.sandboxSelfTest.ok": "sandbox öz-testi: tamam (bir komut bu projenin gerçek sandbox görünümünde çalıştı; başlangıçtan çıkışa {ms} ms, görünüm hazırlığı hariç)",
+  "doctor.sandboxSelfTest.failed": "sandbox öz-testi BAŞARISIZ: {detail}. Bu projede onay gerektirmeyen kabuk komutları test geçene kadar çalışamaz (onaylı komutlar etkilenmez); host kabuğuna düşülmez.",
   "doctor.imageRefresh.current": "güncel ({version})",
   "cli.runtime.toolchainsFailed": "Açılışta toolchain güncellik raporu başarısız (bilgi amaçlı; servis etkilenmedi).",
   "cli.runtime.recovery": "İptal kurtarma {count} kaydı inceledi.",

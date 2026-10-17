@@ -85,6 +85,8 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
  * setup failure. */
 export interface ShellLaunch { readonly file: string; readonly args: (command: string) => readonly string[]; readonly statusChannel?: boolean }
 export const BASH_LAUNCH: ShellLaunch = Object.freeze({ file: 'bash', args: (command: string) => ['--noprofile', '--norc', '-c', command] });
+/** SANDBOX-SPAWN (2026-10-18): a launch the OS refused says why (its errno, agent-facing words), never an empty `spawn-failed`. */
+const SPAWN_ERRNO_WORDS: Readonly<Record<string, string>> = Object.freeze({ E2BIG: 'argument list too long', ENOENT: 'program or working directory not found', EACCES: 'permission denied', EAGAIN: 'process limit reached', ENOMEM: 'out of memory' });
 /** Longest setup-failure text kept from a launcher. */
 const LAUNCH_STATUS_MAX_BYTES = 1_024;
 
@@ -103,6 +105,8 @@ export function runShellProcess(launch: ShellLaunch, request: HostShellRequest, 
     const output = omitted > 0 ? `${head.toString('utf8')}\n[… ${omitted} bytes of output omitted …]\n${tail.toString('utf8')}` : Buffer.concat([head, tail]).toString('utf8');
     return Object.freeze({ status, exitCode, signal, output, totalBytes: total, omittedBytes: omitted, durationMs: elapsedMs(), cleanup });
   };
+  const notStarted = (error: unknown, code = String((error as { code?: unknown } | null)?.code ?? 'unknown error')): HostShellResult => Object.freeze({ ...done('spawn-failed', null, null),
+    output: `[deckent] the command could not be started: ${code} (${SPAWN_ERRNO_WORDS[code] ?? 'the operating system refused to start it'}); nothing was run.` });
   if (process.platform === 'win32') return Promise.resolve(done('unsupported-platform', null, null));
   if (request.signal?.aborted) return Promise.resolve(done('cancelled', null, null));
   return new Promise(resolve => {
@@ -110,7 +114,7 @@ export function runShellProcess(launch: ShellLaunch, request: HostShellRequest, 
     try {
       child = spawn(launch.file, [...launch.args(request.command)], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
         stdio: launch.statusChannel ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], detached: true });
-    } catch { resolve(done('spawn-failed', null, null)); return; }
+    } catch (error) { resolve(notStarted(error)); return; }
     let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;
     let termSent = false, killSent = false, forceTimer: NodeJS.Timeout | null = null;
     // Pipes still open after the shell exited are drained for a bounded grace once the group is settled, then released; a
@@ -202,7 +206,7 @@ export function runShellProcess(launch: ShellLaunch, request: HostShellRequest, 
       resolve(result);
     };
     let reaping: Promise<HostShellResult['cleanup']> | null = null;
-    child.once('error', () => finish(done('spawn-failed', null, null)));
+    child.once('error', error => finish(notStarted(error)));
     // `exit`: the shell is gone; its status is final and the rest of the group is ended; pipes still open once the group is settled
     // are drained for a bounded grace, then released (the timeout keeps running and, like a cancellation, releases them at once).
     // `close` (always after `exit`): the pipes are closed or released; the result settles once the group is settled too.

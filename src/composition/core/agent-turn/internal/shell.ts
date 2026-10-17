@@ -7,15 +7,15 @@ import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, c
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSetResult, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
-  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, createWorkspaceScope, inspectShellRealmSelection, readTerminalShellConfig,
+  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, inspectAgentShellRealm, readTerminalShellConfig, sandboxNotStartedNote,
   compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange, protectedPathShellNote, onWriteFloor } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { settleSandboxWriteSet } from './sandbox-writes.js';
 
-/** REALM-NOTICE (doctor): the realm a shell call here gets — the configured mode, the service's state root and providers, measured read-only. */
+/** REALM-NOTICE (doctor): the realm a shell call here gets (configured mode, the service's state root and providers, measured read-only) and its self-test. */
 export async function inspectConfiguredShellRealm(projectRoot: string, options: ConfigLoadOptions) {
-  const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
-  return inspectShellRealmSelection({ mode: readTerminalShellConfig(config).realm, stateDir: globalStateRoot(options.env ?? process.env), project: await createWorkspaceScope(projectRoot) });
+  const config = await loadConfig(projectRoot, { ...options, heal: false }), env = options.env ?? process.env, mode = readTerminalShellConfig(config as unknown as Record<string, unknown>).realm;
+  return inspectAgentShellRealm({ mode, stateDir: globalStateRoot(env), projectRoot, layout: config.productLayout, env });
 }
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
@@ -221,6 +221,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
+        if (ran?.status === 'spawn-failed' && realm.containment !== 'host') {
+          channel.emit({ kind: 'tool.output', callId, stream: 'stderr', text: `${sandboxNotStartedNote(ran.output, input.language)}\n` }); await channel.drained();
+        }
         const { text: trackedLine, counts } = await tracked(ran);
         // A run that did not finish (stopped, timed out, not started) leaves nothing to apply: its write set is discarded.
         const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${HOST_SHELL_NOTES.writeSetDiscarded}` : '';

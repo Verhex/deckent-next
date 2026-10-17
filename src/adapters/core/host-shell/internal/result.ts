@@ -27,11 +27,14 @@ export function describeHostShellResult(command: string, result: HostShellResult
   tracked?: { readonly deleted: number; readonly overwritten: number }): string {
   const how = result.status === 'exited' ? `exit ${result.exitCode ?? `signal ${result.signal ?? '?'}`}` : result.status;
   const note = hostShellCleanupNote(result.cleanup), notice = realm?.notice ?? null;
-  return `[deckent] run_shell: ${tracked ? `tracked: deleted=${tracked.deleted} overwritten=${tracked.overwritten}; ` : ''}${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${modelTextPrefix(command, 119)}…` : command})\n${result.output}`
+  const shown = command.replace(/\r?\n/gu, ' ⏎ '); // SANDBOX-SPAWN: one header line; line breaks shown as ⏎ (the command runs unchanged)
+  return `[deckent] run_shell: ${tracked ? `tracked: deleted=${tracked.deleted} overwritten=${tracked.overwritten}; ` : ''}${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${shown.length > 120 ? `${modelTextPrefix(shown, 119)}…` : shown})\n${result.output}`
     + (notice ? `\n${notice}` : '')
     + (note ? `${!notice && (result.output.endsWith('\n') || result.output === '') ? '' : '\n'}${note}` : '');
 }
 
+/** SANDBOX-SPAWN (2026-10-18): the owner's line for a sandbox that could not start a command (shown on the call, not only told to the model). */
+export const sandboxNotStartedNote = (output: string, locale?: Locale): string => t('agent.shell.sandboxNotStarted', { reason: output.replace(/^\[deckent\] /u, '').replace(/; nothing was run\.$/u, '') }, locale);
 /** The agent-facing notes a shell call's result may carry beyond the run itself (its write posture and how it ended). */
 export const HOST_SHELL_NOTES = Object.freeze({
   /** Told to the model when an unattended run failed with the project read-only (so it changes files another way, not by retrying). */

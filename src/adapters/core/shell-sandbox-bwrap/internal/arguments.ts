@@ -64,6 +64,11 @@ export const BUBBLEWRAP_TMPFS_BYTES = 64 * 1024 * 1024;
 export const BUBBLEWRAP_SYSTEM_PATHS: readonly string[] = Object.freeze(['/usr', '/etc', '/bin', '/sbin', '/lib', '/lib32', '/lib64', '/libx32', '/opt',
   '/snap', '/nix', '/sys']);
 
+/** SANDBOX-SPAWN (2026-10-18): argv + env over ARG_MAX (2 MiB) is a silent `spawn E2BIG` (live: 3 073 172 bytes); half bounds a view, refused by name over it. */
+export const BUBBLEWRAP_ARGUMENT_MAX_BYTES = 1_048_576;
+export const bubblewrapArgumentsOverBound = (args: readonly string[], max: number, bytes = args.reduce((total, arg) => total + Buffer.byteLength(arg) + 1, 0)): string | null => bytes <= max ? null
+  : `SANDBOX_VIEW_TOO_LARGE: ${args.filter(arg => ['--bind', '--ro-bind', '--ro-bind-try', '--tmpfs', '--overlay'].includes(arg)).length} mounts need ${bytes} bytes of arguments, over the bound of ${max} (too many read-only paths or deny masks; deckent doctor runs the same view)`;
+
 /** Astra 2189 R7: the most ancestor directories a view pins as mount points (beyond it the view is refused, never run with a
  * renamable ancestor). Measured 2026-09-30 on the owner's HOME from a worktree: 32 pins (HOME, directories above masked credentials and
  * the state roots), a `true` call 6.9 → 8.6 ms. */

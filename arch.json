@@ -1999,6 +1999,7 @@
     },
     "src/adapters/core/agent-workspace-floor": {
       "dependencies": [
+        "src/adapters/core/shell-sandbox-bwrap",
         "src/adapters/core/workspace-read",
         "src/adapters/core/workspace-write",
         "src/adapters/core/host-shell",
@@ -3335,6 +3336,14 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/adapters/core/shell-sandbox-bwrap/internal/arguments.ts",
+        "symbol": "BUBBLEWRAP_ARGUMENT_MAX_BYTES",
+        "values": [
+          1048576
+        ],
+        "reason": "Kernel-derived launch bound: argv plus environment over ARG_MAX (2097152 on the owner host, getconf ARG_MAX) fails spawn with E2BIG; half of it bounds a bubblewrap view so the environment keeps room. Not an operator policy (SANDBOX-SPAWN 2026-10-18)."
+      },
       {
         "file": "src/engine/core/secret-store/internal/helper.ts",
         "symbol": "definition/timeoutMs",
