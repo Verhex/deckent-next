@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { adoptionVerificationPhaseOutcome, executionProfileFingerprint, integrationAdoptionCommandSchema } from '#engine/index.js';
+import { adoptionNotApplied, adoptionVerificationPhaseOutcome, executionProfileFingerprint, integrationAdoptionCommandSchema, type IntegrationAdoptionRecord } from '#engine/index.js';
 
 it('maps every verification task phase to one outcome (design §5.4): only accepted verifies', () => {
   expect({
@@ -32,4 +32,27 @@ it('accepts the v2 adoption command with both verification fields or neither, an
   expect(() => integrationAdoptionCommandSchema.parse({ ...base, verificationRunId: 'v' })).toThrow();
   expect(() => integrationAdoptionCommandSchema.parse({ ...base, verificationKind: 'verify' })).toThrow();
   expect(() => integrationAdoptionCommandSchema.parse({ ...base, schemaVersion: 1 })).toThrow();
+});
+
+// Lead decision on BENIMSEME-DEPO-KIMLIGI: every Deckent branch move claims its journal row first (and a target with a queue generation
+// refuses unfenced adoption), so a ticket with no row was never moved by Deckent, whatever the tip shows now.
+it('no journal row means not applied whatever the tip; a recorded intent keeps every other guard', () => {
+  const [from, moved] = ['a'.repeat(40), 'b'.repeat(40)], repository = 'r'.repeat(64);
+  const observed = (tip: string | null, fence: { sequence: number; scopeId: string; commandId: string } | null = null) => ({ tip, checkedOut: false, fence, repository });
+  const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
+  const record = (fields: Partial<IntegrationAdoptionRecord> = {}): IntegrationAdoptionRecord => ({ sequence: 2, settled: false, repository, ...fields,
+    intent: { schemaVersion: 2, kind: 'adopt', command: { schemaVersion: 2, commandId: 'c', identity, deliveryCommandId: 'd', targetRef: 'refs/heads/x' },
+      targetRef: 'refs/heads/x', fromCommit: from, toCommit: moved, deliveryRef: `refs/deckent/deliveries/${'c'.repeat(64)}`, basis: 'task-acceptance',
+      acceptance: { runRevision: 1 }, verification: null, actor: { id: 'h', issuer: 'os', subject: '1' } } });
+  expect([adoptionNotApplied(observed(from), null, from), adoptionNotApplied(observed(moved), null, from), adoptionNotApplied(observed(null), null, from)])
+    .toEqual([true, true, true]);
+  expect({
+    unsettled: adoptionNotApplied(observed(from), record(), from),
+    moved: adoptionNotApplied(observed(moved), record(), from),
+    ownFence: adoptionNotApplied(observed(from, { sequence: 2, scopeId: 's', commandId: 'c' }), record(), from),
+    settled: adoptionNotApplied(observed(from), record({ settled: true }), from),
+    otherRepository: adoptionNotApplied(observed(from), record({ repository: 'o'.repeat(64) }), from),
+    preV58: adoptionNotApplied(observed(from), record({ repository: null }), from),
+    otherBase: adoptionNotApplied(observed(moved), record(), moved),
+  }).toEqual({ unsettled: true, moved: false, ownFence: false, settled: false, otherRepository: false, preV58: true, otherBase: false });
 });

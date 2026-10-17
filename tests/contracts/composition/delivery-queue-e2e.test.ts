@@ -12,7 +12,7 @@ import { executeConfiguredTask } from '../../../src/composition/core/execution/i
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { DockerSupervisor, GitIntegrationAdoption } from '#adapters/index.js';
-import { adoptionFenceRef, adoptionFenceText, queueCommandIds, TargetBatchExecutor, type TargetQueueView } from '#engine/index.js';
+import { adoptionFenceRef, adoptionFenceText, queueCommandIds, TargetBatchExecutor, WorkspaceAdoptionApplication, type TargetQueueView } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
@@ -343,6 +343,30 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const q2 = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q2' } } as never);
     expect(journal(f, q2.adoption)).toMatchObject({ sequence: 1, settled: 1 });
     expect(await fenceOf(f.target)).toMatchObject({ sequence: 1, commandId: q2.adoption });
+  });
+
+  it('a ticket that published but never claimed its adoption parks for a new attempt even after a foreign writer moved the branch', { timeout: 900_000 }, async () => {
+    const f = await fixture();
+    const attempt = await f.coding('r1', 'write-a');
+    const ids = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q1' } } as never);
+    let s = await queueSession(f);
+    await s.toConfirmation('q1', attempt);
+    // The process dies after publication and before the adoption claimed its journal row; reconciliation dies with it.
+    vi.spyOn(WorkspaceAdoptionApplication.prototype, 'adopt').mockRejectedValue(new Error('process died'));
+    vi.spyOn(TargetBatchExecutor.prototype, 'reconcile').mockRejectedValue(new Error('process died'));
+    await s.confirm('q1');
+    expect({ ticket: (await s.view('q1'))?.state, row: journal(f, ids.adoption) ?? null }).toEqual({ ticket: 'reconciling', row: null });
+    await s.stop(); vi.restoreAllMocks();
+    // Meanwhile a writer outside Deckent moves the branch: the tip no longer names the ticket's base.
+    const foreign = await git(f.target, 'commit-tree', `${f.base}^{tree}`, '-p', f.base, '-m', 'foreign');
+    await git(f.target, 'update-ref', TARGET, foreign, f.base);
+    // No journal row: no Deckent move was possible, so the restart parks the ticket instead of reconciling it forever.
+    s = await queueSession(f);
+    const parked = await s.view('q1');
+    expect({ ticket: parked?.state, reason: parked?.reason, next: parked?.nextAction, row: journal(f, ids.adoption) ?? null })
+      .toEqual({ ticket: 'parked', reason: 'ADOPTION_NOT_APPLIED', next: 'new-attempt', row: null });
+    // Nothing was reverted or adopted on the foreign move.
+    expect(await git(f.target, 'rev-parse', TARGET)).toBe(foreign); expect(await fenceOf(f.target)).toBeNull();
   });
 
   it('the N1 ledger of 2026-10-17 (stuck reconciling ticket, unsettled sequence N+1, clone without fence) recovers on the first start after the v58 upgrade', { timeout: 900_000 }, async () => {
