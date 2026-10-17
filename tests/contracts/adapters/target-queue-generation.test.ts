@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,8 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { GitQueueTarget, type GitWorkspaceOptions } from '#adapters/index.js';
 import { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 import { migrateLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { createTargetQueueService, targetQueueKey, RUNTIME_SERVICE_SCHEMA_VERSION, TargetQueueApplication, type QueueServiceContext, type TargetBatchEffects,
-  type TargetQueuePreparation } from '#engine/index.js';
+import { createTargetQueueService, targetQueueKey, RUNTIME_SERVICE_SCHEMA_VERSION, TargetQueueApplication, GitQueueTargetApplication, adoptionRepositoryIdentity,
+  queueGenerationRef, type QueueServiceContext, type TargetBatchEffects, type TargetQueuePreparation } from '#engine/index.js';
 import { candidateBindingSchema, candidateEvidenceSchema, type TargetQueueRecord } from '#domain/index.js';
 
 // Astra 2607 F1/F2 at the real boundary: a real Git target repository with the shipped generation producer (GitQueueTarget) and a
@@ -117,7 +118,7 @@ async function fixture() {
     const child = execFile('/usr/bin/git', ['-C', sourceRoot, 'update-ref', '--stdin'], error => error ? reject(error) : resolve());
     child.stdin!.end(`start\noption no-deref\n${body}prepare\ncommit\n`);
   });
-  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget, reconciliation };
+  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget, reconciliation, sourceRoot, options };
 }
 
 describe.skipIf(process.platform !== 'linux')('queue generation fence: no target write before consent, durable ownership across restart (Astra 2607 F1/F2)', () => {
@@ -301,5 +302,44 @@ describe.skipIf(process.platform !== 'linux')('queue reconciliation after a star
       expect(s.record('q1')).toMatchObject({ state: 'parked', reason: 'ADOPTION_NOT_APPLIED', evidenceRefs: ['3'.repeat(64)] });
       expect(await f.target()).toMatchObject({ tip: f.base });
     } finally { s.close(); }
+  });
+});
+
+// WSL2 renumbers block devices after a restart: a queue identity that hashed st_dev changed under every queued ticket (QUEUE_CONFLICT).
+describe.skipIf(process.platform !== 'linux')('queue target identity is the adoption repository identity (no device number)', () => {
+  it('the binding is the realpath+inode repository identity and stays the same when only the device number changes', async () => {
+    const f = await fixture();
+    const path = await realpath(await f.git('rev-parse', '--path-format=absolute', '--git-common-dir')), { ino: inode, dev } = await stat(path);
+    const binding = await f.gitTarget.resolveTarget({ kind: 'git-ref', id: TARGET });
+    expect(binding.resourceBinding).toBe(adoptionRepositoryIdentity({ path, inode }));
+    // The same repository observed under two device numbers (before and after a WSL2 restart) is one queue.
+    const run = (args: string[], input = '') => new Promise<string>((resolve, reject) => {
+      const child = execFile('/usr/bin/git', ['-C', f.sourceRoot, ...args], (error, stdout) => error ? reject(error) : resolve(stdout.trim()));
+      child.stdin!.end(input);
+    });
+    const observed = (device: number) => new GitQueueTargetApplication(f.options, 'installation', 'registered', [TARGET], [],
+      { custody: async () => {}, run, common: async () => ({ path, inode, device }) as { path: string; inode: number } }).binding(TARGET);
+    const [before, after] = [await observed(dev), await observed(dev + 31)];
+    expect(after).toEqual(before); expect(targetQueueKey(after)).toBe(targetQueueKey(binding));
+  });
+
+  it('a generation written under the pre-change identity is refused until the operator removes it; then the queue takes the new identity', async () => {
+    const f = await fixture();
+    const path = await realpath(await f.git('rev-parse', '--path-format=absolute', '--git-common-dir')), { ino: inode, dev: device } = await stat(path);
+    const binding = await f.gitTarget.resolveTarget({ kind: 'git-ref', id: TARGET });
+    const legacy = targetQueueKey({ ...binding, resourceBinding: createHash('sha256').update(JSON.stringify({ path, device, inode })).digest('hex') });
+    expect(legacy).not.toBe(targetQueueKey(binding));
+    const ref = queueGenerationRef(TARGET), blob = await new Promise<string>((resolve, reject) => {
+      const child = execFile('/usr/bin/git', ['-C', f.sourceRoot, 'hash-object', '-w', '--stdin'], (error, stdout) => error ? reject(error) : resolve(stdout.trim()));
+      child.stdin!.end(JSON.stringify({ schemaVersion: 1, key: legacy, owner: 'service-a', epoch: 1 }) + '\n');
+    });
+    await f.git('update-ref', ref, blob);
+    // The key check is not weakened: a generation of another queue identity is never taken over silently.
+    await expect(f.gitTarget.fence(targetQueueKey(binding), 'service-a', 2)).rejects.toMatchObject({ code: 'QUEUE_CONFLICT' });
+    expect(await f.generation()).toMatchObject({ owner: 'service-a', epoch: 1 });
+    // Upgrade step (queue terminal on that target): delete the generation once; the next fence writes the new identity.
+    await f.git('update-ref', '-d', ref, blob);
+    await f.gitTarget.fence(targetQueueKey(binding), 'service-b', 1);
+    expect(await f.generation()).toMatchObject({ key: targetQueueKey(binding), owner: 'service-b', epoch: 1 });
   });
 });

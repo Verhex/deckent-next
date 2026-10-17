@@ -32,10 +32,10 @@ export class GitCommand {
       if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o022) || await realpath(path) !== path) throw new WorkspacePatchError('PATCH_UNSAFE');
     }
   }
-  /** The canonical, owned, not group/other-writable Git common directory: the physical repository behind queue and adoption identities. */
+  /** The canonical, owned, not group/other-writable Git common directory (path, inode; no device number): queue and adoption identity. */
   async common(unsafe: () => Error = () => new WorkspacePatchError('PATCH_UNSAFE')) {
     const path = await realpath(await this.run(['rev-parse', '--path-format=absolute', '--git-common-dir'])), stat = await lstat(path);
     if (!stat.isDirectory() || stat.uid !== process.getuid?.() || stat.mode & 0o022) throw unsafe();
-    return { path, device: stat.dev, inode: stat.ino };
+    return { path, inode: stat.ino };
   }
 }
