@@ -1014,6 +1014,7 @@
   "error.QUEUE_TARGET_BUSY": "An earlier ticket owns this target. Watch its progress; do not repeat the effect.",
   "error.QUEUE_CORRUPT": "Queue custody could not be verified. Stop this target and inspect retained evidence.",
   "error.QUEUE_AUTHORITY_REQUIRED": "This action requires an authorized human terminal session with a verified controlling terminal.",
+  "error.QUEUE_WORK_TARGET_REQUIRED": "No work target is configured, so there is no queue to deliver into. Configure execution.workTargets with `deckent config set execution.workTargets …` or in the /config panel, then try again.",
   "error.QUEUE_RECOVERY_REQUIRED": "The target has an unresolved effect or custody record. Reconcile it before continuing.",
   "error.QUEUE_CONFIRMATION_REQUIRED": "No valid consent covers this exact batch and operation. Show a fresh card in the authorized terminal.",
   "error.QUEUE_EXPIRED": "The queue wait or confirmation expired. Inspect the target before preparing a fresh candidate.",

@@ -1014,6 +1014,7 @@
   "error.QUEUE_TARGET_BUSY": "Bu hedef önceki kaydın sahipliğinde. İlerlemeyi izleyin; etkiyi tekrarlamayın.",
   "error.QUEUE_CORRUPT": "Kuyruk custody kanıtı doğrulanamadı. Bu hedefi durdurup saklanan kanıtı inceleyin.",
   "error.QUEUE_AUTHORITY_REQUIRED": "Bu eylem doğrulanmış gerçek terminale bağlı yetkili insan oturumu gerektirir.",
+  "error.QUEUE_WORK_TARGET_REQUIRED": "Yapılandırılmış bir çalışma hedefi (work target) yok; teslim edilecek bir kuyruk bulunmuyor. execution.workTargets ayarını `deckent config set execution.workTargets …` komutuyla ya da /config panelinden yapın, sonra yeniden deneyin.",
   "error.QUEUE_RECOVERY_REQUIRED": "Hedefin çözülmemiş etki veya custody kaydı var. Devam etmeden önce uzlaştırın.",
   "error.QUEUE_CONFIRMATION_REQUIRED": "Bu parti ve işlemi kapsayan geçerli rıza yok. Yetkili terminalde yeni kart gösterin.",
   "error.QUEUE_EXPIRED": "Kuyruk beklemesi veya onay süresi doldu. Yeni adaydan önce hedefi inceleyin.",

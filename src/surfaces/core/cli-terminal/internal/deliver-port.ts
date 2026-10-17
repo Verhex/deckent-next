@@ -47,7 +47,7 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
     async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const ref = config.execution?.workTargets?.targets[0]?.baseRef;
-      if (!ref) throw ErrorRegistry.createError('QUEUE_AUTHORITY_REQUIRED');
+      if (!ref) throw ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
       return context.deliveryQueue!.enqueueTargetQueue({ schemaVersion: 1, commandId, identity, target: { kind: 'git-ref', id: ref } });
     },
     async inspect(scopeId: string, commandId: string) { return (await context.deliveryQueue!.inspectTargetQueue({ schemaVersion: 1, scopeId, commandId })).record; },

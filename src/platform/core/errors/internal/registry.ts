@@ -361,6 +361,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   QUEUE_TARGET_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_TARGET_BUSY', p, l) }) },
   QUEUE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CORRUPT', p, l) }) },
   QUEUE_AUTHORITY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_AUTHORITY_REQUIRED', p, l) }) },
+  QUEUE_WORK_TARGET_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_WORK_TARGET_REQUIRED', p, l) }) },
   QUEUE_RECOVERY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_RECOVERY_REQUIRED', p, l) }) },
   QUEUE_CONFIRMATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CONFIRMATION_REQUIRED', p, l) }) },
   QUEUE_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_EXPIRED', p, l) }) },
