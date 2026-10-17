@@ -19,8 +19,10 @@ export async function queueCommand(argv: readonly string[], context: QueueComman
   }
   const client = context.deliveryQueue, root = context.root ?? process.cwd(), env = context.env ?? process.env;
   if (!client) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const locale = resolveLocale(values.get('--lang'), env); context.onLocale?.(locale);
+  let locale = resolveLocale(values.get('--lang'), env); context.onLocale?.(locale);
   const config = await loadConfig(root, { env }), sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
+  // The installation's configured language outranks LANG/LC_ALL (a C locale must not turn the owner's cards English); --lang wins.
+  locale = resolveLocale(values.get('--lang'), env, config.language); context.onLocale?.(locale);
   let result: unknown;
   if (action === 'integration-queue-enqueue') {
     const source = values.get('--input'); if (!source) throw ErrorRegistry.createError('CLI_USAGE');

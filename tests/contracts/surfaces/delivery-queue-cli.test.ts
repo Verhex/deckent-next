@@ -34,3 +34,17 @@ describe('delivery queue CLI flags (QUEUE-SMALL 6)', () => {
     expect(p.calls).toEqual(['rollback {"schemaVersion":1,"scopeId":"s","commandId":"r1","sourceCommandId":"q0"}', 'inspect {"schemaVersion":1,"scopeId":"s","commandId":"q1"}']);
   });
 });
+
+describe('delivery queue CLI language (QUEUE-SMALL 7)', () => {
+  it('the configured language wins over LANG=C.UTF-8 (the N1 wrapper); --lang still wins over the configuration', async () => {
+    const turkish = project('tr');
+    await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], turkish.context);
+    expect(turkish.locales.at(-1)).toBe('tr'); expect(turkish.output.join('')).toContain('Kuyruk sonucu:');
+    const explicit = project('tr');
+    await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1', '--lang', 'en'], explicit.context);
+    expect(explicit.locales.at(-1)).toBe('en'); expect(explicit.output.join('')).toContain('Queue result:');
+    const unset = project();
+    await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], unset.context);
+    expect(unset.locales.at(-1)).toBe('en');
+  });
+});
