@@ -47,9 +47,11 @@ async function fixture() {
   /** Candidate per ticket: version and Git commit are the same value, so the effect stubs move real refs to real objects. */
   const candidates = new Map<string, string>(), conflicts = new Set<string>();
   const ttl = { ms: 60_000 };
+  /** What the effect lookup observes for a reconciling ticket, and how often the service asked. */
+  const reconciliation: { calls: number; result: 'unknown' | 'not-applied' } = { calls: 0, result: 'unknown' };
   /** One service process: its own instance id and ledger connection, like a restart of the runtime service. */
   /** `failAudit` makes the audit of the first write entering that state fail inside its ledger transaction (an audit/storage error). */
-  const service = (instanceId: string, failAudit?: { state: TargetQueueRecord['state'] }) => {
+  const service = (instanceId: string, failAudit?: { state: TargetQueueRecord['state'] }, windowMs = 1) => {
     const db = new DatabaseSync(ledger), queue = new SqliteTargetQueue(db);
     const app = new TargetQueueApplication(queue, { async authorize() {}, async validate() {} }, bounds, (_store, written) => {
       if (failAudit && written.state === failAudit.state) { failAudit = undefined; throw new Error('audit-storage-failure'); } });
@@ -87,9 +89,10 @@ async function fixture() {
         await runTransaction(`verify ${ref} ${value}\nupdate ${TARGET} ${record.candidate!.candidateVersion} ${record.candidate!.effectiveVersion}\n`);
         return { state: 'settled', evidenceRefs: ['2'.repeat(64)] };
       },
-      async lookup() { return { state: 'unknown' }; },
+      async lookup() { reconciliation.calls++; return { state: reconciliation.result }; },
+      async release() { return reconciliation.result === 'not-applied' ? { state: 'refused', evidenceRefs: ['3'.repeat(64)] } : { state: 'unknown' }; },
     };
-    const instance = createTargetQueueService({ instanceId, config: { targetQueue: { capacity: 8, candidateSlots: 2, batchWindowMs: 1 } },
+    const instance = createTargetQueueService({ instanceId, config: { targetQueue: { capacity: 8, candidateSlots: 2, batchWindowMs: windowMs } },
       async withScope(_scope, _peer, _read, work) { return work(context()); }, snapshot: async () => queue.pending(8), withActor: async (_record, work) => work(),
       effects: async () => effects, preparation: async () => preparation, captureProcess: async () => ({ processStart: 'start', terminal: 'tty' }),
       isMcp: () => false, record: async () => {} });
@@ -114,7 +117,7 @@ async function fixture() {
     const child = execFile('/usr/bin/git', ['-C', sourceRoot, 'update-ref', '--stdin'], error => error ? reject(error) : resolve());
     child.stdin!.end(`start\noption no-deref\n${body}prepare\ncommit\n`);
   });
-  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget };
+  return { git, base, commit, target, generation, service, candidates, conflicts, ttl, gitTarget, reconciliation };
 }
 
 describe.skipIf(process.platform !== 'linux')('queue generation fence: no target write before consent, durable ownership across restart (Astra 2607 F1/F2)', () => {
@@ -271,5 +274,32 @@ describe.skipIf(process.platform !== 'linux')('queue generation fence: no target
       expect(() => d.app.transition(pending, { state: 'adopting' })).toThrow('QUEUE_CONFIRMATION_REQUIRED');
       expect(d.record('q3')).toEqual(pending);
     } finally { d.close(); }
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('queue reconciliation after a started effect (BENIMSEME-DEPO-KIMLIGI)', () => {
+  it('a reconciling head is reconciled periodically with bounded backoff, and parks only with a typed reason and new evidence (BENIMSEME-DEPO-KIMLIGI)', async () => {
+    const f = await fixture();
+    f.candidates.set('q1', await f.commit(f.base, 'candidate-1'));
+    const s = f.service('service-a', undefined, 200);
+    try {
+      await s.enqueue('q1', 1); await s.advance();
+      const started = s.app.transition(s.record('q1'), { state: 'publishing', batchDigest: '9'.repeat(64) });
+      const reconciling = s.app.transition(started, { state: 'reconciling' });
+      // F2-R amended: a started effect never parks without a typed reason, nor without new evidence.
+      expect(() => s.app.transition(reconciling, { state: 'parked', evidenceRefs: ['4'.repeat(64)] })).toThrow('QUEUE_CONFLICT');
+      expect(() => s.app.transition(reconciling, { state: 'parked', reason: 'ADOPTION_NOT_APPLIED' })).toThrow('QUEUE_CONFLICT');
+      expect(s.record('q1')).toEqual(reconciling);
+      // Not only at start: tick reconciles the head, then waits out its backoff before asking again.
+      await s.instance.tick(); expect(f.reconciliation.calls).toBe(1);
+      await s.instance.tick(); expect(f.reconciliation.calls).toBe(1);
+      await new Promise(resolve => setTimeout(resolve, 450)); await s.instance.tick(); expect(f.reconciliation.calls).toBe(2);
+      expect(s.record('q1').state).toBe('reconciling');
+      // The effect is observed not applied: the ticket parks for a new attempt with the release receipt and a typed reason.
+      f.reconciliation.result = 'not-applied';
+      await new Promise(resolve => setTimeout(resolve, 850)); await s.instance.tick();
+      expect(s.record('q1')).toMatchObject({ state: 'parked', reason: 'ADOPTION_NOT_APPLIED', evidenceRefs: ['3'.repeat(64)] });
+      expect(await f.target()).toMatchObject({ tip: f.base });
+    } finally { s.close(); }
   });
 });

@@ -99,7 +99,7 @@ describe('durable target queue', () => {
   });
   it('holds historical unsettled effects whose source binding cannot be backfilled', () => {
     const f = fixture();
-    f.db.prepare('INSERT INTO workspace_adoptions VALUES(?,?,?,?,?,?,?)').run('s', 'legacy', 'same-address', 1, 'adopt', '{}', 0);
+    f.db.prepare('INSERT INTO workspace_adoptions VALUES(?,?,?,?,?,?,?,?)').run('s', 'legacy', 'pre-v58', 'same-address', 1, 'adopt', '{}', 0);
     expect(() => f.store.enqueue(request('one'), bounds, audit)).toThrow('QUEUE_RECOVERY_REQUIRED');
     expect(f.store.load('s', 'one')).toBeNull();
   });

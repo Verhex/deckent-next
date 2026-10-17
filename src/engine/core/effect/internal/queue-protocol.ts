@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { attemptIdentitySchema, clientCommandIdSchema, identitySchema, effectTargetRefSchema, targetDisplaySchema } from '#domain/index.js';
+import { attemptIdentitySchema, clientCommandIdSchema, identitySchema, effectTargetRefSchema, targetDisplaySchema, queueReasonSchema } from '#domain/index.js';
 import { targetQueueViewSchema } from './queue-view.js';
 export const queueEnqueueSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   replacesCommandId: identitySchema.optional(), identity: attemptIdentitySchema, target: effectTargetRefSchema }).strict().readonly();
@@ -28,7 +28,7 @@ export const queueConsentSchema = z.object({ schemaVersion: z.literal(1), digest
   expiresAt: z.number().int().positive().safe(), target: effectTargetRefSchema, display: targetDisplaySchema,
   items: z.array(z.object({ commandId: identitySchema, from: z.string().min(1), to: z.string().min(1), candidateDigest: digest, verificationReceipt: digest, changes: z.array(z.string()) }).strict()).min(1) }).strict().readonly();
 export const queueExecutionSchema = z.object({ settledPrefix: z.number().int().nonnegative().safe(), items: z.array(z.object({ commandId: identitySchema,
-  published: z.boolean(), state: z.enum(['settled', 'refused', 'unknown']) }).strict()) }).strict().readonly();
+  published: z.boolean(), state: z.enum(['settled', 'refused', 'unknown']), reason: queueReasonSchema.optional() }).strict()) }).strict().readonly();
 export type QueueConsent = z.infer<typeof queueConsentSchema>;
 /** The SDK/MCP shape: inspect and list only (DESIGN §6). */
 export interface QueueReadClient {

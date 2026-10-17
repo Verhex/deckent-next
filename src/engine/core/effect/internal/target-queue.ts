@@ -87,7 +87,7 @@ export class TargetQueueApplication {
     for (const row of rows) await this.authority.authorize(row.request, principal, 'inspect');
     return rows.length + 1;
   }
-  transition(previous: TargetQueueRecord, fields: Partial<Pick<TargetQueueRecord, 'state' | 'ownerInstance' | 'epoch' | 'leaseDeadline' | 'candidate' | 'verification' | 'batchDigest' | 'effectCommandIds' | 'evidenceRefs' | 'outcome'>>): TargetQueueRecord {
+  transition(previous: TargetQueueRecord, fields: Partial<Pick<TargetQueueRecord, 'state' | 'ownerInstance' | 'epoch' | 'leaseDeadline' | 'candidate' | 'verification' | 'batchDigest' | 'effectCommandIds' | 'evidenceRefs' | 'outcome' | 'reason'>>): TargetQueueRecord {
     queueNextState(previous, fields.state ?? previous.state);
     const next = targetQueueRecordSchema.parse({ ...previous, ...fields, revision: previous.revision + 1 });
     assertQueueChange(previous, next);
@@ -109,7 +109,9 @@ export function assertQueueChange(previous: TargetQueueRecord, next: TargetQueue
     || previous.key !== next.key || previous.ordinal !== next.ordinal || next.revision !== previous.revision + 1 || queueTerminal(previous.state))
     throw new TargetQueueError('QUEUE_CONFLICT');
   queueNextState(previous, next.state);
-  if (previous.state === 'reconciling' && next.state === 'parked' && (previous.batchDigest !== null || next.evidenceRefs.length <= previous.evidenceRefs.length))
+  // Astra 2609 F2-R, amended by BENIMSEME-DEPO-KIMLIGI: a started effect (batchDigest set) parks only with a typed reason and new evidence —
+  // the executor's receipt that the adoption was observed not applied under the current generation and its journal intent released.
+  if (previous.state === 'reconciling' && next.state === 'parked' && ((previous.batchDigest !== null && !next.reason) || next.evidenceRefs.length <= previous.evidenceRefs.length))
     throw new TargetQueueError('QUEUE_CONFLICT');
   if (previous.state === 'queued' && next.state === 'revalidating') {
     if (!next.ownerInstance || next.epoch <= previous.epoch || next.leaseDeadline === null) throw new TargetQueueError('QUEUE_CONFLICT');

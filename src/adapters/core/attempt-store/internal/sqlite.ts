@@ -6,7 +6,7 @@ import { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 import { SqliteAdoptionJournal } from './adoption.js';
 import { SqliteEffectJournal } from './effect.js';
 import { SqliteWorkerEventLogs } from './worker-events.js';
-import type { IntegrationIntent, IntegrationDeliveryCommand, IntegrationDeliveryIntent, IntegrationQuery, IntegrationAdoptionIntent, ProgressionQuery } from '#engine/index.js';
+import type { IntegrationIntent, IntegrationDeliveryCommand, IntegrationDeliveryIntent, IntegrationQuery, IntegrationAdoptionIntent, AdoptionClaimObservation, ProgressionQuery } from '#engine/index.js';
 import { SqliteIntegrationJournal, readIntegration } from './integration.js';
 import { SqliteRunProgression } from './progression.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
@@ -124,8 +124,10 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async finishDelivery(intent: IntegrationDeliveryIntent) { return new SqliteDeliveryJournal(this.db).finishDelivery(intent); }
   async findDelivery(scopeId: string, commandId: string) { return new SqliteDeliveryJournal(this.db).findDelivery(scopeId, commandId); }
   async loadAdoption(scopeId: string, commandId: string) { return new SqliteAdoptionJournal(this.db).loadAdoption(scopeId, commandId); }
-  async claimAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).claimAdoption(intent); }
+  async claimAdoption(intent: IntegrationAdoptionIntent, observed: AdoptionClaimObservation) { return new SqliteAdoptionJournal(this.db).claimAdoption(intent, observed); }
+  async assertAdoptionFence(targetRef: string, observed: AdoptionClaimObservation) { return new SqliteAdoptionJournal(this.db).assertAdoptionFence(targetRef, observed); }
   async finishAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).finishAdoption(intent); }
+  async releaseAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).releaseAdoption(intent); }
   async saveWorkerEventLog(record: import('#engine/index.js').WorkerEventLog) { return new SqliteWorkerEventLogs(this.db).saveWorkerEventLog(record); }
   async loadWorkerEventLog(scopeId: string, attemptId: string) { return new SqliteWorkerEventLogs(this.db).loadWorkerEventLog(scopeId, attemptId); }
   /** EXEC-RELEASE (Sol ER-R1): the sealed stream itself, verified like every reader does: full attempt identity, artifact read by receipt

@@ -8,7 +8,7 @@ import type { TargetBatchEffects, EffectConfirmation, TargetBatch } from '#engin
 import { RunPolicyAuthorization } from '#engine/core/policy/index.js';
 import type { RunWorkspaceProvider } from '#engine/core/workspaces/index.js';
 import { WorkspaceDeliveryApplication, type IntegrationDeliveryStore, type IntegrationDeliveryTarget } from './delivery.js';
-import { WorkspaceAdoptionApplication, type IntegrationAdoptionTarget, type IntegrationAdoptionStore } from './adoption.js';
+import { WorkspaceAdoptionApplication, adoptionNotApplied, type IntegrationAdoptionTarget, type IntegrationAdoptionStore } from './adoption.js';
 import type { WorkspacePatchApplication } from './application.js';
 import type { WorkspaceIntegrationInspection, IntegrationReader } from './inspection.js';
 import type { IntegrationTarget } from './integration.js';
@@ -51,6 +51,14 @@ export function createWorkspaceQueueEffects(c: QueueEffectContext, ports: QueueE
       await consent(operation); return () => consent(operation);
     },
   });
+  /** The ticket's own journal intent and the target as observed now; `notApplied` per `adoptionNotApplied` from the ticket's own base. */
+  const settlement = async (record: TargetQueueRecord) => {
+    const rollback = record.request.operation === 'rollback', from = rollback ? record.candidate?.candidateVersion : record.candidate?.effectiveVersion;
+    const found = await store.loadAdoption(record.request.identity.scopeId, rollback ? record.request.commandId : queueCommandIds(record).adoption);
+    const adoption = found && found.intent.kind === (rollback ? 'rollback' : 'adopt') ? found : null;
+    const observed = await ports.adoption().observe(record.request.target.target.id);
+    return { adoption, observed, notApplied: (found === null || adoption !== null) && from !== undefined && adoptionNotApplied(observed, adoption, from) };
+  };
   return {
     async fence(target, owner, epoch) { return ports.fence(target, owner, epoch); },
     async validate(record, item) {
@@ -58,7 +66,10 @@ export function createWorkspaceQueueEffects(c: QueueEffectContext, ports: QueueE
       if (record.request.operation !== 'rollback' && (await ports.evidence(record)).phase !== 'accepted') throw new TargetQueueError('QUEUE_CONFLICT');
       if (record.request.operation !== 'rollback') await c.authorization.authorizeIdentity('deliver-integration', record.request.identity, c.principal);
       await c.authorization.authorizeIdentity(record.request.operation === 'rollback' ? 'rollback-integration' : 'adopt-integration', record.request.identity, c.principal);
-      if ((await ports.adoption().observe(record.request.target.target.id)).tip !== item.from) throw new TargetQueueError('QUEUE_CONFLICT');
+      const observed = await ports.adoption().observe(record.request.target.target.id);
+      if (observed.tip !== item.from) throw new TargetQueueError('QUEUE_CONFLICT');
+      // The repository's fence must agree with this repository's journal before anything is published (BENIMSEME-DEPO-KIMLIGI).
+      await store.assertAdoptionFence(record.request.target.target.id, observed);
     },
     async publish(record, fence) {
       const { manifest, patch, plan, ids } = await loaded(record), git = ports.delivery(JSON.parse(fence) as GitQueueFence);
@@ -98,14 +109,22 @@ export function createWorkspaceQueueEffects(c: QueueEffectContext, ports: QueueE
       return { state: 'settled', evidenceRefs: [receipt.digest] };
     },
     async lookup(record) {
-      const ids = queueCommandIds(record), adoption = await store.loadAdoption(record.request.identity.scopeId, record.request.operation === 'rollback' ? record.request.commandId : ids.adoption);
-      if (!adoption || adoption.intent.kind !== (record.request.operation === 'rollback' ? 'rollback' : 'adopt')) return { state: 'unknown' };
-      const observed = await ports.adoption().observe(adoption.intent.targetRef);
+      const ids = queueCommandIds(record), { adoption, observed, notApplied } = await settlement(record);
+      if (notApplied) return { state: 'not-applied' };
+      if (!adoption) return { state: 'unknown' };
       if (observed.tip !== adoption.intent.toCommit || observed.fence?.commandId !== (record.request.operation === 'rollback' ? record.request.commandId : ids.adoption) || observed.fence.scopeId !== record.request.identity.scopeId
         || observed.fence.sequence !== adoption.sequence || adoption.intent.toCommit !== (record.request.operation === 'rollback' ? record.candidate?.effectiveVersion : record.candidate?.candidateVersion)) return { state: 'unknown' };
       const settled = await store.finishAdoption(adoption.intent);
       const receipt = await c.artifacts.put(record.request.identity.scopeId, Buffer.from(JSON.stringify(settled)));
       return { state: 'settled', evidenceRefs: [receipt.digest] };
+    },
+    async release(record) {
+      const { adoption, observed, notApplied } = await settlement(record);
+      if (!notApplied) return { state: 'unknown' };
+      const released = adoption && !adoption.released ? await store.releaseAdoption(adoption.intent) : adoption;
+      const receipt = await c.artifacts.put(record.request.identity.scopeId, Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'adoption-not-applied',
+        commandId: record.request.commandId, adoption: released, observed: { tip: observed.tip, fence: observed.fence, repository: observed.repository } })));
+      return { state: 'refused', evidenceRefs: [receipt.digest] };
     },
   };
 }
