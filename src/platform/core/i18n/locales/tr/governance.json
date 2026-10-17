@@ -397,6 +397,7 @@
   "error.WORKSPACE_ALLOCATION_INCOMPLETE": "Çalışma alanı tahsisi tamamlanmamış; yürütme devam edemez.",
   "error.WORKSPACE_GIT_FAILED": "Git çalışma alanı işlemi başarısız oldu.",
   "error.LOCAL_RUNTIME_UNSUPPORTED": "Bu yerel runtime bağlantısı şu anda Linux gerektirir.",
+  "error.LOCAL_RUNTIME_NATIVE_UNAVAILABLE": "Yerel runtime'ın yerel (native) bileşeni yüklenemedi ya da dosya sistemi gereken bir işlemi desteklemiyor; platform Linux olduğu halde. `npm run build` ile yeniden derleyin ya da dosya sistemini kontrol edin; neden ekte.",
   "error.LOCAL_RUNTIME_OPTIONS": "Yerel runtime bağlantı ayarları geçersiz.",
   "error.INFERENCE_METRICS_UNREAD": "Çıkarım metrikleri okunamadı ({reason}), uç {url}. Deckent sunucuyu başlatmaz.",
   "error.RUNTIME_SHUTDOWN_UNAVAILABLE": "Bu runtime servisinin yapılandırılmış kimliği yok; yönetilen kapatma ile durdurulamaz. İlk kurulum politikasında deckent init policy --scope <id> --upgrade --preview (sonra --apply) service.identity'yi ve sizin shutdown izninizi ayarlar; aksi halde service.identity ({scopeId, serviceId}) ayarlayın ve politikada o servise shutdown izni verin. Çalışan servis bunu yalnız bir sonraki başlangıcında okur: servisi bir kez elle durdurun (deckent runtime serve üzerinde Ctrl+C; terminalin başlattığı servis boşta kalınca da durur).",

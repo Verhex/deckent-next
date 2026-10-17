@@ -14,7 +14,7 @@ export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
   onConnection: (socket: Socket, peer: LocalPeerIdentity) => void, retryDelayMs: number, retryLimit: number) {
   let native: PeerModule;
   try { native = createRequire(import.meta.url)('../native/build/Release/peer_credentials.node') as PeerModule; }
-  catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED', { cause: error }); }
+  catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_NATIVE_UNAVAILABLE', { cause: error }); }
   const clients = new Set<Socket>();
   let stopped = false; let finish: (() => void) | undefined;
   const drained = new Promise<void>(resolve => { finish = resolve; });

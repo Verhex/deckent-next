@@ -40,7 +40,7 @@ describe.skipIf(process.platform !== 'linux')('private runtime socket publicatio
     expect(await readdir(parent)).toEqual([]);
   });
 
-  it('maps unsupported NOREPLACE to a typed surface refusal, releases custody and permits a supported fresh start', async () => {
+  it('maps unsupported NOREPLACE to a typed native-unavailable refusal, releases custody and permits a supported fresh start', async () => {
     const path = await root(); const endpoint = join(path, 'runtime.sock');
     const require = createRequire(import.meta.url);
     const artifact = require.resolve(resolve('src/adapters/core/local-runtime-socket/native/build/Release/peer_credentials.node'));
@@ -54,7 +54,7 @@ describe.skipIf(process.platform !== 'linux')('private runtime socket publicatio
     } };
     try {
       await expect(startLocalRuntimeSocketServer(options(endpoint), async () => { throw new Error('never dispatch'); }))
-        .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_UNSUPPORTED', cause: { code: 'LOCAL_PEER_PUBLICATION_UNSUPPORTED' } });
+        .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_NATIVE_UNAVAILABLE', cause: { code: 'LOCAL_PEER_PUBLICATION_UNSUPPORTED' } });
       await expect(access(endpoint)).rejects.toMatchObject({ code: 'ENOENT' });
       expect(await readdir(path)).toEqual([]);
     } finally { cached.exports = production; }
