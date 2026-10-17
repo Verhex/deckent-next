@@ -11,9 +11,9 @@ import type { InstallationCommandContext } from '#surfaces/core/cli-installation
 import type { ToolchainCurrencyReport, ModelInvocationDeliveryFinding } from '#engine/index.js';
 import {
   inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig,
-  resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
+  resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal,
-  assertActorAssurance, principalToActor, resolveLocale, formatValue, emit,
+  assertActorAssurance, principalToActor, resolveLocale, formatValue, emit, assessNodeSupport, NODE_ENGINE_RANGE,
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
 } from '#platform/index.js';
 
@@ -180,9 +180,10 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const recoveryFiles = context.inspectRecoveryFiles ? await context.inspectRecoveryFiles(root, options).catch(() => null) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
   const startability = context.inspectInstallationStartability ? await context.inspectInstallationStartability(root, { ...options, env: { ...env, DECKENT_LANGUAGE: locale } }) : null;
-  const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
+  const node = assessNodeSupport(process.version, NODE_ENGINE_RANGE);
+  const data = { schemaVersion: 2, scope: 'kernel', platform, host: { ...host, workerBasis: describeWorkerRecommendation(host.freeMemMB, host.cpuCores) }, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, auditIntegrity, startability, status: (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' as const : 'ready' as const, poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');

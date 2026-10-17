@@ -66,8 +66,8 @@ describe('K1 real binary journeys', () => {
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'degraded', startability: { status: 'blocked' }, policyTemplate: null, policyAdministration: null, modelInvocationDelivery: [] });
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable; alpha.35 P0: policyAdministration, null without a
-    // terminal scope).
-    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
+    // terminal scope; Node floor 24.22.0: node).
+    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
@@ -91,6 +91,9 @@ describe('K1 real binary journeys', () => {
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
+    // F12: the human text carries the same overall verdict as the JSON (here degraded: startability is blocked).
+    expect((await f.run(['doctor']).catch(error => error)).stdout).toContain('Status: degraded');
+    expect(result.host.workerBasis).toMatchObject({ cpuBased: expect.any(Number), memoryBased: expect.any(Number), workerMemoryEstimateMB: expect.any(Number), recommended: result.host.recommendedMaxWorkers });
     expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen worker');
     expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
     expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');

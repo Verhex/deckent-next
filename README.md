@@ -515,7 +515,7 @@ flowchart LR
 
 ## Get started
 
-Deckent runs on Linux or Windows through WSL2 with Node.js ≥ 24.15.0 (Node 24 and 26 are supported).
+Deckent runs on Linux or Windows through WSL2 with Node.js ≥ 24.22.0 (Node 24 and 26 are supported).
 Native Windows runtime transport is not supported. A fresh source build needs Docker to build and stage the locked
 bubblewrap (currently 0.13.0); it downloads and verifies the locked source and binary digests. A verified staged
 bundle can be reused offline. System bubblewrap, when selected, must be ≥ 0.12.0. Docker is also required for coding
