@@ -28,7 +28,8 @@
     "fileEffects": "state/file-effects",
     "approvalPreviews": "state/approval-previews",
     "scratch": "state/scratch",
-    "instructionTrust": "state/instruction-trust"
+    "instructionTrust": "state/instruction-trust",
+    "treeScanCache": "state/tree-scan-cache"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal", "projectIdentity"],

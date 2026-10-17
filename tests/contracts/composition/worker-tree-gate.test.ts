@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -24,7 +25,7 @@ const dockerIt = it.skipIf(process.platform !== 'linux' || !dockerImage);
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const PROVIDER_TOKEN = ['sk', 'ant', 'api03', 'Qw7'.repeat(12)].join('-');
 
-async function fixture(context: TestContext, files: Record<string, string>, secretGate?: object) {
+async function fixture(context: TestContext, files: Record<string, string>, secretGate?: object, mounts?: { readonly dependencies: Record<string, string | Buffer>; readonly mounts: readonly object[] }) {
   if (process.platform !== 'linux') context.skip('Docker execution and the private ledger are Linux-only here');
   const root = await mkdtemp(join(tmpdir(), 'worker-tree-gate-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -37,6 +38,9 @@ async function fixture(context: TestContext, files: Record<string, string>, secr
   const parameters = registry.profiles[0]!.parameters;
   if (dockerImage) Object.assign(parameters, { imageId: dockerImage, argv: ['node', '-e', "process.stdout.write(require('node:fs').readFileSync('/workspace/README.md','utf8'))"] });
   const { argv: _argv, ...docker } = parameters; void _argv;
+  // Host-prepared, uncommitted dependency binds (profile data, never part of the Docker execution settings).
+  if (mounts) { Object.assign(parameters, { readOnlyMounts: mounts.mounts });
+    for (const [path, content] of Object.entries(mounts.dependencies)) { await mkdir(join(project, path, '..'), { recursive: true }); await writeFile(join(project, path), content); } }
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
     ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
     ...(secretGate ? { secretGate: { schemaVersion: 1, ...secretGate } } : {}) } }));
@@ -57,7 +61,7 @@ async function fixture(context: TestContext, files: Record<string, string>, secr
     const audit = await openSqliteAuditStore(productResourcePath(opened.layout, 'ledger'), { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' });
     try { return audit.page('s', 0, 100).map(record => record.event.subject).filter(subject => subject.kind === kind); } finally { audit.close(); }
   };
-  return { project, options, store, identity, auditPage, workspaces: productResourcePath(opened.layout, 'workspaces') };
+  return { project, options, store, identity, auditPage, workspaces: productResourcePath(opened.layout, 'workspaces'), gateCache: productResourcePath(opened.layout, 'treeScanCache') };
 }
 const COMMITTED_SECRETS = { 'README.md': '# project\n', '.env': 'DATABASE_URL=postgres://app@db/app\n', 'deploy/server.pem': '-----BEGIN PRIVATE KEY-----\n',
   'src/client.ts': `export const key = '${PROVIDER_TOKEN}';\n` };
@@ -149,6 +153,30 @@ it('passes a tree whose only hits are acknowledged (fixture patterns, a settings
     expect(monitor).toContain('excluded by config: 2 path(s)'); expect(monitor).toContain('.npmrc (deny-path:**/.npmrc) — lifted by acknowledgedDenyPaths:.npmrc');
   } finally { f.store.close(); }
 });
+
+it('passes a declared dependency tree with a 20 MB native binding and third-party fixtures as audited exceptions on the Run card; an .npmrc there still refuses', async context => {
+  const binding = Buffer.alloc(20 * 1024 * 1024, 0x41); binding.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]);
+  const userinfo = ['https://', 'fixture-user', ':', 'fixture-pass', '@example.invalid'].join('');
+  const dependencies = { 'deps/.package-lock.json': '{"lockfileVersion":3}\n', 'deps/native/binding.node': binding, 'deps/zod/tests/string.test.ts': `parse("${userinfo}");\n` };
+  const mounts = [{ source: 'deps', target: '/deps', dependencyTree: { lockfile: '.package-lock.json' } }];
+  const f = await fixture(context, { 'README.md': '# project\n' }, undefined, { dependencies, mounts });
+  try {
+    const capture = vi.spyOn(DockerSupervisor.prototype, 'captureProfile').mockRejectedValue(Object.assign(new Error('reached the supervisor'), { code: 'FIXTURE_REACHED' }));
+    await expect(executeConfiguredTask(f.project, f.identity, f.options)).rejects.toBeTruthy();
+    expect(capture).toHaveBeenCalledTimes(1); expect(await f.auditPage()).toEqual([]);
+    const digest = createHash('sha256').update(binding).digest('hex'), by = 'dependencyTree:/deps';
+    const entries = [{ path: 'deps/native/binding.node', rule: `unscanned-binary:elf:sha256=${digest}`, by }, { path: 'deps/zod/tests/string.test.ts', rule: 'pattern:url-userinfo', by }];
+    expect(await f.auditPage('worker-tree-excluded')).toEqual([{ kind: 'worker-tree-excluded', runId: 'r', taskId: 'a', attemptId: f.identity.attemptId, count: 2, entries }]);
+    expect((await inspectConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks[0]!.configExclusions).toEqual({ count: 2, entries });
+    // The tree's pattern results are kept as product data for the next dispatch.
+    expect(await readdir(f.gateCache)).toHaveLength(1);
+  } finally { f.store.close(); }
+  const refused = await fixture(context, { 'README.md': '# project\n' }, undefined, { dependencies: { ...dependencies, 'deps/zod/.npmrc': '//registry.npmjs.org/:_authToken=fixture-value\n' }, mounts });
+  try {
+    await expect(executeConfiguredTask(refused.project, refused.identity, refused.options)).rejects.toMatchObject({ code: 'WORKER_TREE_SECRET_REFUSED',
+      params: { count: 1, paths: 'deps/zod/.npmrc (deny-path:**/.npmrc)' } });
+  } finally { refused.store.close(); }
+}, 60_000);
 
 dockerIt('dispatches a clean project unchanged through a real container', async context => {
   const f = await fixture(context, { 'README.md': 'clean project\n', 'src/index.ts': 'export const answer = 42;\n' });
