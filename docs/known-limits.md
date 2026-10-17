@@ -51,11 +51,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   Exclusions are configured paths or a declared dependency tree only, audited and shown on the Run card. *Workaround:*
   remove committed secrets from history and rotate them; never put credentials into a request, a prompt or `DECKENT.md`.
 - **A declared dependency tree is trusted for content patterns.** A read-only bind the task profile declares
-  `dependencyTree` (for example `node_modules`) is third-party content: credential-shaped text in it (test fixtures, type
+  `dependencyTree` (for example `node_modules`) whose real path lies outside the attempt workspace and the work-target
+  checkout is third-party content (without a separate work target the project root is the checkout, so a bind inside it
+  keeps the normal rules): credential-shaped text in it (test fixtures, type
   definitions, READMEs) passes as an audited exception instead of refusing, and a native binary above
   `execution.secretGate.maxFileBytes` is identified by its SHA-256 digest instead of being read for patterns. Deny-listed
-  files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; any other oversized file is still
-  unscannable. Pattern results are cached per file content under the product's `state/secret-gate-cache`; a changed lockfile
+  files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; archives and any other oversized file
+  are still unscannable; oversized binaries are read only in 1 MiB windows. Pattern results are cached per file content under the product's `state/secret-gate-cache`; a changed lockfile
   or release starts over, and the unsigned cache can change only which exceptions are listed, never a decision.
   *Impact:* a real token planted in a dependency package as plain text reaches the worker, visible only as an exception.
   *Workaround:* declare only trees installed from a lockfile you trust, and review the exceptions on the Run card.

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { scanWorkerTree, workerTreeViews } from '#adapters/index.js';
 import { workerTreeExclusionSchema } from '#engine/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
@@ -11,7 +11,7 @@ import { snapshotKnownSecrets } from '#platform/index.js';
 // there are audited exceptions, evaluated once per tree identity; deny paths and configured values refuse it as everywhere. Risky inputs are
 // built at run time so this file is not itself a credential carrier.
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(async root => { await chmod(root, 0o700).catch(() => undefined); await rm(root, { recursive: true, force: true }); })); });
+afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(async root => { await chmod(root, 0o700).catch(() => undefined); await rm(root, { recursive: true, force: true }); })); });
 /** The shipped `execution.secretGate.maxFileBytes` default: the rolldown binding (19.3 MB) was refused against it (DOGFOOD-50 pilot2). */
 const DEFAULT_FILE_BYTES = 16_777_216, BINARY_BYTES = 20 * 1024 * 1024;
 const options = (cacheDirectory?: string) => ({ allowPatternPaths: [] as string[], acknowledgedDenyPaths: [] as string[], maxFiles: 1000, maxFileBytes: DEFAULT_FILE_BYTES,
@@ -78,6 +78,55 @@ describe('the dependency class', () => {
     expect(await scanWorkerTree(declared(await tree(dependencies())), { ...options(), maxTotalBytes: DEFAULT_FILE_BYTES })).toMatchObject({ status: 'incomplete', limit: 'total-bytes' });
     expect(await scanWorkerTree(declared(await tree(dependencies())), { ...options(), maxFiles: 2 })).toMatchObject({ status: 'incomplete', limit: 'files' });
   });
+  it('never allocates an oversized file whole: classification reads bounded windows, and a configured value across a window edge still refuses', async () => {
+    const alloc = vi.spyOn(Buffer, 'alloc'), window = 1 << 20;
+    expect(await scanWorkerTree(declared(await tree(dependencies())), options())).toMatchObject({ status: 'clean' });
+    expect(await scanWorkerTree(declared(await tree({ ...dependencies(), [BINDING]: Buffer.alloc(BINARY_BYTES, 0x41) })), options())).toMatchObject({ status: 'incomplete', limit: 'file-bytes' });
+    expect(alloc.mock.calls.filter(([size]) => typeof size === 'number' && size > window && size !== BINARY_BYTES).map(([size]) => size)).toEqual([]);
+    // Only the fixtures themselves (built above in this test) are 20 MB; the gate's own reads stay within one window.
+    expect(alloc.mock.calls.filter(([size]) => size === BINARY_BYTES)).toHaveLength(3);
+    const known = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value: 'erp-hunter2-value' }]), straddling = elf(); straddling.write('erp-hunter2-value', window - 7);
+    expect(await scanWorkerTree(declared(await tree(dependencies(straddling))), options(), known)).toMatchObject({ status: 'refused', findings: [{ path: `node_modules/${BINDING}`, rule: 'known-secret' }] });
+  });
+});
+
+describe('only an owner-declared bind outside the workspace and the checkout takes the class', () => {
+  const views = (workspace: string, source: string, checkoutRoot?: string) => ({ views: workerTreeViews(workspace, [{ source, target: '/node_modules', dependencyTree: { lockfile: '.package-lock.json' } }],
+    { inputs: [], handoffInputs: [] }), options: { ...options(), ...(checkoutRoot ? { checkoutRoot } : {}) } });
+  const { [BINDING]: _binary, ...text } = dependencies(); void _binary;
+  it('a declared source inside the workspace, inside or around the work-target checkout, or reached through a symlink into either gets the normal rules', async () => {
+    const workspace = await tree({ 'README.md': '# project\n', ...Object.fromEntries(Object.entries(text).map(([path, content]) => [`node_modules/${path}`, content])) });
+    const normal = (scan: object, name: string) => { expect(scan, name).not.toHaveProperty('dependencyTrees'); expect(JSON.stringify(scan), name).not.toContain('dependencyTree:'); };
+    const inside = views(workspace, join(workspace, 'node_modules')), insideScan = await scanWorkerTree(inside.views, inside.options);
+    expect(insideScan).toMatchObject({ status: 'refused' }); normal(insideScan, 'inside the workspace');
+    const checkout = await tree(Object.fromEntries(Object.entries(text).map(([path, content]) => [`node_modules/${path}`, content]))), clean = await tree({ 'README.md': '# x\n' });
+    for (const source of [join(checkout, 'node_modules'), checkout]) {
+      const shared = views(clean, source, join(checkout, source === checkout ? 'node_modules' : ''));
+      const scan = await scanWorkerTree(shared.views, shared.options); expect(scan, source).toMatchObject({ status: 'refused' }); normal(scan, source);
+    }
+    const links = await tree({}); await symlink(join(checkout, 'node_modules'), join(links, 'deps'));
+    const linked = views(clean, join(links, 'deps'), checkout);
+    // (Production refuses a linked bind source outright: resolveDockerReadOnlyMounts.) Here the link escapes into the checkout: no class.
+    normal(await scanWorkerTree(linked.views, linked.options), 'symlink into the checkout');
+    // The same bind outside both takes the class.
+    const outside = views(clean, await tree(text), checkout);
+    expect(await scanWorkerTree(outside.views, outside.options)).toMatchObject({ status: 'clean', excluded: [{ rule: 'pattern:url-userinfo', by }] });
+  });
+  it('nothing a repository, worker or task input controls grants it: in-repo markers, inputs, handoff files and prompt text keep the normal rules', async () => {
+    const workspace = await tree({ ...text, 'package.json': '{"name":"x","dependencyTree":{"lockfile":".package-lock.json"}}\n', 'dependencyTree': 'lockfile=.package-lock.json\n' });
+    const scan = await scanWorkerTree(workerTreeViews(workspace, undefined, { inputs: [{ name: 'deps', path: await tree(text) }],
+      handoffInputs: [{ target: '/deckent/inputs/_shared.json', path: join(await tree({ 'h.json': `{"u":"${USERINFO}"}` }), 'h.json') }], dependencyContext: { text: USERINFO } }), options(await tree({})));
+    expect(scan).toMatchObject({ status: 'refused', count: 4 });
+    expect(scan).not.toHaveProperty('dependencyTrees'); expect(JSON.stringify(scan)).not.toContain('dependencyTree:');
+  });
+  it('a deny-listed file at any depth of the class refuses: .env, a key, cloud credentials; archives stay unscannable unless an operator glob lifts them', async () => {
+    for (const [path, content, rule] of [['pkg/test/fixtures/.env', 'API_KEY=fixture\n', 'deny-path:**/.env'], ['a/b/c/server.key', 'k\n', 'deny-path:**/*.key'],
+      ['pkg/.aws/credentials', '[default]\n', 'deny-path:**/.aws']] as const) {
+      expect(await scanWorkerTree(declared(await tree({ ...text, [path]: content })), options()), path).toMatchObject({ status: 'refused', findings: [{ path: expect.stringContaining('node_modules/'), rule }] });
+    }
+    const archive = { ...text, 'pkg/fixture.tgz': Buffer.from([0x1f, 0x8b, 8, 0, 0, 0, 0, 0]) };
+    expect(await scanWorkerTree(declared(await tree(archive)), options())).toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/pkg/fixture.tgz', rule: 'unscannable:archive-gzip' }] });
+  });
 });
 
 describe('the pattern cache of a declared dependency tree', () => {
@@ -93,6 +142,11 @@ describe('the pattern cache of a declared dependency tree', () => {
     const changed = await scanWorkerTree(declared(deps), options(cache));
     expect(changed).toMatchObject({ dependencyTrees: [{ reused: 3, evaluated: 1 }] });
     expect((changed as { excluded: { path: string }[] }).excluded.map(entry => entry.path)).toContain('node_modules/a/index.js');
+    // A tree changed after caching is evaluated again: a configured value written into a cached file refuses at once.
+    await writeFile(join(deps, 'zod/package.json'), '{"name":"zod","password":"erp-hunter2-value"}\n');
+    expect(await scanWorkerTree(declared(deps), options(cache), snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value: 'erp-hunter2-value' }])))
+      .toMatchObject({ status: 'refused', findings: [{ path: 'node_modules/zod/package.json', rule: 'known-secret' }] });
+    await writeFile(join(deps, 'zod/package.json'), '{"name":"zod"}\n');
     await writeFile(join(deps, '.package-lock.json'), '{"lockfileVersion":3,"packages":{}}\n');
     expect(await scanWorkerTree(declared(deps), options(cache))).toMatchObject({ dependencyTrees: [{ reused: 0, evaluated: 4 }] });
   });
