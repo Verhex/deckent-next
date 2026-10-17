@@ -24,11 +24,11 @@ const unescaped = (text: string) => text.replace(/\\u([0-9a-fA-F]{4})|\\x([0-9a-
 /**
  * Every reading a worker's tools can take of the same bytes (parser parity, S6): UTF-8 (a BOM is just a leading character), and when the bytes
  * hold NUL — UTF-16/32 or binary — the NUL-stripped bytes (ASCII inside UTF-16/32 of either byte order) plus UTF-16 in both alignments; each
- * also with JSON/YAML escapes decoded. A rule matching any reading matches the file.
- */
+ * also with JSON/YAML escapes decoded. A rule matching any reading matches the file. UTF-16 decodes an aligned even-length copy: Node 24.21
+ * overruns its heap by one byte on an unaligned odd-length `utf16le` decode and glibc aborts the service (NODE24-CRASH; fixed in 24.22/26.10). */
 export function decodedTexts(bytes: Buffer): readonly string[] {
-  const texts = [bytes.toString('utf8')];
-  if (bytes.includes(NUL)) texts.push(Buffer.from(bytes.filter(byte => byte !== NUL)).toString('utf8'), bytes.toString('utf16le'), bytes.subarray(1).toString('utf16le'));
+  const texts = [bytes.toString('utf8')], utf16 = (start: number) => Buffer.from(bytes.subarray(start, bytes.length - ((bytes.length - start) % 2))).toString('utf16le');
+  if (bytes.includes(NUL)) texts.push(Buffer.from(bytes.filter(byte => byte !== NUL)).toString('utf8'), utf16(0), utf16(1));
   return [...new Set([...texts, ...texts.map(unescaped)])];
 }
 /** A compressed or archived file: the worker can extract it, the gate cannot read it the same way, so it is unscannable (fail closed). */

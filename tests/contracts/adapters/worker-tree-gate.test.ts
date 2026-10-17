@@ -89,6 +89,15 @@ describe('scanWorkerTree', () => {
     await expect(scanWorkerTree(root, options)).resolves.toEqual({ status: 'refused', count: 4, findings: [{ path: 'assets/key.pem', rule: 'deny-path:**/*.pem' },
       { path: 'assets/logo.bin', rule: 'pattern:provider-token' }, { path: 'notes/be.txt', rule: 'pattern:provider-token' }, { path: 'notes/le.txt', rule: 'pattern:provider-token' }] });
   });
+  it('decodes the odd UTF-16 alignment of an even-length binary file without a native heap overrun (NODE24-CRASH)', async () => {
+    // Node 24.21 copies one byte past its buffer for an unaligned odd-length UTF-16LE decode (fixed in 24.22/26.10). glibc aborts the service
+    // when that byte, the file's last, is even and the copy fills its heap chunk exactly: length ≡ 10 (mod 16), above the 1 KiB tcache size.
+    // Same shape as a committed PNG (ends 0x82). On another allocator the unfixed code may not abort; the finding below still must hold.
+    const body = Buffer.concat([Buffer.from([0]), Buffer.from(PROVIDER_TOKEN, 'utf16le')]), file = Buffer.alloc(4106, 0x20);
+    body.copy(file); file[file.length - 1] = 0x82;
+    await expect(scanWorkerTree(await tree({ 'assets/shot.png': file }), options)).resolves.toEqual({ status: 'refused', count: 1,
+      findings: [{ path: 'assets/shot.png', rule: 'pattern:provider-token' }] });
+  });
   it('matches deny paths case-insensitively, refuses special files and scans symlink target text', async () => {
     const root = await tree({ 'certs/SERVER.PEM': 'x', '.ENV': 'x', 'ok.txt': 'fine' });
     await symlink(`/run/${PROVIDER_TOKEN}`, join(root, 'link'));
