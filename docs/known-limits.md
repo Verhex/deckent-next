@@ -3,7 +3,8 @@
 [Türkçe](known-limits.tr.md) · [README](../README.md) · [Architecture overview](architecture-overview.md)
 
 This page says plainly what Deckent does not do yet, what has not been tried, and what you should do instead. It
-describes the pre-release `1.0.0-alpha.39`. A limit leaves this page when the change that closes it has landed and been
+describes the current pre-release (the version is in the [README](../README.md) and the top line of the
+[CHANGELOG](../CHANGELOG.md)). A limit leaves this page when the change that closes it has landed and been
 seen working, not before. Each item gives **what** the limit is, **the impact** on you and, where one exists, a
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
@@ -177,6 +178,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   (newer ledger versions cannot be opened by older builds).
 - **A lost worker can keep its slot.** A granted attempt can stay active and hold an execution slot until custody is resolved.
   *Workaround:* watch it with `deckent monitor`; the slot is freed only by a typed manual decision or by evidence that the worker ended.
+- **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
+  registry and pool. The model connection, `/do`, a worker image build on an empty Docker daemon and the start-up
+  toolchain refresh on a clean daemon were not exercised there. *Workaround:* follow the README first-job path and report what differs.
 - **Restart recovery has not had an independent review** with a real container kill and service restart.
 - **After an upgrade that sets `service.identity`, a running service needs one manual stop** (Ctrl+C on `deckent runtime serve`,
   or its idle stop) before `runtime restart` works: a service reads its identity only when it starts.

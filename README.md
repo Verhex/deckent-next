@@ -162,8 +162,8 @@ deckent init policy --scope my-project --apply
 ## Get your first job done
 
 "Your first session" ends with a governed chat. This path goes on to a real job: Deckent plans it, you approve the plan,
-a coding worker does it in Docker, and the change is delivered to Git. Steps 1 to 4 are one-time operator setup; a clean-machine rehearsal of the whole path has not been
-done yet ([known limits](docs/known-limits.md)). Commands and messages below come from the current source and its message
+a coding worker does it in Docker, and the change is delivered to Git. Steps 1 to 4 are one-time operator setup; a clean-machine rehearsal on 2026-10-15/16 ran the path up to the model step
+(the model step and a worker image build on an empty Docker daemon were not exercised; [known limits](docs/known-limits.md)). Commands and messages below come from the current source and its message
 catalogs; ids, paths and times are examples.
 
 ```mermaid
@@ -227,6 +227,23 @@ policy revision and the runtime service identity, so a change of either in betwe
    (first-run policy v12) already names the service (`service.identity`) and lets you, and only you, stop it. On an older
    first-run installation run the upgrade above first; if it says it set the service identity, stop the running service
    once by hand (see [The runtime service](#the-runtime-service)) before `runtime restart` works.
+   **Before step 5, once: a model and a worker login.** `/do` needs one connected model with a budget, and the worker CLI
+   needs its own login on this machine:
+
+   ```sh
+   deckent secret set DECKENT_ANTHROPIC_KEY
+   deckent models create-budget --scope my-project --usd 10
+   deckent models connect --scope my-project --connection anthropic-api --command-id connect-1 --model claude-sonnet-5-5
+   ```
+
+   `secret set` asks for the key in a hidden prompt. Each connection kind has its own secret name:
+   `DECKENT_ANTHROPIC_KEY`, `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`, `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY`
+   or `DECKENT_OPENROUTER_KEY` (`/provider` stores under the same name). `--model` takes an exact API model ID;
+   the IDs of the packaged catalogs are listed in `assets/model-catalog/<connection>.json` in the source checkout,
+   and `/model` lists them in the terminal. The worker CLI (`codex` or `claude`) must be installed on this
+   machine and logged in: run `codex login`; for Claude Code run `claude` and type `/login`. Deckent reads that login
+   from the CLI's own home (`~/.codex/auth.json`, `~/.claude/.credentials.json`).
+
 5. **Ask for the job.** In the terminal type `/do` and your request in plain words (`deckent do --request "<text>"` is the
    same from the command line). One connected, active model plans it, and Deckent prints the plan:
 
@@ -302,6 +319,11 @@ Model turns, approvals, `/do` and recovery run in one local runtime service per 
   build and configuration; `deckent runtime shutdown` only stops it. `deckent runtime describe` shows the running one.
   Both need the service's identity (`deckent config explain service.identity`) and your `shutdown` rule on it, which
   the first-run policy gives the installing person only; the local MCP actor cannot stop the service.
+- **Older installations.** A first-run policy older than v12 has neither the service identity nor the `shutdown` rule, so
+  `runtime restart` and `runtime shutdown` are refused. Upgrade it with
+  `deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <value>` (see
+  [Get your first job done](#get-your-first-job-done)); if the apply sets `service.identity`, stop a service that is
+  already running once by hand (Ctrl+C on `runtime serve`) before `runtime restart` works.
 
 ## In the terminal
 
@@ -513,11 +535,13 @@ npm link
 Use a fresh `--out` directory for another build. The build ends with `bubblewrap=present` or `bubblewrap=staged from …`.
 On Linux a build that cannot stage the locked bubblewrap stops with `BUBBLEWRAP_BUILD_REQUIRED` instead of finishing;
 start Docker and run it again. Only off Linux does it print `bubblewrap=absent (not Linux)`, which means there is no
-bubblewrap sandbox; inspect the sandbox posture with `deckent doctor`. See the
+bubblewrap sandbox; inspect the sandbox posture with `deckent doctor`. The very first `doctor`, before any service has
+run, can report Landlock instead of bubblewrap: `doctor` only measures, and the runtime service places the bundled
+bubblewrap under `.deckent/bin` when it measures the host. Start the service (`deckent`) and run `doctor` again. See the
 [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart) for prerequisites and one test without a provider key.
 
 **Ubuntu 24.04 and later.** The kernel may restrict unprivileged user namespaces, which bubblewrap needs. Check with
-`sysctl kernel.apparmor_restrict_unprivileged_userns`: `1` means restricted. Deckent then reports the restriction, falls back
+`sysctl kernel.apparmor_restrict_unprivileged_userns`: `1` means restricted; on WSL a missing key (`cannot stat`) means there is no restriction. Deckent then reports the restriction, falls back
 to Landlock visibly, and refuses full-access shell calls because they need the open bubblewrap sandbox. An administrator
 can install bubblewrap root-owned as `/usr/local/bin/bwrap` together with an AppArmor profile that allows `userns` for it.
 
