@@ -1,0 +1,20 @@
+{
+  "note": "S6 dependency class (owner 2026-10-17): native executable and library formats a declared dependency tree may hold above execution.secretGate.maxFileBytes. Such a file is read in bounded windows (hashed, configured values and patterns per window); any other file above the bound stays unscannable (fail closed). refuseInNativeFiles: credential families that refuse in any native-claimed file of the class (review 4); text fixtures stay exceptions. A match also needs a NUL byte in the first headerBytes (every listed format has one in its header).",
+  "headerBytes": 1024,
+  "windowBytes": 1048576,
+  "carryBytesPerChar": 24,
+  "patternCarryBytes": 65536,
+  "refuseInNativeFiles": ["provider-token", "private-key-block", "gitlab-token", "aws-temporary-key", "aws-secret-key", "stripe-key", "slack-token", "pypi-token", "azure-account-key"],
+  "maxCachePathLength": 4096,
+  "maxCacheBytes": 16777216,
+  "signatures": [
+    { "kind": "elf", "hex": "7f454c46" },
+    { "kind": "mach-o", "hex": "feedface" },
+    { "kind": "mach-o", "hex": "feedfacf" },
+    { "kind": "mach-o", "hex": "cefaedfe" },
+    { "kind": "mach-o", "hex": "cffaedfe" },
+    { "kind": "mach-o-universal", "hex": "cafebabe" },
+    { "kind": "pe", "hex": "4d5a" },
+    { "kind": "wasm", "hex": "0061736d" }
+  ]
+}

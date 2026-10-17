@@ -12,7 +12,8 @@ const profile = (readOnlyMounts: unknown) => ({ id: 'verify', version: 1, adapte
   tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536, readOnlyMounts } });
 
 it('pins read-only dependency mounts as profile data, apart from the supervisor options', () => {
-  const mounts = [{ source: 'node_modules', target: '/node_modules' }, { source: 'tools/python/.venv', target: '/opt/venv' }];
+  // S6 dependency class (owner 2026-10-17): `dependencyTree` is the explicit, pinned signal; its lockfile is a path inside the bind.
+  const mounts = [{ source: 'node_modules', target: '/node_modules', dependencyTree: { lockfile: '.package-lock.json' } }, { source: 'tools/python/.venv', target: '/opt/venv' }];
   const resolved = resolveDockerTaskProfile(profile(mounts));
   expect(resolved.readOnlyMounts).toEqual(mounts);
   expect(resolved.options).not.toHaveProperty('readOnlyMounts');
@@ -36,6 +37,12 @@ it.each([
   ['a non-normalized target', [{ source: 'node_modules', target: '/deps/../workspace' }]],
   ['duplicate targets', [{ source: 'a', target: '/deps' }, { source: 'b', target: '/deps' }]],
   ['a writable flag', [{ source: 'node_modules', target: '/deps', readonly: false }]],
+  ['a dependency lockfile outside the bind', [{ source: 'node_modules', target: '/deps', dependencyTree: { lockfile: '../package-lock.json' } }]],
+  ['a dependency lockfile in a Git directory', [{ source: 'node_modules', target: '/deps', dependencyTree: { lockfile: '.git/HEAD' } }]],
+  ['an absolute dependency lockfile', [{ source: 'node_modules', target: '/deps', dependencyTree: { lockfile: '/etc/passwd' } }]],
+  ['a dependency tree without a lockfile', [{ source: 'node_modules', target: '/deps', dependencyTree: {} }]],
+  ['a dependency tree flag', [{ source: 'node_modules', target: '/deps', dependencyTree: true }]],
+  ['an unknown dependency tree key', [{ source: 'node_modules', target: '/deps', dependencyTree: { lockfile: 'a', scan: 'off' } }]],
   ['too many mounts', Array.from({ length: 9 }, (_, index) => ({ source: `d${index}`, target: `/d${index}` }))],
 ] as const)('rejects %s at profile validation', (_name, mounts) => {
   expect(() => validateDockerTaskProfile(profile(mounts))).toThrow('DOCKER_TASK_PROFILE_INVALID');
@@ -51,6 +58,9 @@ it('resolves sources inside the real project root and refuses links, files and p
   const excluded = [data, join(root, 'workspaces')];
   expect(await resolveDockerReadOnlyMounts(project, [{ source: 'node_modules', target: '/node_modules' }], excluded))
     .toEqual([{ source: join(project, 'node_modules'), target: '/node_modules' }]);
+  // The dependency class survives resolution unchanged (the gate reads it); an undeclared bind never gains it.
+  expect(await resolveDockerReadOnlyMounts(project, [{ source: 'node_modules', target: '/node_modules', dependencyTree: { lockfile: '.package-lock.json' } }], excluded))
+    .toEqual([{ source: join(project, 'node_modules'), target: '/node_modules', dependencyTree: { lockfile: '.package-lock.json' } }]);
   // `linked/deps` is a real directory reached through a linked parent: only the real-path comparison refuses it.
   for (const source of ['linked', 'linked/deps', 'inner-link', 'file', 'missing', 'state', 'state/data', 'state/data/x']) {
     if (source === 'state/data/x') await mkdir(join(data, 'x'));

@@ -46,8 +46,24 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   maskelenmez. *Yol:* böyle dosyaları sandbox'ın gördüğü ev dizininin dışında tutun ya da ayrıca yalıtın.
 - **Sır kapısı Git geçmişini taramaz.** İş gönderilmeden önce işçinin aldığı her şeyi (çalışma kopyası, `.git` üst verisi,
   bağlamalar, görev girdileri, istem bağlamı) tarar ve bulursa reddeder; nesne deposundaki eski commit'ler taranmaz. Hariç
-  tutmalar yalnız ayarda yazılı yollardır, denetime yazılır ve Run kartında görünür. *Yol:* geçmişe girmiş sırları
-  geçmişten çıkarın ve değiştirin; isteğe, istem metnine ya da `DECKENT.md`'ye asla kimlik bilgisi koymayın.
+  tutmalar yalnız ayarda yazılı yollar ya da bildirilmiş bir bağımlılık ağacıdır, denetime yazılır ve Run kartında görünür.
+  *Yol:* geçmişe girmiş sırları geçmişten çıkarın ve değiştirin; isteğe, istem metnine ya da `DECKENT.md`'ye asla kimlik
+  bilgisi koymayın.
+- **Bildirilmiş bir bağımlılık ağacına içerik kalıpları için güvenilir.** Görev profilinin `dependencyTree` olarak bildirdiği,
+  gerçek yolu iş denemesinin çalışma alanı ve iş hedefi (work target) kopyasının dışında kalan salt okunur bir bağlama (örneğin
+  `node_modules`) üçüncü taraf içeriktir (ayrı bir iş hedefi yoksa proje kökü o kopyadır; içindeki bağlama normal kurallarla
+  taranır): içindeki kimlik bilgisine benzeyen metin (test
+  verileri, tip tanımları, README'ler) reddedilmez, denetime yazılan istisna olarak geçer; `execution.secretGate.maxFileBytes`
+  üstündeki yerel ikili dosya sınırlı pencerelerle okunur ve SHA-256 özetiyle listelenir. Başlığı yerel ikili olduğunu söyleyen
+  bir dosyada özel anahtarlar ve sağlayıcı/bulut anahtarları reddedilir. Yasak listedeki dosyalar (`.npmrc`, `.env`,
+  anahtarlar) ve yapılandırılmış sır değerleri orada da reddedilir; arşivler ve sınırı aşan başka her dosya yine taranamaz
+  sayılır; büyük ikili dosyalar yalnız 1 MiB'lik pencerelerle okunur. Kalıp
+  sonuçları dosya içeriğine göre ürünün `state/secret-gate-cache` alanında saklanır; değişen kilit dosyası (lockfile) ya da
+  sürüm baştan başlatır, imzasız önbellek yalnız hangi istisnaların listelendiğini değiştirebilir, hiçbir kararı değiştiremez.
+  Ağaç ana makinede taranır ve canlı, salt okunur bağlanır: taramadan sonra ana
+  makinede yapılan bir değişiklik işçiye taranmadan ulaşır (her bağlamada olduğu gibi).
+  *Etki:* bir bağımlılık paketine düz metin olarak konmuş gerçek bir anahtar işçiye ulaşır, yalnız istisna olarak görünür.
+  *Yol:* yalnız güvendiğiniz bir kilit dosyasından kurulan ağaçları bildirin ve Run kartındaki istisnaları gözden geçirin.
 - **Sır kapısının ayar kuralı yalnız ayar türü dosyalara bakar.** Sıradan kaynak koduna yazılmış bir parola yakalanmaz.
   *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 
