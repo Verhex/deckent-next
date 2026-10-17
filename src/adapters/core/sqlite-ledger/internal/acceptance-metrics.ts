@@ -16,11 +16,20 @@ export function recordAcceptanceMetric(db: DatabaseSync, producerCommandId: stri
     .run(id.scopeId, producerCommandId, id.runId, id.taskId, id.attemptId, metric.outcome.kind, record);
 }
 
-/** Read-only receipt metadata, pinned to an already authorized Run snapshot. */
-export function readRunAcceptanceEvaluations(db: DatabaseSync, snapshot: RunSnapshot) {
-  const rows = db.prepare(`SELECT command_id,command FROM run_receipts WHERE scope_id=? AND CASE WHEN json_valid(command) THEN
-    json_extract(command,'$.action')='apply-task-evaluation' AND json_extract(command,'$.evaluation.identity.runId')=? ELSE 0 END`).all(snapshot.identity.scopeId, snapshot.identity.runId);
-  return selectRunAcceptanceEvaluations(snapshot, rows.map(row => ({ commandId: String(row.command_id), command: String(row.command) })));
+type EvaluationRow = { readonly commandId: string; readonly command: string };
+/** Every evaluation receipt in one scan, keyed `scope/run`: a monitor snapshot reads every Run, and one scan per Run cost O(Runs × receipts). */
+export function readAcceptanceEvaluationRows(db: DatabaseSync): ReadonlyMap<string, readonly EvaluationRow[]> {
+  const rows = new Map<string, EvaluationRow[]>();
+  for (const row of db.prepare(`SELECT scope_id,command_id,command,json_extract(command,'$.evaluation.identity.runId') AS run_id FROM run_receipts WHERE CASE WHEN json_valid(command)
+    THEN json_extract(command,'$.action')='apply-task-evaluation' ELSE 0 END`).all()) if (typeof row.run_id === 'string') {
+    const key = `${row.scope_id}/${row.run_id}`, list = rows.get(key) ?? []; list.push({ commandId: String(row.command_id), command: String(row.command) }); rows.set(key, list); }
+  return rows;
+}
+/** Read-only receipt metadata, pinned to an already authorized Run snapshot; `rows` is that Run's slice of `readAcceptanceEvaluationRows`. */
+export function readRunAcceptanceEvaluations(db: DatabaseSync, snapshot: RunSnapshot, rows?: readonly EvaluationRow[]) {
+  return selectRunAcceptanceEvaluations(snapshot, rows ?? db.prepare(`SELECT command_id,command FROM run_receipts WHERE scope_id=? AND CASE WHEN json_valid(command) THEN
+    json_extract(command,'$.action')='apply-task-evaluation' AND json_extract(command,'$.evaluation.identity.runId')=? ELSE 0 END`).all(snapshot.identity.scopeId, snapshot.identity.runId)
+    .map(row => ({ commandId: String(row.command_id), command: String(row.command) })));
 }
 /** Scoped, digest-checked retained metrics; the consumer still owns per-Attempt output admission. */
 export function readRunAcceptanceMetrics(db: DatabaseSync, snapshot: RunSnapshot) {

@@ -114,7 +114,8 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(f.posts).toBe(0); expect(counts(f.path).runs).toBe(0);
   });
   it.each([null, 0])('refuses unavailable/exhausted budget %s before the model', async budget => {
-    const f = await fixture({ budget }); await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: budget === null ? 'RUN_PROPOSAL_BUDGET_MISSING' : 'RUN_PROPOSAL_BUDGET_EXCEEDED' });
+    const f = await fixture({ budget }); await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: budget === null ? 'RUN_PROPOSAL_BUDGET_MISSING' : 'RUN_PROPOSAL_BUDGET_EXCEEDED',
+      ...(budget === 0 ? { params: { remaining: 0, currency: 'USD' } } : {}) });
     expect(f.posts).toBe(0); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
   });
   it.each([['bad-json', 'json'], ['{}', 'schema']] as const)('retains %s failure without Run; invocation replay makes no second POST', async (response, stage) => {
@@ -182,4 +183,21 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   const inspected = await inspectRunProposal(f.project, { schemaVersion: 1, scopeId: 's', runId: first.proposal.proposal.runId, commandId: command.commandId }, f.options);
   expect(inspected!.planningSpending).toEqual({ class: 'unknown', currency: null, amountMinorUnits: null, evidence: 'unknown' });
   expect(first.planningSpending!.amountMinorUnits).toBeGreaterThan(0); expect(f.posts).toBe(1);
+});
+
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] the system narrows a Brain ceiling that copies the limit to the remaining money; the model number never widens and the prompt stays replay-stable', async () => {
+  const { graph, requiredPermissions } = proposalFixture('business');
+  // Live 2026-10-17: the model copied the 100 USD limit after 12.17 USD was spent and every plan was refused RUN_PROPOSAL_BUDGET_EXCEEDED.
+  const f = await fixture({ standing: true, response: JSON.stringify({ graph, budgetCeiling: { currency: 'USD', limitMinorUnits: 1000 }, requiredPermissions }) });
+  const first = await planRun(f.project, command, f.options), settled = first.planningSpending!.amountMinorUnits!;
+  expect(settled).toBeGreaterThan(0);
+  expect(first.proposal).toMatchObject({ status: 'accepted', proposal: { budgetCeiling: { currency: 'USD', limitMinorUnits: 1000 - settled } },
+    binding: { admission: { budget: { remainingMinorUnits: 1000 - settled } } } });
+  expect(JSON.parse(JSON.parse(f.bodies[0]!).messages[1].content).context.context.budget).toEqual({ currency: 'USD', limitMinorUnits: 1000 });
+  expect(await planRun(f.project, command, f.options)).toEqual(first); expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 1, proposals: 1 });
+});
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] keeps a smaller Brain ceiling as authored', async () => {
+  const { graph, requiredPermissions } = proposalFixture('business');
+  const f = await fixture({ response: JSON.stringify({ graph, budgetCeiling: { currency: 'USD', limitMinorUnits: 7 }, requiredPermissions }) });
+  expect((await planRun(f.project, command, f.options)).proposal.proposal.budgetCeiling).toEqual({ currency: 'USD', limitMinorUnits: 7 });
 });

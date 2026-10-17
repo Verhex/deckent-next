@@ -8,7 +8,7 @@ export interface WorkerLineLabels {
   /** `worker {n}` */
   readonly ordinal: string;
   readonly phases: Readonly<Record<WorkerLivePhase, string>>;
-  /** `{n} s`, `{n} min`, `{n} h` */
+  /** `{n} s`, `{n} min`, `{n}h {m}m` (hours with their minutes) */
   readonly durationSeconds: string;
   readonly durationMinutes: string;
   readonly durationHours: string;
@@ -53,7 +53,8 @@ export function formatDuration(ms: number, labels: Pick<WorkerLineLabels, 'durat
   const seconds = Math.max(0, Math.floor(ms / 1000));
   if (seconds < 60) return fillTemplate(labels.durationSeconds, { n: seconds });
   if (seconds < 3600) return fillTemplate(labels.durationMinutes, { n: Math.floor(seconds / 60) });
-  return fillTemplate(labels.durationHours, { n: Math.floor(seconds / 3600) });
+  // Hours carry their minutes ("2 sa 18 dk"), so a long-running age keeps visibly moving (owner 2026-10-17: "2 sa" looked frozen).
+  return fillTemplate(labels.durationHours, { n: Math.floor(seconds / 3600), m: Math.floor((seconds % 3600) / 60) });
 }
 
 function clip(value: string): string {

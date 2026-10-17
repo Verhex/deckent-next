@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { modelInvocationProfileSchema, nativeCliIds, executionProfileDefinitionSchema } from '#domain/index.js';
-import { classifyWorkSpending, workSpendingBasis } from '#engine/index.js';
+import { classifyWorkSpending, workSpendingBasis, workerBillingAxis } from '#engine/index.js';
 const worker = executionProfileDefinitionSchema.parse({ id: 'worker', version: 1, adapter: { id: 'fixture', version: 1 }, parameters: {} });
 const model = modelInvocationProfileSchema.parse({ schemaVersion: 1, id: 'local', version: 1, scopeId: 's',
   reference: { providerId: 'fixture', providerVersion: 1, modelId: 'local', modelVersion: 1 }, bindingDigest: 'a'.repeat(64),
@@ -35,4 +35,21 @@ it('only subscription-only selections waive the budget; a mixed or unresolved ta
   expect(workSpendingBasis([subscription, worker]).semantics).toBe('metered');
   expect(workSpendingBasis([subscription, null]).semantics).toBe('metered');
   expect(workSpendingBasis([subscription]).digest).not.toBe(workSpendingBasis([worker]).digest);
+});
+
+it('a worker declaring the local billing axis is not metered; an absent, malformed or subscription-mixed declaration keeps today\'s class', () => {
+  const local = executionProfileDefinitionSchema.parse({ ...worker, parameters: { billingAxis: 'local' } });
+  expect(workerBillingAxis(local)).toBe('local');
+  expect(classifyWorkSpending({ kind: 'worker', profile: local })).toBe('not-metered');
+  for (const billingAxis of ['metered', 'subscription', 'LOCAL', null, { axis: 'local' }]) {
+    const profile = executionProfileDefinitionSchema.parse({ ...worker, parameters: { billingAxis } });
+    expect(workerBillingAxis(profile)).toBeNull();
+    expect(classifyWorkSpending({ kind: 'worker', profile })).toBe('metered');
+  }
+  // A subscription binding stays the subscription axis; the declaration never relabels it.
+  expect(workerBillingAxis({ ...worker, parameters: { billingAxis: 'local', nativeSubscription: { schemaVersion: 2, provider: nativeCliIds[0]! } } })).toBe('subscription');
+  const subscription = { ...worker, parameters: { nativeSubscription: { schemaVersion: 2, provider: nativeCliIds[0]! } } };
+  expect(workSpendingBasis([subscription, local]).semantics).toBe('not-metered');
+  expect(workSpendingBasis([local, worker]).semantics).toBe('metered');
+  expect(workSpendingBasis([local]).digest).not.toBe(workSpendingBasis([worker]).digest);
 });

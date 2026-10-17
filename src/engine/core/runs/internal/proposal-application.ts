@@ -18,9 +18,13 @@ export interface RunProposalContext {
 export interface RunProposalResult { readonly schemaVersion: 1; readonly proposal: RunProposalRecord; readonly run: RunView | null;
   readonly planningSpending?: Readonly<{ billingAxis?: ModelInvocationBillingAxis; class: 'metered' | 'not-metered' | 'unknown'; currency: string | null;
     amountMinorUnits: number | null; evidence: 'measured-tariff' | 'measured-tariff-upper-bound' | 'provider-reported' | 'settled-local' | 'plan-usage' | 'held' | 'unknown' }>;
-  readonly budgetSemantics: 'admission-check-only' | 'not-metered'; readonly runtimeTotalSpendEnforced: false }
-const result = (proposal: RunProposalRecord, run: RunView | null = null): RunProposalResult => Object.freeze({ schemaVersion: 1,
-  proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false });
+  readonly budgetSemantics: 'admission-check-only' | 'not-metered'; readonly runtimeTotalSpendEnforced: false;
+  /** A budget refusal's money left (and declared ceiling), on the response that recorded it only: the amount moves with every charge, so it
+   * is never stored and a replay renders the refusal without it. Every other refusal replays byte-identically. */
+  readonly reasonParams?: Readonly<Record<string, string | number>> }
+const result = (proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => Object.freeze({ schemaVersion: 1,
+  proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false,
+  ...(error instanceof DeckentError && proposal.reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED' && error.code === proposal.reason && error.params ? { reasonParams: error.params } : {}) });
 const codeOf = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
 export class RunProposalApplication {
   constructor(private readonly store: RunProposalStore, private readonly verifier: PrincipalVerifier, private readonly authority: RunCreationAuthority,
@@ -54,7 +58,7 @@ export class RunProposalApplication {
       } catch (error) {
         const code = codeOf(error); if (!code || !ErrorRegistry.has(code)) throw error;
         this.authority.recordUnapplied(command, principal, evaluation);
-        return result(await this.store.recordProposal({ ...record, status: 'rejected', reason: code }));
+        return result(await this.store.recordProposal({ ...record, status: 'rejected', reason: code }), null, error);
       }
       // A failed receipt write stops before sealing/approval/Run admission.
       record = await this.store.recordProposal(record);
@@ -82,7 +86,7 @@ export class RunProposalApplication {
       const status = pending ? 'pending' : ['APPROVAL_EXPIRED', 'APPROVAL_STALE', 'APPROVAL_CONFLICT', 'RUN_PROPOSAL_BASIS_STALE'].includes(code) ? 'parked' : 'rejected';
       const next: RunProposalRecord = { ...record, revision: record.revision + 1, status, reason: code, authority: null,
         approval: pending ? { approvalId: String(pending.approvalId), expiresAt: Number(pending.expiresAt), decisionRecordId: String(pending.decisionRecordId) } : null };
-      return result(await this.store.transitionProposal(record, next));
+      return result(await this.store.transitionProposal(record, next), null, pending ? undefined : error);
     }
   }
 }

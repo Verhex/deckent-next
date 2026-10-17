@@ -1,5 +1,5 @@
 import { dirname, resolve } from 'node:path';
-import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, mapBounded, HOST_LIMITS_REGISTRY, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, DockerSupervisor, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
 import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels,
   type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
@@ -31,29 +31,27 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
         // H34 S3: the target resolved the scope for its own company; this request's company must be that company.
         assertRequestCompany(target.config.company.id, c.config.company.id);
         const page = await inspectConfiguredInventory(source.path, { schemaVersion: 1, scopeId: query.scopeId, limit: Math.min(remaining, target.config.inspection.maxPageSize), after: query.after }, options);
-        const authorization = contextDispatchAuthorization(target);
+        // One policy document, one trace pass, bounded parallel probes per page (2026-10-17: per-attempt policy/trace re-reads took 5.8 s).
+        const authorization = contextDispatchAuthorization(target, target.document), views = await inspectConfiguredResources(target.config, target.layout, page.page.entries.map(entry => entry.identity));
         const reader = await openSqliteInventoryReader(await inspectProductFile(target.layout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: target.config.storage.sqlite.busyTimeoutMs });
-        const workers: WorkerObservation[] = [];
-        try {
-          for (const entry of page.page.entries) {
-            const basic: WorkerObservation = { taskId: entry.identity.taskId, identity: entry.identity, authority: 'next-ledger',
-              provider: 'unknown', workspace: null, process: 'unknown', handle: entry.terminal?.handle ?? null,
-              terminal: entry.terminal, outputRecorded: entry.outputRecorded, patchRecorded: false, files: null, diagnostics: [] };
-            try {
-              await authorization.authorizeIdentity('read-output', entry.identity, target.principal);
-              const resources = await inspectConfiguredResources(target.config, target.layout, entry.identity);
-              if (query.open && entry.terminal) { workers.push({ ...basic, resources, diagnostics: ['info:ledger-only'] }); continue; }
-              const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
-              const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).catch(() => ({ state: 'unknown' as const, handle: null }));
-              let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity)
-                .catch((error: { code?: unknown }) => { absent = error?.code === 'ENOENT'; return null; }), released = absent && !!record.patch && activity.state === 'missing';
-              const evidence = await observeAttemptWorkerModels(reader, FileArtifactStore.reader(() => inspectProductDirectory(target.layout, 'artifacts'), target.config.artifacts.maxBytes), entry.identity, files?.usage ?? null), model = evidence.model;
-              workers.push({ ...basic, resources, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle ?? basic.handle,
-                patchRecorded: !!record.patch, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
-                  ...(evidence.usageEvidence === 'unavailable' ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable'])] });
-            } catch (error) { workers.push({ ...basic, diagnostics: [...(query.open && entry.terminal ? ['info:ledger-only'] : []), ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable'] }); }
-          }
-        } finally { reader.close(); }
+        const workers = await mapBounded(page.page.entries, HOST_LIMITS_REGISTRY.observationConcurrency, async (entry, index): Promise<WorkerObservation> => {
+          const basic: WorkerObservation = { taskId: entry.identity.taskId, identity: entry.identity, authority: 'next-ledger',
+            provider: 'unknown', workspace: null, process: 'unknown', handle: entry.terminal?.handle ?? null,
+            terminal: entry.terminal, outputRecorded: entry.outputRecorded, patchRecorded: false, files: null, diagnostics: [] };
+          try {
+            await authorization.authorizeIdentity('read-output', entry.identity, target.principal);
+            const resources = views[index]!;
+            if (query.open && entry.terminal) return { ...basic, resources, diagnostics: ['info:ledger-only'] };
+            const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
+            const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).catch(() => ({ state: 'unknown' as const, handle: null }));
+            let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity)
+              .catch((error: { code?: unknown }) => { absent = error?.code === 'ENOENT'; return null; }), released = absent && !!record.patch && activity.state === 'missing';
+            const evidence = await observeAttemptWorkerModels(reader, FileArtifactStore.reader(() => inspectProductDirectory(target.layout, 'artifacts'), target.config.artifacts.maxBytes), entry.identity, files?.usage ?? null), model = evidence.model;
+            return { ...basic, resources, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle ?? basic.handle,
+              patchRecorded: !!record.patch, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
+                ...(evidence.usageEvidence === 'unavailable' ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable'])] };
+          } catch (error) { return { ...basic, diagnostics: [...(query.open && entry.terminal ? ['info:ledger-only'] : []), ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable'] }; }
+        }).finally(() => reader.close());
         remaining -= workers.length;
         sources.push({ ...source, status: 'available', workers, nextAfter: page.page.nextAfter, truncated: page.page.nextAfter !== null });
       } catch (error) { sources.push({ ...source, status: ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'denied' : 'unavailable', workers: [], nextAfter: null, truncated: false }); }

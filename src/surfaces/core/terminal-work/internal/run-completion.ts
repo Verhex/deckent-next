@@ -70,10 +70,12 @@ export function useRunCompletion(input: { readonly limit: number | undefined; re
     records.current.set(run.runId, { revision: run.revision, terminal: false, notified: false, run, sinceMs: Date.now() });
     setPending(true); advance(value => value + 1); publish();
   }, [input.labels, input.limit, input.ledger?.scopeId, input.push, publish]);
-  /** The person opened a finished Run from the strip: it leaves the strip (its completion line was already written once). */
-  const dismiss = useCallback((runId: string) => {
-    const record = records.current.get(runId);
-    if (record?.terminal && record.notified) { records.current.delete(runId); publish(); }
+  /** The person opened a finished Run (strip or `/run`), or the whole Run list (`/runs`, no id): those finished Runs leave the strip (their
+   * completion line was already written once). Unfinished Runs always stay. */
+  const dismiss = useCallback((runId?: string) => {
+    let changed = false;
+    for (const [id, record] of records.current) if ((runId === undefined || id === runId) && record.terminal && record.notified) { records.current.delete(id); changed = true; }
+    if (changed) publish();
   }, [publish]);
   // Production uses serialized push snapshots. Older/test ports without that seam inspect only admitted identities.
   useSingleFlightPoll(pending && !input.refused && !denied && Boolean(input.ledger) && !(input.ledger?.followEvents && input.ledger.readSurfaceSnapshot), input.pollMs,

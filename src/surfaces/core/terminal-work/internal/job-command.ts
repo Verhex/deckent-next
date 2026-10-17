@@ -17,6 +17,8 @@ interface WorkCommandContext {
   readonly runDecision: (command: 'approvals' | 'cancel' | 'runs', args: string, execution: LocalExecution) => Promise<void>;
   /** `{part}`: a slash command without its port in this terminal (`terminal.admin.partUnavailable`, the session language). */
   readonly commandUnavailable?: string | undefined;
+  /** The person opened a Run window (`/run`, its id) or the Run list (`/runs`, no id): the active-work strip drops those finished Runs. */
+  readonly onRunsSeen?: ((runId?: string) => void) | undefined;
 }
 /**
  * The job and approval windows (SW-2). SLASH-WINDOWS I-1 (owner 2026-10-08): a typed argument never selects anything here — the rich
@@ -52,7 +54,10 @@ export async function dispatchWorkCommand(slash: { readonly command: string; rea
         push([systemSummaryEntry(text)]); return true;
       }
       // Y1: `/runs` carries the hold/resume/close keys when the terminal has the lifecycle port and the words; otherwise the read-only list.
-      if (slash.command === 'approvals' || slash.command === 'cancel' || (slash.command === 'runs' && ledger!.controlRun && workLabels!.runControl)) await runDecision(slash.command as 'approvals' | 'cancel' | 'runs', '', execution);
+      if (slash.command === 'approvals' || slash.command === 'cancel' || (slash.command === 'runs' && ledger!.controlRun && workLabels!.runControl)) {
+        await runDecision(slash.command as 'approvals' | 'cancel' | 'runs', '', execution);
+        if (slash.command === 'runs' && !execution.signal.aborted) context.onRunsSeen?.();
+      }
       else if (['watch-workers', 'watch-runs', 'tasks'].includes(slash.command)) {
         const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current })!;
         if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
@@ -62,7 +67,7 @@ export async function dispatchWorkCommand(slash: { readonly command: string; rea
         setWatchStatus(refused ? '' : fillTemplate(workLabels!.jobs!.watchStatus, { mode: feed && pushMode !== 'poll' ? workLabels!.jobs!.push : workLabels!.jobs!.poll }));
         if (action.window) live.show(action.window);
       } else {
-        const summary = await runJobWindow(slash.command as 'workers' | 'runs' | 'run' | 'transcript', panel, execution, ledger!, workLabels!);
+        const summary = await runJobWindow(slash.command as 'workers' | 'runs' | 'run' | 'transcript', panel, execution, ledger!, workLabels!, context.onRunsSeen);
         if (!execution.signal.aborted) push([systemSummaryEntry(summary)]);
       }
     } catch (error) {

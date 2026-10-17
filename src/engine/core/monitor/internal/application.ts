@@ -34,8 +34,8 @@ export class MonitorApplication {
     // Select before any port call and before path deduplication, so an explicitly selected alias keeps its id.
     const selected = targets.filter(target => install === undefined || target.id === install)
       .filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
-    const observedAt = this.ports.now(); const installs: MonitorInstall[] = [];
-    for (const target of selected) installs.push(await this.install(target, observedAt));
+    // Installs are independent read-only observations: they are read concurrently and kept in target order.
+    const observedAt = this.ports.now(), installs = await Promise.all(selected.map(target => this.install(target, observedAt)));
     return Object.freeze({ schemaVersion: 1, observedAt, installs: Object.freeze(installs), control: 'observe-only',
       sourcesRead: Object.freeze(selected.map(target => target.id)) });
   }

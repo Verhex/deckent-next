@@ -1,6 +1,6 @@
 import { executionRegistrySchema, type BrainPlanCommand,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { BrainPlanApplication, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending } from '#engine/index.js';
+import { BrainPlanApplication, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -34,8 +34,9 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
     input = parsed.data;
     await loadComposedConfig(root, options);
     const context = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
+    const readBudget = (scopeId: string) => readConfiguredRunBudget(root, scopeId, options).then(value => providerSpendRemaining(value.checkpoint));
     return await new BrainPlanApplication({ verify: async () => context.principal }, {
-      knownSecrets: getConfigKnownSecrets(context.config),
+      knownSecrets: getConfigKnownSecrets(context.config), remainingBudget: scopeId => readBudget(scopeId).catch(() => null),
       inspect: query => inspectConfiguredRunProposal(root, query, options), invoke,
       propose: propose ?? (proposal => proposeConfiguredRun(root, proposal, options)), text: extractOpenAiChatTextFromInvocation,
       stoppedAtLength: openAiChatStoppedAtLength,
@@ -49,12 +50,10 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         const spending = classifyWorkSpending({ kind: 'model', profile });
         const requiresTaskBudget = registry.profiles.every(value => !isNativeCodingTemplate(value) && classifyWorkSpending({ kind: 'worker', profile: value }) === 'metered');
         const needsBudget = spending === 'metered' || requiresTaskBudget;
-        const snapshot = needsBudget ? await readConfiguredRunBudget(root, command.scopeId, options) : null;
-        const account = snapshot?.checkpoint?.account, budget = account?.budget ?? null;
+        const budget = needsBudget ? await readBudget(command.scopeId) : null;
         if (needsBudget) {
           if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_MISSING');
-          const remaining = budget.limitMinorUnits - (account?.reservedMinorUnits ?? 0) - (account?.settledMinorUnits ?? 0);
-          if (account?.frozen || remaining <= 0) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED');
+          if (budget.frozen || budget.remainingMinorUnits <= 0) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED', { params: { remaining: budget.remainingMinorUnits, currency: budget.currency } });
         }
         const templates = registry.profiles.filter(isNativeCodingTemplate).map(value => ({ profile: { id: value.id, version: value.version }, ...nativeCodingTemplateWorker(value) }));
         const catalog = await openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
@@ -65,7 +64,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
           const profile = template ? registry.profiles.find(value => value.id === row.profile.id && value.version === row.profile.version) : undefined;
           return { kind: row.kind, profile: row.profile, type: template ? 'template' as const : 'prepared' as const,
             ...(template ? { provider: template.provider, turnLimit: nativeCodingTemplateTurnLimit(profile!) } : {}) }; });
-        const prompt = prepareBrainRegistryPrompt(command, registry, budget ? { currency: budget.currency, limitMinorUnits: budget.limitMinorUnits } : null,
+        const prompt = prepareBrainRegistryPrompt(command, registry, budget,
           context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels });
         const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference, prompt.invocationSettings);
         assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
