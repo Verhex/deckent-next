@@ -51,7 +51,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches); await preparation.enter('secret-gate');
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim; a refusal is audited (paths, rules) and its checkout released.
-      await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv), config.execution.secretGate, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now, journal: store },
+      await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv), { ...config.execution.secretGate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now, journal: store },
         audit, () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
