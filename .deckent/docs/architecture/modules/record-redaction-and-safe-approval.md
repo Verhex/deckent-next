@@ -64,14 +64,20 @@ in it can reach the model provider through the worker's one egress. The terminal
   the signal is profile data, never a path string: a `readOnlyMounts` entry declares `dependencyTree: { lockfile }` (a path inside the
   bind), pinned with the Run and its profile fingerprint; the checkout, task inputs, handoff files and prompt text never take the class,
   and a declared bind keeps it only when its real path shares no tree with the attempt workspace or the work-target checkout
-  (`checkoutRoot`; without a work target that is the project root, so the class then never applies to project-relative binds).
+  (`checkoutRoot`; without a work target that is the project root, so the class then never applies to project-relative binds), judged by
+  device and inode along both real paths (`pathsShareTree`; an unresolvable path counts as overlapping). The scanned source is the exact
+  bind source: composition hands the same resolved list to the gate and the supervisor, which re-checks it at launch (real path, no link)
+  and proves the created container's mount set (`assertDockerMountsMatch`).
   In such a bind deny paths (with `acknowledgedDenyPaths`) and configured values refuse exactly as elsewhere, on every dispatch; text-pattern
   hits (`pattern:*`, `config-secret`) are audited exceptions `dependencyTree:<target>` (the `worker-tree-excluded` subject, the attempt
   journal and the Run card); archives stay `unscannable` (liftable only by `allowPatternPaths`). A file above `maxFileBytes` (size and
   `maxTotalBytes` checked before any read) is never allocated whole: its 1 KiB header is read first and only a native signature with a
   NUL-bearing header (ELF, Mach-O, PE, wasm; engine data `dependency-binaries.json`) is read further, in 1 MiB windows that are hashed and
   checked for configured values (carrying the bytes that may begin one), with the deadline checked per window; it is recorded as
-  `unscanned-binary:<kind>:sha256=<digest>`; any other oversized file stays `incomplete`. Cache keys longer than 4096 characters are not
+  `unscanned-binary:<kind>:sha256=<digest>`; any other oversized file stays `incomplete`. Parser differential, accepted: such a file's
+  body (a polyglot) is checked for configured values in every reading (windows carry `pendingStart` × 24 bytes, a trailing partial escape
+  set aside, no early exit except a refusal) but not for patterns; the lockfile only scopes the cache (node loads files, not the lockfile,
+  and every reuse is keyed by the file's own bytes); the bind is live, so a host change after the scan is not seen (as for any bind). Cache keys longer than 4096 characters are not
   stored and a cache document above 16 MiB is not written. Pattern results are cached
   per file (path + SHA-256 of the bytes read on this dispatch) inside a scope of the lockfile bytes, the rule table, the product version
   and the bind target, in the product resource `secretGateCache` (`state/secret-gate-cache`, one file per bind, atomic 0600 writes). A

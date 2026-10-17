@@ -81,7 +81,7 @@ export type { IntegrityAuthority } from '#platform/core/integrity/index.js';
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
 export { shortId } from '#platform/core/common/index.js';
 
-export { isRecord, assertSafeKeys, digestText } from '#platform/core/utils/index.js';
+export { isRecord, assertSafeKeys, digestText, pathsShareTree } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
 export { assertConfigSecretPolicies } from '#platform/core/config/index.js';
 

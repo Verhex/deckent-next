@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { isAbsolute, relative, sep } from 'node:path';
 import { z } from 'zod';
 import BINARIES from './dependency-binaries.json' with { type: 'json' };
 
@@ -8,13 +7,6 @@ const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const cacheSchema = z.object({ schemaVersion: z.literal(1), scope: digestSchema,
   files: z.record(z.string().min(1).max(BINARIES.maxCachePathLength), z.tuple([digestSchema, z.string().min(1).max(600).nullable()])) }).strict();
 const signatures = BINARIES.signatures.map(row => ({ kind: row.kind, bytes: Buffer.from(row.hex, 'hex') }));
-/** Whether two real (symlink-resolved) host paths share a tree: one is the other or lies inside it. */
-const overlaps = (a: string, b: string) => [relative(a, b), relative(b, a)].some(path => path === '' || (path !== '..' && !path.startsWith('..' + sep) && !isAbsolute(path)));
-/**
- * A declared dependency bind keeps the class only when its real source shares no tree with the attempt workspace or the work-target
- * checkout (both real paths): content the repository or the worker can shape is never third-party content. Otherwise the normal rules apply.
- */
-export const dependencyTreeEligible = (source: string, roots: readonly string[]) => !roots.some(root => overlaps(root, source));
 /** The lifting entry of every exception a declared dependency tree records: `dependencyTree:<container target>`. */
 export const dependencyTreeLifting = (target: string) => `dependencyTree:${target}`;
 /** Per declared dependency tree of one scan: pattern results reused from the cache and evaluated anew, and whether the cache was saved. */
@@ -71,6 +63,20 @@ export class DependencyTreePatternCache {
 export interface DependencyBinarySource { readonly size: number; readonly read: (offset: number, length: number) => Promise<Buffer> }
 /** A configured-value check of one window: whether a value is in it, and how many trailing bytes may begin one (carried into the next window). */
 export type DependencyBinaryValueCheck = (window: Buffer) => Readonly<{ hit: boolean; carry: number }>;
+/** What the value check needs of the configured-value snapshot (platform `KnownSecretSnapshot`); never the values themselves. */
+export interface DependencyValueSnapshot { readonly spans: (text: string) => readonly unknown[]; readonly pendingStart: (text: string) => number }
+const partialEscape = /\\(?:u[0-9a-fA-F]{0,3}|x[0-9a-fA-F]?)?$/u;
+/**
+ * The configured-value check of one window in every reading `decode` takes of it (the gate's `decodedTexts`: UTF-8, NUL-stripped, UTF-16 at
+ * both alignments, JSON/YAML escapes): a hit anywhere, and the carry — the trailing characters that may begin a value (`pendingStart`, judged
+ * with a trailing partial escape set aside so an escaped value split at the edge is still joined) times `carryBytesPerChar`, the widest byte
+ * form one decoded character takes (a six-character escape in a four-byte encoding).
+ */
+export const dependencyValueCheck = (decode: (bytes: Buffer) => readonly string[], known: DependencyValueSnapshot): DependencyBinaryValueCheck => window => {
+  const texts = decode(window);
+  return { hit: texts.some(text => known.spans(text).length > 0),
+    carry: Math.max(0, ...texts.map(text => (text.length - known.pendingStart(text.replace(partialEscape, ''))) * BINARIES.carryBytesPerChar)) };
+};
 
 /**
  * A dependency-tree file above the text scan bound, never allocated whole: the header (`headerBytes`) is read first, and only a listed native

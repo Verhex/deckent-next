@@ -1,8 +1,13 @@
-import { expect, it } from 'vitest';
-import { classifyDependencyBinary, dependencyTreeEligible, DependencyTreePatternCache } from '#engine/index.js';
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, expect, it } from 'vitest';
+import { classifyDependencyBinary, DependencyTreePatternCache } from '#engine/index.js';
+import { pathsShareTree } from '#platform/index.js';
 
 // S6 dependency class (owner 2026-10-17): the engine half — bounded cache keys and document, bounded binary windows, tree eligibility.
-const WINDOW = 1 << 20;
+const WINDOW = 1 << 20, roots: string[] = [];
+afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const memoryStore = (stored: string | null, writes: string[]) => ({ read: async () => stored === null ? { kind: 'absent' } : { kind: 'ready', value: JSON.parse(stored) as unknown },
   write: async (text: string) => { writes.push(text); } });
 
@@ -43,8 +48,13 @@ it('classifies a native binary through bounded windows; reads only the header of
   await expect(classifyDependencyBinary(source(body), () => ({ hit: true, carry: 0 }), () => undefined)).resolves.toBe('known-secret');
 });
 
-it('grants the class only to a real source that shares no tree with the workspace or the checkout', () => {
-  expect(dependencyTreeEligible('/deps/node_modules', ['/work/a', '/repo'])).toBe(true);
-  expect(dependencyTreeEligible('/repo-node_modules', ['/repo'])).toBe(true);
-  for (const source of ['/repo', '/repo/node_modules', '/', '/work', '/work/a/x']) expect(dependencyTreeEligible(source, ['/work/a', '/repo']), source).toBe(false);
+it('judges tree overlap by device and inode along real paths: a linked spelling is the same tree, an unresolvable path fails closed', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'dn-share-tree-'))); roots.push(root);
+  await mkdir(join(root, 'repo', 'node_modules'), { recursive: true }); await mkdir(join(root, 'deps')); await symlink(join(root, 'repo'), join(root, 'link'));
+  expect(await pathsShareTree(join(root, 'repo'), join(root, 'repo', 'node_modules'))).toBe(true);
+  expect(await pathsShareTree(join(root, 'repo', 'node_modules'), join(root, 'repo'))).toBe(true);
+  expect(await pathsShareTree(join(root, 'link', 'node_modules'), join(root, 'repo'))).toBe(true);
+  expect(await pathsShareTree(join(root, 'repo'), join(root, 'deps'))).toBe(false);
+  expect(await pathsShareTree(join(root, 'repo'), join(root, 'repo-deps-missing'))).toBe(true);
+  expect(await pathsShareTree('/', join(root, 'deps'))).toBe(true);
 });

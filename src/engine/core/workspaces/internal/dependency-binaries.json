@@ -2,6 +2,7 @@
   "note": "S6 dependency class (owner 2026-10-17): native executable and library formats a declared dependency tree may hold above execution.secretGate.maxFileBytes. Such a file is hashed and classified instead of decoded for content patterns; any other file above the bound stays unscannable (fail closed). A match also needs a NUL byte in the first headerBytes (every listed format has one in its header).",
   "headerBytes": 1024,
   "windowBytes": 1048576,
+  "carryBytesPerChar": 24,
   "maxCachePathLength": 4096,
   "maxCacheBytes": 16777216,
   "signatures": [
