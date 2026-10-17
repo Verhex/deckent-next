@@ -66,7 +66,7 @@ async function fixture(context: TestContext, files: Record<string, string>, secr
     const audit = await openSqliteAuditStore(productResourcePath(opened.layout, 'ledger'), { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' });
     try { return audit.page('s', 0, 100).map(record => record.event.subject).filter(subject => subject.kind === kind); } finally { audit.close(); }
   };
-  return { project, options, store, identity, auditPage, workspaces: productResourcePath(opened.layout, 'workspaces'), gateCache: productResourcePath(opened.layout, 'secretGateCache') };
+  return { project, options, store, identity, auditPage, workspaces: productResourcePath(opened.layout, 'workspaces'), gateCache: productResourcePath(opened.layout, 'treeScanCache') };
 }
 const COMMITTED_SECRETS = { 'README.md': '# project\n', '.env': 'DATABASE_URL=postgres://app@db/app\n', 'deploy/server.pem': '-----BEGIN PRIVATE KEY-----\n',
   'src/client.ts': `export const key = '${PROVIDER_TOKEN}';\n` };

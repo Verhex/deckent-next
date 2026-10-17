@@ -29,7 +29,7 @@
     "approvalPreviews": "state/approval-previews",
     "scratch": "state/scratch",
     "instructionTrust": "state/instruction-trust",
-    "secretGateCache": "state/secret-gate-cache"
+    "treeScanCache": "state/tree-scan-cache"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal", "projectIdentity"],
