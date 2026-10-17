@@ -1,7 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
-import type { QueueConsent } from '#engine/index.js';
+import { askQueueConfirmation, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
+import type { QueueConsent, TargetQueueView } from '#engine/index.js';
 
 // QUEUE-SMALL 5: both queue cards asked "Write this reference? y/N". The adoption card moves a branch, so it asks exactly that.
 const TARGET = 'refs/heads/dogfood/adopted';
@@ -32,5 +32,20 @@ describe('queue confirmation questions', () => {
   it('every answer but an explicit y declines, and no controlling terminal is refused before any question', async () => {
     for (const answer of ['\r', 'n\r', 'yes please\r']) expect((await ask('adopt', 'en', answer)).decision).toBe(false);
     await expect(ask('adopt', 'en', 'y\r', false)).rejects.toMatchObject({ code: 'DELIVERY_INTERACTIVE_REQUIRED' });
+  });
+});
+
+// DOGFOOD-50 friction 14: a refused ticket showed only "stale-refused"; its typed cause is shown next to the outcome, in both locales.
+describe('queue status window', () => {
+  const view = (outcome: TargetQueueView['outcome'], reason: string | null): TargetQueueView => ({ schemaVersion: 1, commandId: 'q1',
+    identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' }, operation: 'delivery', target: { kind: 'git-ref', id: TARGET },
+    display: card('publish').display, state: 'settled', outcome, revision: 3, observedAt: 1, freshness: 'last-known', position: null, nextAction: 'prepare-current',
+    responsibility: 'service', basis: null, verification: null, evidenceRefs: [], reason });
+  it('a settled refusal shows its outcome and its typed reason; a ticket without a reason keeps the outcome alone', () => {
+    const en = renderQueueStatus(view('stale-refused', 'QUEUE_PREPARATION_REFUSED'), 'en'), tr = renderQueueStatus(view('stale-refused', 'QUEUE_PREPARATION_REFUSED'), 'tr');
+    expect(en).toContain('The candidate could not be prepared on the current target'); expect(tr).toContain('Aday güncel hedef üzerinde hazırlanamadı');
+    expect(en).not.toContain('error.'); expect(tr).not.toContain('error.');
+    const plain = renderQueueStatus(view('stale-refused', null), 'en');
+    expect(plain).not.toContain('could not be prepared'); expect(en.startsWith(plain.slice(0, plain.indexOf('\nResponsible')))).toBe(true);
   });
 });

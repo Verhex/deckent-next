@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority, fingerprintGitSource,
   GitQueueTarget, openSqliteAttemptStore, type GitWorkspaceOptions } from '#adapters/index.js';
 import { integrationManifestSchema, integrationDeliveryPlanSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, pinRunToDelivery, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
-  targetQueueKey, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
+  targetQueueKey, assertIntegrationBase, SnapshotBudget, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord, type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
 
 const exec = promisify(execFile), roots: string[] = [];
@@ -220,6 +220,42 @@ describe.skipIf(process.platform !== 'linux')('source custody after a safe forwa
     expect(await readFile(join(f.sourceRoot, 'b.txt'), 'utf8')).toBe('unstaged owner\n');
     expect(await f.git('show', second.plan.commit + ':a.txt')).toBe('first worker');
     expect(await f.git('show', second.plan.commit + ':b.txt')).toBe('approved');
+  });
+});
+
+// DOGFOOD-50 friction 14: a release that edits a tracked `.deckent/docs` file made every older ticket PATCH_UNSAFE on re-preparation, because the
+// intervening history was validated with the patch's own write rules. History written by others is only "touched"; the patch rules stay intact.
+describe.skipIf(process.platform !== 'linux').each([false, true])('intervening history under paths a patch may not write (ref-only = %s)', refOnly => {
+  /** A commit by someone else on the target, made in the temporary fixture checkout only. */
+  const advanceWith = async (f: Awaited<ReturnType<typeof fixture>>, path: string, text: string) => {
+    await mkdir(join(f.sourceRoot, path, '..'), { recursive: true }); await writeFile(join(f.sourceRoot, path), text);
+    await f.git('add', '--', path); await f.git('-c', 'gc.auto=0', 'commit', '-qm', `others: ${path}`);
+    const moved = await f.git('rev-parse', 'HEAD'); await f.advance(moved); return moved;
+  };
+  it('re-prepares a docs/ patch over a tracked .deckent/docs edit and keeps that edit in the candidate', async () => {
+    const f = await fixture(refOnly);
+    await advanceWith(f, '.deckent/docs/x.md', 'first\n');
+    const edited = await advanceWith(f, '.deckent/docs/x.md', 'edited by the release\n');
+    const p = f.patch('docs', 'docs/guide.md', null, 'guide\n'), { manifest } = await f.prepare(p);
+    expect(manifest).toMatchObject({ schemaVersion: 2, baseCommit: f.base, effectiveBaseCommit: edited });
+    expect(await readFile(join(manifest.workspace, 'docs/guide.md'), 'utf8')).toBe('guide\n');
+    expect(await readFile(join(manifest.workspace, '.deckent/docs/x.md'), 'utf8')).toBe('edited by the release\n');
+  });
+  it('still conflicts with PATCH_BASE_ADVANCED when the excluded history path lies under a path the patch writes', async () => {
+    const f = await fixture(refOnly);
+    await advanceWith(f, 'pkg/.deckent/state.json', '{}\n');
+    const before = await f.state();
+    await expect(f.prepare(f.patch('pkg', 'pkg', null, 'a file where others made a directory\n'))).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    expect(await f.state()).toEqual(before);
+  });
+  it('the patch itself still may not write .deckent/: refused with typed PATCH_UNSAFE over the same advanced history', async () => {
+    const f = await fixture(refOnly);
+    const moved = await advanceWith(f, '.deckent/docs/x.md', 'edited by the release\n'), valid = f.patch('own', 'docs/guide.md', null, 'guide\n');
+    const own = { ...valid, changes: [{ path: '.deckent/docs/x.md', before: null, after: patchFile(Buffer.from('worker write\n'), '100644') }] } as WorkspacePatch;
+    expect(workspacePatchSchema.safeParse(own).success).toBe(false);
+    const git = async (args: string[]) => (await exec('/usr/bin/git', ['-C', f.sourceRoot, ...args])).stdout;
+    await expect(assertIntegrationBase(git, own, moved, new SnapshotBudget(limits, Date.now() + 10_000))).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
+    await expect(assertIntegrationBase(git, valid, moved, new SnapshotBudget(limits, Date.now() + 10_000))).resolves.toBeUndefined();
   });
 });
 
