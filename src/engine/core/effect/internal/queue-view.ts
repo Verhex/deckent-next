@@ -24,14 +24,15 @@ export const targetQueueViewSchema = z.object({ schemaVersion: z.literal(1), com
     requeues: z.number().int().nonnegative().safe() }).strict().optional() }).strict().readonly();
 export type QueueNextAction = 'wait-service' | 'confirm-batch' | 'watch-reconciliation' | 'new-attempt' | 'select-target' | 'prepare-current' | 'inspect-receipt' | 'approve-run';
 /** The authorized own-ticket projection never leaks physical ordinals, other scopes or an installation-wide backlog count. */
-export function projectTargetQueue(input: TargetQueueRecord, descriptor: TargetDisplay, observedAt: number, position: number | null = null, live?: QueueReattemptView, requeueMax = 0) {
+export function projectTargetQueue(input: TargetQueueRecord, descriptor: TargetDisplay, observedAt: number, position: number | null = null, live?: QueueReattemptView, requeueMax?: number) {
   const record = targetQueueRecordSchema.parse(input), display = targetDisplaySchema.parse(descriptor);
   // The record alone proves an exhausted lineage; the service supplies the live state of a running one (Run and successor ticket).
   const reattempt = live ? queueReattemptViewSchema.parse(live) : record.reason === 'DELIVERY_REATTEMPT_EXHAUSTED' ? { state: 'exhausted' as const,
     count: record.request.reattempt?.count ?? 0, cause: record.request.reattempt?.cause ?? 'PATCH_BASE_ADVANCED', reason: record.reason } : undefined;
   const serviceOwned = reattempt && ['waiting-base', 'running', 'enqueued'].includes(reattempt.state), delegation = record.request.delegation;
   // D2b: a delegated ticket stopped before any effect is the service's to re-queue until the bound; then a typed terminal, owned by a human.
-  const requeue = delegation && queueRequeueCause(record) ? (delegation.requeue?.count ?? 0) < requeueMax ? 'service' : 'exhausted' : null;
+  // Only the service knows the bound; without it (a pure projection) the record's own state and reason stand.
+  const requeue = delegation && requeueMax !== undefined && queueRequeueCause(record) ? (delegation.requeue?.count ?? 0) < requeueMax ? 'service' : 'exhausted' : null;
   if (!Number.isSafeInteger(observedAt) || observedAt < record.request.submittedAt) throw new TargetQueueError('QUEUE_CORRUPT');
   let nextAction: QueueNextAction = 'wait-service';
   if (record.state === 'reconciling') nextAction = 'watch-reconciliation';

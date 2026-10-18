@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 import { migrateLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { createTargetQueueService, RUNTIME_SERVICE_SCHEMA_VERSION, TargetQueueApplication, assertRunDeliveryIntent, stepRunDelivery, stepDeliveryReattempt, reattemptCommandIds,
-  selectQueueActor, type QueueServiceContext, type TargetQueueView } from '#engine/index.js';
+  selectQueueActor, projectTargetQueue, type QueueServiceContext, type TargetQueueView } from '#engine/index.js';
 import { mcpPrincipalRef, queueServiceActor, targetQueueRequestSchema, type RunSnapshot, type TargetQueueRecord, type TargetQueueRequest } from '#domain/index.js';
 import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 
@@ -157,6 +157,8 @@ describe('Run delivery intent (D2b): the service enqueues accepted work for the 
       expect(await stepRunDelivery(f.ports, f.runs.get('r')!)).toEqual([{ taskId: 'approve', state: 'exhausted', reason: 'QUEUE_REQUEUE_EXHAUSTED' }]);
       expect(await f.inspect(last.request.commandId)).toMatchObject({ nextAction: 'prepare-current', responsibility: 'human', reason: 'QUEUE_REQUEUE_EXHAUSTED', delegation: { requeues: 2 } });
       expect(await f.inspect(first.request.commandId)).toMatchObject({ nextAction: 'wait-service', responsibility: 'service' });
+      // A projection without the service's bound (e.g. the /runs detail) keeps the record's own state and reason; never a false terminal.
+      for (const row of [first, last]) expect(projectTargetQueue(row, display, Date.now())).toMatchObject({ nextAction: 'prepare-current', reason: 'QUEUE_VERIFICATION_NOT_ADMITTED' });
       // A forged third hop is refused by the application bound, whoever calls it.
       await expect(f.app.submitDelegated({ ...last.request, commandId: 'third', delegation: { ...last.request.delegation!, requeue: { sourceCommandId: last.request.commandId, count: 3, cause: 'parked' } } }, human))
         .rejects.toMatchObject({ code: 'QUEUE_REQUEUE_EXHAUSTED' });
