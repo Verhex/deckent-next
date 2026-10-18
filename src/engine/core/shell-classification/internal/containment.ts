@@ -32,8 +32,12 @@ const PLAIN_PROGRAM = /^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/u;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 const FIND_ACTIONS: ReadonlySet<string> = new Set(['-exec', '-execdir', '-ok', '-okdir']);
 const REDIRECTION = /^(?:\d*|&)(?:>>|>\||>&|>|<)/u;
-/** A redirection operator standing alone: the next word is its target. */
-const BARE_REDIRECTION = /^(?:\d*|&)(?:>>|>\||>&|>|<)$/u;
+/** Security re-review of 03d82341 (fail closed): the tolerance holds only for a plain path word (no expansion, quoting residue or option)
+ * right after a word without `<`/`>` (any redirection form: `<>`, `{fd}>`, `n>|`, an escaped `\>`), and never in a command that may change
+ * what a program name resolves to or how the shell reads it (an assignment such as `PATH=`, aliases, functions, `hash`, `enable`, …). */
+const PLAIN_PATH = /^[A-Za-z0-9_./@+][A-Za-z0-9_./@+-]*$/u;
+const RESOLUTION_CHANGERS: ReadonlySet<string> = new Set(['alias', 'unalias', 'function', 'hash', 'enable', 'shopt', 'set', 'unset', 'export', 'declare', 'typeset', 'readonly',
+  'local', 'trap']);
 /** Programs that only read the files they are given (no option of theirs writes one): a read-only floor name may be their argument. */
 const READ_ONLY_PROGRAMS: ReadonlySet<string> = new Set(['cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 'ls', 'stat', 'diff', 'cmp', 'cut', 'nl', 'od', 'md5sum', 'sha1sum', 'sha256sum', 'jq']);
 const verdict = (contained: boolean, reasonCode: ShellContainmentReason, detail?: string): ShellContainmentVerdict =>
@@ -48,6 +52,9 @@ export function classifyShellContainment(command: string, protectedName: (path: 
   const scan = scanShell(command);
   if (scan.malformed) return verdict(false, 'UNPARSEABLE');
   if (scan.segments.length === 0) return verdict(false, 'EMPTY_COMMAND');
+  const changes = scan.segments.some(segment => (shellWords(segment) ?? ['(']).some((word, at, all) => ASSIGNMENT.test(word) || word.includes('(')
+    || (RESOLUTION_CHANGERS.has(word) && all.slice(0, at).every(prior => KEYWORDS.has(prior)))));
+  const floorRead = changes ? undefined : readOnlyFloor;
   for (const segment of scan.segments) {
     const words = shellWords(segment);
     if (!words) return verdict(false, 'UNPARSEABLE');
@@ -71,7 +78,7 @@ export function classifyShellContainment(command: string, protectedName: (path: 
     for (const [position, word] of words.entries()) {
       const value = pathOfWord(word);
       if (value === null || !protectedName(value)) continue;
-      const read = reader && position > index && value === word && !BARE_REDIRECTION.test(words[position - 1] ?? '') && readOnlyFloor?.(value) === true;
+      const read = reader && position > index && value === word && PLAIN_PATH.test(word) && !/[<>]/u.test(words[position - 1] ?? '') && floorRead?.(value) === true;
       if (!read) return verdict(false, 'PROTECTED_NAME', value);
     }
   }

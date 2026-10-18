@@ -84,6 +84,20 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
   ])('a write, a non-reading program or the product state still asks: %s', (command, detail) => {
     expect(reading(command)).toEqual({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
   });
+  // Security re-review of 03d82341 (parser differential): every form where the shell may not read the name as a plain argument of the program
+  // the classifier saw keeps the card — fail closed. The view binds the floor read-only regardless; this keeps the classifier honest too.
+  it.each([
+    ['cat <> package.json', 'package.json'], ['cat 3<> package.json', 'package.json'], ['cat {fd}> package.json', 'package.json'], ['cat {fd}>> package.json', 'package.json'],
+    ['cat 9>| package.json', 'package.json'], ['PATH=./bin cat package.json', 'package.json'], ['hash -p ./x cat; cat package.json', 'package.json'],
+    ['function cat { :; }; cat package.json', 'package.json'], ['alias cat=tac; cat package.json', 'package.json'], ['shopt -s expand_aliases; cat package.json', 'package.json'],
+    ['enable -n cat; cat package.json', 'package.json'], ['export PATH=.; cat package.json', 'package.json'], ['declare -f; cat package.json', 'package.json'],
+    ['trap "x" EXIT; cat package.json', 'package.json'], ['cat \\> package.json', 'package.json'],
+  ])('a shell-parse or program-resolution differential keeps the card: %s', (command, detail) => {
+    expect(reading(command)).toMatchObject({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
+  });
+  it.each(['cat -- package.json', "cat 'package.json'", 'cd /tmp/p; cat package.json', 'cd src && head -3 ../package.json', 'cat "$X" package.json 2>/dev/null', 'wc -l < /dev/null package.json'])('a plain argument still reads: %s', command => {
+    expect(reading(command)).toEqual({ contained: true, reasonCode: 'CONTAINED' });
+  });
   it('without a read-only floor in the run\'s view (host realm, full access, an approved writable view) a floor name still asks', () => {
     expect(contained('cat package.json')).toEqual({ contained: false, reasonCode: 'PROTECTED_NAME', detail: 'package.json' });
     expect(reading('node package.json')).toEqual({ contained: false, reasonCode: 'PROGRAM_FLOOR', detail: 'node' });
