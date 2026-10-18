@@ -4082,11 +4082,6 @@
           "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
         },
         {
-          "file": ".cursor/rules/deckent.mdc",
-          "count": 1,
-          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
-        },
-        {
           "file": "tests/fixtures/agent-turn/compaction-response-975da614.json",
           "count": 1,
           "reason": "Captured model response quotes the developer checkout path; redact the fixture to a neutral root and remove."

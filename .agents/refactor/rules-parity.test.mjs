@@ -19,10 +19,7 @@ const CORE_MEMORY = '.deckent/docs/core-memory/';
 // Shrink-only: core-memory changes need owner approval (law_documents_and_memory), so a broken reference found there
 // is listed here until an approved memory edit fixes it; a listed entry that resolves again must be removed.
 // Format: '<file>:<line> → <target>'. Every other rule file tolerates no broken reference.
-const CORE_MEMORY_BROKEN = Object.freeze([
-  // The auditor rule moved into the deckent-closure skill (owner 2026-10-18, Jev g3-rol-kurallari); the law still cites the old file.
-  '.deckent/docs/core-memory/law_second_opinion_jev.md:7 → .claude/rules/auditor.md',
-]);
+const CORE_MEMORY_BROKEN = Object.freeze([]);
 // Cursor-only rules with no Claude/Codex counterpart.
 const CURSOR_ONLY = Object.freeze(['deckent.mdc']);
 
