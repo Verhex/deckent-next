@@ -71,7 +71,7 @@ export interface DependencyValueSnapshot { readonly spans: (text: string) => rea
  * windows stream it in its own coordinates), archive signatures (`archiveKind`), configured values, pattern rows, terminable regex runner and first-rule evaluator.
  */
 export interface DependencyTextChecks {
-  readonly decode: (bytes: Buffer, dropped?: boolean) => readonly string[]; readonly dropped: (bytes: Buffer) => Buffer; readonly archive: (bytes: Buffer) => string | null; readonly known: DependencyValueSnapshot;
+  readonly decode: (bytes: Buffer, dropped?: boolean, wide?: boolean) => readonly string[]; readonly dropped: (bytes: Buffer) => Buffer; readonly archive: (bytes: Buffer) => string | null; readonly known: DependencyValueSnapshot;
   readonly rows: readonly Readonly<{ id: string; source: string; flags: string }>[];
   readonly match: (source: string, flags: string, texts: readonly string[]) => Promise<readonly number[]>;
   readonly first: (texts: readonly string[]) => Promise<string | null>;
@@ -130,7 +130,8 @@ export async function classifyDependencyBinary(source: DependencyBinarySource, c
     const length = Math.min(BINARIES.windowBytes, source.size - offset), chunk = await source.read(offset, length);
     if (chunk.length !== length) throw new Error('WORKER_TREE_ENTRY_CHANGED');
     hash.update(chunk);
-    const window = Buffer.concat([carry, chunk]), stream = Buffer.concat([carried, checks.dropped(chunk)]), own = checks.decode(window, false), joined = checks.decode(stream);
+    // The header's NUL settles the decoder for the whole file: every window also reads as UTF-16 in both alignments, NUL-free or not (Astra 2629 F1).
+    const window = Buffer.concat([carry, chunk]), stream = Buffer.concat([carried, checks.dropped(chunk)]), own = checks.decode(window, false, true), joined = checks.decode(stream);
     const texts = [...new Set([...own, ...joined])];
     if (texts.some(text => checks.known.spans(text).length > 0)) return [{ rule: 'known-secret', refuse: true }];
     const refused = await refusingRule(texts, checks);

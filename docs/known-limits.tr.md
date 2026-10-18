@@ -59,7 +59,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   anahtarlar) ve yapılandırılmış sır değerleri orada da reddedilir; arşivler ve sınırı aşan başka her dosya yine taranamaz
   sayılır; büyük ikili dosyalar yalnız 1 MiB'lik pencerelerle okunur, pencereler arası taşıması (carry) sınırlanamayan
   (1 MiB'yi aşan) ya da gövdesinin herhangi bir yerinde arşiv taşıyan (sona eklenmiş zip, gömülü gzip) dosya taranamaz sayılır.
-  Arşiv tespiti her biçimin en hoşgörülü yaygın açıcısını izler (dosya sonuna yakın bir zip bitiş kaydı, ofsetleri ne derse desin;
+  Arşiv tespiti her biçimin en hoşgörülü yaygın açıcısını izler (gövdenin herhangi bir yerindeki zip bitiş kaydı, yazılı ofsetlerine bakılmadan;
   ayrılmış bayrak bitli gzip; işaretli tar sağlama toplamı), ama kapsayıcı başlığı olmayan sıkıştırılmış ya da kodlanmış veri (ham
   deflate, zlib, brotli, LZMA-alone, lz4, özel bir kodlama) makine kodundan ayırt edilemez: ikili dosyanın özet istisnası içinde geçer
   ve işçi onu bilinen bir ofsetten açabilir (örneğin Node'un kendi zlib'iyle). Kalıp

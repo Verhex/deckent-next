@@ -116,6 +116,15 @@ describe('parser parity for a native-claimed file in the class (polyglot: native
       expect(await scanWorkerTree(declared(await tree(dependencies(bytes))), options(), known), name).toMatchObject({ status: 'refused', findings: [{ path: `node_modules/${BINDING}`, rule: 'known-secret' }] });
     }
   });
+  it('a NUL-free UTF-16 configured value in a NUL-free later window still refuses: the native header settles the decoder for the whole file (Astra 2629 F1)', async () => {
+    // Synthetic value whose UTF-16LE bytes hold no NUL (c65bbc78…498b): only the header has NUL bytes, every later window is 0x41 padding.
+    const wide = snapshotKnownSecrets([{ name: 'ERP_PASSWORD', value: '密碼安全測試憑證' }]), bytes = Buffer.from('密碼安全測試憑證', 'utf16le');
+    expect(bytes.includes(0)).toBe(false);
+    const rows = [['third window, even offset', 2 * edge + 12_344], ['third window, odd offset', 2 * edge + 12_345], ['split across a window edge, even', 3 * edge - 8],
+      ['split across a window edge, odd', 3 * edge - 7]] as const;
+    const seen: Record<string, unknown> = {}; for (const [name, at] of rows) seen[name] = (await scanWorkerTree(declared(await tree(dependencies(place(bytes, at)))), options(), wide) as { findings?: unknown }).findings;
+    expect(seen).toEqual(Object.fromEntries(rows.map(([name]) => [name, [{ path: `node_modules/${BINDING}`, rule: 'known-secret' }]])));
+  });
   it('a NUL run of any length between the parts of a configured value or a refusing family, across a window edge, still refuses (Astra 2626 F2)', async () => {
     const gap = (head: Buffer, tail: Buffer, at: number, nuls: number) => { const body = elf(); head.copy(body, at); body.fill(0, at + head.length, at + head.length + nuls); tail.copy(body, at + head.length + nuls); return body; };
     const pem = ['-----BEGIN ', 'PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END ', 'PRIVATE KEY-----\n'].join('');
@@ -175,7 +184,10 @@ describe('parser parity for a native-claimed file in the class (polyglot: native
     let signed = 0; for (let index = 0; index < 512; index++) signed += index >= 148 && index < 156 ? 32 : (header[index]! << 24) >> 24;
     header.write(`${signed.toString(8).padStart(6, '0')}\0 `, 148, 'latin1');
     const tar = Buffer.concat([header, Buffer.from('neutral tar payload\n'.padEnd(512, '\0'))]), into = (bytes: Buffer, offset: number) => { const body = elf(); bytes.copy(body, offset); return body; };
+    // A worker cuts an embedded zip's byte range and hands it to the same reader, so the record's distance to the file's end proves nothing
+    // (Astra 2629 F2): mid-body behind more than 64 KiB of padding, and across a window edge.
     const rows = [['a zip with shifted offsets and an unknown local method appended at the end', into(shifted, BINARY_BYTES - shifted.length)],
+      ['the same zip mid-body behind 16 MiB of padding', into(shifted, 4 * edge + 5)], ['the same zip across a window edge', into(shifted, 6 * edge - 60)],
       ['a gzip member with reserved flag bits mid-body', into(reserved, 9 * edge + 41)], ['a ustar header with a signed checksum mid-body', into(tar, 17 * edge + 5)]] as const;
     const seen: Record<string, unknown> = {}; for (const [name, bytes] of rows) seen[name] = await scanWorkerTree(declared(await tree(dependencies(bytes))), options());
     expect(seen).toEqual(Object.fromEntries(rows.map(([name]) => [name, bound])));
