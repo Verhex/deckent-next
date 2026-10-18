@@ -39,7 +39,7 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
   if (!pinned !== !evaluation.model || (pinned && (pinned.provider !== evaluation.model!.provider || pinned.evidenceCapability !== evaluation.model!.evidenceCapability
     || JSON.stringify(pinned.pin) !== JSON.stringify(evaluation.model!.requested)))) invalid();
   if (attempt.revision !== evaluation.attemptRevision) stale();
-  if (evaluation.workerExit && dispatch.terminal!.exitCode !== 0) notReady();
+  if ((evaluation.workerExit || evaluation.report) && dispatch.terminal!.exitCode !== 0) notReady();
   if (evaluation.workspaceChange && evaluation.workspaceChange.patchDigest !== dispatch.patch?.digest) stale();
   if (evaluation.quota) {
     if (!pinned || pinned.pin.channelId !== evaluation.quota.channelId || evaluation.model?.verdict === 'substituted' || evaluation.workerExit || dispatch.terminal!.exitCode === 0 || dispatch.terminal!.interrupted !== false

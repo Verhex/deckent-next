@@ -25,7 +25,7 @@ function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) 
 }
 import type { CommandContext } from './kernel-commands.js';
 import { patchStat, resolveLatestAttempt } from '#surfaces/core/cli-terminal/index.js';
-import { renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
+import { notAcceptedLabel, renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
@@ -66,7 +66,7 @@ async function evaluateTask(values: ReadonlyMap<string, string>, context: Comman
       reconciling: t('cli.run.inspect.states.reconciling', {}, locale), skipped: t('cli.run.inspect.states.skipped', {}, locale),
       'awaiting-decision': t('cli.run.inspect.states.awaitingDecision', {}, locale) };
     return [t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phases[task.phase], revision: data.evaluation.run.revision }, locale),
-      ...(task.notAcceptedReason ? [t('task.acceptance.noChangeProduced', {}, locale)] : [])].join('\n');
+      ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale)] : [])].join('\n');
   } });
 }
 

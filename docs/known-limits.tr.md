@@ -123,6 +123,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Teslim ve dala alma
 
+- **Bir iş görevi geçerli bir sonuç raporu ister, ama raporu olmayan bir işçi CLI'ı denetlenmez.** 1.0.0-alpha.47'den beri 0 ile
+  çıkan ve geçerli rapor bırakmayan bir iş görevi `report-missing` ya da `report-invalid` ile başarısız olur. Yapılandırılmış sonuç
+  kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. Tipli
+  rapor kontrolleri (`checkId`, `role`) tanımlıdır ama konteyner köprüsü onları henüz kabul etmez. *Geçici çözüm:* tamamlanması
+  kanıtlanması gereken işlerde Claude ya da Codex işçilerini tercih edin.
 - **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
   yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve ledger v58 yeniden build edilmiş
   binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek terminal/socket/crash ve N1 yük kabulü ayrı kapılardır;

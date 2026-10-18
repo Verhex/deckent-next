@@ -1,6 +1,6 @@
 import { redactSensitive, terminalSafeText, t, type Locale } from '#platform/index.js';
 import type { TaskBrief, ResultBrief } from '#engine/index.js';
-import { deliveryLabel, verdictLabel } from './labels.js';
+import { deliveryLabel, notAcceptedLabel, verdictLabel } from './labels.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
 /** Shared EN/TR wording for worker detail and run inspect. Labels never turn worker reports into evaluation evidence. */
 export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrief | undefined, locale: Locale): string[] {
@@ -20,7 +20,7 @@ export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrie
     'not-run': t('monitor.human.notRun', {}, locale), unknown: t('monitor.human.unknown', {}, locale) };
   if (result) {
     lines.push(t('monitor.human.evaluation', { verdict: verdictLabel(result.evaluation.verdict, locale) }, locale)
-      + (result.evaluation.reason ? ` · ${t('task.acceptance.noChangeProduced', {}, locale)}` : ''));
+      + (result.evaluation.reason ? ` · ${notAcceptedLabel(result.evaluation.reason, locale)}` : ''));
     const report = result.report?.status === 'reported' ? result.report.report : null;
     if (report) {
       lines.push(t('monitor.brief.claim', { value: safe(report.summary) }, locale),

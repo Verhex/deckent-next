@@ -5,7 +5,7 @@ import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { runSnapshotSchema, evaluationCriterionSchema } from '#domain/core/run/index.js';
-import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema } from '#domain/core/worker-event/index.js';
+import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema, workerReportEvidenceSchema, workerReportRefusal } from '#domain/core/worker-event/index.js';
 const modelText = z.string().min(1).max(256);
 /**
  * Worker model evidence of a pinned native attempt (WORKER-CURRENCY-2, owner rule A 2026-09-30; Jev 933e43f2, 58ffe1c9). Recorded with the
@@ -28,6 +28,8 @@ export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), eval
   criteria: z.array(evaluationCriterionSchema).min(1).readonly(),
   /** Host-verified retained patch, not the worker's changedFiles report. The frozen workInput owns no-change policy. */
   workspaceChange: z.object({ schemaVersion: z.literal(1), patchDigest: z.string().regex(/^[a-f0-9]{64}$/), changedFiles: counterSchema }).strict().readonly().optional(), model: taskEvaluationModelSchema.optional(),
+  /** R5 (owner D5a): host-read report status of a work task's clean exit; absent on legacy records, needs-input, quota and other exits. */
+  report: workerReportEvidenceSchema.optional(),
   evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional(),
   returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch', 'criterion-evidence']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
@@ -69,9 +71,13 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
   const normalized = taskEvaluationSchema.parse({ ...evaluation, criteria });
   const profileGate = inspectAcceptanceConclusion(run.data, normalized);
   const gate = taskModelConclusion(normalized.model);
-  if (!task.workInput && normalized.workspaceChange) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
+  if ((!task.workInput && (normalized.workspaceChange || normalized.report)) || (normalized.workerExit && normalized.report)) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
   const change = task.workInput ? normalized.workspaceChange ? normalized.workspaceChange.changedFiles > 0 || task.workInput.noChangeAllowed === true ? 'pass' : 'fail' : 'unknown' : 'pass';
-  const conclusion: 'pass' | 'fail' | 'unknown' = normalized.workerExit ? gate === 'fail' ? 'fail' : 'unknown' : gate === 'fail' || profileGate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
+  // R5 floor (owner D5a), independent of any bound work class: a work task's clean exit without a valid report fails, typed.
+  const reported = normalized.report ? workerReportRefusal(normalized.report) : null;
+  const conclusion: 'pass' | 'fail' | 'unknown' = normalized.workerExit ? gate === 'fail' ? 'fail' : 'unknown' : reported || gate === 'fail' || profileGate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
     : gate === 'unknown' || profileGate === 'unknown' || change === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
-  return Object.freeze({ evaluation: normalized, conclusion });
+  // One owner for the typed cause; the report reason precedes no-change (an unfinished worker often also leaves no patch).
+  const notAcceptedReason = conclusion !== 'fail' ? undefined : reported ?? (change === 'fail' ? 'no-change-produced' as const : undefined);
+  return Object.freeze({ evaluation: normalized, conclusion, ...(notAcceptedReason ? { notAcceptedReason } : {}) });
 }

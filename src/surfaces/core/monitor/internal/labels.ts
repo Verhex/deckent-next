@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkerPhase } from '#domain/index.js';
 import type { WorkerProcessState } from '#engine/index.js';
-import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState } from '#engine/index.js';
+import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
 
 /** Every monitor word comes from the catalogs; the maps keep each key a literal (lint-arch i18n rule). */
@@ -73,6 +73,13 @@ export function installStatusLabel(status: MonitorInstallStatus, locale: Locale)
   const labels: Record<MonitorInstallStatus, string> = { available: t('monitor.install.available', {}, locale),
     unavailable: t('monitor.install.unavailable', {}, locale), denied: t('monitor.install.denied', {}, locale) };
   return labels[status];
+}
+/** The typed cause of a failed Task (R5/R3); one map so every surface names the same cause. */
+export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['reason']>, locale: Locale): string {
+  const labels = { 'no-change-produced': t('task.acceptance.noChangeProduced', {}, locale), 'report-missing': t('task.acceptance.reportMissing', {}, locale),
+    'report-invalid': t('task.acceptance.reportInvalid', {}, locale), 'declared-check-not-passed': t('task.acceptance.declaredCheckNotPassed', {}, locale),
+    'worker-stalled': t('task.acceptance.workerStalled', {}, locale) };
+  return labels[reason];
 }
 export function verdictLabel(verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null, locale: Locale): string {
   if (verdict === null) return t('monitor.verdict.none', {}, locale);

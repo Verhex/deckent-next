@@ -1,6 +1,6 @@
 import type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';
 import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
-import type { AcceptanceView, TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
+import type { AcceptanceView, TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult, TaskNotAcceptedReason } from '#domain/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 import { z } from 'zod';
@@ -69,7 +69,7 @@ export interface MonitorTask {
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
-  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null; readonly reason?: 'no-change-produced' };
+  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null; readonly reason?: TaskNotAcceptedReason };
   readonly dependencies: readonly string[]; readonly handoffs?: readonly HandoffReceiptView[];
   /** S6: hits the operator's `execution.secretGate` lists lifted for the last attempt (path, rule, lifting entry; never a value). */
   readonly configExclusions?: { readonly count: number; readonly entries: readonly import('#engine/core/workspaces/index.js').WorkerTreeExclusion[] };

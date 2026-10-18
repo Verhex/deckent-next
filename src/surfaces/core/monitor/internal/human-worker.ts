@@ -1,5 +1,6 @@
 import { renderBriefLines } from './brief.js';
 import { renderWorkerModelLine } from './worker-model.js';
+import { notAcceptedLabel } from './labels.js';
 import { redactSensitive, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorLine } from './layout.js';
@@ -24,8 +25,8 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
     ...renderBriefLines(h.taskBrief, h.resultBrief, locale).map(text => line(text)),
     ...(worker.model?.reasoningEffort ? [line(renderWorkerModelLine(worker.model, locale))] : []),
     ...(h.resultBrief ? [] : [line(t('monitor.human.evaluation', { verdict: verdictLabel(h.evaluation, locale) }, locale)
-      + (h.evaluationReason ? ` · ${t('task.acceptance.noChangeProduced', {}, locale)}` : ''), h.evaluation === 'rejected' ? 'warning' : undefined)]),
-    ...(h.evaluationReason && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
+      + (h.evaluationReason ? ` · ${notAcceptedLabel(h.evaluationReason, locale)}` : ''), h.evaluation === 'rejected' ? 'warning' : undefined)]),
+    ...(h.evaluationReason === 'no-change-produced' && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
       : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted')]),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),
     usage ? line(t('monitor.human.usage', { source: worker.usageEvidence === 'sealed' ? t('monitor.human.sealed', {}, locale) : t('monitor.human.live', {}, locale),
