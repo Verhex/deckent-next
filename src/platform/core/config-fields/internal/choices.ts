@@ -160,7 +160,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'runRuntime.quotaRecovery.maxResumes': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1, 2, 3, 5] },
   'runRuntime.stallRecovery.schemaVersion': { kind: 'schema' },
   'runRuntime.stallRecovery.warnAfterMs': { kind: 'numeric', unit: 'ms', step: 60000, presets: [60000, 180000, 300000, 600000] },
-  'runRuntime.stallRecovery.stopAfterMs': { kind: 'numeric', unit: 'ms', step: 60000, presets: [300000, 600000, 900000, 1800000] },
+  'runRuntime.stallRecovery.stopAfterMs': { kind: 'numeric', unit: 'ms', step: 60000, presets: [600000, 900000, 1800000, 3600000] },
   'runRuntime.stallRecovery.maxRetries': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1, 2, 3] },
   'runRuntime.stallRecovery.backoffMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [0, 5000, 30000, 60000] },
   'runRuntime.parking.schemaVersion': { kind: 'schema' },

@@ -415,7 +415,7 @@ describe.skipIf(process.platform === 'win32')('R3 silence policy through the rea
     const short = await seeded(registry, undefined, { runRuntime: { stallRecovery: { schemaVersion: 1, warnAfterMs: 1000, stopAfterMs: 5000, maxRetries: 2 } } });
     await createRun(short.project, run('watched', 'coding', workInput()), short.options);
     expect((short.snapshotProfile('watched').tasks[0] as { stall?: unknown }).stall).toEqual({ warnAfterMs: 1000, stopAfterMs: 5000, maxRetries: 2 });
-    // The installation default (stop 600000) cannot stop before this profile's 20000 ms deadline: it is not frozen, the deadline alone bounds the task.
+    // The installation default (stop 3600000) cannot stop before this profile's 20000 ms deadline: it is not frozen, the deadline alone bounds the task.
     const f = await seeded();
     await createRun(f.project, run('deadline-only', 'coding', workInput()), f.options);
     expect((f.snapshotProfile('deadline-only').tasks[0] as { stall?: unknown }).stall).toBeUndefined();

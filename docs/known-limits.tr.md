@@ -133,15 +133,19 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   rapor kontrolleri (`checkId`, `role`) tanımlıdır ama konteyner köprüsü onları henüz kabul etmez. *Geçici çözüm:* tamamlanması
   kanıtlanması gereken işlerde Claude ya da Codex işçilerini tercih edin.
 - **Sessiz bir işçi durdurulur ve bir kez yeniden denenir, ama yalnız bazı görevler izlenir.** 1.0.0-alpha.47'den beri sessizlik sınırı
-  boyunca (varsayılan 10 dakika; 3 dakikada uyarı) hiçbir olay ve model trafiği göndermeyen bir native abonelik işçisi durdurulur.
-  Etkileri yalnız kendi çalışma alanında kalan bir görev yeni bir Attempt ile bir kez yeniden denenir; diğer görevler eskisi gibi
-  insan kararını bekler. alpha.47'den önce oluşturulan Run'lar, native gateway'i olmayan işçiler ve süre sınırı (deadline) bu
-  sınırdan kısa olan profiller yalnız süre sınırıyla sınırlanır. İzlemedeki `worker-silent` uyarısı işçi olaylarını görür, model
-  trafiğini görmez; bu yüzden işçi hâlâ çalışırken uyarabilir. İşçinin içindeki tek bir uzun araç çağrısı (build ya da test koşusu)
-  sürdüğü boyunca olay ve model trafiği göndermez, bu yüzden sessizlik sayılır: sınırdan uzun bir çağrı durdurulur, tekrarı görevi
+  boyunca (varsayılan 1 saat, `runRuntime.stallRecovery.stopAfterMs`; 3 dakikada uyarı) hiçbir olay ve model trafiği göndermeyen bir
+  native abonelik işçisi durdurulur. Etkileri yalnız kendi çalışma alanında kalan bir görev yeni bir Attempt ile bir kez yeniden
+  denenir; diğer görevler eskisi gibi insan kararını bekler. Sınır yalnız profilin süre sınırından (deadline) önce durdurabiliyorsa
+  uygulanır: profil süre sınırı bu sınırdan kısa olan bir görev (1 saatlik varsayılanla bir saatin altındaki her süre sınırı)
+  izlenmez, sessizlik uyarısı almaz ve yalnız süre sınırıyla sınırlanır. alpha.47'den önce oluşturulan Run'lar ve native gateway'i
+  olmayan işçiler de yalnız süre sınırıyla sınırlanır. Sessiz bir işçi durdurulana kadar yürütme yuvasını tutar; takılmış bir işçi bir
+  yuvayı sınır süresi boyunca tutabilir. İzlemedeki `worker-silent` uyarısı işçi olaylarını görür, model trafiğini görmez; bu yüzden
+  işçi hâlâ çalışırken uyarabilir. İşçinin içindeki tek bir uzun araç çağrısı (build, test koşusu ya da kilit beklemesi) sürdüğü
+  boyunca olay ve model trafiği göndermez, bu yüzden sessizlik sayılır: sınırdan uzun bir çağrı durdurulur, tekrarı görevi
   `worker-stalled` ile başarısız kılar. Durdurulan Attempt'in çalışma alanı kopyası tutulur. *Geçici çözüm:*
-  `runRuntime.stallRecovery.stopAfterMs` değerini (ya da iş sınıfının `inactivity` değerini) en uzun araç çağrınızın üstüne çıkarın;
-  süre sınırı önce geliyorsa `stopAfterMs` değerini düşürün ya da profilin süre sınırını artırın.
+  `runRuntime.stallRecovery.stopAfterMs` değerini (ya da iş sınıfının `inactivity` değerini) en uzun araç çağrınızın üstünde tutun;
+  süre sınırı önce geliyorsa ve sessiz işçilerin daha erken durdurulmasını istiyorsanız bu değeri düşürün ya da profilin süre
+  sınırını artırın.
 - **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
   yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve ledger v58 yeniden build edilmiş
   binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek terminal/socket/crash ve N1 yük kabulü ayrı kapılardır;

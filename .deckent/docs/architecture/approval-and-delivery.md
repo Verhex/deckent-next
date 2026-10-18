@@ -718,12 +718,15 @@ container bridge still accepts only `{command, outcome}` checks, so typed checks
 
 ### SILENT-WORKER WATCHDOG (alpha.47 R3, owner D4a/D5a, 2026-10-18)
 
-Policy: `runRuntime.stallRecovery` (`warnAfterMs` 180000, `stopAfterMs` 600000, `maxRetries` 1, `backoffMs` 30000; defaults in
+Policy: `runRuntime.stallRecovery` (`warnAfterMs` 180000, `stopAfterMs` 3600000, `maxRetries` 1, `backoffMs` 30000; defaults in
 `stall-policy.json`); a v2/v3 work class may override warn/stop with `inactivity`. Admission freezes
 `execution.tasks[].stall {warnAfterMs, stopAfterMs, maxRetries}` only for a profile with a host-observed liveness channel (the
 native gateway; `dockerTaskSilenceDeadline`) whose deadline comes later. An explicit class policy that cannot stop before the deadline
 is refused (`WORKER_INACTIVITY_POLICY_INVALID`); the installation default simply does not apply to such a task. Older Runs carry no
 policy and keep only the deadline bound.
+The stop default is 1 hour (owner 2026-10-18, was 10 minutes): a single long tool call (build, test, lock wait) sends no worker
+event and no model traffic, so a short stop cut healthy workers. Consequences: a profile whose deadline is under an hour gets no frozen
+policy (no watchdog, no `worker-silent` warning; its deadline bounds it), and a silent watched worker can hold its slot up to the stop.
 Detection is pure (`inactivityVerdict`): silence counts from the dispatch start, the host receipt of the last worker event batch
 (accepted, dropped or refused) and the last host-side model traffic through the gateway; heartbeat freshness is not an input. The
 execution composition samples these gateway counters on the existing observation tick and aborts the execute signal with reason

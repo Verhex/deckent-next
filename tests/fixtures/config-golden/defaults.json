@@ -178,7 +178,7 @@
       "backoffMs": 30000,
       "maxRetries": 1,
       "schemaVersion": 1,
-      "stopAfterMs": 600000,
+      "stopAfterMs": 3600000,
       "warnAfterMs": 180000
     }
   },
