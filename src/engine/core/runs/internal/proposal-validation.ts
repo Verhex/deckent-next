@@ -43,6 +43,27 @@ export function validateRunProposal(proposal: RunProposal, registry: WorkClassRe
       remainingMinorUnits: remaining, checkedAt: now, ...(budgetSource ? { source: budgetSource } : {}) } });
 }
 
+/** The admission basis a pending approval keeps exact on resubmission (recheck_ceiling, owner 2026-10-18). The person approves the declared
+ * ceiling, never the moving balance: registry, budget identity/revision/source and spending semantics stay exact, while the checkpoint digest and
+ * money left may move. validateRunProposal rechecks currency, frozen and money left >= ceiling on every submission. */
+export function stableRunProposalBasis(basis: RunProposalBinding['admission']): unknown {
+  if (!basis?.budget) return basis;
+  const budget = basis.budget;
+  return { ...basis, budget: { budgetId: budget.budgetId, budgetRevision: budget.budgetRevision, checkedAt: budget.checkedAt, ...(budget.source ? { source: budget.source } : {}) } };
+}
+/** The same recheck inside the Run transaction, against the account row read under the writer lock. */
+export function recheckRunProposalBudget(budget: NonNullable<NonNullable<RunProposalBinding['admission']>['budget']>, ceiling: RunProposal['budgetCeiling'],
+  checkpointInput: unknown): void {
+  const checkpoint = parseProviderSpendCheckpoint(checkpointInput), account = checkpoint.account;
+  if (account.budget.budgetId !== budget.budgetId || account.budget.revision !== budget.budgetRevision || account.budget.currency !== ceiling.currency) {
+    throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
+  }
+  const remaining = providerSpendRemaining(checkpoint)!.remainingMinorUnits;
+  if (account.frozen || remaining < ceiling.limitMinorUnits) {
+    throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_EXCEEDED', { params: { remaining, ceiling: ceiling.limitMinorUnits, currency: ceiling.currency } });
+  }
+}
+
 export function assertRunProposalSource(proposal: RunProposal, receipt: ModelInvocationReceipt | null, text?: string | null, known?: KnownSecretSnapshot): void {
   if (proposal.source.kind !== 'model') return;
   const reference = proposal.source.receipt;

@@ -371,7 +371,7 @@
   "error.RUN_PROPOSAL_BUDGET_EXCEEDED": "The declared ceiling exceeds the remaining scope budget, or the account is frozen. No Run was admitted.",
   "error.RUN_PROPOSAL_BUDGET_EXCEEDED.ceiling": "The declared ceiling {ceiling} exceeds the {remaining} left in the scope budget, or the account is frozen. No Run was admitted.",
   "error.RUN_PROPOSAL_BUDGET_EXCEEDED.remaining": "The scope budget has {remaining} left, or the account is frozen; no plan can be declared. No Run was admitted.",
-  "error.RUN_PROPOSAL_BASIS_STALE": "Proposal parked: its registry or budget basis changed. Submit a new command for the revised proposal.",
+  "error.RUN_PROPOSAL_BASIS_STALE": "Proposal parked: its registry, budget identity, budget revision or spending basis changed. Submit a new command for the revised proposal.",
   "error.RUN_PROPOSAL_COMMAND_CONFLICT": "This command or proposal identity already binds different input or state.",
   "error.RUN_PROPOSAL_ACTOR_MISMATCH": "The proposer does not match the authenticated principal.",
   "error.RUN_PROPOSAL_SOURCE_INVALID": "The model contribution reference has no matching successful invocation receipt.",

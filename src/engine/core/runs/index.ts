@@ -50,7 +50,7 @@ export { RunProposalApplication, RunProposalInspectionApplication } from './inte
 export type { RunProposalContext, RunProposalResult } from './internal/proposal-application.js';
 export { runProposalQuerySchema, runProposalRecordSchema, parseRunProposal, parseRunProposalRecord, runProposalDigest } from './internal/proposal-contract.js';
 export type { RunProposalQuery, RunProposalRecord, RunProposalStore } from './internal/proposal-contract.js';
-export { validateRunProposal, assertRunProposalSource } from './internal/proposal-validation.js';
+export { validateRunProposal, assertRunProposalSource, recheckRunProposalBudget, stableRunProposalBasis } from './internal/proposal-validation.js';
 export type { BoundRunAdmission } from './internal/admission.js';
 
 export { taskQuotaHoldSchema } from './internal/pool-observation.js';

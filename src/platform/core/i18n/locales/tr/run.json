@@ -371,7 +371,7 @@
   "error.RUN_PROPOSAL_BUDGET_EXCEEDED": "Beyan edilen tavan scope bütçesinin kalanını aşıyor veya hesap dondurulmuş. Run kabul edilmedi.",
   "error.RUN_PROPOSAL_BUDGET_EXCEEDED.ceiling": "Beyan edilen tavan {ceiling}, scope bütçesinde kalan {remaining} tutarını aşıyor veya hesap dondurulmuş. Run kabul edilmedi.",
   "error.RUN_PROPOSAL_BUDGET_EXCEEDED.remaining": "Scope bütçesinde kalan {remaining} veya hesap dondurulmuş; plan beyan edilemez. Run kabul edilmedi.",
-  "error.RUN_PROPOSAL_BASIS_STALE": "Öneri park edildi: registry veya bütçe dayanağı değişti. Güncel öneriyi yeni komutla verin.",
+  "error.RUN_PROPOSAL_BASIS_STALE": "Öneri park edildi: registry, bütçe kimliği, bütçe revizyonu veya harcama dayanağı değişti. Güncel öneriyi yeni komutla verin.",
   "error.RUN_PROPOSAL_COMMAND_CONFLICT": "Bu komut veya öneri kimliği farklı girdiye ya da duruma bağlı.",
   "error.RUN_PROPOSAL_ACTOR_MISMATCH": "Öneren aktör doğrulanmış principal ile eşleşmiyor.",
   "error.RUN_PROPOSAL_SOURCE_INVALID": "Model katkısı referansına eşleşen başarılı çağrı makbuzu yok.",
