@@ -88,6 +88,13 @@ test('.cursor/rules carries the same rules as .claude/rules, with the same body 
   }
 });
 
+test('the deckent-route router rule is always loaded on all three surfaces and stays at or below 12 lines', () => {
+  // Owner 2026-10-18 skill-surface decision 6: one cheap moment → skill router, byte-identical for Claude, Codex and Cursor.
+  for (const file of ['.claude/rules/deckent-route.md', '.codex/rules/deckent-route.md', '.cursor/rules/deckent-route.mdc']) assert.ok(TRACKED.has(file), `${file} is not tracked`);
+  assert.ok(read('.claude/rules/deckent-route.md').toString('utf8').trimEnd().split('\n').length <= 12, 'deckent-route.md exceeds 12 lines');
+  assert.match(read('.cursor/rules/deckent-route.mdc').toString('utf8'), /^---\n[\s\S]*?\nalwaysApply: true\n[\s\S]*?---\n/u, 'the Cursor router rule must be alwaysApply');
+});
+
 test('board.mjs DOGFOOD_SOURCE names a tracked file that still contains the cited heading', () => {
   const [file, heading, ...rest] = DOGFOOD_SOURCE.split(' · ');
   assert.equal(rest.length, 0); assert.ok(file && heading, `DOGFOOD_SOURCE must be "<file> · <heading>": ${DOGFOOD_SOURCE}`);
