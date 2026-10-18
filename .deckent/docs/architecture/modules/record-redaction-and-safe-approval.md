@@ -97,6 +97,18 @@ in it can reach the model provider through the worker's one egress. The terminal
   values are evaluated in full each time, so a stale, corrupt or forged entry can only change which pattern exceptions are listed. An
   unreadable cache reuses nothing; a failed save is reported in the scan (`dependencyTrees[].saved`) and costs the next dispatch time only.
   Existing profiles without the field keep the full workspace rules; adding it changes the profile fingerprint (template upgrade path).
+- **Scan admission (R2, owner/lead D3a 2026-10-18):** in one process (the runtime service) scans run inside
+  `execution.secretGate.maxConcurrentScans` slots (registry default 2, FIFO); a scan's `timeoutMs` deadline starts once admitted and the
+  wait is bounded by `admissionTimeoutMs`. Declared dependency binds outside the checkout's tree are scanned apart from the dispatch's own
+  views; dispatches whose bind inputs are byte-identical (host source, target, lockfile bytes and a process-keyed digest of the effective
+  configuration — gate bounds and lists, configured secret values, cache directory, work-target checkout) await the one scan in flight.
+  Nothing is reused after that scan settles and nothing is keyed by stat/ctime; `enforceWorkerTreeGate` still decides per dispatch on the
+  merged result (a refusal wins, then a non-time bound), so each Attempt is audited and journalled and a refusal there refuses every
+  Attempt that awaited it. Bounds apply per scan (dispatch views, shared binds). Measured (`tests/perf/secret-gate-admission.perf.ts`,
+  13 dispatches, 150 MB / 14 060 files): 62 s for 13 full scans vs 8.7 s with one shared scan.
+- **Time is load, not the tree:** a `time` bound (deadline or slot wait) is audited like any incomplete scan and thrown as the transient
+  `WORKER_TREE_SCAN_DEFERRED` (turn backoff) up to `maxTimeRefusals` (default 2) per Attempt, counted in a product-directory record
+  (`crashes/secret-gate-time/`); the refusal after that, or an unreadable count, is the permanent `WORKER_TREE_SCAN_INCOMPLETE`.
 - **Refusal:** both codes are permanent launch refusals (the Run base is pinned; a fix needs a new Run). The checkout is released; no
   container, connection or claim exists. The text (EN/TR, shared renderer) names up to 16 `path (rule)` pairs and the omitted count; paths
   pass through the record redactor and never carry a value. The `worker-tree-refused` audit subject keeps up to 50 findings, the full

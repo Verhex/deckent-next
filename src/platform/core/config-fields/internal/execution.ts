@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import quotaDefaults from './quota-policy.json' with { type: 'json' };
+import scanAdmission from './secret-gate-admission.json' with { type: 'json' };
 /** Required runtime capability settings; install/config composition supplies policy values. */
 export const DOCKER_EXECUTION_SETTINGS = z.object({
   executable: z.string().min(1), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -53,7 +54,12 @@ export const EXECUTION_SECRET_GATE_SETTINGS = z.object({ schemaVersion: z.litera
   allowPatternPaths: z.array(z.string().min(1).max(512).refine(value => !value.startsWith('/') && !value.split('/').includes('..'))).max(64).default([]),
   acknowledgedDenyPaths: z.array(z.string().min(1).max(512).refine(value => !value.startsWith('/') && !/[*?[\]]/u.test(value) && !value.split('/').some(part => part === '..' || part === '.' || part === ''))).max(64).default([]),
   maxFiles: z.number().int().positive().max(10_000_000).default(200_000), maxFileBytes: z.number().int().positive().safe().default(16_777_216),
-  maxTotalBytes: z.number().int().positive().safe().default(1_073_741_824), timeoutMs: z.number().int().positive().max(2_147_483_647).default(120_000) }).strict();
+  maxTotalBytes: z.number().int().positive().safe().default(1_073_741_824), timeoutMs: z.number().int().positive().max(2_147_483_647).default(120_000),
+  // R2 (owner/lead D3a 2026-10-18): scans admitted at once per process (each deadline starts once admitted), the bounded wait for a slot, and the
+  // load-dependent `time` refusals one Attempt retries (`WORKER_TREE_SCAN_DEFERRED`) before the next one is final.
+  maxConcurrentScans: z.number().int().positive().max(1024).default(scanAdmission.maxConcurrentScans),
+  admissionTimeoutMs: z.number().int().positive().max(2_147_483_647).default(scanAdmission.admissionTimeoutMs),
+  maxTimeRefusals: z.number().int().nonnegative().max(100).default(scanAdmission.maxTimeRefusals) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();
 /** A1/A3: shared parked Run/task deadline policy. 24 hours is a conservative, lead-adjustable default,
  * not a measured optimum. Explicit version and strict keys make unsupported policy fail closed. */

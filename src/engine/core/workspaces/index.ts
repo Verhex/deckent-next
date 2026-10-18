@@ -10,6 +10,8 @@ export { createWorkspaceFileIndexCache, rankWorkspacePaths, workspacePathRank } 
 export type { RuntimeWorkspaceFileHost, WorkspaceFileIndex } from './internal/file-index.js';
 export { enforceWorkerTreeGate, workerTreeDenyForms, WORKER_TREE_SHOWN_PATHS } from './internal/secret-gate.js';
 export type { WorkerTreeFinding, WorkerTreeGateContext, WorkerTreeLimit, WorkerTreeScan } from './internal/secret-gate.js';
+export { enforceAdmittedWorkerTreeGate, mergeWorkerTreeScans, WorkerTreeScanAdmission, WorkerTreeScanAdmissionTimeout, WORKER_TREE_SCAN_ADMISSION } from './internal/scan-admission.js';
+export type { AdmittedWorkerTreeGateInput, WorkerTreeScanAdmissionSettings, WorkerTreeScanView, WorkerTreeTimeRefusalFile } from './internal/scan-admission.js';
 export { readWorkerTreeExclusions, recordWorkerTreeExclusions, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, workerTreeExclusionSchema } from './internal/exclusion-receipt.js';
 export type { WorkerTreeExclusion, WorkerTreeExclusionRecord } from './internal/exclusion-receipt.js';
 export { DependencyTreePatternCache, classifyDependencyBinary, dependencyNativeRefusal, dependencyTreeLifting, nativeBinaryKind } from './internal/dependency-tree.js';

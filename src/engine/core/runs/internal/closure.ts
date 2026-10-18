@@ -30,6 +30,8 @@ export async function recordAttemptClosure(store: AttemptStore & Pick<RunStore, 
  * locks, unclassified adapter errors) stays transient: the turn fails as before and the runtime's failure backoff applies. */
 const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_CONFIGURED', 'EXECUTION_HOST_UNSUPPORTED', 'EXECUTION_PROFILE_INVALID', 'DISPATCH_ARTIFACT_REQUIRED',
   // S6: the Run's base commit is pinned, so the same tree is refused on every turn; the person fixes it in a new Run (or raises a bound).
+  // A `time` bound depends on load, not on the tree (R2, D3a 2026-10-18): the gate throws it as WORKER_TREE_SCAN_DEFERRED, deliberately absent
+  // here (transient), until the Attempt's `maxTimeRefusals` are spent; only the refusal after that arrives here as WORKER_TREE_SCAN_INCOMPLETE.
   'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE']);
 export function classifyLaunchRefusal(error: unknown): Readonly<{ disposition: 'permanent'; code: string }> | Readonly<{ disposition: 'transient' }> {
   const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;

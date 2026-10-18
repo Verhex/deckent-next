@@ -110,13 +110,16 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(parsed.execution).toEqual({ docker, git: { gitExecutable: 'git', timeoutMs: 1, outputBytes: 4_194_304 }, adoption: { targets: [], protectedTargets: [], verification: null },
       retention: { schemaVersion: 1, release: 'after-retained-patch', sweepLimit: 16 },
       // S6: the secret gate's acknowledgements default empty (refuse by default) and its bounds come from the inner schema.
-      secretGate: { schemaVersion: 1, allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 200_000, maxFileBytes: 16_777_216, maxTotalBytes: 1_073_741_824, timeoutMs: 120_000 } });
+      secretGate: { schemaVersion: 1, allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 200_000, maxFileBytes: 16_777_216, maxTotalBytes: 1_073_741_824, timeoutMs: 120_000,
+        // R2 (D3a): scan admission per process, the bounded slot wait and the deferred `time` refusals per Attempt.
+        maxConcurrentScans: 2, admissionTimeoutMs: 300_000, maxTimeRefusals: 2 } });
     // A retention section of an unknown version or with unknown keys is a typed config refusal, never a silent default.
     for (const retention of [{ schemaVersion: 2 }, { schemaVersion: 1, release: 'never' }, { schemaVersion: 1, extra: true }, { schemaVersion: 1, sweepLimit: 0 }])
       expect(CORE_SCHEMA.safeParse({ execution: { docker, git: { gitExecutable: 'git', timeoutMs: 1 }, retention } }).success).toBe(false);
     // An unknown gate version or key, an absolute or parent-escaping glob, a glob or `..` in an exact acknowledgement: refused, never defaulted.
     for (const secretGate of [{ schemaVersion: 2 }, { schemaVersion: 1, extra: true }, { schemaVersion: 1, allowPatternPaths: ['/etc/**'] }, { schemaVersion: 1, allowPatternPaths: ['../x'] },
-      { schemaVersion: 1, acknowledgedDenyPaths: ['**/.npmrc'] }, { schemaVersion: 1, acknowledgedDenyPaths: ['a/../.env'] }, { schemaVersion: 1, maxFiles: 0 }])
+      { schemaVersion: 1, acknowledgedDenyPaths: ['**/.npmrc'] }, { schemaVersion: 1, acknowledgedDenyPaths: ['a/../.env'] }, { schemaVersion: 1, maxFiles: 0 },
+      { schemaVersion: 1, maxConcurrentScans: 0 }, { schemaVersion: 1, admissionTimeoutMs: 2_147_483_648 }, { schemaVersion: 1, maxTimeRefusals: -1 }, { schemaVersion: 1, maxTimeRefusals: 1.5 }])
       expect(CORE_SCHEMA.safeParse({ execution: { docker, git: { gitExecutable: 'git', timeoutMs: 1 }, secretGate } }).success).toBe(false);
     expect(parsed.cancellation).toEqual({ maxConcurrentDeliveries: 1, recoveryPageSize: 64, maxAttempts: 3, retryDelayMs: 1000, claimTtlMs: 30_000 });
     expect(parsed.cancellationRuntime).toEqual({ scopeIds: ['a'], pollIntervalMs: 1000, failureBackoffMs: 5000 });
