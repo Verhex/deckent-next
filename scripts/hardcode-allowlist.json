@@ -274,7 +274,6 @@
   {"file":"src/composition/core/agent-turn/internal/workspace-files.ts","fingerprint":"00a8b504089bbf70fa7b111f1aefe1db401edabdefd749d0821e522ef2838c17","rule":"G2"},
   {"file":"src/composition/core/execution/internal/task.ts","fingerprint":"a262a8e7126faddb40c31dc0dc58e068b02874100d2bbd8d7edb6ab52a43eaef","rule":"G4"},
   {"file":"src/composition/core/mcp/internal/entry.ts","fingerprint":"03bed95528536e4137676c9c8412031b8d4b639eb10e02a63e4d46beb3ef4cea","rule":"G3"},
-  {"file":"src/composition/core/mcp/internal/entry.ts","fingerprint":"3776c6b74c428e2c5bb39e09af1ec9c8a7c397a80b63ced8a58900ea4a3f4109","rule":"G3"},
   {"file":"src/composition/core/monitor/internal/inspect.ts","fingerprint":"8f42a277ace04ba1e0b29edf53f5c6b4f2f3c0a1cb151cf0eda2abc8b6291201","rule":"G4"},
   {"file":"src/composition/core/runs/internal/evaluate.ts","fingerprint":"dfebac3f047fa0d30fae7a20f00a290115176edaa7007ef5bf71b2b8685f5f7f","rule":"G4"},
   {"file":"src/surfaces/core/terminal-turn/internal/mentions.ts","fingerprint":"17cd59dafe86b19991d2e0292a04510b26e074164264ec3bb01cd4955aec3ecd","rule":"G2","origin":"src/composition/core/terminal-chat/internal/mentions.ts"},
