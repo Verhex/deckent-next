@@ -2,7 +2,7 @@ import { useContext, useEffect, useId, useRef, useState, type ReactNode } from '
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { SpanText, cells, fillTemplate, graphemes, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, useRenderGlyphs, wrapCells, wrapSpans, type Span } from '#surfaces/core/terminal-render/index.js';
-import { useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
+import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
 import { useWindowNote } from './window-note.js';
 import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
 
@@ -86,18 +86,22 @@ export interface WindowProps {
   readonly reveal?: number;
   /** A decision window: while it is on top but the composer keeps focus, it says how to reach the decision (Ctrl+O). */
   readonly decision?: boolean;
+  /** Told when this window starts or stops owning the keyboard (a question arms from that moment). */
+  readonly onFocusChange?: (focused: boolean) => void;
 }
 
 /**
  * A bounded modal window in the live area (owner 2026-10-07): frame, title left and status right, a body capped to the terminal's rows
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
-export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false }: WindowProps) {
+export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
+  onFocusChange }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const acceptsInput = useWindowLayerGuard(id);
-  const owner = useFocusOwner();
+  const owner = useFocusOwner(), queue = useDecisionQueue(id, priority);
+  useEffect(() => { onFocusChange?.(focused); }, [focused, onFocusChange]);
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
   const note = useWindowNote(), noteText = note && (focused || owner.top === id || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
@@ -130,7 +134,10 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (key.escape && current.onClose) current.onClose();
   }, { isActive: focused });
   const first = clampScroll(offset, rows.length, visible);
-  const statusText = truncateEnd(plainText(status), Math.max(0, Math.floor(width / 2)), glyphs.ellipsis);
+  // A decision waiting behind the shown one draws nothing (its layer and keys stay registered); the shown one says "1/3".
+  if (queue.hidden) return null;
+  const counted = queue.total > 1 ? `${queue.position}/${queue.total} ${plainText(status)}`.trim() : plainText(status);
+  const statusText = truncateEnd(counted, Math.max(0, Math.floor(width / 2)), glyphs.ellipsis);
   const titleRoom = Math.max(1, width - (statusText ? cells(statusText) + 1 : 0));
   const titleText = plainText(title), titleFits = cells(titleText) <= titleRoom;
   return (

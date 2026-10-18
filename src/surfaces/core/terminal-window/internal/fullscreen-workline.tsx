@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useBoxMetrics, useInput, useWindowSize, type DOMElement } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
-import { WindowStackProvider, useFocusOwner } from './window-stack.js';
+import { WindowStackProvider, WINDOW_PRIORITY, useFocusOwner } from './window-stack.js';
 import { scrollViewport, viewportLines, viewportStart, type ViewportAnchor, type ViewportBlocks } from './viewport.js';
 
 /**
@@ -30,10 +30,16 @@ export function FullscreenWorkline({ viewport, above, bar, info }: { readonly vi
     <Box flexDirection="column" height={rows} width={columns} overflow="hidden">
       {viewport}
       <Box flexDirection="column" flexShrink={0} maxHeight={cap} overflow="hidden" justifyContent="flex-end">{above}</Box>
-      <Box flexDirection="column" flexShrink={0}>{bar}</Box>
+      <BarSlot>{bar}</BarSlot>
       <Box flexDirection="column" flexShrink={0} height={fullscreenInfoRows(rows)} overflow="hidden">{info}</Box>
     </Box>
   </WindowStackProvider>;
+}
+
+/** A decision that holds the keyboard takes the bar's place (Claude Code style): the composer stays mounted, so its draft returns with it. */
+function BarSlot({ children }: { readonly children: ReactNode }) {
+  const owner = useFocusOwner(), deciding = owner.topPriority !== null && owner.topPriority >= WINDOW_PRIORITY.approval && !owner.composing;
+  return <Box flexDirection="column" flexShrink={0} display={deciding ? 'none' : 'flex'}>{children}</Box>;
 }
 
 export type ChatViewportLabels = Readonly<{ below: string }>;
