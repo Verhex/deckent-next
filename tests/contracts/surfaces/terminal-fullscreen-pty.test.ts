@@ -85,7 +85,8 @@ describe.skipIf(process.platform === 'win32')('full window on a real PTY (produc
   }, 120_000);
 
   it('wheel and clicks over an approval card never answer it; a deliberate key does', async () => {
-    const run = await pty([['READY', 'card\r', 0.2], ['Approval needed', `${WHEEL_UP}${CLICK}${WHEEL_DOWN}${CLICK}`, 0.6], ['Approval needed', '', 0.5], ['Approval needed', 'n', 0.2], ['READY', '', 0.5]]);
+    // The mouse reports go in once the card's keys count (armed: its key hints show), so they could have answered it if they reached it.
+    const run = await pty([['READY', 'card\r', 0.2], ['Enter confirm', `${WHEEL_UP}${CLICK}${WHEEL_DOWN}${CLICK}`, 0.6], ['Approval needed', '', 0.5], ['Enter confirm', 'n', 0.2], ['READY', '', 0.5]]);
     const before = run.screen(2).join('\n');
     expect(before).toContain('Approval needed');
     // The child writes its decisions to stderr (the same PTY): none before the deliberate n, a deny after it.

@@ -48,7 +48,7 @@ afterEach(async () => {
  * size. Each step waits for text on the terminal before typing, with a hard deadline per step.
  */
 const DRIVER = String.raw`
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, json, os, pty, select, struct, sys, termios, time, re
 argv, steps = json.loads(sys.argv[1]), json.loads(sys.argv[2])
 pid, fd = pty.fork()
 if pid == 0:
@@ -72,7 +72,8 @@ for wait, send in steps:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.3)  # let the view settle (raw mode, input subscription) before typing
-    for char in send:
+    # One write per key: an escape sequence stays whole, as a terminal sends it (CI 2026-10-18).
+    for char in re.findall(r'\x1b\[[A-Z0-9~;<]+|.', send, re.S):
         os.write(fd, char.encode()); time.sleep(0.01)
 deadline = time.time() + 25
 status = None

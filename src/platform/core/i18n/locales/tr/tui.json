@@ -1071,6 +1071,8 @@
   "terminal.activeWork.more": "+{count} daha",
   "terminal.viewport.below": "↓ aşağıda {count} satır daha · End en yeni · PgDn kaydırır · Ctrl+F ara · Ctrl+↑↓ mesajların",
   "terminal.viewport.newMessages": "↓ {count} yeni mesaj · End en yeni · Ctrl+F ara",
+  "terminal.decision.arming": "Yeni açıldı · tuşları birazdan çalışır",
+  "terminal.decision.ignored": "Tuş sayılmadı: kart yeni açıldı · yeniden basın",
   "terminal.viewport.search": "Bu görünümde ara: {query}{state} · Enter/↑ eski · ↓ yeni · Esc kapat",
   "terminal.viewport.searchNone": " · eşleşme yok",
   "terminal.render.contextUnknown": "bağlam ?",

@@ -382,14 +382,14 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
       // Production arming (slice 2): a new card takes the keyboard by itself but swallows keys until a quiet period has passed.
       const view = mount({ streamTurn, ledger: ledger as never, decisionArmMs: DECISION_ARM_DEFAULT });
       await settle(20); await view.type('go\r');
-      await view.card('FIRST-CARD', 'first card'); await settle(DECISION_ARM_DEFAULT + 80); await view.type('y');
+      await view.card('FIRST-CARD', 'first card'); await until(() => view.frame().includes(W.deny), 'first card armed'); await view.type('y');
       await view.card('SECOND-CARD', 'second card'); finishDecision();
       await until(() => view.stdout.text.includes(late === 'answers' ? 'A-ALLOWED approval-a' : 'ERR:late failure'), 'late answer shown');
       await settle(40);
-      expect(view.frame()).toContain('SECOND-CARD'); expect(view.frame()).toContain(W.deny);
+      expect(view.frame()).toContain('SECOND-CARD');
       await view.type('y'); await settle(40);
       expect(decided).toEqual(['approval-a:allow']); // A key at once never answers the new card (it is still arming).
-      await settle(DECISION_ARM_DEFAULT + 80); await view.type('y');
+      await until(() => view.frame().includes(W.deny), 'second card armed'); await view.type('y');
       await until(() => view.frame().includes('Both done.') && !view.frame().includes(W.title), 'second decided, turn ends');
       expect(decided).toEqual(['approval-a:allow', 'approval-b:allow']);
     });

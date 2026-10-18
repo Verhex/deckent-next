@@ -38,6 +38,8 @@ function mountCard(calls: unknown[][], gate: Promise<void>) {
   mounted.push(view.instance); return view;
 }
 const cardShown = (view: ReturnType<typeof mountWorkline>) => view.stdout.frame.includes('Approval needed');
+/** A decision counts keys once its key hints show (TERMINAL-SABIT-DUZEN: the visible armed state); the settle first lets a restart repaint. */
+async function armed(frame: () => string, hint: string) { await settle(ARM + 80); await until(() => frame().includes(hint), `armed (${hint})`); }
 
 describe('decision card keystroke race (real Workline, production arming)', () => {
   it('keys typed for the input before the card appeared stay in the draft and decide nothing', async () => {
@@ -53,7 +55,7 @@ describe('decision card keystroke race (real Workline, production arming)', () =
       await settle(ARM / 2);
       expect(calls).toEqual([]);
       // Denied after a quiet period with Esc; the draft typed before the card is back in the input.
-      await settle(ARM + 80); view.stdin.write('\u001b');
+      await armed(() => view.stdout.frame, 'Enter confirm'); view.stdin.write('\u001b');
       await until(() => calls.length === 1 && !cardShown(view), 'denied'); expect(calls[0]![1]).toBe('deny');
       await settle(60); expect(view.stdout.frame).toMatch(/│ > y+/u);
     } finally { gate.release(); }
@@ -68,10 +70,10 @@ describe('decision card keystroke race (real Workline, production arming)', () =
       for (let elapsed = 0; elapsed < ARM * 2.5; elapsed += 30) { view.stdin.write('y'); await settle(30); }
       expect(calls).toEqual([]);
       // A bracketed paste after arming never answers either.
-      await settle(ARM + 80); view.stdin.write('\u001b[200~y\r\u001b[201~'); await settle(60);
+      await armed(() => view.stdout.frame, 'Enter confirm'); view.stdin.write('\u001b[200~y\r\u001b[201~'); await settle(60);
       expect(calls).toEqual([]);
       // Enter on the default highlight after a quiet period denies (No is the default).
-      await settle(ARM + 80); view.stdin.write('\r');
+      await armed(() => view.stdout.frame, 'Enter confirm'); view.stdin.write('\r');
       await until(() => calls.length === 1, 'decision'); expect(calls[0]![1]).toBe('deny');
     } finally { gate.release(); }
   });
@@ -82,10 +84,10 @@ describe('decision card keystroke race (real Workline, production arming)', () =
       await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
       await until(() => cardShown(view), 'card');
       view.stdin.write('\u001b'); await settle(40); expect(calls).toEqual([]);
-      await settle(ARM + 80);
+      await armed(() => view.stdout.frame, 'Enter confirm');
       view.stdin.write(CTRL_O); await settle(30); view.stdin.write(CTRL_O); await settle(20); view.stdin.write('y'); await settle(60);
       expect(calls).toEqual([]);
-      await settle(ARM + 80); view.stdin.write('y');
+      await armed(() => view.stdout.frame, 'Enter confirm'); view.stdin.write('y');
       await until(() => calls.length === 1, 'approved after re-arm'); expect(calls[0]![1]).toBe('allow');
     } finally { gate.release(); }
   });
@@ -107,8 +109,8 @@ describe('Codex review 6d458d9d repro sequences (paste split across focus, multi
     const gate = hold(), calls: unknown[][] = [], view = mountCard(calls, gate.promise);
     try {
       await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
-      await until(() => cardShown(view), 'card'); await settle(ARM + 80);
-      view.stdin.write('\t'); await settle(ARM + 80);
+      await until(() => cardShown(view), 'card'); await armed(() => view.stdout.frame, 'Enter confirm');
+      view.stdin.write('\t'); await until(() => view.stdout.frame.includes('Reason'), 'reason field'); await settle(40);
       view.stdin.write('\r\u001b[Ay'); await settle(80);
       expect(calls).toEqual([]);
     } finally { gate.release(); }
@@ -118,11 +120,11 @@ describe('Codex review 6d458d9d repro sequences (paste split across focus, multi
     const gate = hold(), calls: unknown[][] = [], view = mountCard(calls, gate.promise);
     try {
       await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
-      await until(() => cardShown(view), 'card'); await settle(ARM + 80);
+      await until(() => cardShown(view), 'card'); await armed(() => view.stdout.frame, 'Enter confirm');
       view.stdin.write('text\u007fy'); await settle(80);
       expect(calls).toEqual([]);
       // A deliberate single key after a quiet period still works.
-      await settle(ARM + 80); view.stdin.write('n'); await until(() => calls.length === 1, 'deliberate n'); expect(calls[0]![1]).toBe('deny');
+      await armed(() => view.stdout.frame, 'Enter confirm'); view.stdin.write('n'); await until(() => calls.length === 1, 'deliberate n'); expect(calls[0]![1]).toBe('deny');
     } finally { gate.release(); }
   });
 });
@@ -148,12 +150,12 @@ describe('queued decisions (one shown, "n/total"), each armed when it becomes vi
     mounted.push(instance);
     await settle(40);
     expect(stdout.frame).toContain('1/2'); expect(stdout.frame.match(/CARD-/gu)).toHaveLength(1);
-    await settle(ARM + 80); stdin.write('n');
+    await armed(() => stdout.frame, 'HINT'); stdin.write('n');
     await until(() => answers.length === 1, 'first answer');
     // A held key arriving right after the switch must not answer the newly shown card.
     for (let i = 0; i < 8; i++) { stdin.write('y'); await settle(25); }
     expect(answers).toHaveLength(1);
-    await settle(ARM + 80); stdin.write('n');
+    await armed(() => stdout.frame, 'HINT'); stdin.write('n');
     await until(() => answers.length === 2, 'second answer after its own arming');
     expect(answers[1]!.endsWith(':n')).toBe(true);
   });
@@ -173,12 +175,12 @@ describe('queued decisions (one shown, "n/total"), each armed when it becomes vi
     const instance = render(createElement(DecisionArmContext.Provider, { value: ARM }, createElement(One)),
       { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, patchConsole: false, interactive: true, exitOnCtrlC: false });
     mounted.push(instance);
-    await settle(ARM + 80);
+    await armed(() => stdout.frame, 'HINT');
     // A key already in flight reaches the card that was on screen (production: the controller refuses its stale handle); the replacement
     // never takes it, nor the next one, until it has armed itself.
     replace(); stdin.write('y'); await settle(20); stdin.write('y'); await settle(60);
     expect(stdout.frame).toContain('CARD-rev-1'); expect(answers.filter(answer => answer.startsWith('rev-1'))).toEqual([]);
-    await settle(ARM + 80); stdin.write('n');
+    await armed(() => stdout.frame, 'HINT'); stdin.write('n');
     await until(() => answers.some(answer => answer.startsWith('rev-1')), 'answer after the replacement armed'); expect(answers.at(-1)).toBe('rev-1:n');
   });
 });
@@ -190,20 +192,20 @@ describe('review 2026-10-18 (fail-open burst handling, focus return onto a decis
     const answers: Array<readonly string[] | null> = [], stdout = new Tty(), stdin = keyboard();
     const options = [{ id: 'go', label: 'Go', key: 'y' }, { id: 'stop', label: 'Stop', key: 'n' }];
     const instance = render(createElement(DecisionArmContext.Provider, { value: ARM }, createElement(WindowStackProvider, { composerDefault: true },
-      createElement(QuestionWindow, { title: 'Q', kind: 'single', options, hints: 'H', position: '{from}-{to}/{total}', onAnswer: ids => { answers.push(ids); } }))),
+      createElement(QuestionWindow, { title: 'Q', kind: 'single', options, hints: 'HINT', position: '{from}-{to}/{total}', onAnswer: ids => { answers.push(ids); } }))),
       { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, patchConsole: false, interactive: true, exitOnCtrlC: false });
     mounted.push(instance);
-    await settle(ARM + 80);
+    await armed(() => stdout.frame, 'HINT');
     stdin.write('\u001b[Ay'); await settle(60); expect(answers).toEqual([]);
-    await settle(ARM + 80); stdin.write('\u000fy'); await settle(60); expect(answers).toEqual([]);
-    await settle(ARM + 80); stdin.write('n'); await until(() => answers.length === 1, 'deliberate key'); expect(answers[0]).toEqual(['stop']);
+    await armed(() => stdout.frame, 'HINT'); stdin.write('\u000fy'); await settle(60); expect(answers).toEqual([]);
+    await armed(() => stdout.frame, 'HINT'); stdin.write('n'); await until(() => answers.length === 1, 'deliberate key'); expect(answers[0]).toEqual(['stop']);
   });
 
   it('focus returning to an armed decision after a later decision closes (K1–K8 return-focus rule) re-arms it: an in-flight key never answers it', async () => {
     const answers: string[] = [];
     let openB!: () => void;
     function Card({ id, onDone }: { readonly id: string; readonly onDone?: () => void }) {
-      return createElement(Window, { title: [{ text: `DECISION-${id}` }], hints: 'H', position: '{from}-{to}/{total}', priority: WINDOW_PRIORITY.approval, decision: true,
+      return createElement(Window, { title: [{ text: `DECISION-${id}` }], hints: 'HINT', position: '{from}-{to}/{total}', priority: WINDOW_PRIORITY.approval, decision: true,
         onInput: (input: string) => { if (input === 'y' || input === 'n') { answers.push(`${id}:${input}`); onDone?.(); return true; } return false; } });
     }
     function Both() {
@@ -214,12 +216,44 @@ describe('review 2026-10-18 (fail-open burst handling, focus return onto a decis
     const instance = render(createElement(DecisionArmContext.Provider, { value: ARM }, createElement(Both)),
       { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, patchConsole: false, interactive: true, exitOnCtrlC: false });
     mounted.push(instance);
-    await settle(ARM + 80); // A is armed
-    openB(); await settle(ARM + 80); // B took the keyboard and armed; A waits behind it
+    await armed(() => stdout.frame, 'HINT'); // A is armed
+    openB(); await armed(() => stdout.frame, 'HINT'); // B took the keyboard and armed; A waits behind it
     expect(stdout.frame).toContain('DECISION-B'); expect(stdout.frame).not.toContain('DECISION-A');
     stdin.write('n'); await until(() => answers.length === 1, 'B answered'); expect(answers).toEqual(['B:n']);
     stdin.write('y'); await settle(30); stdin.write('y'); await settle(60);
     expect(answers).toEqual(['B:n']); // focus is back on A, which re-armed: the keys in flight never answer it
-    await settle(ARM + 80); stdin.write('n'); await until(() => answers.length === 2, 'deliberate key on A'); expect(answers).toEqual(['B:n', 'A:n']);
+    await armed(() => stdout.frame, 'HINT'); stdin.write('n'); await until(() => answers.length === 2, 'deliberate key on A'); expect(answers).toEqual(['B:n', 'A:n']);
+  });
+});
+
+describe('CI 2026-10-18: a key during arming is never a silent swallow', () => {
+  it('the card shows "not counted" for a key that came too early and shows its keys once they count; a key after that decides', async () => {
+    const gate = hold(), calls: unknown[][] = [];
+    const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en'), decisionArm: { arming: 'ARMING-NOW', ignored: 'KEY-IGNORED' } } as never,
+      ledger: ledger(calls) as never, streamTurn: turn(gate.promise) as never, decisionArmMs: ARM } as never, 100, { rows: 40 });
+    mounted.push(view.instance);
+    try {
+      await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
+      await until(() => cardShown(view), 'card');
+      expect(view.stdout.frame).toContain('ARMING-NOW'); expect(view.stdout.frame).not.toContain('Enter confirm');
+      view.stdin.write('y'); await until(() => view.stdout.frame.includes('KEY-IGNORED'), 'ignored feedback'); expect(calls).toEqual([]);
+      // The keys show only once they count: a test (or a person) waiting for them never loses the next key.
+      await until(() => view.stdout.frame.includes('Enter confirm'), 'armed hints');
+      expect(view.stdout.frame).not.toContain('KEY-IGNORED');
+      view.stdin.write('n'); await until(() => calls.length === 1, 'decided'); expect(calls[0]![1]).toBe('deny');
+    } finally { gate.release(); }
+  });
+
+  it('a read of navigation keys only (held PgDn, coalesced arrows) still scrolls/moves an armed card and never decides; adding a letter drops it', async () => {
+    const gate = hold(), calls: unknown[][] = [], view = mountCard(calls, gate.promise);
+    try {
+      await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
+      await until(() => cardShown(view), 'card'); await armed(() => view.stdout.frame, 'Enter confirm');
+      expect(view.stdout.frame).toContain('› 3. No (n)');
+      view.stdin.write('\u001b[A\u001b[A'); await until(() => view.stdout.frame.includes('› 1. Yes, once (y)'), 'highlight moved by a coalesced read');
+      expect(calls).toEqual([]);
+      view.stdin.write('\u001b[By'); await settle(80); expect(calls).toEqual([]); // navigation + letter in one read: dropped whole
+      expect(view.stdout.frame).toContain('› 1. Yes, once (y)');
+    } finally { gate.release(); }
   });
 });

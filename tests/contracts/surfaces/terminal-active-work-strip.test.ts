@@ -147,7 +147,7 @@ describe('active work strip on the real Workline', () => {
     await press(h, CTRL_T); expect(frame(h)).toContain(EN.activeWork!.focused); expect(frame(h)).toContain('› /do process order');
     await press(h, 'y'); expect(h.decisions).toEqual([]); // a letter in the strip is no decision either
     await press(h, '\r'); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(h.decisions).toEqual([]); // Enter on /do = focus transfer only (re-arms)
-    await settle(DECISION_ARM_DEFAULT + 80); await press(h, 'y'); // the explicit key on the focused original card
+    await settle(DECISION_ARM_DEFAULT + 80); await until(() => frame(h).includes('Enter confirm'), 'card armed'); await press(h, 'y'); // the explicit key on the focused card
     await until(() => h.decisions.length === 1, 'decision on the card'); expect(h.decisions).toEqual(['allow']);
     await until(() => h.plans() === 2 && frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['running']}`), 'admitted Run row');
   });

@@ -161,17 +161,17 @@ describe('the single approval card', () => {
     const view = mountWorkline({ streamTurn: streamTurn as never, ledger: ledger as never, decisionArmMs: DECISION_ARM_DEFAULT }, 220);
     mounted.push(view.instance);
     await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes(DENY), 'turn card'); await settle(40);
+    await until(() => view.stdout.frame.includes('… 39 more lines'), 'turn card');
+    // Slice 2: the card takes the keyboard by itself; a y arriving at once is not counted (arming) and the card says so.
+    view.stdin.write('y'); await settle(40); expect(decided).toEqual([]);
+    await until(() => view.stdout.frame.includes(DENY), 'card armed'); await settle(40);
     const frame = view.stdout.frame;
     // A 40-line heredoc keeps the facts on screen: its field shows three rows, the preview below has the whole command.
     expect(frame).toMatch(/Risk: +Deletes \(cannot be undone\)/u); // REVERSIBILITY: a destructive shell card without the producer's word is classified by its cell (never "reversible").
     expect(frame).toMatch(/Undo: +No — it cannot be undone/u);
     expect(frame.indexOf('Deletes (cannot be undone)')).toBeLessThan(frame.indexOf('line 20'));
     expect(frame).toContain('… 39 more lines'); expect(frame).toMatch(/rows 1–\d+ of \d+/u); expect(frame).toContain('R-TURN-HERE'); expect(frame).toContain(NOTHING_RUNS);
-    // TERMINAL-SABIT-DUZEN slice 2 (replaces R2's Ctrl+O): the card takes the keyboard by itself, and a y arriving at once is swallowed by
-    // its arming (production delay), never a decision; a y after a quiet period decides.
-    view.stdin.write('y'); await settle(40); expect(decided).toEqual([]);
-    await settle(DECISION_ARM_DEFAULT + 80);
+    // Armed (its keys are shown): a y now decides.
     view.stdin.write('y');
     await until(() => view.stdout.frame.includes('Ran.'), 'turn continues');
     expect(decided).toEqual([expect.objectContaining({ approvalId: 'appr-h', revision: 0, decisionCapability: CAPABILITY, decision: 'allow' })]);
@@ -297,15 +297,16 @@ describe('the single approval card after Sol 2234', () => {
     const view = mountWorkline({ streamTurn: streamTurn as never, ledger: ledger as never, decisionArmMs: DECISION_ARM_DEFAULT }, 220);
     mounted.push(view.instance);
     await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('package.json'), 'card A'); await settle(DECISION_ARM_DEFAULT + 80);
+    await until(() => view.stdout.frame.includes('package.json') && view.stdout.frame.includes(DENY), 'card A armed');
     view.stdin.write('y'); // slice 2: card A holds the keyboard by itself (armed)
-    await until(() => view.stdout.frame.includes('Makefile') && view.stdout.frame.includes(DENY), 'card B open');
-    await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'late refusal of A');
-    await settle(60);
-    expect(view.stdout.frame).toContain('Makefile'); expect(view.stdout.frame).toContain(DENY); expect(view.stdout.frame).not.toContain('package.json');
+    await until(() => view.stdout.frame.includes('Makefile'), 'card B open');
     // Slice 2: card B takes the keyboard by itself but arms first; a key at once never decides it.
     view.stdin.write('n'); await settle(40); expect(decided).toEqual(['card-a:allow']);
-    await settle(DECISION_ARM_DEFAULT + 80); view.stdin.write('n');
+    await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'late refusal of A');
+    await settle(60);
+    await until(() => view.stdout.frame.includes(DENY), 'card B armed');
+    expect(view.stdout.frame).toContain('Makefile'); expect(view.stdout.frame).not.toContain('package.json');
+    view.stdin.write('n');
     await until(() => view.stdout.frame.includes('Done.'), 'turn continues');
     expect(decided).toEqual(['card-a:allow', 'card-b:deny']);
   });

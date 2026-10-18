@@ -204,11 +204,12 @@ describe('delivery window on the real Workline', () => {
     await until(() => frame(h).includes(windowTitle) && frame(h).includes('note.txt | +1 -1'), 'self-appearing window');
     expect(frame(h)).toContain('INPUT-FOCUS'); expect(frame(h)).toContain(`ORDER-TASK · ${EN.activeWork!.deliveryWaiting}`);
     expect(frame(h)).toContain(`affected files match base ${BASE.slice(0, 12)}`); expect(frame(h)).toContain('refs/deckent/deliveries/');
-    expect(frame(h)).toContain(WORDS.hints); expect(h.calls).toEqual(['preview:r']);
+    // Keys on screen only while they count (TERMINAL-SABIT-DUZEN): behind the composer the window says how to reach it instead.
+    expect(frame(h)).not.toContain(WORDS.hints); expect(h.calls).toEqual(['preview:r']);
     expect(frame(h)).toContain('DECIDE-HINT'); // the waiting decision window says how to reach it
     // A composer keystroke is typing, never a confirmation.
     await press(h, 'y'); await press(h, 'es-draft'); expect(frame(h)).toContain('yes-draft'); expect(h.calls).toEqual(['preview:r']); await press(h, CTRL_U);
-    await press(h, CTRL_O); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(frame(h)).not.toContain('DECIDE-HINT');
+    await press(h, CTRL_O); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(frame(h)).not.toContain('DECIDE-HINT'); expect(frame(h)).toContain(WORDS.hints);
     await press(h, 'y', 120);
     await until(() => frame(h).includes(`Delivered: commit ${COMMIT}`), 'delivered result line');
     expect(h.calls).toEqual(['preview:r', 'available', 'prepare', 'publish']);
@@ -225,7 +226,7 @@ describe('delivery window on the real Workline', () => {
 
   it('n and Esc write nothing, leave the task waiting in the strip, and the strip reopens it in the foreground', async () => {
     const h = harness(); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'n', 100);
     expect(frame(h)).not.toContain(windowTitle); expect(h.calls).toEqual(['preview:r']);
     expect(transcript(h)).toContain('Delivery left waiting: ORDER-TASK. /deliver opens it again.');
@@ -239,7 +240,7 @@ describe('delivery window on the real Workline', () => {
 
   it('a stale base is refused in human words with the next step; nothing is prepared or written', async () => {
     const h = harness({ failFirst: { code: 'PATCH_BASE_ADVANCED', message: 'The delivery base changed.' } }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'y', 120);
     await until(() => frame(h).includes('ERR:The delivery base changed.'), 'typed refusal');
     expect(frame(h)).toContain(WORDS.next['PATCH_BASE_ADVANCED']!.slice(0, 40)); expect(h.calls).toEqual(['preview:r', 'available']);
@@ -250,7 +251,7 @@ describe('delivery window on the real Workline', () => {
 
   it('refuses a session that is not a verified terminal before any preparation, with the next step', async () => {
     const h = harness({ failFirst: { code: 'DELIVERY_INTERACTIVE_REQUIRED', message: 'Delivery/adoption requires a verified human terminal.' } }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'y', 120);
     await until(() => frame(h).includes('requires a verified human terminal'), 'refusal');
     expect(frame(h)).toContain(WORDS.next['DELIVERY_INTERACTIVE_REQUIRED']!.slice(0, 40)); expect(h.calls).toEqual(['preview:r', 'available']);
@@ -258,9 +259,10 @@ describe('delivery window on the real Workline', () => {
 
   it('adoption is offered only with configured targets and moves the chosen branch only after a second, separate y', async () => {
     const h = harness({ targets: ['refs/heads/main', 'refs/heads/release'] }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
+    await press(h, CTRL_O); // keys and their notes show once the window holds the keyboard
     expect(frame(h)).toContain('adopting into a branch is a separate choice: refs/heads/main, refs/heads/release');
-    await press(h, CTRL_O); await press(h, 'y', 120);
+    await press(h, 'y', 120);
     await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
     expect(h.calls).toEqual(['preview:r', 'available', 'prepare', 'publish']); // delivered; no branch moved yet
     await press(h, DOWN); expect(frame(h)).toMatch(/› refs\/heads\/release/u);
@@ -278,7 +280,7 @@ describe('delivery window on the real Workline', () => {
   it('a required verification refuses adoption here with the exact command-line next step; the branch is never moved', async () => {
     const h = harness({ targets: ['refs/heads/main'], failAdopt: { code: 'ADOPTION_NOT_VERIFIED', message: 'This installation requires a verification Run for adoption.' } });
     await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'y', 120);
     await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
     await press(h, 'y', 120);
@@ -316,7 +318,7 @@ describe('delivery window on the real Workline', () => {
 
   it('n after delivery finishes without adopting; the branch is never moved', async () => {
     const h = harness({ targets: ['refs/heads/main'] }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'y', 120);
     await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
     await press(h, 'n', 100);
@@ -327,7 +329,7 @@ describe('delivery window on the real Workline', () => {
 
   it('a port card that differs from what was shown is displayed exactly and needs a fresh y; n declines without writing', async () => {
     const h = harness({ viewFiles: ['note.txt', 'unexpected.txt'] }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'y', 120);
     await until(() => frame(h).includes(WORDS.confirmBody) && frame(h).includes('unexpected.txt'), 'exact port card');
     expect(frame(h)).toContain(`Reference ${REF} · ${BASE} → `); // the exact line hard-wraps at the window width expect(h.calls).toEqual(['preview:r', 'available', 'prepare']);
@@ -338,7 +340,7 @@ describe('delivery window on the real Workline', () => {
 
   it('a differing card confirmed with its own y delivers', async () => {
     const h = harness({ viewFiles: ['note.txt', 'unexpected.txt'] }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'y', 120);
     await until(() => frame(h).includes(WORDS.confirmBody), 'exact port card');
     await press(h, 'y', 120);
@@ -349,7 +351,7 @@ describe('delivery window on the real Workline', () => {
   it('Ctrl+Y, Alt+y and a coalesced Ctrl+O y never deliver, confirm or adopt; only a single typed y does (TERMINAL-UX)', async () => {
     const CTRL_Y = '\u0019', ALT_Y = `${ESC}y`, COALESCED = `${CTRL_O}y`;
     const h = harness({ targets: ['refs/heads/main'], viewFiles: ['note.txt', 'unexpected.txt'] }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); expect(frame(h)).toContain('WINDOW-FOCUS');
     // ready → deliver
     for (const keys of [CTRL_Y, ALT_Y, COALESCED]) { await press(h, keys, 120); expect(h.calls).toEqual(['preview:r']); }
@@ -375,7 +377,7 @@ describe('delivery window on the real Workline', () => {
   const REQUIRED = { kind: 'verify', required: true } as const, V1 = { runId: 'verify-run-1', taskId: 'check' }, V2 = { runId: 'verify-run-2', taskId: 'check' };
   async function toVerification(h: Harness) {
     await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready');
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
     await press(h, CTRL_O); await press(h, 'y', 120);
     await until(() => frame(h).includes(WORDS.adoptHints), 'adoption choice');
     await press(h, 'y', 120);
@@ -487,7 +489,7 @@ it('routes a registered target into the queue and asks each exact batch card wit
       state = 'settled'; h.calls.push('queue-settled'); return { settledPrefix: 1, items: [{ commandId, published: true, state: 'settled' }] };
     },
   };
-  await admit(h); h.set(awaiting()); await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'delivery ready');
+  await admit(h); h.set(awaiting()); await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'delivery ready');
   await press(h, CTRL_O); await press(h, 'y'); await until(() => frame(h).includes('Queued'), 'durable queue state');
   expect(h.calls).toContain('enqueue'); expect(h.calls).not.toContain('prepare'); expect(h.calls).not.toContain('publish');
   state = 'awaiting-confirmation'; await press(h, 'r'); await press(h, 'y');
@@ -503,9 +505,9 @@ it('offers current-base queue preparation after a typed stale-base refusal', asy
   h.port.preview = async () => { throw Object.assign(new Error('base advanced'), { code: 'PATCH_BASE_ADVANCED' }); };
   h.port.queue = { async prepareCurrent(_target, command) { queued.push(command); throw new Error('adapter unavailable'); }, async inspect() { return null; }, async confirm() { throw new Error('must-not-confirm'); } };
   await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
-  // The re-prepare key is offered next to closing, never instead of it.
-  expect(frame(h)).toContain(WORDS.queue!.reprepare); expect(frame(h)).toContain(WORDS.failedHints);
-  await press(h, CTRL_O); await press(h, 'r'); await until(() => frame(h).includes('adapter unavailable'), 'queue preparation refusal');
+  // The re-prepare key is offered next to closing, never instead of it (keys show once the window holds the keyboard).
+  await press(h, CTRL_O); expect(frame(h)).toContain(WORDS.queue!.reprepare); expect(frame(h)).toContain(WORDS.failedHints);
+  await press(h, 'r'); await until(() => frame(h).includes('adapter unavailable'), 'queue preparation refusal');
   expect(queued).toHaveLength(1); expect(h.calls).not.toContain('publish');
   // A refusal `r` cannot act on offers only closing.
   expect(frame(h)).not.toContain(WORDS.queue!.reprepare); expect(frame(h)).toContain(WORDS.failedHints);
@@ -516,8 +518,8 @@ it('without a queue port a stale-base refusal offers only closing; r does nothin
   const h = harness();
   h.port.preview = async () => { throw Object.assign(new Error('base advanced'), { code: 'PATCH_BASE_ADVANCED' }); };
   await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
-  expect(frame(h)).toContain(WORDS.failedHints); expect(frame(h)).not.toContain(WORDS.queue!.reprepare);
-  await press(h, CTRL_O); await press(h, 'r'); expect(frame(h)).toContain('base advanced'); expect(h.calls).not.toContain('prepare');
+  await press(h, CTRL_O); expect(frame(h)).toContain(WORDS.failedHints); expect(frame(h)).not.toContain(WORDS.queue!.reprepare);
+  await press(h, 'r'); expect(frame(h)).toContain('base advanced'); expect(h.calls).not.toContain('prepare');
 });
 
 // Read-only diff inside the delivery window (alpha.46): the port carries bounded per-file hunks, the window shows them; seeing never delivers.
