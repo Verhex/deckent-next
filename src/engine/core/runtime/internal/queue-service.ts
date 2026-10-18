@@ -81,7 +81,7 @@ function reattemptScheduler<C extends QueueServiceContext, Peer extends QueueSer
       }
       for (const id of new Set([...last.keys(), ...backoff.keys()])) if (!scanned.has(id)) { last.delete(id); backoff.delete(id); }
       // D2b: the same scan submits accepted Attempts of Runs under a delivery intent as their granting human; one failing Run never stops the rest.
-      for (const ref of await ports.intents?.() ?? []) {
+      for (const ref of ports.deliver ? await ports.intents?.() ?? [] : []) {
         try { await ports.withActor(ref.grantedBy, () => ports.withScope(ref.scopeId, undefined, false, c => ports.deliver!(c, ref))); } catch (error) { failure ??= error; }
       }
       return failure;
