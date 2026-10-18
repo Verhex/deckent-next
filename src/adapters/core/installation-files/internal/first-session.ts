@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash } from 'node:crypto'; import { dirname } from 'node:path';
 import { inspectInstallationFile, publishInstallationFile } from './publication.js';
 import { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { InstallationPublicationError, type PolicyTemplatePublishTarget } from '#engine/index.js';
@@ -24,7 +24,7 @@ export async function firstSessionTargets(layout: ProductLayout, scopeId: string
   validateConfig(config);
   for (const resource of ['ledger', 'config'] as const) {
     const path = productResourcePath(layout, resource);
-    if ((await inspectInstallationFile({ root: layout.root, path, maxBytes })).digest !== null) continue;
+    if ((await inspectInstallationFile({ root: resource === 'config' ? dirname(path) : layout.root, path, maxBytes })).digest !== null) continue; // config: the bootstrap path, outside a moved root
     const content = JSON.stringify(resource === 'config' ? config : { schemaVersion: 1, ledgerVersion: CURRENT_LEDGER_VERSION }) + '\n';
     targets.push(Object.freeze({ resource, path, content, digest: digest(content) }));
   }
@@ -39,14 +39,14 @@ export function firstSessionPublication(layout: ProductLayout, maxBytes: number)
         const path = await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
         const db = openSqliteLedger(path, getConfigFieldDefault('storage').sqlite, 'allow');
         db.close();
-      } else await publishInstallationFile({ root: layout.root, path: target.path, maxBytes, transactionId }, target.content);
+      } else await publishInstallationFile({ root: dirname(target.path), path: target.path, maxBytes, transactionId }, target.content);
     },
     async verify(target: PolicyTemplatePublishTarget) {
       if (target.resource === 'ledger') {
         const path = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
         const db = openSqliteLedgerReadOnly(path, getConfigFieldDefault('storage').sqlite);
         try { requireLedgerVersion(db, CURRENT_LEDGER_VERSION); } finally { db.close(); }
-      } else if ((await inspectInstallationFile({ root: layout.root, path: target.path, maxBytes })).digest !== target.digest) {
+      } else if ((await inspectInstallationFile({ root: dirname(target.path), path: target.path, maxBytes })).digest !== target.digest) {
         throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
       }
     },
