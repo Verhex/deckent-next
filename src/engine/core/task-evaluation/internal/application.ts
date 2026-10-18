@@ -216,7 +216,8 @@ export class TaskEvaluationApplication {
    * operation settlements (an ERP/CRM effect stays with reconciliation). Anything uncertain is never re-run. */
   private stallable(run: RunSnapshot, identity: AttemptIdentity): boolean {
     const entry = run.execution.tasks.find(row => row.taskId === identity.taskId), task = run.graph.tasks.find(row => row.id === identity.taskId);
-    if (!this.stallRecovery || !entry?.stall || !task || run.progress.find(row => row.taskId === identity.taskId)?.unresolvedEffects !== false
+    const progress = run.progress.find(row => row.taskId === identity.taskId);
+    if (!this.stallRecovery || !entry?.stall || !task || progress?.phase !== 'evaluating' || progress.unresolvedEffects
       || task.acceptanceCriteria.some(id => run.execution.criteria.find(row => row.criterionId === id)?.evaluator.implementation.id === 'operation-evidence')) return false;
     try { return this.stallRecovery.effects(entry.profile) === 'workspace-only'; } catch { return false; }
   }

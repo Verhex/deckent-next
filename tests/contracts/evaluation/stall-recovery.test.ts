@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyAttemptObservation, createAttempt, createRun, executionRegistrySchema, observeRunAttempt, recoverStalledTask, reserveRunTasks, resolveTaskDecision, runSnapshotSchema,
   type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
 import { proposeTaskEvaluationCommit } from '#engine/core/task-evaluation/index.js';
-import { DispatchApplication, RunReservationApplication, TaskEvaluationApplication, deriveRunBlocker, inactivityVerdict, inactivityWatch, resolveExecutionRegistry, type ExecutionSupervisor } from '#engine/index.js';
-import { FileArtifactStore, classifyDockerTaskEffects, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { DispatchApplication, RunReservationApplication, TaskEvaluationApplication, deriveRunBlocker, projectRunView, reservationRefusalOutcome, inactivityVerdict, inactivityWatch, resolveExecutionRegistry, type ExecutionSupervisor } from '#engine/index.js';
+import { FileArtifactStore, classifyDockerTaskEffects, inventoryReadsPerCall, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { fixtureDockerRegistry, fixtureExecution } from '../support/execution-registry.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyProfile, custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
@@ -184,7 +184,7 @@ describe.skipIf(process.platform === 'win32')('composed through the SQLite ledge
     const app = new TaskEvaluationApplication(store, verifier, authorization, evaluator, artifacts, { maxEvidenceItems: 1, maxTotalBytes: 65536 }, { now: () => now, timeoutMs: 5000 },
       undefined, undefined, undefined, { backoffMs: 50, effects: () => { if (effects === 'throws') throw new Error('unclassified'); return effects; } });
     const evaluate = async (identity: AttemptIdentity, commandId = `eval-${++sequence}`) => app.execute({ schemaVersion: 1, identity, commandId, expectedRevision: (await store.loadRun('s', 'r'))!.revision });
-    return { store, reserve, stop, evaluate, evaluator, app, setEffects(value: typeof effects) { effects = value; }, setNow(value: number) { now = value; } };
+    return { root, store, reserve, stop, evaluate, evaluator, app, setEffects(value: typeof effects) { effects = value; }, setNow(value: number) { now = value; } };
   }
   it('retries a workspace-only stop once (receipt replays), then fails worker-stalled; the evaluator never runs', async () => {
     const f = await ledger(); const first = await f.reserve(); await f.stop(first);
@@ -193,10 +193,20 @@ describe.skipIf(process.platform === 'win32')('composed through the SQLite ledge
     expect(receipt.snapshot.previousBindings?.[0]).toMatchObject({ observedKind: 'stalled', stallCause: 'inactivity' });
     const replay = await f.app.execute({ schemaVersion: 1, identity: first, commandId: 'eval-first', expectedRevision: receipt.snapshot.revision - 1 });
     expect(replay.snapshot).toEqual(receipt.snapshot);
+    // The Run stays `running` (the progression keeps visiting it); before the backoff a reservation is the quiet `waiting` outcome.
+    expect(receipt.snapshot.state).toEqual({ kind: 'running' });
+    const early = await f.reserve().then(() => null, (error: { code?: string; params?: { reason?: string } }) => error);
+    expect(early).toMatchObject({ code: 'RUN_CAPACITY_OR_ORDER' }); expect(reservationRefusalOutcome(early!.code!)).toBe('waiting');
     f.setNow(1050); const second = await f.reserve(); expect(second).toMatchObject({ generation: 2 }); expect(second.attemptId).not.toBe(first.attemptId);
     await f.stop(second); const exhausted = await f.evaluate(second);
     expect(exhausted.snapshot.progress[0]).toMatchObject({ phase: 'failed', notAcceptedReason: 'worker-stalled' });
     expect(f.evaluator.evaluate).not.toHaveBeenCalled();
+    // Read paths after a retry and after exhaustion: the stall evaluation receipts stay readable by inspection and the Run view.
+    const reader = inventoryReadsPerCall(async () => join(f.root, 'ledger.db'), { busyTimeoutMs: 100 });
+    for (const snapshot of [receipt.snapshot, exhausted.snapshot]) {
+      const evaluations = await reader.loadRunEvaluations(snapshot);
+      expect(() => projectRunView(snapshot, [], evaluations)).not.toThrow();
+    }
   });
   it.each([['external effects', { effects: 'external' as const }], ['unknown effects', { effects: 'unknown' as const }], ['an unclassifiable profile', { effects: 'throws' as const }],
     ['a criterion that reads business operation settlements (ERP/CRM)', { operation: true }], ['an older Run without a frozen policy', { stall: false }],
