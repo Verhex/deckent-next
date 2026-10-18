@@ -31,10 +31,10 @@ async function runScheduledBackup(root: string, options: ConfigLoadOptions, trig
   // g2-yedek-dakika: the minute loop decides from the names this schedule writes (below), with no decryption or ledger scan;
   // full verification runs only when a new set is due (a 'daily' schedule: one day after the newest).
   if (trigger === 'daily' && (await readdir(directory)).some(name => Date.now() - namedAt(name) < 86400000)) return;
-  // An older set that no longer verifies (e.g. after a passphrase change) is reported and kept; it never blocks the new set.
+  // Daily only (owner 2026-10-18): an older set that no longer verifies is reported and kept and never blocks the new set; before an upgrade it still stops the migration.
   const unverified: BackupScheduleEvent[] = [];
   const ordered = await inspectScheduledSets(directory, passphrase, config.installation.packageMeasurement,
-    (set, error) => { unverified.push({ trigger, status: 'skipped', code: failureCode(error), set }); });
+    trigger === 'daily' ? (set, error) => { unverified.push({ trigger, status: 'skipped', code: failureCode(error), set }); } : undefined);
   for (const event of unverified) await report(observer, event);
   const name = `recovery-${new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}/, '')}-${randomUUID()}`;
   await executeConfiguredBackup(root, { schemaVersion: 1, action: 'create', scopeId, set: join(directory, name) }, passphrase, options);

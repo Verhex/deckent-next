@@ -158,6 +158,12 @@ it.skipIf(process.platform !== 'linux')('before-upgrade creates a complete set b
   const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:{...f.env,BACKUP_PASSPHRASE:phrase}});services.push(service);
   const directory=join(f.layout.root,'state/backups/recovery'),sets=await readdir(directory);expect(sets).toHaveLength(1);
   const snapshot=new DatabaseSync(join(directory,sets[0]!,'ledger.db'),{readOnly:true});expect(snapshot.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);snapshot.close();
+  // Owner 2026-10-18: unlike the daily schedule, an older set that no longer verifies (a changed passphrase) still stops the migration.
+  await service.stop();await service.done;services.splice(services.indexOf(service),1);
+  const again=new DatabaseSync(f.ledger);again.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);again.close();
+  await expect(startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:{...f.env,BACKUP_PASSPHRASE:'CANARY-changed-passphrase'}})).rejects.toMatchObject({code:'BACKUP_PASSPHRASE_INVALID'});
+  const kept=new DatabaseSync(f.ledger,{readOnly:true});expect(kept.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);kept.close();
+  expect(await readdir(directory)).toEqual(sets);
 });
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and link targets are refused',async()=>{
   const f=await fixture();await call(f,'create');const {createHash}=await import('node:crypto');

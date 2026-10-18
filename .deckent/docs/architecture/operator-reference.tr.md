@@ -219,7 +219,7 @@ secret store'a mevcut `secret set` maskeli/stdin akışıyla sağlayın. Varsay�
 backend için değer servis başlatıcısından sağlanmalıdır. Parola yoksa before-upgrade
 migration engellenir. Yalnız doğrulanmış zamanlanmış setlere saklama sınırı uygulanır;
 başka adlı operatör dosyaları korunur. Artık doğrulanamayan bir set (ör. parola değişince)
-bildirilir ve korunur; sonraki yedeği engellemez. Servis kapanışı devam eden yedeklemeyi bekler.
+bildirilir ve korunur; sonraki günlük yedeği engellemez, yükseltme öncesinde ise göçü durdurur. Servis kapanışı devam eden yedeklemeyi bekler.
 
 Audit kayıtları parolasız olarak principal, scope ve policy taşır. Create/verify kayıtları
 `audit/backup-operations`, restore kayıtları setin yanındaki `.deckent-backup-audit`
