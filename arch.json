@@ -4078,16 +4078,6 @@
           "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
         },
         {
-          "file": ".agents/skills/deckent-next-refactor/SKILL.md",
-          "count": 3,
-          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
-        },
-        {
-          "file": ".agents/skills/deckent-next-refactor/internal-contract.md",
-          "count": 1,
-          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
-        },
-        {
           "file": ".agents/skills/deckent-readonly-audit/SKILL.md",
           "count": 1,
           "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."

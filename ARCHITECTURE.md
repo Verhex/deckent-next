@@ -1123,7 +1123,7 @@ Next development, fixes, refactoring, reviews and handoffs. Codex, Claude and Cu
 to the same `.agents/skills/deckent-next-refactor` source; specialist skills supply task-specific methods.
 Jev details live in the skill's `jev-workflow.md`, read before case preparation or consultation.
 ROOT-DOCS (DOC-01/DOC-06, owner 2026-10-09): the complete former root contract is retained verbatim for
-`.agents/skills/deckent-next-refactor/internal-contract.md`; the skill must require reading it first.
+`.agents/skills/deckent-next-refactor/internal-contract.md`; owner 2026-10-18: it is short, dated rules point to laws, no read-first gate.
 The internal guide and exact skill patch are staged in external `proof/ROOT-DOCS-2026-10-09/` for lead transfer
 with the public roots. Existing Claude rules and the Cursor always-apply rule select the internal skill;
 a full source clone therefore cannot be claimed to load public rules only. Fresh session loading and

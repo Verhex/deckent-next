@@ -1,12 +1,14 @@
 # Deckent — product development contract
 
+The complete stable contract for Next work. Dated owner rules live in the laws
+(`.deckent/docs/core-memory/`) and the ARCHITECTURE decision log; this file points to them.
+
 ## Purpose and authority
 - Build the customer-installed Agent Control & Execution Plane for human, AI and tool-driven work, solo to enterprise.
-- Read `.deckent/docs/core-memory/project_product_north_star.md` for the shared product quality bar.
-- Enterprise-grade is the target of every slice; small slices never reduce the product ambition.
-- Live owner instructions take precedence, then `ARCHITECTURE.md` and `PLAN.md`.
-- Read `.deckent/docs/core-memory/MEMORY.md` in this repo; HOME/legacy copies are not authority.
-- Preserve accepted decisions; reopen them only for owner direction or material new evidence.
+- The north star (`.deckent/docs/core-memory/project_product_north_star.md`) is the shared quality bar;
+  Enterprise-grade is the target of every slice, and small slices never reduce the product ambition.
+- Live owner instructions take precedence, then `ARCHITECTURE.md` and `PLAN.md`. Core-memory in this repo is
+  authority; HOME/legacy copies are not. Reopen accepted decisions only for owner direction or material new evidence.
 
 ## Engineering contract
 - Reuse one typed application contract across human and AI surfaces; one owner per state transition.
@@ -15,46 +17,37 @@
 - Target scope is installation > company > optional site/unit > project > session; company policy is Core, customer IdP/SIEM are adapters.
 - `do` proposes and admits Runs independently of Mission; business processes reuse the operation catalog and existing execution authority.
 - Keep secure Core standalone and proprietary Enterprise outside public artifacts and history.
-- Enterprise is the commercial target (owner 2026-09-23): every Core contract must let Enterprise and ERP adapters
-  (IFS, SAP, Oracle, Microsoft, Uyumsoft, Logo) layer on via registry without editing Core; no new module-specific effect flow.
+- Every Core contract lets Enterprise and ERP adapters (IFS, SAP, Oracle, Microsoft, Uyumsoft, Logo) layer on via
+  registry without editing Core; no new module-specific effect flow (law 10, `law_enterprise_layering.md`).
 - Enforce filesystem/process/network/secret boundaries; workspace separation alone is not isolation.
 - Preserve bounded resources, cancellation, recovery and uncertain-effect handling.
 - Mutable policy and user strings belong in registries/catalogs; invariants remain versioned code.
 - Preserve legacy successes; pair relevant failure causes with corrections and negative proof.
 - Optimize measured end-to-end behavior, resource cost and human effort; do not claim unmeasured scale.
-- Keep modules compact by responsibility, not by dropping capabilities or duplicating mechanisms.
+- Keep modules compact by responsibility, not by dropping capabilities or duplicating mechanisms. Read the current
+  machine gates (`arch.json`, `scripts/lint-arch.mjs`) for language, package, file-size, version and migration limits.
 
-## Working method
-- At every task start, read `ARCHITECTURE.md`, `PLAN.md`, your process-board row (`node .agents/refactor/board.mjs show`) and relevant local core-memory; reconcile affected claims with code and evidence.
-- Before any design, code or advice touching an API, SDK, library, protocol, standard or vendor, verify the current state with WebSearch/WebFetch (official docs, specs, changelogs) and context7/package registries; record established practice vs current state with date and source (owner 2026-09-28).
-- Update affected core documents at task start when stale claims are verified, whenever accepted decisions or scope change, and before delivery or handoff; this is mandatory.
-- Keep remaining scope in `PLAN.md` (completed work moves to `COMPLETED-PLAN.md`, read only when needed), contracts in `ARCHITECTURE.md`, lasting decisions in core-memory, who-holds-what/next step on the host process board, proof in the external proof folder; `follow-up-works/current-flow.md` is short-term task memory: temporary items and who holds them; finished items are deleted there and recorded in PLAN/COMPLETED-PLAN/CHANGELOG (owner 2026-10-10, replaces the 2026-10-03 pointer-only rule).
-- Before reporting completion, document implemented behavior, verification, open limits and the concrete next step; documentation reconciliation is part of delivery.
-- Preserve concurrent edits and accepted authority; never promote analysis into a decision or historical proof into a fresh result. Leave unaffected documents unchanged.
-- Preserve other contributors' WIP; work in bounded, complete, reviewable slices.
-- Explain progress and results in plain Turkish, with observable behavior and evidence.
-- Continue authorized work without repeated permission; new scope/authority boundaries need a checkpoint.
-- Use logged Jev preparation often (options, boundaries, checks, evidence fit), carrying the north star and current process.
-- Include real gains/losses, contrary evidence and both abstention choices; advice is not acceptance.
-- Verify actual producer-to-surface behavior and relevant failure paths; test green alone is not closure.
-- Targeted checks per slice (typecheck, eslint on changed files, lint-arch, the touched test files); full `npm run verify` only for batches that add broad features, and only when the owner asks (owner 2026-10-03: repeated full verifies cost time, tokens and machine); no build during an active test suite.
-- Local tests stay within 16 GB: full verify uses 4 workers (default), targeted/lane runs `VITEST_MAX_FORKS=2`; not a product limit.
-- Commit inside the assigned scope without asking; workers never push. The lead lands a batch (merge/push to main) after Astra PASS without waiting for the owner (owner 2026-10-09).
-- Refresh the memory manifest after authorized edits: `node scripts/lint-core-memory.mjs --write`.
-- Keep both `AGENTS.md` and `CLAUDE.md` at or below 70 lines.
+## Working rules
+- Verify the current state of any API, SDK, library, protocol, standard or vendor from official sources and
+  context7/registries before design, code or advice; record date, source, established practice and current state.
+- Reconcile affected documents at task start, when accepted scope changes and before delivery (law 4).
+- Preserve concurrent edits, other contributors' WIP and accepted authority; never promote analysis into a decision
+  or historical proof into a fresh result. Work in bounded, complete, reviewable slices.
+- Explain progress and results in plain Turkish with observable behavior and evidence (law 3).
+- Continue authorized work without repeated permission; new scope or authority boundaries need a checkpoint.
+- Use logged Jev for material judgments (law 8); advice is not acceptance.
+- Verify actual producer-to-surface behavior and relevant failure paths; test green alone is not closure (law 1).
+- Verification cadence, the 16 GB limit, `VITEST_MAX_FORKS=2` and "no build during a suite" follow law 7.
+- Commit inside the assigned scope without asking; workers never push. Release, landing, live/N1 switch and
+  dogfood are lead-only with owner approval per merge and per switch and green hosted PR CI before merge.
+- Refresh the memory manifest after authorized core-memory edits: `node scripts/lint-core-memory.mjs --write`.
+- Keep `AGENTS.md` and `CLAUDE.md` byte-identical and at or below 70 lines.
 
 ## Current development phase
 - Next owns product development and all operator/execution work; use this repository as cwd.
-- For Next cards read `.agents/skills/deckent-next-refactor/SKILL.md`; reuse unchanged session reads.
 - `deckent-dev` is the frozen pre-refactor reference: read only, never run its runtime or workers.
-- External refactor documents/proof: `/home/alperen/deckent-refactor-work`, outside Git/npm.
-- `PLAN.md` holds durable workstreams; the host process board (`.deckent/host/process-board.json`, outside Git, own row only, main reconciles, workers as main sub-list) holds who holds what and what is next.
-- Main notifies the owner only when the owner must act (decision with Jev scores, owner-only command, landing/live done, blocker), at most two lines; no interim or worker notifications (owner 2026-10-03).
-- Current machine gates remain enforced; host-kit Markdown is an owner-authorized exception.
-- DOGFOOD is APPROVED (owner 2026-10-09): open it at the first possible moment, then run 4–8 workers continuously; worker priority Codex → Cursor → Sonnet 5.5 → Haiku 5.5; at 92% of a 5h subscription window wait for the reset. Historical receipts do not prove Next completion.
-- After landing, the lead runs the N1 and live switches without waiting for the owner: verified backup first, then a health check, rollback if it fails. Product steps that need human presence stay with the owner (owner 2026-10-09).
-- Review channel (owner 2026-09-23): Opus implements, Astra reviews via `.agents/refactor/channel.mjs`; recipients consume handled entries.
-- Review once per batch (a wave or the daily batch PR) before landing; the batch lands only after PASS (owner 2026-10-11); do not review preparation, plans, documents or single small items separately. At most one correction round, then logged Jev selection >=0.85 with context sufficiency >=0.67 decides; below that ask owner (owner 2026-10-09; was 0.90/0.75).
-- Host lane count comes from the outcome DAG, disjoint write ownership and measured capacity (law 5), not a fixed number; review lanes never exceed author lanes. Dogfood keeps its 4–8 continuous workers (owner 2026-10-09).
-- Owner 2026-10-05: Qwen development-host tool uses separate source/docs commits and a PR; Astra review is exempt for this host-tool delivery only. Model-quality/HF publication acceptance stays separate.
-- Never fabricate independent review or treat Jev/self-review as independent PASS.
+- External refactor documents and proof live in `<refactor-work>/`, outside Git/npm.
+- Review channel, thresholds and independent review: law 8 (`law_second_opinion_jev.md`); one review per batch
+  before merge; never fabricate independent review or treat Jev/self-review as independent PASS.
+- Host lane count comes from the outcome DAG, disjoint write ownership and measured capacity (law 5), not a fixed
+  number; review lanes never exceed author lanes. Current machine gates remain enforced.

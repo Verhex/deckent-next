@@ -16,7 +16,7 @@ recommendation is a proposal; work enters through an owner-admitted card in [PLA
 Read [AGENTS.md](../../../AGENTS.md), [ARCHITECTURE.md](../../../ARCHITECTURE.md), PLAN and the repository's
 [core-memory index](../../../.deckent/docs/core-memory/MEMORY.md) and
 [product north star](../../../.deckent/docs/core-memory/project_product_north_star.md) before changing the repo.
-The target is a customer-installed Agent OS with a secure standalone open Core and separately
+The target is a customer-installed Agent Control & Execution Plane with a secure standalone open Core and separately
 distributed proprietary Enterprise. Small slices must preserve that target and accepted contracts.
 
 The lead assigns disjoint lanes and file ownership in separate worktrees based on the recorded
@@ -41,7 +41,8 @@ external refactor proof area. `follow-up-works/current-flow.md` is short-term ta
 
 - Use `lane/<card>` for an admitted card and `release/<version>` for an authorized release.
 - Keep a lane bounded and reviewable; agree overlapping paths with the lead before editing.
-- Commit only with owner authorization. Publishing/pushing needs its own authorization.
+- Commit inside the assigned scope without asking; workers never push. Landing, push and release are
+  lead-only and need owner approval (see the shared skill).
 - Use the repository's observed `type(scope): description` style, such as
   `docs(repo): GitHub community standards, bilingual README, PR workflow` or `fix(runtime): …`.
   Recent history also contains unscoped `docs: …`; this is a convention, not a new commit hook.
@@ -61,7 +62,7 @@ Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>
 
 ## Style and machine gates
 
-Core uses TypeScript with ESM/native subpath imports, Node.js **≥ 24.15.0** (see
+Core uses TypeScript with ESM/native subpath imports, Node.js **≥ 24.22.0** (see
 [package.json](../../../package.json)), Zod for typed validation and Vitest for contract/e2e tests.
 Use the lockfile and `npm ci`; do not silently upgrade dependencies. Domain stays pure,
 adapters sit behind ports, composition is explicit, and each transition has one application owner.
@@ -105,28 +106,28 @@ standards documentation changes, run `lint-arch`, core-memory validation and rel
 checks; `npm run lint` is not required for this slice. Add relevant failure/negative evidence for
 behavior changes. Test green is author evidence, not independent acceptance or producer-to-surface proof.
 
-Local tests stay within 16 GB. Targeted/lane Vitest runs use two forks; full verify uses four by
-default. Do not build during an active test suite. Full `npm run verify` runs only for batches that
-add broad features and only on owner request (2026-10-03); ordinary slices use targeted checks.
+Verification cadence and resource limits follow law 7
+([law_local_verification.md](../../../.deckent/docs/core-memory/law_local_verification.md)): targeted checks per
+slice, a full suite on each release candidate, 16 GB, `VITEST_MAX_FORKS=2`, no build during an active suite.
 
 Open a PR from the admitted branch, filling card id, scope, checks, independent review status,
 risks/limits and whether DOGFOOD/live remained untouched. CI already runs on `pull_request` via
 [ci.yml](../../../.github/workflows/ci.yml). The required cells are Ubuntu on Node 24 and Node 26
 (owner 2026-10-06 ruleset; the earlier six-cell rule of 2026-10-03 is superseded). macOS and Windows run separately in the nightly
 [platform-verification.yml](../../../.github/workflows/platform-verification.yml) and are not merge gates; a red required cell is a real failure, not noise. A CI badge or author checks do not replace independent review of the exact candidate.
-The implementer cannot award their own work independent PASS. In the host review arrangement,
-Sol's channel address remains `astra`; use the assigned independent reviewer, not the author.
+The implementer cannot award their own work independent PASS. In the host review arrangement the
+channel address `astra` is model-independent and the board review row names the current reviewer model.
 
-The lead owns landing: independent review + targeted checks for the exact scope/revision,
-resolved blocking findings and owner authorization. Refresh affected docs and preserve proof
-before landing. No direct push to `main` without this landing gate and separate push authority.
+The lead owns landing: independent review of the exact candidate, a full suite on the release
+candidate (law 7), resolved blocking findings, green hosted PR CI on the exact head and owner approval
+of the merge. Refresh affected docs and preserve proof before landing. No direct push to `main`.
 CODEOWNERS names the default owner; automatic review requests and enforcement depend on GitHub
 permissions, the base branch and repository protection settings. These files do not enable settings.
 
 ## Deckent-worker branches and PRs — WORKER-GIT-PR
 
 This is the owner-admitted **design and documentation** from 2026-10-03. The host PR script
-(`.agents/refactor/pr.mjs`) is present; workers still do not open PRs automatically. Owner test and landing remain open. The intended workflow is:
+(`.agents/refactor/pr.mjs`) is present; workers still do not open PRs automatically. Its owner test and landing status is tracked in PLAN. The intended workflow is:
 
 1. The admitted worker runs in its isolated attempt checkout. Git credentials stay out of worker
    containers; workers neither push nor open PRs. Existing product patch/delivery custody remains
@@ -142,7 +143,7 @@ This is the owner-admitted **design and documentation** from 2026-10-03. The hos
    only the lead may land after the gate. A worker report, prepared candidate or opened PR is not
    Task acceptance, independent PASS or live delivery.
 
-Host-kit interface (script present; owner test and landing remain open):
+Host-kit interface (script present; status in PLAN):
 
 ```text
 node .agents/refactor/pr.mjs prepare <patch-dir> --card <id> [--scope <glob>]...
@@ -150,7 +151,7 @@ node .agents/refactor/pr.mjs open <patch-dir> --card <id> --push
 ```
 
 [PLAN.md](../../../.deckent/docs/plan/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
-replay/failure checks and owner test planned for **2026-10-04**. The script is present; owner test and landing remain open.
+replay/failure checks and the owner test status.
 Credential plumbing, live GitHub push, live PR creation, main landing and a DOGFOOD/live switch stay outside this script.
 
 ## Development host
@@ -182,17 +183,18 @@ is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and
 are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
 safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
 The `pilot` scope and local source catalog are development fixtures, not an installed default.
-DOGFOOD is owner-approved (2026-10-09; see internal-contract.md). Changing MCP configuration requires reconnecting already-open clients.
+Dogfood operations are lead-only (see the shared skill). Changing MCP configuration requires reconnecting already-open clients.
 
 The process board (`node .agents/refactor/board.mjs show`) owns who holds what and the next step;
 [PLAN.md](../../../PLAN.md) owns admitted work. The board is host coordination data outside Git/npm,
 not authority or liveness proof. `deckent monitor` observes installations without admitting work.
 If a lane lacks the shared host board, leave the lead a handoff instead of creating a competing board.
 
-### Development duration measurement (A02/W0-3)
+### Development duration measurement (optional tool, A02/W0-3)
 
-`node .agents/refactor/effort.mjs` records how long development slices actually take. It is
-host tooling for M1–M5 forecast updates, not a product feature or a second work ledger.
+`node .agents/refactor/effort.mjs` records how long development slices actually take when the lead asks
+for duration data. It is host tooling for M1–M5 forecast updates, not a product feature, a required
+step of the working loop or a second work ledger.
 
 ```sh
 node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
