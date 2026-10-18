@@ -257,7 +257,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A Run's delivery intent can be given only in the proposal JSON, by you.** `deckent run propose` with `delivery: { target,
   mode: "enqueue-accepted" }` asks your Run card and then lets the service queue each accepted task for your cards, re-queue one
   that stopped before any effect (up to `targetQueue.requeueMax`, default 2) and re-attempt once on a conflict. `/do` has no
-  option for it yet; an AI (MCP) proposer can never carry one, and an AI-proposed plan cannot get one through your approval yet.
+  option for it yet; an AI (MCP) proposer can never carry one (MCP `propose_run` does not accept the field), and an AI-proposed plan cannot get one through your approval yet.
   A re-attempt Run's own tickets are not re-queued. The service reads the intent Runs once per queue lease.
 - **A worker's resource use is measured in bounded local traces only.** There is no cost or quality report per worker yet.
 - **The ledger is one local SQLite file shared by every process.** Writes are serialized; a write that waits longer than

@@ -258,7 +258,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Bir Run'ın teslim niyetini yalnız siz, öneri JSON'unda verebilirsiniz.** `deckent run propose` ile `delivery: { target,
   mode: "enqueue-accepted" }` Run kartınızı açar; sonra servis kabul edilen her görevi kartlarınız için kuyruğa alır, herhangi bir
   etki başlamadan duranı yeniden sıraya alır (en çok `targetQueue.requeueMax`, varsayılan 2) ve çakışmada bir kez yeniden dener.
-  `/do` için henüz seçenek yok; bir AI (MCP) önerici niyet taşıyamaz, AI'ın önerdiği bir plan da sizin onayınızla henüz niyet
+  `/do` için henüz seçenek yok; bir AI (MCP) önerici niyet taşıyamaz (MCP `propose_run` bu alanı kabul etmez), AI'ın önerdiği bir plan da sizin onayınızla henüz niyet
   alamaz. Yeniden deneme Run'ının kendi biletleri yeniden sıraya alınmaz. Servis niyetli Run'ları kuyruk kirası başına bir kez okur.
 - **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** İşçi başına henüz maliyet ya da kalite raporu yok.
 - **Defter (ledger), her sürecin paylaştığı tek bir yerel SQLite dosyasıdır.** Yazmalar sırayla yapılır; `storage.sqlite.busyTimeoutMs`

@@ -152,8 +152,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const planRun = applications.planRun;
   if (planRun) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'plan_run', description: t('mcp.tool.planRun', {}, locale),
     schema: brainPlanCommandSchema, invoke: input => planRun.call(applications, brainPlanCommandSchema.parse(input)) });
+  // D2b: MCP is an AI actor and never grants a delivery intent, so it is not advertised; a `delivery` key is MCP_INPUT_INVALID (the engine refuses it too).
+  const mcpProposal = runProposalSchema.unwrap().omit({ delivery: true }).strict().readonly();
   if (proposeRun) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'propose_run', description: t('mcp.tool.proposeRun', {}, locale),
-    schema: runProposalSchema, invoke: input => proposeRun.call(applications, runProposalSchema.parse(input)) });
+    schema: mcpProposal, invoke: input => proposeRun.call(applications, mcpProposal.parse(input)) });
   if (inspectProposal) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_run_proposal', description: t('mcp.tool.inspectRunProposal', {}, locale),
     schema: runProposalQuerySchema, invoke: input => inspectProposal.call(applications, runProposalQuerySchema.parse(input)) });
   const createRun = applications.createRun;
