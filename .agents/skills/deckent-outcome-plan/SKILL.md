@@ -12,6 +12,8 @@ result using current ARCHITECTURE, PLAN, relevant core-memory and a current auth
 Reuse unchanged `deckent-authority-bootstrap` evidence; refresh only affected facts.
 An accepted priority, audit, transcript or historical receipt cannot admit execution by itself.
 This skill creates a plan, not a product Run, worker, state transition or new authority gate.
+Product Brain (former brain rule, owner 2026-10-18) is a runtime role, not the host implementer.
+Plan/evaluate against explicit acceptance; deterministic scheduling and authorization remain system responsibilities.
 
 ## Bound the result
 

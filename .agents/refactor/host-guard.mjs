@@ -15,7 +15,7 @@
 // never triggers a denial (false-block cases are covered by host-guard.test.mjs).
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,6 +25,7 @@ const CONTAINER_VERBS = new Set(['docker', 'docker-compose', 'podman']);
 const NEXT_BINS = new Set(['deckent', 'deckent-mcp']);
 const MEMORY_DIR = ['.deckent', 'docs', 'core-memory'].join(sep);
 const LINE_CAP = 70;
+export const MEMORY_WARNING = `core-memory changed (${MEMORY_DIR}); the manifest was NOT refreshed. Core-memory changes need owner approval: if the owner approved this edit, run \`node scripts/lint-core-memory.mjs --write\`; otherwise revert it. \`node scripts/lint-core-memory.mjs\` shows the pending difference.`;
 
 function segments(command) {
   return command.split(/\r?\n|&&|\|\||;|\|/).map(s => s.trim()).filter(Boolean).map(s => {
@@ -126,10 +127,9 @@ export function guard(event, input, ctx) {
       if (lines > LINE_CAP) return block(`${rel} has ${lines} lines; CLAUDE.md requires at or below ${LINE_CAP}. Trim it before continuing.`);
       return pass();
     }
-    if (rel && rel.startsWith(MEMORY_DIR + sep) && rel.endsWith('.md')) {
-      const result = ctx.refreshMemoryManifest();
-      return context('PostToolUse', `core-memory manifest refresh (${MEMORY_DIR}): ${result}`);
-    }
+    // Warn only (Jev g3-hostguard-manifest warn_only, owner 2026-10-18): refreshing the manifest here approved every
+    // core-memory edit locally; the manifest is the owner-approval record, so only an owner-approved edit refreshes it.
+    if (rel && rel.startsWith(MEMORY_DIR + sep) && rel.endsWith('.md')) return context('PostToolUse', MEMORY_WARNING);
     return pass();
   }
 
@@ -174,12 +174,6 @@ export function defaultContext(root, legacy) {
     vitestRunning,
     distUsers,
     readLines: (p) => readFileSync(p, 'utf8').split('\n').filter((l, i, a) => i < a.length - 1 || l !== '').length,
-    refreshMemoryManifest: () => {
-      const script = resolve(root, 'scripts', 'lint-core-memory.mjs');
-      if (!existsSync(script)) return 'skipped (scripts/lint-core-memory.mjs not found)';
-      try { execFileSync('node', [script, '--write'], { cwd: root, encoding: 'utf8', timeout: 10_000 }); return 'refreshed via scripts/lint-core-memory.mjs --write'; }
-      catch (e) { return `failed: ${String(e.stderr || e.message).trim().slice(0, 300)}`; }
-    },
     sessionSummary: () => {
       const git = (args) => { try { return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', timeout: 5_000 }).trim(); } catch { return 'unavailable'; } };
       const head = git(['rev-parse', '--short', 'HEAD']);
