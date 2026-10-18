@@ -39,8 +39,9 @@ and update it, and end with PASS/REVISE plus surfaces checked, so an interrupted
    Implementer checks, a second self-review and Jev are not independent PASS.
 
 Tests, typechecks, lint and CI support these claims within their measured scope. Test green cannot
-replace a missing producer, real consumer or settlement link. Landing verification follows the
-current rule in `deckent-next-refactor`; local checks, hosted CI and live proof remain separately identified. Unavailable evidence is blocking
+replace a missing producer, real consumer or settlement link. Verification cadence follows law 7
+(`.deckent/docs/core-memory/law_local_verification.md`); a batch merges only after independent PASS and green
+hosted PR CI on the exact head. Local checks, hosted CI and live proof remain separately identified. Unavailable evidence is blocking
 when the accepted proof contract requires it, rather than by an invented legacy ritual.
 
 ## Assessment and delivery
