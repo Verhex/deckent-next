@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyAttemptObservation, createAttempt, createRun, executionRegistrySchema, observeRunAttempt, recoverStalledTask, reserveRunTasks, resolveTaskDecision, runSnapshotSchema,
   type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
 import { proposeTaskEvaluationCommit } from '#engine/core/task-evaluation/index.js';
-import { DispatchApplication, RunReservationApplication, TaskEvaluationApplication, deriveRunBlocker, projectRunView, reservationRefusalOutcome, inactivityVerdict, inactivityWatch, resolveExecutionRegistry, type ExecutionSupervisor } from '#engine/index.js';
+import { DispatchApplication, RunReservationApplication, TaskEvaluationApplication, deriveRunBlocker, projectRunView, reservationRefusalOutcome, inactivityVerdict, inactivityWatch, resolveExecutionRegistry, sandboxInterruptCause, type ExecutionSupervisor } from '#engine/index.js';
 import { FileArtifactStore, classifyDockerTaskEffects, inventoryReadsPerCall, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { fixtureDockerRegistry, fixtureExecution } from '../support/execution-registry.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -225,21 +225,24 @@ describe.skipIf(process.platform === 'win32')('dispatch records why the supervis
   const roots: string[] = [], stores: SqliteAttemptStore[] = [];
   afterEach(async () => { stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
   const verifier = { async verify() { return { id: 'user', issuer: 'test', subject: 'user', assurance: 'os-user' as const, scopeIds: ['s'] }; } };
-  it.each([['inactivity', 'inactivity'], ['operator', 'cancel'], [null, 'deadline']] as const)('abort reason %s records interruptCause %s; no new token or secret reaches the worker', async (reason, cause) => {
+  it.each([['inactivity', 'inactivity'], ['operator', 'cancel'], [null, 'deadline']] as const)('the supervisor fixes its first stop (abort reason %s → %s); a later abort never relabels it; no new token or secret reaches the worker', async (reason, cause) => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-stall-dispatch-')); roots.push(root);
     const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
     const identity = { runId: 'r', taskId: 't', attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' };
     await admitRunAttempts(store, [identity]); await mkdir(join(root, 'artifacts'), { mode: 0o700 });
     const request = { protocolVersion: 1 as const, identity, workspace: join(root, 'workspace'), argv: ['worker'] };
-    const seen: unknown[] = [];
+    const seen: unknown[] = [], controller = new AbortController();
     const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = { async captureProfile() { return custodyProfile; },
       async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { return 'absent' as const; },
       async execute(input, signal) {
         seen.push(input);
         if (reason !== null) await new Promise(resolve => signal!.addEventListener('abort', resolve, { once: true }));
-        return { handle: 'h', result: { kind: 'exited', exitCode: 137 }, outputCompleteness: 'partial', stdout: '', stderr: '', interrupted: true };
+        const stop = reason === null ? sandboxInterruptCause('deadline') : sandboxInterruptCause('signal', signal!.reason);
+        // Cleanup after the decision: a watchdog abort now (after a deadline) must not change the recorded cause.
+        if (reason === null) controller.abort('inactivity');
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return { handle: 'h', result: { kind: 'exited', exitCode: 137 }, outputCompleteness: 'partial', stdout: '', stderr: '', interrupted: true, interruptCause: stop };
       } };
-    const controller = new AbortController();
     const app = new DispatchApplication(store, supervisor, verifier, { async authorize() {} }, 'p', new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 }));
     const running = app.execute(request, undefined, controller.signal);
     if (reason !== null) setTimeout(() => controller.abort(reason), 10);
@@ -247,6 +250,19 @@ describe.skipIf(process.platform === 'win32')('dispatch records why the supervis
     expect(outcome.record.terminal).toMatchObject({ interrupted: true, interruptCause: cause });
     // The supervisor receives exactly the authorized request: the watchdog adds a signal, never argv, env, credentials or paths.
     expect(seen).toEqual([request]);
+  });
+  it('a supervisor that reports no cause leaves none: the dispatch never derives one from the (later) signal state', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-stall-dispatch-')); roots.push(root);
+    const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
+    const identity = { runId: 'r', taskId: 't', attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' };
+    await admitRunAttempts(store, [identity]); await mkdir(join(root, 'artifacts'), { mode: 0o700 });
+    const controller = new AbortController();
+    const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = { async captureProfile() { return custodyProfile; },
+      async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { return 'absent' as const; },
+      async execute() { controller.abort('inactivity'); return { handle: 'h', result: { kind: 'exited', exitCode: 137 }, outputCompleteness: 'partial', stdout: '', stderr: '', interrupted: true }; } };
+    const app = new DispatchApplication(store, supervisor, verifier, { async authorize() {} }, 'p', new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 }));
+    const outcome = await app.execute({ protocolVersion: 1 as const, identity, workspace: join(root, 'workspace'), argv: ['worker'] }, undefined, controller.signal);
+    expect(outcome.record.terminal).toMatchObject({ interrupted: true }); expect(outcome.record.terminal!.interruptCause).toBeUndefined();
   });
 });
 

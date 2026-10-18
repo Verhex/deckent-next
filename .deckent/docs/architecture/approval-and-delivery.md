@@ -729,7 +729,11 @@ Detection is pure (`inactivityVerdict`): silence counts from the dispatch start,
 execution composition samples these gateway counters on the existing observation tick and aborts the execute signal with reason
 `inactivity`; the existing kill path follows (`docker kill`, then inspect). The dispatch terminal records the additive
 `interruptCause: deadline | inactivity | cancel` (absent on older records, read as none). `deadline` means interrupted without an
-abort (the profile deadline or a supervisor CLI failure); `cancel` is any other abort reason and has no caller yet.
+abort (the profile deadline or a supervisor CLI failure); `cancel` is any other abort reason and has no caller yet. The cause is the
+FIRST stop, fixed where the supervisor decides it (the Docker command boundary records whether its deadline or the execute signal
+fired first, via `AbortSignal.any`) and carried on the sandbox result (`sandboxInterruptCause`); the dispatch never re-reads the signal
+after cleanup or output retention, so a later watchdog abort cannot relabel a deadline stop (Astra 2642 F1). A supervisor that reports
+no cause leaves none, which is never retried.
 Retry owner: `recoverStalledTask` (domain), reached only through the evaluation commit that the ledger re-runs. Under the frozen bound
 the binding moves to `previousBindings` as `observedKind: stalled` with `stallCause`, and the task returns to `pending` with a
 `not-before` backoff; the next Attempt is a new generation with a new id and lease. Over the bound the task fails with

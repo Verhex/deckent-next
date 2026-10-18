@@ -3,10 +3,10 @@ import { sampleDockerResources } from './resources.js';
 import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
+import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, sandboxInterruptCause, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
 import { identifyDockerRequest } from './identity.js';
-import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
+import { runNodeDockerCommand, DockerCommandFailure, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
 import { assertDockerMountsMatch, assertReadOnlyMountSource, type DockerExpectedMount } from './mounts.js';
 type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
@@ -67,7 +67,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
     if (value?.Config?.Labels?.['deckent.request'] !== digest) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
     return value;
   }
-  private result(handle: string, inspection: Inspection | null, stdout = '', stderr = '', interrupted = false, captured = false): SandboxResult {
+  private result(handle: string, inspection: Inspection | null, stdout = '', stderr = '', interrupted = false, captured = false, cause?: SandboxResult['interruptCause']): SandboxResult {
     const result = inspection?.State?.Status === 'exited' && Number.isSafeInteger(inspection.State.ExitCode)
       ? { kind: 'exited' as const, exitCode: inspection.State.ExitCode }
       : { kind: 'unknown' as const, reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' };
@@ -85,7 +85,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
     }
     const parsedWorker = workerIncarnationSchema.safeParse({ kind: 'container', id: inspection?.Id, startedAt: inspection?.State.StartedAt });
     const worker = parsedWorker.success ? parsedWorker.data : undefined;
-    return Object.freeze({ handle, ...(worker ? { worker } : {}), result: Object.freeze(result), ...(container ? { container } : {}), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
+    return Object.freeze({ handle, ...(worker ? { worker } : {}), result: Object.freeze(result), ...(container ? { container } : {}), stdout, stderr, interrupted, ...(interrupted ? { interruptCause: cause ?? 'deadline' } : {}), outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
   }
   async cancel(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>> {
     const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
@@ -195,22 +195,24 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const created = await this.inspect(handle, digest);
     if (!created) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
     assertDockerMountsMatch(created.Mounts, expected);
-    let stdout: string; let stderr: string; let interrupted = false;
+    let stdout: string; let stderr: string; let interrupted = false, cause: SandboxResult['interruptCause'];
     try {
       const output = await this.command(['start', '--attach', handle], o.deadlineMs, signal);
       stdout = output.stdout; stderr = output.stderr;
     } catch (error) {
-      const failure = error as { stdout?: string; stderr?: string; killed?: boolean; code?: unknown };
+      const failure = error as { stdout?: string; stderr?: string; killed?: boolean; code?: unknown; stop?: 'deadline' | 'signal' | null; stopReason?: unknown };
       stdout = typeof failure.stdout === 'string' ? failure.stdout : '';
       stderr = typeof failure.stderr === 'string' ? failure.stderr : '';
       interrupted = !!signal?.aborted || !!failure.killed || typeof failure.code !== 'number';
+      // R3 (Astra 2642 F1): the first stop is fixed here, before inspect/kill; a watchdog abort during cleanup cannot relabel a deadline.
+      cause = failure.stop ? sandboxInterruptCause(failure.stop, failure.stopReason) : !(error instanceof DockerCommandFailure) && signal?.aborted ? sandboxInterruptCause('signal', signal.reason) : undefined;
       const observed = await this.inspect(handle, digest);
-      if (observed?.State.Status === 'exited') return this.result(handle, observed, stdout, stderr, interrupted, true);
+      if (observed?.State.Status === 'exited') return this.result(handle, observed, stdout, stderr, interrupted, true, cause);
       interrupted = true;
       // An interrupted CLI is not proof the container stopped. Kill, then inspect authoritative daemon state.
       try { await this.command(['kill', handle], o.controlTimeoutMs); } catch { /* Inspect determines terminal truth. */ }
     }
-    return this.result(handle, await this.inspect(handle, digest), stdout, stderr, interrupted, true);
+    return this.result(handle, await this.inspect(handle, digest), stdout, stderr, interrupted, true, cause);
   }
   /** EXEC-RELEASE: only the labelled, exited container of this exact request, removed by its immutable id (no name reuse between
    * inspect and rm), never forced; success requires Docker to echo that id and a later inspect to report it absent. */
