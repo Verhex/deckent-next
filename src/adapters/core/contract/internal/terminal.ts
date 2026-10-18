@@ -7,12 +7,9 @@ import chatDefaults from './terminal-chat-defaults.json' with { type: 'json' };
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
 export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
 export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
-export const TERMINAL_LAYOUTS = ['fullscreen', 'inline'] as const; // TERMINAL-SABIT-DUZEN: full window, or inline (native scrollback, screen readers)
 
-/**
- * Operator terminal chat is a governed model invocation: the section names a declared catalog model;
- * catalog revision and binding are read fresh per turn and enforced by the model invocation service.
- */
+/** Operator terminal chat is a governed model invocation: the section names a declared catalog model;
+ * catalog revision and binding are read fresh per turn and enforced by the model invocation service. */
 export const terminalConfigSchema = z.object({
   /** Scope the interactive terminal (`deckent` with no arguments) works in; `--scope` overrides it. */
   scopeId: z.string().min(1).max(128).optional(),
@@ -31,8 +28,8 @@ export const terminalConfigSchema = z.object({
   banner: z.enum(TERMINAL_BANNERS).default(TERMINAL_BANNERS[0]),
   /** T2 (T-STARTUP): clear the visible screen (never the scrollback) when the interactive workline opens on a terminal. */
   clearOnStart: z.boolean().default(true),
-  layout: z.enum(TERMINAL_LAYOUTS).default(TERMINAL_LAYOUTS[0]),
-  viewportRows: z.number().int().min(100).max(100_000).default(chatDefaults.viewportRows),
+  layout: z.enum(['fullscreen', 'inline']).default('fullscreen'), // TERMINAL-SABIT-DUZEN: full window, or inline (native scrollback)
+  viewportRows: z.number().int().min(100).max(100_000).default(2_000), // rows the full-window conversation scrolls back through
   /** T4-B (owner 2026-10-08, Jev d84b248d): the person's own default terminal model — an exact catalog reference, nothing else. Only the user
    * (global) layer may hold it; precedence is in {@link resolveTerminalModel}. Additive optional key (the `readResultMaxBytes` pattern). */
   defaultModel: modelReferenceSchema.optional(),

@@ -3,6 +3,5 @@
   "effortOutputTokens": { "none": 4096, "low": 4096, "medium": 8192, "high": 16384, "xhigh": 32768, "max": 65536, "ultra": 128000 },
   "historyMessages": 40,
   "compactionThresholdTokens": 100000,
-  "maxTrackedRuns": 128,
-  "viewportRows": 2000
+  "maxTrackedRuns": 128
 }

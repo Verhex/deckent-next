@@ -146,7 +146,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   viewport (flex, bottom-anchored), windows/cards (capped at half the frame through `reservedRows`, internal scroll), the composer, and
   a fixed-height information region (`fullscreenInfoRows`: state row; Active work summary or the full-access line; focus hint). The
   bar's row therefore depends only on the terminal size and its own draft height. `ChatViewport` draws the bounded `LedgerBuffer.history`
-  (`terminal.viewportRows`, registry default 2000) through a pure anchor model (`viewport.ts`: follow, PgUp/PgDn half view, Ctrl+Home,
+  (`terminal.viewportRows`, default 2000) through a pure anchor model (`viewport.ts`: follow, PgUp/PgDn half view, Ctrl+Home,
   Ctrl+End re-follow, a "lines below" row while anchored); rows are laid out once per width by `renderToString` with the providers
   `Static` used (`workline-transcript.tsx`), outside React's render (a nested reconciler pass crashes Yoga), so only shown rows are laid
   out. The opening banner and the how-to line are the first viewport block; on exit the conversation is written to the main screen
