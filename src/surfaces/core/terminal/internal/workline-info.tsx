@@ -69,7 +69,7 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
     if (execution.signal.aborted) return { handled: true, picked: null };
     const picked = await show(view, labels, execution.signal);
     // `/help` answers the command picked; `/permissions` its clear-session choice (the workline runs that confirmed flow).
-    return { handled: true, picked: (name === 'help' || name === 'permissions') && !execution.signal.aborted ? picked : null };
+    return { handled: true, picked: (name === 'help' || name === 'permissions' || name === 'context') && !execution.signal.aborted ? picked : null };
   }, [show]);
   return { run, show };
 }

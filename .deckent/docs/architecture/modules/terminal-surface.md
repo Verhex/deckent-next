@@ -414,6 +414,13 @@ evidence: external `proof/K1-K8-2026-10-18/GAP.md`.
   longer has the row). `/policy` shows a "Me" row after its scopes that closes the window and runs `/permissions` in the same command
   (`openPermissions`). `/status` gains the company row (the where-am-I part of `/scope`). Typed `/scope` is a moved name until 1.0.0-beta.1,
   then held for "change scope" (09-29 catalog).
+- **`/compact` (K3, runtime protocol v30).** `chatTurn` gains optional `compact: { focus? }` (≤500 code units); a compact turn may end with any
+  message. The engine (`runAgentTurn` `compact`) plans the same compaction as the automatic path (`applyCompaction`, guard included), runs only
+  the governed summary call — the focus is quoted as data in the instruction — emits `compacted` and finishes `stop` with a typed note, with no
+  model round; nothing older than the kept tail is a `stop` with "nothing to compact"; a failed summary is `error` with the history unchanged.
+  The request digest binds `compact` (a compact turn never replays an old answer). The rich terminal runs it as one controller line (queued
+  behind a running turn, Esc cancels); `/context` ends with "Compact now" and "Compact with a focus…" (a `DecisionCard` whose Tab field is the
+  focus; `y` compacts, n/Esc keep). Line mode accepts `/compact`. Lifecycle window [30, 29]: a v29 terminal can describe/stop a v30 service only.
 - **Unfocused close (K5).** Ctrl+X closes the open live window while input is focused (`LiveWindowCloseKey`, inside the window stack; a
   focused card owns the keyboard), and inside the focused Runs window; Escape still closes a focused window. Ctrl+O and Ctrl+T keep their
   meaning. Ctrl+X is not composer text: a draft stays.

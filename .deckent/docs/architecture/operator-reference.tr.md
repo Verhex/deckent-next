@@ -22,7 +22,11 @@ adlandırmadır: yazıldığında bilinmeyen-komut penceresi yeni komutu ilk ve 
 adı sonra "kapsam değiştir" için tutulur) burada kim olduğunuzu, bu oturumun modunu, bu terminalin neyi görebildiğini ve kendi
 kalıcı onaylarınızı (`deckent policy grants --mine` okuması) gösterir; tek seçeneği bu oturumun kalıcı cevaplarını bir y/N
 penceresinden sonra unutturur (`/approvals`'tan taşındı). `/policy` onu "Ben" satırından açar; `/status` projeyi, kapsamı,
-şirketi ve kurulumu söyler. Girişin üstündeki "Aktif iş" şeridi bu
+şirketi ve kurulumu söyler. `/compact` (K3) konuşmayı hemen kısaltır: servis eski mesajların yerine etiketli tek bir özet yazar
+(sizin eski mesajlarınız ve en yeni mesajlar olduğu gibi kalır) ve model cevabı çalışmaz; tur sürerken yazılırsa onun arkasında
+bekler, Escape bir tur gibi iptal eder. `/context` "Şimdi kısalt" ve "Odakla kısalt…" sunar: o pencerede Tab özetin neyi
+koruyacağını yazar, `y` kısaltır. Run, onay ve teslim durumu hiçbir zaman özetten gelmez; defterden okunur. Satır modu da
+`/compact` alır. Girişin üstündeki "Aktif iş" şeridi bu
 oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum ve geçen
 süreyle listeler; kendiliğinden odak almaz. Ctrl+T ile seçilir (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
 Enter o Run'ın penceresini açar; biten Run açıldıktan sonra şeritten çıkar. Pipe ve satır modu çıktısı değişmez.

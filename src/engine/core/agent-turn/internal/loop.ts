@@ -54,7 +54,7 @@ export interface AgentTurnPorts {
    * `unreadable` when it answered with no usable summary (TERM-FEEDBACK-1): the loop compacts with Deckent's labelled mechanical
    * excerpt instead, and the turn's note says so.
    */
-  summarize?(input: { readonly sequence: number; readonly messages: readonly AgentTurnMessage[] }, signal: AbortSignal):
+  summarize?(input: { readonly sequence: number; readonly messages: readonly AgentTurnMessage[]; readonly focus?: string | undefined }, signal: AbortSignal):
     Promise<AgentCompactionSummary | 'unreadable' | null>;
   /**
    * The owner's decision on one approval-gated call (T-L4, C12): opens a single-use approval bound to exactly this call and waits.
@@ -144,6 +144,8 @@ export interface AgentTurnInput {
   readonly fullAccess?: boolean;
   /** APPROVER-NOTE: the most code points of an approver's note the model receives (`approvals.approverNoteMaxChars`). Absent: no note is sent. */
   readonly approverNoteMaxChars?: number;
+  /** K3 `/compact` (v30): compact the older history now (with the person's focus) and finish without a model round. */
+  readonly compact?: { readonly focus?: string | undefined };
 }
 
 export interface AgentTurnResult {
@@ -270,6 +272,36 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const summary = () => toolCalls === 0 ? t('agent.turn.outcome.noTools', {}, input.language) : t('agent.turn.outcome.tools', { calls: toolCalls, rounds }, input.language);
   const cancelled = () => t('agent.turn.outcome.cancelled', { summary: summary() }, input.language);
 
+  /** One compaction (T-L5b pressure or K3 request): the summary call, the replacement and its `compacted` event. `failed`: the summary call
+   * gave no answer (the history is unchanged); a result: the turn ends with it. */
+  const applyCompaction = async (plan: NonNullable<ReturnType<typeof compactionGuard.plan>>, byteBound: number | undefined, focus?: string):
+    Promise<'applied' | 'failed' | AgentTurnResult> => {
+    const canonical = carry.fold(plan.older, byteBound);
+    if (!canonical) return finish('error', agentContextFailureNote('AGENT_CONTEXT_CARRY_TOO_LARGE', input.language));
+    compactions++;
+    let summaryOf: AgentCompactionSummary | 'unreadable' | null;
+    try { summaryOf = await ports.summarize!({ sequence: compactions, messages: plan.older, ...(focus ? { focus } : {}) }, signal); } catch { summaryOf = null; }
+    if (signal.aborted) return finish('cancelled', cancelled());
+    if (!summaryOf) return 'failed';
+    if (summaryOf === 'unreadable') mechanical++;
+    const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf, canonical), ...plan.tail];
+    if (byteBound !== undefined && agentHistoryBytes(next) > byteBound) return finish('error', agentContextFailureNote('AGENT_CONTEXT_CARRY_TOO_LARGE', input.language));
+    compactionGuard.applied(messages, next);
+    messages.splice(0, messages.length, ...next);
+    const visible = new Set<AgentTurnMessage>(plan.tail);
+    for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
+    emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
+    return 'applied';
+  };
+  // K3 `/compact` (v30): the person asks for compaction now; no model round runs. Nothing older than the kept tail: a stop with a note.
+  if (input.compact) {
+    const plan = ports.summarize ? compactionGuard.plan(messages) : null;
+    if (!plan) return finish('stop', t('agent.turn.outcome.compactNothing', {}, input.language));
+    const applied = await applyCompaction(plan, input.admission?.requestMaxBytes, input.compact.focus);
+    if (applied === 'failed') return finish('error', t('agent.turn.outcome.compactFailed', {}, input.language));
+    if (applied !== 'applied') return applied;
+    return finish('stop', t('agent.turn.outcome.compacted', { replaced: plan.older.length }, input.language));
+  }
   for (;;) {
     if (signal.aborted) return finish('cancelled', cancelled());
     rounds++;
@@ -295,26 +327,13 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       || historyBytes + (input.admission?.requestReserveBytes ?? 0) > byteBound);
     const plan = ports.summarize && (tokenPressure || bytePressure) ? compactionGuard.plan(messages) : null;
     if (plan && ports.summarize) {
-      const canonical = carry.fold(plan.older, byteBound);
-      if (!canonical) return finish('error', agentContextFailureNote('AGENT_CONTEXT_CARRY_TOO_LARGE', input.language));
-      compactions++;
-      let summaryOf: AgentCompactionSummary | 'unreadable' | null;
-      try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
-      if (signal.aborted) return finish('cancelled', cancelled());
-      if (!summaryOf) {
+      const applied = await applyCompaction(plan, byteBound);
+      if (applied === 'failed') {
         const reached = tokenPressure && current ? t('agent.turn.outcome.contextLimit', { prompt: current.promptTokens, window: current.windowTokens ?? '?' }, input.language)
           : t('agent.turn.outcome.requestLimit', { bytes: byteBound ?? '?' }, input.language);
         return finish('error', t('agent.turn.outcome.compactionFailed', { reached, summary: summary() }, input.language));
       }
-      if (summaryOf === 'unreadable') mechanical++;
-      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf, canonical), ...plan.tail];
-      if (byteBound !== undefined && agentHistoryBytes(next) > byteBound) return finish('error',
-        agentContextFailureNote('AGENT_CONTEXT_CARRY_TOO_LARGE', input.language));
-      compactionGuard.applied(messages, next);
-      messages.splice(0, messages.length, ...next);
-      const visible = new Set<AgentTurnMessage>(plan.tail);
-      for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
-      emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
+      if (applied !== 'applied') return applied;
       await measure();
       if (signal.aborted) return finish('cancelled', cancelled());
     }

@@ -189,7 +189,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       shell: posture, session: await sessionOf() });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
-      ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
+      ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}),
+      ...(command.compact ? { compact: command.compact } : {}) })}`); // K3: a compact turn is its own request (never an old answer)
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
     registered = !host.running.has(key);
@@ -310,12 +311,12 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (requested) emitApproval({ kind: 'approval.settled', callId: call.id, approvalId: requested.approvalId, outcome: settlement });
         }
       },
-      async summarize({ sequence, messages: older }, summarySignal) {
+      async summarize({ sequence, messages: older, focus }, summarySignal) {
         // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.
         const transcript = agentCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));
         const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnCompactionCommandId(command.scopeId, command.turnId, sequence),
           scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-          nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: agentCompactionInstruction(language) },
+          nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: agentCompactionInstruction(language, focus) },
             { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false,
           ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
         const result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
@@ -348,7 +349,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
-      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes, chat.compactionThresholdTokens), fullAccess,
+      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes, chat.compactionThresholdTokens), fullAccess, ...(command.compact ? { compact: command.compact } : {}),
       approverNoteMaxChars: context.config.approvals.approverNoteMaxChars }, store, ports);
     await channel.drained();
     const answer = result.answer;

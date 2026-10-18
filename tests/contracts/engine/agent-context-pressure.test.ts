@@ -81,3 +81,30 @@ it('keeps a large Unicode tool result but refuses the next round before it can o
   expect(invokeRound).toHaveBeenCalledTimes(1); expect(execute).toHaveBeenCalledTimes(1);
   expect(events.filter(event => event.kind === 'message').at(-1)).toEqual({ kind: 'message', message: { role: 'tool', toolCallId: 'call', name: tool.name, content } });
 });
+
+// K3 `/compact` (owner 2026-10-14, protocol v30): the person asks for compaction now; no model round runs and no pressure is needed.
+it('a compact turn summarizes the older history once with the focus, emits compacted, and finishes without any model round', async () => {
+  const events: AgentTurnEvent[] = [], invokeRound = vi.fn(async () => answer()), measure = vi.fn(async () => ({ promptTokens: 1, windowTokens: 1_000_000, quality: 'provider-count' as const }));
+  const summarize = vi.fn(async () => ({ objective: 'kept', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] }));
+  const result = await runAgentTurn({ messages: history(), tools: [tool], signal: new AbortController().signal, emit: event => events.push(event), language: 'en',
+    compact: { focus: 'the API decisions' } }, ports({ invokeRound, measure, summarize }));
+  expect(invokeRound).not.toHaveBeenCalled(); expect(measure).not.toHaveBeenCalled();
+  expect(summarize).toHaveBeenCalledTimes(1);
+  expect(summarize.mock.calls[0]![0]).toMatchObject({ sequence: 1, focus: 'the API decisions' });
+  const compacted = events.find(event => event.kind === 'compacted');
+  expect(compacted).toMatchObject({ kind: 'compacted', replacedMessages: 1 });
+  expect(JSON.stringify(compacted)).toContain('Keep the original directive.'); // the person's own earlier message is carried verbatim
+  expect(result).toMatchObject({ finish: 'stop', rounds: 0, toolCalls: 0, appendedCount: 0 });
+  expect(result.note).toContain('compacted on request: 1 earlier messages');
+});
+it('a compact turn with nothing older than the kept tail sends nothing and says so; a failed summary leaves the history unchanged', async () => {
+  const summarize = vi.fn(async () => null), invokeRound = vi.fn(async () => answer());
+  const short: AgentTurnMessage[] = [{ role: 'user', content: 'only one' }];
+  const nothing = await runAgentTurn({ messages: short, tools: [], signal: new AbortController().signal, emit: () => undefined, language: 'en', compact: {} }, ports({ summarize, invokeRound }));
+  expect(nothing).toMatchObject({ finish: 'stop' }); expect(nothing.note).toContain('Nothing to compact yet');
+  expect(summarize).not.toHaveBeenCalled(); expect(invokeRound).not.toHaveBeenCalled();
+  const events: AgentTurnEvent[] = [];
+  const failed = await runAgentTurn({ messages: history(), tools: [], signal: new AbortController().signal, emit: event => events.push(event), language: 'tr', compact: {} }, ports({ summarize, invokeRound }));
+  expect(failed).toMatchObject({ finish: 'error' }); expect(failed.note).toContain('kısaltılamadı');
+  expect(events.some(event => event.kind === 'compacted')).toBe(false); expect(invokeRound).not.toHaveBeenCalled();
+});

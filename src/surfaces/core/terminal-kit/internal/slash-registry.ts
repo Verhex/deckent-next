@@ -31,6 +31,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'context', group: 'info', descriptionKey: 'terminal.slash.context' },
   { name: 'resume', group: 'session', descriptionKey: 'terminal.slash.resume', argumentKey: 'terminal.slash.resumeArgument' },
   { name: 'clear', group: 'session', descriptionKey: 'terminal.slash.clear' },
+  // K3 (owner 2026-10-14): compact the conversation now (queued behind a running turn); the focus window opens from /context (no typed argument, I-1).
+  { name: 'compact', group: 'session', descriptionKey: 'terminal.slash.compact' },
   { name: 'mode', group: 'settings', descriptionKey: 'terminal.slash.mode', argumentKey: 'terminal.slash.modeArgument' },
   // TL-A D6: shows or hides the reasoning preview (toggle, or `on`/`off`); runs at once from the palette.
   { name: 'reasoning', group: 'settings', descriptionKey: 'terminal.slash.reasoning' },

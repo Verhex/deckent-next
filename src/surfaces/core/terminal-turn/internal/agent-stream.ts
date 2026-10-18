@@ -30,6 +30,8 @@ export interface TerminalAgentTurnInput {
   /** T4 MODEL-SWITCH (v23): the session's pinned model; the service uses exactly it or refuses typed. */
   readonly reference?: ModelReference;
   readonly onTurnBound?: (binding: PanelTurnBinding) => void;
+  /** K3 `/compact` (v30): compact the history now (with the person's focus) instead of a model round. */
+  readonly compact?: Readonly<{ focus?: string }>;
 }
 type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown };
 
@@ -40,7 +42,8 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   input.signal?.throwIfAborted();
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages],
     ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}),
-    ...(input.fullAccess === true ? { fullAccess: true as const } : {}), ...(input.reference ? { reference: { ...input.reference } } : {}) };
+    ...(input.fullAccess === true ? { fullAccess: true as const } : {}), ...(input.reference ? { reference: { ...input.reference } } : {}),
+    ...(input.compact ? { compact: input.compact.focus ? { focus: input.compact.focus } : {} } : {}) };
   let cancellation: Promise<unknown> | undefined;
   const cancel = () => cancellation ??= ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
     .catch(() => undefined);

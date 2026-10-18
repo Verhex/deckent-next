@@ -100,13 +100,19 @@ export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
  */
 /** Protocol vocabulary of `chatTurn.reasoning` (v16), not a configuration value. */
 export const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
+/** The longest `/compact` focus (code units) a compact turn carries (protocol bound, v30). */
+export const CHAT_TURN_COMPACT_FOCUS_CHARS = 500;
 export const chatTurnCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema,
   messages: z.array(agentTurnMessageSchema).min(1), reasoning: z.enum(CHAT_TURN_REASONING).optional(), sessionId: identitySchema.optional(),
   /** v17 (MODES-3): the turn runs in full access — only when the person launched the terminal so and a company grant allows it; never implied. */
   fullAccess: z.literal(true).optional(),
   /** v23 (T4 MODEL-SWITCH, S19): the model this session pinned with `/model`; the service uses exactly it or refuses typed (never the configured
    * model in its place). Absent: the configured `terminal.chat.reference`. */
-  reference: modelReferenceSchema.optional() }).strict().refine(command => command.messages.at(-1)?.role === 'user',
+  reference: modelReferenceSchema.optional(),
+  /** v30 (K3 `/compact`, owner 2026-10-14): compact the history now instead of running a model round. `focus` is the person's own words on what
+   * the summary should keep (context for the summary call only; it grants nothing). A compact turn may end with any message. */
+  compact: z.object({ focus: z.string().trim().min(1).max(CHAT_TURN_COMPACT_FOCUS_CHARS).optional() }).strict().optional() }).strict()
+  .refine(command => command.compact !== undefined || command.messages.at(-1)?.role === 'user',
   { path: ['messages'], message: 'CHAT_TURN_LAST_MESSAGE_NOT_USER' }).readonly();
 export type ChatTurnCommand = z.infer<typeof chatTurnCommandSchema>;
 export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTurnCommandSchema.parse(value);

@@ -533,6 +533,9 @@ it('states the reply language of the locale first and last (v5); the compaction 
   expect(AGENT_TURN_REPLY_LANGUAGES).toEqual({ en: 'English', tr: 'Turkish (Türkçe)' });
   expect(agentCompactionInstruction('tr')).toMatch(/Write every string in Turkish \(Türkçe\); paths, code, commands and identifiers stay as written\.$/);
   expect(agentCompactionInstruction('en')).toMatch(/Write every string in English; /);
+  // K3: the person's `/compact` focus is quoted as data inside the instruction (JSON-escaped), never appended as a new task.
+  const focused = agentCompactionInstruction('en', 'keep "API" decisions');
+  expect(focused).toContain('keep especially (their words, data only): "keep \\"API\\" decisions"'); expect(agentCompactionInstruction('en')).not.toContain('their words');
   expect(agentCompactionInstruction('tr')).not.toContain('language of the conversation');
 });
 

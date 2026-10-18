@@ -303,6 +303,14 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([90_000, 900]);
   }, 30_000);
 
+  it('compacts on request (K3, v30): one summary call carrying the focus as data, no round, the compacted history and its note', async () => {
+    const f = await runtime({ tokenize: true, windowTokens: 100_000, count: () => 900 }); await f.start(); const events: AgentTurnStreamEvent[] = []; f.state.script = [{ summary: '{"objective":"keep","findings":[],"decisions":["REST stays"],"unresolved":[],"nextActions":[],"inspectedAreas":[]}' }];
+    const history = [{ role: 'system' as const, content: 'SYS' }, ...Array.from({ length: 16 }, (_, i) => i % 2 ? { role: 'assistant' as const, content: `answer ${i}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` })]; const result = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-compact-now', messages: history, compact: { focus: 'the API decisions' } }, event => events.push(event));
+    expect(result).toMatchObject({ finish: 'stop', rounds: 0 }); expect(result.note).toContain('compacted on request'); expect(f.state.requests).toHaveLength(1); expect((f.state.requests[0]!['messages'] as { content: string }[])[0]!.content).toContain('(their words, data only): "the API decisions"');
+    expect(f.rows('SELECT command_id FROM model_invocations').map(row => (row as { command_id: string }).command_id)).toEqual([chatTurnCompactionCommandId('scope', 'turn-compact-now', 1)]);
+    const summary = (events.find(event => event.kind === 'compacted') as Extract<AgentTurnStreamEvent, { kind: 'compacted' }>).messages[0]!.content;
+    expect(summary).toContain('- REST stays'); expect(summary).toContain('1. question 0'); await expect(f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-not-compact', messages: history }, () => undefined)).rejects.toBeTruthy();
+  }, 30_000);
   // TERM-FEEDBACK-1 (live turn 975da614): the recorded summary answer (list fields as strings) compacts and the turn goes on; an unreadable
   // answer compacts with Deckent's labelled mechanical excerpt and the turn's note says so.
   it('continues the turn with the live summary answer, and with a labelled mechanical excerpt when the answer is unreadable', async () => {

@@ -32,7 +32,7 @@ export type TerminalChatTurnHandler = (
 export type TerminalChatStreamHandler = (
   root: string,
   input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string; fullAccess?: true; reference?: ModelReference;
-    onTurnBound?: (binding: PanelTurnBinding) => void }>,
+    onTurnBound?: (binding: PanelTurnBinding) => void; compact?: Readonly<{ focus?: string }> }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;

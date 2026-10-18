@@ -180,6 +180,11 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
+    compact: { running: t('terminal.compact.running', {}, locale), focusTitle: t('terminal.compact.focusTitle', {}, locale), focusDetail: t('terminal.compact.focusDetail', {}, locale),
+      focusPrompt: t('terminal.compact.focusPrompt', {}, locale), pending: t('terminal.compact.pending', {}, locale), kept: t('terminal.compact.kept', {}, locale),
+      reason: { label: t('terminal.compact.reason.label', {}, locale), hint: t('terminal.compact.reason.hint', {}, locale), empty: t('terminal.compact.reason.empty', {}, locale) },
+      now: t('terminal.compact.now', {}, locale), nowDetail: t('terminal.compact.nowDetail', {}, locale), withFocus: t('terminal.compact.withFocus', {}, locale),
+      withFocusDetail: t('terminal.compact.withFocusDetail', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
       more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
       usage: t('terminal.scratch.usage', {}, locale) },
@@ -216,7 +221,7 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
 async function runSession(locale: Locale, context: TerminalLaunchContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
   historyMessages: number, interactive: boolean, status: () => Promise<string>, known: Parameters<typeof projectHumanText>[2],
-  stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) => AsyncIterable<TurnDelta>, instructionSources?: () => readonly string[]): Promise<void> {
+  stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined, compact?: true) => AsyncIterable<TurnDelta>, instructionSources?: () => readonly string[]): Promise<void> {
   // The rich view's one projection (B7 record redaction, controls removed, B8 hidden marks) on every model-written line.
   const project = (text: string, kind: 'exact' | 'prose') => plainText(projectHumanText(text, kind, known).spans);
   const stdin = context.stdin ?? process.stdin;
@@ -234,6 +239,17 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
       if (trimmed === '/exit') break;
       if (trimmed === '/context') { for (const line of instructionSources?.() ?? []) emit(line, sinks); }
       else if (trimmed === '/status') { emit(await status(), sinks); }
+      // K3 `/compact` in line mode: the same service compaction as the rich view; its `compacted` history replaces the conversation's.
+      else if (trimmed === '/compact' && stream) {
+        let note: string | null = null;
+        try {
+          for await (const delta of stream(boundAgentHistory(system, agentHistory, historyMessages), context.signal, true)) {
+            if (delta.kind === 'compacted') agentHistory = [system, ...delta.messages.filter(message => message.role !== 'system')];
+            if (delta.kind === 'done') note = delta.note ?? null;
+          }
+          if (note) emit(project(note, 'prose'), sinks);
+        } catch (error) { emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' }); }
+      }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
       else if (trimmed.startsWith('/')) {
         // K2: a moved name says where it went (a rename; the old name never runs), any other slash input is unknown.
@@ -372,8 +388,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (parsed.action === 'session') {
     for (const notice of accessNotices) emit(notice.text, sinks);
     if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
-    const lineStream = context.streamTerminalChat ? (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) =>
-      (async function* () { yield* context.streamTerminalChat!(root, { scopeId, messages: await withInstructions(messages) }, options, signal); })() : undefined;
+    const lineStream = context.streamTerminalChat ? (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined, compact?: true) =>
+      (async function* () { yield* context.streamTerminalChat!(root, { scopeId, messages: await withInstructions(messages), ...(compact ? { compact: {} } : {}) }, options, signal); })() : undefined;
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
       async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'), getConfigKnownSecrets(config), lineStream, () => lineSources);
     return;
@@ -457,7 +473,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Parameters<WorklineStreamTurn>[2]) =>
       context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
         ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.reference ? { reference: turn.reference } : {}),
-        ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal) } : {}),
+        ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}), ...(turn?.compact ? { compact: turn.compact } : {}) }, options, signal) } : {}),
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),

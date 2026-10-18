@@ -42,8 +42,8 @@ describe('/help grouped', () => {
     for (const locale of ['en', 'tr'] as const) {
       const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
       // Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver; K1/K8 remove eight work commands and /quit.
-      expect(rows).toHaveLength(23);
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(23);
+      expect(rows).toHaveLength(24); // K3 adds /compact
+      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(24);
     }
   });
 });

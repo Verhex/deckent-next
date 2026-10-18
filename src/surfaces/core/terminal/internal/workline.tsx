@@ -17,7 +17,8 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from './workline-history.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type InfoWindowModel, type WindowNote } from '#surfaces/core/terminal-window/index.js';
+import { DecisionCard, approvalTemplateLine } from '#surfaces/core/approval-presentation/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -64,6 +65,13 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly windows?: SlashWindowLabels;
   /** TESLIM-PENCERESI: the delivery window's words (terminal.delivery.*); without them (or without the port) `/deliver` is unavailable. */
   readonly delivery?: DeliveryWindowLabels;
+  /** K3 `/compact`: the running status, the focus window (its Tab field is the focus) and the two `/context` choices; absent: no `/compact`. */
+  readonly compact?: WorklineCompactLabels;
+}
+export interface WorklineCompactLabels {
+  readonly running: string; readonly focusTitle: string; readonly focusDetail: string; readonly focusPrompt: string; readonly pending: string; readonly kept: string;
+  readonly reason: Readonly<{ label: string; hint: string; empty: string }>;
+  readonly now: string; readonly nowDetail: string; readonly withFocus: string; readonly withFocusDetail: string;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -295,9 +303,12 @@ export function WorklineApp(props: WorklineProps) {
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution),
     ...(props.info?.ports.permissions ? { openPermissions: async (execution: LocalExecution) => { await performRef.current('/permissions', [], execution); } } : {}) });
 
+  // K3: `/context` ends with the two compaction choices when this terminal can compact (the streamed agent turn and the words).
+  const withCompactChoices = (model: InfoWindowModel): InfoWindowModel => labels.compact && props.streamTurn ? { ...model, sections: [...model.sections, { choices: [
+    { id: 'compact', label: labels.compact.now, detail: labels.compact.nowDetail }, { id: 'compact-focus', label: labels.compact.withFocus, detail: labels.compact.withFocusDetail }] }] } : model;
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
-    context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current,
+    context: (info, ascii) => withCompactChoices(session.contextView(history.current, info, ascii, instructions.sourceLines())), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current,
       // K7: `/permissions` offers clearing this session's standing answers when this terminal can (moved from `/approvals`).
       ...(ledger?.clearSessionStanding && labels.work?.sessionStandingClear && labels.work.jobs ? { clearSession: { label: labels.work.jobs.clearSession, detail: labels.work.jobs.clearDetail } } : {}) }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
@@ -397,6 +408,44 @@ export function WorklineApp(props: WorklineProps) {
     targets.map((_, index) => String(index)));
     if (picked !== null && !execution.signal.aborted) deliveries.open(targets[Number(picked)]!, 'foreground');
   };
+  /**
+   * K3 `/compact` (protocol v30): the service compacts the conversation now (its summary call, with the person's focus), with no model round.
+   * Its `compacted` event replaces the history exactly as an automatic compaction does; the turn's note is the one system line. It runs as
+   * one line of the controller, so a `/compact` typed during a turn waits behind it; Esc cancels it like a turn.
+   */
+  const runCompact = async (execution: LocalExecution, focus?: string) => {
+    const words = labels.compact;
+    if (!props.streamTurn || !words) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'compact' }))]); return; }
+    const signal = execution.signal, stream = panel.stream(execution);
+    const system: AgentChatMessage = { role: 'system', content: systemPrompt + await instructions.prepare(signal) };
+    const messages = agentHistory(system, history.current);
+    let note: string | null = null, replaced: readonly AgentChatMessage[] | null = null;
+    setTurnRunning(true);
+    push([systemSummaryEntry(words.running)]);
+    try {
+      for await (const delta of props.streamTurn(messages, signal, { sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
+        compact: focus ? { focus } : {}, ...pinnedFor(execution.input.context.sessionId) })) {
+        session.noteContext(delta);
+        if (delta.kind === 'compacted') replaced = [messages[0]!, ...delta.messages.filter(message => message.role !== 'system')];
+        if (delta.kind === 'done') note = delta.note ?? null;
+      }
+      if (replaced) { history.current = agentHistory(replaced[0]!, replaced); push(await session.save(history.current)); }
+      if (note) push([systemSummaryEntry(note.replace(/^\[deckent\]\s*/u, ''), replaced ? 'info' : 'warning')]);
+    } catch (error) { if (!signal.aborted) push([notice('error', errorText(error))]); }
+    finally { setTurnRunning(false); }
+  };
+  /** K3: the focus window (from `/context`): Tab writes the focus, `y` compacts with it (nothing written: compacts without one), n/Esc keeps. */
+  const askCompactFocus = async (execution: LocalExecution) => {
+    const words = labels.compact;
+    if (!words) return;
+    let focus: string | undefined;
+    const choice = await slot.ask(answer => <DecisionCard title={approvalTemplateLine(words.focusTitle, {})} projectedLines={[approvalTemplateLine(words.focusDetail, {})]}
+      decisionLabels={labels.render} prompt={words.focusPrompt} pendingText={words.pending} position={labels.work?.window.position ?? '{from}-{to}/{total}'}
+      reason={words.reason} onDecide={(yes, _standing, text) => { focus = text; answer(yes ? 'compact' : null); }} />);
+    if (execution.signal.aborted) return;
+    if (choice === 'compact') await runCompact(execution, focus?.trim() || undefined);
+    else push([systemSummaryEntry(words.kept)]);
+  };
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
@@ -433,6 +482,7 @@ export function WorklineApp(props: WorklineProps) {
       finally { setPlanning(false); setDoRunning(false); setActiveDo(null); }
       return true;
     }
+    if (slash.command === 'compact') { await runCompact(execution); return true; }
     if (slash.command === 'deliver') {
       // TESLIM-PENCERESI: a picker of tasks awaiting delivery (fresh /runs read model plus this session's Runs); the chosen window takes focus.
       if (!deliveries.available || !labels.delivery || !ledger) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
@@ -454,6 +504,8 @@ export function WorklineApp(props: WorklineProps) {
     if (props.info && (rich || !slash.args) && INFO_WINDOW_COMMANDS.has(slash.command)) {
       const shown = await infoWindow.run(slash.command, execution);
       if (shown.handled && slash.command === 'permissions') { if (shown.picked === 'clear-session') await work.clearSession(execution); return true; }
+      // K3: `/context` offers compacting now and the focus window.
+      if (shown.handled && slash.command === 'context') { if (shown.picked === 'compact') await runCompact(execution); else if (shown.picked === 'compact-focus') await askCompactFocus(execution); return true; }
       if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
     }
     if (slash.command === 'reasoning') {
