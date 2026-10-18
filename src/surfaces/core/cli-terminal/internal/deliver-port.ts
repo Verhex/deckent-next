@@ -2,7 +2,7 @@ import { loadConfig, ErrorRegistry, type ConfigLoadOptions } from '#platform/ind
 import type { AttemptIdentity } from '#domain/index.js';
 import type { WorkspacePatch } from '#engine/index.js';
 import type { InventoryQueryHandler } from '#surfaces/core/monitor/index.js';
-import type { DeliveryFileStat, TerminalDeliveryPort, VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
+import type { DeliveryFileDiff, DeliveryFileStat, TerminalDeliveryPort, VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import PORT from './deliver-port.json' with { type: 'json' };
 
@@ -37,6 +37,26 @@ export function patchStat(changes: WorkspacePatch['changes'], render: (path: str
 }
 
 /**
+ * Bounded per-file diff bodies of the same patch (read-only): the CLI's own renderer, never a second diff. A file whose text holds a NUL byte, or
+ * whose sides exceed the byte bound, or that lies beyond the file bound carries a typed reason instead of a body (the renderer is not run on it);
+ * a long body is cut at the line bound with the hidden count. A mode-only change shows its mode line.
+ */
+export function patchDiffs(changes: WorkspacePatch['changes'], render: (path: string, before: string | null, after: string | null) => string): readonly DeliveryFileDiff[] {
+  const bytes = (text: string | undefined) => text === undefined ? 0 : Buffer.byteLength(text);
+  return Object.freeze(changes.map((change, index) => {
+    const none = (unavailable: 'binary' | 'too-large') => Object.freeze({ path: change.path, lines: Object.freeze([]), hidden: 0, unavailable });
+    if ([change.before?.text, change.after?.text].some(text => text?.includes('\0'))) return none('binary');
+    if (index >= PORT.maxDiffFiles || bytes(change.before?.text) > PORT.maxDiffBytesPerFile || bytes(change.after?.text) > PORT.maxDiffBytesPerFile) return none('too-large');
+    let before = change.before?.text ?? null, after = change.after?.text ?? null;
+    if ((before === null || before.endsWith('\n')) && (after === null || after.endsWith('\n'))) { before = before?.slice(0, -1) ?? null; after = after?.slice(0, -1) ?? null; }
+    const body = change.before && change.after && change.before.text === change.after.text ? [] : render(change.path, before, after).split('\n').slice(2);
+    const mode = change.before && change.after && change.before.mode !== change.after.mode ? [`mode ${change.before.mode} -> ${change.after.mode} ${change.path}`] : [];
+    const lines = [...body, ...mode];
+    return Object.freeze({ path: change.path, lines: Object.freeze(lines.slice(0, PORT.maxDiffLinesPerFile)), hidden: Math.max(0, lines.length - PORT.maxDiffLinesPerFile), unavailable: null });
+  }));
+}
+
+/**
  * TESLIM-PENCERESI: the delivery window's port over the CLI's own handlers — inventory, patch preview, integration check and prepare, and
  * the trusted composition's verified-terminal delivery/adoption. Absent (no `/deliver`, no window) unless every handler is bound.
  */
@@ -59,8 +79,8 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       const preview = await previewWorkspacePatch(root, identity, options);
       // Read-only: the integration check observes the affected files of the current source; a changed base is its typed refusal.
       const checked = await checkWorkspaceIntegration(root, identity, options);
-      const config = await loadConfig(root, options), stat = patchStat(preview.patch.changes, renderUnifiedDiff), verification = config.execution?.adoption.verification;
-      return Object.freeze({ target, identity, ...stat, source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
+      const config = await loadConfig(root, options), stat = patchStat(preview.patch.changes, renderUnifiedDiff), diffs = patchDiffs(preview.patch.changes, renderUnifiedDiff), verification = config.execution?.adoption.verification;
+      return Object.freeze({ target, identity, ...stat, diffs, source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
         outOfScope: checked.scope.status === 'out-of-scope' ? checked.scope.outOfScope : [], adoptionTargets: Object.freeze([...config.execution?.adoption.targets ?? []]),
         verification: verification ? Object.freeze({ kind: verification.kind, required: verification.required }) : null,
         ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef } : {}) });

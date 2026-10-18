@@ -277,6 +277,9 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     verifyLoading: t('terminal.delivery.verifyLoading', {}, locale), verifyNone: t('terminal.delivery.verifyNone', {}, locale), verifyHow: t('terminal.delivery.verifyHow', {}, locale),
     verifyCheck: t('terminal.delivery.verifyCheck', {}, locale), verifyHints: t('terminal.delivery.verifyHints', {}, locale), verifyNoneHints: t('terminal.delivery.verifyNoneHints', {}, locale),
     verifiedBy: t('terminal.delivery.verifiedBy', {}, locale), notVerified: t('terminal.delivery.notVerified', {}, locale),
+    diffListHints: t('terminal.delivery.diffListHints', {}, locale), diffHints: t('terminal.delivery.diffHints', {}, locale), diffHeader: t('terminal.delivery.diffHeader', {}, locale),
+    diffUnavailable: t('terminal.delivery.diffUnavailable', {}, locale), diffEmpty: t('terminal.delivery.diffEmpty', {}, locale),
+    diffHidden: t('terminal.delivery.diffHidden', {}, locale), diffPosition: t('terminal.delivery.diffPosition', {}, locale),
     next: {
       PATCH_BASE_ADVANCED: t('terminal.delivery.next.PATCH_BASE_ADVANCED', {}, locale),
       PATCH_CONFLICT: t('terminal.delivery.next.PATCH_CONFLICT', {}, locale),

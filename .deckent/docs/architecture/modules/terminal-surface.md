@@ -154,6 +154,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   NATIVE-BAGLAM (2026-10-14): the strip's records (/do, waiting deliveries, admitted Runs) also reach the model as a bounded note on the
   latest sent message only (`terminal-work/active-work-note.ts`, English protocol text, marker stripped from resume/fresh-context displays);
   the strip itself is unchanged and the note grants nothing.
+  Read-only diff (alpha.46): `DeliveryPreview.diffs` (bounded per file by `deliver-port.json`) feed a file list + hunk view inside the same window; viewing is inert for delivery.
   TESLIM-PENCERESI (owner 2026-10-14, author candidate): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
   window over a `TerminalDeliveryPort` that `cli-terminal/deliver-port.ts` builds from the CLI's own handlers (inventory, patch preview,
   integration check/prepare) and the composition's `interactiveDeliveryHandlers(answer)` (the TESLIM-GUVENLIK port; installed only by

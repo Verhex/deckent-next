@@ -24,6 +24,9 @@ export interface DeliveryWindowLabels {
   readonly verifyTitle: string; readonly verifyRow: string; readonly verifyWithout: string; readonly verifyLoading: string; readonly verifyNone: string;
   readonly verifyHow: string; readonly verifyCheck: string; readonly verifyHints: string; readonly verifyNoneHints: string;
   readonly verifiedBy: string; readonly notVerified: string;
+  /** Read-only per-file diff view inside the window: key hints, header, why a body is absent, cut lines and the scroll position. */
+  readonly diffListHints: string; readonly diffHints: string; readonly diffHeader: string; readonly diffUnavailable: string;
+  readonly diffEmpty: string; readonly diffHidden: string; readonly diffPosition: string;
 }
 export type DeliveryOpening = 'foreground' | 'background';
 type Waiting = Readonly<{ view: EffectConfirmationView; resolve: (yes: boolean) => void }>;
@@ -44,7 +47,7 @@ interface Entry {
   readonly target: DeliveryTarget; readonly sinceMs: number;
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
-  queue?: TargetQueueView; selected: number; closed: boolean; settled: boolean; verify: Verify | null;
+  queue?: TargetQueueView; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -74,7 +77,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
     if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
-    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0;
+    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null;
     current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.stage = { kind: 'ready' }; changed(); } },
       error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); });
   }, [changed]);
@@ -218,6 +221,21 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           if (decision !== null) stage.waiting.resolve(decision === 'yes');
           return decision !== null;
         }
+        // Read-only diff of the changed files (ready step only): ↑↓/j/k choose a file, Enter opens its hunks, Esc goes back. No key here delivers, adopts or declines.
+        const diffs = stage.kind === 'ready' ? visible.preview?.diffs : undefined;
+        if (diffs?.length && visible.preview && !key.ctrl && !key.meta) {
+          const up = key.upArrow || text === 'k', down = key.downArrow || text === 'j', file = visible.fileSel ?? 0;
+          if (visible.diffScroll !== null && visible.diffScroll !== undefined) {
+            const room = Math.max(0, (diffs[file]?.lines.length ?? 0) - WINDOW.diffViewLines);
+            if (key.escape) visible.diffScroll = null;
+            else if (up) visible.diffScroll = Math.max(0, visible.diffScroll - 1);
+            else if (down) visible.diffScroll = Math.min(room, visible.diffScroll + 1);
+            changed(); return true;
+          }
+          const count = Math.min(visible.preview.files.length, WINDOW.maxFiles);
+          if ((up || down) && count) { visible.fileSel = (file + (up ? count - 1 : 1)) % count; changed(); return true; }
+          if (key.return) { visible.diffScroll = 0; changed(); return true; }
+        }
         if (stage.kind === 'delivered' && (key.upArrow || key.downArrow) && visible.preview) {
           const count = visible.preview.adoptionTargets.length;
           visible.selected = (visible.selected + (key.upArrow ? count - 1 : 1)) % count; changed(); return true;
@@ -258,7 +276,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
   switch (entry.stage.kind) {
     case 'queue': return labels.queue?.hints ?? '';
     case 'queue-confirm': return labels.confirmHints;
-    case 'ready': return labels.hints;
+    case 'ready': return entry.preview?.diffs?.length ? entry.diffScroll !== null && entry.diffScroll !== undefined ? labels.diffHints : `${labels.hints} · ${labels.diffListHints}` : labels.hints;
     case 'confirm': return labels.confirmHints;
     case 'delivered': return labels.adoptHints;
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
@@ -271,7 +289,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
 }
 
 /** Body rows: ids, the check of the current source, the changed files with their stat, where it writes, and the stage's own lines. */
-export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
+export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'fileSel' | 'diffScroll'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
@@ -289,10 +307,13 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   }
   if (stage.kind === 'loading') return [...rows, line(labels.loading, { role: 'muted' })];
   if (preview) {
+    if (stage.kind === 'ready' && entry.diffScroll !== null && entry.diffScroll !== undefined && preview.diffs?.length)
+      return [...rows, ...diffLines(preview, entry.fileSel ?? 0, entry.diffScroll, labels, text)];
     rows.push(line(fillTemplate(labels.check, { base: preview.base.slice(0, 12), source: preview.source }), { role: 'success' }));
     if (preview.outOfScope.length) rows.push(line(fillTemplate(labels.outOfScope, { count: preview.outOfScope.length, paths: preview.outOfScope.join(', ') }), { role: 'warning' }));
     rows.push(line(fillTemplate(labels.summary, { count: preview.files.length, added: preview.added, removed: preview.removed })),
-      ...preview.files.slice(0, WINDOW.maxFiles).map(file => exact(fillTemplate(labels.file, { path: file.path, added: file.added, removed: file.removed }))));
+      ...preview.files.slice(0, WINDOW.maxFiles).map((file, index) => exact(`${preview.diffs?.length ? `${index === (entry.fileSel ?? 0) ? '›' : ' '} ` : ''}${fillTemplate(labels.file, { path: file.path, added: file.added, removed: file.removed })}`,
+        preview.diffs?.length && index === (entry.fileSel ?? 0) ? { role: 'accent', bold: true } : {})));
     if (preview.files.length > WINDOW.maxFiles) rows.push(line(fillTemplate(labels.moreFiles, { count: preview.files.length - WINDOW.maxFiles }), { role: 'muted' }));
     if (!delivered) {
       rows.push(line(labels.where, { role: 'muted' }));
@@ -319,6 +340,20 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
       generation: arg(String(id.generation)), layout: arg(id.layoutRevision), delivery: delivered ? arg(delivered.commandId) : '<delivery>',
       target: target === undefined ? '<branch>' : arg(target) }) : next, { role: 'accent' }));
   }
+  return rows;
+}
+/** The opened file's hunks: the Attempt/base/proposal the preview was built from, then one bounded page of the diff body (every row sanitized and redacted by `text`). */
+function diffLines(preview: DeliveryPreview, index: number, scroll: number, labels: DeliveryWindowLabels, text: (value: string) => string): WindowLine[] {
+  const diff = preview.diffs![index], id = preview.identity;
+  const row = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
+  const rows: WindowLine[] = [row(fillTemplate(labels.diffHeader, { path: diff?.path ?? '', index: index + 1, count: preview.files.length, attempt: `${id.attemptId}#${id.generation}`,
+    base: preview.base.slice(0, 12), proposal: preview.proposal.slice(0, 12) }), { bold: true })];
+  if (!diff || diff.unavailable) return [...rows, row(labels.diffUnavailable, { role: 'warning' })];
+  if (!diff.lines.length) return [...rows, row(labels.diffEmpty, { role: 'muted' })];
+  const page = diff.lines.slice(scroll, scroll + WINDOW.diffViewLines);
+  rows.push(...page.map(value => row(value, value.startsWith('@@') ? { role: 'accent' } : value.startsWith('+') ? { role: 'success' } : value.startsWith('-') ? { role: 'error' } : {})));
+  rows.push(row(fillTemplate(labels.diffPosition, { from: scroll + 1, to: scroll + page.length, total: diff.lines.length }), { role: 'muted' }));
+  if (diff.hidden) rows.push(row(fillTemplate(labels.diffHidden, { count: diff.hidden }), { role: 'muted' }));
   return rows;
 }
 /** The verification step's rows: what is chosen for which branch, the candidates (or why there is none and how to make one), and what the adoption checks. */
