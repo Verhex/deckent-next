@@ -33,17 +33,20 @@ const CURSOR_ONLY = Object.freeze(['deckent.mdc']);
 /**
  * The YAML subset these rules use (Cursor rules format, prod.cursor.com/docs/reference/plugins#rules-format, read 2026-10-18:
  * description string, alwaysApply boolean, globs string or array). Astra 2648 F2: a line regex let `description: [` or an
- * unbalanced quote through, which is not valid YAML. Accepted here: exactly `description` as a YAML plain scalar that
- * resolves to a string, and `alwaysApply: true`. Flow collections, quotes, block scalars, anchors, tags, comments,
- * `key: value` inside a value, YAML booleans/null/numbers as a description, and `globs` (unused) are refused.
+ * unbalanced quote through, which is not valid YAML. Astra 2650/2652: blocklists kept missing cases (C0/C1 bytes, U+FFFE/U+FFFF,
+ * `0x20`/`0o20` integers), so `description` is an explicit ALLOWLIST derived from the real rule headers ("Deckent Next
+ * moment-to-skill router" and two more use letters, spaces and `-`): it starts with an ASCII letter and then holds only
+ * ASCII letters, digits, single spaces and `. , ; ( ) / _ -`. That set has no YAML indicator, quote, colon or comment
+ * character, so every accepted value is a valid plain scalar; starting with a letter rules out every int/float form, and the
+ * YAML 1.1/1.2 core-schema keywords that still start with a letter (true/false/yes/no/on/off/null/y/n) are refused
+ * case-insensitively. Anything else (Cc, Cn such as U+FFFE/U+FFFF, Co, Cs, non-ASCII) is refused. `globs` (unused) is refused.
  */
-const PLAIN_SCALAR_START = /^[^\s\-?:,[\]{}#&*!|>'"%@`]/u;
-const NON_STRING_SCALAR = /^(?:true|false|yes|no|on|off|null|~|[-+]?(?:\.?\d[\d_]*(?:\.\d*)?(?:e[-+]?\d+)?|\.inf|\.nan))$/iu;
+const DESCRIPTION = /^[A-Za-z](?:[A-Za-z0-9.,;()/_-]| (?=[^ ]))*$/u;
+const NON_STRING_KEYWORD = /^(?:true|false|yes|no|on|off|null|y|n)$/iu;
 const FRONTMATTER = Object.freeze({
-  description: value => /[\p{Cc}\uFEFF]/u.test(value) ? 'contains a control character'
-    : !PLAIN_SCALAR_START.test(value) ? 'must be a plain YAML scalar (no flow collection, quote, block or indicator start)'
-    : /: |\s#|[\t\r]|\s$|:$/u.test(value) ? 'plain scalar contains ": ", " #", a tab or trailing space/colon'
-      : NON_STRING_SCALAR.test(value) ? 'would resolve to a non-string YAML scalar' : null,
+  description: value => !DESCRIPTION.test(value)
+    ? 'must start with an ASCII letter and use only ASCII letters, digits, single spaces and . , ; ( ) / _ -'
+    : NON_STRING_KEYWORD.test(value) ? 'would resolve to a non-string YAML scalar' : null,
   alwaysApply: value => value === 'true' ? null : 'must be exactly true (always loaded on every surface)',
 });
 
@@ -184,6 +187,14 @@ test('the Cursor rule parser refuses copies that Cursor would load differently o
     'raw DEL in description': rule('---\ndescription: d\u007f\nalwaysApply: true\n---\n'),
     'C1 control in description': rule('---\ndescription: d\u0085x\nalwaysApply: true\n---\n'),
     'raw TAB after alwaysApply': rule('---\ndescription: d\nalwaysApply: true\t\n---\n'),
+    // Astra 2652: noncharacters, private use, YAML integers and keywords that a blocklist missed.
+    'U+FFFE in description': rule('---\ndescription: d\uFFFE\nalwaysApply: true\n---\n'),
+    'U+FFFF in description': rule('---\ndescription: d\uFFFF\nalwaysApply: true\n---\n'),
+    'private-use character': rule('---\ndescription: d\uE000\nalwaysApply: true\n---\n'),
+    'hex integer': rule('---\ndescription: 0x20\nalwaysApply: true\n---\n'),
+    'octal integer': rule('---\ndescription: 0o20\nalwaysApply: true\n---\n'),
+    'boolean keyword True': rule('---\ndescription: True\nalwaysApply: true\n---\n'),
+    'null keyword': rule('---\ndescription: null\nalwaysApply: true\n---\n'),
     'invalid UTF-8 in header': Buffer.concat([Buffer.from('---\ndescription: d'), Buffer.from([0xff]), Buffer.from('\nalwaysApply: true\n---\n'), body]),
   };
   for (const [name, buffer] of Object.entries(refused)) assert.throws(() => parseCursorRule(buffer), Error, name);
