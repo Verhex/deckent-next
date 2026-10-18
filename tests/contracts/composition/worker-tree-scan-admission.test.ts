@@ -101,6 +101,17 @@ it('a secret in the shared dependency scan refuses every waiting Attempt: each c
   } finally { f.store.close(); }
 }, 120_000);
 
+it('a lockfile that is not a regular file (a FIFO) never blocks the dispatch and is never shared: the bind is scanned with it and refused', async context => {
+  const f = await fixture(context, 1, { 'deps/zod/index.js': 'module.exports = {};\n' });
+  try {
+    await exec('/usr/bin/mkfifo', [join(f.project, 'deps/.package-lock.json')]);
+    const capture = vi.spyOn(DockerSupervisor.prototype, 'captureProfile'), before = WORKER_TREE_SCAN_ADMISSION.statistics();
+    await expect(executeConfiguredTask(f.project, f.identities[0]!, f.options)).rejects.toMatchObject({ code: 'WORKER_TREE_SECRET_REFUSED',
+      params: { count: 1, paths: 'deps/.package-lock.json (unscannable:special-file)' } });
+    expect(WORKER_TREE_SCAN_ADMISSION.statistics().started - before.started).toBe(0); expect(capture).not.toHaveBeenCalled();
+  } finally { f.store.close(); }
+}, 60_000);
+
 it('a time refusal is deferred (attempt stays open, nothing dispatched) up to maxTimeRefusals; the next one closes the Attempt', async context => {
   // A 1 ms deadline cannot read the 20 MiB binding: a load-shaped `time` refusal on every turn.
   const f = await fixture(context, 1, { 'deps/.package-lock.json': '{"lockfileVersion":3}\n', 'deps/native/binding.node': binding() }, { timeoutMs: 1, maxTimeRefusals: 1 });
