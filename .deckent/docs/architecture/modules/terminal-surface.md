@@ -79,8 +79,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   through the runtime model client in the caller's `--scope` (same path as `models invoke`), so principal,
   policy, activation and spending apply. Abort (Esc, or Ctrl+C while busy) stops the wait and requests
   cancellation of that invocation. There is no direct/unmanaged HTTP backend and no silent fallback.
-  **Streaming (S-STREAM, implemented end to end 2026-09-24):** `streamTerminalChatTurn` yields the surface
-  `TurnDelta` contract over runtime protocol `invokeModelStream` (since v11): the same governed invocation as `invokeModel`
+  **Streaming (S-STREAM, implemented end to end 2026-09-24):** runtime protocol `invokeModelStream` (since v11; the unwired
+  composition driver `streamTerminalChatTurn` was removed 2026-10-18, the service, client and e2e tests remain): the same governed invocation as `invokeModel`
   (authorization, activation, reservation before send, settlement, durable command replay), answered by ordered delta
   frames and exactly one ordinary response frame. Delta frames are presentation: each ≤ `service.responseMaxBytes`, all
   together ≤ one more `responseMaxBytes`, coalesced per event-loop turn; when exhausted they stop for good, so the client
