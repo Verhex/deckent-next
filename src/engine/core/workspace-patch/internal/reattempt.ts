@@ -102,7 +102,9 @@ export interface WorkspaceReattemptContext {
 }
 /** Work-target wiring of one step as the delegating human: the base check is the work target's own integration check of the original output. */
 export function stepWorkspaceQueueReattempt(c: WorkspaceReattemptContext, store: RunBoundDispatchStore & RunBoundTaskStore & Pick<RunStore, 'loadRun'>,
-  adapter: { readonly target: IntegrationTarget; effects(profile: ExecutionProfileDefinition): ReattemptEffects; admit(command: RunAdmission): Promise<void> },
+  adapter: { readonly target: IntegrationTarget; effects(profile: ExecutionProfileDefinition): ReattemptEffects; admit(command: RunAdmission): Promise<void>;
+    /** Retains the accepted Attempt's patch when evaluation did not (a kind without work input), like a human `patch-prepare`. */
+    preparePatch(identity: AttemptIdentity): Promise<void> },
   record: TargetQueueRecord, act: boolean) {
   const verifier = { async verify() { return c.principal; } }, maxBytes = c.config.artifacts.maxBytes;
   const integration = new WorkspaceIntegrationApplication(new WorkspacePatchApplication(store, c.artifacts, verifier, c.authorization, maxBytes, c.scopeMode),
@@ -114,5 +116,6 @@ export function stepWorkspaceQueueReattempt(c: WorkspaceReattemptContext, store:
       try { await integration.check(ticket.request.identity); return false; }
       catch (error) { if ((error as { code?: unknown }).code === 'PATCH_BASE_ADVANCED') return true; throw error; }
     },
-    accepted: identity => c.accepted(identity), submit: request => c.app.submitReattempt(request, c.principal) }, record, act);
+    async accepted(identity) { if (!(await store.loadBoundDispatch(identity))?.patch) await adapter.preparePatch(identity); return c.accepted(identity); },
+    submit: request => c.app.submitReattempt(request, c.principal) }, record, act);
 }
