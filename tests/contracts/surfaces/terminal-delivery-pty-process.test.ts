@@ -83,7 +83,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     // The owner commits a change to an affected file after the patch was made: the base the patch was made on is no longer the source.
     await writeFile(join(f.project, 'note.txt'), 'changed by the owner\n'); await f.git('-c', 'core.hooksPath=/dev/null', 'commit', '-qam', 'moved base');
     const before = await f.refs();
-    const result = await inPty(f.project, f.options.env, 'window', [...opening, [WINDOW, ''], ...decide('y', 'Next: '), ['Enter/Esc close', '']]);
+    const result = await inPty(f.project, f.options.env, 'window', [...opening, [WINDOW, ''], ...decide('y', 'Next: ', 'Enter/Esc close'), ['Enter/Esc close', '']]);
     expect(result.output).toMatch(/ERR PATCH_(?:BASE_ADVANCED|CONFLICT)/u);
     expect(await f.refs()).toEqual(before); expect(await f.deliveries()).toEqual([]);
     // No queue is composed in this window: the queue's re-prepare key is not offered, closing is (terminal-delivery-window covers the offer).
