@@ -46,7 +46,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** The person's locale (the turn's reply language): the language of the notes a result explains itself with (B3). */
   readonly language?: Locale }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
-  const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
+  const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState), floorNames = createShellProtectedNames(scope.root, [], input.writeFloor ?? (() => false));
   const namesProductState = (detail: string | undefined) => detail !== undefined
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
   const plans = new Map<string, ShellPlan>();
@@ -86,7 +86,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     for (const verdict of [readOnly, mutation]) {
       if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
     }
-    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation), contained: classifyShellContainment(command, protectedNames).contained };
+    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation), contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined).contained };
     plans.set(key(tool, args), planned);
     return planned;
   };

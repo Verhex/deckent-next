@@ -69,6 +69,25 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
   ])('asks: %s → %s', (command, reasonCode, detail) => {
     expect(contained(command)).toEqual({ contained: false, reasonCode, ...(detail === undefined ? {} : { detail }) });
   });
+  // Owner 2026-10-18 ("okuma kartı kalksın", Jev 5e6dd7aa): where the run's own view binds the write floor read-only (the caller passes the
+  // floor names that view keeps read-only and readable), a read-only program merely naming a floor path is contained; a write target is not.
+  const readOnlyFloor = (text: string) => floor(text) && !text.startsWith('.deckent');
+  const reading = (command: string) => classifyShellContainment(command, text => floor(text) || text.startsWith('.deckent'), 'posix', readOnlyFloor);
+  it.each(['cat package.json', 'wc -c package.json', 'cat package.json | head -40; echo "---"; git log --oneline -5 2>/dev/null', 'grep -n name package.json .github/ci.yml',
+    'head -5 ./package.json && ls -la .github', 'diff package.json other.json'])('reads a read-only floor name: %s', command => {
+    expect(reading(command)).toEqual({ contained: true, reasonCode: 'CONTAINED' });
+  });
+  it.each([
+    ['printf x > package.json', 'package.json'], ['echo x >> package.json', 'package.json'], ['cat a >package.json', 'package.json'], ['cat a 2> package.json', 'package.json'],
+    ['cp a package.json', 'package.json'], ['cat a | tee package.json', 'package.json'], ['sed -n 1p package.json', 'package.json'], ['mv package.json x', 'package.json'],
+    ['rm package.json', 'package.json'], ['touch .github/x.yml', '.github/x.yml'], ['grep --file=package.json x', 'package.json'], ['cat .deckent/state/ledger.db', '.deckent/state/ledger.db'],
+  ])('a write, a non-reading program or the product state still asks: %s', (command, detail) => {
+    expect(reading(command)).toEqual({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
+  });
+  it('without a read-only floor in the run\'s view (host realm, full access, an approved writable view) a floor name still asks', () => {
+    expect(contained('cat package.json')).toEqual({ contained: false, reasonCode: 'PROTECTED_NAME', detail: 'package.json' });
+    expect(reading('node package.json')).toEqual({ contained: false, reasonCode: 'PROGRAM_FLOOR', detail: 'node' });
+  });
   // B3 (owner test 2026-10-07): the same reading names the protected paths a failed sandboxed command touched.
   it('shellNamedPaths: every part, redirection targets and option values, in order without repeats; never an expansion', () => {
     expect(shellNamedPaths('rm package.json && echo x >> .github/a.yml 2>&1; cat package.json', floor)).toEqual(['package.json', '.github/a.yml']);
