@@ -11,8 +11,8 @@ description: Use for Deckent CLI/TUI ergonomics, information hierarchy, keyboard
 Make Terminal a first-class control and operator surface, not a reduced Desktop. Load
 deckent-design-dna and the relevant product or agentic skill.
 
-Terminal is one stable product surface. Basic/Advanced are Desktop-only disclosure modes; never
-project them onto Terminal, create parallel density shells or rename them as Terminal modes.
+Terminal is one stable product surface. Never add disclosure or density modes, parallel density
+shells or a second Terminal product shell.
 Contextual disclosure, focus and drill-down reveal detail without changing surfaces. Ask/Run/Control,
 where present, are authority postures and must not be treated as visual-density modes.
 
@@ -113,7 +113,7 @@ stand in for the whole matrix.
 ## Parity contract
 
 Terminal and Desktop share authoritative nouns, lifecycle, permissions, evidence and action
-consequences. Terminal keeps one surface while Desktop may use Basic/Advanced disclosure; their
+consequences. Terminal keeps one surface while Desktop uses a chat-first main view with detail panels; their
 navigation and presentation may differ without changing semantic truth. Dashboard remains
 observability only.
 

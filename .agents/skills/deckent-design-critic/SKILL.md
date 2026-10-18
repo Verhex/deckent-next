@@ -35,7 +35,8 @@ If real evidence is required but absent, do not guess PASS.
 1. Product truth: no invented capability, state, metric or authority.
 2. Agentic semantics: causality, ownership, lifecycle, freshness, evidence and recovery are clear.
 3. Information hierarchy: the primary decision and next safe action are obvious.
-4. Visual language: accepted Graphite/Desktop and inherited Terminal rules, with restrained tone.
+4. Visual language: the direction in the design-dna reference (`current-owner-decisions.md`) and
+   inherited Terminal rules, with restrained tone; name the Claude Code/Codex reference behaviour.
 5. Interaction: keyboard, focus, streaming, interruption and destructive actions are coherent.
 6. Accessibility: WCAG 2.2 criteria and applicable ARIA patterns, zoom, reduced motion, forced
    colors and non-color carriers.

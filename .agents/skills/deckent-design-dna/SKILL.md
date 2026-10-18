@@ -29,7 +29,8 @@ date, established practice, current state and unavailable context7/registry evid
 documentation does not certify product compliance.
 
 For Deckent product, Desktop workspace or visual-language work, also read
-[references/current-owner-decisions.md](references/current-owner-decisions.md). Treat its accepted
+[references/current-owner-decisions.md](references/current-owner-decisions.md), the single home of the
+design direction. Treat its accepted
 and rejected directions as a decision ratchet: do not re-propose settled or rejected context unless
 the reference's reopening rule is satisfied.
 
@@ -68,11 +69,13 @@ Do not load every skill by default.
 
 ## Default design direction
 
-The accepted Desktop direction is Graphite Operations with Bricolage Grotesque and Geist Mono.
-Terminal inherits the user's font/theme and keeps Causal Workline with contextual Work Ledger.
-These are design targets, not proof of shipped Next surfaces. Precision Instrument describes
-the restrained tone: calm, formal, precise, long-session readable and dense when needed. Hierarchy comes from execution semantics. Color and
-motion communicate status or causality.
+The direction lives in [references/current-owner-decisions.md](references/current-owner-decisions.md):
+a chat-first Desktop main view with detail panels and progressive disclosure, "Kâğıt ve Mürekkep" /
+"Gece Gölü" themes, Atkinson Hyperlegible type, proven Claude Code/Codex UX and no Desktop decision
+surface before beta. Terminal inherits the user's font/theme and keeps Causal Workline with contextual
+Work Ledger. These are design targets, not proof of shipped surfaces. The tone is calm, precise and
+long-session readable; hierarchy comes from execution semantics; color and motion communicate status
+or causality.
 
 Reject as defaults:
 

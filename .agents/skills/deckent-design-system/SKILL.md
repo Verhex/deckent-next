@@ -36,7 +36,7 @@ Every shared component specifies:
 
 1. Purpose and authoritative data source
 2. Anatomy and content hierarchy
-3. Variants and disclosure: Desktop Basic/Advanced; one stable Terminal surface
+3. Variants and disclosure: Desktop main view vs detail panel (design-dna reference); one stable Terminal surface
 4. Lifecycle, freshness, permission and evidence states
 5. Keyboard behavior and optional pointer behavior where the surface supports it
 6. Focus management and accessible name/description

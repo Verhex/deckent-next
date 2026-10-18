@@ -14,18 +14,19 @@ agentic skills.
 
 ## Runtime truth
 
-The accepted Desktop direction retains Electron while decoupling runtime authority. Current
-Next does not contain the former `src/desktop` consumer: this is a target, not shipped-runtime
-proof. Inspect PLAN and actual wiring before claiming availability. A platform migration requires
+Desktop is Electron + React in the separate `deckent-desktop` repository (`contract/`, `shell/`, `ui/`);
+Next holds the typed bridge contract in `src/surfaces/core/desktop/internal/bridge-contract.ts`. Runtime
+authority stays in Next. Inspect PLAN and actual wiring of both before claiming a capability is shipped.
+A platform migration requires
 new comparative evidence and owner direction. Keep one shell and one authority rather than
 separate Classic/NOVA products. Verify current Electron security guidance before implementation;
 renderer integration cannot become a second execution or secret authority.
 
 ## Workspace model
 
-Apply the current owner decision ratchet loaded by deckent-design-dna. For the accepted Basic
-Desktop direction, prioritize one operational home plus a governed contextual detail surface;
-reserve durable routes and panes for deep or sustained work.
+Apply the direction in the design-dna reference (`current-owner-decisions.md`): one chat-first main
+view plus governed detail panels opened by progressive disclosure; reserve durable routes and panes for
+deep or sustained work. Copy proven Claude/Codex app layout behaviour rather than inventing it.
 
 Define:
 

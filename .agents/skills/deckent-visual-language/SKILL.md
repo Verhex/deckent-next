@@ -17,9 +17,10 @@ Apply the current owner decision ratchet loaded by deckent-design-dna before pre
 tone or composition candidate. A rejected family or visual grammar is not a fresh direction when
 only its name, accent or spacing changes.
 
-The accepted Desktop baseline is Graphite Operations, Bricolage Grotesque and Geist Mono.
-Terminal inherits the user's font/background/capabilities and shares semantic roles, not pixels.
-Precision Instrument describes the following tone, without reopening the accepted direction:
+The Desktop themes, type system and main-view direction are defined once in the design-dna reference
+`references/current-owner-decisions.md`; do not restate or vary them here. Terminal inherits the user's
+font/background/capabilities and shares semantic roles, not pixels. The tone, without reopening the
+accepted direction:
 
 - calm and formal rather than theatrical;
 - precise, inspectable and long-session readable;

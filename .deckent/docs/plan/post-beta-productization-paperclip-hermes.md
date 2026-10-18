@@ -58,7 +58,7 @@ Varyantlar: temiz kurulum; mevcut kuruluma bağlanma; davetli ekip üyesi; yerel
 
 ### A2 — Desktop'ta tam yönetim yolculuğu
 
-**Paperclip örneği:** görev merkezli çalışma, contextual detail, müdahale kutusu ve çıktı inceleme. Mevcut Deckent Graphite Operations / Basic-Advanced Desktop yönünü yeniden açmadan bu davranışlardan öğren.
+**Paperclip örneği:** görev merkezli çalışma, contextual detail, müdahale kutusu ve çıktı inceleme. Güncel Deckent Desktop yönünü (sohbet öncelikli ana görünüm + detay panelleri, "Kâğıt ve Mürekkep" / "Gece Gölü", Atkinson Hyperlegible; tek kaynak [tasarım kararları](../../../.agents/skills/deckent-design-dna/references/current-owner-decisions.md)) yeniden açmadan bu davranışlardan öğren.
 
 Desktop'tan iş başlatma, durumu ve bekleme nedenini anlama, doğru Run/Task/Attempt'i seçme, yetkili onay, pause/resume/cancel, gerektiğinde kullanıcı girdisi ve teslim zincirini mevcut tek typed application contract üzerinden bağla. Dashboard gözlem rolünde kalır. Renderer yeni policy, kimlik, state veya kabul otoritesi olamaz.
 
