@@ -990,7 +990,8 @@ sends no intent (old behaviour). When such a ticket settles `conflict-needs-reat
 - admits the same frozen Task (kind, work class, work input, criteria) as a single-task Run `queue-reattempt-<digest>` through normal
   Run admission as the delegating human: policy, pool, ceilings and a Run-create card are unchanged, and only the proposal path has a
   money budget gate (`budgetSemantics`), so a plain Run admission checks none, as before;
-- lets its own Run progression execute and evaluate that Run on the current base;
+- lets its own Run progression execute and evaluate that Run on the current base, and retains the accepted Attempt's patch when
+  evaluation did not (a kind without work input), as a human `patch-prepare` would;
 - enqueues the accepted Attempt as ticket `queue-reattempt-ticket-<digest>`, whose actor is the human's service principal (issuer
   `<issuer>/service`, provenance only) with `reattempt {sourceCommandId, intentCommandId, count, cause, approvedBy}`.
 `TargetQueueApplication.submitReattempt` is the one owner of that transition: the source must be the approver's settled, base-advanced
