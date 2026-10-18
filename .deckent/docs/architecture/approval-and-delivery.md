@@ -956,7 +956,13 @@ Scope-local positions count only authorized tickets; physical ordinals and other
 A ticket pins the exact accepted Attempt and retained patch. Revalidation examines every intervening commit, conservatively including
 rename endpoints, mode changes, directory prefixes and changed-then-restored paths. History paths are checked for shape only: a path the
 patch may never write (such as a tracked `.deckent/` file) changed by others is touched, and conflicts (`PATCH_BASE_ADVANCED`) only when it
-intersects a patch path; the patch's own paths keep the full exclusion rules (`PATCH_UNSAFE`). It never rebases/merges a user's branch. An allowed
+intersects a patch path; the patch's own paths keep the full exclusion rules (`PATCH_UNSAFE`). It never rebases/merges a user's branch.
+A patch that started from accepted predecessor output (`accepted-patch` edge) is cumulative against the original base, so its
+predecessor's adopted commit is intervening history (alpha.47 S5a, proven on real Git). `predecessorLineage` (R1-a, adapter-generic:
+"the target's recorded adopted version") accepts such a version only when it is exactly a predecessor's recorded adopted version,
+every path it changed is that predecessor's, and the patch holds each predecessor change with the same `before`; the head must then
+hold the predecessor's `after`. Lineage comes from trusted stores only; none (today's callers) is exactly the disjoint rule. Not wired
+yet: the queue's lineage source and the candidate before/snapshot checks still use the original-base `before`. An allowed
 drift creates a new integration command (optional `replacesCommandId` must resolve the same retained patch). Private prefix objects
 move through bounded object-only transport between private repositories, without publishing source refs. Zero configured revalidation
 budget refuses drift. An unresolved preparation/admission is not automatically retried with a new identity. A failed verification

@@ -219,4 +219,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yapılandırılmış bir slot sayısı vardır (`executionSlots`, `inFlightSlots`).
 - **İşçiler arasındaki çakışmalar teslimde yakalanır, çalışırken önlenmez.** İki işçi ya da bir işçi ve bir kişi aynı
   dosyaları düzenlerse yama tabanı kontrolünde karşılaşır. Kaynak kilidi dışarıdaki bir kişiyi ya da bir ERP yazıcısını durdurmaz.
+- **Zincirli görev, önceki görevi benimsenince çakışır.** Önceki bir görevin kabul edilmiş çıktısından başlayan görev, o
+  çıktıyı kendi değişikliğinde taşır. Önceki görevin bileti benimsendikten sonra sonraki bilet çakışma olarak reddedilir
+  (`conflict-needs-reattempt`). Yalnız kayıtlı benimsenmiş önceki çıktıyı kabul eden kural var, ama kuyruk onu henüz
+  sağlamıyor. *Yol:* zincirin yalnız son görevini teslim edin; değişikliği önceki görevlerin değişikliklerini zaten içerir
+  ve kartları hepsini gösterir.
 - **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** İşçi başına henüz maliyet ya da kalite raporu yok.

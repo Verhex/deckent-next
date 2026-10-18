@@ -219,4 +219,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   configured slot count (`executionSlots`, `inFlightSlots`).
 - **Conflicts between workers are caught at delivery, not prevented while they work.** Two workers, or a worker and a person,
   editing the same files meet at the patch base check. A source lock does not stop an outside person or an ERP writer.
+- **A chained task conflicts once its predecessor is adopted.** A task that starts from an earlier task's accepted output
+  carries that output in its own change. After the earlier task's ticket is adopted, the later ticket is refused as a
+  conflict (`conflict-needs-reattempt`). The rule that accepts exactly the recorded adopted predecessor exists, but the
+  queue does not supply it yet. *Workaround:* deliver only the last task of the chain; its change already contains the
+  earlier tasks' changes, and its cards show all of them.
 - **A worker's resource use is measured in bounded local traces only.** There is no cost or quality report per worker yet.

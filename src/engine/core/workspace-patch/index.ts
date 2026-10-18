@@ -43,6 +43,8 @@ export { prepareIntegrationSnapshot } from './internal/snapshot.js';
 
 export { createWorkspaceQueuePreparation } from './internal/queue-preparation.js';
 export { assertIntegrationBase } from './internal/git-integration-base.js';
+export { predecessorLineage } from './internal/lineage.js';
+export type { AdoptedPredecessor } from './internal/lineage.js';
 export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY } from './internal/git-queue-target.js';
 export { createWorkspaceQueueEffects } from './internal/queue-effects.js';
 export { createWorkspaceQueueAdmission } from './internal/queue-admission.js';

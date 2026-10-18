@@ -7,7 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, GitWorkspaceBroker, GitRunWorkspaceProvider, LocalOsSessionAuthority,
   applyAcceptedPredecessorPatches, listBase, readBaseBlobs, readWorkspace, diffAgainstBase, hashAlgorithmOf, type GitWorkspaceOptions } from '#adapters/index.js';
 import { integrationManifestSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, capturedWorkspacePatch, WorkspaceAdoptionApplication,
-  WorkspaceDeliveryApplication, assertIntegrationBase, SnapshotBudget, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord,
+  WorkspaceDeliveryApplication, assertIntegrationBase, assertIntegrationBefore, assertIntegrationSnapshot, prepareIntegrationSnapshot, parseBaseListing, predecessorLineage,
+  SnapshotBudget, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord,
   type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
 import type { RunSnapshot } from '#domain/index.js';
 
@@ -67,17 +68,36 @@ async function chain() {
     return app.adopt({ schemaVersion: 2, commandId: 'adopt-' + id.taskId, identity: id, deliveryCommandId: record.intent.command.commandId, targetRef });
   };
   /** The dependent's worker: starts from the accepted predecessor patch, edits, and the patch is captured against the Run's original base. */
-  const dependent = async (edit: Record<string, string>) => {
-    const broker = new GitWorkspaceBroker(startOptions), lease = await broker.allocate({ schemaVersion: 1, identity: identity('d'), baseCommit: base });
+  const dependent = async (edit: Record<string, string>, taskId = 'd') => {
+    const broker = new GitWorkspaceBroker(startOptions), lease = await broker.allocate({ schemaVersion: 1, identity: identity(taskId), baseCommit: base });
     await applyAcceptedPredecessorPatches(lease, startOptions, limits, [{ source: predecessor.identity, receipt: receiptOf(predecessor), patch: predecessor }]);
     for (const [path, text] of Object.entries(edit)) await writeFile(join(lease.workspace, path), text);
     const budget = () => new SnapshotBudget(limits, Date.now() + 10000), listing = await listBase(lease, startOptions, budget()), algorithm = hashAlgorithmOf(base);
     const after = await readWorkspace(lease.workspace, budget(), { listing, algorithm }), changed = diffAgainstBase(listing, after, algorithm);
     const before = await readBaseBlobs(lease, startOptions, budget(), changed.flatMap(path => { const entry = listing.get(path); return entry ? [[path, entry] as const] : []; }));
-    return capturedWorkspacePatch(identity('d'), source, base, changed, before, after);
+    return capturedWorkspacePatch(identity(taskId), source, base, changed, before, after);
   };
-  return { git, base, targetRef, target, predecessor, deliver, adopt, dependent, raw: (args: string[]) => exec('/usr/bin/git', ['-C', sourceRoot, ...args]).then(out => out.stdout) };
+  /** A commit written behind the product's back (plumbing, private index): the history another writer or an attacker could produce. */
+  const commitOn = async (parent: string, files: Record<string, string>, message: string) => {
+    const env = { ...process.env, GIT_INDEX_FILE: join(root, 'scratch-index') }, plumb = async (args: string[], input?: string) => {
+      const child = execFile('/usr/bin/git', ['-C', sourceRoot, ...args], { env });
+      if (input !== undefined) child.stdin!.end(input);
+      return new Promise<string>((done, fail) => { let out = ''; child.stdout!.on('data', chunk => out += chunk); child.on('close', code => code ? fail(new Error(String(code))) : done(out.trim())); });
+    };
+    await plumb(['read-tree', parent]);
+    for (const [path, text] of Object.entries(files)) await plumb(['update-index', '--add', '--cacheinfo', `100644,${await plumb(['hash-object', '-w', '--stdin'], text)},${path}`]);
+    return plumb(['commit-tree', await plumb(['write-tree']), '-p', parent, '-m', message]);
+  };
+  /** The target version's tree as the candidate preparation lists and checks it out. */
+  const checkout = async (commit: string, taskId: string) => {
+    const lease = await new GitWorkspaceBroker(startOptions).allocate({ schemaVersion: 1, identity: identity(taskId), baseCommit: commit });
+    const budget = () => new SnapshotBudget(limits, Date.now() + 10000), listing = parseBaseListing(await git('ls-tree', '-r', '-z', '-l', '--full-tree', commit) + '\0', budget());
+    return { lease, listing, read: () => readWorkspace(lease.workspace, budget(), { listing, algorithm: hashAlgorithmOf(commit), keep: new Set(['a.txt', 'b.txt']) }) };
+  };
+  return { git, base, targetRef, target, predecessor, deliver, adopt, dependent, commitOn, checkout,
+    raw: (args: string[]) => exec('/usr/bin/git', ['-C', sourceRoot, ...args]).then(out => out.stdout) };
 }
+const budget = () => new SnapshotBudget(limits, Date.now() + 10000);
 
 describe.skipIf(process.platform !== 'linux')('chained delivery (accepted-patch edge)', () => {
   it('SPIKE: the dependent patch is cumulative against the original base and conflicts once the predecessor is adopted', async () => {
@@ -93,5 +113,80 @@ describe.skipIf(process.platform !== 'linux')('chained delivery (accepted-patch 
     // Today: the adopted predecessor's own commit is the intervening history that refuses the dependent.
     await expect(assertIntegrationBase(f.raw, d, adopted.toCommit, new SnapshotBudget(limits, Date.now() + 10000))).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
     await expect(f.target.observe(d)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    // Past the base check, the candidate checks compare the dependent's original-base `before` with the adopted tree and refuse too.
+    const tip = await f.checkout(adopted.toCommit, 'tip');
+    expect(() => assertIntegrationBefore(tip.listing, 'sha1', d)).toThrow(expect.objectContaining({ code: 'PATCH_CORRUPT' }));
+    expect(() => prepareIntegrationSnapshot(tip.listing, 'sha1', d, new Map())).toThrow(expect.objectContaining({ code: 'PATCH_CONFLICT' }));
+    const initial = await tip.read();
+    expect(() => prepareIntegrationSnapshot(tip.listing, 'sha1', d, initial)).toThrow(expect.objectContaining({ code: 'PATCH_CONFLICT' }));
+    // The candidate after applying the dependent on the adopted tree: `a.txt` no longer differs, so the changed path set mismatches.
+    expect(() => assertIntegrationSnapshot(tip.listing, 'sha1', d, new Map(initial).set('b.txt', d.changes[1]!.after!)))
+      .toThrow(expect.objectContaining({ code: 'PATCH_CONFLICT' }));
+  });
+
+  it('known-limits workaround: the last task of the chain delivers alone, and its delivery holds the predecessor change too', async () => {
+    const f = await chain(), d = await f.dependent({ 'b.txt': 'b dep\n' });
+    const delivered = await f.deliver(d), commit = delivered.intent.plan.commit;
+    expect(await f.git('rev-parse', commit + '^')).toBe(f.base);
+    expect([await f.git('show', commit + ':a.txt'), await f.git('show', commit + ':b.txt')]).toEqual(['a pred', 'b dep']);
+  });
+
+  describe('R1-a lineage rule: only the exact recorded adopted predecessor version is accepted', () => {
+    const adoptedChain = async () => {
+      const f = await chain(), d = await f.dependent({ 'b.txt': 'b dep\n' }), adopted = await f.adopt(await f.deliver(f.predecessor));
+      return { f, d, version: adopted.toCommit, lineage: [{ adoptedVersion: adopted.toCommit, changes: f.predecessor.changes }] };
+    };
+    it('accepts the adopted predecessor commit, also behind later disjoint history, and expects its after identity', async () => {
+      const { f, d, version, lineage } = await adoptedChain();
+      await expect(assertIntegrationBase(f.raw, d, version, budget(), lineage)).resolves.toBeUndefined();
+      const later = await f.commitOn(version, { 'c.txt': 'unrelated\n' }, 'disjoint');
+      await expect(assertIntegrationBase(f.raw, d, later, budget(), lineage)).resolves.toBeUndefined();
+      // Not yet adopted (target still at the original base): the dependent's own `before` is expected, as today.
+      await expect(assertIntegrationBase(f.raw, d, f.base, budget(), lineage)).resolves.toBeUndefined();
+      // Zero lineage is exactly today's rule.
+      await expect(assertIntegrationBase(f.raw, d, later, budget())).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    });
+    it('refuses an unrelated intervening commit, even one writing the predecessor content byte for byte', async () => {
+      const { f, d, version, lineage } = await adoptedChain();
+      const lookalike = await f.commitOn(f.base, { 'a.txt': 'a pred\n' }, 'same content, not the adopted version');
+      expect(lookalike).not.toBe(version);
+      await expect(assertIntegrationBase(f.raw, d, lookalike, budget(), lineage)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+      // A later commit on a predecessor path (changed-then-restored included) is still stale input.
+      const touched = await f.commitOn(version, { 'a.txt': 'a other\n' }, 'touch'), restored = await f.commitOn(touched, { 'a.txt': 'a pred\n' }, 'restore');
+      await expect(assertIntegrationBase(f.raw, d, restored, budget(), lineage)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+      const own = await f.commitOn(version, { 'b.txt': 'b other\n' }, 'own path');
+      await expect(assertIntegrationBase(f.raw, d, own, budget(), lineage)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    });
+    it('refuses a tampered predecessor output: the recorded version does not hold the recorded predecessor change', async () => {
+      const { f, d, version } = await adoptedChain();
+      const tampered = await f.commitOn(f.base, { 'a.txt': 'a evil\n' }, 'tampered');
+      await expect(assertIntegrationBase(f.raw, d, tampered, budget(), [{ adoptedVersion: tampered, changes: f.predecessor.changes }]))
+        .rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+      const forged = f.predecessor.changes.map(change => ({ ...change, after: patchFile(Buffer.from('a evil\n'), '100644') }));
+      await expect(assertIntegrationBase(f.raw, d, version, budget(), [{ adoptedVersion: version, changes: forged }])).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    });
+    it('refuses a predecessor adopted at a different tree or as a different version', async () => {
+      const { f, d, version, lineage } = await adoptedChain();
+      const wider = await f.commitOn(f.base, { 'a.txt': 'a pred\n', 'extra.txt': 'more\n' }, 'wider tree');
+      await expect(assertIntegrationBase(f.raw, d, wider, budget(), [{ adoptedVersion: wider, changes: f.predecessor.changes }]))
+        .rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+      const other = await f.commitOn(f.base, { 'a.txt': 'a pred\n' }, 'same tree, other version');
+      expect(await f.git('rev-parse', other + '^{tree}')).toBe(await f.git('rev-parse', version + '^{tree}'));
+      await expect(assertIntegrationBase(f.raw, d, other, budget(), lineage)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    });
+    it('refuses a dependent that does not carry the predecessor change it claims to have started from', async () => {
+      const { f, version, lineage } = await adoptedChain();
+      const reverted = await f.dependent({ 'a.txt': 'a base\n', 'b.txt': 'b dep\n' }, 'e');
+      expect(reverted.changes.map(change => change.path)).toEqual(['b.txt']);
+      await expect(assertIntegrationBase(f.raw, reverted, version, budget(), lineage)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    });
+    it('refuses malformed lineage: the same version or path claimed twice', () => {
+      const change = { path: 'a.txt', before: null, after: patchFile(Buffer.from('x'), '100644') };
+      const patch = { changes: [change] } as unknown as WorkspacePatch;
+      expect(() => predecessorLineage(patch, [{ adoptedVersion: 'a'.repeat(40), changes: [change] }, { adoptedVersion: 'a'.repeat(40), changes: [] }]))
+        .toThrow(expect.objectContaining({ code: 'PATCH_CORRUPT' }));
+      expect(() => predecessorLineage(patch, [{ adoptedVersion: 'a'.repeat(40), changes: [change] }, { adoptedVersion: 'b'.repeat(40), changes: [change] }]))
+        .toThrow(expect.objectContaining({ code: 'PATCH_CORRUPT' }));
+    });
   });
 });
