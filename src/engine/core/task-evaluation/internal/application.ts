@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { detectWorkerQuota } from './quota.js';
 import { readWorkspaceChange } from './workspace-change.js';
 import { createHash } from 'node:crypto';
-import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport,
+import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport, workerReportEvidence,
   bindTaskAcceptance, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
   type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal, type OperationEvidenceBinding } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
@@ -180,8 +180,10 @@ export class TaskEvaluationApplication {
     const notes = report.status === 'reported' ? report.report.sharedNotes : undefined;
     const sharedNotes = notes?.length ? { count: notes.length, digest: createHash('sha256').update(JSON.stringify(notes)).digest('hex') } : undefined;
     const workspaceChange = workerExit ? undefined : await readWorkspaceChange(task.workInput, identity, dispatch, this.artifacts, this.limits.maxTotalBytes);
+    // R5 (owner D5a): a work task's clean exit records its report status; the domain fails a missing/invalid report, typed.
+    const reportEvidence = task.workInput && !workerExit && dispatch.terminal.exitCode === 0 ? { report: workerReportEvidence(report) } : {};
     const recovery = await evaluationRecovery(this.store, run, identity, dispatch, model, criteria);
-    const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...proposed, ...recovery, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}), ...(workspaceChange ? { workspaceChange } : {}) }));
+    const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...proposed, ...recovery, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}), ...(workspaceChange ? { workspaceChange } : {}), ...reportEvidence }));
     proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, evaluation, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
     const restriction = await this.unknownPolicy?.decide(evaluation, principal);
     if (restriction !== undefined && restriction !== 'wait' && restriction !== 'fail') throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
