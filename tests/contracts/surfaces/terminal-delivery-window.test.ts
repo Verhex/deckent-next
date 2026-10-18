@@ -565,7 +565,9 @@ describe('read-only diff view in the delivery window', () => {
   ];
   async function ready(options: PortOptions = {}) {
     const h = harness({ diffs, viewFiles: (options.diffs ?? diffs).map(diff => diff.path), ...options }); await admit(h); h.set(awaiting());
-    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready'); await press(h, CTRL_O);
+    // Behind the composer the window shows the "Ctrl+O to decide" line, not its keys; they show once it holds the keyboard and is armed.
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready'); await press(h, CTRL_O);
+    await until(() => frame(h).includes(WORDS.hints), 'window keys');
     return h;
   }
   it('Enter opens the selected file; j/k and arrows choose and scroll; Esc goes back to the list and then closes only on the next Esc; nothing is delivered', async () => {

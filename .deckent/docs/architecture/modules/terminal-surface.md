@@ -146,7 +146,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   input owner (`arming.ts`; each key while unarmed restarts the wait, a focus change or a new card instance re-arms; the hint row shows the
   keys only once armed — `terminal.decision.arming` / `.ignored` before — so a person and a PTY test wait on the same visible signal, CI 2026-10-18); keys of one stdin read
   are gathered and looked at after the read — one event is a key press; several (escape sequence + letter, "text⌫y") are dropped whole unless
-  the owner takes plain text right now (`burstText`: only an open reason field), and then only as text, never a decision; a paste consumer stays active (paste never decides); Ctrl+O in a read drops it. `DecisionCard` lists its
+  the owner takes plain text right now (`burstText`: only an open reason field), and then only as text, never a decision — except a read of
+  navigation keys only (↑↓, PgUp/PgDn, Home/End without modifiers: a held key or coalesced arrows), delivered as ordinary keys because they
+  only scroll or move the highlight and never decide (armed and focused still required); a paste consumer stays active (paste never decides); Ctrl+O in a read drops it. `DecisionCard` lists its
   answers through the shared question contract (`question.tsx`: ↑↓/j/k, 1–9, Enter, Esc, option letters; multi: Space) with the highlight on
   No; session/always only as the service offers (G6). In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
   mounted). Proof: `TERMINAL-SABIT-DUZEN-2026-10-18/race-*.txt` (failing first), `terminal-decision-race.test.ts`. While a card waits behind the composer (after Ctrl+O back) it shows `tui.focus.decide`.

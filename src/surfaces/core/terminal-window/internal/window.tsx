@@ -86,7 +86,8 @@ export interface WindowProps {
   readonly priority?: number;
   /** Keys first go to the owner; `true` means handled. Unhandled scroll keys (arrows, page, first and last row) move the body. A decision
    * window delivers keys one stdin read at a time: a read that produced several key events comes with `burst` set, event by event, and the
-   * owner must treat them as text at most (never a decision); the first one it does not take ends the burst and re-arms the window. */
+   * owner must treat them as text at most (never a decision); the first one it does not take ends the burst and re-arms the window. A read
+   * of navigation keys only (↑↓, page, first and last row; no modifiers) comes as ordinary keys: an owner must never decide on those keys. */
   readonly onInput?: (input: string, key: Key, meta?: Readonly<{ burst: boolean }>) => boolean | void;
   /** Pasted text while this decision window holds the keyboard (never a decision; the owner may take it as text). */
   readonly onPaste?: (text: string) => void;
