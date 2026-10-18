@@ -48,7 +48,8 @@ export class DispatchApplication {
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: grant.record });
     const output = await retainOutput(this.artifacts, request, result, await this.supervisor.collectOutputFiles?.(request) ?? []);
     await this.store.retainDispatchOutput(claim, output);
-    const record = await this.store.finishDispatch(claim, { handle: result.handle, ...(result.container ? { container: result.container } : {}), exitCode: result.result.exitCode, ...(result.result.signal === undefined ? {} : { signal: result.result.signal }), interrupted: result.interrupted });
+    const record = await this.store.finishDispatch(claim, { handle: result.handle, ...(result.container ? { container: result.container } : {}), exitCode: result.result.exitCode, ...(result.result.signal === undefined ? {} : { signal: result.result.signal }), interrupted: result.interrupted,
+      ...(result.interrupted ? { interruptCause: signal?.aborted ? signal.reason === 'inactivity' ? 'inactivity' as const : 'cancel' as const : 'deadline' as const } : {}) });
     return Object.freeze({ kind: 'terminal', record });
   }
   async reconcile(input: unknown, credential?: unknown): Promise<DispatchOutcome> {

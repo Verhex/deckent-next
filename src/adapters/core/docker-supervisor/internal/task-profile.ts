@@ -40,3 +40,12 @@ export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   // Project-relative binds stay profile data; trusted composition resolves them to host paths (resolveDockerReadOnlyMounts).
   return Object.freeze({ argv, nativeSubscription, readOnlyMounts, options: Object.freeze(options) });
 }
+/** Effect reach of a frozen profile for automatic re-runs (delivery re-attempt, R3 stall retry): a profile this adapter resolves runs with
+ * `--network none` and reaches only its workspace and the gateway's model tunnel; anything else is unknown and never re-run. */
+export function classifyDockerTaskEffects(profile: ExecutionProfileDefinition): 'workspace-only' | 'unknown' {
+  try { resolveDockerTaskProfile(profile); return 'workspace-only'; } catch { return 'unknown'; }
+}
+/** R3: the deadline a silence policy must stop before, for profiles with a host-observed liveness channel (the native gateway); else null. */
+export function dockerTaskSilenceDeadline(profile: ExecutionProfileDefinition): number | null {
+  try { const resolved = resolveDockerTaskProfile(profile); return resolved.nativeSubscription ? resolved.options.deadlineMs : null; } catch { return null; }
+}

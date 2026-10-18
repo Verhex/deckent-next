@@ -348,6 +348,7 @@
   "monitor.blocker.cancellationPending": "iptal bekleniyor",
   "monitor.blocker.notAdmitted": "henüz kabul edilmedi",
   "monitor.blocker.unknown": "neden bilinmiyor",
+  "monitor.blocker.workerSilent": "işçi sessiz (olay yok)",
   "monitor.phase.pending": "sırada",
   "monitor.phase.active": "çalışıyor",
   "monitor.phase.evaluating": "değerlendiriliyor",

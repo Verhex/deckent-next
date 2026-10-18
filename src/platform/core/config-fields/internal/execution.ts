@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import quotaDefaults from './quota-policy.json' with { type: 'json' };
+import stallDefaults from './stall-policy.json' with { type: 'json' };
 import scanAdmission from './secret-gate-admission.json' with { type: 'json' };
 /** Required runtime capability settings; install/config composition supplies policy values. */
 export const DOCKER_EXECUTION_SETTINGS = z.object({
@@ -68,3 +69,8 @@ export const RUN_PARKING_SETTINGS = z.object({ schemaVersion: z.literal(1),
 
 export const QUOTA_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), maxResumes: z.number().int().nonnegative().safe().default(quotaDefaults.maxResumes),
   maxWaitMs: z.number().int().positive().safe().default(quotaDefaults.maxWaitMs) }).strict();
+/** R3 (owner D4a): installation silence policy for watchable workers (frozen per task at admission; a work class may override warn/stop),
+ * at most `maxRetries` automatic re-runs of a stalled Attempt after `backoffMs`. Warn must come before stop. */
+export const STALL_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), warnAfterMs: z.number().int().positive().safe().default(stallDefaults.warnAfterMs),
+  stopAfterMs: z.number().int().positive().safe().default(stallDefaults.stopAfterMs), maxRetries: z.number().int().nonnegative().safe().default(stallDefaults.maxRetries),
+  backoffMs: z.number().int().nonnegative().safe().default(stallDefaults.backoffMs) }).strict().refine(value => value.warnAfterMs < value.stopAfterMs, { path: ['warnAfterMs'], message: 'WORKER_INACTIVITY_POLICY_INVALID' });

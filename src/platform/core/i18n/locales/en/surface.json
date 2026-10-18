@@ -348,6 +348,7 @@
   "monitor.blocker.cancellationPending": "cancellation pending",
   "monitor.blocker.notAdmitted": "not admitted yet",
   "monitor.blocker.unknown": "reason unknown",
+  "monitor.blocker.workerSilent": "worker silent (no events)",
   "monitor.phase.pending": "pending",
   "monitor.phase.active": "active",
   "monitor.phase.evaluating": "evaluating",

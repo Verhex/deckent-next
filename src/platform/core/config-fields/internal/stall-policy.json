@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "warnAfterMs": 180000,
+  "stopAfterMs": 600000,
+  "maxRetries": 1,
+  "backoffMs": 30000
+}

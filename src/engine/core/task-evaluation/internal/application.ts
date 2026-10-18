@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { detectWorkerQuota } from './quota.js';
 import { readWorkspaceChange } from './workspace-change.js';
 import { createHash } from 'node:crypto';
-import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport, workerReportEvidence,
+import { attemptIdentitySchema, counterSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport, workerReportEvidence, workerReportRefusal,
   bindTaskAcceptance, taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
   type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal, type OperationEvidenceBinding } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
@@ -19,6 +19,9 @@ import { evaluateHandoff, type HandoffStartRecord } from '#engine/core/handoff-o
 import { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 import { evaluationRecovery } from './recovery.js';
 import { operationEvidenceBinding } from './operation-binding.js';
+import type { ReattemptEffects } from '#engine/core/workspace-patch/index.js';
+/** R3 retry inputs: the installation backoff and the one adapter effect classifier (shared with the delivery re-attempt). */
+export interface StallRecovery { readonly backoffMs: number; effects(profile: RunSnapshot['execution']['tasks'][number]['profile']): ReattemptEffects }
 
 export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, expectedRevision: counterSchema }).strict();
@@ -51,7 +54,8 @@ export class TaskEvaluationApplication {
     private readonly authorization: TaskEvaluationAuthorization, private readonly evaluator: TaskTerminalEvaluator,
     private readonly artifacts: Pick<ArtifactStore, 'read'>, private readonly limits: EvaluationEvidenceLimits,
     private readonly lifecycle: { now: () => number; timeoutMs: number }, private readonly unknownPolicy?: UnknownEvaluationPolicy,
-    private readonly preparePatch?: (identity: AttemptIdentity) => Promise<void>, private readonly quotaRecovery?: { maxResumes: number; maxWaitMs: number }) {}
+    private readonly preparePatch?: (identity: AttemptIdentity) => Promise<void>, private readonly quotaRecovery?: { maxResumes: number; maxWaitMs: number },
+    private readonly stallRecovery?: StallRecovery) {}
   async execute(input: unknown, credential?: unknown) {
     const command = taskEvaluationCommandSchema.parse(input), principal = await authenticate(this.verifier, credential, command.identity.scopeId);
     await this.authorization.authorize(command.identity, principal);
@@ -107,7 +111,8 @@ export class TaskEvaluationApplication {
       if (snapshot.identity.scopeId !== identity.scopeId || snapshot.identity.runId !== identity.runId
         || snapshot.identity.layoutRevision !== identity.layoutRevision || snapshot.revision !== stored.expectedRevision + 1
         || !snapshot.bindings.some(binding => sameAttemptIdentity(binding.identity, identity)
-          && binding.observedRevision === stored.evaluation.attemptRevision + (stored.evaluation.quota ? 1 : 0))) throw new RunStoreError('RUN_STORE_CORRUPT');
+          && binding.observedRevision === stored.evaluation.attemptRevision + (stored.evaluation.quota ? 1 : 0))
+          && !(stored.evaluation.stall && (snapshot.previousBindings ?? []).some(binding => sameAttemptIdentity(binding.identity, identity)))) throw new RunStoreError('RUN_STORE_CORRUPT');
       assertRunExecution(snapshot.graph, snapshot.execution);
       return replay;
     }
@@ -116,12 +121,22 @@ export class TaskEvaluationApplication {
     const attempt = await this.store.load(identity.scopeId, identity.attemptId);
     let dispatch = await this.store.loadBoundDispatch(identity);
     if (!attempt || !dispatch?.terminal || !dispatch.output) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
-    assertTaskEvaluationReady(run, attempt, dispatch, command.expectedRevision, identity, this.lifecycle.now());
+    assertTaskEvaluationReady(run, attempt, dispatch, command.expectedRevision, identity, this.lifecycle.now(), !!this.stallRecovery);
     const task = run.graph.tasks.find(value => value.id === identity.taskId);
     if (!task) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
     // A typed input request is consumed only from complete, exact-attempt retained output after a clean host exit.
     const manifestEvaluation = { schemaVersion: 1 as const, evaluationId: command.commandId, identity, graphRevision: run.graph.revision,
       attemptRevision: attempt.revision, criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown' as const, evidenceIds: ['dispatch-output'] })) };
+    // R3: readiness admits only a watchdog stop here; its output is partial and is never read. Unproven effects keep today's evaluation-not-ready
+    // hold (human/reconciliation).
+    if (dispatch.terminal.interrupted === true && dispatch.terminal.interruptCause === 'inactivity') {
+      if (!this.stallable(run, identity)) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
+      const stopped = await this.workerModel(run, identity);
+      const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...manifestEvaluation, ...(stopped ? { model: stopped } : {}), stall: { cause: 'inactivity', backoffMs: this.stallRecovery!.backoffMs } }));
+      proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, evaluation, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
+      await this.authorization.authorize(identity, principal);
+      return this.store.commitTaskEvaluation({ commandId: command.commandId, actor, expectedRevision: command.expectedRevision, evaluation, dispatch, now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
+    }
     await verifyDispatchEvaluationEvidence(manifestEvaluation, dispatch.request, [{ evidenceId: 'dispatch-output', receipt: dispatch.output }],
       { async readDispatch() { return dispatch; } }, this.artifacts, this.limits);
     const retained = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);
@@ -182,8 +197,12 @@ export class TaskEvaluationApplication {
     const workspaceChange = workerExit ? undefined : await readWorkspaceChange(task.workInput, identity, dispatch, this.artifacts, this.limits.maxTotalBytes);
     // R5 (owner D5a): a work task's clean exit records its report status; the domain fails a missing/invalid report, typed.
     const reportEvidence = task.workInput && !workerExit && dispatch.terminal.exitCode === 0 ? { report: workerReportEvidence(report) } : {};
+    // D5a: a missing/invalid report shares the bounded R3 retry (a substituted model fails as before).
+    const refusal = reportEvidence.report ? workerReportRefusal(reportEvidence.report) : null;
+    const stall = (refusal === 'report-missing' || refusal === 'report-invalid') && model?.verdict !== 'substituted' && this.stallable(run, identity)
+      ? { stall: { cause: refusal, backoffMs: this.stallRecovery!.backoffMs } } : {};
     const recovery = await evaluationRecovery(this.store, run, identity, dispatch, model, criteria);
-    const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...proposed, ...recovery, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}), ...(workspaceChange ? { workspaceChange } : {}), ...reportEvidence }));
+    const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...proposed, ...recovery, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}), ...(workspaceChange ? { workspaceChange } : {}), ...reportEvidence, ...stall }));
     proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, evaluation, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
     const restriction = await this.unknownPolicy?.decide(evaluation, principal);
     if (restriction !== undefined && restriction !== 'wait' && restriction !== 'fail') throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
@@ -192,6 +211,14 @@ export class TaskEvaluationApplication {
       expectedRevision: command.expectedRevision, evaluation, dispatch,
       ...(restriction === 'fail' ? { unknownDisposition: 'fail' as const } : {}),
       now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
+  }
+  /** R3 effect gate: a frozen stall policy, settled effects, a profile the adapter proves workspace-only and no criterion that reads business
+   * operation settlements (an ERP/CRM effect stays with reconciliation). Anything uncertain is never re-run. */
+  private stallable(run: RunSnapshot, identity: AttemptIdentity): boolean {
+    const entry = run.execution.tasks.find(row => row.taskId === identity.taskId), task = run.graph.tasks.find(row => row.id === identity.taskId);
+    if (!this.stallRecovery || !entry?.stall || !task || run.progress.find(row => row.taskId === identity.taskId)?.unresolvedEffects !== false
+      || task.acceptanceCriteria.some(id => run.execution.criteria.find(row => row.criterionId === id)?.evaluator.implementation.id === 'operation-evidence')) return false;
+    try { return this.stallRecovery.effects(entry.profile) === 'workspace-only'; } catch { return false; }
   }
   /**
    * Worker model evidence of a pinned attempt (WORKER-CURRENCY-2, owner rule A; Jev 933e43f2, 58ffe1c9): the host-sealed verdict from the

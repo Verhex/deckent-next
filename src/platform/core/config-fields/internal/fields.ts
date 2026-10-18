@@ -1,6 +1,6 @@
 import { TARGET_QUEUE_SETTINGS } from './target-queue.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
-import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS } from './execution.js';
+import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS, STALL_RECOVERY_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { RESOURCE_OBSERVATION_SETTINGS } from './resource-observation.js';
 import { z } from 'zod';
@@ -107,6 +107,7 @@ export const CONFIG_FIELDS = Object.freeze({
   runRuntime: field('config.field.runRuntime', { state: 'bound', consumers: ['src/composition/core/run-progression'] }, 'restart', z.object({
     parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
     quotaRecovery: QUOTA_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
+    stallRecovery: STALL_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
     maxConcurrentRuns: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),

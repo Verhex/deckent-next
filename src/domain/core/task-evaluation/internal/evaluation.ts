@@ -4,7 +4,7 @@ import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './accep
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
-import { runSnapshotSchema, evaluationCriterionSchema } from '#domain/core/run/index.js';
+import { runSnapshotSchema, evaluationCriterionSchema, STALL_CAUSES } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema, workerReportEvidenceSchema, workerReportRefusal } from '#domain/core/worker-event/index.js';
 const modelText = z.string().min(1).max(256);
 /**
@@ -30,6 +30,8 @@ export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), eval
   workspaceChange: z.object({ schemaVersion: z.literal(1), patchDigest: z.string().regex(/^[a-f0-9]{64}$/), changedFiles: counterSchema }).strict().readonly().optional(), model: taskEvaluationModelSchema.optional(),
   /** R5 (owner D5a): host-read report status of a work task's clean exit; absent on legacy records, needs-input, quota and other exits. */
   report: workerReportEvidenceSchema.optional(),
+  /** R3 (owner D4a/D5a): the application proved this Attempt retryable (settled, workspace-only); the run owner retries or fails it. */
+  stall: z.object({ cause: z.enum(STALL_CAUSES), backoffMs: counterSchema }).strict().readonly().optional(),
   evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional(),
   returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch', 'criterion-evidence']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
@@ -72,6 +74,10 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
   const profileGate = inspectAcceptanceConclusion(run.data, normalized);
   const gate = taskModelConclusion(normalized.model);
   if ((!task.workInput && (normalized.workspaceChange || normalized.report)) || (normalized.workerExit && normalized.report)) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
+  // A stall names its exact cause: silence carries no report or patch evidence; a report cause is the report's own refusal.
+  const stall = normalized.stall;
+  if (stall && (normalized.workerExit || normalized.quota || (stall.cause === 'inactivity' ? normalized.report || normalized.workspaceChange
+    || criteria.some(value => value.verdict !== 'unknown') : !normalized.report || workerReportRefusal(normalized.report) !== stall.cause))) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
   const change = task.workInput ? normalized.workspaceChange ? normalized.workspaceChange.changedFiles > 0 || task.workInput.noChangeAllowed === true ? 'pass' : 'fail' : 'unknown' : 'pass';
   // R5 floor (owner D5a), independent of any bound work class: a work task's clean exit without a valid report fails, typed.
   const reported = normalized.report ? workerReportRefusal(normalized.report) : null;

@@ -154,7 +154,7 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
     provider: evaluated?.provider ?? pin?.provider ?? record?.profile.adapterId ?? null, model,
     sealedAtMs: sealed && sealed.identity.attemptId === attemptId ? sealed.sealedAt : null,
     dispatch: record ? Object.freeze({ launch: record.launch, grantedAtMs: record.grant?.grantedAt ?? null, outputRecorded: !!record.output, patchRecorded: !!record.patch,
-      terminal: record.terminal ? Object.freeze({ ...(record.terminal.container ? { container: record.terminal.container } : {}), exitCode: record.terminal.exitCode, signal: record.terminal.signal ?? null, interrupted: record.terminal.interrupted }) : null }) : null });
+      terminal: record.terminal ? Object.freeze({ ...(record.terminal.container ? { container: record.terminal.container } : {}), exitCode: record.terminal.exitCode, signal: record.terminal.signal ?? null, interrupted: record.terminal.interrupted, interruptCause: record.terminal.interruptCause ?? null }) : null }) : null });
 }
 
 /** Current approvals retain decided/expired history. Pending requests and newest expiry lead the bounded page;

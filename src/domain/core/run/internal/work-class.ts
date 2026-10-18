@@ -38,6 +38,9 @@ const legacyRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: i
 const currentRegistrySchema = z.object({ schemaVersion: z.literal(2), revision: identitySchema,
   classes: z.array(z.object({ id: identitySchema, defaultEffort: z.enum(REASONING_EFFORTS),
     parentClassId: identitySchema.optional(), acceptanceProfile: workClassAcceptanceProfileSchema, proposalAdmission: proposalAdmission.optional(),
+    /** R3 (owner D4a): this class's silence policy, over the installation default; admission refuses it unless it stops before the deadline. */
+    inactivity: z.object({ warnAfterMs: z.number().int().positive().safe(), stopAfterMs: z.number().int().positive().safe() }).strict()
+      .refine(value => value.warnAfterMs < value.stopAfterMs).readonly().optional(),
   }).strict().readonly()).min(1).max(256).readonly(),
   bindings: z.array(z.object({ kind: identitySchema, classId: identitySchema,
     override: z.object({ previousClassId: identitySchema }).strict().readonly().optional(),
