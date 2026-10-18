@@ -27,12 +27,14 @@ export function LinesWindow({ title, lines, hints, position, onClose }: { readon
 /**
  * A question window: a single typed `y` answers yes, `n` no (Ctrl/Alt+y and pasted keys answer nothing); Esc, Enter and Ctrl+C give no answer (null) — for a trust question nothing is recorded then.
  * One answer only; later keys are ignored. Arrows and page keys scroll a long body.
+ * A decision window (G2-3, analysis 2026-10-18): MCP trust, provider disconnect and profile apply get the approval cards' key-race guard — keys
+ * count only after the quiet arming period (arming.ts), and a burst or pasted read never answers — so a `y` typed before it appeared is swallowed.
  */
 export function QuestionWindow({ title, lines, hints, position, onAnswer }: { readonly title: string; readonly lines: readonly PanelLine[]; readonly hints: string;
   readonly position: string; readonly onAnswer: (answer: boolean | null) => void }) {
   const known = useHumanTextSecrets(), answered = useRef(false);
   const answer = (value: boolean | null) => { if (answered.current) return; answered.current = true; onAnswer(value); };
-  return <Window title={[span(title)]} body={panelWindowLines(lines, known)} hints={hints} position={position} onClose={() => answer(null)}
+  return <Window title={[span(title)]} body={panelWindowLines(lines, known)} hints={hints} position={position} decision onClose={() => answer(null)}
     onInput={(input, key) => {
       if (key.return || (key.ctrl && input === 'c')) { answer(null); return true; }
       if (key.escape) return false; // the window's close gives no answer
