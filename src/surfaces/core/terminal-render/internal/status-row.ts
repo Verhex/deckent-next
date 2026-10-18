@@ -96,8 +96,8 @@ export function worklineStatusSegments(input: WorklineStatusInput): StatusSegmen
       ...(input.provider ? [{ ...segment('provider', `(${input.provider})`, 'provider', 60), group: 'model-provider' }] : [])] : []),
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
     ...(input.busy && input.cancellable ? [segment('cancel', input.labels.cancelHint ?? NEUTRAL_CANCEL_HINT, 'muted', 45)] : []),
-    // Full access is a standing warning (T3 L4, owner 2026-10-07: mark, word and the warning tone together, bold); a derived source marker also
-    // keeps its mode, which names the full-access exception.
+    // Full access stays visible (T3 L4: mark, word and the warning tone together, bold); owner 2026-10-18: a calm mark, not an alarm — full-auto
+    // has its own colour. A derived source marker also keeps its mode, which names the full-access exception.
     ...(mode ? [mode === 'full-access' ? Object.freeze({ ...segment('mode', modeText(input, mode), 'warning', 95, false), bold: true })
       : segment('mode', modeText(input, mode), mode === 'standart' ? 'muted' : 'modeIndicator', 55, !input.selfSource)] : []),
     ...(input.selfSource && input.labels.selfSourceFloor ? [segment('self-source', input.labels.selfSourceFloor, 'warning', 96, false)] : []),

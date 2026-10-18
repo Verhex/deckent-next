@@ -6,19 +6,23 @@ import type { WorkLedgerEntry } from './work-ledger.js';
  * starting a new epoch (a fresh `Static`) that holds only rows appended after that commit.
  */
 export type LedgerRow = Readonly<{ seq: number; entry: WorkLedgerEntry }>;
-export type LedgerBuffer = Readonly<{ epoch: number; nextSeq: number; pending: readonly LedgerRow[]; tail: readonly WorkLedgerEntry[] }>;
+/** `history`: the newest rows of the conversation since the last `/clear`, bounded, for the full-window chat viewport (TERMINAL-SABIT-DUZEN),
+ * which draws them itself instead of Ink `Static`; the inline layout ignores it. */
+export type LedgerBuffer = Readonly<{ epoch: number; nextSeq: number; pending: readonly LedgerRow[]; tail: readonly WorkLedgerEntry[]; history: readonly LedgerRow[] }>;
 
 export const LEDGER_TAIL_LIMIT = 200;
 export const LEDGER_COMPACT_AT = 64;
 
-export const EMPTY_LEDGER: LedgerBuffer = Object.freeze({ epoch: 0, nextSeq: 0, pending: Object.freeze([]), tail: Object.freeze([]) });
+export const EMPTY_LEDGER: LedgerBuffer = Object.freeze({ epoch: 0, nextSeq: 0, pending: Object.freeze([]), tail: Object.freeze([]), history: Object.freeze([]) });
 
-export function appendLedger(buffer: LedgerBuffer, entries: readonly WorkLedgerEntry[], tailLimit = LEDGER_TAIL_LIMIT): LedgerBuffer {
+/** `historyLimit`: rows the full-window viewport can scroll back through (`terminal.viewportRows`); 0 keeps no history (inline layout). */
+export function appendLedger(buffer: LedgerBuffer, entries: readonly WorkLedgerEntry[], tailLimit = LEDGER_TAIL_LIMIT, historyLimit = 0): LedgerBuffer {
   if (entries.length === 0) return buffer;
   const rows = entries.map((entry, index) => Object.freeze({ seq: buffer.nextSeq + index, entry }));
-  const tail = [...buffer.tail, ...entries];
+  const tail = [...buffer.tail, ...entries], history = historyLimit > 0 ? [...buffer.history, ...rows] : [];
   return Object.freeze({ epoch: buffer.epoch, nextSeq: buffer.nextSeq + entries.length, pending: Object.freeze([...buffer.pending, ...rows]),
-    tail: Object.freeze(tail.length > tailLimit ? tail.slice(-tailLimit) : tail) });
+    tail: Object.freeze(tail.length > tailLimit ? tail.slice(-tailLimit) : tail),
+    history: Object.freeze(history.length > historyLimit ? history.slice(-historyLimit) : history) });
 }
 
 /** `printed` is the pending length observed at a commit; rows appended after that commit stay pending. */

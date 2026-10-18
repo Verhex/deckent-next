@@ -227,10 +227,12 @@
       "schemaVersion": 1
     },
     "clearOnStart": true,
+    "layout": "fullscreen",
     "maxTrackedRuns": 128,
     "persistHistory": true,
     "serviceStartTimeoutMs": 20000,
-    "theme": "auto"
+    "theme": "auto",
+    "viewportRows": 2000
   },
   "toolchains": {
     "currency": {

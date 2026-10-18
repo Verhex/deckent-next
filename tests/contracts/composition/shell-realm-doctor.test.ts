@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { inspectConfiguredShellRealm } from '#composition/core/agent-turn/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
@@ -49,4 +49,34 @@ it('doctor shows the realm in its human lines in the product\'s own sandbox word
   const unwired = capture();
   await runKernelCommand(['doctor', '--json'], { root: f.project, env: f.env, stdout: unwired.sink });
   expect(JSON.parse(unwired.lines.join(''))).toMatchObject({ shellRealm: null });
+});
+
+it('doctor runs one command through the selected sandbox with the turn\'s own layout and names a failure once (SANDBOX-SPAWN 2026-10-18)', async () => {
+  // Every state root exists (the global one outside the project), so the self-test may run; it creates nothing.
+  const f = await fixture(), out = capture(), stateDir = join(f.project, '..', 'global'), env = { ...f.env, DECKENT_GLOBAL_HOME: stateDir };
+  await Promise.all([stateDir, join(f.project, '.deckent'), resolveProductLayout({ projectRoot: f.project }).root].map(dir => mkdir(dir, { recursive: true })));
+  const tree = async () => (await readdir(join(f.project, '..'), { recursive: true })).sort();
+  const before = await tree();
+  await runKernelCommand(['doctor', '--json'], { root: f.project, env, stdout: out.sink, inspectShellRealm: inspectConfiguredShellRealm });
+  const report = JSON.parse(out.lines.join('')).shellRealm;
+  // A selected sandbox runs the self-test for real (this host's measurement decides which); no sandbox selected: nothing to test.
+  const sandboxed = report.selected === 'bubblewrap' || report.selected === 'landlock';
+  console.info('shell realm doctor self-test:', JSON.stringify({ selected: report.selected, selfTest: report.selfTest }));
+  expect(report.selfTest).toMatchObject(sandboxed ? { status: 'ok', detail: null, durationMs: expect.any(Number) } : { status: 'not-run', detail: null, durationMs: null });
+  expect(await tree()).toEqual(before);
+  // A missing state root (the first fixture's global root): no self-test, and doctor still creates nothing.
+  const fresh = capture();
+  await runKernelCommand(['doctor', '--json'], { root: f.project, env: f.env, stdout: fresh.sink, inspectShellRealm: inspectConfiguredShellRealm });
+  expect(JSON.parse(fresh.lines.join('')).shellRealm.selfTest).toEqual({ status: 'not-run', detail: null, durationMs: null });
+  expect(existsSync(f.stateDir)).toBe(false);
+  const view = { mode: 'prefer-sandbox', selected: 'bubblewrap', marker: 'sandbox: bubblewrap', notice: null, code: null, rejected: [], preferSandbox: null };
+  const failed = capture();
+  await runKernelCommand(['doctor'], { root: f.project, env: f.env, stdout: failed.sink, inspectShellRealm: async () => ({ ...view,
+    selfTest: { status: 'failed' as const, detail: 'spawn-failed: [deckent] the command could not be started: E2BIG (argument list too long); nothing was run.', durationMs: 3 } }) });
+  const text = failed.lines.join('');
+  expect(text).toContain('sandbox: bubblewrap [terminal.shell.realm prefer-sandbox]\nsandbox self-test FAILED: spawn-failed: [deckent] the command could not be started: E2BIG');
+  expect(text).toContain('Status: degraded');
+  const passed = capture();
+  await runKernelCommand(['doctor'], { root: f.project, env: f.env, stdout: passed.sink, inspectShellRealm: async () => ({ ...view, selfTest: { status: 'ok' as const, detail: null, durationMs: 1200 } }) });
+  expect(passed.lines.join('')).toContain('sandbox self-test: ok (a command ran in this project\'s real sandbox view; 1200 ms from start to exit, view preparation not counted)');
 });

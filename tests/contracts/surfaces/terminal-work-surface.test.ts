@@ -3,6 +3,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
+import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps, type WorklineApproval,
   type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
 import type { RunView, WorkerObservationReport } from '#engine/index.js';
@@ -47,7 +48,8 @@ function keyboard() {
   return stdin;
 }
 /** The approval window's EN catalog strings these tests look for (T-APPROVAL-WINDOW). */
-const W = { title: 'Approval needed ·', once: 'y once', deny: 'n deny (Enter/Esc too)', session: 's this session', always: 'a always in this project',
+// TERMINAL-SABIT-DUZEN slice 2: the answers are list rows that name their letters; the hint row names Esc deny.
+const W = { title: 'Approval needed ·', once: 'Yes, once (y)', deny: 'Esc deny', session: 'Yes, for this session', always: 'Always allow in this project', no: 'No (n)',
   covers: 's: your answer is remembered for' } as const;
 const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check: () => boolean, label: string) {
@@ -61,7 +63,7 @@ function mount(props: Partial<WorklineProps>) {
   const stdout = new Screen(), stdin = keyboard();
   const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
     labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`,
-    completeTurn: async () => 'unused', ...props, ...panelFixture(props),
+    completeTurn: async () => 'unused', decisionArmMs: 0, ...props, ...panelFixture(props),
   }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   mounted.push(instance);
   const type = async (text: string) => { for (const char of text) { stdin.write(char); await settle(2); } };
@@ -324,7 +326,6 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
     // The whole preview is in the window; it is longer than the capped body, so it scrolls (End shows the last row).
     expect(view.frame()).toMatch(/rows 1–\d+ of \d+/u); expect(view.frame()).not.toContain('ctx 59');
     expect(view.frame()).toMatch(/What: +A file will be edited: src\/a\.ts/u); expect(view.frame()).toMatch(/File: +src\/a\.ts/u);
-    await view.type('\u000f'); await settle(40); // R2: explicitly focus this automatic card before scrolling/deciding.
     view.stdin.write('\u001B[F'); await until(() => view.frame().includes('ctx 59'), 'scrolled to the end');
     expect(view.frame()).toContain('Bound call: edit_file · src/a.ts · 0123456789ab');
     await view.type('y');
@@ -378,16 +379,17 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
           } else finishTurn();
           return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
         } };
-      const view = mount({ streamTurn, ledger: ledger as never });
+      // Production arming (slice 2): a new card takes the keyboard by itself but swallows keys until a quiet period has passed.
+      const view = mount({ streamTurn, ledger: ledger as never, decisionArmMs: DECISION_ARM_DEFAULT });
       await settle(20); await view.type('go\r');
-      await view.card('FIRST-CARD', 'first card'); await view.type('\u000f'); await settle(40); await view.type('y');
+      await view.card('FIRST-CARD', 'first card'); await until(() => view.frame().includes(W.deny), 'first card armed'); await view.type('y');
       await view.card('SECOND-CARD', 'second card'); finishDecision();
       await until(() => view.stdout.text.includes(late === 'answers' ? 'A-ALLOWED approval-a' : 'ERR:late failure'), 'late answer shown');
       await settle(40);
-      expect(view.frame()).toContain('SECOND-CARD'); expect(view.frame()).toContain(W.deny);
+      expect(view.frame()).toContain('SECOND-CARD');
       await view.type('y'); await settle(40);
-      expect(decided).toEqual(['approval-a:allow']); // New automatic card cannot inherit the first card's focus.
-      await view.type('\u000f'); await settle(40); await view.type('y');
+      expect(decided).toEqual(['approval-a:allow']); // A key at once never answers the new card (it is still arming).
+      await until(() => view.frame().includes(W.deny), 'second card armed'); await view.type('y');
       await until(() => view.frame().includes('Both done.') && !view.frame().includes(W.title), 'second decided, turn ends');
       expect(decided).toEqual(['approval-a:allow', 'approval-b:allow']);
     });
@@ -429,14 +431,13 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     const view = mount({ streamTurn: scoped(scopes, 'appr-s') as never, ledger: port(calls, answer) as never });
     await settle(20); await view.type('run it\r');
     await view.card(W.title, 'scoped card');
-    await view.type('\u000f'); await settle(40); // R2: scopes still require a focused original card.
     return view;
   };
 
   it('shows what a standing answer covers and the offered keys; s and a decide allow with that scope and report what the service saved', async () => {
     const calls: unknown[][] = [];
     const view = await open(['session', 'always'], calls, standing => ({ standing: { scope: standing, saved: true } }));
-    expect(view.stdout.text).toContain(`${W.covers} npm test in this session`); expect(view.frame()).toContain(`${W.once} · ${W.session} · ${W.always} · ${W.deny}`);
+    expect(view.stdout.text).toContain(`${W.covers} npm test in this session`); for (const row of [W.once, W.session, W.always, W.no, W.deny]) expect(view.frame()).toContain(row);
     await view.type('a');
     await until(() => view.stdout.text.includes('S-SAVED-ALWAYS appr-s'), 'always saved shown');
     expect(calls).toEqual([['appr-s', 'allow', 'always']]);
@@ -450,7 +451,7 @@ describe('work surface: approval card with standing scopes (G6)', () => {
   it('a scope the service did not offer is not a key; y stays once, n and Enter deny; a not-saved answer is shown with its reason', async () => {
     const onlySession: unknown[][] = [];
     const view = await open(['session'], onlySession);
-    expect(view.frame()).toContain(`${W.once} · ${W.session} · ${W.deny}`); expect(view.frame()).not.toContain(W.always);
+    for (const row of [W.once, W.session, W.no, W.deny]) expect(view.frame()).toContain(row); expect(view.frame()).not.toContain(W.always);
     await view.type('a'); await settle(60);
     expect(onlySession).toEqual([]);
     await view.type('y');
@@ -476,8 +477,7 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     }) as never, ledger: port(calls) as never });
     await settle(20); await view.type('go\r');
     await view.card(W.deny, 'plain card');
-    await view.type('\u000f'); await settle(40);
-    expect(view.frame()).toContain(`${W.once} · ${W.deny}`); expect(view.frame()).not.toContain(W.session);
+    for (const row of [W.once, W.no, W.deny]) expect(view.frame()).toContain(row); expect(view.frame()).not.toContain(W.session);
     await view.type('sa'); await settle(60);
     expect(calls).toEqual([]);
     await view.type('n');
@@ -497,6 +497,6 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     // Exact rows break at the cell limit and keep every character: the inner rows joined give the pattern back whole.
     const inner = view.frame().split('\n').filter(row => row.startsWith('│ ')).map(row => row.slice(2, 2 + 220 - 4)).join('');
     expect(inner).toContain(`${W.covers} ${pattern} in this session`);
-    await view.type('\u000f'); await settle(40); await view.type('n');
+    await view.type('n');
   });
 });

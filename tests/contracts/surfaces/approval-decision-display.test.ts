@@ -18,7 +18,7 @@ const hash = (text: string) => createHash('sha256').update(text, 'utf8').digest(
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 /** The approval window's EN deny key hint (T-APPROVAL-WINDOW): present exactly while a decision window owns the keyboard. */
-const DENY = 'n deny (Enter/Esc too)';
+const DENY = 'Esc deny';
 const frames: Array<{ label: string; frame: string }> = [];
 afterAll(() => { if (process.env.DECKENT_A1_FRAME_PROOF) writeFileSync(process.env.DECKENT_A1_FRAME_PROOF, JSON.stringify({ syntheticFixturesOnly: true, frames }, null, 2) + '\n'); });
 const observe = (label: string, view: ReturnType<typeof mountWorkline>) => { frames.push({ label, frame: view.stdout.frame }); };
@@ -125,7 +125,7 @@ describe('A1 complete-field decision projection and private custody', () => {
     await view.instance.waitUntilRenderFlush(); view.stdin.write('\r'); await until(() => view.stdout.frame.includes(DENY), 'snapshot card');
     expect(view.stdout.frame).toContain(SECRET); observe('snapshot-none-initial', view);
     for (const snapshot of [known, snapshotKnownSecrets([{ name: 'OTHER_FIXTURE', value: 'unrelated-known-value' }]), undefined]) {
-      view.instance.rerender(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, { ...props, ...panelFixture(props), ...(snapshot ? { knownSecrets: snapshot } : {}) }) }));
+      view.instance.rerender(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, { decisionArmMs: 0, ...props, ...panelFixture(props), ...(snapshot ? { knownSecrets: snapshot } : {}) }) }));
       const expected = snapshot === known ? '‹secret:FIXTURE_ONLY›' : SECRET;
       await until(() => view.stdout.frame.includes(DENY) && view.stdout.frame.includes(expected), 'same mounted snapshot update');
       expect(item.summary).toBe(SECRET); if (snapshot === known) expect(view.stdout.frame).not.toContain(SECRET);

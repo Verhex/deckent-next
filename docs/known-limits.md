@@ -48,8 +48,27 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   masked. *Workaround:* keep such files out of the home folder the sandbox sees, or isolate separately.
 - **The secret gate does not scan Git history.** Before dispatch it scans everything the worker receives (checkout, `.git`
   metadata, binds, task inputs, prompt context) and refuses on a hit; past commits in the object store are not scanned.
-  Exclusions are configured paths only, audited and shown on the Run card. *Workaround:* remove committed secrets from
-  history and rotate them; never put credentials into a request, a prompt or `DECKENT.md`.
+  Exclusions are configured paths or a declared dependency tree only, audited and shown on the Run card. *Workaround:*
+  remove committed secrets from history and rotate them; never put credentials into a request, a prompt or `DECKENT.md`.
+- **A declared dependency tree is trusted for content patterns.** A read-only bind the task profile declares
+  `dependencyTree` (for example `node_modules`) whose real path lies outside the attempt workspace and the work-target
+  checkout is third-party content (without a separate work target the project root is the checkout, so a bind inside it
+  keeps the normal rules): credential-shaped text in it (test fixtures, type
+  definitions, READMEs) passes as an audited exception instead of refusing, and a native binary above
+  `execution.secretGate.maxFileBytes` is read in bounded windows and listed by its SHA-256 digest. In a file whose header
+  claims a native format, private keys and provider or cloud tokens refuse. Deny-listed
+  files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; archives and any other oversized file
+  are still unscannable; oversized binaries are read only in 1 MiB windows, and one whose window carry cannot be bounded
+  (more than 1 MiB) or that holds an archive anywhere in its body (an appended zip, an embedded gzip member) is unscannable.
+  Archive detection follows each container's most lenient common extractor (a zip end record anywhere in the body, judged without its stated
+  offsets, gzip with reserved flag bits, a signed tar checksum), but compressed or encoded data without a container header (raw
+  deflate, zlib, brotli, LZMA-alone, lz4, a custom encoding) cannot be told apart from machine code: it passes inside the
+  binary's digest exception, and a worker can decompress it at a known offset (for example with Node's own zlib). A native binary at or below `maxFileBytes` is read whole and an archive is recognised only at its start, so an archive embedded later in such a binary passes (closing it would refuse common dependency binaries such as esbuild; during beta this moves to scanning every offset with lockfile-pinned digest exceptions). Pattern results are cached per file content under the product's `state/tree-scan-cache`; a changed lockfile
+  or release starts over, and the unsigned cache can change only which exceptions are listed, never a decision.
+  The tree is scanned on the host and bound live, read-only: a change made on
+  the host after the scan reaches the worker unscanned (as for any bind).
+  *Impact:* a real token planted in a dependency package as plain text reaches the worker, visible only as an exception.
+  *Workaround:* declare only trees installed from a lockfile you trust, and review the exceptions on the Run card.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
   detected. *Workaround:* keep secrets in a secret store, never in source.
 
@@ -59,7 +78,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   practice do anything. *Impact:* approvals and policy hold against Deckent's own sandboxed workers, not against other
   agents you run as yourself. Audit checkpoints (`deckent audit verify`) show a changed policy or producer set and a cut
   or wiped audit trail; undoing both local histories together on your own account is only caught by a checkpoint export
-  kept on a separate device. Hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
+  kept on a separate device. A separate approval channel, a fixed audit floor and the design for remote decisions are worked on during the beta process; hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
   separate account without Docker or sudo, and keep Deckent's workers in their sandbox.
 
 ## Providers and subscriptions
@@ -69,7 +88,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use an Anthropic API key for terminal chat and `/do` planning.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
-- **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available. *Workaround:* an OpenAI API key, or a
+- **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available; a visible sign-in is worked on during the beta process. *Workaround:* an OpenAI API key, or a
   Codex worker with its own login.
 - **No automatic fallback from a subscription to an API model yet.** Deckent does not switch to a paid API by itself when a
   subscription window is used up; routing across a declared candidate list is planned. *Workaround:* connect an API model
@@ -97,7 +116,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Delivery and adoption
 
-- **The target queue is a source candidate, not accepted runtime behavior.** It connects registered Git targets, private
+- **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
   v29 and ledger v58 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and

@@ -297,6 +297,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CANCELLATION_RUNTIME_LOOP_OPTIONS: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_RUNTIME_LOOP_OPTIONS', p, l) }) },
   CANCELLATION_RUNTIME_LOOP_RUNNING: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_RUNTIME_LOOP_RUNNING', p, l) }) },
   LOCAL_RUNTIME_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNSUPPORTED', p, l) }) },
+  LOCAL_RUNTIME_NATIVE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_NATIVE_UNAVAILABLE', p, l) }) },
   LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG: { category: 'config', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', p, l) }) },
   DOCTOR_CONFIG_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_CONFIG_INCOMPLETE', p, l) }) },
   DOCTOR_LEDGER_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_LEDGER_UNAVAILABLE', p, l) }) },

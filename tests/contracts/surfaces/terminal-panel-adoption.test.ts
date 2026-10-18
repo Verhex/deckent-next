@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { readLocalOsIdentity, openTerminalSessionStore } from '#adapters/index.js';
 import { clearConfigCache, snapshotKnownSecrets } from '#platform/index.js';
 import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
@@ -83,9 +84,9 @@ describe('real identity producer → shared controller → private adapter → W
     try {
       await until(() => stdout.text.includes('Ask anything'), 'real CLI composer'); stdin.write('hello\r');
       await until(() => observed.controllers[0]?.snapshot().approval?.phase === 'pending' && stdout.text.includes('PRIVATE-PREVIEW'), 'private decision renderer'); await settle(40);
-      stdin.write('y'); await settle(40); expect(decisions).toHaveLength(0); // Composer text cannot decide the automatic card.
-      stdin.write('\u0015'); await settle(40); // Explicitly erase the retained draft before the focused decision.
-      stdin.write('\u000f'); await settle(40); stdin.write('y'); await until(() => observed.controllers[0]!.snapshot().approval?.phase === 'deciding', 'decision in flight'); stdin.write('y');
+      stdin.write('y'); await settle(40); expect(decisions).toHaveLength(0); // A key at once cannot decide the card: it is still arming (slice 2).
+      await settle(DECISION_ARM_DEFAULT + 80); await until(() => stdout.text.lastIndexOf('Enter confirm') > stdout.text.lastIndexOf('Approval needed'), 'card armed'); // a deliberate key once it counts
+      stdin.write('y'); await until(() => observed.controllers[0]!.snapshot().approval?.phase === 'deciding', 'decision in flight'); stdin.write('y');
       await until(() => observed.controllers[0]?.snapshot().phase === 'idle' && stdout.text.includes('ANSWER'), 'one completed adapter invocation');
       expect(decisions).toHaveLength(1); expect(decisions[0]).toMatchObject({ scopeId: 's', approvalId: 'approval-1', expectedRevision: 0, decisionCapability: capability, channel: 'local-terminal-card', decision: 'allow' });
       expect(commands).toHaveLength(1); expect(observed.controllers).toHaveLength(1);
@@ -175,7 +176,7 @@ describe('adopted session and decision lifecycle', () => {
       } }); views.push(view.instance);
     await until(() => view.stdout.text.includes('READY'), 'ready'); view.stdin.write('go\r');
     try {
-      await until(() => view.stdout.frame.includes('OLD-REVISION'), 'old card'); await settle(30); view.stdin.write('\u000f'); await settle(40); view.stdin.write('y');
+      await until(() => view.stdout.frame.includes('OLD-REVISION'), 'old card'); await settle(30); view.stdin.write('y');
       await until(() => view.stdout.frame.includes('NEW-REVISION'), 'new card'); late.resolve(); await settle(40);
       expect(observed.controllers[0]!.snapshot().approval).toMatchObject({ approvalId: 'same-id', revision: 1, phase: 'pending' });
       expect(view.stdout.frame).toContain('NEW-REVISION'); expect(calls).toEqual([0]);
@@ -193,7 +194,7 @@ describe('adopted session and decision lifecycle', () => {
       } }); views.push(view.instance);
     await until(() => view.stdout.text.includes('READY'), 'ready'); view.stdin.write('go\r');
     try {
-      await until(() => view.stdout.frame.includes('UNCERTAIN-CARD'), 'card'); await settle(30); view.stdin.write('\u000f'); await settle(40); view.stdin.write('y');
+      await until(() => view.stdout.frame.includes('UNCERTAIN-CARD'), 'card'); await settle(30); view.stdin.write('y');
       await until(() => observed.controllers[0]!.snapshot().approval?.phase === 'unknown' && view.stdout.frame.includes('A-UNSETTLED uncertain'), 'unknown notice');
       expect(view.stdout.frame).not.toContain('A-PROMPT'); view.stdin.write('\u001b'); await until(() => signal.aborted, 'cancel via restored composer');
       await until(() => observed.controllers[0]!.snapshot().phase === 'idle', 'returned cancellation'); expect(observed.controllers[0]!.snapshot().last?.outcome).toBe('unknown');

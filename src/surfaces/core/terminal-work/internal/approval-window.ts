@@ -52,7 +52,9 @@ export interface ApprovalWindowLabels {
   readonly detail: Readonly<Record<Details, string>>;
   /** `{pattern}`. */
   readonly sessionCovers: string; readonly alwaysCovers: string;
-  readonly keys: Readonly<Record<'once' | 'session' | 'always' | 'deny' | 'reason' | 'scroll', string>>;
+  readonly keys: Readonly<Record<'once' | 'session' | 'always' | 'deny' | 'reason' | 'scroll' | 'choose', string>>;
+  /** TERMINAL-SABIT-DUZEN slice 2: the answers as list rows (their letters y/s/a/n are shown on the rows). */
+  readonly choices: Readonly<{ once: string; session: string; always: string; no: string }>;
   readonly reason: Readonly<{ label: string; hint: string; empty: string }>;
   /** T3 L4: a config-change approval in the words of a setting — title, scope (`{key}`, `{layer}`), why (`{rule}`), undo, and the layer names. */
   readonly config?: Readonly<{ title: string; scope: string; why: string; undo: string; layers: Readonly<Record<'project' | 'global', string>> }>;
@@ -256,7 +258,7 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
 }
 
 /** The key-hint row: only the scopes the service offered, then deny, reason and scroll. */
-export function approvalWindowHints(labels: ApprovalWindowLabels, scopes: readonly StandingScope[]): string {
-  return [labels.keys.once, ...(scopes.includes('session') ? [labels.keys.session] : []), ...(scopes.includes('always') ? [labels.keys.always] : []),
-    labels.keys.deny, labels.keys.reason, labels.keys.scroll].join(' · ');
+/** The answers are list rows (each names its letter, only the offered scopes), so the hint row names how to move and confirm. */
+export function approvalWindowHints(labels: ApprovalWindowLabels): string {
+  return [labels.keys.choose, labels.keys.deny, labels.keys.reason, labels.keys.scroll].join(' · ');
 }

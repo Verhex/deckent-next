@@ -29,7 +29,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.44`** (2026-10-17 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.45`** (2026-10-17 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
@@ -251,7 +251,7 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    Run <run-id> için plan · <durum>
    Görev t1: <görevin yaptığı iş> · tür coding · iş sınıfı <sınıf>
      Kabul: <sonucun karşılaması gereken ölçüt>
-   Gereken izinler: <bu Run'ın izinleri>
+   Kabulde politikayla denetlenen izinler: <her görev için bir task/execute>
    TTY onayınız bekleniyor: <onay-kimliği>, son tarih <saat>. Model bu işe yetki veremez.
    ```
 
@@ -280,7 +280,7 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    Pencere o zaman `<commit> commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.` diye sorar ve
    `Dala alındı: refs/heads/deckent/first-job <önce> → <sonra>` ile biter. Checkout'unuz, index'iniz ve çalışma
    dosyalarınız değişmez; sonucu `git log deckent/first-job` ile görün ve birleştirmeyi kendiniz yapın.
-9. **Kuyrukta benimsenen işi inceleyin veya geri alın** (kaynak adayı; gerçek terminal kabulü bekliyor).
+9. **Kuyrukta benimsenen işi inceleyin veya geri alın** (1.0.0-alpha.43'ten beri canlıda kullanılıyor; beta kabulü bekliyor).
    Kayıtlı entegrasyon hedefi servis kuyruğunu kullanır. `/deliver` güncel tabanda hazırlar; taban/hedef reddinden sonra `r`
    yeniden hazırlama sunar. Son bilinen durumu `r` ile okuyun; yayın ve benimseme tam ve sabit partiyi ayrı gösterip `y/N`
    sorar. `/runs` ayrıntısı yetkili kapsam konumunu, sorumluyu ve sonucu gösterir. Main/varsayılan/korunan, checkout'taki veya
@@ -296,8 +296,9 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
 
    Geri alma kartı sonuçlanmış tek işi kapsar. Hata partinin kalanını durdurur; benimsenmiş ön ek korunur. Belirsiz etki o
    hedefi uzlaştırmaya kadar tutar. Eski doğrudan entegrasyon komutları tarihsel makbuzları okuyabilir; etkin kuyruk generation'ı
-   üzerinden yazamaz. Sınırlar ve bilet ömrü `targetQueue` kaynağındadır; doğrulama profili ve politika gerekir. Bu kaynak adayı
-   paketlenmiş binary, hosted CI, canlı, platform veya N1 yük kabulü kanıtı değildir.
+   üzerinden yazamaz. Sınırlar ve bilet ömrü `targetQueue` kaynağındadır; doğrulama profili ve politika gerekir. Kuyruk
+   1.0.0-alpha.43'ten beri canlıda kullanılıyor ve gerçek teslimleri sonuçlandırdı; bu, paketlenmiş binary, hosted CI, platform
+   veya N1 yük kabulünün kanıtı değildir; bunları beta kabulü göstermelidir.
 
    ```text
    Kaynak <kaynak> · etkilenen dosyalar base ile aynı · öneri <öneri>

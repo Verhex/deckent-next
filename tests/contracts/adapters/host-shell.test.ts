@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { describeHostShellResult, HOST_SHELL_CHUNK_MAX_BYTES, hostShellCleanupNote, runHostShell, type HostShellResult } from '#adapters/index.js';
+import { describeHostShellResult, HOST_SHELL_CHUNK_MAX_BYTES, hostShellCleanupNote, runHostShell, sandboxNotStartedNote, type HostShellResult } from '#adapters/index.js';
 
 // setsid is an explicit fixture capability; macOS has no system setsid executable. No command may pass vacuously when it is absent.
 const hasSetsid = process.platform !== 'win32' && spawnSync('setsid', ['--version'], { timeout: 2_000, stdio: 'ignore' }).status === 0;
@@ -23,6 +23,16 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     expect(result.output).toContain(`${cwd}\nsecret=none allowed=yes term=dumb pager=cat\n`);
     expect(result.output).toContain('oops');
     expect(result.output).not.toContain('s3cr3t');
+  });
+
+  it('says why a command could not start: the errno is kept, never an empty spawn-failed (SANDBOX-SPAWN 2026-10-18)', async () => {
+    const cwd = await workspace();
+    // One argument over the kernel's per-string limit (MAX_ARG_STRLEN, 128 KiB): spawn throws E2BIG synchronously.
+    const huge = await runHostShell({ command: `echo ${'x'.repeat(200_000)}`, cwd });
+    expect(huge).toMatchObject({ status: 'spawn-failed', exitCode: null, output: expect.stringMatching(/^\[deckent\] the command could not be started: E2BIG \(.+\); nothing was run\.$/u) });
+    // A working directory that is gone: the child's `error` event (ENOENT), not a silent failure.
+    const gone = await runHostShell({ command: 'true', cwd: join(cwd, 'missing') });
+    expect(gone).toMatchObject({ status: 'spawn-failed', output: expect.stringContaining('ENOENT') });
   });
 
   it('kills the whole process group on cancel, background children included', async () => {
@@ -174,6 +184,11 @@ it('describes a run: how it ended and after how long, the command cut at 120, th
   expect(describeHostShellResult('ls', ran({ cleanup: 'group-ended' }), null)).toBe(`[deckent] run_shell: exit 0 after 1.2s (ls)\nhi\n${hostShellCleanupNote('group-ended')}`);
   expect(describeHostShellResult('ls', ran({ output: 'no newline', cleanup: 'unverified' }), { marker: 'sandbox: none', notice: 'N' })).toBe(
     `[deckent] run_shell: sandbox: none; exit 0 after 1.2s (ls)\nno newline\nN\n${hostShellCleanupNote('unverified')}`);
+  // SANDBOX-SPAWN (2026-10-18): a multi-line command stays one header line; its line breaks are shown, never silently joined.
+  expect(describeHostShellResult('cd x\necho a\r\necho b', ran({}), null)).toBe('[deckent] run_shell: exit 0 after 1.2s (cd x ⏎ echo a ⏎ echo b)\nhi\n');
+  // The owner's line for a sandbox that could not start a command: the typed reason, in the owner's language, never a host fallback.
+  expect(sandboxNotStartedNote('[deckent] sandbox: SANDBOX_VIEW_TOO_LARGE: 9 mounts; nothing was run.', 'en')).toBe('The sandbox could not start this command: sandbox: SANDBOX_VIEW_TOO_LARGE: 9 mounts. Nothing ran and no host shell was used; `deckent doctor` runs the same sandbox self-test.');
+  expect(sandboxNotStartedNote('[deckent] the command could not be started: E2BIG (argument list too long); nothing was run.', 'tr')).toMatch(/^Sandbox bu komutu başlatamadı: the command could not be started: E2BIG .*host kabuğuna geçilmedi/u);
   expect(hostShellCleanupNote('clean')).toBeNull();
   expect(hostShellCleanupNote('unverified')).toMatch(/^\[deckent\] cleanup unverified: .*this is not a sandbox\.$/u);
 });

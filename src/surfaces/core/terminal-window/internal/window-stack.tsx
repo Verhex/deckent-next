@@ -14,7 +14,9 @@ export const WINDOW_PRIORITY = Object.freeze({ window: 0, approval: 100 } as con
 
 type Layer = Readonly<{ id: string; priority: number; sequence: number }>;
 type Stack = Readonly<{ register: (id: string, priority: number, foreground: boolean) => () => void; top: string | null; open: number; reservedRows: number | undefined;
-  composing: boolean; composerWindows: boolean; accepts: (id: string | null) => boolean; focusTop: () => boolean }>;
+  composing: boolean; composerWindows: boolean; accepts: (id: string | null) => boolean; focusTop: () => boolean;
+  /** The top layer's priority (null: no window); approval-priority layers in opening order (one shown at a time, "1/3"). */
+  topPriority: number | null; decisions: readonly string[] }>;
 
 const WindowStackContext = createContext<Stack | null>(null);
 /** A window's opening cause, independent of its priority or authority. User-opened windows are the default. */
@@ -39,17 +41,20 @@ export function WindowStackProvider({ children, reservedRows, composerDefault = 
   const register = useCallback((id: string, priority: number, foreground: boolean) => {
     const layer: Layer = Object.freeze({ id, priority, sequence: ++sequence.current });
     currentLayers.current = [...currentLayers.current.filter(item => item.id !== id), layer];
-    // A new automatic card never inherits the previous window's focus. A foreground picker/card takes it immediately.
-    if (composerDefault && topWindowLayer(currentLayers.current) === layer) { focus.current = foreground; setWindowFocused(foreground); }
+    // A new automatic card never inherits the previous window's focus. A foreground picker/card takes it immediately, and so does a decision
+    // (approval priority, TERMINAL-SABIT-DUZEN slice 2, owner 2026-10-18): it arms before its keys count, so no Ctrl+O is needed to answer it.
+    if (composerDefault && topWindowLayer(currentLayers.current) === layer) { const takes = foreground || priority >= WINDOW_PRIORITY.approval; focus.current = takes; setWindowFocused(takes); }
     setLayers(currentLayers.current);
     return () => {
       const wasTop = topWindowLayer(currentLayers.current) === layer;
       currentLayers.current = currentLayers.current.filter(item => item !== layer);
-      if (composerDefault && wasTop) { focus.current = false; setWindowFocused(false); }
+      // The next queued decision takes the keyboard (it arms afresh, arming.ts); anything else returns it to the composer.
+      if (composerDefault && wasTop) { const next = topWindowLayer(currentLayers.current), takes = next !== null && next.priority >= WINDOW_PRIORITY.approval; focus.current = takes; setWindowFocused(takes); }
       setLayers(currentLayers.current);
     };
   }, [composerDefault]);
-  const top = topWindowLayer(layers)?.id ?? null;
+  const topLayer = topWindowLayer(layers), top = topLayer?.id ?? null;
+  const decisions = useMemo(() => layers.filter(layer => layer.priority >= WINDOW_PRIORITY.approval).sort((a, b) => a.sequence - b.sequence).map(layer => layer.id), [layers]);
   useInput((input, key) => {
     if (!composerDefault || !key.ctrl || key.meta || input !== 'o' || currentLayers.current.length === 0) return;
     focus.current = !focus.current; setWindowFocused(focus.current);
@@ -64,8 +69,9 @@ export function WindowStackProvider({ children, reservedRows, composerDefault = 
     focus.current = true; setWindowFocused(true); return true;
   }, [composerDefault]);
   const composing = top === null || !windowFocused;
-  const value = useMemo<Stack>(() => ({ register, top, open: layers.length, reservedRows, composing, composerWindows: composerDefault, accepts, focusTop }),
-    [register, top, layers.length, reservedRows, composing, composerDefault, accepts, focusTop]);
+  const topPriority = topLayer?.priority ?? null;
+  const value = useMemo<Stack>(() => ({ register, top, open: layers.length, reservedRows, composing, composerWindows: composerDefault, accepts, focusTop, topPriority, decisions }),
+    [register, top, layers.length, reservedRows, composing, composerDefault, accepts, focusTop, topPriority, decisions]);
   return <WindowStackContext.Provider value={value}>{children}</WindowStackContext.Provider>;
 }
 
@@ -98,8 +104,19 @@ export function useWindowReserve(): number | undefined {
 }
 
 /** One input owner: the composer listens when no window exists or the person has returned focus to it. */
-export function useFocusOwner(): Readonly<{ idle: boolean; top: string | null; composing: boolean; composerWindows: boolean; inputAllowed: () => boolean; focusTop: () => boolean }> {
+export function useFocusOwner(): Readonly<{ idle: boolean; top: string | null; composing: boolean; composerWindows: boolean; inputAllowed: () => boolean; focusTop: () => boolean;
+  topPriority: number | null }> {
   const stack = useContext(WindowStackContext);
   return { idle: !stack || stack.open === 0, top: stack?.top ?? null, composing: stack?.composing ?? true, composerWindows: stack?.composerWindows ?? false,
-    inputAllowed: () => stack?.accepts(null) ?? true, focusTop: () => stack?.focusTop() ?? false };
+    inputAllowed: () => stack?.accepts(null) ?? true, focusTop: () => stack?.focusTop() ?? false, topPriority: stack?.topPriority ?? null };
+}
+
+/** A decision's place in the queue: decisions wait one at a time (the one on top shows, the rest hide behind it), counted "n/total". */
+export function useDecisionQueue(id: string, priority: number): Readonly<{ hidden: boolean; position: number; total: number }> {
+  const stack = useContext(WindowStackContext), decisions = stack?.decisions ?? [];
+  if (priority < WINDOW_PRIORITY.approval || decisions.length < 2) return { hidden: false, position: 1, total: decisions.length };
+  const shown = stack?.top !== null && decisions.includes(stack?.top ?? '') ? stack!.top! : decisions.at(-1)!;
+  // The shown decision counts as the first of the waiting ones; the others keep their opening order behind it.
+  const order = [shown, ...decisions.filter(item => item !== shown)];
+  return { hidden: id !== shown, position: order.indexOf(id) + 1, total: decisions.length };
 }

@@ -34,7 +34,10 @@ export interface ShellRealmReport extends ShellRealmSelectionView {
   readonly bubblewrap: { readonly status: string; readonly launcher: { readonly source: string; readonly path: string; readonly version: string; readonly overlay: boolean } | null;
     readonly rejected: readonly { readonly path: string; readonly reason: string }[]; readonly detail: string | null };
   readonly landlock: ShellCapabilities['landlock'];
+  /** SANDBOX-SPAWN (2026-10-18): one `echo` in the selected sandbox, turn layout, unattended posture (the view a cardless call gets); `not-run`: none selected/asked. */
+  readonly selfTest: { readonly status: 'ok' | 'failed' | 'not-run'; readonly detail: string | null; readonly durationMs: number | null };
 }
+const SELF_TEST_MARKER = 'deckent-sandbox-self-test-ok';
 
 const viewOf = (resolution: ShellRealmResolution): ShellRealmSelectionView => ({
   selected: resolution.ok ? resolution.realm.kind : null, marker: resolution.ok ? resolution.marker : null, notice: resolution.ok ? resolution.notice : null,
@@ -42,13 +45,16 @@ const viewOf = (resolution: ShellRealmResolution): ShellRealmSelectionView => ({
   rejected: (resolution.rejected ?? []).map(item => ({ kind: item.kind, reason: boundSandboxReason(item.reason), restricted: item.restricted === true })) });
 
 export async function inspectShellRealmSelection(input: { readonly mode: ShellRealmMode; readonly stateDir: string | null; readonly project: ShellSandboxLayout['project'];
-  readonly capabilities?: ShellCapabilities; readonly sandboxes?: readonly ShellSandbox[] }): Promise<ShellRealmReport> {
+  readonly capabilities?: ShellCapabilities; readonly sandboxes?: readonly ShellSandbox[]; readonly selfTest?: { readonly environment: Readonly<Record<string, string | undefined>> } }): Promise<ShellRealmReport> {
   const capabilities = input.capabilities ?? await probeShellCapabilities({ platform: process.platform, kernel: nativeShellKernelProbe,
     bubblewrap: signal => selectBubblewrapLauncher({ stateDir: input.stateDir, place: false }, signal) });
   // The layout a turn gives its shell (no conversation scratch area yet: a doctor run has none) with the fail-closed write floor.
   const sandboxes = input.sandboxes ?? shippedShellSandboxes({ project: input.project, scratchDir: null, writeFloor: () => true });
   const { status, launcher, rejected, detail } = capabilities.bubblewrap;
-  return { schemaVersion: 1, mode: input.mode, stateDir: input.stateDir, ...viewOf(resolveShellRealm(input.mode, capabilities, sandboxes)),
+  const resolution = resolveShellRealm(input.mode, capabilities, sandboxes);
+  const ran = input.selfTest && resolution.ok && resolution.containment !== 'host' ? await resolution.realm.run({ command: `echo ${SELF_TEST_MARKER}`, cwd: input.project.root,
+    environment: input.selfTest.environment, writeFloorReadOnly: true, projectReadOnly: true }) : null, ok = ran?.exitCode === 0 && ran.output.includes(SELF_TEST_MARKER);
+  return { schemaVersion: 1, mode: input.mode, stateDir: input.stateDir, ...viewOf(resolution), selfTest: { status: !ran ? 'not-run' : ok ? 'ok' : 'failed', detail: !ran || ok ? null : boundSandboxReason(`${ran.status}: ${ran.output.trim() || '(no output)'}`), durationMs: ran?.durationMs ?? null },
     // K4: the MCP default is `sandbox-net` — a launch-eligible sandbox or no start (never a host fallback); the field keeps its name (doctor's JSON).
     preferSandbox: input.mode === 'host' ? viewOf(resolveShellRealm('require-sandbox', capabilities, shellLaunchSandboxes(sandboxes))) : null,
     bubblewrap: { status, launcher: launcher && { source: launcher.source, path: launcher.path, version: launcher.version, overlay: launcher.overlay },

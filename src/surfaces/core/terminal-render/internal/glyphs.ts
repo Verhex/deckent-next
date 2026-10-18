@@ -13,14 +13,14 @@ const UNICODE: RenderGlyphs = Object.freeze({
   ascii: false, assistant: '●', bullet: '•', quote: '▌', horizontal: '─', separator: '·', ellipsis: '…',
   codeTop: '╭─', codeRail: '│', codeBottom: '╰─', spinner: Object.freeze(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']),
   table: Object.freeze({ top: ['┌', '┬', '┐'] as const, mid: ['├', '┼', '┤'] as const, bottom: ['└', '┴', '┘'] as const, edge: '│' }),
-  mode: Object.freeze({ standart: '⏸', 'ask-edits': '⏸', 'full-auto': '⏵⏵', 'full-access': '⚠' }),
+  mode: Object.freeze({ standart: '⏸', 'ask-edits': '⏸', 'full-auto': '⏵⏵', 'full-access': '⏵⏵⏵' }),
 });
 
 const ASCII: RenderGlyphs = Object.freeze({
   ascii: true, assistant: '*', bullet: '-', quote: '|', horizontal: '-', separator: '|', ellipsis: '...',
   codeTop: '+-', codeRail: '|', codeBottom: '+-', spinner: Object.freeze(['|', '/', '-', '\\']),
   table: Object.freeze({ top: ['+', '+', '+'] as const, mid: ['+', '+', '+'] as const, bottom: ['+', '+', '+'] as const, edge: '|' }),
-  mode: Object.freeze({ standart: '||', 'ask-edits': '||', 'full-auto': '>>', 'full-access': '!!' }),
+  mode: Object.freeze({ standart: '||', 'ask-edits': '||', 'full-auto': '>>', 'full-access': '>>>' }),
 });
 
 export function resolveRenderGlyphs(ascii: boolean): RenderGlyphs {

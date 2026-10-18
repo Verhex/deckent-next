@@ -669,7 +669,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       try {
         await until(() => view.stdout.text.includes('READY'), 'ready');
         view.stdin.write('rewrite it\r');
-        await until(() => view.stdout.text.includes('n deny (Enter/Esc too)'), 'approval card')
+        await until(() => view.stdout.text.includes('Esc deny'), 'approval card')
         const preview = previews[0]!;
         expect(Buffer.byteLength(preview, 'utf8')).toBeLessThanOrEqual(16_384);
         expect(preview.split('\n')[0]).toMatch(/^\[Deckent: preview cut to \d+ of \d+ lines \(\d+ of \d+ bytes\); whole text sha256 [0-9a-f]{64}; complete at .*approval-previews\/[0-9a-f]{64}\.txt\]$/);
@@ -679,7 +679,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
         expect(whole).toContain(`-${before.repeat(count)}`); expect(whole).toContain(`+${after.repeat(count)}`);
         expect(preview.split('\n')[0]).toContain(createHash('sha256').update(whole).digest('hex'));
         // TERMINAL-SABIT R2 (owner 2026-10-14): the turn's card keeps the composer focused; Ctrl+O moves to it, then y decides.
-        await new Promise(resolve => setTimeout(resolve, 60)); view.stdin.write('\u000f'); await new Promise(resolve => setTimeout(resolve, 40)); view.stdin.write('y');
+        await new Promise(resolve => setTimeout(resolve, 60)); view.stdin.write('y');
         await until(() => view.stdout.text.includes('Written.'), 'turn finished');
       } finally { view.instance.unmount(); }
       expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe(after.repeat(count));

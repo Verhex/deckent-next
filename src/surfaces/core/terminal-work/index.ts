@@ -14,5 +14,5 @@ export { runControlActions } from './internal/run-control.js';
 export { openTaskAction } from './internal/task-actions.js';
 
 export { useRunCompletion, runCompletionText, type TrackedRun } from './internal/run-completion.js';
-export { ActiveWorkStrip, activeWorkItems, activeWorkRows, activeWorkWindow, useActiveWorkClock, type ActiveDelivery, type ActiveDo, type ActiveWorkItem, type ActiveWorkLabels } from './internal/active-work.js';
+export { ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkRows, activeWorkWindow, useActiveWorkClock, type ActiveDelivery, type ActiveDo, type ActiveWorkItem, type ActiveWorkLabels } from './internal/active-work.js';
 export { ACTIVE_WORK_NOTE_MARK, activeWorkModelNote, withoutActiveWorkNote } from './internal/active-work-note.js';

@@ -1,3 +1,4 @@
+import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { render } from 'ink';
@@ -110,7 +111,7 @@ describe('active work rows: one line per Run (owner 2026-10-17)', () => {
 });
 
 /** A real Workline with a /do whose run-create approval is pending until the person decides it on the card. */
-function harness() {
+function harness(decisionArmMs = 0) {
   let current: RunView = run(RUNNING), release: (() => void) | undefined, decided = false, plans = 0;
   const decisions: string[] = [], pending = pendingBrainFixture(), gate = new Promise<void>(resolve => { release = resolve; });
   const approval: WorklineApproval = { approvalId: pending.proposal.approval!.approvalId, runId: 'r', taskId: '-', requester: 'owner', revision: 0,
@@ -118,7 +119,7 @@ function harness() {
   const ledger = { scopeId: 's', workerHeartbeatMs: 60_000, listRunIds: async () => ['r'], inspectRun: async () => current,
     listWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }), listApprovalPage: async () => ({ items: decided ? [] : [approval], nextAfter: null }),
     decideApproval: async (target: WorklineApproval, answer: 'allow' | 'deny') => { decisions.push(answer); decided = true; return { ...target, revision: 1, status: 'decided', decision: answer }; } } as unknown as WorklineLedgerPorts;
-  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, work: EN }, ledger, pollMs: 25, maxTrackedRuns: 4,
+  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, work: EN }, ledger, pollMs: 25, maxTrackedRuns: 4, decisionArmMs,
     doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST', lines: () => ['PLAN-RESULT'],
       plan: async () => { plans++; if (!decided) { await gate; return pending; }
         return { ...pending, run: current, proposal: { ...pending.proposal, status: 'accepted', approval: null } }; } } }, 160, { rows: 40 });
@@ -130,7 +131,7 @@ const press = async (h: ReturnType<typeof harness>, keys: string, ms = 60) => { 
 
 describe('active work strip on the real Workline', () => {
   it('is hidden with no active work, appears for /do without taking the composer, and Enter on /do focuses its card without deciding', async () => {
-    const h = harness(); await settle(80);
+    const h = harness(DECISION_ARM_DEFAULT); await settle(80);
     expect(frame(h)).not.toContain('Active work');
     await press(h, '/do process order\r');
     await until(() => frame(h).includes(`/do process order · ${EN.activeWork!.planning}`), 'planning row');
@@ -140,12 +141,13 @@ describe('active work strip on the real Workline', () => {
     h.release();
     await until(() => frame(h).includes('Create proposed Run') && frame(h).includes('waiting for you'), 'waiting row with the card');
     expect(frame(h)).toMatch(/waiting for you · \d+ min left/u);
-    // Composer keys never reach the card, and the strip does not hold input until Ctrl+T.
-    await press(h, 'y'); expect(h.decisions).toEqual([]); await press(h, '\u0015');
+    // Slice 2: the card takes the keyboard by itself and arms first, so a key at once is no decision; Ctrl+O gives input back.
+    expect(frame(h)).toContain('WINDOW-FOCUS'); await press(h, 'y'); expect(h.decisions).toEqual([]);
+    await press(h, CTRL_O); expect(frame(h)).toContain('INPUT-FOCUS');
     await press(h, CTRL_T); expect(frame(h)).toContain(EN.activeWork!.focused); expect(frame(h)).toContain('› /do process order');
     await press(h, 'y'); expect(h.decisions).toEqual([]); // a letter in the strip is no decision either
-    await press(h, '\r'); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(h.decisions).toEqual([]); // Enter on /do = focus transfer only
-    await press(h, 'y'); // the explicit key on the focused original card
+    await press(h, '\r'); expect(frame(h)).toContain('WINDOW-FOCUS'); expect(h.decisions).toEqual([]); // Enter on /do = focus transfer only (re-arms)
+    await settle(DECISION_ARM_DEFAULT + 80); await until(() => frame(h).includes('Enter confirm'), 'card armed'); await press(h, 'y'); // the explicit key on the focused card
     await until(() => h.decisions.length === 1, 'decision on the card'); expect(h.decisions).toEqual(['allow']);
     await until(() => h.plans() === 2 && frame(h).includes(`ORDER-TASK · r · order · ${EN.jobs!.runStates['running']}`), 'admitted Run row');
   });
@@ -154,7 +156,7 @@ describe('active work strip on the real Workline', () => {
     const h = harness(); await settle(80);
     await press(h, '/do process order\r'); h.release();
     await until(() => frame(h).includes('Create proposed Run'), 'card');
-    await press(h, CTRL_O); await press(h, 'y');
+    await press(h, 'y'); // slice 2: the card holds the keyboard by itself
     await until(() => frame(h).includes('PLAN-RESULT'), 'result window');
     await press(h, CTRL_O); await press(h, ESC); // close the automatic /do result
     await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks');
@@ -177,7 +179,7 @@ describe('active work strip on the real Workline', () => {
     const h = harness(); await settle(80);
     await press(h, '/do process order\r'); h.release();
     await until(() => frame(h).includes('Create proposed Run'), 'card');
-    await press(h, CTRL_O); await press(h, 'y');
+    await press(h, 'y'); // slice 2: the card holds the keyboard by itself
     await until(() => frame(h).includes('PLAN-RESULT'), 'result window');
     await press(h, CTRL_O); await press(h, ESC);
     await until(() => frame(h).includes(EN.live!.tasksTitle), 'automatic /tasks');

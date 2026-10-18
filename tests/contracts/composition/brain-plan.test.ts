@@ -10,6 +10,7 @@ import { exitCodeFor } from '#platform/index.js';
 import { brainRunId } from '#engine/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { proposalFixture } from '../support/run-proposal.js';
+import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { clearConfigCache } from '#platform/index.js';
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); vi.restoreAllMocks(); });
@@ -200,4 +201,35 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   const { graph, requiredPermissions } = proposalFixture('business');
   const f = await fixture({ response: JSON.stringify({ graph, budgetCeiling: { currency: 'USD', limitMinorUnits: 7 }, requiredPermissions }) });
   expect((await planRun(f.project, command, f.options)).proposal.proposal.budgetCeiling).toEqual({ currency: 'USD', limitMinorUnits: 7 });
+});
+// Live 2026-10-18 (deepseek-flash): the model listed run/scope/model-invocation entries for a model the plan never uses, and the plan was refused
+// POLICY_DENIED. The system derives what admission evaluates from the validated graph; the model's list is advisory and never a requirement.
+const invented = (resourceId: string) => [{ kind: 'task', action: 'execute', resourceId: 'task' }, { kind: 'attempt', action: 'execute', resourceId: 'task' },
+  { kind: 'run', action: 'create', resourceId: 'docs-version-label-update' }, { kind: 'run', action: 'reserve', resourceId: 'docs-version-label-update' },
+  { kind: 'scope', action: 'inspect', resourceId: 'live' }, { kind: 'model-invocation', action: 'invoke', resourceId }];
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] invented model permissions are advisory: a policy that grants only the real needs admits the plan and the card names them', async () => {
+  const { graph, budgetCeiling } = proposalFixture('business');
+  const f = await fixture({ standing: true, response: JSON.stringify({ graph, budgetCeiling, requiredPermissions: invented('gpt-6.1-sol') }) });
+  const first = await planRun(f.project, command, f.options);
+  expect(first.proposal).toMatchObject({ status: 'accepted', reason: null }); expect(first.run).not.toBeNull();
+  // The model's list is kept as authored (digest/replay unchanged); it is shown as advisory, never evaluated.
+  expect(first.proposal.proposal.requiredPermissions).toEqual(invented('gpt-6.1-sol'));
+  for (const locale of ['en', 'tr'] as const) {
+    const lines = brainProposalLines(first, locale).join('\n');
+    expect(lines).toContain(locale === 'tr' ? 'Kabulde politikayla denetlenen izinler: task/execute/task' : 'Permissions checked by policy at admission: task/execute/task');
+    expect(lines).toContain(locale === 'tr' ? 'Modelin ayrıca andığı izinler (yalnız bilgi, değerlendirilmedi, yetki vermez)' : 'The model also mentioned (advisory, not evaluated, grants nothing)');
+    expect(lines).toContain('model-invocation/invoke/gpt-6.1-sol'); expect(lines).toContain('scope/inspect/live');
+  }
+  expect(await planRun(f.project, command, f.options)).toEqual(first); expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 1, proposals: 1 });
+});
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] a real need the policy denies still refuses the plan, even when the model lists nothing', async () => {
+  const { graph, budgetCeiling } = proposalFixture('business');
+  const f = await fixture({ standing: true, response: JSON.stringify({ graph, budgetCeiling, requiredPermissions: [] }) });
+  const path = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(path, 'utf8')), owner = policy.grants[0].principals;
+  policy.revision = 'task-denied';
+  policy.grants.push({ id: 'no-task', effect: 'deny', actions: ['execute'], scopes: ['s'], principals: owner, resource: { kind: 'task', ids: ['task'] } });
+  await writeFile(path, JSON.stringify(policy), { mode: 0o600 });
+  const refused = await planRun(f.project, command, f.options);
+  expect(refused.proposal).toMatchObject({ status: 'rejected', reason: 'POLICY_DENIED' }); expect(refused.run).toBeNull();
+  expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
 });

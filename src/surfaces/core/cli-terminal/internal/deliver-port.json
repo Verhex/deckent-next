@@ -1,4 +1,7 @@
 {
   "schemaVersion": 1,
-  "scanRuns": 200
+  "scanRuns": 200,
+  "maxDiffFiles": 50,
+  "maxDiffLinesPerFile": 400,
+  "maxDiffBytesPerFile": 65536
 }

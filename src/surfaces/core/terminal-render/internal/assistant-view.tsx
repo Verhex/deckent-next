@@ -49,6 +49,8 @@ export type AssistantRenderLabels = Readonly<{
   toolSummary?: Readonly<Record<'lines' | 'linesMore' | 'headings' | 'headingsMore' | 'matches' | 'matchesMore' | 'entries', string>>;
   /** `{percent}` of `{window}` tokens; `{approx}` is `~` when the prompt is an upper bound, not the provider's count. */
   context: string;
+  /** The information row's context segment before any measurement (harness gap item 1); absent: no segment until measured. */
+  contextUnknown?: string;
   /** `{count}` earlier messages were replaced by a summary to fit the context window. */
   compacted: string;
   /** TL-A (optional until the catalog carries `terminal.render.waiting.*` / `terminal.render.cancelledDuring.*`, see `i18n-delta.json`; the

@@ -48,7 +48,7 @@ afterEach(async () => {
  * size. Each step waits for text on the terminal before typing, with a hard deadline per step.
  */
 const DRIVER = String.raw`
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, json, os, pty, select, struct, sys, termios, time, re
 argv, steps = json.loads(sys.argv[1]), json.loads(sys.argv[2])
 pid, fd = pty.fork()
 if pid == 0:
@@ -72,7 +72,8 @@ for wait, send in steps:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.3)  # let the view settle (raw mode, input subscription) before typing
-    for char in send:
+    # One write per key: an escape sequence stays whole, as a terminal sends it (CI 2026-10-18).
+    for char in re.findall(r'\x1b\[[A-Z0-9~;<]+|.', send, re.S):
         os.write(fd, char.encode()); time.sleep(0.01)
 deadline = time.time() + 25
 status = None
@@ -231,7 +232,9 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.status).toBe(0);
     const at = result.output.lastIndexOf('\u001b[3J');
     expect(at, 'ED 3 sent').toBeGreaterThan(-1);
-    expect(result.output.lastIndexOf('\u001b[2J', at)).toBeGreaterThan(result.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'));
+    expect(at).toBeGreaterThan(result.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'));
+    // TERMINAL-SABIT-DUZEN: the full window empties itself on the alternate screen (no ED 2 needed there); ED 3 still drops the scrollback.
+    expect(result.output).toContain('\u001b[?1049h');
     // The replayed terminal, scrollback included: the earlier conversation is gone; the new conversation's one system line is there.
     const screen = terminalScreen(result.output, 120);
     expect(screen).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(screen).not.toMatch(/│ hello/u);

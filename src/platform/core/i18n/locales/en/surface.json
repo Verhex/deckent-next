@@ -1,5 +1,6 @@
 {
   "agent.shell.fullAccessUnavailable": "Full access requires an open sandbox; nothing was run.",
+  "agent.shell.sandboxNotStarted": "The sandbox could not start this command: {reason}. Nothing ran and no host shell was used; `deckent doctor` runs the same sandbox self-test.",
   "error.RUNTIME_CHAT_EVENT_TOO_LARGE": "A required conversation event exceeds the single-frame capacity. Delivery stopped; some history may be missing. Check any tool effects before retrying. Start a new conversation with /clear and use smaller parts.",
   "agent.context.AGENT_CONTEXT_CARRY_TOO_LARGE": "The preserved context and summary exceed the request byte bound. Nothing more was sent; the conversation history is unchanged. Start a new conversation with /clear and send smaller parts.",
   "agent.context.AGENT_CONTEXT_REQUEST_TOO_LARGE": "The conversation exceeds the request byte bound. No further model request was sent; the history was not shortened. Start a new conversation with /clear and send smaller parts.",
@@ -429,7 +430,7 @@
   "monitor.detail.attempt": "attempt {attempt} gen {generation} · launch {launch} · {started} → {ended} ({duration}) · exit {exit} · {provider}/{model}",
   "monitor.detail.evaluation": "evaluation: {verdict} {when}",
   "monitor.detail.handoffReceived": "handoff received from {source} (attempt {attempt}, digest {digest})",
-  "monitor.detail.configExcluded": "excluded by config: {count} path(s) passed the secret gate only because execution.secretGate lists them (audited)",
+  "monitor.detail.configExcluded": "excluded by config: {count} path(s) passed the secret gate only as audited exceptions (an execution.secretGate entry or a dependency tree the task profile declares)",
   "monitor.detail.configExcludedEntry": "      {path} ({rule}) — lifted by {by}",
   "monitor.detail.dependencies": "depends on: {list}",
   "monitor.graph.summary": "Graph: {tasks} tasks, {edges} edges, depth {depth}; pending {pending}, running {running}, needs attention {attention}, accepted {accepted}, failed {failed}, stopped {stopped}",

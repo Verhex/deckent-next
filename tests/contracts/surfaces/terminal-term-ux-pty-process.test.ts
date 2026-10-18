@@ -31,7 +31,7 @@ afterEach(async () => {
 
 /** python3 `pty` driver (as in terminal-mode-pty-process). */
 const DRIVER = String.raw`
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, json, os, pty, select, struct, sys, termios, time, re
 argv, steps, columns = json.loads(sys.argv[1]), json.loads(sys.argv[2]), int(sys.argv[3])
 pid, fd = pty.fork()
 if pid == 0:
@@ -58,7 +58,9 @@ for wait, send in steps:
     seen_at = time.time()
     read_for(0.5)
     sent_at = time.time()
-    for char in send:
+    # One write per key: an escape sequence (PgDn, an arrow) stays whole, as a terminal sends it (CI 2026-10-18: byte by byte it split into
+    # several reads on a loaded host and a decision window rightly refused the multi-event read).
+    for char in re.findall(r'\x1b\[[A-Z0-9~;<]+|.', send, re.S):
         os.write(fd, char.encode()); time.sleep(0.01)
     marks.append([wait, seen_at, sent_at])
 deadline = time.time() + 25

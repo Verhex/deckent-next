@@ -95,11 +95,11 @@ describe('arrow pickers for /resume and /approvals', () => {
     const view = await open(approvals().props);
     await view.type('/approvals\r');
     await until(() => view.frame().includes('> A-ITEM 1 ap-1') && view.frame().includes('  A-ITEM 2 ap-2'), 'picker');
-    expect(view.frame()).not.toContain('n deny (Enter/Esc too)');
+    expect(view.frame()).not.toContain('Esc deny');
     await view.type(DOWN);
     await until(() => view.frame().includes('> A-ITEM 2 ap-2'), 'second approval');
     await view.type('\r');
-    await until(() => view.frame().includes('Approval: ap-2') && view.frame().includes('Run run-1 · task task-1') && view.frame().includes('n deny (Enter/Esc too)'), 'second card');
+    await until(() => view.frame().includes('Approval: ap-2') && view.frame().includes('Run run-1 · task task-1') && view.frame().includes('Esc deny'), 'second card');
     expect(view.frame()).not.toContain('Approval: ap-1');
   });
 
@@ -108,7 +108,7 @@ describe('arrow pickers for /resume and /approvals', () => {
     await view.type('/approvals\r');
     await until(() => view.frame().includes('> A-ITEM 1 ap-1'), 'picker');
     await view.type(ESC);
-    await until(() => !view.frame().includes('A-ITEM 1') && !view.frame().includes('n deny (Enter/Esc too)'), 'closed');
+    await until(() => !view.frame().includes('A-ITEM 1') && !view.frame().includes('Esc deny'), 'closed');
   });
 
   it('typed /resume 2 after Esc still loads that session through the stored index', async () => {

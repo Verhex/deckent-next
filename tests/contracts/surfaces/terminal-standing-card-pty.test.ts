@@ -31,9 +31,9 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
-def wait(token, seconds=20):
+def wait(token, seconds=20, after=0):
     deadline = time.time() + seconds
-    while token.encode() not in out:
+    while token.encode() not in out[after:]:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': token, 'output': out.decode('utf8', 'replace')}))
             sys.exit(3)
@@ -45,10 +45,9 @@ def typed(text):
 wait('READY')
 typed('go\r')
 wait('remembered for npm test')
-read_for(0.4)
-# R2: automatic approval keeps the composer focused until Ctrl+O; preserve the same scoped keys/assertions.
-typed('\x0f')
-read_for(0.15)
+# TERMINAL-SABIT-DUZEN slice 2: the card's keys show (and count) only once it is armed.
+wait('Enter confirm', after=out.index(b'remembered for npm test'))
+# TERMINAL-SABIT-DUZEN slice 2: the card takes the keyboard by itself; the 0.4 s quiet wait above outlasts its arming.
 for group in keys.split(';'):
     token, _, expect = group.partition('=')
     typed(token)
@@ -84,12 +83,12 @@ async function run(keys: string, env: Record<string, string>) {
 describe.skipIf(process.platform === 'win32')('scoped approval card on a real pseudo-terminal (G6)', () => {
   it('a raw a keystroke decides allow with the always scope and the view prints what the port saved', async () => {
     const result = await run('a=S-SAVED-ALWAYS appr-pty', { SCOPES: 'session,always' });
-    expect(result.output).toContain('y once · s this session · a always in this project · n deny');
+    for (const row of ['Yes, once (y)', 'Yes, for this session', 'Always allow in this project', 'No (n)', 'Esc deny']) expect(result.output).toContain(row);
     expect(result.decisions).toEqual(['appr-pty allow always']);
   });
   it('a scope the card did not offer is not a key (a does nothing), s is the session scope, and a refused save is shown with its reason', async () => {
     const result = await run('a;s=S-NOT-SAVED-SESSION appr-pty STANDING_DELEGATION', { SCOPES: 'session', SAVED: 'no' });
-    expect(result.output).toContain('y once · s this session · n deny'); expect(result.output).not.toContain('a always in this project');
+    for (const row of ['Yes, once (y)', 'Yes, for this session', 'No (n)']) expect(result.output).toContain(row); expect(result.output).not.toContain('Always allow in this project');
     expect(result.decisions).toEqual(['appr-pty allow session']);
   });
   it('y stays a single allow without a scope', async () => {

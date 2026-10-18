@@ -7,3 +7,8 @@ export * from './internal/scroll.js';
 export * from './internal/info-model.js';
 export * from './internal/info-window.js';
 export * from './internal/system-summary.js';
+export * from './internal/viewport.js';
+export * from './internal/fullscreen-workline.js';
+export * from './internal/question.js';
+export * from './internal/arming.js';
+export * from './internal/mouse.js';

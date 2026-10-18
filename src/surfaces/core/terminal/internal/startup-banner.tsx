@@ -28,6 +28,8 @@ export const CLEAR_VISIBLE_SCREEN = '\u001b[H\u001b[2J';
  * conversation cannot be scrolled back to. ED 3 follows ED 2 because some terminals (VTE) push the erased screen into the scrollback first.
  */
 export const CLEAR_SCREEN_AND_SCROLLBACK = '\u001b[H\u001b[2J\u001b[3J';
+/** `/clear` in the full-window layout: ED 3 only — the view owns the (alternate) screen and redraws itself; the terminal's scrollback goes. */
+export const CLEAR_SCROLLBACK = '\u001b[3J';
 /**
  * The clear of the opening frame: `rows` line feeds first scroll every visible row into the scrollback from wherever the cursor is (xterm's
  * ED 2 erases the visible rows without keeping them; some terminals keep them), then home + ED 2 leaves an empty screen with the cursor at the top.

@@ -33,7 +33,7 @@ afterEach(async () => {
 
 /** python3 `pty` driver (as in terminal-mode-pty-process); a `fresh` step waits for its text after the previous step's keys only. */
 const DRIVER = String.raw`
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, json, os, pty, select, struct, sys, termios, time, re
 argv, steps, columns = json.loads(sys.argv[1]), json.loads(sys.argv[2]), int(sys.argv[3])
 pid, fd = pty.fork()
 if pid == 0:
@@ -41,6 +41,7 @@ if pid == 0:
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 50, columns, 0, 0))
 out = b''
 sent_at = 0
+matched_at = 0
 def read_for(seconds):
     global out
     end = time.time() + seconds
@@ -54,13 +55,17 @@ def read_for(seconds):
     return True
 for step in steps:
     wait, send = step[0], step[1]
-    since = sent_at if len(step) > 2 else 0
+    # 'fresh': after the previous step's keys; 'next': after the previous step's matched text (a decision's keys show only once armed).
+    since = matched_at if len(step) > 2 and step[2] == 'next' else sent_at if len(step) > 2 else 0
     deadline = time.time() + 25
     while wait.encode() not in out[since:]:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
+    matched_at = out.index(wait.encode(), since) + len(wait.encode())
     read_for(0.5)
-    for char in send:
+    # One write per key: an escape sequence (PgDn, an arrow) stays whole, as a terminal sends it (CI 2026-10-18: byte by byte it split into
+    # several reads on a loaded host and a decision window rightly refused the multi-event read).
+    for char in re.findall(r'\x1b\[[A-Z0-9~;<]+|.', send, re.S):
         os.write(fd, char.encode()); time.sleep(0.01)
     sent_at = len(out)
 deadline = time.time() + 25
@@ -79,8 +84,7 @@ sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'rep
  * back to back, a loaded host reads both bytes in one chunk, which Ink 7.1.1 parses as one text input (`\x0fy`, not Ctrl+O) and the y lands
  * in the composer (CI run 38503250233; ALPHA36-CI2 DECISIONS).
  */
-const FOCUSED = 'Window focused · Ctrl+O return to input';
-async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string] | readonly [string, string, 'fresh']>, columns = 160) {
+async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string] | readonly [string, string, 'fresh' | 'next']>, columns = 160) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps), String(columns)],
     { cwd, env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
   return JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
@@ -175,7 +179,8 @@ describe.skipIf(process.platform !== 'linux')('fetch_url in a real pseudo-termin
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'check the local status page\r'],
-      ['https://localhost/status?probe=1', '\u000f'], [FOCUSED, 'y', 'fresh'],
+      // Slice 2: the card takes the keyboard by itself; its keys show (and count) once it is armed.
+      ['https://localhost/status?probe=1', ''], ['Enter confirm', 'y', 'next'],
       ['Fetch turn done.', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();

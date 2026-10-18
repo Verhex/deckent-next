@@ -18,6 +18,7 @@ import { RenderGlyphsContext, plainText, resolveRenderGlyphs } from '#surfaces/c
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { WORKER_LINE_EN } from '../support/worker-line-labels.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 import { fullSnapshot } from '../../fixtures/monitor/snapshots.js';
 
 /** T3 L5: `/monitor`, `/watch-workers`, `/watch-runs` and `/tasks` as bounded modal windows. */
@@ -260,8 +261,9 @@ describe('/monitor window through the real terminal entry', () => {
     await writeFile(join(project, '.deckent/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [],
       grants: [{ id: 'g', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind: 'scope', ids: 'all' } }] }), { mode: 0o600 });
     const stdout = new Screen(120, 40), stdin = keyboard(), reads: string[] = [];
-    // The last painted frame: Ink's synchronized-update block (a single write ends the screen state).
-    const lastFrame = () => { const at = stdout.text.lastIndexOf('\u001B[?2026h'); return at >= 0 ? stdout.text.slice(at) : stdout.text; };
+    // The screen as the terminal shows it now, replayed from every byte written (CI 2026-10-18: the full window redraws only changed rows, so
+    // the last synchronized block alone is not the screen — a frame that only moved the spinner lacked the window's hints and looked closed).
+    const lastFrame = () => terminalBuffers(stdout.text.replaceAll('\u001b[?1000h', '').replaceAll('\u001b[?1006h', ''), 120, 40).text;
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'tr'], { root: project, env: { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'),
       DECKENT_GLOBAL_HOME: join(home, 'global'), NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
       stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,

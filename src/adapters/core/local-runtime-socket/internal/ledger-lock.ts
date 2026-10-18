@@ -16,7 +16,7 @@ export function acquireLedgerLock(path: string): LedgerLock {
   if (typeof path !== 'string' || !isAbsolute(path) || normalize(path) !== path || path.includes('\0')) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_OPTIONS');
   let native: LockModule;
   try { native = createRequire(import.meta.url)('../native/build/Release/peer_credentials.node') as LockModule; }
-  catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED', { cause: error }); }
+  catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_NATIVE_UNAVAILABLE', { cause: error }); }
   let fd: number | null;
   try { fd = native.lockFile(path); }
   catch (error) {

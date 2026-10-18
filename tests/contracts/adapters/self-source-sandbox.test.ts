@@ -49,6 +49,18 @@ describe('derived self-source floor in both shipped shell providers', () => {
       expect(rules.rules.some(([access, path]) => access === 'w' && (path === 'docs' || path === '.'))).toBe(true);
     }
   });
+  it('binds a read-only floor directory once, never each file inside it again (SANDBOX-SPAWN 2026-10-18: E2BIG on a large floored tree)', async () => {
+    if (process.platform === 'win32') return;
+    const f = await fixture(true);
+    await mkdir(join(f.root, 'src', 'nested', 'deep'), { recursive: true });
+    await Promise.all(Array.from({ length: 40 }, (_, index) => writeFile(join(f.root, 'src', 'nested', 'deep', `f${index}.ts`), 'x\n')));
+    const view = await resolveBubblewrapView(f, { PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true });
+    if (!view.ok) throw new Error(view.reason);
+    const readOnly = view.view.readOnlyPaths;
+    expect(readOnly).toContain(join(f.root, 'src'));
+    expect(readOnly.filter(path => readOnly.some(other => path.startsWith(`${other}/`)))).toEqual([]);
+    expect(readOnly.some(path => path.startsWith(join(f.root, 'src') + '/'))).toBe(false);
+  });
   for (const provider of ['bubblewrap', 'landlock'] as const) {
     const supported = provider === 'bubblewrap' ? capabilities.bubblewrap.status === 'available' && capabilities.userNamespace === 'available'
       : capabilities.landlock.status === 'available' && (capabilities.landlock.abi ?? 0) >= 6;

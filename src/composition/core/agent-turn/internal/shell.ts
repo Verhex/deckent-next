@@ -7,15 +7,15 @@ import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, c
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSetResult, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
-  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, createWorkspaceScope, inspectShellRealmSelection, readTerminalShellConfig,
+  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, inspectAgentShellRealm, readTerminalShellConfig, sandboxNotStartedNote,
   compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange, protectedPathShellNote, onWriteFloor } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { settleSandboxWriteSet } from './sandbox-writes.js';
 
-/** REALM-NOTICE (doctor): the realm a shell call here gets — the configured mode, the service's state root and providers, measured read-only. */
+/** REALM-NOTICE (doctor): the realm a shell call here gets (configured mode, the service's state root and providers, measured read-only) and its self-test. */
 export async function inspectConfiguredShellRealm(projectRoot: string, options: ConfigLoadOptions) {
-  const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
-  return inspectShellRealmSelection({ mode: readTerminalShellConfig(config).realm, stateDir: globalStateRoot(options.env ?? process.env), project: await createWorkspaceScope(projectRoot) });
+  const config = await loadConfig(projectRoot, { ...options, heal: false }), env = options.env ?? process.env, mode = readTerminalShellConfig(config as unknown as Record<string, unknown>).realm;
+  return inspectAgentShellRealm({ mode, stateDir: globalStateRoot(env), projectRoot, layout: config.productLayout, env });
 }
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
@@ -46,7 +46,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** The person's locale (the turn's reply language): the language of the notes a result explains itself with (B3). */
   readonly language?: Locale }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
-  const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
+  const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState), floorNames = createShellProtectedNames(scope.root, [], input.writeFloor ?? (() => false));
   const namesProductState = (detail: string | undefined) => detail !== undefined
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
   const plans = new Map<string, ShellPlan>();
@@ -86,7 +86,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     for (const verdict of [readOnly, mutation]) {
       if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
     }
-    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation), contained: classifyShellContainment(command, protectedNames).contained };
+    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation), contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined).contained };
     plans.set(key(tool, args), planned);
     return planned;
   };
@@ -221,6 +221,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
+        if (ran?.status === 'spawn-failed' && realm.containment !== 'host') {
+          channel.emit({ kind: 'tool.output', callId, stream: 'stderr', text: `${sandboxNotStartedNote(ran.output, input.language)}\n` }); await channel.drained();
+        }
         const { text: trackedLine, counts } = await tracked(ran);
         // A run that did not finish (stopped, timed out, not started) leaves nothing to apply: its write set is discarded.
         const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${HOST_SHELL_NOTES.writeSetDiscarded}` : '';

@@ -36,8 +36,10 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const f = await workspacePatchFixture(track); await f.run(); await grant(f, ['create', 'reserve', 'inspect', 'cancel']);
     const before = (await f.runtime.store.loadRun('s', 'r'))!;
     expect(before.state.kind).toBe('running');
-    const steps: Step[] = [['READY', '/runs\r'], ['h hold', 'h'], ['Hold run', 'y'], ['hold recorded, now parked (revision', 'c'], ['Close parked run', 'y'], ['(code: RUN_DECISION_NOT_READY)', 'r'],
-      ['Resume run', 'y'], ['resume recorded, now running (revision', '']];
+    // TERMINAL-SABIT-DUZEN slice 2: each confirmation card shows its keys only once they count (armed); y waits for them ('next').
+    const steps: Step[] = [['READY', '/runs\r'], ['h hold', 'h'], ['Hold run', ''], ['Enter/Esc keep (default)', 'y', 'next'], ['hold recorded, now parked (revision', 'c'],
+      ['Close parked run', ''], ['Enter/Esc keep (default)', 'y', 'next'], ['(code: RUN_DECISION_NOT_READY)', 'r'],
+      ['Resume run', ''], ['Enter/Esc keep (default)', 'y', 'next'], ['resume recorded, now running (revision', '']];
     const result = await inPty(program, f.project, f.options.env, 'en', steps); await capture('runs-hold-close-resume-en.txt', result.output);
     const after = (await f.runtime.store.loadRun('s', 'r'))!;
     expect(after.state.kind).toBe('running'); expect(after.revision).toBe(before.revision + 2); // hold + resume; the refused close wrote nothing
@@ -50,7 +52,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
   it('without the run cancel grant the hold is refused by policy, in Turkish in a TR session; nothing changes', async () => {
     const f = await workspacePatchFixture(track); await f.run(); await grant(f, ['create', 'reserve', 'inspect']);
     const before = (await f.runtime.store.loadRun('s', 'r'))!;
-    const result = await inPty(program, f.project, f.options.env, 'tr', [['READY', '/runs\r'], ['h beklet', 'h'], ['bekletilsin mi', 'y'], ['(kod: ', '']]);
+    const result = await inPty(program, f.project, f.options.env, 'tr', [['READY', '/runs\r'], ['h beklet', 'h'], ['bekletilsin mi', ''], ['Enter/Esc koru (varsayılan)', 'y', 'next'], ['(kod: ', '']]);
     await capture('runs-hold-policy-denied-tr.txt', result.output);
     const after = (await f.runtime.store.loadRun('s', 'r'))!;
     expect(after.revision).toBe(before.revision); expect(after.state.kind).toBe('running');

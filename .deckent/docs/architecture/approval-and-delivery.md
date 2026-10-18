@@ -499,7 +499,9 @@ source at launch (real directory, outside the workspaces root) and always adds `
 `--read-only`, cap-drop, user and `/workspace` are unchanged. Supervisor option `readOnlyMounts` is additive (adapter version 2, like
 `inputs`/`connection`); a build without it refuses such a dispatch profile (`SUPERVISOR_PROFILE_INVALID`). Customer installations use a
 verification image with its dependencies instead (owner); host-prepared dependencies may drift from the delivered lockfile (stale deps can
-fail or, in principle, mask a lockfile change — known limit).
+fail or, in principle, mask a lockfile change — known limit). A bind may declare `dependencyTree: { lockfile }` (a path inside it): the S6
+secret gate then treats it as third-party content (pattern hits become audited exceptions, native binaries above the scan bound are
+hash-classified; deny paths and configured values still refuse; see record-redaction-and-safe-approval, S6 dependency class).
 
 ### Cancellation settlement — owner 2026-09-22 (implemented)
 
@@ -530,7 +532,7 @@ profile revision, in-flight Runs keep their imageId) and API capability snapshot
 
 ### Worker toolchain update policy — owner 2026-09-22 (propose/auto slice implemented)
 
-`toolchains.update` is policy data: `mode off | propose | auto` (default propose), `buildTimeoutMs`, `outputBytes`, `atStartup`.
+`toolchains.update` is policy data: `mode off | propose | auto` (default auto), `buildTimeoutMs`, `outputBytes`, `atStartup`.
 `toolchains update [--apply]` (CLI), `update_toolchains` (MCP) and `updateToolchains` (SDK) run the currency report and, when an
 npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
 under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; landed, `97590485`): the packaged lineage is reconciled

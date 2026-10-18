@@ -6,11 +6,19 @@ import { cells, graphemes } from '#surfaces/core/terminal-render/index.js';
  * This fixture uses the PTY's dimensions; LF, CR, delayed wrapping, cursor movement and erasure all matter.
  */
 export function terminalScreen(output: string, columns: number, rows = 40): string {
-  const lines: string[][] = Array.from({ length: rows }, () => []), history: string[] = [];
-  let x = 0, y = 0;
+  return terminalBuffers(output, columns, rows).text;
+}
+
+/** The replay with both screens: `text` is what the terminal shows now (the alternate screen while it is active, else the main screen with
+ * its scrollback); `main` is the main screen and its scrollback; `alternate` reports whether the alternate screen (DEC 1049) is active. */
+export function terminalBuffers(output: string, columns: number, rows = 40): Readonly<{ text: string; main: string; alternate: boolean }> {
+  let lines: string[][] = Array.from({ length: rows }, () => []);
+  const history: string[] = [];
+  let x = 0, y = 0, saved: Readonly<{ lines: string[][]; x: number; y: number }> | null = null;
   const lineFeed = () => {
     y++;
-    if (y === rows) { history.push(lines.shift()!.join('').trimEnd()); lines.push([]); y--; }
+    // The alternate screen has no scrollback: a line scrolled off its top is gone.
+    if (y === rows) { const gone = lines.shift()!.join('').trimEnd(); if (!saved) history.push(gone); lines.push([]); y--; }
   };
   const eraseLine = (mode: number) => {
     if (mode === 0) lines[y]!.splice(x);
@@ -21,7 +29,10 @@ export function terminalScreen(output: string, columns: number, rows = 40): stri
   const control = (parameters: string, command: string) => {
     const numbers = parameters.split(';').map(value => Number(value || 0)), n = numbers[0] || 1;
     // Ink's presentation-only controls: color, cursor visibility, synchronized output, keyboard protocol.
-    if (command === 'm' || (['h', 'l'].includes(command) && ['?25', '?2004', '?2026'].includes(parameters))
+    // DEC 1049: save the cursor and switch to a cleared alternate screen; `l` restores the main screen and the cursor.
+    if (parameters === '?1049' && command === 'h') { if (!saved) { saved = { lines, x, y }; lines = Array.from({ length: rows }, () => []); } return; }
+    if (parameters === '?1049' && command === 'l') { if (saved) { ({ lines, x, y } = saved); saved = null; } return; }
+    if (command === 'm' || (['h', 'l'].includes(command) && ['?25', '?1000', '?1006', '?2004', '?2026'].includes(parameters))
       || (command === 'u' && /^[><=?][\d;]*$/u.test(parameters))) return;
     if (command === 'A') y = Math.max(0, y - n);
     else if (command === 'B') y = Math.min(rows - 1, y + n);
@@ -38,7 +49,7 @@ export function terminalScreen(output: string, columns: number, rows = 40): stri
       if (mode === 0) { eraseLine(0); for (let i = y + 1; i < rows; i++) lines[i] = []; }
       else if (mode === 1) { eraseLine(1); for (let i = 0; i < y; i++) lines[i] = []; }
       else if (mode === 2) for (let i = 0; i < rows; i++) lines[i] = [];
-      else if (mode === 3) history.length = 0;
+      else if (mode === 3) history.length = 0; // ED 3 drops the main screen's scrollback from either screen
       else throw new Error(`VT_ERASE_DISPLAY:${mode}`);
     } else throw new Error(`VT_UNSUPPORTED_CSI:${parameters}${command}`);
   };
@@ -70,5 +81,7 @@ export function terminalScreen(output: string, columns: number, rows = 40): stri
     }
     offset++;
   }
-  return [...history, ...lines.map(line => line.join('').trimEnd())].join('\n').trimEnd();
+  const screen = (rowsOf: string[][]) => rowsOf.map(line => line.join('').trimEnd());
+  const main = [...history, ...screen(saved ? saved.lines : lines)].join('\n').trimEnd();
+  return { text: saved ? screen(lines).join('\n').trimEnd() : main, main, alternate: saved !== null };
 }

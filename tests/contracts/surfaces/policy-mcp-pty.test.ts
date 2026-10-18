@@ -38,6 +38,7 @@ for wait, send, label in steps:
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace'), 'frames': frames})); sys.exit(3)
     read_for(0.4)
     frames.append([label, out.decode('utf8', 'replace')])
+    # send is a list of whole keys here (one write each, escape sequences intact).
     for char in send:
         os.write(fd, char.encode()); time.sleep(0.06)
 os.write(fd, b'\x03'); time.sleep(0.2); os.write(fd, b'\x03')

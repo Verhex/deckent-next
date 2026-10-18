@@ -86,10 +86,12 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
     // The configuration file (the turn's write floor) stays read-only under full access; an owner-approved call of that turn (its card
     // approved the floor) gets the existing file writable inside the sealed root — content only, never a new name.
     const config = join(f.project, '.deckent/config.json');
-    expect({ readOnly: view.readOnlyPaths.includes(config), writable: view.writablePaths?.includes(config) ?? false }).toEqual({ readOnly: true, writable: false });
+    // SANDBOX-SPAWN (2026-10-18): a read-only path inside a read-only directory is not bound again (the outermost one covers it).
+    const readOnlyIn = (paths: readonly string[], path: string) => paths.some(item => item === path || path.startsWith(`${item}/`));
+    expect({ readOnly: readOnlyIn(view.readOnlyPaths, config), writable: view.writablePaths?.includes(config) ?? false }).toEqual({ readOnly: true, writable: false });
     const approved = await resolveBubblewrapView(f.layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: false, open: true });
     if (!approved.ok) throw new Error(approved.reason);
-    expect({ readOnly: approved.view.readOnlyPaths.includes(config), writable: approved.view.writablePaths?.includes(config) ?? false }).toEqual({ readOnly: true, writable: false });
+    expect({ readOnly: readOnlyIn(approved.view.readOnlyPaths, config), writable: approved.view.writablePaths?.includes(config) ?? false }).toEqual({ readOnly: true, writable: false });
     // The closed view of the same layout is unchanged: no network, HOME a tmpfs.
     const closed = await resolveBubblewrapView(f.layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true });
     if (!closed.ok) throw new Error(closed.reason);

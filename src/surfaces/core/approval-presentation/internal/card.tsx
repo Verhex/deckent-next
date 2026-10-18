@@ -3,7 +3,7 @@ import { Box, Text, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { scopedDecisionKey, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { HiddenTextNotice, fillTemplate, span, useRenderGlyphs, type Span } from '#surfaces/core/terminal-render/index.js';
-import { Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { QuestionRows, Window, WINDOW_PRIORITY, questionStep, type QuestionOption, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import type { ApprovalDecisionProjection, ApprovalDecisionLabels, ApprovalDecisionLine } from './types.js';
 
 export const approvalRawPatternCount = (field: ApprovalDecisionProjection) => field.patternMatches.reduce((count, match) => count + match.count, 0);
@@ -36,6 +36,8 @@ export function decisionWindowLines(lines: readonly ApprovalDecisionLine[], labe
 
 /** Tab opens a one-line reason the decision carries to the audit record; labels absent = no reason field. */
 export type DecisionReasonLabels = Readonly<{ label: string; hint: string; empty: string }>;
+/** TERMINAL-SABIT-DUZEN slice 2: the card's answers as a list (↑↓ choose, Enter confirms); `session`/`always` only where offered. */
+export type DecisionChoiceLabels = Readonly<{ once: string; session: string; always: string; no: string }>;
 
 export interface DecisionCardProps {
   readonly title: ApprovalDecisionLine;
@@ -55,6 +57,8 @@ export interface DecisionCardProps {
   readonly pending?: boolean;
   /** Standing scopes this card offers (`s` session, `a` always); none = the plain y/N card. */
   readonly scopes?: readonly StandingScope[];
+  /** The answers as a list (shared question contract); absent = keys only. The highlight starts on No, so Enter alone never approves. */
+  readonly choices?: DecisionChoiceLabels;
   /** Called once; later keys are ignored while the decision is recorded. `reason` is the typed text, trimmed (absent: none typed). */
   readonly onDecide: (yes: boolean, standing?: StandingScope, reason?: string) => void;
 }
@@ -68,8 +72,13 @@ const REASON_CAP = 2048;
  * `y` typed there never decides. Shift+Tab is swallowed: under a decision it changes nothing else.
  */
 export function DecisionCard({ title, projectedLines, decisionLabels = {}, prompt, pendingText, position = '{from}-{to}/{total}', status, priority = WINDOW_PRIORITY.window,
-  reason: reasonLabels, pending: controlledPending, scopes = [], onDecide }: DecisionCardProps) {
+  reason: reasonLabels, pending: controlledPending, scopes = [], choices, onDecide }: DecisionCardProps) {
   const decided = useRef(false);
+  const options: readonly QuestionOption[] = choices ? [{ id: 'once', label: choices.once, key: 'y' }, ...(scopes.includes('session') ? [{ id: 'session', label: choices.session, key: 's' }] : []),
+    ...(scopes.includes('always') ? [{ id: 'always', label: choices.always, key: 'a' }] : []), { id: 'no', label: choices.no, key: 'n' }] : [];
+  // The highlight is kept as an option id (default No), so a changed option set can never move it onto an approving answer.
+  const [chosen, setChosen] = useState('no'), found = options.findIndex(option => option.id === chosen), at = found < 0 ? Math.max(0, options.length - 1) : found;
+  const atRef = useRef(at); atRef.current = at;
   const [pending, setPending] = useState(false);
   const [editing, setEditing] = useState(false);
   const [reason, setReason] = useState('');
@@ -80,8 +89,20 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
     for (const char of text) { if (kept.length + char.length > REASON_CAP) break; kept += char; }
     reasonRef.current = kept; setReason(kept);
   };
-  const onInput = (input: string, key: Key): boolean => {
+  const decide = (yes: boolean, standing?: StandingScope) => {
+    if (controlledPending === undefined) { decided.current = true; setPending(true); }
+    const text = reasonRef.current.trim();
+    onDecide(yes, standing, text || undefined);
+  };
+  const onInput = (input: string, key: Key, meta?: Readonly<{ burst: boolean }>): boolean => {
     if (key.tab && key.shift) return true;
+    // One stdin read with several key events (security review 2026-10-18): plain text into an open reason field at most, never a decision.
+    if (meta?.burst) {
+      if (!editingRef.current || key.return || key.tab || key.escape || key.ctrl || key.meta || key.backspace || key.delete || key.upArrow || key.downArrow
+        || key.leftArrow || key.rightArrow || key.pageUp || key.pageDown || key.home || key.end) return false;
+      write(reasonRef.current + input.replace(/[\r\n\t]+/gu, ' '));
+      return true;
+    }
     if (editingRef.current) {
       if (key.return || key.tab || key.escape) { edit(false); return true; }
       if (key.backspace || key.delete) { write([...reasonRef.current].slice(0, -1).join('')); return true; }
@@ -92,18 +113,32 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
     // Recording: decision keys do nothing more, scroll keys still scroll.
     if (controlledPending ?? decided.current) return key.return || key.escape || key.tab || input.length > 0 && !key.upArrow && !key.downArrow;
     if (key.tab && reasonLabels) { edit(true); return true; }
+    if (options.length) {
+      const step = questionStep('single', options, { at: atRef.current, ticked: [] }, input, key);
+      if (step.kind === 'move') { atRef.current = step.state.at; setChosen(options[step.state.at]?.id ?? 'no'); return true; }
+      if (step.kind === 'cancel') { decide(false); return true; }
+      if (step.kind === 'submit') {
+        const id = step.ids[0];
+        decide(id !== 'no', id === 'session' || id === 'always' ? id : undefined);
+        return true;
+      }
+      return key.tab;
+    }
     const answer = scopedDecisionKey(input, key, scopes);
     if (answer === null) return key.tab;
-    if (controlledPending === undefined) { decided.current = true; setPending(true); }
-    const text = reasonRef.current.trim();
-    onDecide(answer.yes, answer.standing, text || undefined);
+    decide(answer.yes, answer.standing);
     return true;
   };
-  const reasonRow = reasonLabels && (editing || reason) ? 1 : 0;
+  const reasonRow = reasonLabels && (editing || reason) ? 1 : 0, rows = reasonRow + options.length;
   return <Window title={title.spans} {...(status ? { status } : {})} body={[...decisionWarningLines(title.fields, decisionLabels), ...decisionWindowLines(projectedLines, decisionLabels)]}
     hints={(controlledPending ?? pending) ? pendingText : editing && reasonLabels ? reasonLabels.hint : prompt}
-    position={position} priority={priority} onInput={onInput} footerRows={reasonRow} decision
-    {...(reasonRow ? { footer: () => <ReasonRow label={reasonLabels!.label} text={reason} editing={editing} empty={reasonLabels!.empty} /> } : {})} />;
+    position={position} priority={priority} onInput={onInput} footerRows={rows} decision burstText={editing}
+    // Pasted text only ever fills an open reason field; otherwise the window drops it and re-arms.
+    {...(editing ? { onPaste: (text: string) => write(reasonRef.current + text.replace(/[\r\n\t]+/gu, ' ')) } : {})}
+    {...(rows ? { footer: (focused: boolean) => <>
+      {reasonRow ? <ReasonRow label={reasonLabels!.label} text={reason} editing={editing} empty={reasonLabels!.empty} /> : null}
+      {options.length ? <QuestionRows kind="single" options={options} state={{ at, ticked: [] }} focused={focused && !editing} /> : null}
+    </> } : {})} />;
 }
 
 function ReasonRow({ label, text, editing, empty }: { readonly label: string; readonly text: string; readonly editing: boolean; readonly empty: string }) {

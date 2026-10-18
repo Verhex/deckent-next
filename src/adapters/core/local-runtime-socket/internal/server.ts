@@ -190,7 +190,7 @@ async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, gua
     } finally { await close(guard).catch(() => undefined); ledger?.release(); }
     if (error instanceof LocalRuntimeSocketError) throw error;
     if ((error as NodeJS.ErrnoException).code === 'LOCAL_PEER_PUBLICATION_UNSUPPORTED') {
-      throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED', { cause: error });
+      throw new LocalRuntimeSocketError('LOCAL_RUNTIME_NATIVE_UNAVAILABLE', { cause: error });
     }
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }

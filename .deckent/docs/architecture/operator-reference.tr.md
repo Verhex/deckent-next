@@ -2,17 +2,42 @@
 
 [README.tr.md](../../../README.tr.md) içindeki ürün özetinin arkasındaki ayrıntılı işletim davranışı. English: [operator-reference.md](operator-reference.md).
 
-Etkileşimli terminal giriş alanını ve durum satırını son çıktının altında, ekran dolduğunda da en alt satırlarda tutar;
-açık pencereler ve canlı çıktı onları ekranın dışına itmez. Tamamlanan çıktı bir kez yazılır ve kaydırma geçmişinde kalır. Komutunuzla veya seçiminizle açılan
+Etkileşimli terminal tam penceredir (terminalin alternatif ekranı, Claude Code tam ekran görünümü gibi): sohbet üst alanda
+kayar, giriş barı oturum boyunca aynı alt satırda kalır (yalnız pencere boyutu ya da kendi çok satırlı taslağınız onu oynatır),
+altında sabit yükseklikte bir bilgi alanı durumu, modeli ve modu, Aktif iş özetini (ya da tam erişim satırını) ve tuş
+ipuçlarını gösterir. Sohbet en yeni satırı izler; fare tekerleği her çentikte üç satır, PgUp/PgDn yarım görünüm kaydırır,
+Ctrl+Home ilk satıra, Ctrl+End en yeniye döner; geriye okurken bir satır kaç yeni mesaj (ya da satır) geldiğini söyler ve
+End/Home en yeniye/ilk satıra atlar (akış görünümü aşağı çekmez; en altta yeniden izler). Geride okurken Ctrl+F bu görünümün
+tuttuğu sohbette arar (yalnız gösterilen, maskelenmiş metin; Enter/↑ eski, ↓ yeni, Esc kapatır; taslak değişmez), Ctrl+Yukarı/
+Ctrl+Aşağı önceki/sonraki mesajına atlar (Ctrl+R giriş geçmişi aramasıdır). Pencere ve kartlar giriş barının hemen üstünde açılır,
+ekranın en çok yarısını kaplar ve içeride kayar; sohbet alanını daraltır, barı oynatmaz. Çıkışta sohbet normal ekrana yazılır,
+böylece terminalin kaydırma geçmişinde kalır; `/clear` görünümü ve o geçmişi boşaltır. Tam pencere yalnız gösterilirken fare
+tekerleğini alır (tıklamalar yok sayılır ve hiçbir kartı cevaplamaz); metni Claude Code'daki gibi terminalin değiştirici tuşuyla
+seçin — çoğu terminalde Shift, iTerm2'de Option, Terminal.app'te Fn. `terminal.layout: inline` önceki satır içi düzeni korur (çalışırken
+yerel kaydırma geçmişi; ekran okuyucuyla önerilir); `terminal.viewportRows` (varsayılan 2000) görünümün ne kadar geriye
+kaydığını sınırlar. Mod renkleri: standart soluk, tam otomatik kendi rengi, tam erişim uyarı tonunda sakin `⏵⏵⏵` işaretiyle
+(NO_COLOR: modu sözcükler taşır). Komutunuzla veya seçiminizle açılan
 pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
 turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
-arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Otomatik onay kartında
-karar tuşları ancak bu odak geçişinden sonra çalışır (bekleyen kart "Bu kartta karar için Ctrl+O" der); girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
+arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Onay kartı (ve her soru) klavyeyi
+kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez. Cevaplar listedir — "Evet, bu sefer (y)", "Evet, bu
+oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis sunduğunda (taban öğelerinde ve her zaman sorulan
+kilitlerde asla), "Hayır (n)" — ↑↓, j/k ya da 1–9 ile seçilir, Enter ile onaylanır ya da harfle cevaplanır; seçim Hayır'da
+başlar, Esc reddeder. Kart, gösterildiği andan itibaren kısa bir sessiz süre (0,3 sn, `decision.json`) geçmeden tuş saymaz;
+o sırada ipucu satırı "Yeni açıldı · tuşları birazdan çalışır" der (erken gelen tuş için "Tuş sayılmadı … yeniden basın"),
+tuşlar sayılmaya başlayınca orada görünür:
+girişe az önce yazılan tuşlar, basılı tutulan tuş, yapıştırma, az önce cevaplanan karttan ya da odak değişiminden gelen tuş
+kartı cevaplamaz; birden çok tuş olayı üreten tek bir okuma asla karar vermez. Taslak korunur ve barla geri gelir. Bekleyen
+kararlar tek tek gelir ("1/3"). "Hep izin ver" kendi kalıcı iznindir (`deckent policy grants --mine`, `deckent policy revoke`
+ile kaldırılır). Mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
 Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut taslak/iptal davranışı sürer. Uzun pencere
 içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
-yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin üstündeki "Aktif iş" şeridi bu
-oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum ve geçen
-süreyle listeler; kendiliğinden odak almaz. Ctrl+T ile seçilir (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
+yükseklik bütçesi içinde imleci takip eder. Ctrl+S taslağın tamamını kenara koyar (yalnız bellekte; kaydedilmez, loglanmaz),
+boş satırda geri getirir (kenardaki taslak asla üzerine yazılmaz); Ctrl+_ gönderilmemiş son düzenlemeyi geri alır (kesintisiz
+yazım tek adımdır, gönderince silinir). Barın altındaki bilgi satırı sohbetin bağlam kullanımını da gösterir (`/context`
+ölçümü; ilkinden önce "bağlam ?"). `/watch-stop` gözlemi kapatır. Girişin altındaki "Aktif iş" özet satırı bu
+oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum, geçen
+süre ve "+N daha" ile gösterir; kendiliğinden odak almaz. Ctrl+T tam listeyi girişin üstünde açar (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
 Enter o Run'ın penceresini açar; biten Run açıldıktan sonra şeritten çıkar. Pipe ve satır modu çıktısı değişmez.
 
 ## Kurulum muhafazası
@@ -37,7 +62,7 @@ etkinleştirmez. Aynı rapor MCP `inspect_toolchain_currency` aracı ve SDK
 `inspectToolchainCurrency` fonksiyonuyla alınabilir.
 
 `deckent toolchains update [--apply]`, eski sürüm raporundan bir sonraki worker image sürümünü
-hazırlar. `toolchains.update.mode` değerleri `off | propose | auto`, varsayılan `propose`'dur.
+hazırlar. `toolchains.update.mode` değerleri `off | propose | auto`, varsayılan `auto`'dur.
 Tipli plan `<data root>/workspaces/toolchains/plans/` altına yazılır. `auto` ya da `--apply` ile paketli
 builder `workspaces/toolchains/builds/<version>/` altına kopyalanır ve sınırlı sürede derlenir;
 makbuzundan uygulanmamış (`not-applied`) profil revizyon önerisi (`proposals/<version>.json`) oluşur.
@@ -233,4 +258,4 @@ Teslim commit'i kabul edilmiş görev başlığı, kimlikler ve sınırlı kabul
 
 ### Terminalde teslim penceresi (TESLIM-PENCERESI yazar adayı)
 
-Bu terminalin `/do` ile kabul ettiği bir Run'ın görevi "kabul edildi · yama hazır, teslim bekliyor" durumuna gelince teslim penceresi kendiliğinden, girişin odağını almadan açılır (Ctrl+O ya da Aktif iş şeridindeki "teslim bekliyor" satırı Ctrl+T ve Enter ile odağı ona verir); `/deliver` kapsamdaki bekleyen tüm görevleri listeler ve seçileni odakla açar. Pencere görev başlığını, Run/Görev kimliklerini, güncel kaynağın uyum kontrolünü (etkilenen dosyalar tabanla aynı), değişen dosyaları `patch-preview --stat` sayılarıyla, yalnız ayrı bir `refs/deckent/deliveries/` referansının yazılacağını (dallar, index ve çalışma ağacı değişmez) ve yalnız `execution.adoption.targets` yapılandırılmışsa hedef dalları sonraki ayrı bir seçim olarak gösterir. `y`, `task integration-check|prepare|deliver` ile aynı uygulamalar ve yukarıdaki doğrulanmış terminal onayı üzerinden kontrol, hazırlık ve teslimi tek akışta yapar: pencerenin `y`'si onayı yalnız kart pencerenin gösterdiği işlem, kimlikler, komut, dosya kümesi ve tabanla birebir aynıysa cevaplar; değilse kartın kendisi gösterilir ve yeni bir `y` ister. Teslimden sonra yapılandırılmış dala alma yalnız ikinci bir `y` ile yapılır (↑↓ dalı seçer); `n`/Esc hiçbir şey yapmaz. `execution.adoption.verification` yapılandırılmışsa (Y1) bu `y` önce doğrulama adımını açar: kapsamın yapılandırılmış türde (tek görevli) kabul edilmiş Run'ları, yalnız zorunlu değilse "doğrulamasız dala al" satırı; ↑↓ seçer, tek yazılmış `y` seçimle dala alır (tür o anda yapılandırmadan okunur, `task integration-adopt --verification-run` gibi), `r` listeyi yeniden okur, `n`/Esc geri döner. Hiç yoksa bunu söyler ve `deckent run create … --delivery-command-id <bu teslim>` adımını adlandırır. Dala alma uygulaması Run'ın tam olarak bu commit'i güncel profil ve kurulum ölçütleriyle doğruladığını yine denetler; bir ret, nedeniyle ve yeni bir dala alma komutuyla seçime döner. Teslim ve dala alma satırları ile döküm özeti teslim ve dala alma komut kimliklerini gösterir (`task integration-rollback --adoption-command-id`). Girişe yazılan `y` hiçbir zaman onay değildir. Eskimiş taban, eksik izin (attempt araması için `scope inspect` ve entegrasyon eylemleri) veya doğrulanmamış oturum sade sözlerle ve sonraki adımla reddedilir. Teslim kendiliğinden başlamaz; ileride owner'ın koyacağı "kurala göre otonom" aracı aynı onay portuna bağlanır ve uygulanmadı.
+Bu terminalin `/do` ile kabul ettiği bir Run'ın görevi "kabul edildi · yama hazır, teslim bekliyor" durumuna gelince teslim penceresi kendiliğinden, girişin odağını almadan açılır (Ctrl+O ya da Aktif iş şeridindeki "teslim bekliyor" satırı Ctrl+T ve Enter ile odağı ona verir); `/deliver` kapsamdaki bekleyen tüm görevleri listeler ve seçileni odakla açar. Pencere görev başlığını, Run/Görev kimliklerini, güncel kaynağın uyum kontrolünü (etkilenen dosyalar tabanla aynı), değişen dosyaları `patch-preview --stat` sayılarıyla, yalnız ayrı bir `refs/deckent/deliveries/` referansının yazılacağını (dallar, index ve çalışma ağacı değişmez) ve yalnız `execution.adoption.targets` yapılandırılmışsa hedef dalları sonraki ayrı bir seçim olarak gösterir. `y`, `task integration-check|prepare|deliver` ile aynı uygulamalar ve yukarıdaki doğrulanmış terminal onayı üzerinden kontrol, hazırlık ve teslimi tek akışta yapar: pencerenin `y`'si onayı yalnız kart pencerenin gösterdiği işlem, kimlikler, komut, dosya kümesi ve tabanla birebir aynıysa cevaplar; değilse kartın kendisi gösterilir ve yeni bir `y` ister. Teslimden sonra yapılandırılmış dala alma yalnız ikinci bir `y` ile yapılır (↑↓ dalı seçer); `n`/Esc hiçbir şey yapmaz. `execution.adoption.verification` yapılandırılmışsa (Y1) bu `y` önce doğrulama adımını açar: kapsamın yapılandırılmış türde (tek görevli) kabul edilmiş Run'ları, yalnız zorunlu değilse "doğrulamasız dala al" satırı; ↑↓ seçer, tek yazılmış `y` seçimle dala alır (tür o anda yapılandırmadan okunur, `task integration-adopt --verification-run` gibi), `r` listeyi yeniden okur, `n`/Esc geri döner. Hiç yoksa bunu söyler ve `deckent run create … --delivery-command-id <bu teslim>` adımını adlandırır. Dala alma uygulaması Run'ın tam olarak bu commit'i güncel profil ve kurulum ölçütleriyle doğruladığını yine denetler; bir ret, nedeniyle ve yeni bir dala alma komutuyla seçime döner. Teslim ve dala alma satırları ile döküm özeti teslim ve dala alma komut kimliklerini gösterir (`task integration-rollback --adoption-command-id`). Girişe yazılan `y` hiçbir zaman onay değildir. Eskimiş taban, eksik izin (attempt araması için `scope inspect` ve entegrasyon eylemleri) veya doğrulanmamış oturum sade sözlerle ve sonraki adımla reddedilir. Teslim kendiliğinden başlamaz; ileride owner'ın koyacağı "kurala göre otonom" aracı aynı onay portuna bağlanır ve uygulanmadı. Hazır adım ayrıca her değişen dosyanın salt okunur farkını sunar (alpha.46; yeni komut yok): ↑↓/j/k dosya seçer, Enter hunk'ları önizlemenin kurulduğu deneme, taban ve öneri kimliğiyle açar, ↑↓/j/k kaydırır, Esc listeye döndürür. Port, sayıların geldiği aynı yamadan dosya başına fark gövdesi taşır; sınırlar `deliver-port.json` içindedir (`maxDiffFiles`, `maxDiffLinesPerFile`, `maxDiffBytesPerFile`); ikili ya da aşırı büyük dosya gövde yerine "Gösterilemez: ikili veya çok büyük" der, kesilen satırlar sayılır. Her satır pencerenin geri kalanıyla aynı redaksiyon ve terminal metni temizliğinden geçer. Görmek hazırlamaz, teslim etmez, dala almaz: fark içinde `y`, `n` ve Enter bir şey yapmaz; teslim, liste adımındaki ayrı doğrulanmış-terminal `y`'si olarak kalır. Eski taban ya da reddedilen erişim yine tipli ret satırıdır.

@@ -70,7 +70,8 @@ export function mountWorkline(props: Partial<WorklineProps>, columns = 200, obse
   const wrapper = observation.strict ? StrictMode : Fragment;
   const instance = render(createElement(wrapper, null, createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
     labels: WORKLINE_TEST_LABELS, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 40, errorText: (error: unknown) => `ERR:${(error as Error).message}`,
-    completeTurn: async () => 'unused', ...props, ...panelFixture(props),
+    // Decision arming is off unless a test sets it (terminal-decision-race keeps the production value).
+    completeTurn: async () => 'unused', decisionArmMs: 0, ...props, ...panelFixture(props),
   }) })), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: observation.debug ?? true,
     interactive: true, exitOnCtrlC: false, patchConsole: false });
   return { stdout, stdin, instance };

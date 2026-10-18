@@ -121,7 +121,7 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   };
   const shown = () => view.stdout.text.replace(/[┃│]/g, ' ').replace(/\s+/g, ' ');
   // TERMINAL-SABIT R2 (owner 2026-10-14): a card raised during a model turn keeps the composer focused; Ctrl+O moves to it, then the explicit key decides.
-  const decide = async (keys: string) => { view.stdin.write('\u000f'); await settle(40); await type(keys); };
+  const decide = async (keys: string) => { await type(keys); }; // TERMINAL-SABIT-DUZEN slice 2: the decision card takes the keyboard by itself (arming guards it); no Ctrl+O.
   return { view, type, decide, events, requests, rows, project, client, host, faults, clearSession, shown };
 }
 it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s and clear-session: visible %s text, real writes, remembered/used audit and next prompt', async locale => {
@@ -131,15 +131,13 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   const first = f.events.find(e => e.kind === 'approval.requested')! as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
   expect(first.standing).toEqual({ scopes: ['session'], pattern: 'src/*' });
   // T-APPROVAL-WINDOW: the offered keys in the window's hint row, and the window names the call from the real producer's own `tool.started`.
-  const keys = [t('terminal.approval.window.keys.once', {}, locale), t('terminal.approval.window.keys.session', {}, locale), t('terminal.approval.window.keys.deny', {}, locale)].join(' · ');
-  await until(() => f.view.stdout.frame.includes(keys), 'session key on card').catch(error => { throw new Error(String(error) + '\n' + f.view.stdout.frame); });
+  // TERMINAL-SABIT-DUZEN slice 2: the offered answers are list rows naming their letters; the hint row names Esc deny.
+  const rows = [`${t('terminal.approval.window.choice.once', {}, locale)} (y)`, `${t('terminal.approval.window.choice.session', {}, locale)} (s)`, t('terminal.approval.window.keys.deny', {}, locale)];
+  await until(() => rows.every(row => f.view.stdout.frame.includes(row)), 'session key on card').catch(error => { throw new Error(String(error) + '\n' + f.view.stdout.frame); });
   expect(f.view.stdout.frame).not.toContain(t('terminal.approval.window.keys.always', {}, locale));
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## real producer approval window (${locale})\n${f.view.stdout.frame}\n`);
-  // R2: before Ctrl+O the decision key is typed text in the composer draft, never a decision; the draft is then cleared (Ctrl+U).
-  await settle(60); await f.type('s'); await settle(40);
-  expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0); expect(f.view.stdout.frame).toContain('> s');
-  await f.type('\u0015'); await settle(40);
-  await f.decide('a'); await settle(40);
+  // Slice 2: the card holds the keyboard by itself (arming is covered by terminal-decision-race); a scope it does not offer is no answer.
+  await settle(60); await f.decide('a'); await settle(40);
   expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0);
   await f.type('s');
   // T2 integration: notices name the short approval id (first 8 characters of the UUID); the full id is the detail line of the decision notice.

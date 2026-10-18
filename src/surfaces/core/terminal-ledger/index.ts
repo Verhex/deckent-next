@@ -3,7 +3,7 @@ export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, notice, parseTaskPhases
 export { formatRunCardLines, formatTaskPhases, formatWorkerCardLines, type LedgerCardLabels } from './internal/cards.js';
 export { compactCount, fillTemplate, formatDuration, formatWorkerLine, type WorkerLine, type WorkerLineLabels } from './internal/worker-line.js';
 export { agentHistory, appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory,
-  type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
+  type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow } from './internal/ledger-buffer.js';
 export { assistantLedgerEntries, streamStepEntries } from './internal/ledger-units.js';
 export { freshRunCards, newRunLedgerEntries, runWatchFingerprint } from './internal/run-watch.js';
 export { newWorkerTaskIds } from './internal/worker-watch.js';

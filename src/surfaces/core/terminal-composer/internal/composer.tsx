@@ -19,6 +19,8 @@ export interface ComposerLabels {
   readonly shortcuts: string;
   /** Dim hint after the caret while the draft is empty; never part of the draft. */
   readonly placeholder?: string;
+  /** Shown while a draft is put aside with Ctrl+S and the composer is empty (how to bring it back). */
+  readonly stashed?: string;
   /** Slash description and argument texts by catalog key (`SlashCommand.descriptionKey` / `argumentKey`). */
   readonly slash: Readonly<Record<string, string>>;
 }
@@ -177,6 +179,7 @@ export function Composer(props: ComposerProps): ReactNode {
         {state.shortcuts ? labels.shortcuts.split('\n').map((line, index) => <Text key={index} wrap="truncate" {...(index ? palette.muted : palette.accent)}>{line}</Text>) : null}
         {menu && auxiliary > 0 ? <MenuRows menu={menu} labels={labels} limit={Math.min(MENU_ROWS, auxiliary)} /> : null}
         {state.search ? <Text wrap="truncate">{`${labels.search} '${state.search.query}': ${match.split('\n')[0]}`}</Text> : null}
+        {state.stash && !state.text && labels.stashed ? <Text {...palette.muted} wrap="truncate">{labels.stashed}</Text> : null}
       </Box>
       <Box {...(framed ? { borderStyle: 'round' as const, paddingX: 1 } : {})} flexDirection="column" flexShrink={0}>
         {rows.slice(first, first + visible).map((row, offset) => { const index = first + offset; return (
