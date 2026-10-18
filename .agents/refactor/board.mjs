@@ -18,7 +18,8 @@ const WORKER_KINDS = ['codex-exec', 'claude-subagent', 'claude-headless', 'curso
 const WORKER_STATUS = ['running', 'review', 'landed', 'canceled', 'failed'];
 const WORKER_FIELDS = ['id', 'kind', 'model', 'worktree', 'card', 'status', 'since'];
 const DOGFOOD_MODES = ['OFF', 'TRIAL', 'ON'];
-const DOGFOOD_SOURCE = 'AGENTS.md · Current development phase';
+// Repository-relative file and its heading; rules-parity.test.mjs proves both still exist (moved from AGENTS.md in 9b7790b4).
+export const DOGFOOD_SOURCE = '.agents/skills/deckent-next-refactor/internal-contract.md · Current development phase';
 const fail = (code, detail, extra = {}) => Object.assign(new Error(`${code}${detail ? `: ${detail}` : ''}`), { code, detail: detail ?? null, ...extra });
 const text = (value, field) => { if (value === null) return null; if (typeof value !== 'string' || !value.trim() || value.length > TEXT) throw fail('BOARD_FIELD', field); return value; };
 const stamp = (value, field) => { if (value === null) return null; if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw fail('BOARD_FIELD', field); return value; };

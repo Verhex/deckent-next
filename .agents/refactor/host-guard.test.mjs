@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { guard } from './host-guard.mjs';
+import { guard, defaultContext, MEMORY_WARNING } from './host-guard.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = resolve(here, 'host-guard.mjs');
@@ -16,7 +16,6 @@ function ctx(over = {}) {
     vitestRunning: () => false,
     distUsers: () => [],
     readLines: () => 46,
-    refreshMemoryManifest: () => 'refreshed (stub)',
     sessionSummary: () => 'summary (stub)',
     ...over,
   };
@@ -95,17 +94,19 @@ test('U1: build/verify of a checkout whose dist runs a live process is denied; o
   assert.deepEqual(buildTargets('cd /a && cd b && npm run build; node ../c/scripts/build.mjs', '/x'), [resolve('/a/b'), resolve('/a/c')]);
 });
 
-test('post-tool: CLAUDE.md line cap and core-memory manifest refresh', () => {
+test('post-tool: CLAUDE.md line cap; a core-memory edit only warns and never writes the manifest', () => {
   const over = guard('post-tool', edit(`${root}/CLAUDE.md`), ctx({ readLines: () => 71 }));
   assert.equal(over.decision, 'block');
   assert.match(over.reason, /71 lines/);
   assert.deepEqual(guard('post-tool', edit(`${root}/AGENTS.md`), ctx({ readLines: () => 70 })), {});
-  let calls = 0;
-  const mem = guard('post-tool', edit(`${root}/.deckent/docs/core-memory/new_fact.md`), ctx({ refreshMemoryManifest: () => { calls++; return 'refreshed'; } }));
-  assert.equal(calls, 1);
+  const mem = guard('post-tool', edit(`${root}/.deckent/docs/core-memory/new_fact.md`), ctx());
   assert.equal(mem.hookSpecificOutput.hookEventName, 'PostToolUse');
-  assert.match(mem.hookSpecificOutput.additionalContext, /refreshed/);
-  assert.deepEqual(guard('post-tool', edit(`${root}/src/x.ts`), ctx({ refreshMemoryManifest: () => { throw new Error('must not run'); } })), {});
+  assert.equal(mem.hookSpecificOutput.additionalContext, MEMORY_WARNING);
+  assert.match(MEMORY_WARNING, /NOT refreshed/u); assert.match(MEMORY_WARNING, /owner approv/u);
+  assert.match(MEMORY_WARNING, /`node scripts\/lint-core-memory\.mjs --write`/u);
+  assert.equal(defaultContext(root, legacy).refreshMemoryManifest, undefined, 'the guard has no manifest writer');
+  assert.deepEqual(guard('post-tool', edit(`${root}/src/x.ts`), ctx()), {});
+  assert.deepEqual(guard('post-tool', edit(`${root}/.deckent/docs/core-memory/notes.txt`), ctx()), {});
 });
 
 test('session-start injects summary; unknown events and malformed input pass', () => {

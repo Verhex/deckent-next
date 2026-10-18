@@ -34,8 +34,8 @@ görsel düzenlemede ek ritüel veya sabit kimlik beyanı gerektirmez. Okumak i�
    yetenek veya güvenlik hedefini düşürmez. Kapsam dışını, bağımlılığı ve owner kararını açık tut.
 7. **Kanıtları ayır.** Tasarım kabulü, uygulama, gerçek yüzey sonucu ve bağımsız review ayrı
    iddialardır. Jev/self-review independent PASS değildir; legacy xverify/MASTER ritüeli taşıma.
-   İlgili negatif yolları ve producer-to-surface kanıtını seç; landing doğrulaması
-   `deckent-next-refactor`'daki güncel kurala uyar (dilimde hedefli kontrol; tam verify yalnız owner isterse).
+   İlgili negatif yolları ve producer-to-surface kanıtını seç; doğrulama sıklığı ve kaynak sınırı
+   kanun 7'ye uyar (`.deckent/docs/core-memory/law_local_verification.md`).
 
 ## Çıktı
 

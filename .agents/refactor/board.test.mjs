@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, renderOwnerReport, writeAtomic, DEFAULT_SLOTS } from './board.mjs';
+import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, renderOwnerReport, writeAtomic, DEFAULT_SLOTS, DOGFOOD_SOURCE } from './board.mjs';
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deckent-board-'));
@@ -21,7 +21,8 @@ test('init creates the board once with role slots, revision 0 and the dogfood mi
   assert.equal(board.schemaVersion, 1); assert.equal(board.revision, 0);
   assert.deepEqual(board.sessions.map(s => s.slot), DEFAULT_SLOTS.map(s => s.slot));
   assert.ok(board.sessions.every(s => s.status === 'unassigned' && s.sessionId === null));
-  assert.equal(board.dogfood.mode, 'OFF'); assert.match(board.dogfood.source, /AGENTS\.md/);
+  assert.equal(board.dogfood.mode, 'OFF'); assert.equal(board.dogfood.source, DOGFOOD_SOURCE);
+  assert.match(DOGFOOD_SOURCE, /^\.agents\/skills\/deckent-next-refactor\/internal-contract\.md · /u);
   assert.equal(code(() => initBoard(file)), 'BOARD_EXISTS');
   assert.deepEqual(readBoard(file), board);
 });
@@ -179,7 +180,7 @@ test('only the main session reconciles the map: assigns rows, mirrors dogfood wi
   setOwnRow(file, 'main', { name: 'Fable main', status: 'active' }, { session: 'main-1', revision: 0 });
   assert.equal(code(() => setMap(file, { sessions: { review: { sessionId: 'sol-9' } } }, { session: 'sol-9', revision: 1 })), 'BOARD_NOT_MAIN');
   const result = setMap(file, { sessions: { review: { sessionId: 'sol-9', name: 'GPT-6.1 Sol', channel: 'astra', status: 'active' } },
-    dogfood: { mode: 'OFF', source: 'AGENTS.md · Current development phase', observedAt: '2026-10-03T00:00:00.000Z' } }, { session: 'main-1', revision: 1 });
+    dogfood: { mode: 'OFF', source: DOGFOOD_SOURCE, observedAt: '2026-10-03T00:00:00.000Z' } }, { session: 'main-1', revision: 1 });
   assert.equal(result.revision, 2);
   let review = readBoard(file).sessions.find(s => s.slot === 'review');
   assert.equal(review.sessionId, 'sol-9'); assert.equal(review.channel, 'astra');
