@@ -8,9 +8,15 @@ import type { EffectConfirmationView, RunView, TargetQueueView, QueueConsent, Ta
  */
 export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string }>;
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
+/**
+ * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
+ * (hunk headers included) of the same patch the preview counted; `hidden` counts lines cut at the line bound; `unavailable` says why no body is
+ * carried (binary content, or beyond the byte/file bound). Viewing it never prepares, delivers or adopts anything.
+ */
+export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]; hidden: number; unavailable: 'binary' | 'too-large' | null }>;
 /** What the window shows before the person's `y`; `base`/`source`/`proposal` come from the integration check of the current source. */
 /** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
-export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; added: number; removed: number;
+export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
   verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string }>;
 export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;

@@ -5,10 +5,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { targetQueueViewSchema, type QueueConsent, type EffectConfirmationView, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryPreview, type TerminalDeliveryPort,
+import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview, type TerminalDeliveryPort,
   type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
+import { patchDiffs, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
@@ -34,7 +34,7 @@ function run(state: RunView['state'], phase: string, outlook?: string, id = 'r',
 const RUNNING = { kind: 'running' } as const, COMPLETED = { kind: 'terminal', outcome: 'completed', reason: 'completed' } as const;
 const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 'awaiting-delivery', id, title);
 
-type PortOptions = { targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
+type PortOptions = { diffs?: readonly DeliveryFileDiff[]; targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
   /** Y1: the installation's verification bar, the candidates each read returns (in order; the last repeats), and refusals by verification Run. */
   verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>> };
 /** Records every step; `answer` is asked where the production port asks it, with the card the engine would build. */
@@ -52,7 +52,7 @@ function recordingPort(options: PortOptions = {}) {
     async preview(target) {
       calls.push(`preview:${target.runId}`);
       return { target, identity: { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: 'a', layoutRevision: 'l', generation: 1 },
-        files: [{ path: 'note.txt', added: 1, removed: 1 }], added: 1, removed: 1, source: 'SOURCE-FINGERPRINT', base: BASE, proposal: 'P'.repeat(20), outOfScope: [],
+        files: options.diffs ? options.diffs.map(diff => ({ path: diff.path, added: 1, removed: 1 })) : [{ path: 'note.txt', added: 1, removed: 1 }], ...(options.diffs ? { diffs: options.diffs } : {}), added: 1, removed: 1, source: 'SOURCE-FINGERPRINT', base: BASE, proposal: 'P'.repeat(20), outOfScope: [],
         adoptionTargets: options.targets ?? [], verification: options.verification ?? null };
     },
     async deliver(preview, ids, answer) {
@@ -518,4 +518,92 @@ it('without a queue port a stale-base refusal offers only closing; r does nothin
   await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
   expect(frame(h)).toContain(WORDS.failedHints); expect(frame(h)).not.toContain(WORDS.queue!.reprepare);
   await press(h, CTRL_O); await press(h, 'r'); expect(frame(h)).toContain('base advanced'); expect(h.calls).not.toContain('prepare');
+});
+
+// Read-only diff inside the delivery window (alpha.46): the port carries bounded per-file hunks, the window shows them; seeing never delivers.
+describe('bounded per-file diffs (cli-terminal port)', () => {
+  const file = (text: string | null) => text === null ? null : { text, mode: '100644', digest: 'd' };
+  const render = (path: string, before: string | null, after: string | null) => ['--- a/' + path, '+++ b/' + path, '@@ -1 +1 @@', `-${before ?? ''}`, `+${after ?? ''}`].join('\n');
+  const change = (path: string, before: string | null, after: string | null) => ({ path, before: file(before), after: file(after) }) as never;
+  it('renders a normal change; a NUL, a byte-oversized side and files beyond the file bound carry a typed reason and never reach the renderer', () => {
+    let rendered = 0;
+    const count = (path: string, before: string | null, after: string | null) => { rendered++; return render(path, before, after); };
+    const [normal, binary, big] = patchDiffs([change('a.txt', 'x\n', 'y\n'), change('b.bin', 'a\0b', 'c'), change('c.txt', 'x', 'y'.repeat(70_000))], count);
+    expect(normal).toMatchObject({ path: 'a.txt', lines: ['@@ -1 +1 @@', '-x', '+y'], hidden: 0, unavailable: null });
+    expect(binary).toMatchObject({ path: 'b.bin', lines: [], unavailable: 'binary' }); expect(big).toMatchObject({ path: 'c.txt', lines: [], unavailable: 'too-large' });
+    expect(rendered).toBe(1);
+    const many = patchDiffs(Array.from({ length: 52 }, (_, index) => change(`f${String(index).padStart(2, '0')}.txt`, 'x', 'y')), render);
+    expect(many.slice(0, 50).every(diff => diff.unavailable === null)).toBe(true); expect(many.slice(50).map(diff => diff.unavailable)).toEqual(['too-large', 'too-large']);
+  });
+  it('cuts a long body at the line bound and counts what it hid; a mode-only change shows its mode line', () => {
+    const [long] = patchDiffs([change('l.txt', 'x', 'y')], () => ['--- a', '+++ b', ...Array.from({ length: 600 }, (_, index) => `+line ${index}`)].join('\n'));
+    expect(long!.lines).toHaveLength(400); expect(long!.hidden).toBe(200);
+    const [mode] = patchDiffs([{ path: 'm.sh', before: { text: 'same', mode: '100644', digest: 'd' }, after: { text: 'same', mode: '100755', digest: 'e' } } as never], render);
+    expect(mode!.lines).toEqual(['mode 100644 -> 100755 m.sh']);
+  });
+  it('the real port keeps the Attempt, base and proposal of the preview and adds the diffs of the same patch', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-port-diffs-')); mkdirSync(join(root, '.deckent'));
+    writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
+      logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: [] } } }));
+    const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 3 };
+    const handlers = { inspectInventory: async () => ({ schemaVersion: 1, layout: {}, page: { entries: [{ identity }], nextAfter: null } }),
+      previewWorkspacePatch: async () => ({ patch: { changes: [change('a.txt', 'x\n', 'y\n')] } }),
+      checkWorkspaceIntegration: async () => ({ observation: { source: 'SRC', head: BASE }, proposal: 'PROP', scope: { status: 'in-scope' } }),
+      prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: render, interactiveDelivery: () => ({}) };
+    const preview = await terminalDeliveryPort(root, handlers as never, { env: homeEnv(join(root, 'home')) })!.preview({ scopeId: 's', runId: 'r', taskId: 'task', key: 'k', title: 't' });
+    expect(preview).toMatchObject({ identity, base: BASE, proposal: 'PROP', files: [{ path: 'a.txt', added: 1, removed: 1 }], diffs: [{ path: 'a.txt', lines: ['@@ -1 +1 @@', '-x', '+y'] }] });
+  });
+});
+
+describe('read-only diff view in the delivery window', () => {
+  const diffs: DeliveryFileDiff[] = [
+    { path: 'one.txt', lines: ['@@ -1 +1 @@', '-old-one', '+new-one'], hidden: 0, unavailable: null },
+    { path: 'big.bin', lines: [], hidden: 0, unavailable: 'binary' },
+    { path: 'long.txt', lines: Array.from({ length: 40 }, (_, index) => `+row-${index}`), hidden: 7, unavailable: null },
+  ];
+  async function ready(options: PortOptions = {}) {
+    const h = harness({ diffs, viewFiles: (options.diffs ?? diffs).map(diff => diff.path), ...options }); await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window ready'); await press(h, CTRL_O);
+    return h;
+  }
+  it('Enter opens the selected file; j/k and arrows choose and scroll; Esc goes back to the list and then closes only on the next Esc; nothing is delivered', async () => {
+    const h = await ready();
+    expect(frame(h)).toContain(WORDS.diffListHints); expect(frame(h)).toContain('› one.txt | +1 -1');
+    await press(h, 'j'); expect(frame(h)).toContain('› big.bin'); await press(h, 'k'); expect(frame(h)).toContain('› one.txt');
+    await press(h, '\r'); expect(frame(h)).toContain('one.txt (1/3)'); expect(frame(h)).toContain('-old-one'); expect(frame(h)).toContain('+new-one'); expect(frame(h)).toContain(WORDS.diffHints);
+    expect(frame(h)).toContain('attempt a#1'); expect(frame(h)).toContain(`base ${BASE.slice(0, 12)}`); expect(frame(h)).toContain('proposal PPPPPPPPPPPP');
+    await press(h, ESC); expect(frame(h)).toContain(WORDS.diffListHints); expect(frame(h)).toContain(windowTitle);
+    await press(h, DOWN); await press(h, DOWN); await press(h, '\r'); expect(frame(h)).toContain('+row-0'); expect(frame(h)).not.toContain('+row-30');
+    await press(h, 'j'); await press(h, 'j'); expect(frame(h)).not.toContain('+row-0\n'); expect(frame(h)).toContain('diff lines 3-20 of 40');
+    expect(frame(h)).toContain('+7 more diff lines'); await press(h, ESC);
+    expect(h.calls).toEqual(['preview:r']);
+  });
+  it('a binary or too-large file says it cannot be shown instead of an empty or partial diff', async () => {
+    const h = await ready(); await press(h, 'j'); await press(h, '\r');
+    expect(frame(h)).toContain('big.bin (2/3)'); expect(frame(h)).toContain(WORDS.diffUnavailable); expect(h.calls).toEqual(['preview:r']);
+  });
+  it('seeing a diff never delivers: y, n and Enter inside the diff do nothing, and only the list step y delivers once', async () => {
+    const h = await ready(); await press(h, '\r'); await press(h, 'y', 120); await press(h, 'n'); await press(h, '\r');
+    expect(frame(h)).toContain('one.txt (1/3)'); expect(h.calls).toEqual(['preview:r']); expect(h.views).toEqual([]);
+    await press(h, ESC); await press(h, 'y', 120);
+    await until(() => frame(h).includes(`Delivered: commit ${COMMIT}`), 'delivered after the explicit list-step y');
+    expect(h.calls).toEqual(['preview:r', 'available', 'prepare', 'publish']); expect(h.views).toHaveLength(1);
+  });
+  it('hostile terminal text and a known secret in a diff cannot corrupt the screen or leak', async () => {
+    const hostile: DeliveryFileDiff[] = [{ path: 'evil\u001b[2Jname.txt', lines: ['@@ -1 +1 @@', '+\u001b[2J\u001b]0;pwned\u0007\u001b[31mred\u0000\r\u202e', '+token sk-ant-api03-' + 'A'.repeat(40)], hidden: 0, unavailable: null }];
+    const h = await ready({ diffs: hostile }); await press(h, '\r');
+    const out = h.view.stdout.text;
+    expect(out).not.toContain('\u001b[2J'); expect(out).not.toContain('pwned\u0007'); expect(out).not.toContain('\u202e'); expect(out).not.toContain('A'.repeat(40));
+    expect(frame(h)).toContain('evil');
+  });
+  it('a stale base after viewing the diff is the same typed refusal row; a denied preview shows its typed row and no diff', async () => {
+    const stale = await ready({ failFirst: { code: 'PATCH_BASE_ADVANCED', message: 'The delivery base changed.' } });
+    await press(stale, '\r'); await press(stale, ESC); await press(stale, 'y', 120);
+    await until(() => frame(stale).includes('ERR:The delivery base changed.'), 'typed stale refusal'); expect(frame(stale)).toContain(WORDS.next['PATCH_BASE_ADVANCED']!.slice(0, 40));
+    expect(stale.calls).not.toContain('publish');
+    const denied = harness({ diffs }); denied.port.preview = async () => { throw Object.assign(new Error('access denied'), { code: 'POLICY_DENIED' }); };
+    await admit(denied); denied.set(awaiting()); await until(() => frame(denied).includes('access denied'), 'typed denial');
+    expect(frame(denied)).toContain(WORDS.next['POLICY_DENIED']!.slice(0, 40)); expect(frame(denied)).not.toContain('old-one');
+    await press(denied, CTRL_O); await press(denied, '\r'); expect(frame(denied)).not.toContain('old-one');
+  });
 });
