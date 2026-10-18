@@ -84,3 +84,12 @@ test('no directory or a missing one is a skip, not a failure; the CLI always exi
   assert.deepEqual(snapshot(dir), before);
   assert.equal(run(['--dir']).status, 2);
 });
+
+test('a malformed percent-encoded index link is a warning; the report and exit 0 survive (Astra 2648 N1)', t => {
+  const dir = fixture(t, { 'MEMORY.md': '- [A](a.md) — a\n- [not](bad%.md) — broken encoding\n', 'a.md': note('a') });
+  const result = lintMemory(dir);
+  assert.deepEqual(codes(result), ['index-bad-link MEMORY.md']);
+  assert.equal(result.warnings[0].line, 2); assert.match(result.warnings[0].detail, /bad%\.md/u);
+  const cli = spawnSync(process.execPath, [TOOL, '--dir', dir, '--json'], { encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr); assert.equal(JSON.parse(cli.stdout).warnings[0].code, 'index-bad-link');
+});

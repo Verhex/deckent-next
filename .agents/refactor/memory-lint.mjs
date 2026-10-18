@@ -61,7 +61,9 @@ export function lintMemory(dir) {
   if (index === undefined) warn('index-missing', INDEX, 'no MEMORY.md index');
   else index.split('\n').forEach((line, i) => {
     for (const match of line.matchAll(/\]\(([^)\s]+)\)/gu)) {
-      const target = decodeURI(match[1].split('#')[0]);
+      let target;
+      // Malformed percent-encoding (e.g. `bad%.md`) is a warning, never an abort of this warn-only report (Astra 2648 N1).
+      try { target = decodeURI(match[1].split('#')[0]); } catch { warn('index-bad-link', INDEX, `link target ${match[1]} is not valid percent-encoding`, i + 1); continue; }
       if (!target || /^[a-z][a-z0-9+.-]*:/iu.test(target)) continue;
       const name = path.posix.normalize(target);
       listed.add(name);
