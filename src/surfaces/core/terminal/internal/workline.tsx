@@ -193,6 +193,9 @@ export function WorklineApp(props: WorklineProps) {
   const size = useWindowSize(), pinned = pinnedMode && size.rows > 0 && size.columns > 0;
   // TERMINAL-SABIT-DUZEN: the full-window layout is chosen once too (the alternate screen was entered for it before the first frame).
   const [fullscreenMode] = useState(() => pinnedMode && props.fullscreen === true);
+  // Transcript search (Ctrl+F while scrolled back) holds the typed keys while it is open; the composer keeps its draft.
+  const [searchOpen, setSearchOpen] = useState(false), searchFocus = useRef(false);
+  const onSearch = useCallback((open: boolean) => { searchFocus.current = open; setSearchOpen(open); }, []);
   const [bannerShown, setBannerShown] = useState(true);
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
@@ -635,7 +638,7 @@ export function WorklineApp(props: WorklineProps) {
     selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)}
     context={contextStatus(session.measured, labels.render, labels.sessions?.locale)} />;
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
-  const composerNode = <StackComposer elsewhere={() => stripFocus.current} active={!stripFocused} prompt={labels.prompt} labels={{ ...labels.composer,
+  const composerNode = <StackComposer elsewhere={() => stripFocus.current || searchFocus.current} active={!stripFocused && !searchOpen} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
     busy={busy} historyText={bareSlash} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
     onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
@@ -673,7 +676,7 @@ export function WorklineApp(props: WorklineProps) {
   const activityNode = activeLabels && stripItems.length ? <ActiveWorkSummary items={stripItems} labels={activeLabels} /> : fullAccessNode ?? <Text> </Text>;
   const layout = fullscreenMode
     ? <FullscreenWorkline
-      viewport={<WheelContext.Provider value={props.wheel ?? null}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} /></WheelContext.Provider>}
+      viewport={<WheelContext.Provider value={props.wheel ?? null}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} /></WheelContext.Provider>}
       above={<>
         {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} collapsed /> : null}
         {windowsNode}</>}
@@ -716,7 +719,7 @@ function contextStatus(measured: Readonly<{ promptTokens: number; windowTokens: 
     window: measured.windowTokens === null ? '?' : formatContextTokens(measured.windowTokens, locale ?? 'en') });
 }
 /** Language-neutral until the catalog words are passed (tests, hosts without the catalog). */
-const NEUTRAL_VIEWPORT_LABELS: ChatViewportLabels = Object.freeze({ below: '+{count} PgDn · End', newMessages: '+{count} · End' });
+const NEUTRAL_VIEWPORT_LABELS: ChatViewportLabels = Object.freeze({ below: '+{count} PgDn · End', newMessages: '+{count} · End', search: '/{query}{state}', searchNone: ' ∅' });
 
 export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly labels: WorklineLabels;

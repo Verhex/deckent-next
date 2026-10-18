@@ -17,7 +17,7 @@ const labels = {
     toolStatus: {}, context: 'CTX', compacted: 'COMPACTED' },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS', stashed: 'STASHED', slash: {} },
   focus: { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS', decide: 'DECIDE-HERE' },
-  viewport: { below: 'BELOW {count} END', newMessages: 'NEW {count} END' },
+  viewport: { below: 'BELOW {count} END', newMessages: 'NEW {count} END', search: 'FIND[{query}]{state}', searchNone: ' NONE' },
   work: workSurfaceLabels('en'),
 };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

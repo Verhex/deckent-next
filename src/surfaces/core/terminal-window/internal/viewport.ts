@@ -86,3 +86,48 @@ export function viewportLines(blocks: ViewportBlocks, anchor: ViewportAnchor, he
   }
   return { lines, below: anchor ? Math.max(0, linesToEnd(blocks, from, Number.MAX_SAFE_INTEGER) - room) : null };
 }
+
+/**
+ * Transcript search and prompt jumps (harness gap 4, the Claude Code focused-transcript pattern): only the lines this view keeps (bounded
+ * history, already projected for display) are searched. `layout` lays a block out outside any render; `isPrompt` marks the person's own
+ * messages. Both are optional: without them search and jumps find nothing.
+ */
+export type SearchableBlocks = ViewportBlocks & Readonly<{ layout?: (index: number) => readonly string[]; isPrompt?: (index: number) => boolean }>;
+
+// eslint-disable-next-line no-control-regex -- display lines carry SGR colour codes.
+const SGR = /\u001b\[[\d;]*m/gu;
+
+function topOf(blocks: ViewportBlocks, anchor: ViewportAnchor, height: number): Position | null {
+  return anchor ? positionOf(blocks, anchor) : followTop(blocks, Math.max(1, height));
+}
+
+/** The next line containing `query` (case-insensitive) older (−1) or newer (+1) than the view's first line; the found line is put on top. */
+export function searchViewport(blocks: SearchableBlocks, anchor: ViewportAnchor, height: number, query: string, direction: -1 | 1): ViewportAnchor | 'none' {
+  const needle = query.toLocaleLowerCase(), from = topOf(blocks, anchor, height);
+  if (!needle || !from) return 'none';
+  const lines = (index: number) => (blocks.layout ?? blocks.linesOf)(index);
+  const hit = (index: number, line: number) => (lines(index)[line] ?? '').replace(SGR, '').toLocaleLowerCase().includes(needle);
+  let index = from.index, line = from.line;
+  for (;;) {
+    line += direction;
+    while (line < 0 || line >= lines(index).length) {
+      index += direction;
+      if (index < 0 || index >= blocks.keys.length) return 'none';
+      line = direction < 0 ? lines(index).length - 1 : 0;
+    }
+    if (hit(index, line)) return { key: blocks.keys[index]!, line };
+  }
+}
+
+/** The previous (−1) or next (+1) message of the person relative to the view's first line; past the newest one the view follows again. */
+export function promptJump(blocks: SearchableBlocks, anchor: ViewportAnchor, height: number, direction: -1 | 1): ViewportAnchor {
+  const from = topOf(blocks, anchor, height), isPrompt = blocks.isPrompt, view = Math.max(1, height);
+  if (!from || !isPrompt) return anchor;
+  const at = (index: number): ViewportAnchor => linesToEnd(blocks, { index, line: 0 }, view) <= view ? null : { key: blocks.keys[index]!, line: 0 };
+  if (direction < 0) {
+    for (let index = from.line > 0 ? from.index : from.index - 1; index >= 0; index--) if (isPrompt(index)) return at(index);
+    return anchor;
+  }
+  for (let index = from.index + 1; index < blocks.keys.length; index++) if (isPrompt(index)) return at(index);
+  return null;
+}

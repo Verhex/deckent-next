@@ -28,8 +28,9 @@ export function composerKey(input: string, key: Key): ComposerKey | null {
   if (key.delete) return { type: 'delete', span: word ? 'wordForward' : 'forward' };
   if (key.leftArrow) return { type: 'move', to: word ? 'wordLeft' : 'left' };
   if (key.rightArrow) return { type: 'move', to: word ? 'wordRight' : 'right' };
-  if (key.upArrow) return { type: 'move', to: 'up' };
-  if (key.downArrow) return { type: 'move', to: 'down' };
+  // Ctrl+Up / Ctrl+Down jump between the person's messages in the full-window conversation (harness gap 4); plain arrows stay composer keys.
+  if (key.upArrow && !key.ctrl) return { type: 'move', to: 'up' };
+  if (key.downArrow && !key.ctrl) return { type: 'move', to: 'down' };
   // Ctrl+Home / Ctrl+End scroll the full-window conversation (TERMINAL-SABIT-DUZEN); plain Home/End stay line moves.
   if (key.home && !key.ctrl) return { type: 'move', to: 'home' };
   if (key.end && !key.ctrl) return { type: 'move', to: 'end' };

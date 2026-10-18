@@ -60,3 +60,27 @@ describe('2/3 — draft stash (Ctrl+S) and edit undo (Ctrl+_)', () => {
     view.stdin.write(UNDO); await settle(30); expect(composerRow(view.stdout.frame)).not.toContain('abc'); expect(sent).toEqual(['abc']);
   });
 });
+
+describe('4 — transcript search and prompt jumps in the full window', () => {
+  const PGUP = '\u001b[5~', CTRL_F = '\u0006', CTRL_UP = '\u001b[1;5A', CTRL_DOWN = '\u001b[1;5B', ESC = '\u001b';
+  const labels = { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}', search: 'FIND {query}{state}', searchNone: ' NONE' } };
+  it('searches only this view, keeps the draft, jumps between the person\'s messages and returns to the latest', async () => {
+    let n = 0;
+    const view = mountWorkline({ labels, fullscreen: true, completeTurn: async () => { n += 1; return Array.from({ length: 30 }, (_, i) => n === 1 && i === 3 ? 'the NEEDLE line' : `a${n}-row-${i}`).join('\n'); } } as never, 80, { rows: 24 });
+    mounted.push(view.instance);
+    await until(() => view.stdout.frame.includes('READY'), 'ready');
+    for (const prompt of ['prompt-one', 'prompt-two', 'prompt-three']) { view.stdin.write(`${prompt}\r`); await until(() => view.stdout.frame.includes(`-row-29`) && view.stdout.frame.includes('READY'), prompt); await settle(40); }
+    for (const char of 'my draft') { view.stdin.write(char); await settle(3); }
+    view.stdin.write(PGUP); await until(() => view.stdout.frame.includes('BELOW'), 'scrolled back');
+    view.stdin.write(CTRL_F); await until(() => /^FIND/mu.test(view.stdout.frame), 'search open');
+    for (const char of 'needle') { view.stdin.write(char); await settle(20); }
+    await until(() => view.stdout.frame.includes('the NEEDLE line'), 'match shown');
+    expect(view.stdout.frame).toContain('FIND needle'); expect(view.stdout.frame).toContain('my draft'); expect(view.stdout.frame).not.toContain('my draftneedle');
+    for (const char of 'zz') { view.stdin.write(char); await settle(20); }
+    await until(() => view.stdout.frame.includes('FIND needlezz NONE'), 'no match');
+    view.stdin.write(ESC); await until(() => !/^FIND/mu.test(view.stdout.frame), 'search closed');
+    view.stdin.write(CTRL_UP); await settle(60); expect(view.stdout.frame.split('\n')[0]).toMatch(/you|│ prompt-/u);
+    view.stdin.write(CTRL_DOWN); await settle(40); view.stdin.write(CTRL_DOWN); await settle(40); view.stdin.write(CTRL_DOWN); await settle(60);
+    expect(view.stdout.frame).not.toContain('BELOW'); expect(view.stdout.frame).toContain('a3-row-29'); expect(view.stdout.frame).toContain('my draft');
+  });
+});

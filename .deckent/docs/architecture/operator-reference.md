@@ -8,7 +8,9 @@ own multi-line draft moves it), and under it a fixed information area shows the 
 summary (or the full-access line) and key hints. The conversation follows the newest line; the mouse wheel scrolls it three
 lines a notch, PgUp/PgDn by half a view, Ctrl+Home goes to its first line and Ctrl+End back to the newest one; while you read
 back a row says how many new messages (or lines) arrived and End/Home jump to the newest/first line (streaming never pulls the
-view down; at the bottom it follows again). Windows and cards open right above the input bar, take at most half the screen and scroll inside; they shrink the
+view down; at the bottom it follows again). While scrolled back Ctrl+F searches the conversation this view keeps (the shown,
+masked text only; Enter/↑ older, ↓ newer, Esc closes; the draft is untouched), and Ctrl+Up/Ctrl+Down jump to your previous/next
+message (Ctrl+R stays input-history search). Windows and cards open right above the input bar, take at most half the screen and scroll inside; they shrink the
 conversation area, never move the bar. On exit the conversation is written to the normal screen, so it stays in your
 terminal's scrollback; `/clear` empties the view and that scrollback. The full window reports the mouse wheel only while it
 is shown (clicks are ignored and never answer a card); select text with your terminal's modifier as in Claude Code — Shift

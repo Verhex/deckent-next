@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Writable, PassThrough } from 'node:stream';
 import { cells } from '#surfaces/core/terminal-render/index.js';
-import { fullscreenFrameRows, fullscreenInfoRows, scrollViewport, takeMouseReports, viewportLines, viewportStart, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
+import { fullscreenFrameRows, fullscreenInfoRows, promptJump, scrollViewport, searchViewport, takeMouseReports, viewportLines, viewportStart, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
@@ -181,6 +181,17 @@ describe('viewport scroll model', () => {
     // A block that left the bounded history: the oldest line still there.
     expect(viewportLines(blocks([5, 5]), { key: 'gone', line: 3 }, 4).lines[0]).toBe('b0:0');
     expect(viewportLines(blocks([]), null, 4)).toEqual({ lines: [], below: null });
+  });
+  it('searches older/newer lines from the view (colour codes ignored) and jumps between prompt blocks', () => {
+    const base = blocks([3, 3, 3, 3]), coloured = { ...base, linesOf: (index: number) => base.linesOf(index).map(line => line === 'b1:1' ? '\u001b[1mB1:1\u001b[22m' : line),
+      isPrompt: (index: number) => index % 2 === 0 };
+    expect(searchViewport(coloured, null, 3, 'b1:1', -1)).toEqual({ key: 'b1', line: 1 });
+    expect(searchViewport(coloured, { key: 'b0', line: 0 }, 3, 'b2:2', 1)).toEqual({ key: 'b2', line: 2 });
+    expect(searchViewport(coloured, null, 3, 'absent', -1)).toBe('none');
+    expect(promptJump(coloured, null, 3, -1)).toEqual({ key: 'b2', line: 0 });
+    expect(promptJump(coloured, { key: 'b2', line: 0 }, 3, -1)).toEqual({ key: 'b0', line: 0 });
+    expect(promptJump(coloured, { key: 'b0', line: 0 }, 3, 1)).toEqual({ key: 'b2', line: 0 });
+    expect(promptJump(coloured, { key: 'b2', line: 0 }, 3, 1)).toBeNull();
   });
 });
 

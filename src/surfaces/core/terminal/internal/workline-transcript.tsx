@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { renderToString } from 'ink';
-import type { ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
+import type { SearchableBlocks } from '#surfaces/core/terminal-window/index.js';
 import type { LedgerRow } from '#surfaces/core/terminal-ledger/index.js';
 
 /**
@@ -11,7 +11,7 @@ import type { LedgerRow } from '#surfaces/core/terminal-ledger/index.js';
  * React's call stack, and the view renders again. `banner`: the opening frame as the first block (until `/clear`).
  */
 export type TranscriptRender = (row: LedgerRow) => ReactElement;
-export type TranscriptBlocks = ViewportBlocks & Readonly<{ text: () => string }>;
+export type TranscriptBlocks = SearchableBlocks & Readonly<{ text: () => string }>;
 
 type Laid = Readonly<{ columns: number; style: unknown; lines: readonly string[] }>;
 const BANNER_KEY = 'banner', BANNER_SEQ = -1, PLACEHOLDER: readonly string[] = Object.freeze(['']);
@@ -52,8 +52,19 @@ export function useTranscriptBlocks(rows: readonly LedgerRow[], columns: number,
       if (!item) return '';
       return (fresh(item.seq) ?? cache.current.get(item.seq)?.lines ?? splitRendered(item.draw())).join('\n');
     }).join('\n');
+    // Search (outside any render): a row not laid out yet is laid out now and cached like the viewport's own rows.
+    const layout = (index: number): readonly string[] => {
+      const item = source(index);
+      if (!item) return [];
+      const hit = fresh(item.seq);
+      if (hit) return hit;
+      const lines = splitRendered(item.draw());
+      cache.current.set(item.seq, { columns: width, style: styleKey, lines });
+      return lines;
+    };
+    const isPrompt = (index: number) => { const row = rows[index - offset]; return row !== undefined && row.entry.kind === 'chat' && row.entry.role === 'user'; };
     void version;
-    return Object.freeze({ keys, linesOf, text });
+    return Object.freeze({ keys, linesOf, text, layout, isPrompt });
   }, [rows, columns, banner, styleKey, version]);
   useEffect(() => {
     if (wanted.current.size === 0) return undefined;

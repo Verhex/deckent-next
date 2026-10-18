@@ -101,4 +101,13 @@ describe.skipIf(process.platform === 'win32')('full window on a real PTY (produc
     expect(composer(5)).toContain('draft-abc'); expect(composer(5)).not.toContain('draft-abcX'); // undone
     expect(run.output.slice(0, run.marks[8]).includes('DECIDED')).toBe(false);
   }, 120_000);
+
+  it('Ctrl+F searches the kept conversation while scrolled back and Ctrl+Up jumps to the person\'s message (real TTY keys)', async () => {
+    const run = await pty([['READY', 'alpha\r', 0.2], ['alpha-line-3', 'long\r', 0.2], ['long-line-79', '\u001b[5~\u001b[5~', 0.4], ['BELOW', '\u0006', 0.3],
+      ['FIND[', 'alpha-line-1', 0.3], ['FIND[alpha-line-1]', '\u001b', 0.3], ['BELOW', '\u001b[1;5A', 0.4], ['BELOW', '', 0.2]]);
+    const found = run.screen(5).join('\n');
+    expect(found).toContain('FIND[alpha-line-1]'); expect(found).toMatch(/^ +alpha-line-1$/mu); expect(found).not.toContain('NONE');
+    // Ctrl+Up: the person's previous message ("long") is now the view's first row block.
+    expect(run.screen(7).slice(0, 3).join('\n')).toMatch(/│ long|you/u);
+  }, 120_000);
 });
