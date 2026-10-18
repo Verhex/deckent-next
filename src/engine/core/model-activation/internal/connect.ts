@@ -1,7 +1,7 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, modelConnectCommandSchema, parseProviderCatalog, parseModelInvocationProfile, type AuditEvent, type JsonObject,
+import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, endpointMayCarryKey, modelConnectCommandSchema, parseProviderCatalog, parseModelInvocationProfile, type AuditEvent, type JsonObject,
   type ModelActivationRecord, type ModelBindingDefinition, type ModelConnectCommand, type ModelConnectResult, type ModelConnectStepState, type ModelReference,
   type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
 
@@ -91,9 +91,9 @@ export class ModelConnectApplication {
     if (!kind.endpoint.editable && command.endpoint !== null) throw new ModelConnectError('MODEL_CONNECT_ENDPOINT_FIXED');
     const address = command.endpoint ?? kind.endpoint.default, base = address === null ? null : ports.endpoint(address);
     if (base === null) throw new ModelConnectError('MODEL_CONNECT_ENDPOINT_INVALID');
-    const endpoint = `${base}${kind.connect.chatPath}`, secure = new URL(endpoint).protocol === 'https:', keyName = ports.secretName(kind.id, base);
+    const endpoint = `${base}${kind.connect.chatPath}`, secure = endpointMayCarryKey(endpoint), keyName = ports.secretName(kind.id, base);
     if (kind.keyRequired && secure && keyName === null) throw new ModelConnectError('MODEL_CONNECT_KEY_NAME_UNAVAILABLE');
-    // A key is only ever named over https; a plain-http local server is reached without one (the adapters refuse a cleartext credential).
+    // A key is only ever named over https (`endpointMayCarryKey`, G2-7); a plain-http local server is reached without one (the adapters refuse a cleartext credential).
     const credentialRef = secure ? keyName : null, { scopeId } = command;
     const principal = await ports.principal();
     let layers = await ports.layers();

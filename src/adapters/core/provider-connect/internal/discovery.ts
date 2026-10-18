@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { exactModelIdSchema, parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/index.js';
+import { endpointMayCarryKey, exactModelIdSchema, parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION } from '#adapters/core/provider-openai-chat/index.js';
 import { PROVIDER_CONNECT_LIMITS, type ProviderConnectKind } from './registry.js';
 import { providerProbeBase, type ProviderProbeOptions } from './probe.js';
@@ -29,9 +29,8 @@ async function readPart(reader: ReadableStreamDefaultReader<Uint8Array>, signal:
 export async function discoverProviderModels(kind: ProviderConnectKind, endpoint: string | null, key: string | null,
   options: ProviderProbeOptions = {}): Promise<readonly string[]> {
   if (!kind.available || kind.connect?.seed !== null || !kind.probe?.listsModels) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE');
-  const base = providerProbeBase(kind, endpoint), secure = new URL(base).protocol === 'https:';
-  // A key never travels in cleartext. A plain-http loopback discovery, like its invocation, is anonymous.
-  const credential = secure ? key : null;
+  // One key rule (G2-7): a key never travels in cleartext; a plain-http loopback discovery, like its invocation, is anonymous.
+  const base = providerProbeBase(kind, endpoint), secure = endpointMayCarryKey(base), credential = secure ? key : null;
   if (secure && kind.key?.required && !credential) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE');
   const headers: Record<string, string> = { accept: 'application/json', ...kind.probe.headers };
   if (credential) headers[kind.probe.auth.type === 'bearer' ? 'authorization' : kind.probe.auth.name] = kind.probe.auth.type === 'bearer' ? `Bearer ${credential}` : credential;

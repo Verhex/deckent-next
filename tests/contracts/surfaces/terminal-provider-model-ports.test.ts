@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { clearConfigCache, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
-import { providerEndpoint } from '#adapters/core/provider-connect/index.js';
+import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-panels/index.js';
@@ -124,6 +124,28 @@ describe('/provider port', () => {
       '1 model profile(s) name DECKENT_ANTHROPIC_KEY; they are refused until a key is stored again.']);
     expect(store.deletes).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_ANTHROPIC_KEY' }]);
   });
+});
+
+// G2-7 (owner 2026-10-18, "no key over plain http"): a key typed for a plain-http local server is refused by the real connection check before
+// any request; the window says why in the person's language and nothing is stored.
+describe('/provider: a key for a plain-http address', () => {
+  it.each([['en', 'Key: not sent, not checked and not stored — a key never travels over plain http'], ['tr', 'Anahtar: gönderilmedi, denenmedi ve saklanmadı — anahtar düz http üzerinden']] as const)(
+    '%s: refused before any request, explained, nothing stored; an empty key still checks the server', async (locale, text) => {
+      const { root, options } = await project({});
+      const store = secrets(), sent: string[] = [];
+      const fetch = async (url: string, init: { headers: Record<string, string> }) => { sent.push(`${url} ${init.headers['authorization'] ?? 'no-key'}`); return new Response('{"data":[]}', { status: 200 }); };
+      const host = { ...connectHost('ok'), probe: (input: { kind: string; endpoint: string | null; key: string | null }) => probeProviderConnection(input, { fetch }) };
+      const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: host }, options, locale, errorText);
+      for (const endpoint of ['http://127.0.0.1:8000', 'http://[::1]:11434']) {
+        const refused = await port.connect({ kind: 'local-openai', endpoint, key: CANARY });
+        expect(refused).toMatchObject({ stored: false });
+        expect(refused.lines[0]).toMatchObject({ tone: 'warning', text: expect.stringContaining(text) });
+        expect(JSON.stringify(refused)).not.toContain(CANARY);
+      }
+      expect(sent).toEqual([]); expect(store.sets).toEqual([]);
+      expect(await port.connect({ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000', key: null })).toMatchObject({ stored: false });
+      expect(sent).toEqual(['http://127.0.0.1:8000/v1/models no-key']); expect(store.sets).toEqual([]);
+    });
 });
 
 describe('/provider addresses (owner 2026-10-08, D3: chosen from a list; a typed address is the narrow exception)', () => {
