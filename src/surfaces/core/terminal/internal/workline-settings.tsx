@@ -36,6 +36,8 @@ function settingsPanelOf(command: string, args: string, ports: PanelPorts | null
  */
 export function useWorklineSettings(input: { readonly panels: WorklinePanels | undefined; readonly permissionMode: WorklinePermissionModePort | undefined; readonly mode: Mode;
   readonly panel: WorklinePanel; readonly state: PanelSnapshot<TerminalLocalContext>; readonly openApprovals: (approvalId: string, execution: LocalExecution) => Promise<void>;
+  /** K7: `/policy`'s "Me" row closes the window and runs `/permissions` in the same command. Absent: no row. */
+  readonly openPermissions?: (execution: LocalExecution) => Promise<void>;
   readonly push: (entries: readonly WorkLedgerEntry[]) => void; readonly errorText: (error: unknown) => string; readonly blocked: boolean;
   readonly sessionModel?: WorklineSessionModel }) {
   const { panels, permissionMode, panel, state, push, errorText } = input;
@@ -57,12 +59,14 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice, fresh?: boolean) => sessionModel.current?.pin(choice, fresh) } } : {}) };
   }, [panels, permissionMode, pinnable]);
   const approvalAfter = useRef<string | null>(null), openApprovals = useRef(input.openApprovals); openApprovals.current = input.openApprovals;
+  const permissionsAfter = useRef(false), openPermissions = useRef(input.openPermissions); openPermissions.current = input.openPermissions;
   const open = useCallback(async (command: string, args: string, execution: LocalExecution): Promise<boolean> => {
     const kind = settingsPanelOf(command, args, ports);
     if (!kind) return false;
-    approvalAfter.current = null;
+    approvalAfter.current = null; permissionsAfter.current = false;
     await panel.pick(execution, { kind: 'settings', panel: kind }, ['close']);
     const approvalId = approvalAfter.current; approvalAfter.current = null;
+    if (permissionsAfter.current && !execution.signal.aborted) { permissionsAfter.current = false; await openPermissions.current?.(execution); return true; }
     if (approvalId && !execution.signal.aborted) {
       try { await openApprovals.current(approvalId, execution); } catch (error) { push([notice('error', errorText(error))]); }
     }
@@ -75,6 +79,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
     // one system summary line, never a chat notice.
     ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => ({ ...systemSummaryEntry(item.text, item.level), ...(item.identity ? { identity: item.identity } : {}) })))}
       onError={error => push([systemSummaryEntry(errorText(error), 'error')])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
-      onClose={() => { panel.choose(handle.current, 'close'); }} /> : null;
+      onClose={() => { panel.choose(handle.current, 'close'); }}
+      {...(input.openPermissions ? { onPermissions: () => { permissionsAfter.current = true; panel.choose(handle.current, 'close'); } } : {})} /> : null;
   return { open, openKind: kind, window };
 }

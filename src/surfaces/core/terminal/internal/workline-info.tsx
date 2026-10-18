@@ -10,7 +10,7 @@ import type { WindowSlot } from './workline-windows.js';
 /** SW-1: the typed information-window ports and their words (`terminalAdminPorts(...).info`). */
 export type WorklineInfo = Readonly<{ ports: InfoViewPorts; labels: InfoSurfaceLabels }>;
 /** The bare commands that answer in an information window. */
-export const INFO_WINDOW_COMMANDS: ReadonlySet<string> = new Set(['help', 'status', 'usage', 'doctor', 'scope', 'context']);
+export const INFO_WINDOW_COMMANDS: ReadonlySet<string> = new Set(['help', 'status', 'usage', 'doctor', 'permissions', 'context']);
 
 /** `/help` as a window: the registry's commands under their group headings, each a row to pick (picking runs it; no typed argument). */
 export function helpInfoModel(slash: Readonly<Record<string, string>>, labels: InfoSurfaceLabels, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): InfoWindowModel {
@@ -53,7 +53,7 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
   }, [push, slot]);
   const latest = useRef(host);
   latest.current = host;
-  /** `handled: false` when no port answers the command here (the text path answers it); `picked` is `/help`'s chosen command. */
+  /** `handled: false` when no port answers the command here (the text path answers it); `picked` is `/help`'s chosen command or `/permissions`' choice. */
   const run = useCallback(async (command: string, execution: LocalExecution): Promise<Readonly<{ handled: boolean; picked: string | null }>> => {
     const current = latest.current, labels = current.info!.labels, name = command;
     let view: InfoView;
@@ -68,7 +68,8 @@ export function useInfoWindow(host: Readonly<{ info: WorklineInfo | undefined; s
     } catch (error) { current.push([notice('error', current.errorText(error))]); return { handled: true, picked: null }; }
     if (execution.signal.aborted) return { handled: true, picked: null };
     const picked = await show(view, labels, execution.signal);
-    return { handled: true, picked: name === 'help' && !execution.signal.aborted ? picked : null };
+    // `/help` answers the command picked; `/permissions` its clear-session choice (the workline runs that confirmed flow).
+    return { handled: true, picked: (name === 'help' || name === 'permissions') && !execution.signal.aborted ? picked : null };
   }, [show]);
   return { run, show };
 }

@@ -47,7 +47,8 @@ describe('terminal slash registry', () => {
   it('K1/K2/K8: one name registry — moved and reserved names are disjoint from live ones, every move lands on a live command, names are unique', () => {
     const live = new Set(WORKLINE_SLASH_COMMANDS.map(command => command.name));
     expect(live.size).toBe(WORKLINE_SLASH_COMMANDS.length);
-    expect(Object.keys(SLASH_MOVED).sort()).toEqual(['cancel', 'quit', 'run', 'tasks', 'transcript', 'watch-runs', 'watch-stop', 'watch-workers', 'workers']);
+    expect(Object.keys(SLASH_MOVED).sort()).toEqual(['cancel', 'quit', 'run', 'scope', 'tasks', 'transcript', 'watch-runs', 'watch-stop', 'watch-workers', 'workers']);
+    expect(SLASH_MOVED['scope']).toBe('permissions');
     for (const [old, now] of Object.entries(SLASH_MOVED)) { expect(live.has(old)).toBe(false); expect(live.has(now)).toBe(true); expect(movedSlashCommand(old)).toBe(now); }
     for (const name of SLASH_RESERVED) { expect(live.has(name)).toBe(false); expect(movedSlashCommand(name)).toBeNull(); }
     expect(SLASH_RESERVED).toContain('plan');
@@ -169,7 +170,7 @@ describe('terminal slash registry: exit and moved names (K2/K8)', () => {
     await settle(60); expect(exited).toBe(false); expect(completeTurn).not.toHaveBeenCalled();
   });
 
-  it.each([['tasks', 'runs', 'Runs (live)'], ['quit', 'exit', null]])('K2 rich terminal: /%s opens the unknown window with "Moved: /%s" as the selected first row; Enter runs it', async (old, now, opened) => {
+  it.each([['tasks', 'runs', 'Runs (live)'], ['quit', 'exit', null], ['scope', 'permissions', 'NO-PORT permissions']])('K2 rich terminal: /%s opens the unknown window with "Moved: /%s" as the selected first row; Enter runs it', async (old, now, opened) => {
     const completeTurn = vi.fn(async () => 'unexpected');
     const view = await open({ completeTurn, labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, work: workSurfaceLabels('en'),
       composer: { ...WORKLINE_TEST_LABELS.composer, slash: terminalComposerLabels('en').slash } },

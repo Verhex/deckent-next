@@ -12,7 +12,7 @@ import type { WorklineProps } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until as harnessUntil } from '../support/workline-harness.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 
-// TERMINAL-CLOSE S09: read-only /status /model /usage /doctor /scope. Every call asks its typed producer again; a failed query shows its typed
+// TERMINAL-CLOSE S09: read-only /status /model /usage /doctor /permissions (K7; was /scope). Every call asks its typed producer again; a failed query shows its typed
 // error and never an earlier value. The /model path runs on the real catalog application and ledger (the same handler the CLI context holds).
 const until = (check: () => boolean, label: string) => harnessUntil(check, label, 300);
 const roots: string[] = [], views: Array<ReturnType<typeof mountWorkline>> = [];
@@ -41,8 +41,8 @@ async function catalogFixture() {
 }
 
 describe('terminal read-only management (S09)', () => {
-  it('registers /model /usage /doctor /scope with catalog descriptions in both locales', () => {
-    for (const name of ['model', 'usage', 'doctor', 'scope']) {
+  it('registers /model /usage /doctor /permissions with catalog descriptions in both locales', () => {
+    for (const name of ['model', 'usage', 'doctor', 'permissions']) {
       const command = WORKLINE_SLASH_COMMANDS.find(entry => entry.name === name);
       expect(command, name).toMatchObject({ descriptionKey: `terminal.slash.${name}` });
       expect(command?.argumentKey).toBeUndefined();
@@ -184,19 +184,21 @@ describe('terminal read-only management (S09)', () => {
     expect(unknown).toContain(none); expect(unknown).not.toMatch(/(Reasoning|Akıl yürütme): 0 tok/u);
   });
 
-  it('/scope names each part it could not read and still shows the rest', async () => {
+  it('/permissions (K7; was /scope) names each part it could not read and still shows the rest', async () => {
     const context: TerminalAdminContext = {
       inspectPermissionMode: async () => { throw typed('POLICY_DENIED'); },
       inspectSurfaceAccess: async () => ({ binding: 'bind-1', kinds: ['run', 'worker'] }),
     };
     const { inspect } = terminalAdminPorts({ ...base, root: '/nonexistent-root-for-scope-test', locale: 'en', context });
-    const text = (await inspect.scope!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
+    const text = (await inspect.permissions!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
     expect(text).toContain('Scope: s'); expect(text).toContain('Installation identity: inst-1'); expect(text).toContain('Project identity: proj-1');
     expect(text).toContain('Permission mode: not read'); expect(text).toContain('POLICY_DENIED');
     expect(text).toContain('Surface access: runs, workers');
-    expect((await inspect.scope!('x', { usage: EMPTY_SESSION_USAGE }))[0]).toContain('Usage: /scope');
+    // No grant reader wired here: the part is named unavailable, never an empty list.
+    expect(text).toMatch(/your standing approvals/u); expect(text).not.toContain('None saved');
+    expect((await inspect.permissions!('x', { usage: EMPTY_SESSION_USAGE }))[0]).toContain('Usage: /permissions');
     const none = terminalAdminPorts({ ...base, locale: 'tr', context: { inspectSurfaceAccess: async () => null } }).inspect;
-    expect((await none.scope!('', { usage: EMPTY_SESSION_USAGE })).join('\n')).toContain('Yüzey erişimi: henüz yok');
+    expect((await none.permissions!('', { usage: EMPTY_SESSION_USAGE })).join('\n')).toContain('Yüzey erişimi: henüz yok');
   });
 
   it('/doctor shows what the host doctor wrote, and a doctor that fails shows its typed error', async () => {
@@ -217,8 +219,8 @@ describe('terminal read-only management (S09)', () => {
 
   it('commands without a wired port answer plainly and are never unknown', async () => {
     const view = await open({});
-    await type(view, '/model \r/usage \r/doctor \r/scope \r');
-    await until(() => ['model', 'usage', 'doctor', 'scope'].every(name => view.stdout.text.includes(`NO-PORT ${name}`)), 'unwired notices');
+    await type(view, '/model \r/usage \r/doctor \r/permissions \r');
+    await until(() => ['model', 'usage', 'doctor', 'permissions'].every(name => view.stdout.text.includes(`NO-PORT ${name}`)), 'unwired notices');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });

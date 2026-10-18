@@ -9,8 +9,9 @@ type Groups = Awaited<ReturnType<PolicyPanelPort['inspect']>>['groups'];
 type Stage = { kind: 'scopes'; scopes: readonly string[] } | { kind: 'groups'; scopeId: string; groups: Groups; delegation?: boolean }
   | { kind: 'action'; scopeId: string; group: Groups[number] } | { kind: 'preview'; preview: PolicyPanelPreview };
 /** The existing bounded window/arrow selection pattern, with no text entry or filter. Page keys reveal every exact preview row. */
-export function PolicyPanel({ port, labels, push, onError, onClose }: { readonly port: PolicyPanelPort; readonly labels: PanelLabels;
-  readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void }) {
+/** `onMe` (K7): after the scopes, the "Me" row closes this window and opens `/permissions` (the host runs it); scope rows keep their order. */
+export function PolicyPanel({ port, labels, push, onError, onClose, onMe }: { readonly port: PolicyPanelPort; readonly labels: PanelLabels;
+  readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void; readonly onMe?: (() => void) | undefined }) {
   const words = labels.policy!;
   const [stage, setStage] = useState<Stage | null>(null), [busy, setBusy] = useState(true);
   const exits = useRef({ onError, onClose }); exits.current = { onError, onClose };
@@ -29,7 +30,8 @@ export function PolicyPanel({ port, labels, push, onError, onClose }: { readonly
     setBusy(true); void port.preview(scopeId, groupId, action).then(view => { setStage({ kind: 'preview', preview: view }); setBusy(false); }, fail);
   };
   if (busy || !stage) return <Window maxColumns={80} title={[span(words.title)]} body={[{ spans: [span(labels.loading)] }]} hints={words.hints} position={labels.position} onInput={() => true} />;
-  const rows = stage.kind === 'scopes' ? [...stage.scopes, words.back]
+  const me = stage.kind === 'scopes' && onMe && words.me ? [words.me] : [];
+  const rows = stage.kind === 'scopes' ? [...stage.scopes, ...me, words.back]
     : stage.kind === 'groups' ? [...stage.groups.map(group => `${group.label} · ${group.detail}`), ...(port.delegations && !stage.delegation ? [words.delegations!] : []), words.back]
     : stage.kind === 'action' ? stage.group.id.startsWith('decision:') ? [words.delegateGrant!, words.delegateRevoke!, words.back] : [words.grant, words.revoke, words.back]
     : stage.preview.applicable ? [words.confirm, words.back] : [words.back];
@@ -39,7 +41,7 @@ export function PolicyPanel({ port, labels, push, onError, onClose }: { readonly
   const lines = stage.kind === 'preview' ? stage.preview.lines : stage.kind === 'action' ? [{ label: '', text: stage.group.note }]
     : stage.kind === 'scopes' && !stage.scopes.length ? [{ label: '', text: words.empty }] : [];
   const select = (index: number) => {
-    if (stage.kind === 'scopes') { const id = stage.scopes[index]; if (id) groups(id); else onClose(); }
+    if (stage.kind === 'scopes') { const id = stage.scopes[index]; if (id) groups(id); else if (me.length && index === stage.scopes.length) onMe!(); else onClose(); }
     else if (stage.kind === 'groups') { const group = stage.groups[index]; if (group) setStage({ kind: 'action', scopeId: stage.scopeId, group }); else if (!stage.delegation && port.delegations && index === stage.groups.length) delegations(stage.scopeId); else if (stage.delegation) groups(stage.scopeId); else scopes(); }
     else if (stage.kind === 'action') { if (index < 2) preview(stage.scopeId, stage.group.id, index === 0 ? 'grant' : 'revoke'); else groups(stage.scopeId); }
     else if (stage.preview.applicable && index === 0) {

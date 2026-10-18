@@ -5,7 +5,7 @@ import type { InfoSurfaceLabels, InfoViewPorts } from '#surfaces/core/terminal-w
 import { doctorLines, doctorView } from './doctor.js';
 import { terminalInfoLabels } from './info-labels.js';
 import { modelLines } from './model.js';
-import { scopeLines, scopeView } from './scope.js';
+import { permissionsLines, permissionsView } from './permissions.js';
 import { statusLines, statusView } from './status.js';
 import { usageLines, usageView } from './usage.js';
 
@@ -23,13 +23,13 @@ export interface TerminalAdminInput {
   readonly doctor: (sink: OutputSink) => Promise<void>;
   /** The same doctor command with its structured report (`deckent doctor --json`): the `/doctor` window groups it by area (SW-1). Absent: the text. */
   readonly doctorReport?: (sink: OutputSink) => Promise<void>;
-  /** The person's display name for `/scope` (the host user the principal is derived from); absent means the line is left out. */
+  /** The person's display name for `/permissions` (the host user the principal is derived from); absent means the line is left out. */
   readonly principalName?: string | null;
 }
 
 /**
  * The read-only management ports of the interactive terminal (S09); each call asks its typed producers again. `info` (SW-1) answers the same
- * commands as typed window models (`/status`, `/usage`, `/doctor`, `/scope`) with the catalog words of the information windows.
+ * commands as typed window models (`/status`, `/usage`, `/doctor`, `/permissions`) with the catalog words of the information windows.
  */
 export function terminalAdminPorts(input: TerminalAdminInput): Readonly<{ inspect: InspectSlashPorts; info: Readonly<{ ports: InfoViewPorts; labels: InfoSurfaceLabels }> }> {
   const call = { root: input.root, scopeId: input.scopeId, options: input.options, locale: input.locale, context: input.context };
@@ -39,11 +39,11 @@ export function terminalAdminPorts(input: TerminalAdminInput): Readonly<{ inspec
     model: args => modelLines(call, args),
     usage: (args, view) => usageLines(call, args, view.usage),
     doctor: () => doctorLines(input.doctor),
-    scope: (args, view) => scopeLines(call, identity, args, input.principalName ?? null, view.sessionFullAccess === true),
+    permissions: (args, view) => permissionsLines(call, identity, args, input.principalName ?? null, view.sessionFullAccess === true),
   }, info: { labels: terminalInfoLabels(input.locale), ports: {
     status: () => statusView(call, input.status, identity),
     usage: view => usageView(call, view.usage),
     doctor: () => doctorView(input.locale, input.doctorReport ?? null, input.doctor),
-    scope: view => scopeView(call, identity, input.principalName ?? null, view.sessionFullAccess === true),
+    permissions: view => permissionsView(call, identity, input.principalName ?? null, view.sessionFullAccess === true, view.clearSession),
   } } };
 }

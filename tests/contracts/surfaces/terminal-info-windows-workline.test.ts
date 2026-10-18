@@ -7,13 +7,14 @@ import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION } from '#platform/inde
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { terminalAdminPorts, type TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
+import { terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { EMPTY_SESSION_USAGE, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { infoModelText, type InfoSurfaceLabels } from '#surfaces/core/terminal-window/index.js';
 import type { WorklineProps } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { homeEnv } from '../support/host-platform.js';
 
-// SW-1 (owner 2026-10-08): bare /help /status /usage /doctor /scope /context open information windows on the real workline. Nothing reaches the
+// SW-1 (owner 2026-10-08): bare /help /status /usage /doctor /permissions /context open information windows on the real workline. Nothing reaches the
 // chat stream while they are open; on close exactly one framed system summary line stays; identities are never the primary label.
 const ESC = '\u001B', DOWN = '\u001B[B';
 const INSTALLATION = '7d1e2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b', PROJECT = '0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d', COMMIT = '3f9a2c71e4b8d0aa55c1e2f3a4b5c6d7e8f90123';
@@ -128,17 +129,54 @@ describe('information windows on the real workline (SW-1)', () => {
     expect(text.join('\n')).not.toContain('could not be read');
   });
 
-  it('/scope shows human labels with identities muted after them, and names a part it could not read', async () => {
+  it('/permissions (K7; was /scope) shows human labels with identities muted, your standing approvals, and names a part it could not read', async () => {
     const root = await project();
     const context: TerminalAdminContext = { inspectPermissionMode: async () => { throw ErrorRegistry.createError('POLICY_DENIED' as never); },
-      inspectSurfaceAccess: async () => ({ binding: 'b', kinds: ['run', 'worker'] }) };
-    const model = (await admin(root, context).info.ports.scope!({ usage: EMPTY_SESSION_USAGE })).model;
+      inspectSurfaceAccess: async () => ({ binding: 'b', kinds: ['run', 'worker'] }),
+      listStandingGrants: async () => [{ id: 'g-1', tool: 'run_shell', kind: 'command', text: 'npm test' }] };
+    const model = (await admin(root, context).info.ports.permissions!({ usage: EMPTY_SESSION_USAGE })).model;
     const text = infoModelText(model);
+    expect(model.title).toBe('Your permissions');
     expect(text).toEqual(expect.arrayContaining(['Installation   this installation 7d1e2c3b...', 'Project        project identity 0a1b2c3d...', 'Surface access runs, workers']));
     expect(text.find(line => line.startsWith('Mode'))).toMatch(/Permission mode: not read.*POLICY_DENIED.*\[x not read\]/u);
-    expect(text.join('\n')).not.toContain(INSTALLATION);
+    expect(text.join('\n')).toContain('run_shell: npm test · g-1'); expect(text.join('\n')).not.toContain(INSTALLATION);
+    // Without the workline's clear-session words there is no choice; with them the one choice is offered.
+    expect(model.sections.some(section => section.choices?.length)).toBe(false);
+    const offered = (await admin(root, context).info.ports.permissions!({ usage: EMPTY_SESSION_USAGE, clearSession: { label: 'CLEAR-ROW', detail: 'clear-detail' } })).model;
+    expect(offered.sections.flatMap(section => section.choices ?? [])).toEqual([{ id: 'clear-session', label: 'CLEAR-ROW', detail: 'clear-detail' }]);
+    const unread = infoModelText((await admin(root, { listStandingGrants: async () => { throw new Error('locked'); } }).info.ports.permissions!({ usage: EMPTY_SESSION_USAGE })).model);
+    expect(unread.join('\n')).toMatch(/your standing approvals/u); expect(unread.join('\n')).not.toContain('None saved');
     // No row of any window starts with an identity: the key column is a word.
     for (const line of text) expect(line).not.toMatch(/^[0-9a-f]{8}/u);
+  });
+
+  it.each(['y', 'n'] as const)('K7: /permissions offers clearing this session\'s standing answers (moved from /approvals); %s on its confirmation window', async key => {
+    const root = await project(), cleared: string[] = [];
+    const work = workSurfaceLabels('en');
+    const view = mountWorkline({ info: admin(root, {}).info, labels: { ...WORKLINE_TEST_LABELS, work, composer: { ...WORKLINE_TEST_LABELS.composer, slash: terminalComposerLabels('en').slash } },
+      ledger: { scopeId: 's', async listWorkers() { return { schemaVersion: 1, scopeId: 's', sources: [] } as never; }, async inspectRun() { return null; },
+        async clearSessionStanding(sessionId) { cleared.push(sessionId); } } });
+    views.push(view); await until(() => view.stdout.frame.includes('READY'), 'ready');
+    await type(view, '/permissions\r'); await until(() => view.stdout.frame.includes(work.jobs!.clearSession), 'clear-session choice');
+    await settle(40); await type(view, '\r'); await until(() => view.stdout.frame.includes(work.jobs!.clearDetail), 'confirmation window');
+    expect(cleared).toEqual([]); await settle(40); await type(view, key);
+    await until(() => view.stdout.frame.includes(key === 'y' ? work.sessionStandingClear!.cleared.slice(0, 20) : work.jobs!.kept), 'one summary line');
+    expect(cleared).toHaveLength(key === 'y' ? 1 : 0);
+    // /approvals no longer carries the row.
+    await type(view, '/approvals\r'); await settle(120); expect(view.stdout.frame).not.toContain(work.jobs!.clearSession);
+  });
+
+  it('K7: /policy offers a "Me" row after its scopes that opens /permissions; /status names the company', async () => {
+    const root = await project();
+    const policy = { scopes: async () => ['scope-a'], inspect: async () => ({ groups: [] }), preview: async () => { throw new Error('unused'); }, apply: async () => [] };
+    const ports = admin(root, {});
+    const view = await open({ info: ports.info, panels: { ports: { policy }, labels: terminalPanelLabels('en') } });
+    await type(view, '/policy\r'); await until(() => view.stdout.frame.includes('> scope-a') && view.stdout.frame.includes('Me: my permissions'), 'policy scopes with the Me row');
+    await settle(40); await type(view, DOWN); await settle(40); await type(view, '\r');
+    await until(() => view.stdout.frame.includes('Your permissions'), '/permissions opened from /policy');
+    await type(view, ESC); await until(() => view.stdout.frame.includes(`${MARK} · Permissions:`), 'permissions summary');
+    await type(view, '/status\r'); await until(() => view.stdout.frame.includes('▸ Where'), 'status window');
+    expect(view.stdout.frame).toMatch(/│ Company +/u);
   });
 
   it('/context opens the window from the measured turn; typed arguments of /usage keep the text answer', async () => {

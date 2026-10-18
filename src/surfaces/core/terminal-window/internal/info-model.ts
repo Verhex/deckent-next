@@ -132,9 +132,10 @@ export function infoModelText(model: InfoWindowModel, glyphs: InfoGlyphs = INFO_
 /** What a surface answers for one information command: the window, and optionally what a picked choice opens next (`null` closes). */
 export type InfoView = Readonly<{ model: InfoWindowModel; pick?: (choice: string) => Promise<InfoView | null> }>;
 /** What the terminal measured at call time (the same view the text ports get). */
-export type InfoViewInput = Readonly<{ usage: SessionUsageView; sessionFullAccess?: boolean }>;
-/** The information commands a host fills with typed producers (`/status`, `/usage`, `/doctor`, `/scope`); each call reads fresh. */
-export type InfoViewCommand = 'status' | 'usage' | 'doctor' | 'scope';
+/** `clearSession` (K7): the workline can clear this session's standing answers; its words for the `/permissions` choice. */
+export type InfoViewInput = Readonly<{ usage: SessionUsageView; sessionFullAccess?: boolean; clearSession?: Readonly<{ label: string; detail: string }> }>;
+/** The information commands a host fills with typed producers (`/status`, `/usage`, `/doctor`, `/permissions`); each call reads fresh. */
+export type InfoViewCommand = 'status' | 'usage' | 'doctor' | 'permissions';
 export type InfoViewPorts = Readonly<Partial<Record<InfoViewCommand, (input: InfoViewInput) => Promise<InfoView>>>>;
 
 /** Words of `/context` as a window (`terminal.info.context.*`); templates use `{name}` placeholders. */

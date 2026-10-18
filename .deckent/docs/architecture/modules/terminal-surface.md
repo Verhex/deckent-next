@@ -407,6 +407,13 @@ evidence: external `proof/K1-K8-2026-10-18/GAP.md`.
   builds the same `runLifecycleCommandSchema` `answer` command as `deckent run resume --task --answer` and calls the CLI's in-process
   `applyRunLifecycle`; the runtime service protocol and the MCP schema are unchanged (answering stays a human decision). A refusal (stale
   revision, policy) is the typed error line; a Run that stopped asking sends nothing.
+- **`/permissions` (K7).** Replaces `/scope` (`terminal-admin/internal/permissions.ts`, text and window forms): you, project, company, mode
+  (session/stored), rule revision, surface access, and your standing approvals through `listStandingGrants` (the same read as `deckent
+  policy grants --mine`; an unreadable list is named, never shown empty). When the workline can clear (`clearSessionStanding` and its words),
+  the window offers one choice that runs the confirmed clear-session flow (`rowCards.clearSession`, moved from `/approvals`, whose picker no
+  longer has the row). `/policy` shows a "Me" row after its scopes that closes the window and runs `/permissions` in the same command
+  (`openPermissions`). `/status` gains the company row (the where-am-I part of `/scope`). Typed `/scope` is a moved name until 1.0.0-beta.1,
+  then held for "change scope" (09-29 catalog).
 - **Unfocused close (K5).** Ctrl+X closes the open live window while input is focused (`LiveWindowCloseKey`, inside the window stack; a
   focused card owns the keyboard), and inside the focused Runs window; Escape still closes a focused window. Ctrl+O and Ctrl+T keep their
   meaning. Ctrl+X is not composer text: a draft stays.

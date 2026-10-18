@@ -1,4 +1,4 @@
-import { standingAnswerNotice, clearStandingNotice } from '#surfaces/core/approval-presentation/index.js';
+import { standingAnswerNotice } from '#surfaces/core/approval-presentation/index.js';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { RunView } from '#engine/index.js';
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts, APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
@@ -10,8 +10,7 @@ import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentatio
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
 import { JobWindow } from './job-windows.js';
-import { RunAnswerDecisionCard, RunControlDecisionCard, runAnswerAction, runControlAction } from './run-control.js';
-import type { RunControlAction } from '#surfaces/core/terminal-ledger/index.js';
+import { RunAnswerDecisionCard, RunControlDecisionCard, rowCards } from './run-control.js';
 import { systemSummaryEntry } from './system-summary.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
@@ -87,23 +86,14 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       }
       const { pending, truncated } = await scanPendingApprovals(ledger.listApprovalPage!, Date.now());
       if (!pending.length) setApprovalStatus('');
-      const clearSession = ledger.clearSessionStanding && work.sessionStandingClear ? work.jobs!.clearSession : undefined;
       const status = truncated ? fillTemplate(work.approvalsTruncated, { pages: APPROVAL_SCAN_MAX_PAGES }) : approvalStatus;
-      if (!pending.length && !clearSession) {
+      if (!pending.length) {
         await panel.pick(execution, { kind: 'window', title, body: [work.approvalsNone, ...(status ? [status] : [])], hints: work.jobs!.hints, confirm: false }, ['close']);
         output(work.approvalsNone); return;
       }
-      const choice = selectedApprovalId ? String(pending.findIndex(item => item.approvalId === selectedApprovalId)) : await panel.pick(execution, { kind: 'approvals', rows: pending, ...(clearSession ? { clearSession } : {}), ...(status ? { status } : {}) },
-        [...pending.map((_, index) => String(index)), ...(clearSession ? ['clear-session'] : [])]);
+      const choice = selectedApprovalId ? String(pending.findIndex(item => item.approvalId === selectedApprovalId)) : await panel.pick(execution, { kind: 'approvals', rows: pending, ...(status ? { status } : {}) },
+        pending.map((_, index) => String(index)));
       if (choice === null || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }
-      if (choice === 'clear-session') {
-        const answer = await panel.pick(execution, { kind: 'window', title: clearSession!, body: [work.jobs!.clearDetail], hints: work.cancelPrompt, confirm: true }, ['allow', 'deny']);
-        if (answer === 'allow' && !execution.signal.aborted) {
-          const cleared = await clearStandingNotice(execution.input.context.sessionId, ledger.clearSessionStanding!, work.sessionStandingClear!);
-          output(cleared.text);
-        } else output(work.jobs!.kept);
-        return;
-      }
       const target = pending[Number(choice)];
       if (!target) {
         await panel.pick(execution, { kind: 'window', title, body: [fillTemplate(work.approvalNotFound, { ref: shortId(selectedApprovalId ?? '') })], hints: work.jobs!.hints, confirm: false }, ['close']);
@@ -128,19 +118,8 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     }
   };
   /** Y1 from the Runs window (`h`/`r`/`c` on a row): its own y/N card, then one transcript line (the result, the refusal or nothing sent). */
-  const control = async (execution: LocalExecution, runId: string, action: RunControlAction): Promise<void> => {
-    if (!work?.runControl || !ledger?.controlRun) return;
-    pickedReason.current = undefined;
-    const line = await runControlAction(panel, execution, ledger, work, runId, action, errorText, () => pickedReason.current).catch((error: unknown) => errorText(error));
-    pickedReason.current = undefined; if (line && !execution.signal.aborted) push([systemSummaryEntry(line)]);
-  };
-  /** K7 from the Runs window (`a` on a row): the answer card (its reason field holds the answer), then one transcript line. */
-  const answer = async (execution: LocalExecution, runId: string): Promise<void> => {
-    if (!work?.runAnswer || !work.runControl || !ledger?.answerTask) return;
-    pickedReason.current = undefined;
-    const line = await runAnswerAction(panel, execution, ledger, work, runId, errorText, () => pickedReason.current).catch((error: unknown) => errorText(error));
-    pickedReason.current = undefined; if (line && !execution.signal.aborted) push([systemSummaryEntry(line)]);
-  };
+  // Y1/K7 row cards and K7 `/permissions` clear-session: each opens its own card and leaves one transcript line.
+  const { control, answer, clearSession } = rowCards({ panel, ledger, work, push, errorText, reason: pickedReason });
   // T2 integration: a decision notice names the approval by its short id; the full id is a detail line under it (never the primary line).
   const identified = useCallback((template: string, approvalId: string) => fillTemplate(template, { id: shortId(approvalId) }), []);
   const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope, reason?: string) => {
@@ -201,12 +180,12 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const region = (
     <>
       {picker && modal === null && work ? <ApprovalDecisionPicker key={state.picker?.pickerHandle} rows={picker.map((item, index) => approvalRowPresentation(item, index + 1, Date.now(), work))} labels={labels.render ?? {}} work={work}
-        clearSession={presentation?.kind === 'approvals' ? presentation.clearSession : undefined} status={presentation?.kind === 'approvals' ? presentation.status : undefined}
-        onSelect={index => { panel.choose(state.picker?.pickerHandle, index === picker.length ? 'clear-session' : String(index)); }} onCancel={() => { panel.choose(state.picker?.pickerHandle, null); }} /> : null}
+        status={presentation?.kind === 'approvals' ? presentation.status : undefined}
+        onSelect={index => { panel.choose(state.picker?.pickerHandle, String(index)); }} onCancel={() => { panel.choose(state.picker?.pickerHandle, null); }} /> : null}
       {card}
     </>
   );
-  return { openApproval: (approvalId: string, execution: LocalExecution) => run('approvals', '', execution, approvalId), approvalStatus, observeWorkers, observeApprovals, run, control, answer, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, workers };
+  return { openApproval: (approvalId: string, execution: LocalExecution) => run('approvals', '', execution, approvalId), approvalStatus, observeWorkers, observeApprovals, run, control, answer, clearSession, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, workers };
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {

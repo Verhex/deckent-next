@@ -1,5 +1,5 @@
 import { basename } from 'node:path';
-import { PACKAGE_VERSION, shortId, t } from '#platform/index.js';
+import { PACKAGE_VERSION, loadConfig, shortId, t } from '#platform/index.js';
 import type { InfoChip, InfoRow, InfoSection, InfoView } from '#surfaces/core/terminal-window/index.js';
 import { queryFailureText } from './failure.js';
 import { readCurrentModel } from './current-model.js';
@@ -51,6 +51,8 @@ export async function statusLines(call: TerminalAdminCall, report: () => Promise
 /** `/status` as a window (SW-1): the same fresh facts as typed rows — human words first, identities muted and shortened by the window. */
 export async function statusView(call: TerminalAdminCall, report: () => Promise<string>, identity: Readonly<{ installationId: string; projectId: string }>): Promise<InfoView> {
   const { locale, root, scopeId } = call, facts = await readStatusFacts(call, report);
+  // K7: the where-am-I part of the former `/scope` (the company) reads here; a failed read leaves the row out, never a guess.
+  const company = await loadConfig(root, call.options).then(config => config.company.id, () => null);
   const stateChip: InfoChip = facts.state === 'running' ? { state: 'ok', text: t('terminal.info.status.chip.running', {}, locale) }
     : facts.state === 'open' ? { state: 'neutral', text: t('terminal.info.status.chip.open', {}, locale) } : { state: 'fail', text: t('terminal.info.chip.notRead', {}, locale) };
   const model = facts.model?.value;
@@ -71,9 +73,11 @@ export async function statusView(call: TerminalAdminCall, report: () => Promise<
     sections: [
       { title: 'Deckent', rows: [{ key: t('terminal.info.status.key.state', {}, locale), value: stateText }, { key: t('terminal.info.status.key.version', {}, locale), value: PACKAGE_VERSION }, modelRow] },
       { title: t('terminal.info.status.section.where', {}, locale), rows: [{ key: t('terminal.info.status.key.project', {}, locale), value: basename(root) || root, id: identity.projectId },
-        { key: t('terminal.info.status.key.scope', {}, locale), value: scopeId }, { key: t('terminal.info.status.key.installation', {}, locale), value: t('terminal.info.status.installationValue', {}, locale), id: identity.installationId }] },
+        { key: t('terminal.info.status.key.scope', {}, locale), value: scopeId },
+        ...(company ? [{ key: t('terminal.info.status.key.company', {}, locale), value: company === 'default' ? t('terminal.admin.scope.companyDefault', {}, locale) : company }] : []),
+        { key: t('terminal.info.status.key.installation', {}, locale), value: t('terminal.info.status.installationValue', {}, locale), id: identity.installationId }] },
       serviceSection,
-      // The host report repeats identities in prose: the window shows them shortened (the full values are in `/scope` and the text answer).
+      // The host report repeats identities in prose: the window shows them shortened (the full values are in `/permissions` and the text answer).
       { title: t('terminal.info.status.section.details', {}, locale), items: facts.body.split('\n').filter(line => line.trim())
         .map(text => ({ text: text.replace(UUID, id => `${shortId(id)}…`), muted: true })) },
     ] } };

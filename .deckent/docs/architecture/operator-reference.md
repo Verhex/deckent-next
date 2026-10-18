@@ -17,7 +17,11 @@ answer in the card; `y` with nothing written sends nothing) — each after its o
 Opened after /do it waits in the background; Ctrl+X closes it from input (Escape when it is focused), and Shift+Tab still steps the
 mode while it waits behind input (a waiting card still owns Shift+Tab). The old names `/workers`, `/watch-workers`, `/watch-runs`,
 `/watch-stop`, `/tasks`, `/run`, `/transcript`, `/cancel` and `/quit` are renamed, never aliased: typed, the unknown-command window
-offers the new command as its first, selected row (Enter runs it) and line mode names it; the table goes at 1.0.0-beta.1. Above input, an "Active work" strip lists
+offers the new command as its first, selected row (Enter runs it) and line mode names it; the table goes at 1.0.0-beta.1.
+`/permissions` (K7; it replaces `/scope`, whose name is then held for "change scope") shows who you are here, the mode this
+session runs in, what this terminal may see and your own standing approvals (the read of `deckent policy grants --mine`); its
+one choice forgets this session's standing answers after a y/N window (moved from `/approvals`). `/policy` opens it from its
+"Me" row; `/status` names the project, scope, company and installation. Above input, an "Active work" strip lists
 this session's running /do (planning, or waiting for you with the approval time left) and the Runs it started, with title,
 state and elapsed time; it never takes input by itself. Ctrl+T selects it (↑↓, Esc back): Enter on /do focuses its window, Enter on a
 Run opens that Run's window; a finished Run leaves the strip once opened. Pipe and line-mode output is unchanged.

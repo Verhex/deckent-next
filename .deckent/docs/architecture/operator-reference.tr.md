@@ -18,7 +18,11 @@ durumunun sunduğu tuşları gösterir. /do sonrası arka planda açılır; Ctrl
 beklerken Shift+Tab modu değiştirmeye devam eder (bekleyen bir kart Shift+Tab'ı yine kendine alır). Eski adlar `/workers`,
 `/watch-workers`, `/watch-runs`, `/watch-stop`, `/tasks`, `/run`, `/transcript`, `/cancel` ve `/quit` takma ad değil, yeniden
 adlandırmadır: yazıldığında bilinmeyen-komut penceresi yeni komutu ilk ve seçili satır olarak sunar ("Taşındı: /runs", Enter
-çalıştırır), satır modu yeni adı söyler; tablo 1.0.0-beta.1'de kalkar. Girişin üstündeki "Aktif iş" şeridi bu
+çalıştırır), satır modu yeni adı söyler; tablo 1.0.0-beta.1'de kalkar. `/permissions` (K7; `/scope`'un yerini alır, `/scope`
+adı sonra "kapsam değiştir" için tutulur) burada kim olduğunuzu, bu oturumun modunu, bu terminalin neyi görebildiğini ve kendi
+kalıcı onaylarınızı (`deckent policy grants --mine` okuması) gösterir; tek seçeneği bu oturumun kalıcı cevaplarını bir y/N
+penceresinden sonra unutturur (`/approvals`'tan taşındı). `/policy` onu "Ben" satırından açar; `/status` projeyi, kapsamı,
+şirketi ve kurulumu söyler. Girişin üstündeki "Aktif iş" şeridi bu
 oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum ve geçen
 süreyle listeler; kendiliğinden odak almaz. Ctrl+T ile seçilir (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
 Enter o Run'ın penceresini açar; biten Run açıldıktan sonra şeritten çıkar. Pipe ve satır modu çıktısı değişmez.

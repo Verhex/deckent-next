@@ -39,6 +39,9 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   // MCP-CLIENT: the project's MCP servers (`/mcp approve|reconnect|remove <name>` typed); runs at once from the palette.
   { name: 'mcp', group: 'settings', descriptionKey: 'terminal.slash.mcp' },
   { name: 'policy', group: 'settings', descriptionKey: 'terminal.slash.policy' },
+  // K7 (owner 2026-10-14; 09-29 catalog `/permissions`): your own permissions — person, mode, surface access, standing approvals (`policy grants
+  // --mine`) and clearing this session's standing answers; `/policy` opens it from its "Me" row. Was `/scope` (its where-am-I part is in /status).
+  { name: 'permissions', group: 'settings', descriptionKey: 'terminal.slash.permissions' },
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
   { name: 'config', group: 'settings', descriptionKey: 'config.surface.slashDescription' },
   // T4 PROVIDER-CONNECT: connect a provider (masked key, free check, secret store) or disconnect it; a window only.
@@ -48,7 +51,6 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'model', group: 'info', descriptionKey: 'terminal.slash.model' },
   { name: 'usage', group: 'info', descriptionKey: 'terminal.slash.usage' },
   { name: 'doctor', group: 'info', descriptionKey: 'terminal.slash.doctor' },
-  { name: 'scope', group: 'info', descriptionKey: 'terminal.slash.scope' },
   { name: 'exit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
 ]);
@@ -59,9 +61,10 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
  */
 export const SLASH_MOVED: Readonly<Record<string, string>> = Object.freeze({
   workers: 'runs', 'watch-workers': 'runs', 'watch-runs': 'runs', 'watch-stop': 'runs', tasks: 'runs', run: 'runs', transcript: 'runs', cancel: 'runs',
-  quit: 'exit',
+  quit: 'exit', scope: 'permissions',
 });
-/** Names held for an accepted future meaning (K8: `/plan`, plan mode is its own card); typed, they answer as unknown. */
+/** Names held for an accepted future meaning (K8: `/plan`, plan mode is its own card); typed, they answer as unknown. `/scope` is held for
+ * "change scope" (09-29 catalog) once its moved row goes at 1.0.0-beta.1. */
 export const SLASH_RESERVED: readonly string[] = Object.freeze(['plan']);
 /** The new name of a moved command, or null. */
 export function movedSlashCommand(command: string): string | null {
@@ -69,7 +72,7 @@ export function movedSlashCommand(command: string): string | null {
 }
 
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
-export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope'] as const);
+export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'permissions'] as const);
 export type InspectSlashCommand = typeof INSPECT_SLASH_COMMANDS[number];
 export function isInspectSlashCommand(command: string): command is InspectSlashCommand {
   return (INSPECT_SLASH_COMMANDS as readonly string[]).includes(command);

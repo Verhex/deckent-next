@@ -7,14 +7,17 @@ import type { TerminalAdminCall } from './context.js';
 type Attempt<T> = Readonly<{ value: T }> | Readonly<{ note: string }>;
 type ModeView = Readonly<{ mode: string; askEdits: boolean; revision: number | string; supported: boolean; fullAccess: boolean }>;
 /** What `/scope` reads on every call; a part that could not be read is a note that names it, never a guessed value. */
+type GrantRow = Readonly<{ id: string; tool: string; kind: string; text: string }>;
 async function readScopeFacts(call: TerminalAdminCall): Promise<Readonly<{ company: Attempt<string>; mode: Attempt<ModeView>;
-  access: Attempt<Readonly<{ binding: string; kinds: readonly string[] }> | null> }>> {
+  access: Attempt<Readonly<{ binding: string; kinds: readonly string[] }> | null>; grants: Attempt<readonly GrantRow[]> }>> {
   const { root, scopeId, options, locale, context } = call;
   const company = await attempt(t('terminal.admin.scope.partCompany', {}, locale), locale, async () => (await loadConfig(root, options)).company.id);
   const mode = await attempt(t('terminal.admin.scope.partMode', {}, locale), locale, context.inspectPermissionMode
     ? () => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options) : null);
   const access = await attempt(t('terminal.admin.scope.partAccess', {}, locale), locale, context.inspectSurfaceAccess ? () => context.inspectSurfaceAccess!(root, scopeId, options) : null);
-  return { company, mode: mode as Attempt<ModeView>, access };
+  // K7 `/permissions`: the person's own persisted standing approvals, the same read as `deckent policy grants --mine` (read-only here).
+  const grants = await attempt(t('terminal.info.permissions.partGrants', {}, locale), locale, context.listStandingGrants ? () => context.listStandingGrants!(root, scopeId, options) : null);
+  return { company, mode: mode as Attempt<ModeView>, access, grants: grants as Attempt<readonly GrantRow[]> };
 }
 /** T2 integration: the mode reads as the status row's stop word, so "careful" (standart with the ask-for-edits preference) is its own word. */
 function stopWord(view: Readonly<{ mode: string; askEdits: boolean }>, locale: TerminalAdminCall['locale']): string {
@@ -29,14 +32,15 @@ function kindWords(kinds: readonly string[], locale: TerminalAdminCall['locale']
 }
 
 /**
- * `/scope`: who acts where on one line (you, project, company, mode, rule version, short identities), the surface access in words, then the details
- * with the full identities and the full permission-mode record. Read fresh on every call; a part that could not be read is named, not guessed.
+ * `/permissions` (K7; was `/scope`): who acts where on one line (you, project, company, mode, rule version), the surface access in words, your
+ * standing approvals, then the details with the full identities and the full permission-mode record. Read fresh on every call; a part that could
+ * not be read is named, not guessed.
  */
-export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ installationId: string; projectId: string }>, args: string, principalName: string | null,
+export async function permissionsLines(call: TerminalAdminCall, identity: Readonly<{ installationId: string; projectId: string }>, args: string, principalName: string | null,
   sessionFullAccess = false): Promise<readonly string[]> {
   const { root, scopeId, locale } = call;
   if (args.trim()) return [t('terminal.admin.scope.usage', {}, locale)];
-  const { company, mode, access } = await readScopeFacts(call);
+  const { company, mode, access, grants } = await readScopeFacts(call);
   const flag = (value: boolean) => value ? t('terminal.value.yes', {}, locale) : t('terminal.value.no', {}, locale);
   const summary = [
     ...(principalName ? [t('terminal.admin.scope.you', { name: principalName }, locale)] : []),
@@ -51,7 +55,10 @@ export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ i
   const accessLine = 'note' in access ? access.note : access.value
     ? t('terminal.admin.scope.access', { kinds: kindWords(access.value.kinds, locale) }, locale)
     : t('terminal.admin.scope.accessNone', {}, locale);
-  return [summary, t('terminal.admin.scope.scope', { scope: scopeId }, locale), accessLine,
+  const grantLines = 'note' in grants ? [grants.note] : grants.value.length
+    ? [t('terminal.info.permissions.standingCount', { count: grants.value.length }, locale), ...grants.value.map(grant => `  ${grantText(grant, locale)}`)]
+    : [t('terminal.info.permissions.standingNone', {}, locale)];
+  return [summary, t('terminal.admin.scope.scope', { scope: scopeId }, locale), accessLine, ...grantLines,
     ...('note' in company ? [company.note] : []), ...('note' in mode ? [mode.note] : []),
     t('terminal.admin.scope.details', {}, locale),
     ...[t('terminal.admin.scope.installation', { id: identity.installationId }, locale), t('terminal.admin.scope.project', { id: identity.projectId }, locale),
@@ -59,11 +66,21 @@ export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ i
       .map(line => `  ${line}`)];
 }
 
-/** `/scope` as a window (SW-1): the same fresh facts in sections; identities are the muted tail of a human label, never the label. */
-export async function scopeView(call: TerminalAdminCall, identity: Readonly<{ installationId: string; projectId: string }>, principalName: string | null,
-  sessionFullAccess = false): Promise<InfoView> {
+function grantText(grant: GrantRow, locale: TerminalAdminCall['locale']): string {
+  return t('terminal.info.permissions.standingRow', { tool: grant.tool, text: grant.text, id: grant.id }, locale);
+}
+
+/** The choice id `/permissions` answers when the person picks clearing this session's standing answers (the workline runs its confirmed flow). */
+export const PERMISSIONS_CLEAR_SESSION = 'clear-session';
+/**
+ * `/permissions` as a window (K7, SW-1; was `/scope`): who you are here, the mode and rules, what this terminal may see and your standing
+ * approvals; `clearSession` (the workline's own words, when it can clear) adds the choice that forgets this session's standing answers.
+ * Identities are the muted tail of a human label, never the label.
+ */
+export async function permissionsView(call: TerminalAdminCall, identity: Readonly<{ installationId: string; projectId: string }>, principalName: string | null,
+  sessionFullAccess = false, clearSession?: Readonly<{ label: string; detail: string }>): Promise<InfoView> {
   const { root, scopeId, locale } = call;
-  const { company, mode, access } = await readScopeFacts(call);
+  const { company, mode, access, grants } = await readScopeFacts(call);
   const notRead: InfoChip = { state: 'fail', text: t('terminal.info.chip.notRead', {}, locale) }, oneLine = (text: string) => text.replace(/\s*\n\s*/gu, ' ');
   const flag = (value: boolean): InfoChip => value ? { state: 'ok', text: t('terminal.value.yes', {}, locale) } : { state: 'neutral', text: t('terminal.value.no', {}, locale) };
   const project = basename(root) || root;
@@ -87,6 +104,9 @@ export async function scopeView(call: TerminalAdminCall, identity: Readonly<{ in
           : { key: t('terminal.info.scope.key.company', {}, locale), value: oneLine(company.note), chip: notRead }] },
       { title: t('terminal.info.scope.section.rules', {}, locale), rows: rules },
       { title: t('terminal.info.scope.section.access', {}, locale), rows: [accessRow] },
+      { title: t('terminal.info.permissions.section.standing', {}, locale), ...('note' in grants ? { notes: [oneLine(grants.note)] } : grants.value.length
+        ? { items: grants.value.map(grant => ({ text: grantText(grant, locale) })) } : { notes: [t('terminal.info.permissions.standingNone', {}, locale)] }),
+        ...(clearSession ? { choices: [{ id: PERMISSIONS_CLEAR_SESSION, label: clearSession.label, detail: clearSession.detail }] } : {}) },
       { title: t('terminal.info.scope.section.identities', {}, locale), rows: [{ key: t('terminal.info.scope.key.installation', {}, locale), value: t('terminal.info.scope.installationValue', {}, locale), id: identity.installationId },
         { key: t('terminal.info.scope.key.projectId', {}, locale), value: t('terminal.info.scope.projectIdValue', {}, locale), id: identity.projectId }] },
     ] } };

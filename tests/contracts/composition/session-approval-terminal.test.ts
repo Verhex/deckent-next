@@ -14,6 +14,7 @@ import { executeRuntimeApproval } from '#composition/core/runtime-service/index.
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { createWorklineLedgerPorts, workSurfaceLabels } from '#surfaces/core/cli/index.js';
+import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import { SessionStanding, RUNTIME_SERVICE_SCHEMA_VERSION, runtimeServiceRequestSchema, type RuntimeServiceRequest } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import type { AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';
@@ -102,7 +103,10 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   const snapshots = new Map<string, readonly AgentChatMessage[]>();
   // Explicit test identity bypasses the renderer-only synthetic binding; the composition below binds its actual command.
   const context = { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' };
-  const view = mountWorkline({ context, ledger, fullAccess: settings.fullAccess === true, sessions: { async save(input) { snapshots.set(input.sessionId, input.messages); },
+  // K7: `/permissions` (the real information port) offers clearing this session's standing answers (moved from `/approvals`).
+  const info = terminalAdminPorts({ root: project, scopeId: 'scope', installationId: context.installationId, projectId: context.projectId, options: { env }, locale, context: {},
+    status: async () => '', doctor: async () => undefined }).info;
+  const view = mountWorkline({ context, ledger, info, fullAccess: settings.fullAccess === true, sessions: { async save(input) { snapshots.set(input.sessionId, input.messages); },
     async list() { return [...snapshots].map(([sessionId, messages]) => ({ sessionId, messages: messages.length, updatedAtMs: Date.now(), preview: 'saved' })); },
     async load(id) { return snapshots.get(id) ?? null; } }, labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale) },
     streamTurn: (messages, signal, turn) => streamTerminalAgentTurn({ projectRoot: project, scopeId: 'scope', options: { env }, messages, signal,
@@ -112,11 +116,11 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   cleanups.push(async () => { view.instance.unmount(); controller.abort(); await rm(root, { recursive: true, force: true }); });
   const type = async (text: string) => { for (const ch of text) { view.stdin.write(ch); await settle(3); } };
   const rows = (sql: string) => { const db = new DatabaseSync(opened.path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
-  // SLASH-WINDOWS (SW-2): `/approvals` takes no typed argument in the terminal; clearing the session's answers is the picker's last row,
-  // confirmed in its own window (y), and its acknowledgement is the one system line (whitespace and window rails folded for matching).
+  // K7 (was `/approvals`' last row): clearing the session's answers is the `/permissions` window's choice, confirmed in its own window (y), and its
+  // acknowledgement is the one system line (whitespace and window rails folded for matching).
   const clearSession = async () => {
     const jobs = workSurfaceLabels(locale).jobs!;
-    await type('/approvals\r'); await until(() => view.stdout.frame.includes(jobs.clearSession), 'clear-session row');
+    await type('/permissions\r'); await until(() => view.stdout.frame.includes(jobs.clearSession), 'clear-session choice');
     await settle(40); await type('\r'); await until(() => view.stdout.frame.includes(jobs.clearDetail), 'clear-session confirmation'); await settle(40); await type('y');
   };
   const shown = () => view.stdout.text.replace(/[┃│]/g, ' ').replace(/\s+/g, ' ');

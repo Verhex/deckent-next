@@ -316,6 +316,8 @@ export interface PolicyPanelPreview {
 }
 export interface PolicyPanelLabels {
   readonly delegations?: string; readonly delegationConfirm?: string; readonly delegateGrant?: string; readonly delegateRevoke?: string;
+  /** K7: the row after the scopes list, opening `/permissions` (the person's own permissions); absent: no row. */
+  readonly me?: string;
   readonly title: string; readonly scope: string; readonly groups: string; readonly preview: string;
   readonly grant: string; readonly revoke: string; readonly confirm: string; readonly back: string; readonly hints: string; readonly empty: string;
 }

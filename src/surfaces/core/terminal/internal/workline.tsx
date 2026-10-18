@@ -292,11 +292,14 @@ export function WorklineApp(props: WorklineProps) {
   const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
-    openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
+    openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution),
+    ...(props.info?.ports.permissions ? { openPermissions: async (execution: LocalExecution) => { await performRef.current('/permissions', [], execution); } } : {}) });
 
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
-    context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
+    context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current,
+      // K7: `/permissions` offers clearing this session's standing answers when this terminal can (moved from `/approvals`).
+      ...(ledger?.clearSessionStanding && labels.work?.sessionStandingClear && labels.work.jobs ? { clearSession: { label: labels.work.jobs.clearSession, detail: labels.work.jobs.clearDetail } } : {}) }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
@@ -450,6 +453,7 @@ export function WorklineApp(props: WorklineProps) {
     // command there does; without window words (TERM=dumb) a typed argument keeps the text command.
     if (props.info && (rich || !slash.args) && INFO_WINDOW_COMMANDS.has(slash.command)) {
       const shown = await infoWindow.run(slash.command, execution);
+      if (shown.handled && slash.command === 'permissions') { if (shown.picked === 'clear-session') await work.clearSession(execution); return true; }
       if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
     }
     if (slash.command === 'reasoning') {

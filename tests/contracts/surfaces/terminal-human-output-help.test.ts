@@ -10,7 +10,7 @@ describe('/help grouped', () => {
     expect(slashHelpText(terminalComposerLabels('en').slash).split('\n\n')[0]).toBe([
       'Commands', 'Info', '  /status  Show whether Deckent is running, its version and the model', '  /context  Show how full the model\'s context window is',
       '  /monitor  Monitor window: stuck runs, workers, approvals, pools and installs (--install/--scope: text snapshot)', '  /model  Choose this session\'s model; models that cannot be used show why',
-      '  /usage  Show this conversation\'s token usage', '  /doctor  Run the installation health report', '  /scope  Show scope, project, mode and surface access',
+      '  /usage  Show this conversation\'s token usage', '  /doctor  Run the installation health report',
       '  /help  List the commands by group'].join('\n'));
   });
   it('TR', () => {
@@ -25,12 +25,14 @@ describe('/help grouped', () => {
   it('puts the window and mode commands under their headings, one short line each (T2 integration)', () => {
     const section = (text: string, heading: string) => text.split('\n').slice(1).join('\n').split('\n\n').find(part => part.startsWith(`${heading}\n`)) ?? '';
     const en = slashHelpText(terminalComposerLabels('en').slash), tr = slashHelpText(terminalComposerLabels('tr').slash);
-    expect(section(en, 'Approvals')).toContain('  /approvals [number|id|clear-session]  Pick a pending approval and decide it');
+    expect(section(en, 'Approvals')).toContain('  /approvals [number|id]  Pick a pending approval and decide it');
+    expect(section(en, 'Settings')).toContain('  /permissions  Your permissions:');
     expect(section(en, 'Jobs')).toContain('  /runs  Runs and workers in one window');
     expect(section(en, 'Jobs')).not.toMatch(/\/(cancel|workers|tasks|transcript|watch-\w+|run) /u);
     expect(section(en, 'Settings')).toContain('  /service-restart  Restart the runtime service from this build (asks first)');
     expect(section(en, 'Settings')).toContain('  /mode ');
-    expect(section(tr, 'Onaylar')).toContain('  /approvals [numara|kimlik|clear-session]  Bekleyen bir onayı seç ve karar ver');
+    expect(section(tr, 'Onaylar')).toContain('  /approvals [numara|kimlik]  Bekleyen bir onayı seç ve karar ver');
+    expect(section(tr, 'Ayar')).toContain('  /permissions  Yetkileriniz:');
     expect(section(tr, 'İşler')).toContain('  /runs  İşler ve işçiler tek pencerede');
     expect(section(tr, 'Ayar')).toContain('  /service-restart  Çalışma servisini bu derlemeden yeniden başlat (önce sorar)');
     expect(section(tr, 'Ayar')).toContain('  /mode ');

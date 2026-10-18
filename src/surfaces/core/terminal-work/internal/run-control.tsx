@@ -1,7 +1,8 @@
 import type { RunView } from '#engine/index.js';
 import { shortId } from '#platform/index.js';
-import { DecisionCard, approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
-import { fillTemplate, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
+import { DecisionCard, approvalTemplateLine, clearStandingNotice, projectApprovalDecisionText, type ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
+import { fillTemplate, type RunControlAction, type WorkLedgerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
+import { systemSummaryEntry } from './system-summary.js';
 import { useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
 import { runStateText, runTitle } from './job-windows.js';
 import type { LocalExecution, WorklinePanel } from './workline-panel.js';
@@ -108,4 +109,37 @@ export async function runAnswerAction(panel: WorklinePanel, execution: LocalExec
   if (!text) return fillTemplate(words.empty, { run: shortId(fresh.runId) });
   try { return await ledger.answerTask!(fresh.runId, waiting.taskId, text, fresh.revision); }
   catch (error) { return errorText(error); }
+}
+
+/**
+ * The work surface's row cards (Y1 control, K7 answer) and K7's `/permissions` clear-session confirmation: each opens its own card through the
+ * panel controller and leaves exactly one transcript line (the result, the typed refusal, or that nothing was sent). `reason` carries the text
+ * typed on the card (a hold note, an answer), reset around every card.
+ */
+export function rowCards(input: Readonly<{ panel: WorklinePanel; ledger: WorklineLedgerPorts | undefined; work: WorkSurfaceLabels | undefined;
+  push: (entries: readonly WorkLedgerEntry[]) => void; errorText: (error: unknown) => string; reason: { current: string | undefined } }>) {
+  const { panel, ledger, work, push, errorText, reason } = input;
+  const settle = async (execution: LocalExecution, line: Promise<string | null>) => {
+    reason.current = undefined;
+    const text = await line.catch((error: unknown) => errorText(error));
+    reason.current = undefined; if (text && !execution.signal.aborted) push([systemSummaryEntry(text)]);
+  };
+  return {
+    control: async (execution: LocalExecution, runId: string, action: RunControlAction) => {
+      if (work?.runControl && ledger?.controlRun) await settle(execution, Promise.resolve().then(() => runControlAction(panel, execution, ledger, work, runId, action, errorText, () => reason.current)));
+    },
+    answer: async (execution: LocalExecution, runId: string) => {
+      if (work?.runAnswer && work.runControl && ledger?.answerTask) await settle(execution, Promise.resolve().then(() => runAnswerAction(panel, execution, ledger, work, runId, errorText, () => reason.current)));
+    },
+    /** K7 (moved from `/approvals`): forget this session's standing answers after a confirmed window; pending requests and project answers remain. */
+    clearSession: async (execution: LocalExecution) => {
+      if (!work?.sessionStandingClear || !work.jobs || !ledger?.clearSessionStanding) return;
+      const words = work.sessionStandingClear, jobs = work.jobs, clear = ledger.clearSessionStanding;
+      await settle(execution, (async () => {
+        const decision = await panel.pick(execution, { kind: 'window', title: jobs.clearSession, body: [jobs.clearDetail], hints: work.cancelPrompt, confirm: true }, ['allow', 'deny']);
+        if (execution.signal.aborted) return null;
+        return decision === 'allow' ? (await clearStandingNotice(execution.input.context.sessionId, clear, words)).text : jobs.kept;
+      })());
+    },
+  };
 }

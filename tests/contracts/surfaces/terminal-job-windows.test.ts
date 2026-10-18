@@ -104,11 +104,10 @@ describe('SW-2 job windows (K1: the one Runs window)', () => {
     await until(() => view.stdout.frame.includes('Approval needed'), 'approval card'); await snapshot('approval', view); await settle(40); view.stdin.write('y');
     await until(() => captured.entries.length > 0, 'approved'); onlySummary(); expect(decide).toHaveBeenCalledWith(approval, 'allow', undefined, undefined);
   });
-  it.each(['y', 'n', ESC])('clear-session is a picker row and %s requires a confirmed window', async key => {
+  it('/approvals no longer carries the clear-session row (K7: it moved to /permissions)', async () => {
     const clear = vi.fn(async () => undefined), view = await open('/approvals', ports({ listApprovalPage: async () => ({ items: [], nextAfter: null }), clearSessionStanding: clear }));
-    await until(() => view.stdout.frame.includes(EN.jobs!.clearSession), 'clear row'); await choose(view);
-    await until(() => view.stdout.frame.includes(EN.jobs!.clearDetail), 'confirm window'); await snapshot('clear-session', view); expect(clear).not.toHaveBeenCalled(); await settle(40); view.stdin.write(key);
-    await until(() => captured.entries.length > 0, 'summary'); onlySummary(); expect(clear).toHaveBeenCalledTimes(key === 'y' ? 1 : 0);
+    await until(() => view.stdout.frame.includes(EN.approvalsNone), 'empty approvals window'); expect(view.stdout.frame).not.toContain(EN.jobs!.clearSession);
+    await close(view); onlySummary(); expect(clear).not.toHaveBeenCalled();
   });
   // SLASH-WINDOWS I-1 (owner 2026-10-08): in the rich terminal a typed argument opens the same window as the bare command; that window notes once
   // that the terminal takes no typed argument, and the typed text is never shown or used.
