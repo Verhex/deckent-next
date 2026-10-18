@@ -39,6 +39,11 @@ export const taskEligibilitySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('immediate') }).strict(),
   z.object({ kind: z.literal('not-before'), at: counterSchema }).strict(),
 ]).readonly();
+/** Typed causes of a failed Task (additive literals). `report-missing`/`report-invalid` (R5, owner D5a): a work task ended without a valid
+ * structured result report; `declared-check-not-passed`: its report's acceptance check did not pass; `worker-stalled` (R3): the
+ * bounded silence retry is exhausted. Report reasons are retry-classifiable; the retry itself belongs to the run recovery owner. */
+export const TASK_NOT_ACCEPTED_REASONS = ['no-change-produced', 'report-missing', 'report-invalid', 'declared-check-not-passed', 'worker-stalled'] as const;
+export type TaskNotAcceptedReason = typeof TASK_NOT_ACCEPTED_REASONS[number];
 export const taskProgressSchema = z.object({
   taskId: identity,
   phase: z.enum(['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling', 'skipped', 'awaiting-decision']),
@@ -46,7 +51,7 @@ export const taskProgressSchema = z.object({
   decision: z.object({ reason: z.enum(['evaluation-unknown', 'evaluation-not-ready', 'needs-input']), since: counterSchema, deadline: counterSchema, evaluationId: identity.optional(),
     question: workerNeedsInputSchema.unwrap().shape.question.optional(),
     evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional() }).strict().readonly().optional(),
-  notAcceptedReason: z.literal('no-change-produced').optional(),
+  notAcceptedReason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional(),
   acceptedEvidence: z.literal('model-unverified').optional(),
   inputAnswer: z.object({ schemaVersion: z.literal(1), source: attemptIdentitySchema, question: workerNeedsInputSchema.unwrap().shape.question,
     answer: z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars) }).strict().readonly().optional(),

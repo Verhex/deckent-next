@@ -1,6 +1,6 @@
 export { taskDependencySchema, dependencyTaskId, taskDependencyIds, taskInputNameSchema, TASK_GRAPH_SCHEMA_VERSION, taskDefinitionSchema, taskEligibilitySchema, taskGraphSchema, taskProgressSchema,
-  readinessInputSchema, TaskGraphError } from './internal/contract.js';
-export type { TaskDependency, TaskDefinition, TaskEligibility, TaskGraph, TaskProgress, ReadinessInput, TaskGraphErrorCode } from './internal/contract.js';
+  readinessInputSchema, TaskGraphError, TASK_NOT_ACCEPTED_REASONS } from './internal/contract.js';
+export type { TaskDependency, TaskDefinition, TaskEligibility, TaskGraph, TaskProgress, ReadinessInput, TaskGraphErrorCode, TaskNotAcceptedReason } from './internal/contract.js';
 export { validateTaskGraph } from './internal/graph.js';
 export { measureTaskGraph, summarizeTaskGraph, taskGraphShapeSchema, taskGraphSummarySchema } from './internal/shape.js';
 export type { TaskGraphShape, TaskGraphSummary } from './internal/shape.js';

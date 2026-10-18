@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
-import { quotaWaitText, renderAcceptanceLine, renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { notAcceptedLabel, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import type { RunCancellationDeliveryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type { RunCancellationDeliveryHandler, RunQueryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly Readonly<{ code: string; taskId: string; modelId: string; minCliVersion: string; cliVersion: string | null }>[] }>>;
@@ -150,7 +150,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
         ...renderBriefLines(task.taskBrief, task.resultBrief, locale),
         t('cli.run.inspect.stateLabel', { phase: task.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : phases[task.phase] }, locale),
-        ...(task.notAcceptedReason ? [t('task.acceptance.noChangeProduced', {}, locale)] : []),
+        ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale)] : []),
         ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
         ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
         ...(task.decision?.question ? [t('cli.run.lifecycle.question', { question: task.decision.question }, locale)] : []),

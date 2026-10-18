@@ -1,4 +1,5 @@
 import { evaluationAcceptanceSchema, runSnapshotSchema, type RunSnapshot } from '#domain/core/run/index.js';
+import { workerReportRefusal } from '#domain/core/worker-event/index.js';
 import { TaskEvaluationError, type TaskEvaluation } from './evaluation.js';
 
 export { evaluationAcceptanceSchema };
@@ -25,6 +26,8 @@ export function bindTaskAcceptance(run: RunSnapshot, evaluation: TaskEvaluation)
     if (definition.evidenceTypes.some(type => coreType(type) === 'approval-receipt' && !actual.includes(type))) missingApproval = true;
     return absent || invalidType ? { ...row, verdict: row.verdict === 'fail' ? 'fail' as const : 'unknown' as const } : row;
   });
+  // R5 (owner D5a): a missing or invalid worker report is missing evidence, expressed through the profile's ceiling rule.
+  if (evaluation.report && ['report-missing', 'report-invalid'].includes(workerReportRefusal(evaluation.report) ?? '')) missing = true;
   const weights = profile.rubric.reduce((sum, row) => sum + row.weight, 0);
   let score = profile.rubric.reduce((sum, rubric) => {
     const matched = criteria.filter(row => reference.criteria.find(value => value.criterionId === row.criterionId)?.criterionType === rubric.criterionType);

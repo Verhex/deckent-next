@@ -59,3 +59,22 @@ it('profile scores never loosen unresolved-effect refusal', () => {
   expect(bound.acceptance?.score).toBe(0);
   expect(() => inspectTaskEvaluation(uncertain, bound)).toThrow('TASK_EVALUATION_NOT_READY');
 });
+it.each([
+  ['missing', 'report-missing', ['missing-evidence']], ['invalid', 'report-invalid', ['missing-evidence']], ['oversized', 'report-invalid', ['missing-evidence']],
+] as const)('R5: report status %s on a bound work task fails typed and is capped by the missing-evidence ceiling', (status, reason, ceilingReasons) => {
+  const workInput = { schemaVersion: 1, task: 'Post the invoice', scope: { paths: ['erp/invoices'] }, acceptance: 'Invoice posted', model: { channelId: 'channel', modelId: 'model', auxiliaryModelIds: [] } };
+  // Pure domain fixture: template compilation is admission's concern; the bound business work class has no acceptance exception.
+  const { run: base } = evaluating();
+  const run = runSnapshotSchema.parse({ ...base, graph: { ...base.graph, schemaVersion: 3, tasks: [{ ...base.graph.tasks[0]!, workInput }] } });
+  const change = { schemaVersion: 1, patchDigest: 'a'.repeat(64), changedFiles: 1 };
+  const passing = bindTaskAcceptance(run, { ...evidence(), workspaceChange: change, report: { status: 'reported' } });
+  expect(inspectTaskEvaluation(run, passing)).toEqual({ evaluation: passing, conclusion: 'pass' });
+  const bound = bindTaskAcceptance(run, { ...evidence(), workspaceChange: change, report: { status } });
+  expect(bound.acceptance).toMatchObject({ score: 0, ceilingReasons });
+  expect(inspectTaskEvaluation(run, bound)).toMatchObject({ conclusion: 'fail', notAcceptedReason: reason });
+  expect(applyTaskEvaluation(run, run.revision, bound, { now: 100, timeoutMs: 1000 }).snapshot.progress[0]).toMatchObject({ phase: 'failed', notAcceptedReason: reason });
+  // The report evidence is a work-task field: a needs-input exit or a non-work task carrying it is refused, never silently passed.
+  expect(() => inspectTaskEvaluation(run, { ...bound, workerExit: { schemaVersion: 1, kind: 'needs-input', question: 'Which ledger?' } })).toThrow('TASK_EVALUATION_INVALID');
+  const { run: plain } = evaluating();
+  expect(() => inspectTaskEvaluation(plain, bindTaskAcceptance(plain, { ...evidence(), report: { status: 'missing' } }))).toThrow('TASK_EVALUATION_INVALID');
+});

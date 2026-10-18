@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { readWorkerModelPin, workerModelPinSchema, workerFinalReportResultSchema, type RunSnapshot, type WorkerFinalReportResult } from '#domain/index.js';
+import { readWorkerModelPin, workerModelPinSchema, workerFinalReportResultSchema, TASK_NOT_ACCEPTED_REASONS, type RunSnapshot, type WorkerFinalReportResult } from '#domain/index.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
 const text = z.string();
 const safe = (value: string) => redactSensitive(terminalSafeText(value));
@@ -13,7 +13,7 @@ export const taskBriefSchema = z.object({ schemaVersion: z.literal(1), task: tex
 }).strict().readonly();
 export type TaskBrief = z.infer<typeof taskBriefSchema>;
 export const briefEvaluationSchema = z.object({ verdict: z.enum(['accepted', 'accepted-unverified', 'rejected', 'unknown', 'pending']).nullable(),
-  reason: z.literal('no-change-produced').optional() }).strict().readonly();
+  reason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional() }).strict().readonly();
 const deliveryReceiptSchema = z.object({ state: z.enum(['integrating', 'integrated', 'delivering', 'delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']),
   commit: text.nullable(), commandId: text.nullable().optional(), targetRef: text.nullable().optional(),
 }).strict().readonly();

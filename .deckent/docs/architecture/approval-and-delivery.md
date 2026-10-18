@@ -700,6 +700,22 @@ Graph v2 and tasks without workInput keep their existing criteria; analysis-type
 are not inferred. Legacy evaluation receipts replay unchanged. New fields are additive to current strict schemas; older builds
 refuse records carrying these fields, so downgrades across new evidence require the existing governed backup/restore path.
 
+### REPORT-REQUIRED (alpha.47 R5, owner D5a, 2026-10-18)
+
+A work task (`workInput`) that exits 0 must also leave a valid structured result report. The evaluation application records the
+host-read report status as optional `report` (`reported | missing | invalid | oversized | unsupported`) only for a clean exit of a
+work task that did not ask for input; the transition refuses it on any other exit. The domain floor fails `missing` as
+`notAcceptedReason: report-missing` and `invalid`/`oversized` as `report-invalid`, whether or not a work class is bound; with a
+bound profile the same absence also raises the `missing-evidence` ceiling. The report stays a claim: a valid report removes only
+this floor, never the patch, criterion, model or profile gates. Report checks may carry optional `checkId` and
+`role: acceptance | exploratory`; an acceptance check whose last outcome is not `passed` fails as `declared-check-not-passed`,
+exploratory and untyped checks never fail. Reasons have one owner (`inspectTaskEvaluation`); the report reason precedes
+`no-change-produced`. `worker-stalled` is reserved for the R3 silence retry. Report reasons are retry-classifiable; the bounded
+retry belongs to the run recovery owner (R3), not to evaluation. `unsupported` (a CLI without a structured result channel, today
+Cursor) is not gated and stays visible on the evaluation. Legacy receipts without `report` replay unchanged. Generic by design:
+for an ERP/CRM operation the report is the worker's structured result, with no Git or test assumption. Not yet wired: the
+container bridge still accepts only `{command, outcome}` checks, so typed checks are reachable only after its schema mirror changes.
+
 Docker terminal observations add `container` v1 to the existing dispatch terminal: immutable container Id, image digest,
 nullable daemon start/end timestamps (nanoseconds preserved), and the frozen CPU/memory/pids/tmp resource profile.
 The labelled exact-request observation is carried by execute/cancel/reconcile into the same attempt-bound dispatch record.
