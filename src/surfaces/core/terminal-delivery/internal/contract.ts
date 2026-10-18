@@ -31,6 +31,8 @@ export type DeliveryAnswer = (view: EffectConfirmationView) => Promise<boolean>;
 export interface TerminalDeliveryPort {
   queue?: {
     prepareCurrent(target: DeliveryTarget, commandId: string): Promise<TargetQueueView>;
+    /** Read-only: whether `prepareCurrent` would carry the bounded re-attempt intent now (a work target and `targetQueue.reattempts` > 0). */
+    reattempt(): Promise<boolean>;
     inspect(scopeId: string, commandId: string): Promise<TargetQueueView | null>;
     confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>): Promise<TargetBatchExecution>;
   };

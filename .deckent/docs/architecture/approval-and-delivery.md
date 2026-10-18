@@ -1001,7 +1001,8 @@ The registered-target `/deliver` flow enqueues (no work target: `QUEUE_WORK_TARG
 with `deliveryIntent:"service-reattempt"`: an explicit per-Run delivery intent naming this ticket's Run and target, recorded in the
 request (payload digest, audit). It is set only by the human's own enqueue; the MCP channel stays read-only. The verified-terminal
 `/deliver` window always sends it on its queue enqueue (owner 2026-10-18, option A; no per-delivery key) and shows one catalog line
-(`terminal.delivery.reattempt`) before the `y` that enqueues; with `targetQueue.reattempts` 0 it sends no intent and shows no line, so the
+(`terminal.delivery.reattempt`) before the `y` that enqueues, and on a refused preview before the `r` that prepares on the current
+base (the port's read-only `queue.reattempt()`); with `targetQueue.reattempts` 0 it sends no intent and shows no line, so the
 record states the truth. The owner's delivery and adopt cards are unchanged. When such a ticket settles `conflict-needs-reattempt` with `PATCH_BASE_ADVANCED`, the service:
 - waits until the live target base actually moved past the original output (the work target's own integration check of that output
   refuses it; a refusal against an earlier, not yet adopted candidate of the same batch only waits);

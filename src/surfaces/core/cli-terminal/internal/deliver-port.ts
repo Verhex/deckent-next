@@ -64,6 +64,7 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
   const { inspectInventory, previewWorkspacePatch, checkWorkspaceIntegration, prepareWorkspaceIntegration, renderUnifiedDiff, interactiveDelivery, inspectRun } = context;
   if (!inspectInventory || !previewWorkspacePatch || !checkWorkspaceIntegration || !prepareWorkspaceIntegration || !renderUnifiedDiff || !interactiveDelivery) return undefined;
   const queue = context.deliveryQueue && context.confirmDeliveryQueue ? {
+    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; },
     async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const ref = config.execution?.workTargets?.targets[0]?.baseRef;
