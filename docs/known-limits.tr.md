@@ -195,6 +195,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Yedek kümesinin göreli yolu yanıltıcı bir mesajla reddedilir.** Mutlak yol kullanın.
 - **Ledger yükseltmesinden sonra eski bir Deckent'e dönemezsiniz;** yükseltmeden önce alınan yedeği geri yüklemeden olmaz
   (yeni ledger sürümlerini eski derlemeler açamaz).
+- **Günlük yedek ayarı ledger yükseltmesinden hemen önce yedek almaz.** `backup.schedule` tek değer alır (kapalı, günlük ya da
+  yükseltme öncesi); günlük seçiliyse yükseltme yeni set almadan başlar ve dönüş yolu en yeni günlük settir, en fazla yaklaşık bir
+  gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya
+  da günlük yerine yükseltme öncesini seçin.
 - **Kaybolan bir işçi slotunu tutabilir.** Verilmiş bir deneme, saklama çözülene kadar etkin kalıp bir yürütme slotunu tutabilir.
   *Yol:* `deckent monitor` ile izleyin; slot yalnız tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
 - **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
