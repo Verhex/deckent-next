@@ -210,7 +210,8 @@ is up; before-upgrade runs before ledger migration. Set `BACKUP_PASSPHRASE` thro
 selected secret store (the existing `secret set` masked/stdin flow). The default environment
 backend must instead be provisioned by the service launcher. Missing credentials block an
 admitted before-upgrade migration. Only authenticated scheduled sets are retained/pruned;
-operator files with other names remain. Shutdown waits for a backup already in progress.
+operator files with other names remain. A set that no longer verifies (for example after a
+passphrase change) is reported and kept, and does not block the next backup. Shutdown waits for a backup already in progress.
 
 Backup audit receipts contain principal, scope and policy, without credentials. Create/verify
 receipts live under `audit/backup-operations`; restore receipts live beside the set under

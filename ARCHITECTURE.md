@@ -514,9 +514,9 @@ refresh, usage and dogfood closure remain open.
   them and shows an installation directory mode open to group/other. Evidence: external `proof/BACKUP-FIXES-2026-10-09/`.
 - Config `backup.schedule` selects off/daily/before-upgrade; retention selects 3/7/14/30 sets. The service uses its configured scope and
   its verified hosting OS principal, the same policy and `BACKUP_PASSPHRASE` from the selected secret store. Daily due state survives
-  restart in authenticated set timestamps; before-upgrade runs under service custody before schema migration. Stop waits in-flight work.
+  restart in the set names (the minute check reads names only; sets are verified when one is due); before-upgrade runs under service custody before schema migration. Stop waits in-flight work.
   The shared schedule event reaches SDK observers and `runtime serve` (localized text/JSON, sanitized failure codes).
-  Only authenticated scheduled sets are pruned after a new complete set exists; other names are kept. Missing pre-upgrade credential
+  Only authenticated scheduled sets are pruned after a new complete set exists; other names, and a set that no longer verifies (event `skipped`, kept, not a blocker), are kept. Missing pre-upgrade credential
   blocks migration. KMS remains future adapter work. Linux native custody is the verified restore platform; other hosts refuse unsupported custody.
 - Evidence: external `proof/BACKUP-COMMAND-2026-10-08/`; author checks, independent review, packaged acceptance and DOGFOOD admission remain separate.
 
