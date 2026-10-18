@@ -453,6 +453,11 @@ if (localeNames.length > 1) {
   }
 }
 const knownKeys = new Set(Object.keys(catalogs[localeNames[0]] ?? {}));
+// The identical-text exemption inventory may only name live catalog keys: a removed message cannot keep a stale exemption.
+const identicalPath = join(catalogDir, 'internal', 'identical-messages.json');
+if (existsSync(identicalPath)) for (const key of JSON.parse(readFileSync(identicalPath, 'utf8'))) {
+  if (!knownKeys.has(key)) fail('i18n-identical-stale', rel(identicalPath), `identical-text exemption "${key}" names no catalog key`);
+}
 const T_CALL = new RegExp(`(?<![\\w.])${arch.i18n.callee}\\(\\s*([^)]*?)\\s*[,)]`, 'g');
 const OUTPUT_CALL = /(?:console\.(?:log|error|warn|info)|process\.(?:stdout|stderr)\.write)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
 for (const file of srcFiles) {
