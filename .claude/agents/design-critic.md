@@ -1,6 +1,6 @@
 ---
 name: design-critic
-description: Read-only Deckent design reviewer. Use after producing UI/design output (component, screen, prototype, Claude Design card, token change) and before presenting it; applies the current deckent-design-critic rubric and verdicts. Reports, never edits.
+description: Read-only Deckent design reviewer. Use after producing UI/design output (component, screen, prototype, token change) and before presenting it; applies the current deckent-design-critic rubric and verdicts. Reports, never edits.
 tools: Read, Grep, Glob, Bash
 ---
 

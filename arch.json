@@ -3253,7 +3253,6 @@
       ".codex/AGENTS.md": 5
     },
     "trackedAllowGlobs": [
-      ".agents/skills/claude-design-sync/*.md",
       ".agents/skills/deckent-agentic-ux/*.md",
       ".agents/skills/deckent-authority-bootstrap/*.md",
       ".agents/skills/deckent-closure/*.md",

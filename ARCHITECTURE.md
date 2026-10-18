@@ -1109,7 +1109,7 @@ The Markdown gate admits the five product/roadmap documents `README.md`, `ARCHIT
 public reader guides `docs/glossary{,.tr}.md` and `docs/architecture-overview{,.tr}.md` (owner-approved pre-beta DOC-03/DOC-04 fixes, 2026-10-09);
 byte-identical ≤70-line public contributor guidance `CLAUDE.md`, `AGENTS.md` (DOC-01, 2026-10-09);
 ≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
-and the explicit refactor host-kit globs in `arch.json`: the remaining 20 `.agents/skills/<skill>`
+and the explicit refactor host-kit globs in `arch.json`: the remaining 19 `.agents/skills/<skill>` (`claude-design-sync` retired 2026-10-18)
 directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.
 The host kit is excluded from product distribution (`package.json files`: dist/native/assets/README/LICENSE).
 Product Markdown generation is limited to owner-admitted `deckent init` project instructions (DECKENT-MD, 2026-10-08): detected project facts, preview and explicit consent, plus selected append-only bridges. Owner-maintained host instructions remain a development-only exception.
