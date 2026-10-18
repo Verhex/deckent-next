@@ -8,9 +8,12 @@ import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
 import { workerReportLimits } from '#domain/core/worker-event/index.js';
 export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).strict().readonly();
+/** R3 (owner D4a/D5a): why a superseded Attempt was retried by the bounded stall recovery; only on a `stalled` previous binding. */
+export const STALL_CAUSES = ['inactivity', 'report-missing', 'report-invalid'] as const;
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
-  observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused']).nullable(),
-}).strict().readonly();
+  observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused', 'stalled']).nullable(),
+  stallCause: z.enum(STALL_CAUSES).optional(),
+}).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
   z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted']),
@@ -46,13 +49,13 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
   for (const binding of run.previousBindings ?? []) {
     const id = binding.identity;
     if (!tasks.has(id.taskId) || attempts.has(id.attemptId) || id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId
-      || id.layoutRevision !== run.identity.layoutRevision || !['exited', 'quota-exhausted'].includes(binding.observedKind ?? '') || binding.observedRevision === null) invalid();
+      || id.layoutRevision !== run.identity.layoutRevision || !['exited', 'quota-exhausted', 'stalled'].includes(binding.observedKind ?? '') || binding.observedRevision === null) invalid();
     attempts.add(id.attemptId);
   }
   for (const binding of run.bindings) {
     const id = binding.identity;
     if (!tasks.has(id.taskId) || bound.has(id.taskId) || attempts.has(id.attemptId) || id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId || id.layoutRevision !== run.identity.layoutRevision ||
-      (binding.observedRevision === null) !== (binding.observedKind === null)) invalid();
+      (binding.observedRevision === null) !== (binding.observedKind === null) || binding.observedKind === 'stalled') invalid();
     bound.add(id.taskId); attempts.add(id.attemptId);
   }
   const waits = run.quotaWaits ?? [];

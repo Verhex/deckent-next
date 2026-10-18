@@ -1,6 +1,8 @@
 export { parkRunQuota, resetRunQuota, releaseRunQuota } from './internal/quota.js';
 export type { RunQuotaWait } from './internal/quota.js';
-export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError } from './internal/contract.js';
+export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES } from './internal/contract.js';
+export { recoverStalledTask } from './internal/stall.js';
+export type { StallCause } from './internal/stall.js';
 export type { RunIdentity, RunSnapshot } from './internal/contract.js';
 export { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, closesAttemptWithoutExit } from './internal/reduce.js';
 export { preventRunAttempt } from './internal/prevent.js';
@@ -9,8 +11,8 @@ export type { WorkspaceDeliveryState } from './internal/workspace-custody.js';
 export { settleCancelledRunAttempt } from './internal/settle.js';
 export { executionRegistrySchema, executionProfileDefinitionSchema, evaluatorDefinitionSchema, encodeExecutionProfileDefinition } from './internal/registry.js';
 export type { ExecutionRegistry, ExecutionProfileDefinition, EvaluatorDefinition } from './internal/registry.js';
-export { runExecutionSnapshotSchema } from './internal/registry.js';
-export type { RunExecutionSnapshot } from './internal/registry.js';
+export { runExecutionSnapshotSchema, taskStallPolicySchema } from './internal/registry.js';
+export type { RunExecutionSnapshot, TaskStallPolicy } from './internal/registry.js';
 export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';
 

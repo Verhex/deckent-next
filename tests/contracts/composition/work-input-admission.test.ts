@@ -47,13 +47,13 @@ const graph = (kind: string, input?: object, schemaVersion = 3) => ({ schemaVers
 const run = (runId: string, kind: string, input?: object, schemaVersion = 3) => ({ schemaVersion: 1 as const, commandId: `create-${runId}`, scopeId: 's', runId,
   graph: graph(kind, input, schemaVersion) });
 
-async function seeded(localRegistry: object = registry, suppliedCatalog?: object) {
+async function seeded(localRegistry: object = registry, suppliedCatalog?: object, extraConfig: object = {}) {
   const project = await mkdtemp(join(tmpdir(), 'dn-work-input-')); roots.push(project); const data = join(project, 'd');
   await mkdir(join(project, '.deckent'), { recursive: true }); const options = { env: { HOME: join(project, 'h') } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
     ordering: 'input-order', registry: localRegistry }, cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
   cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 }, service: { inputMaxBytes: 65536, responseMaxBytes: 65536,
-    maxConnections: 4, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 1000, shutdownGraceMs: 1000 } }));
+    maxConnections: 4, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 1000, shutdownGraceMs: 1000 }, ...extraConfig }));
   const { store, path } = await openConfiguredAttemptStore(project, options);
   try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); } finally { store.close(); }
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
@@ -407,5 +407,17 @@ describe.skipIf(process.platform === 'win32')('terminal monitor reasoning effort
         expect(detail).not.toContain(lang === 'en' ? 'Reasoning effort:' : 'Muhakeme eforu:');
       }
     }
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('R3 silence policy through the real admission composition', () => {
+  it('R3: admission freezes the silence policy for a native worker only when it stops before the profile deadline', async () => {
+    const short = await seeded(registry, undefined, { runRuntime: { stallRecovery: { schemaVersion: 1, warnAfterMs: 1000, stopAfterMs: 5000, maxRetries: 2 } } });
+    await createRun(short.project, run('watched', 'coding', workInput()), short.options);
+    expect((short.snapshotProfile('watched').tasks[0] as { stall?: unknown }).stall).toEqual({ warnAfterMs: 1000, stopAfterMs: 5000, maxRetries: 2 });
+    // The installation default (stop 600000) cannot stop before this profile's 20000 ms deadline: it is not frozen, the deadline alone bounds the task.
+    const f = await seeded();
+    await createRun(f.project, run('deadline-only', 'coding', workInput()), f.options);
+    expect((f.snapshotProfile('deadline-only').tasks[0] as { stall?: unknown }).stall).toBeUndefined();
   });
 });

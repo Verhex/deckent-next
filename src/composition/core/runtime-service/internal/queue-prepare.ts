@@ -1,5 +1,5 @@
 import { WorkspacePatchApplication, createWorkspaceQueuePreparation, stepWorkspaceQueueReattempt } from '#engine/index.js';
-import { GitIntegrationTarget, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, gitQueueCandidateSource, openSqliteInventoryReader, resolveDockerTaskProfile } from '#adapters/index.js';
+import { GitIntegrationTarget, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, gitQueueCandidateSource, openSqliteInventoryReader, classifyDockerTaskEffects } from '#adapters/index.js';
 import type { TargetQueueRecord } from '#domain/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { prepareConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
@@ -24,6 +24,6 @@ export async function queuePreparation(root: string, c: QueueContext, options: C
 export async function queueReattempt(root: string, c: QueueContext, options: ConfigLoadOptions, record: TargetQueueRecord, act: boolean) {
   const reader = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
   try { return await stepWorkspaceQueueReattempt(c, reader, { target: new GitIntegrationTarget(c.git, c.limits), async admit(command) { await withConfiguredRunAdmission(root, c, options, app => app.create(command)); },
-    effects(profile) { try { resolveDockerTaskProfile(profile); return 'workspace-only'; } catch { return 'unknown'; } },
+    effects: classifyDockerTaskEffects,
     async preparePatch(identity) { await prepareConfiguredWorkspacePatch(root, identity, options); } }, record, act); } finally { reader.close(); }
 }

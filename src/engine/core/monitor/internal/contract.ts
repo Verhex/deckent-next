@@ -24,7 +24,7 @@ export interface MonitorService {
 }
 /** Why a non-terminal Run is not progressing; `none` only when it is progressing normally. */
 export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'waiting-execution-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
-  | 'worker-running' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
+  | 'worker-running' | 'worker-silent' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
   | 'unresolved-effect' | 'cancellation-pending' | 'not-admitted' | 'unknown';
 export interface MonitorBlocker {
   readonly pool?: import('#engine/core/runs/index.js').PoolWait;

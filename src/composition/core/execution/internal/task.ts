@@ -6,7 +6,7 @@ import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArti
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
-  RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
+  RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -67,8 +67,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
       for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
+      // R3: the frozen silence policy stops a worker whose gateway saw no event or model traffic; the existing kill path follows.
+      const stall = run!.execution.tasks.find(row => row.taskId === identity.taskId)?.stall, silence = new AbortController();
+      const watch = stall && connection ? inactivityWatch(stall, Date.now()) : undefined;
       const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
         config.inspection.workers.maxFileBytes, async () => {
+          if (watch?.(Date.now(), connection!.statistics()) === 'stop') silence.abort('inactivity');
           let record = await store.loadBoundDispatch(identity); if (!record) return null;
           const activity = await supervisor.inspectActivity(request).catch(() => ({ handle: null, state: 'unknown' as const }));
           // Supervisor observation must also settle a missed exit while the execute controller is
@@ -83,7 +87,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
             terminal: record.terminal, outputRecorded: !!record.output };
         });
       let result; dispatching = true;
-      try { result = await app.execute(request); } finally { await observation.close(); }
+      try { result = await app.execute(request, undefined, silence.signal); } finally { await observation.close(); }
       outcome = { status: result.kind, terminal: result.record.terminal, outputRecorded: !!result.record.output };
       } finally {
         await connection?.close();

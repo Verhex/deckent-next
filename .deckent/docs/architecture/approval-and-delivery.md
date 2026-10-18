@@ -716,6 +716,35 @@ Cursor) is not gated and stays visible on the evaluation. Legacy receipts withou
 for an ERP/CRM operation the report is the worker's structured result, with no Git or test assumption. Not yet wired: the
 container bridge still accepts only `{command, outcome}` checks, so typed checks are reachable only after its schema mirror changes.
 
+### SILENT-WORKER WATCHDOG (alpha.47 R3, owner D4a/D5a, 2026-10-18)
+
+Policy: `runRuntime.stallRecovery` (`warnAfterMs` 180000, `stopAfterMs` 600000, `maxRetries` 1, `backoffMs` 30000; defaults in
+`stall-policy.json`); a v2/v3 work class may override warn/stop with `inactivity`. Admission freezes
+`execution.tasks[].stall {warnAfterMs, stopAfterMs, maxRetries}` only for a profile with a host-observed liveness channel (the
+native gateway; `dockerTaskSilenceDeadline`) whose deadline comes later. An explicit class policy that cannot stop before the deadline
+is refused (`WORKER_INACTIVITY_POLICY_INVALID`); the installation default simply does not apply to such a task. Older Runs carry no
+policy and keep only the deadline bound.
+Detection is pure (`inactivityVerdict`): silence counts from the dispatch start, the host receipt of the last worker event batch
+(accepted, dropped or refused) and the last host-side model traffic through the gateway; heartbeat freshness is not an input. The
+execution composition samples these gateway counters on the existing observation tick and aborts the execute signal with reason
+`inactivity`; the existing kill path follows (`docker kill`, then inspect). The dispatch terminal records the additive
+`interruptCause: deadline | inactivity | cancel` (absent on older records, read as none). `deadline` means interrupted without an
+abort (the profile deadline or a supervisor CLI failure); `cancel` is any other abort reason and has no caller yet.
+Retry owner: `recoverStalledTask` (domain), reached only through the evaluation commit that the ledger re-runs. Under the frozen bound
+the binding moves to `previousBindings` as `observedKind: stalled` with `stallCause`, and the task returns to `pending` with a
+`not-before` backoff; the next Attempt is a new generation with a new id and lease. Over the bound the task fails with
+`worker-stalled` (or keeps `report-missing`/`report-invalid`) and never parks for a decision. Only `inactivity` stops and
+`report-missing`/`report-invalid` clean exits (D5a) share the bound; `deadline`, legacy and other interruptions keep today's
+evaluation-not-ready hold, and accepting it stays `RUN_DECISION_NOT_READY`. The evaluation readiness carve-out is keyed on the
+host-recorded cause and only allows the retry/fail transition, never a pass; the stopped worker's partial output is never read.
+Effect gate: a retry needs settled effects (`unresolvedEffects === false`), the one adapter classifier saying workspace-only
+(`classifyDockerTaskEffects`, shared with the delivery re-attempt) and no criterion that reads business operation settlements
+(`operation-evidence`). Anything else, for example an ERP/CRM task with external effects, keeps the existing hold and
+reconciliation path. Monitor: `worker-silent` (warn) when a fresh-heartbeat worker's last host-received event is older than the
+frozen warn bound; details `WORKER_INACTIVITY_STOPPED` (a stop awaiting evaluation) and `TASK_STALL_RETRY_EXHAUSTED` (a Run parked
+because the bound was used). The superseded Attempt's clone is not released automatically: EXEC-RELEASE treats an unbound Attempt as
+held, as for a quota resume.
+
 Docker terminal observations add `container` v1 to the existing dispatch terminal: immutable container Id, image digest,
 nullable daemon start/end timestamps (nanoseconds preserved), and the frozen CPU/memory/pids/tmp resource profile.
 The labelled exact-request observation is carried by execute/cancel/reconcile into the same attempt-bound dispatch record.

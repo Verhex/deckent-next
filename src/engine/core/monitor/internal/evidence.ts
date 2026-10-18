@@ -14,7 +14,7 @@ export interface MonitorLedgerDispatch {
   readonly launch: 'pending' | 'granted' | 'prevented-before-launch';
   /** `dispatches.record.grant.grantedAt`: the launch grant (linearization point), not proof that the process started. */
   readonly grantedAtMs: number | null;
-  readonly terminal: { readonly container?: ContainerEvidence; readonly exitCode: number | null; readonly signal: string | null; readonly interrupted: boolean | null } | null;
+  readonly terminal: { readonly container?: ContainerEvidence; readonly exitCode: number | null; readonly signal: string | null; readonly interrupted: boolean | null; readonly interruptCause?: string | null } | null;
   readonly outputRecorded: boolean;
   /** `dispatches.record.patch` exists: the patch was prepared and retained (metadata only, no content read). Absent on older readers. */
   readonly patchRecorded?: boolean;

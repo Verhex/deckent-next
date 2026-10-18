@@ -17,7 +17,7 @@ const held = (reason: MonitorBlockerCode, proof?: MonitorBlocker | null): HumanS
   waitingOn: reason === 'awaiting-approval' || reason === 'awaiting-decision' ? 'you' : reason === 'pool-held' ? 'operator' : 'system', reason,
   detail: proof?.detail ?? null, since: proof?.sinceMs ?? null, deadline: proof?.deadlineMs ?? null,
   nextAction: reason === 'awaiting-approval' ? 'inspect-approvals' : reason === 'pool-held' ? 'inspect-pool'
-    : reason === 'awaiting-decision' ? 'inspect-task' : reason === 'worker-stale-heartbeat' ? 'inspect-worker' : 'inspect-run' });
+    : reason === 'awaiting-decision' ? 'inspect-task' : reason === 'worker-stale-heartbeat' || reason === 'worker-silent' ? 'inspect-worker' : 'inspect-run' });
 const BLOCKER_STATE: Readonly<Partial<Record<MonitorBlockerCode, Exclude<HumanStateCode, 'held'>>>> = Object.freeze({
   'waiting-dependency': 'queued', 'waiting-pool-slot': 'queued', 'waiting-execution-slot': 'queued', none: 'queued',
   'worker-running': 'running', 'worker-exited-unevaluated': 'checking', 'evaluation-not-ready': 'checking',
