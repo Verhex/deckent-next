@@ -26,10 +26,18 @@ revision/diff, task, role, read/write/negative scopes, sole writer, output artif
 bounds and stop conditions, and the law check and two perspectives (full template:
 `<refactor-work>/proof/LAW-GATE/CARD-TEMPLATE.md`):
 
-    ## Kanun kontrolü (her satır: uyumlu / ilgisiz / çatışma + neden)
-    1 Kanıt ve kapanış · 2 Yetki sınırı · 3 Owner iletişimi · 4 Doküman haritası · 5 İş bölme ve kök neden
-    6 Model/provider tek kaynak · 7 Yerel doğrulama · 8 İkinci görüş · 9 Alp Discipline · 10 Enterprise katmanı
-    North star: güvenlik, determinizm, sınırlı kaynak, iptal/kurtarma, ölçülmüş performans
+    ## Kanun kontrolü (zorunlu)
+    1. Kanıt ve kapanış — uyumlu / ilgisiz / çatışma: <neden>
+    2. Yetki sınırı — uyumlu / ilgisiz / çatışma: <neden>
+    3. Owner iletişimi — uyumlu / ilgisiz / çatışma: <neden>
+    4. Doküman haritası — uyumlu / ilgisiz / çatışma: <neden>
+    5. İş bölme ve kök neden — uyumlu / ilgisiz / çatışma: <neden>
+    6. Model/provider tek kaynak — uyumlu / ilgisiz / çatışma: <neden>
+    7. Yerel doğrulama — uyumlu / ilgisiz / çatışma: <neden>
+    8. İkinci görüş — uyumlu / ilgisiz / çatışma: <neden>
+    9. Alp Discipline — uyumlu / ilgisiz / çatışma: <neden>
+    10. Enterprise katmanı — uyumlu / ilgisiz / çatışma: <neden>
+    North star (güvenlik, determinizm, sınırlı kaynak, iptal/kurtarma, ölçülmüş performans) — <neden>
     ## İki bakış
     - Dogfood: Deckent kendini geliştirirken bu ne katar?
     - Hedef ürün: müşteri bir ERP/CRM sürecini yürütürken aynı mekanizma nasıl çalışır?
