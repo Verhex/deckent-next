@@ -213,7 +213,7 @@ an attacker with the same account who removes both all markers and checkpoints c
 like a fresh installation locally. Rebaseline is a witnessed human y/N action, on the AI floor,
 after investigating the cause; it establishes a new reference, not proof the past was safe.
 Hardware-backed FIDO2 confirmation and signed policy bundles are post-beta work, not current
-protection. See [audit limits](architecture-overview.md#audit-integrity-and-pull-witness).
+protection. See [audit limits](architecture-overview.md#audit-integrity-and-pull-witnesses).
 
 ## What the compliance report proves
 

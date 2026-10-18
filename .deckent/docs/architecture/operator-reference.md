@@ -18,8 +18,8 @@ in most terminals, Option in iTerm2, Fn in Terminal.app. `terminal.layout: inlin
 inline layout (native scrollback while running; recommended with screen readers); `terminal.viewportRows` (default 2000)
 bounds how far the view scrolls back. Mode colours: standard muted, full auto its own colour, full access the warning tone
 with a calm `⏵⏵⏵` mark (NO_COLOR: the words carry the mode). A window opened by your command or selection takes
-focus immediately; Escape closes it back to input. Automatic /do planning, progress and approval cards, model-turn
-approvals and run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
+focus immediately; Escape closes it back to input. Automatic /do planning and progress windows and
+run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
 operation. Ctrl+O switches between input and the top window. An approval card (and any question) takes the keyboard by
 itself and replaces the input bar in place, so no Ctrl+O is needed; its answers are a list — "Yes, once (y)", "Yes, for this
 session (s)" and "Always allow in this project (a)" only where the service offers them (never for floor items or always-ask
@@ -61,7 +61,7 @@ the MCP tool `inspect_toolchain_currency` and the SDK function `inspectToolchain
 
 `deckent toolchains update [--apply]` turns a stale report into the next worker image version under
 `toolchains.update.mode` (`off | propose | auto`, default `auto`): a typed plan is written under
-`<data root>/workspaces/toolchains/plans/`; with `auto` or `--apply` the shipped builder is copied into
+`<data root>/workspaces/toolchains/plans/`; with `--apply` (in every mode; under `auto` the running service's own refresh applies by itself) the shipped builder is copied into
 `workspaces/toolchains/builds/<version>/`, built with a bounded timeout, and its receipt produces a
 `not-applied` profile-revision proposal (`proposals/<version>.json`). Installed config is never rewritten;
 apply the proposal as a new installation profile revision. Running work keeps its image; old versions stay for

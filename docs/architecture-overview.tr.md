@@ -77,7 +77,10 @@ Bir **yürütme (Run)**, **görev (Task)** grafiğini kabul eder. Her **deneme (
 ayırır, bağımlılıklara ve politikaya uyar, çalıştırma gözlemlerini kaydeder ve çıktıyı
 değerlendirir. İşin kabulü, yama entegrasyonu ve teslim süreç sonlanmasından ayrıdır.
 Başarısız ön koşul, bağımlı görevleri atlanmış olarak kapatabilir; bu görevler başarıyla
-çalışmış sayılmaz.
+çalışmış sayılmaz. `deckent do` (terminalde `/do`), bağlı ve etkin bir modelden (Brain) bir niyeti
+Run önerisine dönüştürmesini ister; plan mevcut kabul ve onay kapılarından geçer, kendisi yetki
+vermez. Kayıtlı bir Git entegrasyon hedefine teslim o hedefin kuyruğundan geçer: yayımlama ve
+benimseme dondurulmuş partilerini gösterir ve ayrı onay ister; geri alma ayrıca onaylanan bir işlemdir.
 
 İşlemsel SQLite kaydı işleri, ayrılan kaynakları, onayları, etkileri ve makbuzları saklar.
 Mühürlü denetim kayıtları kararları bağlamına bağlar. Kaynak sınırları, iptal, süre sonu ve
@@ -109,8 +112,9 @@ kontrol edilir. Politika izin verir, reddeder veya onay gerektirir; zorunlu kıs
 kullanıcı ayarıyla gevşetilemez.
 
 Onay istekleri eylemi, bağlamı, süre sonunu ve yetkili kararı bağlar. İzin modları yalnız
-uygun işlemleri otomatikleştirir. **Tam erişim** şirket izni gerektirir ve oturumla sınırlıdır;
-ana makine dosya sistemi, ev dizini, ağ ve Git erişimini bilerek genişletir. Retler ve
+uygun işlemleri otomatikleştirir. **Tam erişim** şirket izni gerektirir; izin her açılışta ve her
+çağrıda yeniden denetlenir. Yalnız bir terminal oturumu için açılabilir ya da kişinin başlangıç kipi
+olarak saklanabilir. Tam erişim ana makine dosya sistemi, ev dizini, ağ ve Git erişimini bilerek genişletir. Retler ve
 değişmez koruma sınırı geçerlidir; etki çağrıları denetim kaydına girer. Tam erişimin
 maruziyeti, kapalı yalıtım görünümünden farklıdır.
 
@@ -131,14 +135,23 @@ kontrol edin.
 ## Eklenti noktaları ve bugünkü sınırlar
 
 Herkese açık SDK dışa aktarımları açıkça listelenir. `deckent/extensions` bugün işlem
-adaptörü ve sır deposu kaydı ile bu kayıtları ekleyen dağıtım için CLI girişini sunar.
+adaptörü, sır deposu, onay güvencesi üreticisi, MCP yetki grubu ve sağlayıcı ücretsiz-çağrı
+sertifikası kaydını, sır yardımcısı fabrikasını ve bu kayıtları ekleyen dağıtım için CLI (`runCli`)
+ve MCP (`runMcp`) girişlerini sunar.
 Kayıt, bileşim kökü kayıt dizinlerini mühürlemeden önce yapılmalıdır; geç kayıt reddedilir.
 Ayarlar kayıtlı uygulamayı seçer, politika kullanımı yetkilendirir. Adaptör kaydı yürütme
 izni vermez.
 
+Güvenilir bir dağıtım, aynı SecretStore portu üzerinden isteğe bağlı bir
+[sır yardımcısı (EN)](secret-helpers.md) kaydedebilir. Komutu ve sınırları kayıtta sabitlenir;
+ayarlar yalnız kimliğini seçer. Her okuma bir uygulama yetki kararı gerektirir; süre ve çıktı
+sınırlıdır, hatalar arındırılır. Yardımcı salt okunurdur, dış ad listelemesi yapmaz ve bir
+sandbox değildir. Mevcut depo taşıma kısıtları ve platform sınırları geçerliliğini korur.
+
 Ayrı paket, Core'u değiştirmeden mevcut etki sözleşmesiyle hedef adaptörü veya portuyla
-sır deposu sağlayabilir. Bu, her iç kayıt dizininin dışa açıldığı anlamına gelmez. Servis
-ve MCP eklenti başlangıç bağlantıları uçtan uca kanıtlanmış değildir. ERP entegrasyonları
+sır deposu sağlayabilir. Bu, her iç kayıt dizininin dışa açıldığı anlamına gelmez. Dağıtım
+kayıtlarının servis ve MCP başlangıcında yeniden uygulanması bağlıdır (`runCli`, `runMcp`) ve elle
+çalıştırılan `npm run smoke:dist` ile sınanır; CI'da yer almaz. ERP entegrasyonları
 ve müşteri kimlik/SIEM adaptörleri mimari eklenti sınırlarıdır; doğrulanmış hazır
 bağlayıcılar değildir.
 

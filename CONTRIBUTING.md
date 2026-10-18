@@ -77,13 +77,13 @@ and again in check mode to compare them, and retains the inventories, logs, lock
 Linked-library version changes that need a new verified license text stop for maintainer review.
 It never updates the build image, source tarball, shipped architectures or source/license pins silently.
 
-Automatic draft PR publication requires `contents: write` and `pull-requests: write` on that watch
-job; the current card's read-only contents boundary requires an owner decision before enabling it.
-Until then, the uploaded `deps-watch-<attempt>` artifact contains the candidate locks and PR body;
-a maintainer reviews those bytes, creates a branch and submits
-`build(bwrap): refresh pins (Alpine <release>)`. `scripts/publish-bwrap-refresh.mjs` is prepared for
-that narrowly scoped job but is not invoked while contents remain read-only. It changes only the
-lock and generated runtime identity, reuses an existing PR and never force-updates or merges.
+The watch job itself stays read-only. A separate `deps-publish` job, the only one with
+`contents: write` and `pull-requests: write`, runs only when the watch verified a refresh and found
+no integrity problem. It installs no packages, builds nothing and runs no candidate code: it checks
+out the base the watch resolved, re-verifies the uploaded `deps-watch-<attempt>` candidate and runs
+`scripts/publish-bwrap-refresh.mjs` to open a draft `build(bwrap): refresh pins (Alpine <release>)`
+pull request. It changes only the lock and generated runtime identity, reuses an existing PR and
+never force-updates or merges.
 Astra review and hosted CI remain mandatory. GitHub-token-created PRs need an explicit maintainer
 CI dispatch on the candidate branch; their creation does not itself trigger the normal PR workflow.
 
@@ -118,8 +118,8 @@ sandbox tests still need the staged bundle; tests that spawn `dist` entries need
 | Sandbox integration tests | Need staged bubblewrap and host kernel capabilities. An unsupported-host skip does not verify isolation. |
 | Full test suite / `npm run verify` | Broad, resource-intensive checks coordinated by maintainers. The configuration defaults to four workers; use targeted tests for a normal PR. Do not run a build while a test suite is active. |
 
-A sample of the quickstart policy test on 2026-10-09 (Linux x64, Node 24.21.0, Vitest 5.0.1,
-two-worker limit) passed 9 tests with no skips in 2.59 seconds. GNU `time -v` reported a maximum
+A sample of the quickstart policy test on 2026-10-09 (Linux x64, Node 24.21.0 before the floor was
+raised to 24.22.0, Vitest 5.0.1, two-worker limit) passed 9 tests with no skips in 2.59 seconds. GNU `time -v` reported a maximum
 process RSS of about 464 MiB; this is not aggregate suite memory. It is one local sample, not a
 setup-time or full-suite estimate. Docker and sandbox execution were not exercised by that test.
 

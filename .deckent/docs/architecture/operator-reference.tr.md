@@ -17,8 +17,8 @@ seçin — çoğu terminalde Shift, iTerm2'de Option, Terminal.app'te Fn. `termi
 yerel kaydırma geçmişi; ekran okuyucuyla önerilir); `terminal.viewportRows` (varsayılan 2000) görünümün ne kadar geriye
 kaydığını sınırlar. Mod renkleri: standart soluk, tam otomatik kendi rengi, tam erişim uyarı tonunda sakin `⏵⏵⏵` işaretiyle
 (NO_COLOR: modu sözcükler taşır). Komutunuzla veya seçiminizle açılan
-pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
-turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
+pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama ve ilerleme pencereleri ile
+Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
 arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Onay kartı (ve her soru) klavyeyi
 kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez. Cevaplar listedir — "Evet, bu sefer (y)", "Evet, bu
 oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis sunduğunda (taban öğelerinde ve her zaman sorulan
@@ -63,8 +63,8 @@ etkinleştirmez. Aynı rapor MCP `inspect_toolchain_currency` aracı ve SDK
 
 `deckent toolchains update [--apply]`, eski sürüm raporundan bir sonraki worker image sürümünü
 hazırlar. `toolchains.update.mode` değerleri `off | propose | auto`, varsayılan `auto`'dur.
-Tipli plan `<data root>/workspaces/toolchains/plans/` altına yazılır. `auto` ya da `--apply` ile paketli
-builder `workspaces/toolchains/builds/<version>/` altına kopyalanır ve sınırlı sürede derlenir;
+Tipli plan `<data root>/workspaces/toolchains/plans/` altına yazılır. `--apply` ile (her modda; `auto` yalnız çalışan servisin kendi yenilemesine
+uygulama yetkisi verir) paketli builder `workspaces/toolchains/builds/<version>/` altına kopyalanır ve sınırlı sürede derlenir;
 makbuzundan uygulanmamış (`not-applied`) profil revizyon önerisi (`proposals/<version>.json`) oluşur.
 Kurulu config yeniden yazılmaz; öneri yeni kurulum profil revizyonu olarak uygulanır. Çalışan iş
 kendi image'ını korur; önceki sürümler geri dönüş için tutulur. `toolchains.update.atStartup`,

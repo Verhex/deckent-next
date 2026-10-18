@@ -536,7 +536,7 @@ profile revision, in-flight Runs keep their imageId) and API capability snapshot
 `toolchains update [--apply]` (CLI), `update_toolchains` (MCP) and `updateToolchains` (SDK) run the currency report and, when an
 npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
 under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; landed, `97590485`): the packaged lineage is reconciled
-to r4-20260930 using the retained recipe/Dockerfile hashes in its build receipt. In `auto` mode or with explicit apply,
+to r4-20260930 using the retained recipe/Dockerfile hashes in its build receipt. With explicit apply (a manual update in every mode; the service's own refresh under `auto`),
 before writing a plan artifact or creating a build context, the installed builder runs its read-only `--held-version` mode
 against the exact repository on the selected daemon and reports the highest held r<N> tag. ISCI-IMAJ-SAYAC (2026-10-17):
 installations sharing one daemon share its `deckent/worker:r<N>-<day>` tag namespace, so the planned counter is
