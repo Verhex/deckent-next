@@ -95,6 +95,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use an Anthropic API key for terminal chat and `/do` planning.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
+- **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
+  access token (for Codex also the ID token) into the worker's container and checks that it has not expired; refresh tokens,
+  API keys and the rest of the login file stay on the host. *Impact:* the worker's CLI can act as your subscription account
+  until that token expires. *Workaround:* none; the token's own lifetime is the bound.
 - **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available; a visible sign-in is worked on during the beta process. *Workaround:* an OpenAI API key, or a
   Codex worker with its own login.
 - **No automatic fallback from a subscription to an API model yet.** Deckent does not switch to a paid API by itself when a

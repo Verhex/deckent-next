@@ -97,6 +97,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   planlaması için bir Anthropic API anahtarı kullanın.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
+- **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
+  yalnız geçerli erişim token'ını (Codex'te kimlik token'ını da) kopyalar ve süresinin dolmadığını denetler; yenileme
+  token'ları, API anahtarları ve giriş dosyasının geri kalanı makinede kalır. *Etki:* işçinin CLI'ı, o token'ın süresi
+  dolana kadar abonelik hesabınız adına işlem yapabilir. *Yol:* yok; sınır, token'ın kendi süresidir.
 - **ChatGPT ile giriş henüz yok.** `/provider` bunu kullanılamıyor olarak listeler; görünür giriş beta sürecinde ele alınır. *Yol:* bir OpenAI API anahtarı ya da kendi
   girişiyle bir Codex işçisi.
 - **Aboneliklerden API modeline henüz otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli
