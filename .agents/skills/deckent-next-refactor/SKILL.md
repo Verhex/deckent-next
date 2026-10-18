@@ -104,6 +104,8 @@ historical proof and current verification.
    Resolve relevant root causes with negative proof. Bound retries and stop unchanged-failure loops.
    Delegation requires authorized independent work, disjoint writes and one writer per shared resource.
    Continue routine work under existing authorization; new scope or authority needs an owner checkpoint.
+   Worker default (former worker-default rule, owner 2026-10-18): work only on the assigned Next card and
+   write scope, preserve WIP, record exact evidence and partial effects; never claim acceptance from exit code alone.
 5. **Verify the behavior in scope.** Trace producer → application → adapter → actual surface.
    Exercise relevant failure, cancellation, replay, scope and recovery paths. Use targeted checks during
    implementation; host-tool success proves host tooling only. Follow `law_local_verification.md`:
@@ -152,6 +154,8 @@ Reconcile affected documents and retain proof outside Git/npm. A handoff is not 
 The current owner arrangement is Opus implementing and the independent reviewer session on the
 model-independent channel address `astra` reviewing (its model is on the board review row). Follow the role actually assigned in the session.
 An implementation assignment does not authorize reviewing one's own work as an independent PASS.
+An assigned card auditor follows the auditor review role in `deckent-closure`; Product Brain planning
+follows `deckent-outcome-plan` (role rules moved out of always-loaded host rules, owner 2026-10-18).
 
 Channel commands from Next:
 

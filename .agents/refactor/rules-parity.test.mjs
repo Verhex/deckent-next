@@ -19,7 +19,12 @@ const CORE_MEMORY = '.deckent/docs/core-memory/';
 // Shrink-only: core-memory changes need owner approval (law_documents_and_memory), so a broken reference found there
 // is listed here until an approved memory edit fixes it; a listed entry that resolves again must be removed.
 // Format: '<file>:<line> → <target>'. Every other rule file tolerates no broken reference.
-const CORE_MEMORY_BROKEN = Object.freeze([]);
+const CORE_MEMORY_BROKEN = Object.freeze([
+  // The auditor rule moved into the deckent-closure skill (owner 2026-10-18, Jev g3-rol-kurallari); the law still cites the old file.
+  '.deckent/docs/core-memory/law_second_opinion_jev.md:7 → .claude/rules/auditor.md',
+]);
+// Cursor-only rules with no Claude/Codex counterpart.
+const CURSOR_ONLY = Object.freeze(['deckent.mdc']);
 
 /** True when a tracked file or directory exists at the target, following tracked symlinks (.codex/skills → .agents/skills). */
 function trackedTarget(absolute) {
@@ -69,6 +74,18 @@ test('.claude/rules and .codex/rules carry the same tracked Markdown rules byte 
   assert.ok(claude.length > 0, 'no tracked .claude/rules/*.md');
   assert.deepEqual(codex, claude, 'rule sets differ between .claude/rules and .codex/rules');
   for (const name of claude) assert.ok(read(`.claude/rules/${name}`).equals(read(`.codex/rules/${name}`)), `${name} differs; copy .claude/rules/${name} to .codex/rules/${name}`);
+});
+
+test('.cursor/rules carries the same rules as .claude/rules, with the same body under its frontmatter', () => {
+  const claude = [...TRACKED].filter(file => /^\.claude\/rules\/[^/]+\.md$/u.test(file)).map(file => path.posix.basename(file, '.md')).sort();
+  const cursor = [...TRACKED].filter(file => /^\.cursor\/rules\/[^/]+\.mdc$/u.test(file)).map(file => path.posix.basename(file))
+    .filter(name => !CURSOR_ONLY.includes(name)).map(name => name.slice(0, -'.mdc'.length)).sort();
+  assert.deepEqual(cursor, claude, 'rule sets differ between .claude/rules and .cursor/rules');
+  for (const name of claude) {
+    const match = /^---\n[\s\S]*?\n---\n([\s\S]*)$/u.exec(read(`.cursor/rules/${name}.mdc`).toString('utf8'));
+    assert.ok(match, `.cursor/rules/${name}.mdc needs a frontmatter block`);
+    assert.equal(match[1], read(`.claude/rules/${name}.md`).toString('utf8'), `.cursor/rules/${name}.mdc body differs from .claude/rules/${name}.md`);
+  }
 });
 
 test('board.mjs DOGFOOD_SOURCE names a tracked file that still contains the cited heading', () => {
