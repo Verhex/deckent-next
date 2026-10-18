@@ -16,9 +16,10 @@ export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: 
 export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]; hidden: number; unavailable: 'binary' | 'too-large' | null }>;
 /** What the window shows before the person's `y`; `base`/`source`/`proposal` come from the integration check of the current source. */
 /** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
+/** `reattempt`: with a queue target, the enqueue carries the bounded service re-attempt intent (`targetQueue.reattempts` > 0). */
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
-  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string }>;
+  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true }>;
 export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;
 /** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
 export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
@@ -30,6 +31,8 @@ export type DeliveryAnswer = (view: EffectConfirmationView) => Promise<boolean>;
 export interface TerminalDeliveryPort {
   queue?: {
     prepareCurrent(target: DeliveryTarget, commandId: string): Promise<TargetQueueView>;
+    /** Read-only: whether `prepareCurrent` would carry the bounded re-attempt intent now (a work target and `targetQueue.reattempts` > 0). */
+    reattempt(): Promise<boolean>;
     inspect(scopeId: string, commandId: string): Promise<TargetQueueView | null>;
     confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>): Promise<TargetBatchExecution>;
   };

@@ -251,7 +251,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   `deliveryIntent: "service-reattempt"` and the service re-runs that task once as a new Run on the current base. A chained task
   is re-run after its predecessor is adopted. The re-run task gets the same two delivery cards. Without the intent, or past the
   bound (`targetQueue.reattempts`, default 1), you create the new attempt yourself. The work is re-run, not merged, so it costs a
-  second worker run. Tasks with unproven or unresolved effects are never re-run. The `/deliver` window does not send the intent yet.
+  second worker run. Tasks with unproven or unresolved effects are never re-run. The `/deliver` window always sends the intent and says so in one
+  line, also on the refused-preview screen where `r` prepares on the current base; with `targetQueue.reattempts` 0 it sends none
+  and shows no line. If that setting changes between the line and your key, the request follows the setting at that moment.
 - **A Run's delivery intent can be given only in the proposal JSON, by you.** `deckent run propose` with `delivery: { target,
   mode: "enqueue-accepted" }` asks your Run card and then lets the service queue each accepted task for your cards, re-queue one
   that stopped before any effect (up to `targetQueue.requeueMax`, default 2) and re-attempt once on a conflict. `/do` has no

@@ -197,6 +197,54 @@ describe('queue preparation without a work target (cli-terminal port)', () => {
   });
 });
 
+// Owner 2026-10-18 (A): the verified-terminal /deliver window always asks for the one bounded service re-attempt on its queue enqueue, unless
+// the installation disables re-attempts (`targetQueue.reattempts: 0`): then neither the intent is recorded nor the line shown.
+/** The real cli-terminal port over a tmp installation with one work target; the queue client records each enqueue request. */
+function realQueuePort(targetQueue?: Readonly<{ reattempts: number }>, refusePreview = false) {
+  const root = mkdtempSync(join(tmpdir(), 'deckent-queue-intent-')); mkdirSync(join(root, '.deckent'));
+  writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ ...(targetQueue ? { targetQueue } : {}), execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
+    logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: [] },
+    workTargets: { schemaVersion: 1, targets: [{ id: 'app', kind: 'git', path: join(root, 'target'), baseRef: 'refs/heads/integration' }] } } }));
+  const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 }, enqueued: Record<string, unknown>[] = [];
+  const handlers = { inspectInventory: async () => ({ schemaVersion: 1, layout: {}, page: { entries: [{ identity }], nextAfter: null } }),
+    previewWorkspacePatch: async () => ({ patch: { changes: [] } }),
+    checkWorkspaceIntegration: async () => { if (refusePreview) throw Object.assign(new Error('base advanced'), { code: 'PATCH_BASE_ADVANCED' }); return { observation: { source: 'SRC', head: BASE }, proposal: 'PROP', scope: { status: 'in-scope' } }; },
+    prepareWorkspaceIntegration: async () => { throw new Error('must-not-prepare'); }, renderUnifiedDiff: () => '', interactiveDelivery: () => ({}),
+    deliveryQueue: { async enqueueTargetQueue(input: Record<string, unknown>) { enqueued.push(input); if (refusePreview) throw new Error('queue-recorded'); return { recorded: true }; } },
+    confirmDeliveryQueue: async () => { throw new Error('must-not-confirm'); } };
+  return { subject: terminalDeliveryPort(root, handlers as never, { env: homeEnv(join(root, 'home')) })!, enqueued };
+}
+describe('delivery intent on the queue enqueue (cli-terminal port)', () => {
+  async function enqueueThroughPort(targetQueue?: Readonly<{ reattempts: number }>) {
+    const { subject, enqueued } = realQueuePort(targetQueue), target = { scopeId: 's', runId: 'r', taskId: 'task', key: 'k', title: 't' };
+    const preview = await subject.preview(target), reattempt = await subject.queue!.reattempt();
+    await subject.queue!.prepareCurrent(target, 'terminal-queue-1');
+    return { preview, reattempt, enqueued };
+  }
+  it('sends deliveryIntent "service-reattempt" by default and the preview marks the line; the enqueue is otherwise unchanged', async () => {
+    const { preview, reattempt, enqueued } = await enqueueThroughPort();
+    expect(preview).toMatchObject({ queueTarget: 'refs/heads/integration', reattempt: true }); expect(reattempt).toBe(true);
+    expect(enqueued).toEqual([{ schemaVersion: 1, commandId: 'terminal-queue-1', identity: { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 },
+      target: { kind: 'git-ref', id: 'refs/heads/integration' }, deliveryIntent: 'service-reattempt' }]);
+  });
+  it('targetQueue.reattempts 0: no intent in the enqueue (the record states the truth) and no line', async () => {
+    const { preview, reattempt, enqueued } = await enqueueThroughPort({ reattempts: 0 });
+    expect(preview.queueTarget).toBe('refs/heads/integration'); expect(preview).not.toHaveProperty('reattempt'); expect(reattempt).toBe(false);
+    expect(enqueued).toHaveLength(1); expect(enqueued[0]).not.toHaveProperty('deliveryIntent');
+  });
+  it('the line is one catalog sentence in English and Turkish, shown with a queue target only', () => {
+    const entry = { target: { key: 'k', scopeId: 's', runId: 'r', taskId: 'task', title: 't' }, stage: { kind: 'ready' } as const, delivered: null, adopted: null, selected: 0,
+      preview: { target: { key: 'k', scopeId: 's', runId: 'r', taskId: 'task', title: 't' }, identity: { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 },
+        files: [], added: 0, removed: 0, source: 'SRC', base: BASE, proposal: 'PROP', outOfScope: [], adoptionTargets: [], verification: null } as DeliveryPreview };
+    const texts = (preview: DeliveryPreview, locale: 'en' | 'tr') => deliveryLines({ ...entry, preview }, deliveryWindowLabels(locale)).map(row => row.spans.map(part => part.text).join(''));
+    const queued = { ...entry.preview, queueTarget: 'refs/heads/integration', reattempt: true } as const;
+    expect(texts(queued, 'en')).toContain('If the target moves on, Deckent re-attempts this once on the new base; your cards still decide.');
+    expect(texts(queued, 'tr')).toContain('Hedef ilerlerse Deckent bunu yeni tabanda bir kez yeniden dener; kararı yine kartlarınız verir.');
+    for (const preview of [entry.preview, { ...entry.preview, queueTarget: 'refs/heads/integration' }, { ...entry.preview, reattempt: true } as const])
+      for (const locale of ['en', 'tr'] as const) expect(texts(preview, locale)).not.toContain(deliveryWindowLabels(locale).reattempt);
+  });
+});
+
 describe('delivery window on the real Workline', () => {
   it('appears on acceptance without taking the composer; composer y never confirms; Ctrl+O then y checks, prepares and delivers once', async () => {
     const h = harness(); await admit(h);
@@ -477,7 +525,7 @@ it('routes a registered target into the queue and asks each exact batch card wit
     revision: phase, observedAt: Date.now(), freshness: 'last-known', position: state === 'settled' ? null : 1,
     nextAction: state === 'awaiting-confirmation' ? 'confirm-batch' : state === 'settled' ? 'inspect-receipt' : 'wait-service', responsibility: 'service', basis: null, verification: null, evidenceRefs: [] });
   h.port.preview = async target => ({ ...await originalPreview(target), queueTarget: 'refs/heads/integration' });
-  h.port.queue = {
+  h.port.queue = { async reattempt() { return false; },
     async prepareCurrent(_target, id) { commandId = id; h.calls.push('enqueue'); return view(); },
     async inspect() { return view(); },
     async confirm(_scope, _command, ask) {
@@ -500,10 +548,23 @@ it('routes a registered target into the queue and asks each exact batch card wit
   expect(h.calls).toContain('queue-settled');
 });
 
+it('shows the re-attempt line in the window frame before the y that enqueues; without it the frame stays as before', async () => {
+  for (const reattempt of [true, false]) {
+    const h = harness(), originalPreview = h.port.preview, enqueued: string[] = [];
+    h.port.preview = async target => ({ ...await originalPreview(target), queueTarget: 'refs/heads/integration', ...(reattempt ? { reattempt: true as const } : {}) });
+    h.port.queue = { async reattempt() { return reattempt; }, async prepareCurrent(_target, id) { enqueued.push(id); throw new Error('queue-recorded'); }, async inspect() { return null; }, async confirm() { throw new Error('must-not-confirm'); } };
+    // The ready preview (its file row), not the loading frame, is what the person reads before y.
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes(windowTitle) && frame(h).includes('note.txt') && frame(h).includes('DECIDE-HINT'), 'delivery ready');
+    expect(squeeze(frame(h)).includes(squeeze(WORDS.reattempt))).toBe(reattempt); expect(enqueued).toEqual([]);
+    await press(h, CTRL_O); await press(h, 'y'); await until(() => frame(h).includes('queue-recorded'), 'enqueue reached');
+    expect(enqueued).toHaveLength(1); expect(h.calls).not.toContain('prepare'); expect(h.calls).not.toContain('publish');
+  }
+});
+
 it('offers current-base queue preparation after a typed stale-base refusal', async () => {
   const h = harness(), queued: string[] = [];
   h.port.preview = async () => { throw Object.assign(new Error('base advanced'), { code: 'PATCH_BASE_ADVANCED' }); };
-  h.port.queue = { async prepareCurrent(_target, command) { queued.push(command); throw new Error('adapter unavailable'); }, async inspect() { return null; }, async confirm() { throw new Error('must-not-confirm'); } };
+  h.port.queue = { async reattempt() { return false; }, async prepareCurrent(_target, command) { queued.push(command); throw new Error('adapter unavailable'); }, async inspect() { return null; }, async confirm() { throw new Error('must-not-confirm'); } };
   await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
   // The re-prepare key is offered next to closing, never instead of it (keys show once the window holds the keyboard).
   await press(h, CTRL_O); expect(frame(h)).toContain(WORDS.queue!.reprepare); expect(frame(h)).toContain(WORDS.failedHints);
@@ -512,6 +573,21 @@ it('offers current-base queue preparation after a typed stale-base refusal', asy
   // A refusal `r` cannot act on offers only closing.
   expect(frame(h)).not.toContain(WORDS.queue!.reprepare); expect(frame(h)).toContain(WORDS.failedHints);
   await press(h, 'r'); expect(queued).toHaveLength(1);
+});
+
+it('a refused preview offering r shows the re-attempt line before r, and that enqueue carries the intent; at 0 neither (real port)', async () => {
+  for (const reattempts of [1, 0]) {
+    const h = harness(), real = realQueuePort({ reattempts }, true);
+    h.port.preview = real.subject.preview; h.port.queue = real.subject.queue!;
+    await admit(h); h.set(awaiting()); await until(() => frame(h).includes('base advanced'), 'typed base refusal');
+    await press(h, CTRL_O); expect(frame(h)).toContain(WORDS.queue!.reprepare);
+    expect(squeeze(frame(h)).includes(squeeze(WORDS.reattempt))).toBe(reattempts > 0); expect(real.enqueued).toEqual([]);
+    await press(h, 'r'); await until(() => frame(h).includes('queue-recorded'), 'enqueue reached');
+    expect(real.enqueued).toHaveLength(1);
+    if (reattempts > 0) expect(real.enqueued[0]).toMatchObject({ deliveryIntent: 'service-reattempt', target: { kind: 'git-ref', id: 'refs/heads/integration' } });
+    else expect(real.enqueued[0]).not.toHaveProperty('deliveryIntent');
+    expect(h.calls).not.toContain('prepare'); expect(h.calls).not.toContain('publish');
+  }
 });
 
 it('without a queue port a stale-base refusal offers only closing; r does nothing', async () => {

@@ -1089,6 +1089,7 @@
   "terminal.delivery.moreFiles": "+{count} dosya daha",
   "terminal.delivery.where": "Yalnız refs/deckent/deliveries/ altında ayrı bir referans yazılır; dallar, index ve çalışma ağacı değişmez.",
   "terminal.delivery.adoptionLater": "Teslimden sonra dala alma ayrı bir seçimdir: {targets}",
+  "terminal.delivery.reattempt": "Hedef ilerlerse Deckent bunu yeni tabanda bir kez yeniden dener; kararı yine kartlarınız verir.",
   "terminal.delivery.hints": "y kontrol et, hazırla ve teslim et · n/Esc bekletmeye devam et",
   "terminal.delivery.working": "Kontrol ediliyor, hazırlanıyor ve teslim ediliyor…",
   "terminal.delivery.confirmBody": "Onay kartı gösterilenden farklı. Yanıtlamadan önce kontrol et:",

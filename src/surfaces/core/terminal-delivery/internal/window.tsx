@@ -14,7 +14,7 @@ export interface DeliveryWindowLabels {
   readonly queue?: { readonly reprepare: string; readonly hints: string; readonly waiting: string;
     status(view: TargetQueueView): string; card(view: Omit<QueueConsent, 'capability'>): string };
   readonly title: string; readonly ids: string; readonly loading: string; readonly check: string; readonly outOfScope: string; readonly summary: string;
-  readonly file: string; readonly moreFiles: string; readonly where: string; readonly adoptionLater: string; readonly hints: string;
+  readonly file: string; readonly moreFiles: string; readonly where: string; readonly adoptionLater: string; readonly reattempt: string; readonly hints: string;
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
   readonly delivered: string; readonly adoptPrompt: string; readonly adoptTarget: string; readonly adoptHints: string; readonly adopting: string;
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
@@ -47,7 +47,8 @@ interface Entry {
   readonly target: DeliveryTarget; readonly sinceMs: number;
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
-  queue?: TargetQueueView; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
+  /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
+  reattempt?: boolean; queue?: TargetQueueView; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -77,9 +78,13 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
     if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
-    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null;
-    current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.stage = { kind: 'ready' }; changed(); } },
-      error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); });
+    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false;
+    current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; entry.stage = { kind: 'ready' }; changed(); } },
+      error => {
+        const show = () => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); };
+        // A refused preview that offers `r` (queue preparation on the current base) shows the re-attempt line first when that enqueue carries the intent.
+        if (current.queue && QUEUE_REPREPARE.has(codeOf(error) ?? '')) current.queue.reattempt().then(yes => { entry.reattempt = yes; show(); }, show); else show();
+      });
   }, [changed]);
   const open = useCallback((target: DeliveryTarget, opening: DeliveryOpening) => {
     if (!latest.current.port || !latest.current.labels) return;
@@ -289,7 +294,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
 }
 
 /** Body rows: ids, the check of the current source, the changed files with their stat, where it writes, and the stage's own lines. */
-export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'fileSel' | 'diffScroll'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
+export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'fileSel' | 'diffScroll' | 'reattempt'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
@@ -318,6 +323,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     if (!delivered) {
       rows.push(line(labels.where, { role: 'muted' }));
       if (preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
+      if (preview.queueTarget && preview.reattempt) rows.push(line(labels.reattempt, { role: 'muted' }));
     }
   }
   if (stage.kind === 'working' || stage.kind === 'adopting') rows.push(line(stage.kind === 'working' ? labels.working : labels.adopting, { role: 'accent' }));
@@ -332,6 +338,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     verification: adopted.verifiedBy ? fillTemplate(labels.verifiedBy, { run: adopted.verifiedBy }) : labels.notVerified }), { role: 'success' }));
   if (stage.kind === 'failed') {
     rows.push(...stage.error.split('\n').map(value => line(value, { role: 'error' })));
+    if (!preview && !entry.queue && entry.reattempt && QUEUE_REPREPARE.has(stage.code ?? '')) rows.push(line(labels.reattempt, { role: 'muted' }));
     // A next step may name the exact command for this attempt, delivery and selected branch (ADOPTION_NOT_VERIFIED: the CLI with --verification-run).
     const next = (stage.code ? labels.next[stage.code] : undefined) ?? labels.nextDefault, id = preview?.identity;
     // Identities admit spaces, quotes, $() and ; — every value placed into the suggested command is one POSIX shell word (Astra 2543 P1).

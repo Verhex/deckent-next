@@ -253,7 +253,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   benimsendikten sonra yeniden çalışır. Yeniden çalışan görev aynı iki teslim kartını alır. Niyet yoksa ya da sınır aşıldıysa
   (`targetQueue.reattempts`, varsayılan 1) yeni denemeyi siz oluşturursunuz. İş birleştirilmez, yeniden çalıştırılır; bu ikinci
   bir işçi çalışması demektir. Etkisi kanıtlanmamış ya da çözülmemiş görevler hiç yeniden çalıştırılmaz. `/deliver` penceresi
-  niyeti henüz göndermiyor.
+  niyeti her zaman gönderir ve bunu bir satırla söyler; `r` ile güncel tabanda hazırlamayı sunan reddedilmiş önizleme ekranında da.
+  `targetQueue.reattempts` 0 ise niyet gönderilmez, satır gösterilmez. Bu ayar satırla tuşunuz arasında değişirse istek o anki ayara uyar.
 - **Bir Run'ın teslim niyetini yalnız siz, öneri JSON'unda verebilirsiniz.** `deckent run propose` ile `delivery: { target,
   mode: "enqueue-accepted" }` Run kartınızı açar; sonra servis kabul edilen her görevi kartlarınız için kuyruğa alır, herhangi bir
   etki başlamadan duranı yeniden sıraya alır (en çok `targetQueue.requeueMax`, varsayılan 2) ve çakışmada bir kez yeniden dener.
