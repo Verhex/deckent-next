@@ -5,4 +5,4 @@ alwaysApply: true
 Read `.cursor/skills/deckent-next-refactor/SKILL.md` for all Deckent Next work.
 Operator and execution cwd is the assigned Next checkout. Never run legacy entry points or workers.
 Use target ARCHITECTURE.md and PLAN.md; legacy is the read-only behavior source.
-DOGFOOD is ON (lead-only operation). Opus implements; Astra reviews; Fable is not used. Preserve WIP, identity and scope.
+DOGFOOD is ON (lead-only operation). Review channel: Opus implements, Astra reviews. Preserve WIP, identity and scope.

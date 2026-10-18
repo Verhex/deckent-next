@@ -41,6 +41,7 @@ bounds and stop conditions, and the law check and two perspectives (full templat
     ## İki bakış
     - Dogfood: Deckent kendini geliştirirken bu ne katar?
     - Hedef ürün: müşteri bir ERP/CRM sürecini yürütürken aynı mekanizma nasıl çalışır?
+      Kod/test'e özgü bir öğe kalıyorsa git adapter'ında mı?
 
 ## Lane rules
 

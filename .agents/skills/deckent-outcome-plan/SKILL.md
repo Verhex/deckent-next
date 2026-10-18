@@ -57,6 +57,7 @@ Every plan, card and lane brief carries the law check and two perspectives (full
     ## İki bakış
     - Dogfood: Deckent kendini geliştirirken bu ne katar?
     - Hedef ürün: müşteri bir ERP/CRM sürecini yürütürken aynı mekanizma nasıl çalışır?
+      Kod/test'e özgü bir öğe kalıyorsa git adapter'ında mı?
 
 Before a material decision goes to the owner — a new package scope, an architecture or authority change,
 or a law change — run the clean-context, read-only law auditor (`<refactor-work>/proof/LAW-GATE/AUDITOR-PROMPT.md`)
