@@ -221,11 +221,14 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           if (decision !== null) stage.waiting.resolve(decision === 'yes');
           return decision !== null;
         }
-        // Read-only diff of the changed files (ready step only): ↑↓/j/k choose a file, Enter opens its hunks, Esc goes back. No key here delivers, adopts or declines.
+        // Read-only diff of the changed files (ready step only): ↑↓/j/k choose a file, Enter opens its hunks, ↑↓/j/k scroll them, the page keys scroll the
+        // window, Esc goes back. No key here delivers, adopts or declines.
         const diffs = stage.kind === 'ready' ? visible.preview?.diffs : undefined;
         if (diffs?.length && visible.preview && !key.ctrl && !key.meta) {
           const up = key.upArrow || text === 'k', down = key.downArrow || text === 'j', file = visible.fileSel ?? 0;
           if (visible.diffScroll !== null && visible.diffScroll !== undefined) {
+            // The page keys stay the Window's own scroll, so a short terminal still reaches the page's last rows; every other key stays here and never decides.
+            if (key.pageUp || key.pageDown || key.home || key.end) return false;
             const room = Math.max(0, (diffs[file]?.lines.length ?? 0) - WINDOW.diffViewLines);
             if (key.escape) visible.diffScroll = null;
             else if (up) visible.diffScroll = Math.max(0, visible.diffScroll - 1);
