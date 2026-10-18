@@ -4030,6 +4030,135 @@
         }
       ]
     },
+    "hostPaths": {
+      "note": "G-d2 (Jev g3-ev-yolu 2026-10-18): host home paths stay out of published docs, skills, Cursor rules and test fixtures; existing hits are a shrink-only allowlist, cleaned gradually by their owners.",
+      "patterns": [
+        "/home/"
+      ],
+      "scope": [
+        ".deckent/docs",
+        ".agents/skills",
+        ".cursor/rules",
+        "tests/fixtures"
+      ],
+      "allow": [
+        {
+          "file": ".deckent/docs/architecture/approval-and-delivery.md",
+          "count": 1,
+          "reason": "Architecture/plan document cites the developer checkout or external proof root; rewrite to a neutral root and remove."
+        },
+        {
+          "file": ".deckent/docs/architecture/decisions.md",
+          "count": 1,
+          "reason": "Architecture/plan document cites the developer checkout or external proof root; rewrite to a neutral root and remove."
+        },
+        {
+          "file": ".deckent/docs/architecture/modules/terminal-surface.md",
+          "count": 3,
+          "reason": "Architecture/plan document cites the developer checkout or external proof root; rewrite to a neutral root and remove."
+        },
+        {
+          "file": ".deckent/docs/core-memory/law_documents_and_memory.md",
+          "count": 1,
+          "reason": "Core-memory cites the developer checkout/proof roots; changes only with owner approval, then neutral roots and remove."
+        },
+        {
+          "file": ".deckent/docs/decisions/owner-decisions.md",
+          "count": 74,
+          "reason": "Owner decision log cites external proof under the developer refactor-work root; main session rewrites to <refactor-work>/ during its document passes."
+        },
+        {
+          "file": ".deckent/docs/plan/owner-targets-2026-10-05.md",
+          "count": 2,
+          "reason": "Architecture/plan document cites the developer checkout or external proof root; rewrite to a neutral root and remove."
+        },
+        {
+          "file": ".agents/skills/deckent-authority-bootstrap/SKILL.md",
+          "count": 2,
+          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
+        },
+        {
+          "file": ".agents/skills/deckent-next-refactor/SKILL.md",
+          "count": 3,
+          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
+        },
+        {
+          "file": ".agents/skills/deckent-next-refactor/internal-contract.md",
+          "count": 1,
+          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
+        },
+        {
+          "file": ".agents/skills/deckent-readonly-audit/SKILL.md",
+          "count": 1,
+          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
+        },
+        {
+          "file": ".cursor/rules/deckent.mdc",
+          "count": 1,
+          "reason": "Host-kit guidance names the developer checkout/refactor-work roots; rewrite to <repo>/ and <refactor-work>/ and remove."
+        },
+        {
+          "file": "tests/fixtures/agent-turn/compaction-response-975da614.json",
+          "count": 1,
+          "reason": "Captured model response quotes the developer checkout path; redact the fixture to a neutral root and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/frame-full-tr-120.txt",
+          "count": 1,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/snapshots.ts",
+          "count": 6,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-empty-en.txt",
+          "count": 3,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-empty-tr.txt",
+          "count": 3,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-full-en-120.txt",
+          "count": 6,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-full-en-60.txt",
+          "count": 6,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-full-en-80.txt",
+          "count": 6,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-full-tr-120.txt",
+          "count": 7,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-full-tr-60.txt",
+          "count": 6,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-full-tr-80.txt",
+          "count": 6,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        },
+        {
+          "file": "tests/fixtures/monitor/text-long-en-60.txt",
+          "count": 2,
+          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
+        }
+      ]
+    },
     "vendorSlugCaps": {
       "domain": 3,
       "engine": 20,

@@ -9,7 +9,7 @@
 //  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
 //  9. structural guards (arch.json guards): src never imports outside src except assets/, tests never import .agents,
-//     host vocabulary absent from src (shrink-only allowlist), vendor-slug caps per layer, claim/delivery/adoption files only in the effect owner
+//     host vocabulary absent from src and host home paths absent from docs/skills/rules/fixtures (shrink-only allowlists), vendor-slug caps per layer, claim/delivery/adoption files only in the effect owner
 //  8. external dependencies: dependencies.json registry, owned bare imports, embedded components (scripts/dependencies.mjs)
 import ts from 'typescript';
 import { createHash } from 'node:crypto';
@@ -723,22 +723,31 @@ if (arch.guards) {
       if (denied) fail('test-host-import', `${rel(file)}:${imp.line}`, `product tests may not import ${denied} (got ${imp.spec}); move host-tool tests into the test:host pack`);
     }
   }
+  // Shrink-only word ratchet shared by G-d and G-d2: unlisted hits are red, a listed count may only fall, stale entries go.
+  const wordRatchet = (rule, key, config, files, unlisted) => {
+    const res = (config?.patterns ?? []).map(pattern => new RegExp(pattern, 'giu'));
+    const allow = new Map((config?.allow ?? []).map(entry => [entry.file, entry]));
+    for (const entry of allow.values()) if (!entry.reason || !Number.isInteger(entry.count) || entry.count < 1) fail(rule, entry.file, `${key}.allow entry needs a reason and a positive count`);
+    const seen = new Set();
+    for (const file of files) {
+      const path = rel(file), text = readFileSync(file, 'utf8');
+      let count = 0, first = null;
+      for (const re of res) for (const m of text.matchAll(re)) { count++; first ??= { word: m[0], line: text.slice(0, m.index).split('\n').length }; }
+      if (count === 0) continue;
+      const entry = allow.get(path); seen.add(path);
+      if (!entry) fail(rule, `${path}:${first.line}`, unlisted(first.word, count));
+      else if (count > entry.count) fail(rule, `${path}:${first.line}`, `${count} ${rule} hits > allowed ${entry.count}`);
+      else if (count < entry.count) fail(rule, path, `${count} ${rule} hits < allowed ${entry.count}; lower the allowance (shrink-only)`);
+    }
+    for (const path of allow.keys()) if (!seen.has(path)) fail(rule, path, `stale ${key}.allow entry: no match remains; remove it`);
+  };
   // G-d: host vocabulary never appears in src (comments, strings, catalogs included); existing hits are a shrink-only allowlist.
-  const hostRes = (guards.hostWords?.patterns ?? []).map(pattern => new RegExp(pattern, 'giu'));
-  const hostAllow = new Map((guards.hostWords?.allow ?? []).map(entry => [entry.file, entry]));
-  for (const entry of hostAllow.values()) if (!entry.reason || !Number.isInteger(entry.count) || entry.count < 1) fail('host-word', entry.file, 'hostWords.allow entry needs a reason and a positive count');
-  const hostSeen = new Set();
-  for (const file of anyFiles('src', p => /\.(ts|tsx|mts|json|mjs|js|md)$/.test(p))) {
-    const path = rel(file), text = readFileSync(file, 'utf8');
-    let count = 0, first = null;
-    for (const re of hostRes) for (const m of text.matchAll(re)) { count++; first ??= { word: m[0], line: text.slice(0, m.index).split('\n').length }; }
-    if (count === 0) continue;
-    const entry = hostAllow.get(path); hostSeen.add(path);
-    if (!entry) fail('host-word', `${path}:${first.line}`, `host/process word "${first.word}" in product source (${count} hit(s)); src stays host-neutral: use a generic operator/contract term`);
-    else if (count > entry.count) fail('host-word', `${path}:${first.line}`, `${count} host-word hits > allowed ${entry.count}`);
-    else if (count < entry.count) fail('host-word', path, `${count} host-word hits < allowed ${entry.count}; lower the allowance (shrink-only)`);
-  }
-  for (const path of hostAllow.keys()) if (!hostSeen.has(path)) fail('host-word', path, 'stale hostWords.allow entry: no host word remains; remove it');
+  wordRatchet('host-word', 'hostWords', guards.hostWords, anyFiles('src', p => /\.(ts|tsx|mts|json|mjs|js|md)$/.test(p)),
+    (word, count) => `host/process word "${word}" in product source (${count} hit(s)); src stays host-neutral: use a generic operator/contract term`);
+  // G-d2: host home paths stay out of the public docs, skills, Cursor rules and test fixtures (Jev g3-ev-yolu, 2026-10-18).
+  if (guards.hostPaths) wordRatchet('host-path', 'hostPaths', guards.hostPaths,
+    guards.hostPaths.scope.flatMap(root => anyFiles(root, p => /\.(md|mdc|txt|json|jsonl|ts|mjs|js|sse|fixture)$/.test(p))),
+    (word, count) => `host path "${word}" in a published file (${count} hit(s)); use a neutral root such as <refactor-work>/ or <repo>/`);
   // G-h: claim/delivery/adoption/lease flow files belong to the effect port owner; the five legacy flows are a shrink-only list.
   if (guards.effectFlows) {
     const { owner, pattern, frozen } = guards.effectFlows, flowRe = new RegExp(pattern, 'i'), frozenSet = new Set(frozen);
