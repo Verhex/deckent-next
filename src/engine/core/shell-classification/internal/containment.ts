@@ -14,7 +14,10 @@ import type { ShellDialect } from './classify.js';
  * - a program word that is not a plain name (`$x`, `$(…)`, a path such as `./x`): it could be any of the above;
  * - a process substitution (`<(…)`, `>(…)`), whose inside the lenient scanner does not expose, and anything it cannot parse;
  * - a word that names a protected path (the write floor, the product state): the realm keeps existing floor paths read-only, but a
- *   floor path that does not exist yet can only be seen by name.
+ *   floor path that does not exist yet can only be seen by name. Owner 2026-10-18 ("okuma kartı kalksın", Jev 5e6dd7aa): `readOnlyFloor`
+ *   names the floor paths the run's own view binds read-only and readable (the caller passes it only then: an enforced sandbox, an
+ *   unattended posture, never the product state); such a name is no reason for a card when a read-only program reads it as a plain
+ *   argument — never as a redirection target or an option's value, never for any other program (a write, rename or delete still asks).
  * The destructive table is not here: its only owner is the risk tier (`shell-destructive`), which no mode lowers.
  */
 export type ShellContainmentReason = 'CONTAINED' | 'PROGRAM_FLOOR' | 'PROGRAM_UNKNOWN' | 'PROCESS_SUBSTITUTION' | 'PROTECTED_NAME' | 'UNPARSEABLE'
@@ -29,12 +32,17 @@ const PLAIN_PROGRAM = /^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/u;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 const FIND_ACTIONS: ReadonlySet<string> = new Set(['-exec', '-execdir', '-ok', '-okdir']);
 const REDIRECTION = /^(?:\d*|&)(?:>>|>\||>&|>|<)/u;
+/** A redirection operator standing alone: the next word is its target. */
+const BARE_REDIRECTION = /^(?:\d*|&)(?:>>|>\||>&|>|<)$/u;
+/** Programs that only read the files they are given (no option of theirs writes one): a read-only floor name may be their argument. */
+const READ_ONLY_PROGRAMS: ReadonlySet<string> = new Set(['cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 'ls', 'stat', 'diff', 'cmp', 'cut', 'nl', 'od', 'md5sum', 'sha1sum', 'sha256sum', 'jq']);
 const verdict = (contained: boolean, reasonCode: ShellContainmentReason, detail?: string): ShellContainmentVerdict =>
   Object.freeze(detail === undefined ? { contained, reasonCode } : { contained, reasonCode, detail });
 const onProgramFloor = (name: string) => PRIVILEGE_PROGRAMS.has(name) || INTERPRETER_PROGRAMS.has(name) || EVAL_PROGRAMS.has(name) || XARGS_PROGRAMS.has(name)
   || PACKAGE_PROGRAMS.has(name) || NETWORK_PROGRAMS.has(name);
 
-export function classifyShellContainment(command: string, protectedName: (path: string) => boolean, dialect: ShellDialect = 'posix'): ShellContainmentVerdict {
+export function classifyShellContainment(command: string, protectedName: (path: string) => boolean, dialect: ShellDialect = 'posix',
+  readOnlyFloor?: (path: string) => boolean): ShellContainmentVerdict {
   if (dialect !== 'posix') return verdict(false, 'UNSUPPORTED_DIALECT', dialect);
   if (typeof command !== 'string' || command.trim().length === 0) return verdict(false, 'EMPTY_COMMAND');
   const scan = scanShell(command);
@@ -48,6 +56,7 @@ export function classifyShellContainment(command: string, protectedName: (path: 
     let index = 0;
     while (index < words.length && (KEYWORDS.has(words[index]!) || ASSIGNMENT.test(words[index]!) || /^[({]+$/u.test(words[index]!))) index++;
     const raw = words[index];
+    let reader = false;
     // A `case` arm's program follows its pattern (`case x in a) python;;`): not read here, so the construct asks.
     if (raw === 'case') return verdict(false, 'PROGRAM_UNKNOWN', 'case');
     if (raw !== undefined) {
@@ -57,10 +66,13 @@ export function classifyShellContainment(command: string, protectedName: (path: 
       if (onProgramFloor(name)) return verdict(false, 'PROGRAM_FLOOR', name);
       if (name === 'env' && args.some(arg => !arg.startsWith('-') && !ASSIGNMENT.test(arg))) return verdict(false, 'PROGRAM_FLOOR', 'env');
       if (name === 'find' && args.some(arg => FIND_ACTIONS.has(arg))) return verdict(false, 'PROGRAM_FLOOR', 'find');
+      reader = READ_ONLY_PROGRAMS.has(name);
     }
-    for (const word of words) {
+    for (const [position, word] of words.entries()) {
       const value = pathOfWord(word);
-      if (value !== null && protectedName(value)) return verdict(false, 'PROTECTED_NAME', value);
+      if (value === null || !protectedName(value)) continue;
+      const read = reader && position > index && value === word && !BARE_REDIRECTION.test(words[position - 1] ?? '') && readOnlyFloor?.(value) === true;
+      if (!read) return verdict(false, 'PROTECTED_NAME', value);
     }
   }
   return verdict(true, 'CONTAINED');

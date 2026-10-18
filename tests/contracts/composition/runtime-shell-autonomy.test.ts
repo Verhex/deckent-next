@@ -109,6 +109,20 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     }, 120_000);
   }
 
+  // Owner 2026-10-18 ("okuma kartı kalksın", Jev 5e6dd7aa): reading a floor file runs without a card where the run's view keeps the floor read-only.
+  it.skipIf(!bwrapReady)('full-auto bubblewrap reads a floor file without a card; a write to it, the host realm and standart (auto-edit) still ask', async () => {
+    const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS.bubblewrap });
+    await writeFile(join(f.project, 'package.json'), '{"name":"floor-read"}\n');
+    const read = await f.call('run_shell', { command: 'cat package.json' });
+    expect(read).toMatchObject({ card: false, status: 'ok' }); expect(read.text).toContain('floor-read');
+    expect(await f.call('run_shell', { command: 'printf x > package.json' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await readFile(join(f.project, 'package.json'), 'utf8')).toBe('{"name":"floor-read"}\n');
+    for (const [realm, mode] of [['host', 'full-auto'], ['bubblewrap', 'auto-edit']] as const) {
+      const g = await modeRuntime({ grants: LIVE, mode, ...REALMS[realm] });
+      expect({ realm, mode, ...(await g.call('run_shell', { command: 'cat package.json' })) }).toMatchObject({ realm, mode, card: true, status: 'denied' });
+    }
+  }, 120_000);
+
   it.skipIf(!bwrapReady)('the product state is refused in the plan without a card in full-auto, and a hidden reach to it asks', async () => {
     const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS.bubblewrap, dataRoot: '.cache/deckent' });
     const literal = await f.call('run_shell', { command: 'ls && cat .cache/deckent/state/ledger.db' });
