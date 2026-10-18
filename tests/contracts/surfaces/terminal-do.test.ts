@@ -52,11 +52,11 @@ it.each(['y', 'n'])('/do preserves the rich-terminal intent; the actual approval
   expect(history).toEqual(['/do Prepare purchase api_key=[REDACTED]']);
   expect(view.stdout.frame).toContain('no total Run spending limit is enforced');
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO approval ${key}\n${view.stdout.frame}\n`);
-  await settle(40); view.stdin.write('\u000f'); await settle(40); view.stdin.write(key); // Focus, then approve/deny the displayed original card, then assert the effect.
+  await settle(40); view.stdin.write(key); // slice 2: the card holds the keyboard by itself; approve/deny it, then assert the effect.
   await until(() => plans.length === 2 && view.stdout.frame.includes(key === 'y' ? 'Admitted; task outcomes are not yet accepted' : 'Rejected'), 'recorded result window');
   expect(decisions).toEqual([key === 'y' ? 'allow' : 'deny']); expect(plans[1]).toEqual(plans[0]);
   if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## DO result ${key}\n${view.stdout.frame}\n`);
-  await settle(40); view.stdin.write('\u000f'); await settle(40); view.stdin.write('\r');
+  await settle(40); view.stdin.write('\u000f'); await settle(40); view.stdin.write('\r'); // the automatic result window still needs Ctrl+O (not a decision)
   if (key === 'y') await until(() => view.stdout.frame.includes('Watching'), 'tasks observation after result');
   else { await until(() => !view.stdout.frame.includes('Rejected'), 'closed'); view.stdin.write('/do Revised request\r');
     await until(() => plans.length === 3, 'new request'); expect(plans[2]!.id).not.toBe(plans[0]!.id); }

@@ -27,10 +27,12 @@ export interface StatusStripProps {
   readonly cancellable?: boolean | undefined;
   /** SLASH-WINDOWS: the reasoning state in the catalog's words (`/reasoning` window); droppable before the mode. */
   readonly reasoning?: string | undefined;
+  /** The conversation's context use (the `/context` measurement, or its "unknown" words); dropped before scope, state and mode. */
+  readonly context?: string | undefined;
 }
 
 /** One inline text node measured against live terminal width; no wrapping or stale lines on resize (legacy f18d53fb8, row 7143). */
-export function StatusStrip({ target, model, provider, state, busy, queued, notice, labels, mode, stop, selfSource, cancellable, reasoning }: StatusStripProps) {
+export function StatusStrip({ target, model, provider, state, busy, queued, notice, labels, mode, stop, selfSource, cancellable, reasoning, context }: StatusStripProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const known = useHumanTextSecrets(), identity = model ? provider ? `${model} (${provider})` : model : '';
   // Mask the complete identity before splitting or dropping it; a known secret can span both names.
@@ -44,8 +46,9 @@ export function StatusStrip({ target, model, provider, state, busy, queued, noti
     elapsedMs: since === null ? undefined : Date.now() - since, queued, notice, labels, mode, selfSource, cancellable, stop, modeMark: stop ? glyphs.mode[stop] : undefined });
   const separator = ` ${glyphs.separator} `;
   const reasoningSegment: StatusSegment | null = reasoning ? Object.freeze({ id: 'reasoning', text: reasoning, role: 'muted' as const, priority: 48, droppable: true, shrink: false }) : null;
-  const modeAt = segments.findIndex(segment => segment.id === 'mode');
-  const shown = reasoningSegment ? [...segments.slice(0, modeAt + 1 || segments.length), reasoningSegment, ...segments.slice(modeAt + 1 || segments.length)] : segments;
+  const contextSegment: StatusSegment | null = context ? Object.freeze({ id: 'context', text: context, role: 'muted' as const, priority: 47, droppable: true, shrink: false }) : null;
+  const modeAt = segments.findIndex(segment => segment.id === 'mode'), extra = [reasoningSegment, contextSegment].filter((item): item is StatusSegment => item !== null);
+  const shown = extra.length ? [...segments.slice(0, modeAt + 1 || segments.length), ...extra, ...segments.slice(modeAt + 1 || segments.length)] : segments;
   const layout = fitStatusRow(shown, columns || 80, separator, glyphs.ellipsis);
   return (
     <Text wrap="truncate-end">

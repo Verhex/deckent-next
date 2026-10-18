@@ -1,0 +1,4 @@
+{
+  "note": "TERMINAL-SABIT-DUZEN slice 2 (owner 2026-10-18): a decision card or question that takes the keyboard by itself ignores every key for this long after it does, so keys typed for the input just before it appeared never answer it. Data, not code.",
+  "armMs": 300
+}

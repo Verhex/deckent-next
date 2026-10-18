@@ -107,7 +107,7 @@ describe('settings windows in the workline', () => {
     const view = mountWorkline({ labels, permissionMode: port, fullAccess: true });
     mounted.push(view.instance);
     await until(() => frameOf(view).includes('FA-LINE commands run without asking'), 'warning line');
-    expect(frameOf(view)).toMatch(/⚠ FA-LINE/u);
+    expect(frameOf(view)).toMatch(/⏵⏵⏵ FA-LINE/u); expect(frameOf(view)).not.toContain('⚠');
     view.stdin.write(SHIFT_TAB);
     await until(() => !frameOf(view).includes('FA-LINE'), 'line gone after leaving full access');
   });

@@ -81,7 +81,6 @@ sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'rep
  * back to back, a loaded host reads both bytes in one chunk, which Ink 7.1.1 parses as one text input (`\x0fy`, not Ctrl+O) and the y lands
  * in the composer (CI run 38503250233; ALPHA36-CI2 DECISIONS).
  */
-const FOCUSED = 'Window focused · Ctrl+O return to input';
 async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string] | readonly [string, string, 'fresh']>, columns = 160) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps), String(columns)],
     { cwd, env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
@@ -185,7 +184,7 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
       ['Deckent workline', 'keep notes in scratch\r'],
       // TERMINAL-SABIT R2 (owner 2026-10-14): the shell card arrives during the model turn and leaves the composer focused; Ctrl+O moves
       // focus to that same card, then y approves it (a y typed in the composer would decide nothing).
-      ['touch "$TMPDIR/from-shell.txt"', '\u000f'], [FOCUSED, 'y', 'fresh'],
+      ['touch "$TMPDIR/from-shell.txt"', 'y'], // slice 2: the card takes the keyboard by itself (armed after the driver's 0.5 s wait)
       // SLASH-WINDOWS: `/scratch` is a list window (no `path` / `clear` arguments): the folder and the files show, Enter on a file names its path,
       // the last row clears after a y.
       ['Scratch turn done.', '/scratch\r'],

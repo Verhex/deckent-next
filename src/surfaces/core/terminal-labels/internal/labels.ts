@@ -30,7 +30,7 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
     failed: t('terminal.render.failed', {}, locale), code: t('terminal.render.code', {}, locale),
     moreAbove: t('terminal.render.moreAbove', {}, locale), queued: t('terminal.render.queued', {}, locale),
     tool: t('terminal.render.tool', {}, locale), toolRunning: t('terminal.render.toolRunning', {}, locale),
-    context: t('terminal.render.context', {}, locale), compacted: t('terminal.render.compacted', {}, locale),
+    context: t('terminal.render.context', {}, locale), contextUnknown: t('terminal.render.contextUnknown', {}, locale), compacted: t('terminal.render.compacted', {}, locale),
     toolStatus: { error: t('terminal.render.toolStatus.error', {}, locale), denied: t('terminal.render.toolStatus.denied', {}, locale),
       'approval-required': t('terminal.render.toolStatus.approvalRequired', {}, locale),
       'approval-expired': t('terminal.render.toolStatus.approvalExpired', {}, locale),
@@ -46,7 +46,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
   const catalog = MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'];
   return { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
     exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
-    placeholder: t('terminal.workline.placeholder', {}, locale),
+    placeholder: t('terminal.workline.placeholder', {}, locale), stashed: t('terminal.composer.stashed', {}, locale),
     slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
       .map(key => [key, catalog[key] ?? key])) };
 }

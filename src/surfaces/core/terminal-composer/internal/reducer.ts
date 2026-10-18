@@ -6,6 +6,7 @@
 import type { SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 import { chipFor, chipSpans, cleanText, expandChips, mentionAt, mentionPaths, mentionText, PASTE_COLLAPSE, quotedMentionEnd, shouldCollapse, slashMatches, type PasteChip,
   type PastePolicy } from './assist.js';
+import COMPOSER from './composer.json' with { type: 'json' };
 import { lineEnd, lineStart, nextBoundary, previousBoundary, snapToCluster, verticalOffset, wordLeft, wordRight } from './text.js';
 
 export const COMPOSER_LIMITS = Object.freeze({ historyEntries: 500, exitWindowMs: 2000 });
@@ -36,17 +37,22 @@ export interface ComposerState extends Draft {
   readonly mentionDismissed: string | null;
   readonly shortcuts: boolean;
   readonly armedAt: number | null;
+  /** Ctrl+S (harness gap 2): one whole draft put aside in memory; restored only into an empty composer, never persisted or logged. */
+  readonly stash: Draft | null;
+  /** Ctrl+_ (harness gap 3): earlier drafts of this unsent edit, newest last, bounded; cleared on submit. Typing runs group into one step. */
+  readonly undo: readonly Draft[];
+  readonly typing: boolean;
 }
 
 export const EMPTY_COMPOSER: ComposerState = Object.freeze({ text: '', cursor: 0, pastes: [], killed: '', history: [], browsing: null,
-  search: null, selected: 0, dismissed: null, mentions: null, mentionDismissed: null, shortcuts: false, armedAt: null });
+  search: null, selected: 0, dismissed: null, mentions: null, mentionDismissed: null, shortcuts: false, armedAt: null, stash: null, undo: [], typing: false });
 
 export type ComposerMove = 'left' | 'right' | 'wordLeft' | 'wordRight' | 'home' | 'end' | 'up' | 'down';
 export type ComposerDelete = 'back' | 'forward' | 'wordBack' | 'spaceWordBack' | 'wordForward' | 'toStart' | 'toEnd';
 
 export type ComposerKey =
   | { readonly type: 'text' | 'paste'; readonly text: string }
-  | { readonly type: 'submit' | 'newline' | 'tab' | 'escape' | 'interrupt' | 'eof' | 'search' | 'yank' | 'tick' }
+  | { readonly type: 'submit' | 'newline' | 'tab' | 'escape' | 'interrupt' | 'eof' | 'search' | 'yank' | 'tick' | 'stash' | 'undo' }
   | { readonly type: 'move'; readonly to: ComposerMove }
   | { readonly type: 'delete'; readonly span: ComposerDelete }
   | { readonly type: 'mentions'; readonly start: number; readonly query: string; readonly items: readonly string[] }
@@ -158,7 +164,7 @@ function submit(state: ComposerState): ComposerStep {
   if (!text.trim()) return step(state);
   const entry: ComposerHistoryEntry = { text, pastes: pastes.filter(paste => text.includes(paste.chip)) };
   const history = state.history.at(-1)?.text === text ? state.history : [...state.history, entry].slice(-COMPOSER_LIMITS.historyEntries);
-  return step({ ...EMPTY_COMPOSER, history, killed: state.killed }, { type: 'submit', text: expandChips(text, pastes).trim(), entry,
+  return step({ ...EMPTY_COMPOSER, history, killed: state.killed, stash: state.stash }, { type: 'submit', text: expandChips(text, pastes).trim(), entry,
     mentions: mentionPaths(text, pastes) });
 }
 
@@ -288,14 +294,52 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
   const walking = state.browsing !== null && key.type === 'move' && (key.to === 'up' || key.to === 'down');
   const handled = menu && !walking && menuKey(state, key, menu);
   if (handled) return handled;
+  if (key.type === 'stash') return step(stashKey(state));
+  if (key.type === 'undo') return step(undoKey(state));
+  const editing = key.type === 'text' || key.type === 'paste' || key.type === 'newline' || key.type === 'delete' || key.type === 'yank';
+  if (editing) {
+    const result = editKey(state, key, context), changed = result.state.text !== state.text || result.state.pastes !== state.pastes;
+    if (!changed) return result;
+    // A run of typed characters is one undo step; any other edit starts a new one.
+    // The snapshot is the state before the edit with its own stash/undo dropped (only its draft fields are ever restored, through `load`).
+    const typing = key.type === 'text', snapshot: Draft = bare(state);
+    const undo = typing && state.typing ? state.undo : [...state.undo, snapshot].slice(-COMPOSER.undoSteps);
+    return { ...result, state: { ...result.state, undo, typing } };
+  }
+  const result = plainKey(state, key, context);
+  return { ...result, state: { ...result.state, typing: false } };
+}
+
+/** A state as a draft snapshot without its own stash and undo (only the draft fields are restored, through `load`). */
+const bare = (state: ComposerState): ComposerState => ({ ...state, undo: [], stash: null });
+
+/** One stash at a time and nothing is ever overwritten: a non-empty draft with a stash already kept leaves both as they are. */
+function stashKey(state: ComposerState): ComposerState {
+  if (state.text && state.stash) return state;
+  if (state.text) return { ...load(state, EMPTY_COMPOSER, null), stash: bare(state), undo: [], typing: false };
+  return state.stash ? { ...load(state, state.stash, null), stash: null, undo: [], typing: false } : state;
+}
+
+function undoKey(state: ComposerState): ComposerState {
+  const previous = state.undo.at(-1);
+  return previous ? { ...load(state, previous, state.browsing), undo: state.undo.slice(0, -1), typing: false } : state;
+}
+
+function editKey(state: ComposerState, key: ComposerKey, context: ComposerContext): ComposerStep {
   switch (key.type) {
     case 'text': return withMentionLookup(textKey(state, key.text, context));
     case 'paste': return step(paste(state, key.text, context));
-    case 'submit': return submit(state);
     case 'newline': return step(insert(state, '\n'));
-    case 'move': return step(move(state, key.to));
     case 'delete': return withMentionLookup(step(remove(state, key.span)));
     case 'yank': return withMentionLookup(step(insert(state, state.killed)));
+    default: return step(state);
+  }
+}
+
+function plainKey(state: ComposerState, key: ComposerKey, context: ComposerContext): ComposerStep {
+  switch (key.type) {
+    case 'submit': return submit(state);
+    case 'move': return step(move(state, key.to));
     case 'search': return step({ ...state, search: { query: '', skip: 0, saved: state } });
     case 'escape':
       if (context.busy) return step(state, { type: 'cancel' });
@@ -308,5 +352,6 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
       const token = mentionAt(state.text, state.cursor);
       return token ? step(state, { type: 'mention', ...token }) : step(state);
     }
+    default: return step(state);
   }
 }

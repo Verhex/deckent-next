@@ -234,7 +234,9 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       always: t('terminal.approval.window.keys.always', {}, locale),
       deny: t('terminal.approval.window.keys.deny', {}, locale),
       reason: t('terminal.approval.window.keys.reason', {}, locale),
-      scroll: t('terminal.approval.window.keys.scroll', {}, locale) },
+      scroll: t('terminal.approval.window.keys.scroll', {}, locale), choose: t('terminal.approval.window.keys.choose', {}, locale) },
+    choices: { once: t('terminal.approval.window.choice.once', {}, locale), session: t('terminal.approval.window.choice.session', {}, locale),
+      always: t('terminal.approval.window.choice.always', {}, locale), no: t('terminal.approval.window.choice.no', {}, locale) },
     reason: {
       label: t('terminal.approval.window.reason.label', {}, locale),
       hint: t('terminal.approval.window.reason.hint', {}, locale),
