@@ -40,7 +40,8 @@ const CURSOR_ONLY = Object.freeze(['deckent.mdc']);
 const PLAIN_SCALAR_START = /^[^\s\-?:,[\]{}#&*!|>'"%@`]/u;
 const NON_STRING_SCALAR = /^(?:true|false|yes|no|on|off|null|~|[-+]?(?:\.?\d[\d_]*(?:\.\d*)?(?:e[-+]?\d+)?|\.inf|\.nan))$/iu;
 const FRONTMATTER = Object.freeze({
-  description: value => !PLAIN_SCALAR_START.test(value) ? 'must be a plain YAML scalar (no flow collection, quote, block or indicator start)'
+  description: value => /[\p{Cc}\uFEFF]/u.test(value) ? 'contains a control character'
+    : !PLAIN_SCALAR_START.test(value) ? 'must be a plain YAML scalar (no flow collection, quote, block or indicator start)'
     : /: |\s#|[\t\r]|\s$|:$/u.test(value) ? 'plain scalar contains ": ", " #", a tab or trailing space/colon'
       : NON_STRING_SCALAR.test(value) ? 'would resolve to a non-string YAML scalar' : null,
   alwaysApply: value => value === 'true' ? null : 'must be exactly true (always loaded on every surface)',
@@ -54,7 +55,13 @@ export function parseCursorRule(buffer) {
   const end = buffer.indexOf(CLOSE, OPEN.length - 1);
   if (end < 0) throw new Error('frontmatter block is not closed by a --- line');
   const fields = new Map();
-  for (const line of buffer.subarray(OPEN.length, end).toString('utf8').split('\n')) {
+  // Astra 2650 F2: decode the header losslessly (invalid UTF-8 is refused, never folded to U+FFFD) and allow only printable
+  // characters: YAML 1.2.2 §5.1 forbids C0 controls except TAB/LF/CR; DEL, C1 controls and a BOM are refused here too.
+  let header;
+  try { header = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(buffer.subarray(OPEN.length, end)); } catch { throw new Error('frontmatter is not valid UTF-8'); }
+  const control = /[^\P{Cc}\n]|\uFEFF/u.exec(header);
+  if (control) throw new Error(`frontmatter contains control character U+${control[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
+  for (const line of header.split('\n')) {
     const match = /^([A-Za-z][A-Za-z0-9]*): (.*)$/u.exec(line);
     if (!match) throw new Error(`malformed frontmatter line: ${JSON.stringify(line)}`);
     const [, key, value] = match;
@@ -171,6 +178,13 @@ test('the Cursor rule parser refuses copies that Cursor would load differently o
     'empty description': rule('---\ndescription: \nalwaysApply: true\n---\n'),
     'quoted boolean': rule('---\ndescription: d\nalwaysApply: "true"\n---\n'),
     'unsupported key': rule('---\ndescription: d\nalwaysApply: true\nglobs: *.ts\n---\n'),
+    // Astra 2650 F2: raw control bytes and invalid UTF-8 in the header.
+    'raw NUL in description': rule('---\ndescription: d\u0000\nalwaysApply: true\n---\n'),
+    'raw ESC in description': rule('---\ndescription: d\u001b[31m\nalwaysApply: true\n---\n'),
+    'raw DEL in description': rule('---\ndescription: d\u007f\nalwaysApply: true\n---\n'),
+    'C1 control in description': rule('---\ndescription: d\u0085x\nalwaysApply: true\n---\n'),
+    'raw TAB after alwaysApply': rule('---\ndescription: d\nalwaysApply: true\t\n---\n'),
+    'invalid UTF-8 in header': Buffer.concat([Buffer.from('---\ndescription: d'), Buffer.from([0xff]), Buffer.from('\nalwaysApply: true\n---\n'), body]),
   };
   for (const [name, buffer] of Object.entries(refused)) assert.throws(() => parseCursorRule(buffer), Error, name);
   // A divergent body parses but must not equal the Claude copy, including invalid UTF-8 that decodes to the same U+FFFD.
