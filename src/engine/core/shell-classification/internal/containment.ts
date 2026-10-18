@@ -32,7 +32,7 @@ const TEST_PROGRAMS: ReadonlySet<string> = new Set(['[', '[[', ':']);
 const PLAIN_PROGRAM = /^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/u;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 const FIND_ACTIONS: ReadonlySet<string> = new Set(['-exec', '-execdir', '-ok', '-okdir']);
-const REDIRECTION = /^(?:\d*|&)(?:>>|>\||>&|>|<)/u;
+const REDIRECTION = /^(?:\d*|&|\{[A-Za-z_][A-Za-z0-9_]*\})(?:>>|>\||>&|<>|>|<)/u;
 /** Security re-reviews of 03d82341/6f987adf (fail closed): the floor-read tolerance holds only in a fully modelled read segment
  * (`readsOnlyModelled`: an allowlist per program) and never in a command that may change what a program name resolves to or how the shell
  * reads it (any assignment such as `PATH=`, a substitution, aliases, functions, `hash`, `enable`, …). */
@@ -68,7 +68,8 @@ export function classifyShellContainment(command: string, protectedName: (path: 
       const head = raw.replace(/^[({]+/u, '').replace(/\)+$/u, ''), args = words.slice(index + 1);
       if (!TEST_PROGRAMS.has(head) && (head.includes(SUBSTITUTION) || !PLAIN_PROGRAM.test(head))) return verdict(false, 'PROGRAM_UNKNOWN', head);
       const name = (PROGRAM_ALIASES[head] ?? head).toLowerCase();
-      if (onProgramFloor(name)) return verdict(false, 'PROGRAM_FLOOR', name);
+      // `hash -p`/`enable -f` point a program name at any file (security re-review 2026-10-18): on the floor like the eval wrappers.
+      if (onProgramFloor(name) || name === 'hash' || name === 'enable') return verdict(false, 'PROGRAM_FLOOR', name);
       if (name === 'env' && args.some(arg => !arg.startsWith('-') && !ASSIGNMENT.test(arg))) return verdict(false, 'PROGRAM_FLOOR', 'env');
       if (name === 'find' && args.some(arg => FIND_ACTIONS.has(arg))) return verdict(false, 'PROGRAM_FLOOR', 'find');
       reader = floorRead !== undefined && head === raw && readsOnlyModelled(raw, args);

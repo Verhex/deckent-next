@@ -66,6 +66,10 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
     ['ls 2>&1 | diff <(ls) -', 'PROCESS_SUBSTITUTION', '<(ls)'], ['ls 2>&1 &', 'UNPARSEABLE', undefined], ['ls >&', 'UNPARSEABLE', undefined],
     ['cat <&x', 'UNPARSEABLE', undefined], ['ls 2>&1 "unterminated', 'UNPARSEABLE', undefined], ['echo x >&package.json', 'PROTECTED_NAME', 'package.json'],
     ['echo x &>package.json', 'PROTECTED_NAME', 'package.json'],
+    // Security re-review 2026-10-18 (pre-existing in the base classifier): a named descriptor `{fd}>`, a read-write `<>` and a program-path
+    // override (`hash -p`, `enable`) were contained without a card; the realm kept the floor read-only, the classifier now sees them too.
+    ['echo x {fd}>package.json', 'PROTECTED_NAME', 'package.json'], ['echo x {out}>>package.json', 'PROTECTED_NAME', 'package.json'], ['cat <>package.json', 'PROTECTED_NAME', 'package.json'],
+    ['echo x 3<>package.json', 'PROTECTED_NAME', 'package.json'], ['hash -p /tmp/x ls; ls', 'PROGRAM_FLOOR', 'hash'], ['enable -f ./x.so cat; cat a', 'PROGRAM_FLOOR', 'enable'],
   ])('asks: %s → %s', (command, reasonCode, detail) => {
     expect(contained(command)).toEqual({ contained: false, reasonCode, ...(detail === undefined ? {} : { detail }) });
   });
@@ -88,12 +92,12 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
   // the classifier saw keeps the card — fail closed. The view binds the floor read-only regardless; this keeps the classifier honest too.
   it.each([
     ['cat <> package.json', 'package.json'], ['cat 3<> package.json', 'package.json'], ['cat {fd}> package.json', 'package.json'], ['cat {fd}>> package.json', 'package.json'],
-    ['cat 9>| package.json', 'package.json'], ['PATH=./bin cat package.json', 'package.json'], ['hash -p ./x cat; cat package.json', 'package.json'],
+    ['cat 9>| package.json', 'package.json'], ['PATH=./bin cat package.json', 'package.json'], ['hash -p ./x cat; cat package.json', 'hash'],
     ['function cat { :; }; cat package.json', 'package.json'], ['alias cat=tac; cat package.json', 'package.json'], ['shopt -s expand_aliases; cat package.json', 'package.json'],
-    ['enable -n cat; cat package.json', 'package.json'], ['export PATH=.; cat package.json', 'package.json'], ['declare -f; cat package.json', 'package.json'],
+    ['enable -n cat; cat package.json', 'enable'], ['export PATH=.; cat package.json', 'package.json'], ['declare -f; cat package.json', 'package.json'],
     ['trap "x" EXIT; cat package.json', 'package.json'], ['cat \\> package.json', 'package.json'],
   ])('a shell-parse or program-resolution differential keeps the card: %s', (command, detail) => {
-    expect(reading(command)).toMatchObject({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
+    expect(reading(command)).toMatchObject({ contained: false, reasonCode: detail === 'hash' || detail === 'enable' ? 'PROGRAM_FLOOR' : 'PROTECTED_NAME', detail });
   });
   // Allowlist shape (second security re-review, 6f987adf): an unknown flag, a long option, a non-discard redirection, a glob, an expansion or a
   // case-folded program token was tolerated before and now keeps the card.
