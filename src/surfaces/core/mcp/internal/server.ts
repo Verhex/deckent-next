@@ -9,6 +9,7 @@ import { monitorQuerySchema, type MonitorQuery, type MonitorSnapshot } from '#en
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
+import { isMcpWithheldTool } from './tool-inventory.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendExactAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelCatalogCommand, type ModelCatalogQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult, ModelCatalogInspection, ModelCatalogResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
@@ -280,6 +281,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       return inferenceBudget.call(applications, parsed.profileId === undefined ? {} : { profileId: parsed.profileId });
     } });
   definitions.push(...operationToolDefinitions(applications, locale));
+  // hide_until_slice (owner 2026-10-18): a withheld tool is neither listed nor callable, even when composition supplies its application.
+  definitions.splice(0, definitions.length, ...definitions.filter(tool => !isMcpWithheldTool(tool.name)));
   // The SDK's Node default validator is its bundled ajv + fast-uri, which the published package replaces with a throwing stub (FASTURI-OUT);
   // Deckent's own validator is the only JSON Schema validator it ships (MCP-SCHEMA-VALIDATOR; no server path validates today, form elicitation would).
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} }, jsonSchemaValidator: new DeckentJsonSchemaValidator() }); let active = 0;

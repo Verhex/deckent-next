@@ -27,6 +27,10 @@ const EXPECTED: Readonly<Record<string, Annotations>> = Object.freeze({
   inspect_toolchain_currency: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   update_toolchains: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   create_run: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  // Ungrouped write tools (MCP_UNGROUPED_WRITE_TOOLS): policy decides each call; control_run advertises only hold/operator-hold resume.
+  plan_run: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  propose_run: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  control_run: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   reserve_run_tasks: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   request_run_cancellation: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   deliver_run_cancellation: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -80,6 +84,9 @@ const applications: McpApplications = {
   async inspectRun() { return {}; }, async inspectInventory() { return {}; },
   describeService: noop, shutdownService: noop, inferencePlan: noop, inferenceBudget: noop,
   executeOperation: noop, compensateOperation: noop, inspectOperation: noop, operationCatalog: writeCatalog,
+  planRun: noop, proposeRun: noop, applyRunControl: noop,
+  // Withheld until the post-beta delegation slice (hide_until_slice, owner 2026-10-18): supplied here, never advertised.
+  releaseQuota: noop,
 } as unknown as McpApplications;
 async function listAnnotatedTools(overrides: Partial<McpApplications> = {}) {
   const server = createMcpServer({ ...applications, ...overrides }, { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en');
@@ -93,6 +100,7 @@ async function listAnnotatedTools(overrides: Partial<McpApplications> = {}) {
 it('advertises exactly the contracted tools, no more and no fewer', async () => {
   const tools = await listAnnotatedTools();
   expect(new Set(tools.map(tool => tool.name))).toEqual(new Set(Object.keys(EXPECTED)));
+  expect(tools.map(tool => tool.name)).not.toContain('release_quota');
 });
 it.each(Object.entries(EXPECTED))('reports the evidenced annotations for %s', async (name, expected) => {
   const tools = await listAnnotatedTools();
