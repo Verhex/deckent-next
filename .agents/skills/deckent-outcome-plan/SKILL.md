@@ -12,6 +12,8 @@ result using current ARCHITECTURE, PLAN, relevant core-memory and a current auth
 Reuse unchanged `deckent-authority-bootstrap` evidence; refresh only affected facts.
 An accepted priority, audit, transcript or historical receipt cannot admit execution by itself.
 This skill creates a plan, not a product Run, worker, state transition or new authority gate.
+Product Brain (former brain rule, owner 2026-10-18) is a runtime role, not the host implementer.
+Plan/evaluate against explicit acceptance; deterministic scheduling and authorization remain system responsibilities.
 
 ## Bound the result
 
@@ -34,6 +36,32 @@ without authorization or when coordination costs outweigh the task.
 Name shared hot files and assign one writer. Include affected document reconciliation.
 Resolve runtime provider/model/capacity from current typed config and policy only when runtime
 execution is admitted; a host plan must not invent a worker or resource limit.
+
+## Law check in every plan and lane brief
+
+Every plan, card and lane brief carries the law check and two perspectives (full template:
+`<refactor-work>/proof/LAW-GATE/CARD-TEMPLATE.md`):
+
+    ## Kanun kontrolü (zorunlu)
+    1. Kanıt ve kapanış — uyumlu / ilgisiz / çatışma: <neden>
+    2. Yetki sınırı — uyumlu / ilgisiz / çatışma: <neden>
+    3. Owner iletişimi — uyumlu / ilgisiz / çatışma: <neden>
+    4. Doküman haritası — uyumlu / ilgisiz / çatışma: <neden>
+    5. İş bölme ve kök neden — uyumlu / ilgisiz / çatışma: <neden>
+    6. Model/provider tek kaynak — uyumlu / ilgisiz / çatışma: <neden>
+    7. Yerel doğrulama — uyumlu / ilgisiz / çatışma: <neden>
+    8. İkinci görüş — uyumlu / ilgisiz / çatışma: <neden>
+    9. Alp Discipline — uyumlu / ilgisiz / çatışma: <neden>
+    10. Enterprise katmanı — uyumlu / ilgisiz / çatışma: <neden>
+    North star (güvenlik, determinizm, sınırlı kaynak, iptal/kurtarma, ölçülmüş performans) — <neden>
+    ## İki bakış
+    - Dogfood: Deckent kendini geliştirirken bu ne katar?
+    - Hedef ürün: müşteri bir ERP/CRM sürecini yürütürken aynı mekanizma nasıl çalışır?
+      Kod/test'e özgü bir öğe kalıyorsa git adapter'ında mı?
+
+Before a material decision goes to the owner — a new package scope, an architecture or authority change,
+or a law change — run the clean-context, read-only law auditor (`<refactor-work>/proof/LAW-GATE/AUDITOR-PROMPT.md`)
+on the candidate and attach its PASS/HOLD table. Do not use it for small questions; Jev use is unchanged.
 
 ## Proof and bounded execution
 

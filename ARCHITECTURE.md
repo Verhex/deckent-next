@@ -943,7 +943,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 - Every configured text source file ≤ 1,500 lines (eslint + lint-arch; 800 design target), functions ≤ 150 lines (warning).
 - Package line budgets and the total budget live in `arch.json` (`budgets`); growth past a budget is a
   design decision, not a lint fix.
-- lint-arch geliştirme kapıları (ARCH-GUARDS, 2026-10-06): src-boundary, test-host-import, host-word, slug-cap, tier-direction, tier-budget, effect-flow; `arch.json guards`, `budgets.tierLines`, `literals.allowUnits`; ayrıntı [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md).
+- lint-arch geliştirme kapıları (ARCH-GUARDS, 2026-10-06): src-boundary, test-host-import, host-word, host-path (2026-10-18), slug-cap, tier-direction, tier-budget, effect-flow; `arch.json guards`, `budgets.tierLines`, `literals.allowUnits`; ayrıntı [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md).
 - Model-ingress P2 (`wave/2`): modele giden ham alanlar (mesaj, araç sonucu, onay önizlemesi, MCP açıklaması pini) `projectModelIngressField` ile gizli/bidi/tag Unicode için işaretlenir, aynı not onay kartında ve terminalde EN/TR görünür; audit subject `model-ingress` yalnız özet taşır; `AgentTurnPorts.recordIngress`, `AgentTurnInput.fullAccess`; sıra mesaj → projeksiyon → carry. Ayrıntı [agent-turn-engine](.deckent/docs/architecture/modules/agent-turn-engine.md).
 - Model-ingress P3 (W9 kaynak adayı, `lane/ingress-p3`, taban `04fd206a`): sürümlü `model-ingress-policy.json` P1/P2 mark sınıflarını/korunan kod noktalarını taşır. `checkModelIngressArguments` parse edilmiş JSON'daki tüm anahtar ve string değerleri (iç içe dizi/nesne dahil) aynı projeksiyonla tarar; işaretli argüman `invalid-arguments` / MCP `MCP_INPUT_INVALID` ve `ingress-refused:arguments` ile yürütme, hedef okuma ve onaydan önce reddedilir; komut projeksiyona dönüştürülmez. `projectModelIngressSchema` description/title/$comment metnini measurement ve model turundan, MCP tools/list'ten önce not/withheld yapar; kaynak şema/pin değişmez, literal default/enum/const/examples korunur. Agent-turn ve MCP tools/call (worker MCP çağrıları dahil) bu tek motor yolunu kullanır; scopesuz/erişilemeyen MCP audit kapalı ret, scopesuz şema audit hatası withheld üretir. Audit yalnız digest/sayı/disposition taşır; ham çağrı kendi mevcut protokol/kayıt custody yolunda korunur. Native worker kendi araç yürütücüsü bu yolun dışında; ZWJ/VS15/16 sınıflandırma sınırı sürer. Yazar kanıtı `proof/INGRESS-P3-2026-10-10/`; bağımsız inceleme/hosted/live kabulü değildir.
 - Hata kataloğu (KATALOG-TEMİZLİK, `wave/2`): registry'de numaralı `DECKENT_Exxx` kodu yoktur; `ERROR_CODES` içinde src'de başvurulmayan kod sözleşme testiyle yasak; 5 `LAYOUT_*` kodu `config` kategorisinde (çıkış 78) ve `ConfigValidationError` kayıtlı reason'ı `KOD: yerelleştirilmiş cümle` render eder; DispatchError kodları registry'de olmadan `INVENTORY_UNAVAILABLE`'a düşmez; SDK export envanteri 4 fabrika azaldı. `surfaces/core/doctor` birimi doctor insan render'ını taşır (`surfaces/core/cli` bütçeyi 2000'de tutmak için bölündü).
@@ -1109,7 +1109,7 @@ The Markdown gate admits the five product/roadmap documents `README.md`, `ARCHIT
 public reader guides `docs/glossary{,.tr}.md` and `docs/architecture-overview{,.tr}.md` (owner-approved pre-beta DOC-03/DOC-04 fixes, 2026-10-09);
 byte-identical ≤70-line public contributor guidance `CLAUDE.md`, `AGENTS.md` (DOC-01, 2026-10-09);
 ≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
-and the explicit refactor host-kit globs in `arch.json`: the remaining 20 `.agents/skills/<skill>`
+and the explicit refactor host-kit globs in `arch.json`: the remaining 19 `.agents/skills/<skill>` (`claude-design-sync` retired 2026-10-18)
 directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.
 The host kit is excluded from product distribution (`package.json files`: dist/native/assets/README/LICENSE).
 Product Markdown generation is limited to owner-admitted `deckent init` project instructions (DECKENT-MD, 2026-10-08): detected project facts, preview and explicit consent, plus selected append-only bridges. Owner-maintained host instructions remain a development-only exception.
@@ -1123,7 +1123,7 @@ Next development, fixes, refactoring, reviews and handoffs. Codex, Claude and Cu
 to the same `.agents/skills/deckent-next-refactor` source; specialist skills supply task-specific methods.
 Jev details live in the skill's `jev-workflow.md`, read before case preparation or consultation.
 ROOT-DOCS (DOC-01/DOC-06, owner 2026-10-09): the complete former root contract is retained verbatim for
-`.agents/skills/deckent-next-refactor/internal-contract.md`; the skill must require reading it first.
+`.agents/skills/deckent-next-refactor/internal-contract.md`; owner 2026-10-18: it is short, dated rules point to laws, no read-first gate.
 The internal guide and exact skill patch are staged in external `proof/ROOT-DOCS-2026-10-09/` for lead transfer
 with the public roots. Existing Claude rules and the Cursor always-apply rule select the internal skill;
 a full source clone therefore cannot be claimed to load public rules only. Fresh session loading and

@@ -270,7 +270,7 @@
     },
     "guards": {
       "type": "object",
-      "description": "Shrink-only structural guards (ARCH-GUARDS): outsideSrcImports, testHostImports, hostWords, vendorSlugCaps, effectFlows.",
+      "description": "Shrink-only structural guards (ARCH-GUARDS): outsideSrcImports, testHostImports, hostWords, optional hostPaths (G-d2), vendorSlugCaps, effectFlows.",
       "required": [
         "outsideSrcImports",
         "testHostImports",

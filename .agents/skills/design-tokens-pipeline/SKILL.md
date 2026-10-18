@@ -17,6 +17,11 @@ for an absent surface. At the 2026-10-02 inventory:
 - The current token directory contains the Terminal map; broader primitive/semantic documents
   and cross-surface outputs must be verified before claiming they exist or are consumed.
 - Former Dashboard/Desktop generators and `scripts/build-design-tokens.mjs` are absent in Next.
+- Desktop tokens are CSS custom properties in the separate `deckent-desktop` repository,
+  `ui/src/styles.css` (light "Kâğıt ve Mürekkep", dark "Gece Gölü", type and spacing roles). That repository
+  owns the file and its changes; Next does not generate it, and no drift check links it to the Terminal
+  map. Keep role meaning aligned with the design-dna reference and change it only in an assigned
+  `deckent-desktop` lane.
 
 The builder always writes and has no `--check` mode. Do not run a write command during a read-only
 audit or call it a safe drift check. Generation requires owned source/output paths and authorized

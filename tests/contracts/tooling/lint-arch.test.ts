@@ -52,8 +52,8 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
     arch.units[from]!.dependencies = [...dependencies].sort();
   }
   // Shrink-only repository debt (allowlists, caps, frozen lists) describes the real tree, not a fixture: start every fixture from zero.
-  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
-  guards.hostWords.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
+  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; hostPaths: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
+  guards.hostWords.allow = []; guards.hostPaths.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
   delete (guards as { publicExtensions?: unknown }).publicExtensions; // names the real tree's entry, registrations and overlay fixture
   (arch as unknown as { literals: { allowUnits: unknown[] } }).literals.allowUnits = [];
   patch?.(arch);
@@ -454,6 +454,25 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
     expect(within!.out).not.toContain('[host-word]');
     expect(over!.out).toContain('2 host-word hits > allowed 1');
     expect(stale!.out).toContain('stale hostWords.allow entry');
+    expect(loose!.out).toContain('lower the allowance (shrink-only)');
+  });
+
+  it('G-d2: /home/ paths are red in docs, skills, Cursor rules and fixtures, host words there are not, and listed hits only shrink', async () => {
+    const files = { '.deckent/docs/notes.md': 'proof under /home/me/work\n', '.agents/skills/s/SKILL.md': 'Read /home/me/repo first.\n',
+      '.cursor/rules/r.mdc': 'cwd /home/me\n', 'tests/fixtures/monitor/frame.txt': 'cwd /home/owner/x\n' };
+    const red = await lint(await fixture({ ...clean, ...files }));
+    expect(red.code, red.out).toBe(1);
+    for (const path of Object.keys(files)) expect(red.out).toContain(`[host-path] ${path}:1`);
+    const words = await lint(await fixture({ ...clean, '.deckent/docs/notes.md': 'dogfood board on N1, qwen and dev-release notes\n' }));
+    expect(words.out).not.toContain('[host-path]');
+    expect(words.out).not.toContain('[host-word]');
+    const allow = (count: number): ArchPatch => arch => { arch.guards.hostPaths.allow = [{ file: '.deckent/docs/notes.md', count, reason: 'fixture' }]; };
+    const one = 'see /home/me/a\n', two = 'see /home/me/a and /home/me/b\n';
+    const [within, over, stale, loose] = await Promise.all([[one, 1], [two, 1], ['neutral <refactor-work>/a\n', 1], [one, 2]].map(async ([text, count]) =>
+      lint(await fixture({ ...clean, '.deckent/docs/notes.md': text as string }, true, false, {}, allow(count as number)))));
+    expect(within!.out).not.toContain('[host-path]');
+    expect(over!.out).toContain('2 host-path hits > allowed 1');
+    expect(stale!.out).toContain('stale hostPaths.allow entry');
     expect(loose!.out).toContain('lower the allowance (shrink-only)');
   });
 

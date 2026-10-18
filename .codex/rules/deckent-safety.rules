@@ -1,4 +1,4 @@
-# Owner 2026-09-17: commit requires owner request under the repo contract; push and all kill/cleanup forms prompt.
+# Commits inside the assigned scope are allowed without asking (owner 2026-09-26); push and all kill/cleanup forms prompt.
 # Host rules are not a substitute for product authorization.
 
 prefix_rule(

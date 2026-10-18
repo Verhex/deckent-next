@@ -11,8 +11,8 @@ description: Use for Deckent CLI/TUI ergonomics, information hierarchy, keyboard
 Make Terminal a first-class control and operator surface, not a reduced Desktop. Load
 deckent-design-dna and the relevant product or agentic skill.
 
-Terminal is one stable product surface. Basic/Advanced are Desktop-only disclosure modes; never
-project them onto Terminal, create parallel density shells or rename them as Terminal modes.
+Terminal is one stable product surface. Never add disclosure or density modes, parallel density
+shells or a second Terminal product shell.
 Contextual disclosure, focus and drill-down reveal detail without changing surfaces. Ask/Run/Control,
 where present, are authority postures and must not be treated as visual-density modes.
 
@@ -32,11 +32,16 @@ dependency. A browser mockup is evidence of hierarchy only.
 - Inherit the user's monospace font and light/dark background. Prefer the terminal's default
   background; resolve foreground color through the existing ANSI tier and suppression authority.
 - Compose with sequential Ink layout, conditional region replacement and native scrollback.
-  Bounded modal windows (owner 2026-10-07) are the production pattern for monitor, watch, approval
-  and settings screens: a framed region in the live area with a title and key hints, height capped
-  to the terminal, one focus owner (a window stack), Escape closes, and finished output still goes
-  to scrollback. Free-floating layered overlays, absolute positioning and browser-style clickable
-  buttons are not production interactions.
+  Follow proven Claude Code / Codex terminal UX and name the reference behaviour being copied.
+- Approvals and questions are inline arrow-key cards in the conversation (Enter selects; once,
+  session, always, No; single- and multi-choice), never a focus dance. "Always" is a scoped, revocable
+  rule and is never offered for non-delegable floor items.
+- The bottom input/status bar is fixed and never moves when a card or window opens, closes or streams;
+  PTY regression tests assert its row is invariant.
+- Slash-command output (monitor, watch, settings and other slash windows) uses bounded windows: a framed
+  region in the live area with a title and key hints, height capped to the terminal, one focus owner
+  (a window stack), Escape closes, and finished output still goes to scrollback. Free-floating layered
+  overlays, absolute positioning and browser-style clickable buttons are not production interactions.
 - Keyboard and slash-command paths are primary. Mouse support may be additive only after an exact
   capability probe and may never be the only path.
 - Admit the rich surface only for an interactive TTY whose required raw-input and rendering
@@ -113,7 +118,7 @@ stand in for the whole matrix.
 ## Parity contract
 
 Terminal and Desktop share authoritative nouns, lifecycle, permissions, evidence and action
-consequences. Terminal keeps one surface while Desktop may use Basic/Advanced disclosure; their
+consequences. Terminal keeps one surface while Desktop uses a chat-first main view with detail panels; their
 navigation and presentation may differ without changing semantic truth. Dashboard remains
 observability only.
 
