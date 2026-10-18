@@ -47,6 +47,7 @@ The complete stable contract for Next work. Dated owner rules live in the laws
 - Next owns product development and all operator/execution work; use this repository as cwd.
 - `deckent-dev` is the frozen pre-refactor reference: read only, never run its runtime or workers.
 - External refactor documents and proof live in `<refactor-work>/`, outside Git/npm.
+- DOGFOOD is ON (owner 2026-10-09 approval, on since 2026-10-10; ARCHITECTURE decision log); operating it is lead-only.
 - Review channel, thresholds and independent review: law 8 (`law_second_opinion_jev.md`); one review per batch
   before merge; never fabricate independent review or treat Jev/self-review as independent PASS.
 - Host lane count comes from the outcome DAG, disjoint write ownership and measured capacity (law 5), not a fixed
