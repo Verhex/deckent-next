@@ -59,12 +59,22 @@ export async function walkOptions(spec: ProgramSpec, args: readonly ShellWord[],
       if (grammar.deniedLong?.includes(name)) return { verdict: stageFail('MUTATING_FLAG', name), positionals, scriptSeen, traversal };
       if (spec.scriptOptions?.includes(name)) scriptSeen = true;
       const valueKind = grammar.longValues?.[name];
+      if (Array.isArray(valueKind)) {
+        // A multi-word option takes exactly its next words (no attached form); a missing word refuses rather than shifting a value into the
+        // positionals, where it would be read as the script and skip the path check (G2-2).
+        if (attached !== null || i + valueKind.length >= args.length) return { verdict: stageFail('FLAG_NOT_ALLOWLISTED', name), positionals, scriptSeen, traversal };
+        for (const kind of valueKind as readonly ValueKind[]) {
+          const failure = await checkValue(kind, args[++i]!, name);
+          if (failure) return { verdict: failure, positionals, scriptSeen, traversal };
+        }
+        continue;
+      }
       if (valueKind !== undefined) {
         let value: ShellWord;
         if (attached !== null) value = { text: attached, quoted: word.quoted, glob: false, tilde: false };
         else if (i + 1 < args.length) value = args[++i]!;
         else return { verdict: stageFail('FLAG_NOT_ALLOWLISTED', name), positionals, scriptSeen, traversal };
-        const failure = await checkValue(valueKind, value, name);
+        const failure = await checkValue(valueKind as ValueKind, value, name);
         if (failure) return { verdict: failure, positionals, scriptSeen, traversal };
         continue;
       }

@@ -73,6 +73,25 @@ describe('read-only shell classification (T-L4 slice 3a, POSIX)', () => {
     expect(asked).toEqual(['in', 'pats.txt', 'x', 'a', 'b', 'sub', 'p']);
     expect(await classifyReadOnlyShellCommand('cat ok secret later', recording)).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED', detail: 'secret' });
   });
+
+  // G2-2 (analysis 2026-10-18): jq's `--rawfile`/`--slurpfile` take a name and a file, `--arg`/`--argjson` a name and a value. Modelled as one
+  // word, the file shifted into the positionals, was taken for the script and never reached the path check.
+  it('jq two-word options: the file of --rawfile/--slurpfile is a checked path, --arg/--argjson take two words, a missing or attached form refuses', async () => {
+    const asked: string[] = [];
+    const recording: ShellPathContext = { async check(word) {
+      asked.push(word.text);
+      return word.text === 'secret' ? { ok: false, reasonCode: 'PATH_PROTECTED', detail: 'secret' } : { ok: true };
+    } };
+    expect(await classifyReadOnlyShellCommand("jq --rawfile raw notes.txt --slurpfile all data.json --arg who me --argjson n 3 '.x' f.json", recording))
+      .toMatchObject({ readOnly: true, risk: 'none' });
+    expect(asked).toEqual(['notes.txt', 'data.json', 'f.json']);
+    for (const option of ['--rawfile', '--slurpfile']) {
+      expect(await classifyReadOnlyShellCommand(`jq ${option} raw secret . f.json`, recording), option).toMatchObject({ readOnly: false, risk: null, reasonCode: 'PATH_PROTECTED', detail: 'secret' });
+    }
+    for (const command of ['jq --rawfile raw', 'jq --arg who', 'jq . f.json --slurpfile all', 'jq --rawfile=raw secret . f.json', 'jq --arg=who me . f.json']) {
+      expect(await classify(command), command).toMatchObject({ readOnly: false, risk: null, reasonCode: 'FLAG_NOT_ALLOWLISTED' });
+    }
+  });
 });
 
 describe('script grammars (legacy parity)', () => {
