@@ -7,7 +7,8 @@ import { shortId } from '#platform/index.js';
 import { LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type LedgerCardLabels, type RunControlAction, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { span, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
 import { Window, WINDOW_RESERVED_ROWS, useWindowReserve, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { runControlActions, type RunControlLabels } from './run-control.js';
+import { needsInputTask, runControlActions, type RunControlLabels } from './run-control.js';
+export { needsInputTask } from './run-control.js';
 
 /** K1 (owner 2026-10-14): `runs` is the one Runs window (tabs: runs, workers) that replaces the eight work commands; `monitor` the monitor's own body. */
 export type LiveWindowKind = 'runs' | 'monitor';
@@ -61,11 +62,6 @@ export function runsRowKey(input: string, key: Readonly<{ ctrl?: boolean; meta?:
 }
 /** What this terminal can offer as row keys (its ports and words); the service still authorizes and checks state at the confirmed revision. */
 export type RunsRowOffer = Readonly<{ cancel: boolean; control: boolean; answer: boolean; deliverable: (run: RunView) => boolean }>;
-/** The question a needs-input task asks, or null (K7: `a` answers it). */
-export function needsInputTask(run: RunView): Readonly<{ taskId: string; question: string }> | null {
-  for (const task of run.tasks ?? []) if (task.decision?.reason === 'needs-input' && task.decision.question) return { taskId: task.id, question: task.decision.question };
-  return null;
-}
 /** The keys a Run row offers from its observed state (display only). A worker row offers the cancellation of its Run. */
 export function runsRowKeys(target: WorkLedgerWorkerEntry | WorkLedgerRunEntry, offer: RunsRowOffer): readonly RunsRowKey[] {
   if (target.kind === 'worker') return offer.cancel ? ['cancel'] : [];

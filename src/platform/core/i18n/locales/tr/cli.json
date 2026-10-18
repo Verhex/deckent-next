@@ -654,7 +654,7 @@
   "terminal.slash.group.session": "Oturum",
   "terminal.slash.group.other": "Diğer",
   "terminal.slash.status": "Deckent'in çalışıp çalışmadığını, sürümü ve modeli göster",
-  "terminal.slash.runs": "İşler ve işçiler tek pencerede: Enter ayrıntı, x iptal, h/r/c beklet·sürdür·kapat, d teslim (her biri kendi y'siyle)",
+  "terminal.slash.runs": "İşler ve işçiler tek pencerede: Enter ayrıntı, x iptal, h/r/c beklet·sürdür·kapat, d teslim, a cevapla (her biri kendi y'siyle)",
   "terminal.slash.runUsage": "Kullanım: /run <runId>",
   "terminal.slash.exit": "Terminalden çık",
   "terminal.slash.help": "Komutları gruplara göre listele",

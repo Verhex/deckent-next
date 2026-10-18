@@ -20,7 +20,7 @@ describe('/help grouped', () => {
     expect(sections.map(section => section.split('\n')[0])).toEqual(['Bilgi', 'İşler', 'Onaylar', 'Ayar', 'Oturum']);
     // K1: one Runs window replaces the eight work commands.
     expect(sections[1]).toBe(['İşler', '  /do istek  İsteğinizden iş planı hazırla',
-      "  /runs  İşler ve işçiler tek pencerede: Enter ayrıntı, x iptal, h/r/c beklet·sürdür·kapat, d teslim (her biri kendi y'siyle)", '  /deliver  Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dala al'].join('\n'));
+      "  /runs  İşler ve işçiler tek pencerede: Enter ayrıntı, x iptal, h/r/c beklet·sürdür·kapat, d teslim, a cevapla (her biri kendi y'siyle)", '  /deliver  Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dala al'].join('\n'));
   });
   it('puts the window and mode commands under their headings, one short line each (T2 integration)', () => {
     const section = (text: string, heading: string) => text.split('\n').slice(1).join('\n').split('\n\n').find(part => part.startsWith(`${heading}\n`)) ?? '';

@@ -262,7 +262,7 @@ export function WorklineApp(props: WorklineProps) {
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   workRef.current = work; decide.current = work.decideApproval;
   // K1/K4/K6/K7: the row keys this terminal can offer in the Runs window (each still opens its own card; the service authorizes).
-  const rowOffer = { cancel: Boolean(ledger?.cancelRun), control: Boolean(ledger?.controlRun && labels.work?.runControl), answer: false,
+  const rowOffer = { cancel: Boolean(ledger?.cancelRun), control: Boolean(ledger?.controlRun && labels.work?.runControl), answer: Boolean(ledger?.answerTask && labels.work?.runAnswer && labels.work.runControl),
     deliverable: (run: RunView) => deliveries.available && Boolean(labels.delivery) && deliveries.candidates([run]).length > 0 };
   const liveWin = useLiveWindows({ offer: rowOffer, work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}', onTaskAction: action => taskActionRef.current(action) });
   liveRef.current = liveWin;
@@ -550,7 +550,7 @@ export function WorklineApp(props: WorklineProps) {
           return;
         }
         await openTaskAction(action, panel, execution, ledger, labels.work, { cancel: runId => work.run('cancel', '', execution, undefined, runId),
-          control: (runId, control) => work.control(execution, runId, control), errorText });
+          control: (runId, control) => work.control(execution, runId, control), answer: runId => work.answer(execution, runId), errorText });
       }
       catch (error) { push([notice('error', errorText(error))]); }
       return;

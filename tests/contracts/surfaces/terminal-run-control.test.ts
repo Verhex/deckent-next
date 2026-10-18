@@ -160,3 +160,89 @@ describe('terminal lifecycle port over the CLI handler', () => {
     expect(createWorklineLedgerPorts({ root: '/p', scopeId: 's', options: {}, renderRunCancellation: () => '', inspectWorkers: async () => ({}) as never, inspectRun: async () => ({}) as never })!.controlRun).toBeUndefined();
   });
 });
+
+// K7 (owner 2026-10-14): a worker's needs-input question is answered from the Runs window (`a` on its row) through the same in-process lifecycle
+// command as `deckent run resume --task --answer`; the answer is typed in the card (Tab) and sent only with a single typed y.
+const ASKING = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
+function asking(revision = 5): RunView {
+  return { ...view(ASKING, { kind: 'parked', reason: 'needs-input', since: 1, deadline: 2 } as never, 'Pick a branch', revision),
+    tasks: [{ id: 'task-ask', phase: 'awaiting-decision', decision: { reason: 'needs-input', question: 'Which branch should I use?', since: 1, deadline: 2 },
+      taskBrief: { schemaVersion: 1, task: 'Pick a branch', model: null, scopePaths: [], acceptance: null, criteria: [], profile: null, effort: null, contextRefs: [] } }] } as unknown as RunView;
+}
+describe('needs-input answer from the Runs window (K7)', () => {
+  function answerPorts(answer: WorklineLedgerPorts['answerTask'], current: () => RunView = () => asking()): WorklineLedgerPorts {
+    return { ...ports(vi.fn()), listRunIds: async () => [ASKING], inspectRun: async id => id === ASKING ? current() : null, ...(answer ? { answerTask: answer } : {}) };
+  }
+  async function openAsking(ledger: WorklineLedgerPorts, locale: 'en' | 'tr' = 'en') {
+    const h = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: locale === 'en' ? EN : TR }, ledger, pollMs: 60_000 }, 160, { rows: 50 }); mounted.push(h);
+    await settle(30); h.stdin.write('/runs\r');
+    await until(() => h.stdout.frame.includes('› Pick a branch'), 'asking run row');
+    return h;
+  }
+  it('a opens the card with the question; y with no answer sends nothing; a written answer goes with one y at the shown revision', async () => {
+    const answer = vi.fn(async () => 'ANSWER-RESULT'), h = await openAsking(answerPorts(answer));
+    expect(h.stdout.frame).toContain(EN.live!.keys.answer);
+    for (const keys of [`${ESC}a`, 'aa']) { await press(h, keys); expect(h.stdout.frame).not.toContain('Answer run'); } // Alt+a, coalesced
+    await press(h, 'a', 120); await until(() => h.stdout.frame.includes('Answer run 9c8b7a6d: Pick a branch?'), 'answer card');
+    expect(h.stdout.frame).toContain('The worker asks: Which branch should I use?'); expect(h.stdout.frame).toContain('State parked · revision 5');
+    await press(h, 'y', 150);
+    await until(() => h.stdout.text.includes('Run 9c8b7a6d: no answer was written; nothing was sent.'), 'empty answer refused here');
+    expect(answer).not.toHaveBeenCalled();
+    await until(() => h.stdout.frame.includes('› Pick a branch'), 'the Runs window is back');
+    await press(h, 'a', 120); await until(() => h.stdout.frame.includes('Answer run'), 'card again');
+    for (const keys of [CTRL_Y, `${ESC}y`, `${CTRL_O}y`]) { await press(h, keys, 100); expect(answer).not.toHaveBeenCalled(); }
+    await press(h, TAB); await press(h, 'use release/2 (y is text here)'); await press(h, TAB);
+    expect(answer).not.toHaveBeenCalled();
+    await press(h, 'y', 150); await until(() => answer.mock.calls.length === 1, 'answer sent');
+    expect(answer).toHaveBeenCalledWith(ASKING, 'task-ask', 'use release/2 (y is text here)', 5);
+    await until(() => h.stdout.text.includes('ANSWER-RESULT'), 'result summary');
+  });
+  it.each([['n'], ['\r'], [ESC], ['\u0003']])('%j on the answer card keeps the run and sends nothing, even with an answer written', async key => {
+    const answer = vi.fn(async () => 'SENT'), h = await openAsking(answerPorts(answer));
+    await press(h, 'a', 120); await until(() => h.stdout.frame.includes('Answer run'), 'card');
+    await press(h, TAB); await press(h, 'main'); await press(h, TAB); await press(h, key, 150);
+    await until(() => h.stdout.text.includes('Run 9c8b7a6d unchanged; nothing was sent.'), 'kept');
+    expect(answer).not.toHaveBeenCalled();
+  });
+  it('a typed refusal (a stale revision, policy) is the summary line; a Run that stopped asking sends nothing', async () => {
+    const conflict = Object.assign(new Error('Run revision changed'), { code: 'RUN_REVISION_CONFLICT' });
+    let current = asking();
+    const answer = vi.fn(async () => { throw conflict; }), h = await openAsking(answerPorts(answer, () => current));
+    await press(h, 'a', 120); await until(() => h.stdout.frame.includes('Answer run'), 'card');
+    await press(h, TAB); await press(h, 'main'); await press(h, TAB); await press(h, 'y', 150);
+    await until(() => h.stdout.text.includes('ERR:Run revision changed'), 'refusal summary'); expect(answer).toHaveBeenCalledTimes(1);
+    current = { ...asking(6), state: { kind: 'running' }, tasks: [{ ...asking().tasks[0]!, phase: 'active', decision: undefined }] } as unknown as RunView;
+    await until(() => h.stdout.frame.includes('› Pick a branch'), 'window back'); await press(h, 'a', 150);
+    await until(() => h.stdout.text.includes('Run 9c8b7a6d no longer waits for an answer; nothing was sent.'), 'no longer asking');
+    expect(answer).toHaveBeenCalledTimes(1);
+  });
+  it('without the answer port the row offers no a and opens no card; the TR card speaks Turkish', async () => {
+    const h = await openAsking(answerPorts(undefined));
+    expect(h.stdout.frame).not.toContain(EN.live!.keys.answer); await press(h, 'a', 120); expect(h.stdout.frame).not.toContain('Answer run');
+    const tr = await openAsking(answerPorts(vi.fn(async () => 'TAMAM')), 'tr');
+    expect(tr.stdout.frame).toContain(TR.live!.keys.answer); await press(tr, 'a', 120);
+    await until(() => tr.stdout.frame.includes('9c8b7a6d işine cevap verilsin mi: Pick a branch?'), 'TR card');
+    expect(tr.stdout.frame).toContain('İşçi soruyor: Which branch should I use?');
+  });
+});
+
+describe('terminal answer port over the CLI handler (K7)', () => {
+  it('builds exactly the CLI lifecycle answer command (one schema) and names the command id; a refusal is the typed error unchanged', async () => {
+    const lifecycle = { schemaVersion: 1 as const, layout: {} as never, lifecycle: { schemaVersion: 1 as const, commandId: 'x', run: { ...asking(), revision: 6, state: { kind: 'running' } } } };
+    const apply = vi.fn<(root: string, command: unknown) => Promise<typeof lifecycle>>(async () => lifecycle);
+    const port = createWorklineLedgerPorts({ root: '/project', scopeId: 'scope-a', options: { env: {} }, locale: 'en', renderRunCancellation: () => '',
+      inspectWorkers: async () => ({}) as never, inspectRun: async () => ({}) as never, applyRunLifecycle: apply as never })!;
+    const text = await port.answerTask!(ASKING, 'task-ask', 'use main', 5);
+    const [root, command] = apply.mock.calls[0]! as unknown as [string, Record<string, unknown>];
+    expect(root).toBe('/project'); expect(runLifecycleCommandSchema.parse(command)).toEqual(command);
+    expect(command).toEqual({ schemaVersion: 1, commandId: command['commandId'], scopeId: 'scope-a', runId: ASKING, action: 'answer', taskId: 'task-ask', answer: 'use main', expectedRevision: 5 });
+    expect(String(command['commandId'])).toMatch(/^terminal-run-answer-[0-9a-f-]{36}$/u);
+    expect(text).toBe(`Answer for run 9c8b7a6d recorded, now running (revision 6). Command ${String(command['commandId'])}`);
+    const denied = Object.assign(new Error('denied'), { code: 'POLICY_DENIED' });
+    const refusing = createWorklineLedgerPorts({ root: '/p', scopeId: 's', options: {}, renderRunCancellation: () => '', inspectWorkers: async () => ({}) as never, inspectRun: async () => ({}) as never,
+      applyRunLifecycle: vi.fn(async () => { throw denied; }) as never })!;
+    await expect(refusing.answerTask!(ASKING, 'task-ask', 'x', 1)).rejects.toBe(denied);
+    expect(createWorklineLedgerPorts({ root: '/p', scopeId: 's', options: {}, renderRunCancellation: () => '', inspectWorkers: async () => ({}) as never, inspectRun: async () => ({}) as never })!.answerTask).toBeUndefined();
+  });
+});
+

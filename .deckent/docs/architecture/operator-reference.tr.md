@@ -12,7 +12,8 @@ Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut tas
 içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
 yükseklik bütçesi içinde imleci takip eder. `/runs` tek İşler penceresidir (K1, owner 2026-10-14): bir işler sekmesi ve bir
 işçiler sekmesi (Tab değiştirir); Enter bir Run'ın ayrıntısını ya da bir işçinin mühürlü dökümünü açar; `x` iptal eder, `h`/`r`/`c`
-bekletir, sürdürür ya da kapatır, `d` `/deliver` ile aynı teslim penceresini açar — her biri kendi y/N kartından sonra; satır yalnız
+bekletir, sürdürür ya da kapatır, `d` `/deliver` ile aynı teslim penceresini açar, `a` cevap bekleyen bir Run'da işçinin sorusunu
+cevaplar (cevap kartta Tab ile yazılır; hiçbir şey yazılmadan `y` hiçbir şey göndermez) — her biri kendi y/N kartından sonra; satır yalnız
 durumunun sunduğu tuşları gösterir. /do sonrası arka planda açılır; Ctrl+X girişten kapatır (odaktayken Escape), arka planda
 beklerken Shift+Tab modu değiştirmeye devam eder (bekleyen bir kart Shift+Tab'ı yine kendine alır). Eski adlar `/workers`,
 `/watch-workers`, `/watch-runs`, `/watch-stop`, `/tasks`, `/run`, `/transcript`, `/cancel` ve `/quit` takma ad değil, yeniden

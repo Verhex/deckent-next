@@ -654,7 +654,7 @@
   "terminal.slash.group.session": "Session",
   "terminal.slash.group.other": "Other",
   "terminal.slash.status": "Show whether Deckent is running, its version and the model",
-  "terminal.slash.runs": "Runs and workers in one window: Enter details, x cancel, h/r/c hold·resume·close, d deliver (each after its own y)",
+  "terminal.slash.runs": "Runs and workers in one window: Enter details, x cancel, h/r/c hold·resume·close, d deliver, a answer (each after its own y)",
   "terminal.slash.runUsage": "Usage: /run <runId>",
   "terminal.slash.exit": "Leave the terminal",
   "terminal.slash.help": "List the commands by group",

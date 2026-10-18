@@ -1,6 +1,6 @@
 import { type WorkLedgerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import type { JobWindowLabels } from './job-windows.js';
-import type { RunControlLabels } from './run-control.js';
+import type { RunAnswerLabels, RunControlLabels } from './run-control.js';
 import type { ActiveWorkLabels } from './active-work.js';
 import type { LiveWindowKind, LiveWindowLabels, WorkerPanelLabels } from './live-windows.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
@@ -39,6 +39,8 @@ export interface WorkSurfaceLabels {
   readonly jobs?: JobWindowLabels;
   /** Y1: the Runs window's hold/resume/close keys and cards; absent: `/runs` stays the read-only list. */
   readonly runControl?: RunControlLabels;
+  /** K7: the needs-input answer card (`a` on a Runs window row); absent with `runControl`: no answer key. */
+  readonly runAnswer?: RunAnswerLabels;
   /** TERMINAL-SABIT slice 2: the active work strip above the composer; absent means no strip. */
   readonly activeWork?: ActiveWorkLabels;
   /** Live windows (`/monitor`, the Runs window); absent means those commands are not offered as windows. */

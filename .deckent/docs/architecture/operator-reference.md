@@ -12,7 +12,8 @@ Escape closes or declines in a focused window; from input it retains the draft/c
 bodies scroll internally with arrows, PageUp/PageDown and Home/End, with a visible row range. Multiline input
 follows its caret within a height budget. `/runs` is the one Runs window (K1, owner 2026-10-14): a runs tab and a workers
 tab (Tab switches); Enter opens a Run's detail or a worker's sealed transcript; `x` cancels, `h`/`r`/`c` hold, resume or close and
-`d` opens the same delivery window as `/deliver` — each after its own y/N card, and a row shows only the keys its state offers.
+`d` opens the same delivery window as `/deliver`, and `a` answers a worker's question on a Run waiting for input (Tab writes the
+answer in the card; `y` with nothing written sends nothing) — each after its own y/N card, and a row shows only the keys its state offers.
 Opened after /do it waits in the background; Ctrl+X closes it from input (Escape when it is focused), and Shift+Tab still steps the
 mode while it waits behind input (a waiting card still owns Shift+Tab). The old names `/workers`, `/watch-workers`, `/watch-runs`,
 `/watch-stop`, `/tasks`, `/run`, `/transcript`, `/cancel` and `/quit` are renamed, never aliased: typed, the unknown-command window

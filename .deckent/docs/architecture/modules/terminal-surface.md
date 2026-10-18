@@ -401,6 +401,12 @@ evidence: external `proof/K1-K8-2026-10-18/GAP.md`.
   shows only the keys its observed state and this terminal's ports offer (`runsRowKeys`); the service still authorizes at the confirmed
   revision. Keys travel out of band (`taskActionRef` → `openTaskAction`); no typed text selects a Run, and a row acts only in its own scope.
   Results and refusals are transcript system lines; the window stays open.
+- **Needs-input answer (K7).** `a` on a Run whose task waits with a question (`tasks[].decision.reason = needs-input`) opens the answer
+  card: the worker's question, what the answer does, the Run's state/revision and identity. The answer is typed in the card's reason field
+  (Tab) and sent only with a single typed `y`; `y` with nothing written sends nothing and says so. The terminal ledger port `answerTask`
+  builds the same `runLifecycleCommandSchema` `answer` command as `deckent run resume --task --answer` and calls the CLI's in-process
+  `applyRunLifecycle`; the runtime service protocol and the MCP schema are unchanged (answering stays a human decision). A refusal (stale
+  revision, policy) is the typed error line; a Run that stopped asking sends nothing.
 - **Unfocused close (K5).** Ctrl+X closes the open live window while input is focused (`LiveWindowCloseKey`, inside the window stack; a
   focused card owns the keyboard), and inside the focused Runs window; Escape still closes a focused window. Ctrl+O and Ctrl+T keep their
   meaning. Ctrl+X is not composer text: a draft stays.
