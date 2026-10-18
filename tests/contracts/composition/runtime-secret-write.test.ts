@@ -73,7 +73,10 @@ async function fixture(input: { readonly backend?: 'file' | 'env' } = {}) {
     const hits: string[] = [];
     for (const name of await readdir(dirname(ledger))) {
       if (!name.startsWith(ledger.split('/').at(-1)!)) continue;
-      if ((await readFile(join(dirname(ledger), name))).includes(Buffer.from(CANARY))) hits.push(name);
+      // SQLite unlinks -wal/-shm when its last connection closes; a companion gone after readdir left nothing behind (no bytes to scan).
+      const bytes = await readFile(join(dirname(ledger), name)).catch((error: unknown) => {
+        if ((error as { code?: unknown }).code === 'ENOENT' && name !== ledger.split('/').at(-1)) return null; throw error; });
+      if (bytes?.includes(Buffer.from(CANARY))) hits.push(name);
     }
     if (JSON.stringify(audit()).includes(CANARY)) hits.push('audit-view');
     if (output.join('\n').includes(CANARY)) hits.push('service-output');
