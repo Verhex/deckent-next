@@ -21,6 +21,13 @@ current health. Inspect actual query implementations before trusting a command n
 Use the authorized Next entry surface only for commands verified non-mutating; never run legacy
 entrypoints or read credentials/raw state databases to produce a status view.
 
+Existing read-only surfaces (verify the installed version's behavior before relying on one):
+- CLI `deckent monitor` and `deckent workers watch`; `deckent task integration-queue-list|inspect` for the
+  delivery queue. Run them through `.agents/refactor/next-entry.mjs cli` for the Next development roots.
+- Terminal `/runs` and `/monitor` windows.
+- MCP `inspect_run`, `inspect_monitor` and `list_delivery_queue` (read-only tools).
+- Host lanes: the process board (`node .agents/refactor/board.mjs show`), never as liveness proof.
+
 ## Trace only actual objects
 
 Follow the relevant Run → Task → Attempt, operations, workers, effects and receipts as implemented.
