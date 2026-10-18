@@ -9,7 +9,7 @@ import { inspectConfiguredDecisionDelegations, inspectConfiguredMcpCapabilities 
 import { me, runtime } from '../support/mcp-capability-harness.js';
 
 const DRIVER = String.raw`
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, json, os, pty, select, struct, sys, termios, time, re
 steps = json.loads(sys.argv[1])
 pid, fd = pty.fork()
 if pid == 0:
@@ -38,7 +38,9 @@ for wait, send, label in steps:
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace'), 'frames': frames})); sys.exit(3)
     read_for(0.4)
     frames.append([label, out.decode('utf8', 'replace')])
-    for char in send:
+    # One write per key: an escape sequence (PgDn, an arrow) stays whole, as a terminal sends it (CI 2026-10-18: byte by byte it split into
+    # several reads on a loaded host and a decision window rightly refused the multi-event read).
+    for char in re.findall(r'\x1b\[[A-Z0-9~;<]+|.', send, re.S):
         os.write(fd, char.encode()); time.sleep(0.06)
 os.write(fd, b'\x03'); time.sleep(0.2); os.write(fd, b'\x03')
 deadline = time.time() + 15

@@ -113,7 +113,7 @@ describe('pinned Workline terminal', () => {
     view.stdin.write(`${SWITCH}y`); await settle(60); expect(decisions).toEqual([]); expect(view.stdout.frame).toContain('INPUT-FOCUS');
     view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('WINDOW-FOCUS');
     view.stdin.write('y'); await settle(60); expect(decisions).toEqual([]); // back on the card it re-arms: a key at once is no decision
-    await settle(DECISION_ARM_DEFAULT + 80); view.stdin.write('y');
+    await settle(DECISION_ARM_DEFAULT + 80); await until(() => view.stdout.frame.includes('Enter confirm'), 'card armed (its keys show)'); view.stdin.write('y');
     await until(() => decisions.length === 1, 'approve the original visible card');
     expect(decisions).toEqual(['allow']); await until(() => plans === 2, 'only then replay admission'); expect(created).toBe(1);
   });

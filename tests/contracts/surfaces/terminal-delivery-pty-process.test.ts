@@ -29,8 +29,9 @@ const CONFIRM_BODY = 'The confirmation card differs from what was shown';
 /** /do admits the fixture Run; its result window is closed explicitly; the delivery window then appears by itself (composer keeps focus). */
 const opening: readonly Step[] = [['READY', '/do ship it\r'], ['PLAN-RESULT', CTRL_O], ['WINDOW-FOCUS', ESC]];
 
-/** Ctrl+O moves focus to the waiting window; the decision key is typed only once the window owns the keyboard (`fresh`: after this Ctrl+O). */
-const decide = (key: string, after = READY_HINT): readonly Step[] => [[after, CTRL_O], ['WINDOW-FOCUS', key, 'fresh']];
+/** Ctrl+O moves focus to the waiting window; the decision key is typed only once the window counts keys again: after the switch it re-arms and
+ * shows its key hints only then (TERMINAL-SABIT-DUZEN slice 2; `fresh`: after this Ctrl+O). */
+const decide = (key: string, after = WINDOW, armed = READY_HINT): readonly Step[] => [[after, CTRL_O], [armed, key, 'fresh']];
 
 /** The fixture's grants plus `inspect` on the scope: the window resolves the newest attempt through the inventory, as `deckent task … --run --task` does. */
 async function grant(f: Awaited<ReturnType<typeof readyDeliveryFixture>>, attempt: readonly string[]) {

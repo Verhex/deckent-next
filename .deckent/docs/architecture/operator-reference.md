@@ -24,7 +24,9 @@ operation. Ctrl+O switches between input and the top window. An approval card (a
 itself and replaces the input bar in place, so no Ctrl+O is needed; its answers are a list — "Yes, once (y)", "Yes, for this
 session (s)" and "Always allow in this project (a)" only where the service offers them (never for floor items or always-ask
 locks), "No (n)" — moved with ↑↓, j/k or 1–9 and confirmed with Enter, or answered with the letter; the highlight starts on
-No, Esc denies. A card counts keys only after a short quiet period (0.3 s, `decision.json`) from the moment it is shown:
+No, Esc denies. A card counts keys only after a short quiet period (0.3 s, `decision.json`) from the moment it is shown;
+until then its hint row says "Just opened · its keys work in a moment" (and "Key not counted … press it again" for a key that
+came too early), and its keys appear there once they count:
 keys typed for the input just before, a held key, a paste, a key from a just-answered card or a focus switch never answer
 it, and one stdin read with several key events never decides. The draft stays and returns with the bar. Several pending
 decisions wait one at a time ("1/3"). "Always" is your own standing grant (`deckent policy grants --mine`, removed with

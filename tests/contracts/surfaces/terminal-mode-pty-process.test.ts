@@ -51,6 +51,7 @@ fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, columns, 0, 0))
 out = b''
 marks = []
 sent_at = 0
+matched_at = 0
 def read_for(seconds):
     global out
     end = time.time() + seconds
@@ -64,11 +65,13 @@ def read_for(seconds):
     return True
 for step in steps:
     wait, send = step[0], step[1]
-    since = sent_at if len(step) > 2 else 0
+    # 'fresh': after the previous step's keys; 'next': after the previous step's matched text (a decision's keys show only once armed).
+    since = matched_at if len(step) > 2 and step[2] == 'next' else sent_at if len(step) > 2 else 0
     deadline = time.time() + 25
     while wait.encode() not in out[since:]:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
+    matched_at = out.index(wait.encode(), since) + len(wait.encode())
     read_for(0.5)
     marks.append(len(out.decode('utf8', 'replace')))
     # One write per key: an escape sequence (an arrow) stays whole, so the terminal reads it as one key (T3 L4 windows).
@@ -86,7 +89,7 @@ if status is None:
 read_for(0.2)
 sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace'), 'marks': marks}))
 `;
-type Step = readonly [wait: string, keys: string] | readonly [wait: string, keys: string, fresh: 'fresh'];
+type Step = readonly [wait: string, keys: string] | readonly [wait: string, keys: string, fresh: 'fresh' | 'next'];
 async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: readonly Step[], columns = 120) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps), String(columns)],
     { cwd, env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
@@ -492,9 +495,9 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
 describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real pseudo-terminal (wave/tui-2 integration)', () => {
   it.each([
     ['en', { help: 'Commands', helpSummary: 'Help: ', status: 'Deckent is running', statusSummary: 'Status: Deckent is running', system: '◆ Deckent system', window: 'Approval needed', denied: 'denied', you: 'You', heading: 'Info', careful: '⏸ careful',
-      declined: 'you declined', policy: 'denied by policy', undo: 'Not checked — Deckent does not keep the earlier content', focused: 'Window focused · Ctrl+O return to input' }],
+      declined: 'you declined', policy: 'denied by policy', undo: 'Not checked — Deckent does not keep the earlier content', focused: 'Window focused · Ctrl+O return to input', armed: 'Enter confirm' }],
     ['tr', { help: 'Komutlar', helpSummary: 'Yardım: ', status: 'Deckent çalışıyor', statusSummary: 'Durum: Deckent çalışıyor', system: '◆ Deckent sistemi', window: 'Onay gerekiyor', denied: 'reddedildi', you: 'Sen', heading: 'Bilgi', careful: '⏸ dikkatli',
-      declined: 'sen reddettin', policy: 'policy izin vermedi', undo: 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor', focused: 'Pencere odakta · Ctrl+O girişe dön' }],
+      declined: 'sen reddettin', policy: 'policy izin vermedi', undo: 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor', focused: 'Pencere odakta · Ctrl+O girişe dön', armed: 'Enter onayla' }],
   ] as const)('%s: banner, /help, /status, the approval window and the person/answer rows', async (language, words) => {
     // The person runs careful (standart + ask for edits too), so the eligible edit opens the approval window; standart alone would run it.
     const f = await modeProject('v2', { mode: 'standart' });
@@ -506,9 +509,8 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
       // SW-1: /help and /status open information windows; Esc closes each and leaves one framed system summary line before the next step
       // (waited on its text alone: the raw bytes carry colour codes between the label and the text).
       ['Deckent workline', '/help\r'], [words.help, '\u001b'], [words.helpSummary, '/status\r'], [words.status, '\u001b'], [words.statusSummary, 'go\r'],
-      // TERMINAL-SABIT R2: the card raised during the turn leaves the input focused; Ctrl+O moves to it (a fresh focus label, not the one the
-      // /help and /status windows showed), then n declines.
-      [words.window, ''], [words.focused, 'n'], ['Mode turn done.', '/exit\r']], 100); // slice 2: the card takes the keyboard by itself
+      // TERMINAL-SABIT-DUZEN slice 2: the card takes the keyboard by itself; its keys show (and count) once it is armed, then n declines.
+      [words.window, ''], [words.armed, 'n', 'next'], ['Mode turn done.', '/exit\r']], 100);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     // Each mark is the output length when a step's awaited text had appeared (before its keys were sent).
@@ -560,19 +562,19 @@ describe.skipIf(process.platform !== 'linux')('the approval window shows the who
     const f = await modeProject('v2', { call: { name: 'run_shell', arguments: { command } }, shell: true });
     await startRuntime(f.projectRoot, f.env);
     // The window is capped (TERMINAL-SABIT-DUZEN: at most half the full window): the whole command continues below its first page and PgDn scrolls to it.
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['the whole command is below (↑↓ scrolls)', '\u001b[6~'],
-      ['Whole command (7 lines)', '\u001b[6~'], ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['the whole command is below (↑↓ scrolls)', ''],
+      ['Enter confirm', '\u001b[6~', 'next'], ['Whole command (7 lines)', '\u001b[6~'], ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
     const screen = (mark: number) => terminalScreen(run.output.slice(0, complete(run.marks![mark]!)), 100).split('\n').slice(-40).join('\n');
-    const [first, scrolled] = [screen(1), screen(3)];
+    const [first, scrolled] = [screen(2), screen(4)];
     const proof = process.env['DECKENT_T2_FRAME_PROOF'];
     if (proof) { const { appendFile } = await import('node:fs/promises'); for (const [title, text] of [['first page', first], ['after PgDn', scrolled]] as const)
       await appendFile(proof, `\n### en · Astra 2431 heredoc window · ${title}\n\n\`\`\`text\n${text}\n\`\`\`\n`); }
     expect(first).toMatch(/Command: +cat <<'EOF'/u);
     expect(first).toContain('the whole command is below (↑↓ scrolls)');
-    expect(screen(2)).toContain('Whole command (7 lines)');
+    expect(screen(3)).toContain('Whole command (7 lines)');
     expect(first).toMatch(/rows 1–\d+ of \d+/u);
     // After one PgDn the write is a row of the window itself (inside the frame), as part of the whole command.
     expect(scrolled).toMatch(/│ printf 'changed' > important\.txt +│/u);

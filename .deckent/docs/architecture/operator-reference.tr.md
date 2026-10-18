@@ -23,7 +23,9 @@ arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağ�
 kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez. Cevaplar listedir — "Evet, bu sefer (y)", "Evet, bu
 oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis sunduğunda (taban öğelerinde ve her zaman sorulan
 kilitlerde asla), "Hayır (n)" — ↑↓, j/k ya da 1–9 ile seçilir, Enter ile onaylanır ya da harfle cevaplanır; seçim Hayır'da
-başlar, Esc reddeder. Kart, gösterildiği andan itibaren kısa bir sessiz süre (0,3 sn, `decision.json`) geçmeden tuş saymaz:
+başlar, Esc reddeder. Kart, gösterildiği andan itibaren kısa bir sessiz süre (0,3 sn, `decision.json`) geçmeden tuş saymaz;
+o sırada ipucu satırı "Yeni açıldı · tuşları birazdan çalışır" der (erken gelen tuş için "Tuş sayılmadı … yeniden basın"),
+tuşlar sayılmaya başlayınca orada görünür:
 girişe az önce yazılan tuşlar, basılı tutulan tuş, yapıştırma, az önce cevaplanan karttan ya da odak değişiminden gelen tuş
 kartı cevaplamaz; birden çok tuş olayı üreten tek bir okuma asla karar vermez. Taslak korunur ve barla geri gelir. Bekleyen
 kararlar tek tek gelir ("1/3"). "Hep izin ver" kendi kalıcı iznindir (`deckent policy grants --mine`, `deckent policy revoke`

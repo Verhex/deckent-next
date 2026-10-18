@@ -31,9 +31,9 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
-def wait(token, seconds=20):
+def wait(token, seconds=20, after=0):
     deadline = time.time() + seconds
-    while token.encode() not in out:
+    while token.encode() not in out[after:]:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': token, 'output': out.decode('utf8', 'replace')}))
             sys.exit(3)
@@ -45,7 +45,8 @@ def typed(text):
 wait('READY')
 typed('go\r')
 wait('remembered for npm test')
-read_for(0.4)
+# TERMINAL-SABIT-DUZEN slice 2: the card's keys show (and count) only once it is armed.
+wait('Enter confirm', after=out.index(b'remembered for npm test'))
 # TERMINAL-SABIT-DUZEN slice 2: the card takes the keyboard by itself; the 0.4 s quiet wait above outlasts its arming.
 for group in keys.split(';'):
     token, _, expect = group.partition('=')

@@ -4,7 +4,7 @@ import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { SpanText, cells, fillTemplate, graphemes, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, useRenderGlyphs, wrapCells, wrapSpans, type Span } from '#surfaces/core/terminal-render/index.js';
 import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
 import { useWindowNote } from './window-note.js';
-import { DecisionArmContext, useQuietArming } from './arming.js';
+import { DecisionArmContext, DecisionArmLabelsContext, useQuietArming } from './arming.js';
 import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
 
 /** One logical body row: an optional field label kept in its own column (values wrap under the value column, never under the label; an
@@ -23,6 +23,11 @@ export function hardWrapSpans(spans: readonly Span[], width: number): Span[][] {
   }
   rows.push(sliceSpans(spans, start, offset));
   return rows;
+}
+
+/** Scrolling and highlight keys: they never decide anything, so a read made only of them may pass a decision window's burst rule. */
+function navigationKey(key: Key): boolean {
+  return !key.ctrl && !key.meta && !key.shift && (key.pageUp || key.pageDown || key.home || key.end || key.upArrow || key.downArrow);
 }
 
 /** Frame rows around the body: two border rows, the title row and the key-hint row. */
@@ -122,8 +127,13 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const waitingText = decision && interactive && decideHint && owner.composerWindows && owner.top === id && owner.composing ? decideHint : null;
   const width = Math.max(1, columns - FRAME_COLUMNS);
   const { rows, starts } = layoutWindowRows(body, width);
+  // A decision shows its keys only while they count: focused and armed. Until it is armed (it just appeared, or a key was ignored) the hint
+  // row says so; behind the composer (Ctrl+O back to input) the "Ctrl+O to decide" line speaks instead. Keys on screen ⇔ keys count — one
+  // signal for the person and for a PTY test, whatever frames the renderer skips (CI 2026-10-18).
+  const armLabels = useContext(DecisionArmLabelsContext), behind = owner.top === id && owner.composing;
+  const hintText = !guarded || !interactive || arming.shown ? hints : behind ? '' : arming.ignored ? armLabels.ignored : armLabels.arming;
   // Key hints wrap on a narrow terminal instead of losing their last keys.
-  const hintRows = wrapCells(hints, width);
+  const hintRows = wrapCells(hintText, width);
   const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
   const room = Math.max(minimum, terminalRows - reserved - FRAME_ROWS - footerRows - (hintRows.length - 1) - (noteText === null ? 0 : 1) - (waitingText === null ? 0 : 1));
   const overflow = rows.length > room, visible = overflow ? Math.max(1, room - 1) : rows.length;
@@ -152,6 +162,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (!read) return;
     if (!read.owned || !acceptsInput() || !arming.armed()) { arming.touch(); return; }
     if (read.events.length === 1) { const [input, key] = read.events[0]!; deliver(input, key); return; }
+    // A read of navigation keys only (held PgDn, a coalesced run of arrows) moves the view or the highlight and never decides: delivered.
+    if (read.events.every(([, key]) => navigationKey(key))) { for (const [input, key] of read.events) deliver(input, key); return; }
     // Several events in one read: only an owner taking plain text right now gets them (as text), and the first one it does not take ends
     // the read and re-arms; any other owner never sees such a read (security review 2026-10-18, fail-open burst handling).
     if (!latest.current.burstText) { arming.restart(); return; }

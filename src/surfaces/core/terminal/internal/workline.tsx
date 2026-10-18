@@ -18,7 +18,7 @@ import { freshContextHistory } from './workline-history.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote,
-  FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT,
+  FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
   WheelContext, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { formatContextTokens, span } from '#surfaces/core/terminal-render/index.js';
@@ -69,6 +69,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly delivery?: DeliveryWindowLabels;
   /** Full-window chat viewport words (terminal.viewport.*): the row shown while scrolled back. */
   readonly viewport?: ChatViewportLabels;
+  /** A decision's hint row before its keys count (terminal.decision.*); neutral marks without them. */
+  readonly decisionArm?: DecisionArmLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -700,6 +702,7 @@ export function WorklineApp(props: WorklineProps) {
     </Box>;
   return (
     <DecisionArmContext.Provider value={props.decisionArmMs ?? DECISION_ARM_DEFAULT}>
+    <DecisionArmLabelsContext.Provider value={labels.decisionArm ?? NEUTRAL_ARM_LABELS}>
     <HumanTextContext.Provider value={props.knownSecrets}>
     <WindowNoteContext.Provider value={argumentNote}>
     <WindowDecideHintContext.Provider value={labels.focus?.decide}>
@@ -707,11 +710,13 @@ export function WorklineApp(props: WorklineProps) {
     </WindowDecideHintContext.Provider>
     </WindowNoteContext.Provider>
     </HumanTextContext.Provider>
+    </DecisionArmLabelsContext.Provider>
     </DecisionArmContext.Provider>
   );
 }
 
 const EMPTY_ROWS: readonly LedgerRow[] = Object.freeze([]);
+const NEUTRAL_ARM_LABELS: DecisionArmLabels = Object.freeze({ arming: '…', ignored: '… ×' });
 /** The information row's context segment: the same measurement and words as `/context` (`terminal.render.context`); before one, "unknown". */
 function contextStatus(measured: Readonly<{ promptTokens: number; windowTokens: number | null; quality: string }> | null, render: AssistantRenderLabels, locale: 'en' | 'tr' | undefined): string | undefined {
   if (!measured) return render.contextUnknown;
