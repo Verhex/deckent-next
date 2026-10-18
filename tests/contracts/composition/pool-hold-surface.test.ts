@@ -116,7 +116,7 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
   });
 });
 
-it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited receipts; production MCP principal is denied even with owner pool grants', async () => {
+it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited receipts; MCP does not offer quota release until the delegation slice', async () => {
   const f = await fixture(), command = { schemaVersion: 1, scopeId: 's', commandId: 'cli-release', channelId: 'subscription-channel' };
   const result = await f.cli('quota-release', '--channel', command.channelId, '--command-id', command.commandId, '--json');
   expect(result.code).toBe(0); expect(JSON.parse(result.stdout)).toEqual(await releaseQuota(f.project, command, f.options));
@@ -124,7 +124,9 @@ it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited
   expect((await f.cli('quota-release', '--channel', command.channelId, '--lang', 'tr')).stdout).toContain('serbest bırakıldı');
   expect((await f.cli('quota-release')).code).toBe(2);
   const session = await mcp({ releaseQuota: input => withMcpPrincipal(() => releaseQuota(f.project, input, f.options)) });
-  try { expect(JSON.stringify(await session.client.callTool({ name: 'release_quota', arguments: { ...command, commandId: 'mcp-release' } }))).toContain('POLICY_DENIED'); }
+  // hide_until_slice (owner 2026-10-18): the MCP actor is not offered quota release before the delegation slice; CLI/SDK keep it.
+  try { expect((await session.client.listTools()).tools.map(tool => tool.name)).not.toContain('release_quota');
+    expect(JSON.stringify(await session.client.callTool({ name: 'release_quota', arguments: { ...command, commandId: 'mcp-release' } }))).toContain('MCP_TOOL_UNKNOWN'); }
   finally { await session.close(); }
   expect(f.rows("SELECT count(*) n FROM quota_release_receipts")[0]!.n).toBe(2);
 });

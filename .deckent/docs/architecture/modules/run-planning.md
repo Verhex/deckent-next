@@ -115,9 +115,10 @@ transactionally into `run_quota_waits`; active channel/deadline indexes serve
 reservation, dispatch and inspection, which uses the current clock. The v53→v54
 migration backfills historical waits once without rewriting retained snapshots.
 
-CLI `deckent pool quota-release --channel <id> --scope <scope>`, SDK `releaseQuota`
-and MCP `release_quota` use one application and the separate installation-level
-`pool/release-quota` policy cell. The selected pool must exist and be authorized; each
+CLI `deckent pool quota-release --channel <id> --scope <scope>` and SDK `releaseQuota`
+use one application and the separate installation-level `pool/release-quota` policy cell.
+MCP does not advertise `release_quota` until the post-beta delegation slice (owner
+2026-10-18, hide_until_slice); no MCP capability group grants it. The selected pool must exist and be authorized; each
 pool assigned to a Run with matching active waits also needs installation-level
 release-quota authority; resume alone never grants it. Any denied pool produces a sealed refusal without changing any
 Run. The writer re-reads the affected pool set under `BEGIN IMMEDIATE` and refuses

@@ -17,11 +17,12 @@ import { startTestRuntimeService, stopTestRuntimeService } from '../support/runt
 it('advertises real schemas and bounds concurrent calls, response size and error disclosure', async () => {
   let release!: () => void; let entered!: () => void; const waiting = new Promise<void>(r => { entered = r; }); const gate = new Promise<void>(r => { release = r; });
   const server = createMcpServer({ async inspectRun() { entered(); await gate; return { oversized: 'x'.repeat(1000) }; }, async inspectInventory() { throw new Error('/private secret'); },
-    async releaseQuota() { throw new Error('listing must not execute quota release'); } }, { maxConcurrentCalls: 1, responseMaxBytes: 100 }, 'en');
+    async releaseQuota() { throw new Error('a withheld tool must never execute'); } }, { maxConcurrentCalls: 1, responseMaxBytes: 100 }, 'en');
   const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st); const client = new Client({ name: 'test', version: '1' }); await client.connect(ct);
   try {
-    const tools = await client.listTools(); expect(tools.tools.map(t => t.name)).toEqual(['inspect_run', 'inspect_inventory', 'policy_vocabulary', 'release_quota']);
-    expect(tools.tools.find(tool => tool.name === 'release_quota')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+    // hide_until_slice (owner 2026-10-18): a supplied quota-release application is still neither listed nor callable over MCP.
+    const tools = await client.listTools(); expect(tools.tools.map(t => t.name)).toEqual(['inspect_run', 'inspect_inventory', 'policy_vocabulary']);
+    expect(JSON.stringify(await client.callTool({ name: 'release_quota', arguments: {} }))).toContain('MCP_TOOL_UNKNOWN');
     expect(tools.tools[0]!.inputSchema.required).toContain('scopeId');
     const first = client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r' } }); await waiting;
     expect(JSON.stringify(await client.callTool({ name: 'policy_vocabulary', arguments: {} }))).toContain('MCP_BUSY'); release();
@@ -74,8 +75,8 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
     expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: query }))).toContain('POLICY_DENIED');
     const tools = (await client.listTools()).tools;
-    expect(tools.filter(t => !['plan_run', 'propose_run', 'renew_approval', 'create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_hold', 'apply_pool_capacity', 'release_quota', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'manage_provider_spending', 'audit_provider_spending', 'update_toolchains', 'control_run'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
-    expect(tools.find(t => t.name === 'release_quota')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+    expect(tools.filter(t => !['plan_run', 'propose_run', 'renew_approval', 'create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_hold', 'apply_pool_capacity', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'manage_provider_spending', 'audit_provider_spending', 'update_toolchains', 'control_run'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
+    expect(tools.find(t => t.name === 'release_quota')).toBeUndefined();
     for (const name of ['plan_run', 'propose_run']) expect(tools.find(tool => tool.name === name)!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     expect(tools.find(t => t.name === 'apply_pool_capacity')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     expect(tools.find(t => t.name === 'inspect_pool_capacity')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
