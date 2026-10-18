@@ -986,7 +986,8 @@ that requires Run-create approval refuses that admission (`RUN_APPROVAL_REQUIRED
 The queue does not yet replay an approved verification admission (open); never weaken that policy. Missing/failed/cancelled/unknown verification cannot publish. The exact private commit, original source,
 criteria/profile and receipt are checked again before effects. Legacy delivery-pinned Run admission stays readable.
 
-`deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`.
+`deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`
+and an optional `deliveryIntent:"service-reattempt"` (below).
 Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
 `integration-queue-confirm` obtains separate publish and adoption cards (the adoption card asks "Move <branch> to the verified commit?";
 each action refuses flags it does not take; output follows `--lang`, then config `language`, then LANG); the second card is derived from the first frozen prefix,
@@ -995,6 +996,34 @@ only `inspect_delivery_queue`/`list_delivery_queue`; submission, rollback, decis
 before opening a scope or writer. The SDK runtime client carries inspect/list only; the CLI/Terminal composition installs submission.
 The registered-target `/deliver` flow enqueues (no work target: `QUEUE_WORK_TARGET_REQUIRED` names `execution.workTargets`); `r` offers current-base preparation after drift or reads last-known queue state.
 `/runs` detail projects authorized positions, ownership and outcome. Neither view is acceptance authority.
+
+**Bounded delivery re-attempt (alpha.47 S5b; owner D1a + D2b, 2026-10-18).** It amends DESIGN §6 for one case only. The human may enqueue
+with `deliveryIntent:"service-reattempt"`: an explicit per-Run delivery intent naming this ticket's Run and target, recorded in the
+request (payload digest, audit). It is set only by the human's own enqueue; the MCP channel stays read-only and the `/deliver` window
+sends no intent (old behaviour). When such a ticket settles `conflict-needs-reattempt` with `PATCH_BASE_ADVANCED`, the service:
+- waits until the live target base actually moved past the original output (the work target's own integration check of that output
+  refuses it; a refusal against an earlier, not yet adopted candidate of the same batch only waits);
+- admits the same frozen Task (kind, work class, work input, criteria) as a single-task Run `queue-reattempt-<digest>` through normal
+  Run admission as the delegating human: policy, pool, ceilings and a Run-create card are unchanged, and only the proposal path has a
+  money budget gate (`budgetSemantics`), so a plain Run admission checks none, as before;
+- lets its own Run progression execute and evaluate that Run on the current base, and retains the accepted Attempt's patch when
+  evaluation did not (a kind without work input), as a human `patch-prepare` would;
+- enqueues the accepted Attempt as ticket `queue-reattempt-ticket-<digest>`, whose actor is the human's service principal (issuer
+  `<issuer>/service`, provenance only) with `reattempt {sourceCommandId, intentCommandId, count, cause, approvedBy}`.
+`TargetQueueApplication.submitReattempt` is the one owner of that transition: the source must be the approver's settled, base-advanced
+ticket of the same target under intent, the count exactly one more, and policy/validation run as the approver (never MCP/workload).
+Background work for that ticket runs as the approver. Its actor differs, so it forms its own batch with the same two owner cards.
+Never re-attempted (typed view reason): no intent; failed verification, stale, protected or parked tickets; a started effect; a Task
+whose accepted Attempt did not exit cleanly or has unresolved effects; a profile the installed Docker adapter (`--network none`) does
+not prove workspace-only (`DELIVERY_REATTEMPT_EFFECTS`); cross-task `inputs`, or an `accepted-patch` predecessor not adopted on this
+target (`DELIVERY_REATTEMPT_NOT_ELIGIBLE`). A chained dependent is re-run alone after its predecessor is adopted (no lineage acceptance;
+the lineage rule of S5a stays post-beta). Config `targetQueue.reattempts` (default 1, 0 disables) bounds the lineage. A ticket over it
+settles `DELIVERY_REATTEMPT_EXHAUSTED` (human, `new-attempt`); a failed re-attempt Run reads `DELIVERY_REATTEMPT_FAILED`.
+`targetQueue.reattemptWindowMs` (default 6 h after the human's enqueue) bounds the service's work list. The view field `reattempt`
+reports `waiting-base | awaiting-approval | running | enqueued | refused | failed | exhausted` with count, bound, cause, Run and ticket.
+A pending Run-create card shows `approve-run`; that state and a typed admission refusal are the service's in-memory last-known step,
+recomputed after a restart. For a non-Git target the same contract applies: "base advanced" is the adapter's own optimistic-concurrency
+refusal of the recorded target version.
 
 A Git generation ref lives in the target repository's namespace, keyed by the full target ref; its payload binds queue key, instance
 and epoch. Only a consented execution (both cards answered) or startup recovery of work whose effect may be in flight writes it, always

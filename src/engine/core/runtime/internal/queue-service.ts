@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import { ErrorRegistry } from '#platform/index.js';
-import { TargetQueueError, encodeCommandProjection, targetQueueRequestSchema, type TargetQueueRecord, type TargetBinding, type TargetDisplay, type VerifiedPrincipal, type AttemptIdentity, type EffectTargetRef } from '#domain/index.js';
+import { TargetQueueError, encodeCommandProjection, targetQueueRequestSchema, queueApprover, type TargetQueueRecord, type TargetBinding, type TargetDisplay, type VerifiedPrincipal, type AttemptIdentity, type EffectTargetRef } from '#domain/index.js';
 import { TargetQueueDriver, TargetBatchConfirmation, TargetBatchExecutor, prepareTargetBatch, targetBatchDigest, projectTargetQueue,
   queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema, queueChallengeSchema, queueAnswerSchema, queueExecuteSchema,
-  type BatchPeer, type BatchTerminalWitness, type TargetBatch, type TargetBatchEffects, type TargetQueueApplication, type TargetQueueBounds, type TargetQueueStore, type TargetQueuePreparation } from '#engine/core/effect/index.js';
+  type BatchPeer, type BatchTerminalWitness, type TargetBatch, type TargetBatchEffects, type TargetQueueApplication, type TargetQueueBounds, type TargetQueueStore, type TargetQueuePreparation,
+  type QueueReattemptView } from '#engine/core/effect/index.js';
 import { runtimeServiceResultCapacity, type RuntimeServiceRequest } from './service-protocol.js';
 const queueDigest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export interface QueueServiceContext {
@@ -16,7 +17,7 @@ export interface QueueServiceContext {
 }
 export interface QueueServicePeer { readonly pid: number; readonly uid: number }
 export interface QueueServicePorts<C extends QueueServiceContext, Peer extends QueueServicePeer> {
-  readonly instanceId: string; readonly config: { readonly targetQueue: { readonly capacity: number; readonly candidateSlots: number; readonly batchWindowMs: number } };
+  readonly instanceId: string; readonly config: { readonly targetQueue: { readonly capacity: number; readonly candidateSlots: number; readonly batchWindowMs: number; readonly leaseMs?: number } };
   withScope<T>(scopeId: string, peer: Peer | undefined, readOnly: boolean, work: (context: C) => Promise<T>): Promise<T>;
   snapshot(): Promise<readonly TargetQueueRecord[]>;
   withActor<T>(record: TargetQueueRecord, work: () => Promise<T>): Promise<T>;
@@ -25,6 +26,10 @@ export interface QueueServicePorts<C extends QueueServiceContext, Peer extends Q
   captureProcess(pid: number, uid: number): Promise<BatchTerminalWitness | null>;
   isMcp(peer: Peer): boolean;
   record(peer: BatchPeer, digest: string, operation: TargetBatch['operation'], answer: 'allow' | 'decline'): Promise<void>;
+  /** D1a/D2b: settled base-advanced tickets under a human's delivery intent still inside the re-attempt window, without a successor. */
+  reattempts?(): Promise<readonly TargetQueueRecord[]>;
+  /** One bounded re-attempt step as the delegating human (`act`), or its read-only state for the queue view. */
+  reattempt?(context: C, record: TargetQueueRecord, act: boolean): Promise<QueueReattemptView | null>;
 }
 /** Reconciliation never holds consent: it observes, settles a completed effect or releases a provably unapplied one, and never re-runs a write. */
 async function reconcileQueueRecord<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>, c: C, record: TargetQueueRecord) {
@@ -42,6 +47,36 @@ function targetKeyLock() {
     try { return await work(); } finally { held.delete(key); release(); }
   };
   return { held: held as ReadonlyMap<string, unknown>, lock };
+}
+/** D1a/D2b: one bounded step per base-advanced ticket under intent per turn; waiting ones back off like a reconciling head (existing bounds).
+ * The last step's result stays in memory for the view (last known): a pending Run-create card or a typed admission refusal is not durable. */
+function reattemptScheduler<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>) {
+  const { targetQueue } = ports.config, backoff = new Map<string, { at: number; delay: number }>(), last = new Map<string, QueueReattemptView>();
+  let scanAt = 0; // the work list reads settled rows (no partial index covers them): at most one read per lease, not per batch window
+  const key = (record: TargetQueueRecord) => `${record.request.identity.scopeId}:${record.request.commandId}`;
+  return {
+    /** A Run not yet admitted shows the service's last step (base not moved, card pending, typed refusal); every later fact is durable. */
+    async view(c: C, record: TargetQueueRecord) {
+      const observed = await ports.reattempt?.(c, record, false) ?? undefined, previous = last.get(key(record));
+      return observed?.state === 'waiting-base' && previous && ['awaiting-approval', 'refused'].includes(previous.state) ? previous : observed;
+    },
+    async turn(): Promise<unknown> {
+      if (Date.now() < scanAt) return null;
+      scanAt = Date.now() + (targetQueue.leaseMs ?? targetQueue.batchWindowMs);
+      const scanned = new Set<string>(); let failure: unknown = null;
+      for (const record of await ports.reattempts?.() ?? []) {
+        const id = key(record), due = backoff.get(id); scanned.add(id); if (due && due.at > Date.now()) continue;
+        let result: QueueReattemptView | null = null;
+        try { result = await ports.withActor(record, () => ports.withScope(record.request.identity.scopeId, undefined, false, c => ports.reattempt!(c, record, true))); }
+        catch (error) { failure ??= error; }
+        const delay = Math.min(Math.max(due?.delay ?? 0, targetQueue.batchWindowMs) * 2, targetQueue.leaseMs ?? targetQueue.batchWindowMs);
+        if (result) last.set(id, result); else last.delete(id);
+        if (result?.state === 'enqueued') backoff.delete(id); else backoff.set(id, { at: Date.now() + delay, delay });
+      }
+      for (const id of new Set([...last.keys(), ...backoff.keys()])) if (!scanned.has(id)) { last.delete(id); backoff.delete(id); }
+      return failure;
+    },
+  };
 }
 /** Service lifecycle, admission and batch authority; native custody, persistence and effect owners remain explicit ports. */
 export function createTargetQueueService<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>) {
@@ -62,7 +97,7 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
   };
   const reconcile = (c: C, record: TargetQueueRecord) => reconcileQueueRecord(ports, c, record);
   /** Per-key retry time of a reconciling head: doubles from the batch window up to the lease (existing bounds; no new literal policy). */
-  const backoff = new Map<string, { at: number; delay: number }>();
+  const backoff = new Map<string, { at: number; delay: number }>(), reattempts = reattemptScheduler(ports);
   const service = {
     async run(signal: AbortSignal, wait: (milliseconds: number, signal: AbortSignal) => Promise<void>, onError: (error: unknown) => Promise<void>) {
       while (!signal.aborted) { try { await service.tick(); } catch (error) { await onError(error); }
@@ -101,11 +136,15 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
           await new TargetQueueDriver(c.app, c.bounds, await ports.preparation(c), instanceId, Date.now).advance(records);
         })));
       })); const failed = results.find(result => result.status === 'rejected'); if (failed?.status === 'rejected') failure = failed.reason; }
+      // The scan runs every turn, even when a target's turn failed: one failing key never pauses every re-attempt.
+      const scanFailure = await reattempts.turn(); failure ??= scanFailure;
       if (failure) throw failure;
     },
     async execute(request: RuntimeServiceRequest, peer: Peer, responseMaxBytes: number) {
       if (!request.delivery) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-      // DESIGN §6: the AI channel reads (inspect/list) only. Submission, rollback, consent and execution are human CLI/Terminal acts.
+      // DESIGN §6: the AI channel reads (inspect/list) only. Submission, rollback, consent and execution are human CLI/Terminal acts. Amended by
+      // owner D2b (2026-10-18): under a human's explicit per-Run delivery intent the service itself enqueues one bounded re-attempt (tick above),
+      // as that human's service principal with the delegation recorded; its two cards stay human terminal acts.
       if (ports.isMcp(peer) && request.operation !== 'inspectTargetQueue' && request.operation !== 'listTargetQueue') throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
       const readOnly = request.operation === 'inspectTargetQueue' || request.operation === 'listTargetQueue';
       const input = request.operation === 'enqueueTargetQueueRollback' ? queueRollbackSchema.parse(request.input) : request.operation === 'enqueueTargetQueue' ? queueEnqueueSchema.parse(request.input) : request.operation === 'listTargetQueue' ? queueListSchema.parse(request.input)
@@ -113,7 +152,8 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
         : request.operation === 'executeTargetQueue' ? queueExecuteSchema.parse(request.input) : queueQuerySchema.parse(request.input);
       const scopeId = 'identity' in input ? input.identity.scopeId : input.scopeId;
       return ports.withScope(scopeId, peer, readOnly, async c => {
-        const display = await c.target.describe(), view = async (record: TargetQueueRecord) => projectTargetQueue(record, display, Date.now(), await c.app.position(record, c.principal));
+        const display = await c.target.describe(), view = async (record: TargetQueueRecord) => projectTargetQueue(record, display, Date.now(), await c.app.position(record, c.principal),
+          record.request.deliveryIntent && record.outcome === 'conflict-needs-reattempt' ? await reattempts.view(c, record) : undefined);
         const result = await (async () => {
           if (request.operation === 'enqueueTargetQueueRollback') {
             const command = queueRollbackSchema.parse(input), original = await c.app.inspect(scopeId, command.sourceCommandId, c.principal), payloadDigest = queueDigest(command);
@@ -123,7 +163,8 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
             if (!record) {
               if (c.queue.head(original.key)) throw new TargetQueueError('QUEUE_TARGET_BUSY');
               const now = Date.now();
-              record = await c.app.submit({ ...original.request, operation: 'rollback', sourceCommandId: command.sourceCommandId, commandId: command.commandId,
+              const { deliveryIntent: _intent, reattempt: _lineage, ...source } = original.request; void _intent; void _lineage; // a rollback is the human's own act
+              record = await c.app.submit({ ...source, operation: 'rollback', sourceCommandId: command.sourceCommandId, commandId: command.commandId,
                 actor: { id: c.principal.id, issuer: c.principal.issuer, subject: c.principal.subject }, payloadDigest, policyRevision: c.document.revision, submittedAt: now, deadline: now + c.config.targetQueue.ttlMs }, c.principal);
             }
             if (record.state === 'queued') record = await initializeRollback(c, record);
@@ -140,6 +181,7 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
             const now = Date.now(), target = await c.target.binding(command.target);
             const admitted = await c.app.submit(targetQueueRequestSchema.parse({ schemaVersion: 1, commandId: command.commandId, identity: command.identity, target,
               actor: { id: c.principal.id, issuer: c.principal.issuer, subject: c.principal.subject }, payloadDigest, policyRevision: c.document.revision, ...(command.replacesCommandId ? { replacesCommandId: command.replacesCommandId } : {}),
+              ...(command.deliveryIntent ? { deliveryIntent: command.deliveryIntent } : {}),
               outputDigest: accepted.outputDigest, acceptedRevision: accepted.acceptedRevision, submittedAt: now, deadline: now + c.config.targetQueue.ttlMs }), c.principal);
             // No physical generation here (Astra 2607 F1/F2): a queued ticket has no durable owner or epoch yet. The generation is
             // written only with an owner/epoch the ledger recorded first (reservation, recovery), by the consented execution or recovery.
@@ -197,9 +239,10 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
   return service;
 }
 
-/** Background work keeps the admitted actor; an MCP request is never prepared under the owner's identity. */
+/** Background work keeps the admitted actor; an MCP request is never prepared under the owner's identity. A service re-attempt ticket runs as
+ * the human who delegated it (its actor is that human's service principal, provenance only). */
 export function selectQueueActor(record: TargetQueueRecord, read: (channel: 'mcp' | undefined) => { id: string; issuer: string; subject: string }): 'mcp' | undefined {
-  for (const channel of [undefined, 'mcp'] as const) { const current = read(channel), actor = record.request.actor;
+  for (const channel of [undefined, 'mcp'] as const) { const current = read(channel), actor = queueApprover(record.request);
     if (current.id === actor.id && current.issuer === actor.issuer && current.subject === actor.subject) return channel; }
   throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
 }

@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { attemptIdentitySchema, clientCommandIdSchema, identitySchema, effectTargetRefSchema, targetDisplaySchema, queueReasonSchema } from '#domain/index.js';
+import { attemptIdentitySchema, clientCommandIdSchema, identitySchema, effectTargetRefSchema, targetDisplaySchema, queueReasonSchema, queueDeliveryIntentSchema } from '#domain/index.js';
 import { targetQueueViewSchema } from './queue-view.js';
+/** `deliveryIntent` (D2b) is the human's explicit opt-in on this one Run and target; there is no wire field for a re-attempt or delegation. */
 export const queueEnqueueSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
-  replacesCommandId: identitySchema.optional(), identity: attemptIdentitySchema, target: effectTargetRefSchema }).strict().readonly();
+  replacesCommandId: identitySchema.optional(), identity: attemptIdentitySchema, target: effectTargetRefSchema, deliveryIntent: queueDeliveryIntentSchema.optional() }).strict().readonly();
 export const queueQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema }).strict().readonly();
 export const queueListSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, after: identitySchema.nullable(),
   limit: z.number().int().positive().safe() }).strict().readonly();

@@ -368,6 +368,12 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   QUEUE_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_EXPIRED', p, l) }) },
   QUEUE_VERIFICATION_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_VERIFICATION_NOT_ADMITTED', p, l) }) },
   QUEUE_PREPARATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_PREPARATION_REFUSED', p, l) }) },
+  // D1a (owner 2026-10-18): typed reasons of the service's bounded delivery re-attempt (queue view `reattempt.reason`, ticket `reason`).
+  DELIVERY_INTENT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTENT_MISSING', p, l) }) },
+  DELIVERY_REATTEMPT_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_EXHAUSTED', p, l) }) },
+  DELIVERY_REATTEMPT_NOT_ELIGIBLE: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_NOT_ELIGIBLE', p, l) }) },
+  DELIVERY_REATTEMPT_EFFECTS: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_EFFECTS', p, l) }) },
+  DELIVERY_REATTEMPT_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_FAILED', p, l) }) },
   CANDIDATE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_MISMATCH', p, l) }) },
   CANDIDATE_NOT_ACCEPTED: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_NOT_ACCEPTED', p, l) }) },
   DELIVERY_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTERACTIVE_REQUIRED', p, l) }) },

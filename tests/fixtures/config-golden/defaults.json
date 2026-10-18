@@ -211,6 +211,8 @@
     "chainSize": 16,
     "leaseMs": 60000,
     "perTarget": 256,
+    "reattemptWindowMs": 21600000,
+    "reattempts": 1,
     "revalidations": 2,
     "schemaVersion": 1,
     "ttlMs": 600000,
