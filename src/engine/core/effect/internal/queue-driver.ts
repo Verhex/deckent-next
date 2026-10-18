@@ -34,8 +34,11 @@ export class TargetQueueDriver {
         try { candidate = await this.preparation.prepare(record, previous); }
         catch (error) {
           // Every refusal keeps its typed code on the ticket (view and audit); an untyped failure gets the preparation code, never null.
-          const reason = reasonOf(error) ?? 'QUEUE_PREPARATION_REFUSED';
-          const outcome = reason === 'PATCH_BASE_ADVANCED' ? 'conflict-needs-reattempt' : reason === 'QUEUE_AUTHORITY_REQUIRED' ? 'target-protected' : 'stale-refused';
+          const refused = reasonOf(error) ?? 'QUEUE_PREPARATION_REFUSED';
+          // D1a: a base-advanced ticket under delivery intent whose lineage already used the bound ends typed, owned by a human (no new attempt).
+          const reason = refused === 'PATCH_BASE_ADVANCED' && record.request.deliveryIntent && (record.request.reattempt?.count ?? 0) >= (this.bounds.reattempts ?? 0)
+            ? 'DELIVERY_REATTEMPT_EXHAUSTED' : refused;
+          const outcome = refused === 'PATCH_BASE_ADVANCED' ? 'conflict-needs-reattempt' : reason === 'QUEUE_AUTHORITY_REQUIRED' ? 'target-protected' : 'stale-refused';
           this.app.transition(record, { state: 'settled', outcome, reason }); this.parkSuffix(records, record.ordinal + 1); return;
         }
         record = this.app.transition(record, { state: 'verifying', candidate, effectCommandIds: [...this.preparation.effectIds(record)] });

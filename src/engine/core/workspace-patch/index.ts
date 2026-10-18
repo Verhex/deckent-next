@@ -46,3 +46,5 @@ export { assertIntegrationBase } from './internal/git-integration-base.js';
 export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY } from './internal/git-queue-target.js';
 export { createWorkspaceQueueEffects } from './internal/queue-effects.js';
 export { createWorkspaceQueueAdmission } from './internal/queue-admission.js';
+export { reattemptCommandIds, reattemptEligibility, reattemptGraph, stepDeliveryReattempt, stepWorkspaceQueueReattempt } from './internal/reattempt.js';
+export type { DeliveryReattemptPorts, ReattemptEffects, WorkspaceReattemptContext } from './internal/reattempt.js';

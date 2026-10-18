@@ -9,5 +9,7 @@
   "ttlMs": 600000,
   "verificationTimeoutMs": 300000,
   "revalidations": 2,
-  "candidateSlots": 2
+  "candidateSlots": 2,
+  "reattempts": 1,
+  "reattemptWindowMs": 21600000
 }

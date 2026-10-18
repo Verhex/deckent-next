@@ -48,6 +48,8 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'targetQueue.verificationTimeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [60000, 300000, 900000, 3600000] },
   'targetQueue.revalidations': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1, 2, 4, 8] },
   'targetQueue.candidateSlots': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8] },
+  'targetQueue.reattempts': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1, 2] },
+  'targetQueue.reattemptWindowMs': { kind: 'numeric', unit: 'ms', step: 60000, presets: [3600000, 21600000, 86400000] },
   'execution': { kind: 'container' },
   'cancellation': { kind: 'container' },
   'cancellationRuntime': { kind: 'container' },

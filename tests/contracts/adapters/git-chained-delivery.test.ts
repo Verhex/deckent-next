@@ -9,7 +9,8 @@ import { GitIntegrationTarget, GitIntegrationDelivery, GitIntegrationAdoption, G
 import { integrationManifestSchema, patchDigest, patchFile, patchExclusions, workspacePatchSchema, capturedWorkspacePatch, WorkspaceAdoptionApplication,
   WorkspaceDeliveryApplication, assertIntegrationBase, SnapshotBudget, type WorkspacePatch, type IntegrationDeliveryRecord, type IntegrationAdoptionRecord,
   type IntegrationAdoptionStore, type IntegrationDeliveryStore } from '#engine/index.js';
-import type { RunSnapshot } from '#domain/index.js';
+import { reattemptEligibility, reattemptGraph } from '#engine/index.js';
+import { queueServiceActor, targetQueueRequestSchema, type RunSnapshot, type TargetQueueRecord } from '#domain/index.js';
 
 const exec = promisify(execFile), roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -76,7 +77,17 @@ async function chain() {
     const before = await readBaseBlobs(lease, startOptions, budget(), changed.flatMap(path => { const entry = listing.get(path); return entry ? [[path, entry] as const] : []; }));
     return capturedWorkspacePatch(identity('d'), source, base, changed, before, after);
   };
-  return { git, base, targetRef, target, predecessor, deliver, adopt, dependent, raw: (args: string[]) => exec('/usr/bin/git', ['-C', sourceRoot, ...args]).then(out => out.stdout) };
+  /** The re-attempt's worker (D1a): a NEW Attempt of the same Task in a fresh workspace at the target's current version, no predecessor patch. */
+  const rerun = async (at: string, edit: Record<string, string>, id = { ...identity('d'), runId: 'queue-reattempt', attemptId: 'r1' }) => {
+    const broker = new GitWorkspaceBroker(startOptions), lease = await broker.allocate({ schemaVersion: 1, identity: id, baseCommit: at });
+    for (const [path, text] of Object.entries(edit)) await writeFile(join(lease.workspace, path), text);
+    const current = await new GitWorkspaceBroker(startOptions).captureSourceBase(at), currentSource = { schemaVersion: 1 as const, adapter: current.adapter, sourceFingerprint: current.sourceFingerprint };
+    const budget = () => new SnapshotBudget(limits, Date.now() + 10000), listing = await listBase(lease, startOptions, budget()), algorithm = hashAlgorithmOf(at);
+    const after = await readWorkspace(lease.workspace, budget(), { listing, algorithm }), changed = diffAgainstBase(listing, after, algorithm);
+    const before = await readBaseBlobs(lease, startOptions, budget(), changed.flatMap(path => { const entry = listing.get(path); return entry ? [[path, entry] as const] : []; }));
+    return capturedWorkspacePatch(id, currentSource, at, changed, before, after);
+  };
+  return { git, base, targetRef, target, predecessor, deliver, adopt, dependent, rerun, raw: (args: string[]) => exec('/usr/bin/git', ['-C', sourceRoot, ...args]).then(out => out.stdout) };
 }
 
 describe.skipIf(process.platform !== 'linux')('chained delivery (accepted-patch edge)', () => {
@@ -93,5 +104,35 @@ describe.skipIf(process.platform !== 'linux')('chained delivery (accepted-patch 
     // Today: the adopted predecessor's own commit is the intervening history that refuses the dependent.
     await expect(assertIntegrationBase(f.raw, d, adopted.toCommit, new SnapshotBudget(limits, Date.now() + 10000))).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
     await expect(f.target.observe(d)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+  });
+
+  it('alpha.47 S5b: the conflicting dependent is re-attempted once on the adopted base and then delivers; a second conflict is final', async () => {
+    const f = await chain();
+    const d = await f.dependent({ 'b.txt': 'b dep\n' }), adopted = await f.adopt(await f.deliver(f.predecessor));
+    await expect(f.target.observe(d)).rejects.toMatchObject({ code: 'PATCH_BASE_ADVANCED' });
+    // The product decision on the settled ticket: eligible exactly because the predecessor's own ticket was adopted on this target.
+    const graph = { schemaVersion: 4, revision: 1, criterionDefinitions: [{ id: 'exit', version: 1, description: 'Zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }],
+      tasks: [{ id: 'p', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'] }, { id: 'd', kind: 'coding', dependencies: [{ taskId: 'p', startFrom: 'accepted-patch' }], acceptanceCriteria: ['exit'] }] };
+    const run = { graph, progress: ['p', 'd'].map(taskId => ({ taskId, phase: 'accepted', unresolvedEffects: false, eligibility: { kind: 'immediate' } })),
+      bindings: ['p', 'd'].map(taskId => ({ identity: identity(taskId), observedKind: 'exited' })), execution: { tasks: ['p', 'd'].map(taskId => ({ taskId, profile: {} })) } } as unknown as RunSnapshot;
+    const binding = { schemaVersion: 1, installationId: 'i', adapter: { id: 'git', version: 1 }, resourceBinding: 'a'.repeat(64), target: { kind: 'git-ref', id: f.targetRef } } as const;
+    const ticket = (taskId: string, outcome: string, reattempt?: object) => ({ key: 'k', state: 'settled', outcome, reason: outcome === 'adopted' ? null : 'PATCH_BASE_ADVANCED', batchDigest: null,
+      request: targetQueueRequestSchema.parse({ schemaVersion: 1, commandId: `ticket-${taskId}`, identity: identity(taskId), target: binding, actor, payloadDigest: 'b'.repeat(64),
+        policyRevision: 'p', outputDigest: 'c'.repeat(64), acceptedRevision: 1, submittedAt: 1, deadline: 2, deliveryIntent: 'service-reattempt',
+        ...(reattempt ? { actor: queueServiceActor(actor), reattempt } : {}) }) }) as unknown as TargetQueueRecord;
+    expect(reattemptEligibility(ticket('d', 'conflict-needs-reattempt'), run, 1, () => 'workspace-only', [])).toBe('DELIVERY_REATTEMPT_NOT_ELIGIBLE');
+    expect(reattemptEligibility(ticket('d', 'conflict-needs-reattempt'), run, 1, () => 'workspace-only', [ticket('p', 'adopted')])).toBeNull();
+    expect(reattemptGraph(run, 'd').tasks).toEqual([{ id: 'd', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'] }]);
+    // The new Attempt runs on the adopted tip: its own change only, against the current version, and it delivers and adopts.
+    const again = await f.rerun(adopted.toCommit, { 'b.txt': 'b dep\n' });
+    expect(again.baseCommit).toBe(adopted.toCommit);
+    expect(again.changes.map(change => [change.path, change.before?.text ?? null, change.after?.text ?? null])).toEqual([['b.txt', 'b base\n', 'b dep\n']]);
+    await expect(f.target.observe(again)).resolves.toBeDefined();
+    const landed = await f.adopt(await f.deliver(again));
+    expect(landed).toMatchObject({ status: 'adopted', fromCommit: adopted.toCommit });
+    expect([await f.git('show', `${f.targetRef}:a.txt`), await f.git('show', `${f.targetRef}:b.txt`)]).toEqual(['a pred', 'b dep']);
+    // Bound 1: had the re-attempt met an advanced base again, its lineage would end typed for a human, not loop.
+    const second = ticket('d', 'conflict-needs-reattempt', { sourceCommandId: 'ticket-d', intentCommandId: 'ticket-d', count: 1, cause: 'PATCH_BASE_ADVANCED', approvedBy: actor });
+    expect(reattemptEligibility(second, run, 1, () => 'workspace-only', [ticket('p', 'adopted')])).toBe('DELIVERY_REATTEMPT_EXHAUSTED');
   });
 });
