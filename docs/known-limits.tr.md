@@ -220,3 +220,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **İşçiler arasındaki çakışmalar teslimde yakalanır, çalışırken önlenmez.** İki işçi ya da bir işçi ve bir kişi aynı
   dosyaları düzenlerse yama tabanı kontrolünde karşılaşır. Kaynak kilidi dışarıdaki bir kişiyi ya da bir ERP yazıcısını durdurmaz.
 - **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** İşçi başına henüz maliyet ya da kalite raporu yok.
+- **Defter (ledger), her sürecin paylaştığı tek bir yerel SQLite dosyasıdır.** Yazmalar sırayla yapılır; `storage.sqlite.busyTimeoutMs`
+  süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. *Geçici çözüm:*
+  komutu yeniden çalıştırın; yavaş ya da çok yüklü bir makinede süreyi `.deckent/config.json` içinde artırın. Açılışlar artık yazma kilidini
+  beklemez ve çalışan servis defterin yan dosyalarını yerinde tutar; bu, filo ölçeğinde değil, yüklü tek bir çekirdekte ölçüldü.

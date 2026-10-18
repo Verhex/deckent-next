@@ -220,3 +220,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Conflicts between workers are caught at delivery, not prevented while they work.** Two workers, or a worker and a person,
   editing the same files meet at the patch base check. A source lock does not stop an outside person or an ERP writer.
 - **A worker's resource use is measured in bounded local traces only.** There is no cost or quality report per worker yet.
+- **The ledger is one local SQLite file shared by every process.** Writes are serialized; a write that waits longer than
+  `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. *Workaround:*
+  retry the command; on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
+  lock and the running service keeps the ledger's side files in place; this was measured on one loaded core, not at fleet scale.
