@@ -1072,6 +1072,7 @@
   "terminal.viewport.below": "↓ aşağıda {count} satır daha · End en yeniye gider · PgDn kaydırır",
   "terminal.viewport.newMessages": "↓ {count} yeni mesaj · End en yeniye gider",
   "terminal.render.contextUnknown": "bağlam ?",
+  "terminal.composer.stashed": "Taslak kenarda · Ctrl+S geri getirir",
   "terminal.slash.deliver": "Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dala al",
   "terminal.activeWork.deliveryWaiting": "teslim bekliyor",
   "terminal.delivery.title": "Teslim · {title}",

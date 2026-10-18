@@ -28,7 +28,10 @@ kararlar tek tek gelir ("1/3"). "Hep izin ver" kendi kalıcı iznindir (`deckent
 ile kaldırılır). Mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
 Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut taslak/iptal davranışı sürer. Uzun pencere
 içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
-yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin altındaki "Aktif iş" özet satırı bu
+yükseklik bütçesi içinde imleci takip eder. Ctrl+S taslağın tamamını kenara koyar (yalnız bellekte; kaydedilmez, loglanmaz),
+boş satırda geri getirir (kenardaki taslak asla üzerine yazılmaz); Ctrl+_ gönderilmemiş son düzenlemeyi geri alır (kesintisiz
+yazım tek adımdır, gönderince silinir). Barın altındaki bilgi satırı sohbetin bağlam kullanımını da gösterir (`/context`
+ölçümü; ilkinden önce "bağlam ?"). `/watch-stop` gözlemi kapatır. Girişin altındaki "Aktif iş" özet satırı bu
 oturumun çalışan /do'sunu (planlanıyor ya da kalan onay süresiyle seni bekliyor) ve başlattığı Run'ları başlık, durum, geçen
 süre ve "+N daha" ile gösterir; kendiliğinden odak almaz. Ctrl+T tam listeyi girişin üstünde açar (↑↓, Esc geri): /do üzerinde Enter penceresine odaklar, Run üzerinde
 Enter o Run'ın penceresini açar; biten Run açıldıktan sonra şeritten çıkar. Pipe ve satır modu çıktısı değişmez.

@@ -29,7 +29,10 @@ decisions wait one at a time ("1/3"). "Always" is your own standing grant (`deck
 `deckent policy revoke`). Existing decision, reason and verified-TTY requirements apply.
 Escape closes or declines in a focused window; from input it retains the draft/cancel behavior. Long window
 bodies scroll internally with arrows, PageUp/PageDown and Home/End, with a visible row range. Multiline input
-follows its caret within a height budget. `/watch-stop` closes observation. Under input, the "Active work" summary row names
+follows its caret within a height budget. Ctrl+S puts the whole draft aside (memory only, never saved or logged) and, on an
+empty line, brings it back (a kept draft is never overwritten); Ctrl+_ undoes the last unsent edit (a typing run is one step,
+cleared on send). The information row under the bar also shows the conversation's context use (the `/context` measurement,
+"context ?" before the first one). `/watch-stop` closes observation. Under input, the "Active work" summary row names
 this session's running /do (planning, or waiting for you with the approval time left) and the Runs it started, with title,
 state, elapsed time and "+N more"; it never takes input by itself. Ctrl+T opens the full list above input (↑↓, Esc back): Enter on /do focuses its window, Enter on a
 Run opens that Run's window; a finished Run leaves the strip once opened. Pipe and line-mode output is unchanged.

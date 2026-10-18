@@ -15,7 +15,7 @@ const labels = {
   render: { assistant: 'bot', thinking: 'THINKING', thought: 'THOUGHT', elapsed: '{seconds}s', tokens: '{prompt}', reasoningTokens: '{count}', truncated: 'TRUNCATED',
     cancelled: 'CANCELLED', failed: 'FAILED', code: 'code', moreAbove: '{count} more above', queued: '{count} queued', tool: 'TOOL {name} {target}', toolRunning: 'RUNNING {tool} {seconds}s',
     toolStatus: {}, context: 'CTX', compacted: 'COMPACTED' },
-  composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS', slash: {} },
+  composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS', stashed: 'STASHED', slash: {} },
   focus: { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS', decide: 'DECIDE-HERE' },
   viewport: { below: 'BELOW {count} END', newMessages: 'NEW {count} END' },
   work: workSurfaceLabels('en'),

@@ -23,3 +23,40 @@ describe('1 — persistent context use under the bar', () => {
     expect(status).not.toContain('CTX'); expect(status).toContain('scope');
   });
 });
+
+describe('2/3 — draft stash (Ctrl+S) and edit undo (Ctrl+_)', () => {
+  const CTRL_S = '\u0013', UNDO = '\u001f';
+  const labels = { ...WORKLINE_TEST_LABELS, composer: { ...WORKLINE_TEST_LABELS.composer, stashed: 'STASHED' } };
+  const composerRow = (frame: string) => frame.split('\n').find(row => row.startsWith('│ > ')) ?? '';
+  it('puts a whole draft aside and brings it back only into an empty composer; a submit keeps the stash', async () => {
+    const sent: string[] = [];
+    const view = mountWorkline({ labels, completeTurn: async messages => { sent.push(String(messages.at(-1)?.content)); return 'ok'; } } as never, 100, { rows: 24 });
+    mounted.push(view.instance);
+    await until(() => view.stdout.frame.includes('READY'), 'ready');
+    for (const char of 'first draft') { view.stdin.write(char); await settle(3); }
+    view.stdin.write(CTRL_S); await settle(40);
+    expect(composerRow(view.stdout.frame)).not.toContain('first draft'); expect(view.stdout.frame).toContain('STASHED');
+    for (const char of 'quick question') { view.stdin.write(char); await settle(3); }
+    view.stdin.write(CTRL_S); await settle(40); // a stash is already kept: nothing is overwritten, the draft stays
+    expect(composerRow(view.stdout.frame)).toContain('quick question');
+    view.stdin.write('\r'); await until(() => sent.length === 1, 'sent'); expect(sent[0]).toBe('quick question');
+    expect(view.stdout.frame).toContain('STASHED'); // the stash survives the submit
+    view.stdin.write(CTRL_S); await settle(40);
+    expect(composerRow(view.stdout.frame)).toContain('first draft'); expect(view.stdout.frame).not.toContain('STASHED');
+  });
+  it('undoes unsent edits step by step (a typing run is one step), never resubmits, and forgets the history on submit', async () => {
+    const sent: string[] = [];
+    const view = mountWorkline({ labels, completeTurn: async messages => { sent.push(String(messages.at(-1)?.content)); return 'ok'; } } as never, 100, { rows: 24 });
+    mounted.push(view.instance);
+    await until(() => view.stdout.frame.includes('READY'), 'ready');
+    for (const char of 'hello world') { view.stdin.write(char); await settle(3); }
+    view.stdin.write('\u0017'); await settle(30); // Ctrl+W deletes "world"
+    expect(composerRow(view.stdout.frame)).not.toContain('world');
+    view.stdin.write(UNDO); await settle(30); expect(composerRow(view.stdout.frame)).toContain('hello world');
+    view.stdin.write(UNDO); await settle(30); expect(composerRow(view.stdout.frame)).not.toContain('hello');
+    expect(sent).toEqual([]);
+    for (const char of 'abc') { view.stdin.write(char); await settle(3); }
+    view.stdin.write('\r'); await until(() => sent.length === 1, 'sent');
+    view.stdin.write(UNDO); await settle(30); expect(composerRow(view.stdout.frame)).not.toContain('abc'); expect(sent).toEqual(['abc']);
+  });
+});

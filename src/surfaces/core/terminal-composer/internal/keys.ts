@@ -8,7 +8,7 @@ import type { ComposerKey } from './reducer.js';
 
 const CTRL: Readonly<Record<string, ComposerKey>> = {
   a: { type: 'move', to: 'home' }, e: { type: 'move', to: 'end' }, b: { type: 'move', to: 'left' }, f: { type: 'move', to: 'right' },
-  p: { type: 'move', to: 'up' }, n: { type: 'move', to: 'down' }, w: { type: 'delete', span: 'spaceWordBack' },
+  p: { type: 'move', to: 'up' }, n: { type: 'move', to: 'down' }, w: { type: 'delete', span: 'spaceWordBack' }, s: { type: 'stash' },
   u: { type: 'delete', span: 'toStart' }, k: { type: 'delete', span: 'toEnd' }, y: { type: 'yank' }, c: { type: 'interrupt' },
   d: { type: 'eof' }, r: { type: 'search' }, g: { type: 'escape' },
 };
@@ -19,6 +19,8 @@ const META: Readonly<Record<string, ComposerKey>> = {
 export function composerKey(input: string, key: Key): ComposerKey | null {
   const word = key.ctrl || key.meta;
   if (key.return) return key.shift || key.meta ? { type: 'newline' } : { type: 'submit' };
+  // Ctrl+_ (0x1f; Ctrl+/ on many terminals) undoes the last unsent edit (harness gap 3).
+  if (input === '\u001f' || (key.ctrl && (input === '_' || input === '/'))) return { type: 'undo' };
   if (input === '\n') return { type: 'newline' };
   if (key.tab) return key.shift ? null : { type: 'tab' };
   if (key.escape) return { type: 'escape' };

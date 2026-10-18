@@ -1,0 +1,4 @@
+{
+  "note": "Harness gap 3 (owner 2026-10-18): how many unsent edits Ctrl+_ can step back through (a typing run is one step). Data, not code.",
+  "undoSteps": 100
+}

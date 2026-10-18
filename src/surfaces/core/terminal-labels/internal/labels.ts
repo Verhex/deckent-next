@@ -46,7 +46,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
   const catalog = MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'];
   return { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
     exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
-    placeholder: t('terminal.workline.placeholder', {}, locale),
+    placeholder: t('terminal.workline.placeholder', {}, locale), stashed: t('terminal.composer.stashed', {}, locale),
     slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
       .map(key => [key, catalog[key] ?? key])) };
 }

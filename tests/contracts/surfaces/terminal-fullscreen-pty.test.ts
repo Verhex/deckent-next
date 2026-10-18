@@ -92,4 +92,13 @@ describe.skipIf(process.platform === 'win32')('full window on a real PTY (produc
     expect(run.output.slice(0, run.marks[3]).includes('DECIDED'), run.output.slice(Math.max(0, run.output.indexOf('DECIDED') - 600), run.output.indexOf('DECIDED') + 40)).toBe(false); expect(run.output.slice(run.marks[3])).toContain('DECIDED deny');
     expect(run.screen(4).join('\n')).not.toContain('Approval needed');
   }, 120_000);
+
+  it('Ctrl+S puts the draft aside and brings it back, Ctrl+_ undoes, and neither key ever answers a card (real TTY: no XOFF freeze)', async () => {
+    const run = await pty([['READY', 'draft-abc', 0.2], ['draft-abc', '\u0013', 0.3], ['STASHED', '\u0013', 0.3], ['READY', 'X', 0.2], ['draft-abcX', '\u001f', 0.3],
+      ['READY', '\u0013', 0.3], ['STASHED', 'card\r', 0.2], ['Approval needed', '\u0013\u001f', 0.6], ['Approval needed', '', 0.2]]);
+    const composer = (mark: number) => run.screen(mark).find(row => row.startsWith('│ > ')) ?? '';
+    expect(composer(3)).toContain('draft-abc'); // restored
+    expect(composer(5)).toContain('draft-abc'); expect(composer(5)).not.toContain('draft-abcX'); // undone
+    expect(run.output.slice(0, run.marks[8]).includes('DECIDED')).toBe(false);
+  }, 120_000);
 });
