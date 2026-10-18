@@ -18,7 +18,8 @@ import { freshContextHistory } from './workline-history.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote,
-  FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
+  FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT,
+  WheelContext, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -146,6 +147,8 @@ export interface WorklineProps {
   readonly viewportRows?: number;
   /** Decision arming override (tests); production uses the registry value (`terminal-window` decision.json). */
   readonly decisionArmMs?: number;
+  /** The full window's mouse wheel (SGR reports taken out of the input by `runTerminalWorkline`). */
+  readonly wheel?: WheelSource;
   /** The opening frame drawn as the first block of the full-window conversation (until `/clear`). */
   readonly startup?: WorklineStartup;
   /** The full-window conversation as text, read once after the view closes so it is left in the terminal's own scrollback. */
@@ -669,7 +672,7 @@ export function WorklineApp(props: WorklineProps) {
   const activityNode = activeLabels && stripItems.length ? <ActiveWorkSummary items={stripItems} labels={activeLabels} /> : fullAccessNode ?? <Text> </Text>;
   const layout = fullscreenMode
     ? <FullscreenWorkline
-      viewport={<ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} />}
+      viewport={<WheelContext.Provider value={props.wheel ?? null}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} /></WheelContext.Provider>}
       above={<>
         {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} collapsed /> : null}
         {windowsNode}</>}
@@ -706,7 +709,7 @@ export function WorklineApp(props: WorklineProps) {
 
 const EMPTY_ROWS: readonly LedgerRow[] = Object.freeze([]);
 /** Language-neutral until the catalog words are passed (tests, hosts without the catalog). */
-const NEUTRAL_VIEWPORT_LABELS: ChatViewportLabels = Object.freeze({ below: '+{count} PgDn · Ctrl+End' });
+const NEUTRAL_VIEWPORT_LABELS: ChatViewportLabels = Object.freeze({ below: '+{count} PgDn · End', newMessages: '+{count} · End' });
 
 export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly labels: WorklineLabels;
@@ -728,19 +731,25 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
   const fullscreen = out.isTTY === true && props.clearScreen !== false && props.fullscreen !== false;
   const transcriptExit: { current: (() => string) | null } = { current: null };
   if (startup && !fullscreen) writeStartup(out, startup, palette);
+  // Full window on a real TTY: mouse reports are taken out of the input (wheel = scroll, everything else dropped) and reporting is switched
+  // off again on every exit path this process controls (unmount, abort, a thrown error, process exit).
+  const realInput = stdin ?? process.stdin, mouse = fullscreen && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
+  const mouseOff = () => { try { out.write(MOUSE_REPORTING_OFF); } catch { /* the terminal is gone */ } };
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-    createElement(WorklineApp, { ...props, fullscreen, ...(fullscreen && startup ? { startup } : {}), transcriptExit }));
+    createElement(WorklineApp, { ...props, fullscreen, ...(fullscreen && startup ? { startup } : {}), transcriptExit, ...(mouse ? { wheel: mouse.wheel } : {}) }));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),
-    { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true } : {}), ...(stdin ? { stdin } : {}),
+    { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
       ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
       stdout: props.clearScreen === false ? out : mainScreenOutput(out) });
   const stop = () => instance.unmount();
   signal?.addEventListener('abort', stop, { once: true });
+  if (mouse) { out.write(MOUSE_REPORTING_ON); process.once('exit', mouseOff); }
   try { await instance.waitUntilExit(); }
   finally {
     signal?.removeEventListener('abort', stop);
+    if (mouse) { mouseOff(); process.off('exit', mouseOff); mouse.close(); }
     // The conversation goes to the main screen after the alternate screen is left, so it stays in the terminal's own scrollback.
     if (fullscreen) { try { const text = transcriptExit.current?.(); if (text) out.write(`${text}\n`); } catch { /* the view is gone; nothing to restore */ } }
     const input = stdin ?? process.stdin;

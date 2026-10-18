@@ -159,8 +159,11 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   Ctrl+End re-follow, a "lines below" row while anchored); rows are laid out once per width by `renderToString` with the providers
   `Static` used (`workline-transcript.tsx`), outside React's render (a nested reconciler pass crashes Yoga), so only shown rows are laid
   out. The opening banner and the how-to line are the first viewport block; on exit the conversation is written to the main screen
-  (native scrollback); `/clear` resets the view and sends ED 3 only. No mouse capture (native selection kept; wheel scrolling is an open
-  limit). `terminal.layout: inline` (and non-TTY / TERM=dumb) keeps the R3 inline layout: the live area bounded to rows − 1, the
+  (native scrollback); `/clear` resets the view and sends ED 3 only. Mouse (owner 2026-10-18, Claude Code fullscreen model): SGR reporting
+  (?1000/?1006) only while the full window is shown, switched off on unmount/abort/error/process exit; `mouse.ts` takes reports out of the
+  input before Ink parses it (wheel → `WheelContext` → three lines a notch; clicks dropped), so no mouse event reaches the composer or a
+  card; native selection with the terminal's modifier (Shift; Option in iTerm2). Jump to latest: while anchored the last row counts new
+  entries ("↓ N new messages · End") or lines; End/Home jump while anchored (Ctrl+End/Ctrl+Home always), streaming never moves the view. `terminal.layout: inline` (and non-TTY / TERM=dumb) keeps the R3 inline layout: the live area bounded to rows − 1, the
   measured footer never shrinks, completed records print once through Ink `Static` (no live-area transcript replay). Composer draft rows follow the caret.
   Slice 2 active work strip (`terminal-work/active-work.tsx`; in the full window one `ActiveWorkSummary` row under the bar, the list above the bar only while Ctrl+T selects it): a footer view over the running /do (planning, waiting with approval
   time left) and the Runs `useRunCompletion` registered (state from the same snapshots; finished rows leave once opened). It owns no

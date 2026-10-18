@@ -5,11 +5,13 @@
 Etkileşimli terminal tam penceredir (terminalin alternatif ekranı, Claude Code tam ekran görünümü gibi): sohbet üst alanda
 kayar, giriş barı oturum boyunca aynı alt satırda kalır (yalnız pencere boyutu ya da kendi çok satırlı taslağınız onu oynatır),
 altında sabit yükseklikte bir bilgi alanı durumu, modeli ve modu, Aktif iş özetini (ya da tam erişim satırını) ve tuş
-ipuçlarını gösterir. Sohbet en yeni satırı izler; PgUp/PgDn yarım görünüm kaydırır, Ctrl+Home ilk satıra, Ctrl+End en yeniye
-döner (geriye okurken bir satır aşağıda kaç satır olduğunu söyler). Pencere ve kartlar giriş barının hemen üstünde açılır,
+ipuçlarını gösterir. Sohbet en yeni satırı izler; fare tekerleği her çentikte üç satır, PgUp/PgDn yarım görünüm kaydırır,
+Ctrl+Home ilk satıra, Ctrl+End en yeniye döner; geriye okurken bir satır kaç yeni mesaj (ya da satır) geldiğini söyler ve
+End/Home en yeniye/ilk satıra atlar (akış görünümü aşağı çekmez; en altta yeniden izler). Pencere ve kartlar giriş barının hemen üstünde açılır,
 ekranın en çok yarısını kaplar ve içeride kayar; sohbet alanını daraltır, barı oynatmaz. Çıkışta sohbet normal ekrana yazılır,
-böylece terminalin kaydırma geçmişinde kalır; `/clear` görünümü ve o geçmişi boşaltır. Fare yakalanmaz (terminalin kendi seçme
-ve kopyalaması çalışır; tekerlek görünümü henüz kaydırmaz). `terminal.layout: inline` önceki satır içi düzeni korur (çalışırken
+böylece terminalin kaydırma geçmişinde kalır; `/clear` görünümü ve o geçmişi boşaltır. Tam pencere yalnız gösterilirken fare
+tekerleğini alır (tıklamalar yok sayılır ve hiçbir kartı cevaplamaz); metni Claude Code'daki gibi terminalin değiştirici tuşuyla
+seçin — çoğu terminalde Shift, iTerm2'de Option, Terminal.app'te Fn. `terminal.layout: inline` önceki satır içi düzeni korur (çalışırken
 yerel kaydırma geçmişi; ekran okuyucuyla önerilir); `terminal.viewportRows` (varsayılan 2000) görünümün ne kadar geriye
 kaydığını sınırlar. Mod renkleri: standart soluk, tam otomatik kendi rengi, tam erişim uyarı tonunda sakin `⏵⏵⏵` işaretiyle
 (NO_COLOR: modu sözcükler taşır). Komutunuzla veya seçiminizle açılan

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Writable, PassThrough } from 'node:stream';
 import { cells } from '#surfaces/core/terminal-render/index.js';
-import { fullscreenFrameRows, fullscreenInfoRows, scrollViewport, viewportLines, viewportStart, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
+import { fullscreenFrameRows, fullscreenInfoRows, scrollViewport, takeMouseReports, viewportLines, viewportStart, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
@@ -181,5 +181,15 @@ describe('viewport scroll model', () => {
     // A block that left the bounded history: the oldest line still there.
     expect(viewportLines(blocks([5, 5]), { key: 'gone', line: 3 }, 4).lines[0]).toBe('b0:0');
     expect(viewportLines(blocks([]), null, 4)).toEqual({ lines: [], below: null });
+  });
+});
+
+describe('mouse reports', () => {
+  it('takes wheel notches (with modifiers) out of the input, drops clicks, keeps keys and carries a report cut at the end of a read', () => {
+    const read = takeMouseReports('a\u001b[<64;3;4Mb\u001b[<65;3;4M\u001b[<0;1;1M\u001b[<0;1;1mc\u001b[<68;1;1M\u001b');
+    expect(read).toEqual({ text: 'abc\u001b', wheel: [-1, 1, -1], carry: '' });
+    const cut = takeMouseReports('x\u001b[<65;1');
+    expect(cut).toEqual({ text: 'x', wheel: [], carry: '\u001b[<65;1' });
+    expect(takeMouseReports(';1M\r', cut.carry)).toEqual({ text: '\r', wheel: [1], carry: '' });
   });
 });

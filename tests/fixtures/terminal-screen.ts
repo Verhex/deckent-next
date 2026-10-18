@@ -32,7 +32,7 @@ export function terminalBuffers(output: string, columns: number, rows = 40): Rea
     // DEC 1049: save the cursor and switch to a cleared alternate screen; `l` restores the main screen and the cursor.
     if (parameters === '?1049' && command === 'h') { if (!saved) { saved = { lines, x, y }; lines = Array.from({ length: rows }, () => []); } return; }
     if (parameters === '?1049' && command === 'l') { if (saved) { ({ lines, x, y } = saved); saved = null; } return; }
-    if (command === 'm' || (['h', 'l'].includes(command) && ['?25', '?2004', '?2026'].includes(parameters))
+    if (command === 'm' || (['h', 'l'].includes(command) && ['?25', '?1000', '?1006', '?2004', '?2026'].includes(parameters))
       || (command === 'u' && /^[><=?][\d;]*$/u.test(parameters))) return;
     if (command === 'A') y = Math.max(0, y - n);
     else if (command === 'B') y = Math.min(rows - 1, y + n);
