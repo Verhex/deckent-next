@@ -95,7 +95,22 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
   ])('a shell-parse or program-resolution differential keeps the card: %s', (command, detail) => {
     expect(reading(command)).toMatchObject({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
   });
-  it.each(['cat -- package.json', "cat 'package.json'", 'cd /tmp/p; cat package.json', 'cd src && head -3 ../package.json', 'cat "$X" package.json 2>/dev/null', 'wc -l < /dev/null package.json'])('a plain argument still reads: %s', command => {
+  // Allowlist shape (second security re-review, 6f987adf): an unknown flag, a long option, a non-discard redirection, a glob, an expansion or a
+  // case-folded program token was tolerated before and now keeps the card.
+  it.each([
+    ['cat --show-all package.json', 'package.json'], ['grep -f x package.json', 'package.json'], ['ls --color=always package.json', 'package.json'],
+    ['wc --files0-from=x package.json', 'package.json'], ['head -z package.json', 'package.json'], ['diff --to-file=x package.json', 'package.json'],
+    ['CAT package.json', 'package.json'], ['cat package.json >x', 'package.json'], ['cat package.json 2>err.txt', 'package.json'], ['cat * package.json', 'package.json'],
+    ['cut --output-delimiter=x -f1 package.json', 'package.json'], ['sort package.json', 'package.json'], ['nl package.json', 'package.json'], ['od package.json', 'package.json'],
+    ['cat package.json $X', 'package.json'], ['echo $(id); cat package.json', 'package.json'], ['grep -e "$P" package.json', 'package.json'],
+  ])('allowlist: not modelled, so the card stays: %s', (command, detail) => {
+    expect(reading(command)).toMatchObject({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
+  });
+  it.each(['ls -la .github', 'head -n 5 package.json', 'head -5 package.json', 'tail -n5 package.json', 'grep -rn "version" package.json', 'grep -e x -i package.json',
+    "jq -r '.name | ascii_downcase' package.json", 'cut -d, -f1 package.json', 'wc -lc package.json 2>&1', 'diff -U3 package.json other.json'])('allowlist: modelled read: %s', command => {
+    expect(reading(command)).toEqual({ contained: true, reasonCode: 'CONTAINED' });
+  });
+  it.each(['cat -- package.json', "cat 'package.json'", 'cd /tmp/p; cat package.json', 'cd src && head -3 ../package.json', 'cat package.json 2>/dev/null'])('a plain argument still reads: %s', command => {
     expect(reading(command)).toEqual({ contained: true, reasonCode: 'CONTAINED' });
   });
   it('without a read-only floor in the run\'s view (host realm, full access, an approved writable view) a floor name still asks', () => {

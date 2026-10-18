@@ -1,6 +1,7 @@
 import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PROGRAM_ALIASES, XARGS_PROGRAMS } from './programs.js';
 import { NETWORK_PROGRAMS, PACKAGE_PROGRAMS } from './mutation.js';
 import { scanShell, shellWords } from './risk.js';
+import { readsOnlyModelled } from './floor-read.js';
 import type { ShellDialect } from './classify.js';
 
 /**
@@ -16,8 +17,8 @@ import type { ShellDialect } from './classify.js';
  * - a word that names a protected path (the write floor, the product state): the realm keeps existing floor paths read-only, but a
  *   floor path that does not exist yet can only be seen by name. Owner 2026-10-18 ("okuma kartı kalksın", Jev 5e6dd7aa): `readOnlyFloor`
  *   names the floor paths the run's own view binds read-only and readable (the caller passes it only then: an enforced sandbox, an
- *   unattended posture, never the product state); such a name is no reason for a card when a read-only program reads it as a plain
- *   argument — never as a redirection target or an option's value, never for any other program (a write, rename or delete still asks).
+ *   unattended posture, never the product state); such a name is no reason for a card only as an operand of a fully modelled read
+ *   segment (`readsOnlyModelled`, an allowlist per program) — anything not modelled, any other program or a write still asks.
  * The destructive table is not here: its only owner is the risk tier (`shell-destructive`), which no mode lowers.
  */
 export type ShellContainmentReason = 'CONTAINED' | 'PROGRAM_FLOOR' | 'PROGRAM_UNKNOWN' | 'PROCESS_SUBSTITUTION' | 'PROTECTED_NAME' | 'UNPARSEABLE'
@@ -32,14 +33,11 @@ const PLAIN_PROGRAM = /^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/u;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 const FIND_ACTIONS: ReadonlySet<string> = new Set(['-exec', '-execdir', '-ok', '-okdir']);
 const REDIRECTION = /^(?:\d*|&)(?:>>|>\||>&|>|<)/u;
-/** Security re-review of 03d82341 (fail closed): the tolerance holds only for a plain path word (no expansion, quoting residue or option)
- * right after a word without `<`/`>` (any redirection form: `<>`, `{fd}>`, `n>|`, an escaped `\>`), and never in a command that may change
- * what a program name resolves to or how the shell reads it (an assignment such as `PATH=`, aliases, functions, `hash`, `enable`, …). */
-const PLAIN_PATH = /^[A-Za-z0-9_./@+][A-Za-z0-9_./@+-]*$/u;
+/** Security re-reviews of 03d82341/6f987adf (fail closed): the floor-read tolerance holds only in a fully modelled read segment
+ * (`readsOnlyModelled`: an allowlist per program) and never in a command that may change what a program name resolves to or how the shell
+ * reads it (any assignment such as `PATH=`, a substitution, aliases, functions, `hash`, `enable`, …). */
 const RESOLUTION_CHANGERS: ReadonlySet<string> = new Set(['alias', 'unalias', 'function', 'hash', 'enable', 'shopt', 'set', 'unset', 'export', 'declare', 'typeset', 'readonly',
   'local', 'trap']);
-/** Programs that only read the files they are given (no option of theirs writes one): a read-only floor name may be their argument. */
-const READ_ONLY_PROGRAMS: ReadonlySet<string> = new Set(['cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 'ls', 'stat', 'diff', 'cmp', 'cut', 'nl', 'od', 'md5sum', 'sha1sum', 'sha256sum', 'jq']);
 const verdict = (contained: boolean, reasonCode: ShellContainmentReason, detail?: string): ShellContainmentVerdict =>
   Object.freeze(detail === undefined ? { contained, reasonCode } : { contained, reasonCode, detail });
 const onProgramFloor = (name: string) => PRIVILEGE_PROGRAMS.has(name) || INTERPRETER_PROGRAMS.has(name) || EVAL_PROGRAMS.has(name) || XARGS_PROGRAMS.has(name)
@@ -52,7 +50,7 @@ export function classifyShellContainment(command: string, protectedName: (path: 
   const scan = scanShell(command);
   if (scan.malformed) return verdict(false, 'UNPARSEABLE');
   if (scan.segments.length === 0) return verdict(false, 'EMPTY_COMMAND');
-  const changes = scan.segments.some(segment => (shellWords(segment) ?? ['(']).some((word, at, all) => ASSIGNMENT.test(word) || word.includes('(')
+  const changes = scan.segments.some(segment => (shellWords(segment) ?? ['(']).some((word, at, all) => ASSIGNMENT.test(word) || /[($`]/u.test(word) || word.includes(SUBSTITUTION)
     || (RESOLUTION_CHANGERS.has(word) && all.slice(0, at).every(prior => KEYWORDS.has(prior)))));
   const floorRead = changes ? undefined : readOnlyFloor;
   for (const segment of scan.segments) {
@@ -73,12 +71,12 @@ export function classifyShellContainment(command: string, protectedName: (path: 
       if (onProgramFloor(name)) return verdict(false, 'PROGRAM_FLOOR', name);
       if (name === 'env' && args.some(arg => !arg.startsWith('-') && !ASSIGNMENT.test(arg))) return verdict(false, 'PROGRAM_FLOOR', 'env');
       if (name === 'find' && args.some(arg => FIND_ACTIONS.has(arg))) return verdict(false, 'PROGRAM_FLOOR', 'find');
-      reader = READ_ONLY_PROGRAMS.has(name);
+      reader = floorRead !== undefined && head === raw && readsOnlyModelled(raw, args);
     }
     for (const [position, word] of words.entries()) {
       const value = pathOfWord(word);
       if (value === null || !protectedName(value)) continue;
-      const read = reader && position > index && value === word && PLAIN_PATH.test(word) && !/[<>]/u.test(words[position - 1] ?? '') && floorRead?.(value) === true;
+      const read = reader && position > index && value === word && floorRead?.(value) === true;
       if (!read) return verdict(false, 'PROTECTED_NAME', value);
     }
   }
