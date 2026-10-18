@@ -7,7 +7,7 @@ export type { RunView } from './internal/view.js';
 export { RunCancellationCoordinator } from './internal/cancellation.js';
 export type { RunCancellationSettlement, RunCancellationSettlementStore } from './internal/settlement.js';
 export type { RunCancellationDispatchStore, RunCancellationOutcome } from './internal/cancellation.js';
-export { RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema } from './internal/admission.js';
+export { RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, systemOrderedGraph } from './internal/admission.js';
 export type { RunAdmission, RunAdmissionContext, RunDeliveryAdmission, RunWorkspacePin } from './internal/admission.js';
 export { cancellationDeliverySchema, cancellationDeliveryLimitsSchema, CancellationDeliveryError } from './internal/delivery-port.js';
 export type { CancellationDelivery, CancellationDeliveryLimits, CancellationDeliveryOutcome, CancellationDeliveryClaim, CancellationDeliveryClaimResult, CancellationDeliveryStore } from './internal/delivery-port.js';
@@ -46,7 +46,7 @@ export { runControlCommandSchema, runProgressionParkCommandSchema, proposeRunLif
 export { RunCreationAuthority } from './internal/authority.js';
 export { renderRunCreateApprovalSummary } from './internal/approval-summary.js';
 
-export { RunProposalApplication, RunProposalInspectionApplication } from './internal/proposal-application.js';
+export { RunProposalApplication, proposalRunGraph, RunProposalInspectionApplication } from './internal/proposal-application.js';
 export type { RunProposalContext, RunProposalResult } from './internal/proposal-application.js';
 export { runProposalQuerySchema, runProposalRecordSchema, parseRunProposal, parseRunProposalRecord, runProposalDigest } from './internal/proposal-contract.js';
 export type { RunProposalQuery, RunProposalRecord, RunProposalStore } from './internal/proposal-contract.js';

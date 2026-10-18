@@ -52,5 +52,6 @@ export function renderQueueStatus(view: TargetQueueView, locale: Locale): string
   return t('queue.window.status', { targetLabel: word(view.display.labelKey, locale), target: text(view.target.id), basisLabel: word(view.display.basisKey, locale), basis: view.basis?.effective ?? '—', versionLabel: word(view.display.versionKey, locale), version: view.basis?.candidate ?? '—', command: view.commandId, position: view.position ?? '—', state: word(`queue.state.${view.state}`, locale),
     // The typed cause stands next to the outcome (a settled refusal is not only "stale-refused"); rendered through the shared error registry.
     outcome: [view.outcome ? word(`queue.outcome.${view.outcome}`, locale) : '', view.reason ? ErrorRegistry.createError(view.reason, { locale }).message : ''].filter(Boolean).join(' · ') || '—',
-    owner: word(`queue.owner.${view.responsibility}`, locale), next: word(view.nextAction === 'prepare-current' ? view.display.prepareActionKey : `queue.next.${view.nextAction}`, locale) }, locale);
+    owner: word(`queue.owner.${view.responsibility}`, locale), next: word(view.nextAction === 'prepare-current' ? view.display.prepareActionKey : `queue.next.${view.nextAction}`, locale) }, locale)
+    + (view.delegation ? '\n' + t('queue.delegation.submittedFor', { human: text(view.delegation.grantedBy.id), run: text(view.delegation.runId), requeues: view.delegation.requeues }, locale) : '');
 }

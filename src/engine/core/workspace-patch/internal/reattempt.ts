@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition,
+import { isConflictEdge, queueApprover, queueServiceActor, sameAttemptIdentity, taskGraphSchema, type AttemptIdentity, type ExecutionProfileDefinition,
   type VerifiedPrincipal, type RunSnapshot, type TargetQueueRecord, type TargetQueueRequest, type TaskGraph } from '#domain/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 import type { QueueReattemptView, TargetQueueApplication } from '#engine/core/effect/index.js';
@@ -35,7 +35,8 @@ export function reattemptEligibility(record: TargetQueueRecord, run: RunSnapshot
       && (row.outcome === 'adopted' || row.outcome === 're-prepared+adopted'));
   };
   // A dependent re-runs alone on the current base, so each accepted-patch predecessor must already be adopted there; inputs are not re-wired.
-  if (task.inputs?.length || task.dependencies.some(edge => typeof edge !== 'string' && edge.startFrom === 'accepted-patch' && !adopted(edge.taskId)))
+  // A system scope-conflict edge only ordered the two tasks (no content dependency), so it never holds the re-attempt (D7a).
+  if (task.inputs?.length || task.dependencies.some(edge => typeof edge !== 'string' && edge.startFrom === 'accepted-patch' && !isConflictEdge(edge) && !adopted(edge.taskId)))
     return 'DELIVERY_REATTEMPT_NOT_ELIGIBLE';
   return null;
 }

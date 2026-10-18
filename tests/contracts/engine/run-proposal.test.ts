@@ -280,3 +280,56 @@ it('non-metered proposal cannot admit an actual metered execution profile in the
     } };
   expect((await f.app(f.proposals, port).propose(proposal)).proposal).toMatchObject({ status: 'parked', reason: 'RUN_PROPOSAL_BASIS_STALE' }); noRun(f);
 });
+
+// alpha.47 R4 (owner D7a + D2b): system order edges and a human's per-Run delivery intent ride the approved proposal.
+const order = (id: string) => ({ ...proposal.graph.tasks[0]!, id, resources: [{ kind: 'erp.order', id: '42' }] });
+const conflicting: RunProposal = { ...proposal, graph: { ...proposal.graph, schemaVersion: 5, tasks: [order('approve'), order('invoice')] } };
+const intent = { target: { kind: 'git-ref', id: 'refs/heads/deckent/main' }, mode: 'enqueue-accepted' } as const;
+it('D7a: the admitted Run carries the system order edge, the proposal keeps the authored graph and the sealed admission input binds the edge', async () => {
+  const f = await fixture(), first = await f.app().propose(conflicting);
+  expect(first.proposal.proposal.graph).toEqual(conflicting.graph);
+  const run = await f.store.loadRun('s', 'r');
+  expect(run!.graph.tasks[1]!.dependencies).toEqual([{ taskId: 'approve', startFrom: 'accepted-patch', origin: 'scope-conflict' }]);
+  const { encodeCommandProjection } = await import('#domain/index.js');
+  const sealed = f.audit.load('s', first.proposal.authority!.decision.eventId)!, admission = (graph: unknown) => sha256(encodeCommandProjection('run-admission:1',
+    { schemaVersion: 1, commandId: 'propose', scopeId: 's', runId: 'r', graph, proposal: first.proposal.binding }));
+  expect(sealed.event.subject).toMatchObject({ inputDigest: admission(run!.graph) });
+  expect(admission(run!.graph)).not.toBe(admission(conflicting.graph)); // the order edge changes what the human's decision binds
+  expect(await f.app().propose(conflicting)).toEqual(first); // replay meets the same ordered graph
+});
+it('D7a: an authored system edge is refused before any record', async () => {
+  const f = await fixture(), task = order('invoice');
+  const forged = { ...conflicting, graph: { ...conflicting.graph, tasks: [order('approve'), { ...task, dependencies: [{ taskId: 'approve', startFrom: 'accepted-patch', origin: 'scope-conflict' }] }] } } as RunProposal;
+  await expect(f.app().propose(forged)).rejects.toMatchObject({ code: 'RUN_PROPOSAL_GRAPH_INVALID' }); noRun(f);
+  expect(f.db.prepare('SELECT count(*) AS n FROM run_proposals').get()!.n).toBe(0);
+});
+it('D2b: a delivery intent is part of the digest, always asks the human on the card and binds the human proposer as grantor', async () => {
+  const f = await fixture(true), { runProposalDigest } = await import('#engine/index.js');
+  expect(runProposalDigest({ ...proposal, delivery: intent })).not.toBe(runProposalDigest(proposal));
+  expect(runProposalDigest({ ...proposal, delivery: { ...intent, target: { ...intent.target, id: 'refs/heads/other' } } })).not.toBe(runProposalDigest({ ...proposal, delivery: intent }));
+  const pending = await f.app().propose({ ...proposal, delivery: intent });
+  // Standing low-risk admission would have created the Run at once; an intent never skips the human card.
+  expect(pending.proposal).toMatchObject({ status: 'pending', binding: { delivery: { ...intent, grantedBy: proposal.proposer } } }); noRun(f);
+  const card = await f.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: pending.proposal.approval!.approvalId });
+  expect(card!.request.summary).toContain('Delivery intent'); expect(card!.request.summary).toContain('refs/heads/deckent/main');
+  await f.decide();
+  const accepted = await f.app().propose({ ...proposal, delivery: intent });
+  expect(accepted.proposal.status).toBe('accepted'); expect(accepted.run!.proposal).toMatchObject({ delivery: { ...intent, grantedBy: proposal.proposer } });
+  expect((await f.store.loadRun('s', 'r'))!.authority!.approval).toBeDefined();
+});
+it('D2b: an MCP (AI) proposer can never obtain a delivery intent, even before any card', async () => {
+  const f = await fixture(false), ref = mcpPrincipalRef(principal);
+  f.state.principal = { ...principal, ...ref, id: 'mcp-proposer' };
+  await expect(f.app().propose({ ...proposal, delivery: intent, proposer: { id: 'mcp-proposer', issuer: ref.issuer, subject: ref.subject } }))
+    .rejects.toMatchObject({ code: 'DELIVERY_INTENT_NOT_ADMITTED' });
+  noRun(f); expect(f.approvals.list('s', null, 10)).toEqual([]);
+});
+it('D2b: a stored binding whose intent differs from the approved proposal is corrupt', async () => {
+  const f = await fixture(true); await f.app().propose({ ...proposal, delivery: intent });
+  const { parseRunProposalRecord } = await import('#engine/index.js'), record = (await f.proposals.loadProposal('s', 'propose'))!;
+  const code = (input: unknown) => { try { parseRunProposalRecord(input); return null; } catch (error) { return (error as DeckentError).code; } };
+  expect(code(record)).toBeNull();
+  expect(code({ ...record, binding: { ...record.binding, delivery: { ...record.binding.delivery!, grantedBy: { id: 'other', issuer: 'os', subject: '2' } } } })).toBe('RUN_PROPOSAL_CORRUPT');
+  expect(code({ ...record, binding: { ...record.binding, delivery: undefined } })).toBe('RUN_PROPOSAL_CORRUPT');
+  expect(code({ ...record, proposal: { ...record.proposal, delivery: undefined } })).toBe('RUN_PROPOSAL_CORRUPT');
+});

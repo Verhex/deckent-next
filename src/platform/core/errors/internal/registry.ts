@@ -374,6 +374,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   DELIVERY_REATTEMPT_NOT_ELIGIBLE: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_NOT_ELIGIBLE', p, l) }) },
   DELIVERY_REATTEMPT_EFFECTS: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_EFFECTS', p, l) }) },
   DELIVERY_REATTEMPT_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_FAILED', p, l) }) },
+  // D2b (owner 2026-10-18): a Run's delivery intent is admitted only from a verified human with an approved card; the service re-queue is bounded.
+  DELIVERY_INTENT_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTENT_NOT_ADMITTED', p, l) }) },
+  QUEUE_REQUEUE_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_REQUEUE_EXHAUSTED', p, l) }) },
   CANDIDATE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_MISMATCH', p, l) }) },
   CANDIDATE_NOT_ACCEPTED: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_NOT_ACCEPTED', p, l) }) },
   DELIVERY_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTERACTIVE_REQUIRED', p, l) }) },

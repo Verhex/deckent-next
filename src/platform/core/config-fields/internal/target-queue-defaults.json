@@ -11,5 +11,6 @@
   "revalidations": 2,
   "candidateSlots": 2,
   "reattempts": 1,
-  "reattemptWindowMs": 21600000
+  "reattemptWindowMs": 21600000,
+  "requeueMax": 2
 }

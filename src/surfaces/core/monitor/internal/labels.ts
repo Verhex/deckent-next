@@ -43,6 +43,7 @@ export function blockerLabel(code: MonitorBlockerCode, locale: Locale): string {
     none: t('monitor.blocker.none', {}, locale), 'waiting-pool-slot': t('monitor.blocker.waitingPoolSlot', {}, locale),
     'waiting-execution-slot': t('monitor.blocker.waitingExecutionSlot', {}, locale),
     'pool-held': t('monitor.blocker.poolHeld', {}, locale), 'waiting-dependency': t('monitor.blocker.waitingDependency', {}, locale),
+    'waiting-scope-conflict': t('monitor.blocker.waitingScopeConflict', {}, locale),
     'awaiting-approval': t('monitor.blocker.awaitingApproval', {}, locale), 'worker-running': t('monitor.blocker.workerRunning', {}, locale),
     'worker-stale-heartbeat': t('monitor.blocker.workerStaleHeartbeat', {}, locale),
     'worker-exited-unevaluated': t('monitor.blocker.workerExitedUnevaluated', {}, locale),

@@ -1,9 +1,9 @@
-import { encodeCommandProjection, type ModelInvocationBillingAxis, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
+import { encodeCommandProjection, isAiPrincipal, type ModelInvocationBillingAxis, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { DeckentError, ErrorRegistry, type TrustedClock } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 import type { RunAuthorization } from './application.js';
-import { RunAdmissionApplication, type BoundRunAdmission } from './admission.js';
+import { RunAdmissionApplication, systemOrderedGraph, type BoundRunAdmission } from './admission.js';
 import { RunCreationAuthority } from './authority.js';
 import { parseRunProposal, runProposalDigest, runProposalQuerySchema, type RunProposalQuery, type RunProposalRecord, type RunProposalStore } from './proposal-contract.js';
 import { validateRunProposal } from './proposal-validation.js';
@@ -25,6 +25,11 @@ export interface RunProposalResult { readonly schemaVersion: 1; readonly proposa
 const result = (proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => Object.freeze({ schemaVersion: 1,
   proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false,
   ...(error instanceof DeckentError && proposal.reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED' && error.code === proposal.reason && error.params ? { reasonParams: error.params } : {}) });
+/** The graph a proposal's Run is admitted with: the author's graph plus the system order edges (one definition for admission and store). */
+export const proposalRunGraph = (graph: RunProposal['graph']) => {
+  try { return systemOrderedGraph(graph); }
+  catch { throw ErrorRegistry.createError('RUN_PROPOSAL_GRAPH_INVALID', { params: { reason: 'TASK_GRAPH_INVALID' } }); }
+};
 const codeOf = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
 export class RunProposalApplication {
   constructor(private readonly store: RunProposalStore, private readonly verifier: PrincipalVerifier, private readonly authority: RunCreationAuthority,
@@ -39,10 +44,13 @@ export class RunProposalApplication {
     const proposal = parseRunProposal(input), principal = await authenticate(this.verifier, credential, proposal.scopeId);
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     if (encodeCommandProjection('actor', actor) !== encodeCommandProjection('actor', proposal.proposer)) throw ErrorRegistry.createError('RUN_PROPOSAL_ACTOR_MISMATCH');
+    // D2b: only a verified human grants a delivery intent; an MCP/AI or workload proposer never obtains one (it is also never standing).
+    if (proposal.delivery && isAiPrincipal(principal)) throw ErrorRegistry.createError('DELIVERY_INTENT_NOT_ADMITTED');
     const digest = runProposalDigest(proposal);
+    // The proposal keeps the author's graph (its digest and any model source check); the admitted command carries the system edges.
     const command: BoundRunAdmission = { schemaVersion: 1, commandId: proposal.commandId, scopeId: proposal.scopeId, runId: proposal.runId,
-      graph: proposal.graph, proposal: { schemaVersion: 1, proposalId: proposal.proposalId, digest,
-        budgetCeiling: proposal.budgetCeiling, requiredPermissions: proposal.requiredPermissions, admission: null } };
+      graph: proposalRunGraph(proposal.graph), proposal: { schemaVersion: 1, proposalId: proposal.proposalId, digest,
+        budgetCeiling: proposal.budgetCeiling, requiredPermissions: proposal.requiredPermissions, ...(proposal.delivery ? { delivery: { ...proposal.delivery, grantedBy: actor } } : {}), admission: null } };
     // One Run-create policy evaluation. Proposal does not create a second decision/approval owner.
     const evaluation = await this.authority.evaluate(command, principal);
     let record = await this.store.loadProposal(proposal.scopeId, proposal.commandId);

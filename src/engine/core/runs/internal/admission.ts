@@ -1,6 +1,6 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
+import { branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, hasConflictEdges, withConflictEdges, TaskGraphError, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type RunWorkspaceCustodyStore } from '#engine/core/workspaces/index.js';
@@ -12,6 +12,12 @@ export const runAdmissionSchema = z.object({ schemaVersion: z.literal(1), comman
 export type RunAdmission = z.infer<typeof runAdmissionSchema>;
 /** Engine-only deterministic provenance, never an ingress field of run create. */
 export type BoundRunAdmission = RunAdmission & { readonly proposal?: RunProposalBinding };
+/** D7a: the system, never the author, inserts scope-conflict order edges once at ingress, so the sealed admission input, the card, the
+ * Run and every replay see the same graph. A branch Run keeps its exact compiled diamond (runtime exclusion still applies). */
+export function systemOrderedGraph(graph: RunAdmission['graph'], branch?: unknown): RunAdmission['graph'] {
+  if (hasConflictEdges(graph)) throw new TaskGraphError('TASK_GRAPH_INVALID');
+  return branch ? graph : withConflictEdges(graph);
+}
 /** Local SDK ingress for a Run pinned to a completed delivery of the same scope; the commit is resolved by trusted composition. */
 export const runDeliveryAdmissionSchema = runAdmissionSchema.extend({ deliveryCommandId: identitySchema }).strict();
 export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
@@ -56,7 +62,7 @@ export class RunAdmissionApplication {
     return result;
   }
   async create(input: unknown, credential?: unknown, pin?: RunWorkspacePin) {
-    const command = runAdmissionSchema.parse(input);
+    const parsed = runAdmissionSchema.parse(input), command = { ...parsed, graph: systemOrderedGraph(parsed.graph, parsed.branch) };
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     const evaluation = await this.authorization.evaluate(command, principal);
     return this.admitEvaluated(command, principal, evaluation, pin);

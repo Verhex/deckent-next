@@ -50,6 +50,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'targetQueue.candidateSlots': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8] },
   'targetQueue.reattempts': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1, 2] },
   'targetQueue.reattemptWindowMs': { kind: 'numeric', unit: 'ms', step: 60000, presets: [3600000, 21600000, 86400000] },
+  'targetQueue.requeueMax': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 2, 4] },
   'execution': { kind: 'container' },
   'cancellation': { kind: 'container' },
   'cancellationRuntime': { kind: 'container' },

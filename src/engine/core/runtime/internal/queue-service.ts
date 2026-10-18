@@ -20,7 +20,8 @@ export interface QueueServicePorts<C extends QueueServiceContext, Peer extends Q
   readonly instanceId: string; readonly config: { readonly targetQueue: { readonly capacity: number; readonly candidateSlots: number; readonly batchWindowMs: number; readonly leaseMs?: number } };
   withScope<T>(scopeId: string, peer: Peer | undefined, readOnly: boolean, work: (context: C) => Promise<T>): Promise<T>;
   snapshot(): Promise<readonly TargetQueueRecord[]>;
-  withActor<T>(record: TargetQueueRecord, work: () => Promise<T>): Promise<T>;
+  /** Runs `work` as the ticket's approving human (or the given human, for a Run under delivery intent). */
+  withActor<T>(subject: TargetQueueRecord | QueueHuman, work: () => Promise<T>): Promise<T>;
   effects(context: C, peer: Peer | undefined, consent: (operation: TargetBatch['operation']) => Promise<void>): Promise<TargetBatchEffects>;
   preparation(context: C): Promise<TargetQueuePreparation>;
   captureProcess(pid: number, uid: number): Promise<BatchTerminalWitness | null>;
@@ -30,7 +31,12 @@ export interface QueueServicePorts<C extends QueueServiceContext, Peer extends Q
   reattempts?(): Promise<readonly TargetQueueRecord[]>;
   /** One bounded re-attempt step as the delegating human (`act`), or its read-only state for the queue view. */
   reattempt?(context: C, record: TargetQueueRecord, act: boolean): Promise<QueueReattemptView | null>;
+  /** D2b: Runs whose human-approved proposal carries a delivery intent (bounded, newest first), with the granting human. */
+  intents?(): Promise<readonly Readonly<{ scopeId: string; runId: string; grantedBy: QueueHuman }>[]>;
+  /** One bounded pass over such a Run as its granting human (submit accepted Attempts, re-queue pre-effect stops). */
+  deliver?(context: C, run: Readonly<{ scopeId: string; runId: string }>): Promise<unknown>;
 }
+type QueueHuman = Readonly<{ id: string; issuer: string; subject: string }>;
 /** Reconciliation never holds consent: it observes, settles a completed effect or releases a provably unapplied one, and never re-runs a write. */
 async function reconcileQueueRecord<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>, c: C, record: TargetQueueRecord) {
   const refuse = async () => { throw new TargetQueueError('QUEUE_CONFIRMATION_REQUIRED'); };
@@ -74,6 +80,10 @@ function reattemptScheduler<C extends QueueServiceContext, Peer extends QueueSer
         if (result?.state === 'enqueued') backoff.delete(id); else backoff.set(id, { at: Date.now() + delay, delay });
       }
       for (const id of new Set([...last.keys(), ...backoff.keys()])) if (!scanned.has(id)) { last.delete(id); backoff.delete(id); }
+      // D2b: the same scan submits accepted Attempts of Runs under a delivery intent as their granting human; one failing Run never stops the rest.
+      for (const ref of await ports.intents?.() ?? []) {
+        try { await ports.withActor(ref.grantedBy, () => ports.withScope(ref.scopeId, undefined, false, c => ports.deliver!(c, ref))); } catch (error) { failure ??= error; }
+      }
       return failure;
     },
   };
@@ -153,7 +163,7 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
       const scopeId = 'identity' in input ? input.identity.scopeId : input.scopeId;
       return ports.withScope(scopeId, peer, readOnly, async c => {
         const display = await c.target.describe(), view = async (record: TargetQueueRecord) => projectTargetQueue(record, display, Date.now(), await c.app.position(record, c.principal),
-          record.request.deliveryIntent && record.outcome === 'conflict-needs-reattempt' ? await reattempts.view(c, record) : undefined);
+          record.request.deliveryIntent && record.outcome === 'conflict-needs-reattempt' ? await reattempts.view(c, record) : undefined, c.bounds.requeueMax);
         const result = await (async () => {
           if (request.operation === 'enqueueTargetQueueRollback') {
             const command = queueRollbackSchema.parse(input), original = await c.app.inspect(scopeId, command.sourceCommandId, c.principal), payloadDigest = queueDigest(command);
@@ -163,7 +173,7 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
             if (!record) {
               if (c.queue.head(original.key)) throw new TargetQueueError('QUEUE_TARGET_BUSY');
               const now = Date.now();
-              const { deliveryIntent: _intent, reattempt: _lineage, ...source } = original.request; void _intent; void _lineage; // a rollback is the human's own act
+              const { deliveryIntent: _intent, reattempt: _lineage, delegation: _delegation, ...source } = original.request; void _intent; void _lineage; void _delegation; // a rollback is the human's own act
               record = await c.app.submit({ ...source, operation: 'rollback', sourceCommandId: command.sourceCommandId, commandId: command.commandId,
                 actor: { id: c.principal.id, issuer: c.principal.issuer, subject: c.principal.subject }, payloadDigest, policyRevision: c.document.revision, submittedAt: now, deadline: now + c.config.targetQueue.ttlMs }, c.principal);
             }
@@ -241,8 +251,8 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
 
 /** Background work keeps the admitted actor; an MCP request is never prepared under the owner's identity. A service re-attempt ticket runs as
  * the human who delegated it (its actor is that human's service principal, provenance only). */
-export function selectQueueActor(record: TargetQueueRecord, read: (channel: 'mcp' | undefined) => { id: string; issuer: string; subject: string }): 'mcp' | undefined {
-  for (const channel of [undefined, 'mcp'] as const) { const current = read(channel), actor = queueApprover(record.request);
+export function selectQueueActor(subject: TargetQueueRecord | QueueHuman, read: (channel: 'mcp' | undefined) => { id: string; issuer: string; subject: string }): 'mcp' | undefined {
+  for (const channel of [undefined, 'mcp'] as const) { const current = read(channel), actor = 'request' in subject ? queueApprover(subject.request) : subject;
     if (current.id === actor.id && current.issuer === actor.issuer && current.subject === actor.subject) return channel; }
   throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
 }

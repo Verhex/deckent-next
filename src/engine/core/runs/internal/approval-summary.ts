@@ -1,4 +1,4 @@
-import { advisoryProposalPermissions, type PolicyDecision } from '#domain/index.js';
+import { advisoryProposalPermissions, dependencyTaskId, isConflictEdge, type PolicyDecision } from '#domain/index.js';
 import { currencyAmountText, redactForRecord, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import type { RunCreate } from './store.js';
@@ -25,6 +25,9 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   const permissionRows = (permissions ?? []).slice(0, limits.permissionRows).map(permission => t('approval.plan.permission', {
     kind: field(permission.kind, limits.permissionKindChars, known), action: field(permission.action, limits.permissionActionChars, known), resource: field(permission.resourceId, limits.permissionResourceChars, known),
   }, locale));
+  // D7a: the system's order edges are part of what the human approves (sealed in the admission input digest); always counted, rows bounded.
+  const edges = tasks.flatMap(task => task.dependencies.filter(isConflictEdge).map(edge => ({ task: task.id, after: dependencyTaskId(edge) })));
+  const edgeRows = edges.slice(0, limits.edgeRows).map(edge => t('approval.plan.conflictEdge', { task: field(edge.task, limits.titleChars, known), after: field(edge.after, limits.titleChars, known) }, locale));
   const ceiling = command.proposal?.budgetCeiling;
   const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale)] : [];
   const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale), t('approval.plan.authorityNotice', {}, locale),
@@ -35,13 +38,16 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     t('approval.plan.run', { run: field(command.runId, limits.runChars, known) }, locale)];
   const render = () => [t('approval.plan.tasks', { count: tasks.length }, locale), ...taskRows,
     ...(tasks.length > taskRows.length ? [t('approval.plan.moreTasks', { count: tasks.length - taskRows.length }, locale)] : []),
-    ...checked, footer[0]!, ...permissionRows,
+    ...(edges.length ? [t('approval.plan.conflictEdges', { count: edges.length }, locale), ...edgeRows] : []),
+    ...(edges.length > edgeRows.length ? [t('approval.plan.moreConflictEdges', { count: edges.length - edgeRows.length }, locale)] : []),
+    ...checked, ...(command.proposal?.delivery ? [t('approval.plan.delivery', { target: field(command.proposal.delivery.target.id, limits.runChars, known) }, locale)] : []),
+    footer[0]!, ...permissionRows,
     ...(permissions && permissions.length > permissionRows.length ? [t('approval.plan.morePermissions', { count: permissions.length - permissionRows.length }, locale)] : []),
     ...footer.slice(1)].join('\n');
   // Preserve the budget/decision and explicit omitted counts even with unusually long catalog text. Task titles are
   // proposer-authored, so they are dropped before declared permissions: long titles cannot push permissions off the card.
-  while (render().length > limits.summaryChars && (taskRows.length || permissionRows.length)) {
-    if (taskRows.length) taskRows.pop(); else permissionRows.pop();
+  while (render().length > limits.summaryChars && (taskRows.length || edgeRows.length || permissionRows.length)) {
+    if (taskRows.length) taskRows.pop(); else if (edgeRows.length) edgeRows.pop(); else permissionRows.pop();
   }
   return render();
 }
