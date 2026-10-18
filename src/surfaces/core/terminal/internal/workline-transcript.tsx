@@ -45,11 +45,12 @@ export function useTranscriptBlocks(rows: readonly LedgerRow[], columns: number,
       wanted.current.set(item.seq, { columns: width, style: styleKey, draw: item.draw });
       return PLACEHOLDER;
     };
-    // After the view closed (outside any render): lay out whatever is still missing, synchronously.
+    // After the view closed (outside any render): a row laid out at an earlier width is reused as it is (laying out ~2000 rows again costs
+    // seconds at exit); only a row never laid out is drawn now.
     const text = () => keys.map((_, index) => {
       const item = source(index);
       if (!item) return '';
-      return (fresh(item.seq) ?? splitRendered(item.draw())).join('\n');
+      return (fresh(item.seq) ?? cache.current.get(item.seq)?.lines ?? splitRendered(item.draw())).join('\n');
     }).join('\n');
     void version;
     return Object.freeze({ keys, linesOf, text });
