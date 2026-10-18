@@ -30,7 +30,7 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
     failed: t('terminal.render.failed', {}, locale), code: t('terminal.render.code', {}, locale),
     moreAbove: t('terminal.render.moreAbove', {}, locale), queued: t('terminal.render.queued', {}, locale),
     tool: t('terminal.render.tool', {}, locale), toolRunning: t('terminal.render.toolRunning', {}, locale),
-    context: t('terminal.render.context', {}, locale), compacted: t('terminal.render.compacted', {}, locale),
+    context: t('terminal.render.context', {}, locale), contextUnknown: t('terminal.render.contextUnknown', {}, locale), compacted: t('terminal.render.compacted', {}, locale),
     toolStatus: { error: t('terminal.render.toolStatus.error', {}, locale), denied: t('terminal.render.toolStatus.denied', {}, locale),
       'approval-required': t('terminal.render.toolStatus.approvalRequired', {}, locale),
       'approval-expired': t('terminal.render.toolStatus.approvalExpired', {}, locale),

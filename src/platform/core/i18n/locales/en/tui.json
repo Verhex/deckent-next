@@ -1071,6 +1071,7 @@
   "terminal.activeWork.more": "+{count} more",
   "terminal.viewport.below": "↓ {count} more lines below · End jumps to the latest · PgDn scrolls",
   "terminal.viewport.newMessages": "↓ {count} new messages · End jumps to the latest",
+  "terminal.render.contextUnknown": "context ?",
   "terminal.slash.deliver": "Deliver tasks awaiting delivery: check and deliver each in its own window after y; adopt into a branch with a chosen verification Run",
   "terminal.activeWork.deliveryWaiting": "awaiting delivery",
   "terminal.delivery.title": "Delivery · {title}",

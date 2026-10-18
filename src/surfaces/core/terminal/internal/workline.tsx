@@ -21,7 +21,7 @@ import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContex
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT,
   WheelContext, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
-import { span } from '#surfaces/core/terminal-render/index.js';
+import { formatContextTokens, span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
 import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
@@ -632,7 +632,8 @@ export function WorklineApp(props: WorklineProps) {
   const statusNode = <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
     state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
     queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
-    selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />;
+    selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)}
+    context={contextStatus(session.measured, labels.render, labels.sessions?.locale)} />;
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
   const composerNode = <StackComposer elsewhere={() => stripFocus.current} active={!stripFocused} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
@@ -708,6 +709,12 @@ export function WorklineApp(props: WorklineProps) {
 }
 
 const EMPTY_ROWS: readonly LedgerRow[] = Object.freeze([]);
+/** The information row's context segment: the same measurement and words as `/context` (`terminal.render.context`); before one, "unknown". */
+function contextStatus(measured: Readonly<{ promptTokens: number; windowTokens: number | null; quality: string }> | null, render: AssistantRenderLabels, locale: 'en' | 'tr' | undefined): string | undefined {
+  if (!measured) return render.contextUnknown;
+  return fillTemplate(render.context, { approx: measured.quality === 'upper-bound' ? '~' : '', percent: measured.windowTokens ? Math.ceil(measured.promptTokens * 100 / measured.windowTokens) : '?',
+    window: measured.windowTokens === null ? '?' : formatContextTokens(measured.windowTokens, locale ?? 'en') });
+}
 /** Language-neutral until the catalog words are passed (tests, hosts without the catalog). */
 const NEUTRAL_VIEWPORT_LABELS: ChatViewportLabels = Object.freeze({ below: '+{count} PgDn · End', newMessages: '+{count} · End' });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { CONTEXT_SUGGEST_SHARE, contextBreakdown, contextViewLines, contextCompactionThreshold, fillTemplate, projectHumanPickerText, type ContextCompaction, type ContextMeasure,
   formatContextTokens, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
@@ -81,10 +81,13 @@ export function contextInfoModel(input: Readonly<{ measured: ContextMeasure | nu
  */
 export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined, id: () => string, known?: KnownSecretSnapshot) {
   const saveFailed = useRef(false), listed = useRef<readonly ConversationSessionSummary[]>([]), context = useRef<ContextView | null>(null), compaction = useRef<ContextCompaction | null>(null);
+  // The same measurement `/context` reads, kept as state too so the information row under the bar follows it (harness gap item 1).
+  const [measured, setMeasured] = useState<ContextView | null>(null);
+  const remember = useCallback((value: ContextView | null) => { context.current = value; setMeasured(value); }, []);
   const noteContext = useCallback((delta: TurnDelta) => {
-    if (delta.kind === 'context') context.current = { promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality, ...(delta.compactionThresholdTokens === undefined ? {} : { compactionThresholdTokens: delta.compactionThresholdTokens }) };
+    if (delta.kind === 'context') remember({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality, ...(delta.compactionThresholdTokens === undefined ? {} : { compactionThresholdTokens: delta.compactionThresholdTokens }) });
     if (delta.kind === 'compacted') compaction.current = { count: (compaction.current?.count ?? 0) + 1, replacedMessages: delta.replacedMessages, atMs: Date.now() };
-  }, []);
+  }, [remember]);
   const save = useCallback(async (history: readonly AgentChatMessage[]): Promise<WorkLedgerEntry[]> => {
     if (!port || !labels) return [];
     try { await port.save({ sessionId: id(), messages: history.filter(message => message.role !== 'system') }); listed.current = []; return []; }
@@ -100,7 +103,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     const count = history.current.filter(message => message.role !== 'system').length;
     if (command === 'clear') {
       if (!execution.selectSession({ ...execution.input.context, sessionId: randomUUID() })) return done([]);
-      history.current = history.current.slice(0, 1); context.current = null; compaction.current = null; listed.current = [];
+      history.current = history.current.slice(0, 1); remember(null); compaction.current = null; listed.current = [];
       // The single summary line of a cleared screen (SLASH-WINDOWS); the caller wipes the screen when this is non-empty.
       return done([systemSummaryEntry(labels.started)]);
     }
@@ -133,7 +136,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     if (!messages) return refuse('SESSION_NOT_FOUND', labels.notFound);
     if (!execution.selectSession({ ...execution.input.context, sessionId: target })) return done([]);
     history.current = [history.current[0]!, ...messages.filter(message => message.role !== 'system')];
-    context.current = null; compaction.current = null; listed.current = [];
+    remember(null); compaction.current = null; listed.current = [];
     return done([systemSummaryEntry(fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history, known)]);
   }, [labels, port, known, id]);
   /** SW-1: `/context` as a window model from the same measured state the text view reads. */
@@ -143,6 +146,6 @@ export function useConversationSession(port: ConversationSessionPort | undefined
   }, [labels]);
   /** CACHE-SLICE1: the latest measured prompt of this conversation (null: none yet), and forgetting it when a new context replaces the history. */
   const measuredPrompt = useCallback(() => context.current?.promptTokens ?? null, []);
-  const forgetContext = useCallback(() => { context.current = null; compaction.current = null; }, []);
-  return { noteContext, save, run, id, contextView, measuredPrompt, forgetContext };
+  const forgetContext = useCallback(() => { remember(null); compaction.current = null; }, [remember]);
+  return { noteContext, save, run, id, contextView, measuredPrompt, forgetContext, measured };
 }
