@@ -66,6 +66,10 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
     ['ls 2>&1 | diff <(ls) -', 'PROCESS_SUBSTITUTION', '<(ls)'], ['ls 2>&1 &', 'UNPARSEABLE', undefined], ['ls >&', 'UNPARSEABLE', undefined],
     ['cat <&x', 'UNPARSEABLE', undefined], ['ls 2>&1 "unterminated', 'UNPARSEABLE', undefined], ['echo x >&package.json', 'PROTECTED_NAME', 'package.json'],
     ['echo x &>package.json', 'PROTECTED_NAME', 'package.json'],
+    // Security re-review 2026-10-18 (pre-existing in the base classifier): a named descriptor `{fd}>`, a read-write `<>` and a program-path
+    // override (`hash -p`, `enable`) were contained without a card; the realm kept the floor read-only, the classifier now sees them too.
+    ['echo x {fd}>package.json', 'PROTECTED_NAME', 'package.json'], ['echo x {out}>>package.json', 'PROTECTED_NAME', 'package.json'], ['cat <>package.json', 'PROTECTED_NAME', 'package.json'],
+    ['echo x 3<>package.json', 'PROTECTED_NAME', 'package.json'], ['hash -p /tmp/x ls; ls', 'PROGRAM_FLOOR', 'hash'], ['enable -f ./x.so cat; cat a', 'PROGRAM_FLOOR', 'enable'],
   ])('asks: %s → %s', (command, reasonCode, detail) => {
     expect(contained(command)).toEqual({ contained: false, reasonCode, ...(detail === undefined ? {} : { detail }) });
   });
@@ -83,6 +87,35 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
     ['rm package.json', 'package.json'], ['touch .github/x.yml', '.github/x.yml'], ['grep --file=package.json x', 'package.json'], ['cat .deckent/state/ledger.db', '.deckent/state/ledger.db'],
   ])('a write, a non-reading program or the product state still asks: %s', (command, detail) => {
     expect(reading(command)).toEqual({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
+  });
+  // Security re-review of 03d82341 (parser differential): every form where the shell may not read the name as a plain argument of the program
+  // the classifier saw keeps the card — fail closed. The view binds the floor read-only regardless; this keeps the classifier honest too.
+  it.each([
+    ['cat <> package.json', 'package.json'], ['cat 3<> package.json', 'package.json'], ['cat {fd}> package.json', 'package.json'], ['cat {fd}>> package.json', 'package.json'],
+    ['cat 9>| package.json', 'package.json'], ['PATH=./bin cat package.json', 'package.json'], ['hash -p ./x cat; cat package.json', 'hash'],
+    ['function cat { :; }; cat package.json', 'package.json'], ['alias cat=tac; cat package.json', 'package.json'], ['shopt -s expand_aliases; cat package.json', 'package.json'],
+    ['enable -n cat; cat package.json', 'enable'], ['export PATH=.; cat package.json', 'package.json'], ['declare -f; cat package.json', 'package.json'],
+    ['trap "x" EXIT; cat package.json', 'package.json'], ['cat \\> package.json', 'package.json'],
+  ])('a shell-parse or program-resolution differential keeps the card: %s', (command, detail) => {
+    expect(reading(command)).toMatchObject({ contained: false, reasonCode: detail === 'hash' || detail === 'enable' ? 'PROGRAM_FLOOR' : 'PROTECTED_NAME', detail });
+  });
+  // Allowlist shape (second security re-review, 6f987adf): an unknown flag, a long option, a non-discard redirection, a glob, an expansion or a
+  // case-folded program token was tolerated before and now keeps the card.
+  it.each([
+    ['cat --show-all package.json', 'package.json'], ['grep -f x package.json', 'package.json'], ['ls --color=always package.json', 'package.json'],
+    ['wc --files0-from=x package.json', 'package.json'], ['head -z package.json', 'package.json'], ['diff --to-file=x package.json', 'package.json'],
+    ['CAT package.json', 'package.json'], ['cat package.json >x', 'package.json'], ['cat package.json 2>err.txt', 'package.json'], ['cat * package.json', 'package.json'],
+    ['cut --output-delimiter=x -f1 package.json', 'package.json'], ['sort package.json', 'package.json'], ['nl package.json', 'package.json'], ['od package.json', 'package.json'],
+    ['cat package.json $X', 'package.json'], ['echo $(id); cat package.json', 'package.json'], ['grep -e "$P" package.json', 'package.json'],
+  ])('allowlist: not modelled, so the card stays: %s', (command, detail) => {
+    expect(reading(command)).toMatchObject({ contained: false, reasonCode: 'PROTECTED_NAME', detail });
+  });
+  it.each(['ls -la .github', 'head -n 5 package.json', 'head -5 package.json', 'tail -n5 package.json', 'grep -rn "version" package.json', 'grep -e x -i package.json',
+    "jq -r '.name | ascii_downcase' package.json", 'cut -d, -f1 package.json', 'wc -lc package.json 2>&1', 'diff -U3 package.json other.json'])('allowlist: modelled read: %s', command => {
+    expect(reading(command)).toEqual({ contained: true, reasonCode: 'CONTAINED' });
+  });
+  it.each(['cat -- package.json', "cat 'package.json'", 'cd /tmp/p; cat package.json', 'cd src && head -3 ../package.json', 'cat package.json 2>/dev/null'])('a plain argument still reads: %s', command => {
+    expect(reading(command)).toEqual({ contained: true, reasonCode: 'CONTAINED' });
   });
   it('without a read-only floor in the run\'s view (host realm, full access, an approved writable view) a floor name still asks', () => {
     expect(contained('cat package.json')).toEqual({ contained: false, reasonCode: 'PROTECTED_NAME', detail: 'package.json' });
