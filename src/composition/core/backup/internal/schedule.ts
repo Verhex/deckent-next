@@ -15,6 +15,8 @@ export const BACKUP_SCHEDULE_SECRET = 'BACKUP_PASSPHRASE';
 async function report(observer: BackupScheduleObserver, event: BackupScheduleEvent) {
   try { await observer.onBackup?.(event); } catch { /* A rendering failure cannot change or stop an already audited backup. */ }
 }
+/** The time a scheduled set's own name carries (`recovery-<UTC second, ':' as '-'>-<uuid>`); NaN for any other name. */
+const namedAt = (name: string) => Date.parse(/^recovery-(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\dZ)-[0-9a-f-]{36}$/u.exec(name)?.slice(1).join(':') ?? '');
 const failureCode = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && error.code.startsWith('BACKUP_') ? error.code : 'BACKUP_IO';
 async function runScheduledBackup(root: string, options: ConfigLoadOptions, trigger: 'daily' | 'before-upgrade', observer: BackupScheduleObserver) {
   const config = await loadComposedConfig(root, { ...options, heal: false });
@@ -24,10 +26,16 @@ async function runScheduledBackup(root: string, options: ConfigLoadOptions, trig
   const passphrase = await openConfiguredSecretStore(config, options.env ?? process.env, options.platform).get(BACKUP_SCHEDULE_SECRET);
   if (!passphrase) throw ErrorRegistry.createError('BACKUP_SCHEDULE_SECRET_REQUIRED');
   const directory = join(await prepareProductDirectory(config.productLayout, 'ledgerBackups'), 'recovery');
-  const { mkdir } = await import('node:fs/promises');
+  const { mkdir, readdir } = await import('node:fs/promises');
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const ordered = await inspectScheduledSets(directory, passphrase, config.installation.packageMeasurement);
-  if (trigger === 'daily' && ordered.length && Date.now() - ordered.at(-1)!.at < 86400000) return;
+  // g2-yedek-dakika: the minute loop decides from the names this schedule writes (below), with no decryption or ledger scan;
+  // full verification runs only when a new set is due (a 'daily' schedule: one day after the newest).
+  if (trigger === 'daily' && (await readdir(directory)).some(name => Date.now() - namedAt(name) < 86400000)) return;
+  // An older set that no longer verifies (e.g. after a passphrase change) is reported and kept; it never blocks the new set.
+  const unverified: BackupScheduleEvent[] = [];
+  const ordered = await inspectScheduledSets(directory, passphrase, config.installation.packageMeasurement,
+    (set, error) => { unverified.push({ trigger, status: 'skipped', code: failureCode(error), set }); });
+  for (const event of unverified) await report(observer, event);
   const name = `recovery-${new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}/, '')}-${randomUUID()}`;
   await executeConfiguredBackup(root, { schemaVersion: 1, action: 'create', scopeId, set: join(directory, name) }, passphrase, options);
   // Keep only authenticated scheduled sets after a new complete set exists; foreign names are untouched.

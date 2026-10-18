@@ -123,7 +123,8 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
       const trigger = event.trigger === 'daily' ? t('cli.backup.trigger.daily', {}, locale) : t('cli.backup.trigger.before-upgrade', {}, locale);
       output({ schemaVersion: 1, event: 'backup-schedule', ...event },
         () => event.status === 'created' ? t('cli.backup.scheduled', { trigger }, locale)
-          : t('cli.backup.scheduleFailed', { trigger, code: event.code ?? '-' }, locale), event.status === 'failed' ? 'error' : 'info'); },
+          : event.status === 'skipped' ? t('cli.backup.scheduleSkipped', { trigger, set: event.set ?? '-', code: event.code ?? '-' }, locale)
+          : t('cli.backup.scheduleFailed', { trigger, code: event.code ?? '-' }, locale), event.status === 'created' ? 'info' : 'error'); },
     onIdleShutdown: async event => { output({ schemaVersion: 1, event: 'idle-shutdown', ...event },
       () => t('cli.runtime.idleShutdown', { duration: formatDuration(event.afterMs) }, locale)); },
     onAuditIntegrity: async status => { output({ schemaVersion: 1, event: 'audit-integrity', ...status },

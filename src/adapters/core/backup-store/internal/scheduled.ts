@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { verifyBackupSet } from './set.js';
 import { refuse } from './files.js';
 import type { BackupLimits } from './archive.js';
-/** Retention only admits private, authenticated scheduled sets. Foreign names remain untouched. */
-export async function inspectScheduledSets(directory: string, passphrase: string, limits: BackupLimits) {
+/** Retention only admits private, authenticated scheduled sets. Foreign names remain untouched; with `unverified`, a set that does not verify is reported and left out (kept, never pruned). */
+export async function inspectScheduledSets(directory: string, passphrase: string, limits: BackupLimits, unverified?: (name: string, error: unknown) => void) {
   const names: string[] = []; let entries = 0;
   for await (const item of await opendir(directory)) {
     if (++entries > limits.maxFiles) return refuse('BACKUP_LIMIT');
@@ -12,8 +12,8 @@ export async function inspectScheduledSets(directory: string, passphrase: string
   }
   const ordered: { name: string; at: number }[] = [];
   for (const name of names) {
-    const saved = await verifyBackupSet(join(directory, name), passphrase, limits);
-    try { ordered.push({ name, at: Date.parse(saved.state.createdAt) }); } finally { saved.close(); }
+    const saved = await verifyBackupSet(join(directory, name), passphrase, limits).catch((error: unknown) => { if (!unverified) throw error; unverified(name, error); return null; });
+    if (saved) try { ordered.push({ name, at: Date.parse(saved.state.createdAt) }); } finally { saved.close(); }
   }
   return ordered.sort((a, b) => a.at - b.at || a.name.localeCompare(b.name));
 }
