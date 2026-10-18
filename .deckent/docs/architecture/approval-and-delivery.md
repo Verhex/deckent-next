@@ -741,6 +741,16 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
 
 ### Typed work input and coding templates (K3 = A; owner 2026-09-30, Jev 97e59d70; lane Jev 22ea0d2c; nineteenth batch)
 
+- **Graph v5 (alpha.47 S6 R4-a, owner D7a).** Additive: a task may declare business-record `resources` (`{kind, id}`, the queue's
+  target ref shape) and the system, never an author, inserts `{ taskId, startFrom: 'accepted-patch', origin: 'scope-conflict' }` order
+  edges between tasks whose conflict keys intersect (work-input scope paths with a glob reduced to its static prefix, and exact record
+  keys; the path rule is the delivery revalidation's `patchPathsIntersect`). Run create and proposal admission insert them once at
+  ingress (a branch Run keeps its compiled diamond); an authored system edge is refused; the card lists them and the sealed admission
+  input binds them, while the proposal keeps the authored graph. A conflict edge only orders work: a failed, cancelled or skipped
+  predecessor releases the dependent from base, an accepted one without a workspace patch adds nothing, and the re-attempt eligibility
+  ignores it. `planSchedulingWave` additionally excludes a ready task that intersects in-flight work of its Run (or an earlier
+  candidate) through the same exclusion set; the monitor names it `waiting-scope-conflict`. Authors write v4 (v5 only to declare
+  `resources`); the system raises a graph to v5 only when it inserts an edge.
 - **Graph v4 (AOF-HANDOFF).** `TASK_GRAPH_SCHEMA_VERSION = 4`; the graph schema accepts 2, 3 and 4 side by side. v4 adds explicit accepted-patch dependency edges (see AOF-HANDOFF above). v3 adds optional
   `tasks[].workInput` `{ schemaVersion: 1, task, scope: { paths[1..64] }, acceptance, model: { channelId, modelId,
   auxiliaryModelIds[<=8] }, effort?, maxTurns? }` (domain `workInputSchema`; texts <=16 KiB; paths repository-relative POSIX/glob,
@@ -1024,6 +1034,21 @@ reports `waiting-base | awaiting-approval | running | enqueued | refused | faile
 A pending Run-create card shows `approve-run`; that state and a typed admission refusal are the service's in-memory last-known step,
 recomputed after a restart. For a non-Git target the same contract applies: "base advanced" is the adapter's own optimistic-concurrency
 refusal of the recorded target version.
+
+**Run delivery intent (alpha.47 S6 R4-b, owner D2b).** A proposal may carry `delivery: { target, mode: 'enqueue-accepted' }` (one Run,
+one target; additive in proposal v1, so the proposal digest covers it). Only a verified human (`os-user`, non-MCP) proposer grants it
+(`DELIVERY_INTENT_NOT_ADMITTED` otherwise, before any record); the binding retains it with `grantedBy` = that proposer, and such a
+Run always asks the Run-create card, even for a standing low-risk class. The queue service's existing scan (one pass per lease, same
+cadence as the re-attempt) reads Runs whose binding carries an intent and, as the grantor (`withActor`), submits each accepted,
+workspace-delivering Attempt once through `TargetQueueApplication.submitDelegated`: actor = the grantor's service principal, `deliveryIntent:
+'service-reattempt'` (so a base-advanced conflict goes to the bounded re-attempt above), `delegation { intentRef: {runId, proposalId,
+digest}, grantedBy, requeue? }`. Every admission re-proves the intent on the Run (`assertRunDeliveryIntent`: intent, target, grantor,
+proposal digest, consumed card). A delegated ticket that stopped before any effect (`parked` with no batch digest, or `expired`) is
+re-queued under a new command id with `requeue {sourceCommandId, count, cause, reason?}` up to `targetQueue.requeueMax` (default 2);
+past it the view reads `QUEUE_REQUEUE_EXHAUSTED` (human, `prepare-current`) and the application refuses a forged hop. Refusals
+(`verification-failed`, `stale-refused`, `target-protected`), started effects, cancelled tickets and the human's own tickets are never
+re-queued. The view carries `delegation {grantedBy, runId, requeues}`; the terminal status adds "Submitted for <human> by the delivery
+intent of Run <run>". Publish/adopt remain the human's two terminal cards; MCP stays read-only and has no path to an intent.
 
 A Git generation ref lives in the target repository's namespace, keyed by the full target ref; its payload binds queue key, instance
 and epoch. Only a consented execution (both cards answered) or startup recovery of work whose effect may be in flight writes it, always

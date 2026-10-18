@@ -231,9 +231,17 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   configured slot count (`executionSlots`, `inFlightSlots`).
 - **Conflicts between workers are caught at delivery, not prevented while they work.** Two workers, or a worker and a person,
   editing the same files meet at the patch base check. A source lock does not stop an outside person or an ERP writer.
+  Inside one Run, tasks whose declared scope paths or business records overlap now run one after another (the card shows the
+  order); tasks of different Runs, and a branch Run's tasks before they start, still meet only at delivery. Declared record
+  `resources` order work but are not enforced on the worker yet.
 - **A delivery whose base advanced is re-attempted once, and only under your delivery intent.** Enqueue with
   `deliveryIntent: "service-reattempt"` and the service re-runs that task once as a new Run on the current base. A chained task
   is re-run after its predecessor is adopted. The re-run task gets the same two delivery cards. Without the intent, or past the
   bound (`targetQueue.reattempts`, default 1), you create the new attempt yourself. The work is re-run, not merged, so it costs a
   second worker run. Tasks with unproven or unresolved effects are never re-run. The `/deliver` window does not send the intent yet.
+- **A Run's delivery intent can be given only in the proposal JSON, by you.** `deckent run propose` with `delivery: { target,
+  mode: "enqueue-accepted" }` asks your Run card and then lets the service queue each accepted task for your cards, re-queue one
+  that stopped before any effect (up to `targetQueue.requeueMax`, default 2) and re-attempt once on a conflict. `/do` has no
+  option for it yet; an AI (MCP) proposer can never carry one, and an AI-proposed plan cannot get one through your approval yet.
+  A re-attempt Run's own tickets are not re-queued. The service reads the intent Runs once per queue lease.
 - **A worker's resource use is measured in bounded local traces only.** There is no cost or quality report per worker yet.

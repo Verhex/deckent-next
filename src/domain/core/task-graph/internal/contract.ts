@@ -9,7 +9,7 @@ import { workerNeedsInputSchema, workerReportLimits } from '#domain/core/worker-
 // v4 adds explicit accepted-patch dependency edges. Read migration accepts v2/v3 unchanged: their string edges keep fixed-base semantics.
 export const TASK_GRAPH_SCHEMA_VERSION = 4;
 /** v5 (alpha.47 R4, owner D7a), additive: the system's `origin: 'scope-conflict'` order edge and a task's declared record `resources`.
- * v2–v4 read unchanged; authors keep writing v4 (the system raises a graph to v5 only when it inserts an edge). */
+ * v2–v4 read unchanged; authors write v4 (v5 only to declare `resources`); the system raises a graph to v5 only when it inserts an edge. */
 export const TASK_GRAPH_RESOURCE_SCHEMA_VERSION = 5;
 export const taskDependencySchema = z.union([identity, z.object({ taskId: identity, startFrom: z.literal('accepted-patch').optional(),
   origin: z.literal('scope-conflict').optional() }).strict().refine(edge => !edge.origin || edge.startFrom === 'accepted-patch').readonly()]);
