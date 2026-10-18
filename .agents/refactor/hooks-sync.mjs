@@ -3,7 +3,8 @@
 // owner 2026-10-18). Host tooling only. The hooks live in the Git-ignored `.claude/settings.local.json`
 // (2be86b6c keeps them out of tracked settings so product workers never inherit them), so new worktrees start
 // without host-guard/channel hooks. This script copies ONLY the `hooks` key: permissions, comments and every other
-// key of a target file stay as they are; a missing target file is created with `hooks` alone.
+// key of a target file stay as they are; a missing target file is created with `hooks` alone, never over a file that
+// appeared meanwhile. Concurrent-writer limit: see updateChecked.
 //
 // Default is a dry run that writes nothing. `--apply` writes; owner or lead runs it.
 //
@@ -66,25 +67,71 @@ export function planSync({ source, worktrees }) {
   }) };
 }
 
-const writeAtomic = (file, value, mode) => {
+const serialize = value => `${JSON.stringify(value, null, 2)}\n`;
+const identity = stat => `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+const conflict = (entry, code, reason) => ({ ...entry, applied: false, conflict: code, error: `${code}: ${reason}` });
+
+/** Writes a private temp file next to the target; the caller commits or removes it. */
+const writeTemp = (file, value, mode) => {
   const temp = `${file}.hooks-sync-${process.pid}.tmp`;
-  fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode, flag: 'wx' });
-  try { fs.renameSync(temp, file); } catch (error) { fs.rmSync(temp, { force: true }); throw error; }
+  fs.writeFileSync(temp, serialize(value), { mode, flag: 'wx' });
+  return temp;
 };
 
-/** Applies create/update entries; only the hooks key changes. Each target is re-read so a concurrent edit is kept. */
-export function applyPlan(plan) {
+/**
+ * No-clobber create (Astra 2648 F1): `link(temp, target)` fails with EEXIST when any file appeared at the target after
+ * planning, so another writer's settings are never replaced. Filesystems without hard links fall back to `open(target, 'wx')`
+ * and an in-place write, which is no-clobber but not atomic for readers. Returns false when the target already exists.
+ */
+const createNoClobber = (file, value) => {
+  const temp = writeTemp(file, value, 0o600);
+  try {
+    try { fs.linkSync(temp, file); return true; } catch (error) {
+      if (error.code === 'EEXIST') return false;
+      if (!['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS'].includes(error.code)) throw error;
+    }
+    let fd;
+    try { fd = fs.openSync(file, 'wx', 0o600); } catch (error) { if (error.code === 'EEXIST') return false; throw error; }
+    try { fs.writeFileSync(fd, serialize(value)); } finally { fs.closeSync(fd); }
+    return true;
+  } finally { fs.rmSync(temp, { force: true }); }
+};
+
+/**
+ * Update keeps every key but `hooks` from a fresh read. Concurrent-writer limit: no lock is shared with Claude Code or any
+ * other writer of settings.local.json. The target identity (device, inode, size, mtime, ctime) read before the merge is checked
+ * again right before the rename; a change returns a typed TARGET_CHANGED conflict and writes nothing. A write that lands
+ * in the remaining window between that check and the rename itself is still lost, so run --apply while no session edits
+ * its settings. `beforeCommit` is a test seam that runs inside that window.
+ */
+const updateChecked = (entry, hooks, beforeCommit) => {
+  const before = fs.statSync(entry.target, { bigint: true }), current = readJson(entry.target);
+  const temp = writeTemp(entry.target, { ...current, hooks }, Number(before.mode) & 0o777);
+  try {
+    beforeCommit?.(entry);
+    if (identity(fs.statSync(entry.target, { bigint: true })) !== identity(before))
+      return conflict(entry, 'TARGET_CHANGED', 'target changed after it was read; nothing written, re-run to merge');
+    fs.renameSync(temp, entry.target);
+    return { ...entry, applied: true };
+  } finally { fs.rmSync(temp, { force: true }); }
+};
+
+/**
+ * Applies create/update entries; only the hooks key changes. A create whose target appeared after planning is re-planned
+ * as an update (read and merge), so the other writer's keys survive.
+ */
+export function applyPlan(plan, { beforeCommit } = {}) {
   return plan.entries.map(entry => {
     if (entry.action !== 'create' && entry.action !== 'update') return entry;
     try {
       if (entry.action === 'create') {
         fs.mkdirSync(path.dirname(entry.target), { recursive: true, mode: 0o700 });
-        writeAtomic(entry.target, { hooks: plan.hooks }, 0o600);
-      } else {
-        const current = readJson(entry.target), mode = fs.statSync(entry.target).mode & 0o777;
-        writeAtomic(entry.target, { ...current, hooks: plan.hooks }, mode);
+        beforeCommit?.(entry);
+        if (createNoClobber(entry.target, { hooks: plan.hooks })) return { ...entry, applied: true };
+        const merged = updateChecked({ ...entry, action: 'update', reason: 'target appeared after planning; merged as update' }, plan.hooks);
+        return { ...merged, replanned: true };
       }
-      return { ...entry, applied: true };
+      return updateChecked(entry, plan.hooks, beforeCommit);
     } catch (error) { return { ...entry, applied: false, error: error.message }; }
   });
 }

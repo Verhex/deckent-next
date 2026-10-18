@@ -83,3 +83,34 @@ test('a source without hooks or a bad flag fails before any write', t => {
   assert.equal(spawnSync(process.execPath, [TOOL, '--source'], { encoding: 'utf8' }).status, 2);
   assert.deepEqual(snapshot(listWorktrees(r.main)), before);
 });
+
+test('a target created by another writer after planning is merged, never replaced (Astra 2648 F1)', t => {
+  const r = repo(t);
+  const plan = planSync({ source: settings(r.main), worktrees: [r.fresh, r.broken] });
+  assert.equal(plan.entries[0].action, 'create');
+  const other = { permissions: { allow: ['Bash(git status)'] }, env: { A: '1' } };
+  const [result] = applyPlan({ ...plan, entries: [plan.entries[0]] }, { beforeCommit: entry => writeJson(entry.target, other) });
+  assert.equal(result.applied, true, JSON.stringify(result)); assert.equal(result.replanned, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(settings(r.fresh), 'utf8')), { ...other, hooks: HOOKS });
+  assert.deepEqual(fs.readdirSync(path.dirname(settings(r.fresh))).filter(name => name.includes('hooks-sync')), [], 'no temp file left');
+  // A file that appears unreadable is left byte for byte and reported, not overwritten.
+  fs.rmSync(settings(r.fresh));
+  const again = planSync({ source: settings(r.main), worktrees: [r.fresh] });
+  const [refused] = applyPlan(again, { beforeCommit: entry => { fs.writeFileSync(entry.target, '{half'); } });
+  assert.equal(refused.applied, false); assert.equal(fs.readFileSync(settings(r.fresh), 'utf8'), '{half');
+});
+
+test('an update whose target changes between read and rename returns TARGET_CHANGED and writes nothing (concurrent-writer limit)', t => {
+  const r = repo(t);
+  const plan = planSync({ source: settings(r.main), worktrees: [r.kept] });
+  assert.equal(plan.entries[0].action, 'update');
+  const theirs = JSON.stringify({ permissions: { deny: ['Bash(rm -rf:*)'], allow: ['Bash(ls)'] }, hooks: { Stop: [] }, other: 2 });
+  const [result] = applyPlan(plan, { beforeCommit: entry => fs.writeFileSync(entry.target, theirs) });
+  assert.equal(result.applied, false); assert.equal(result.conflict, 'TARGET_CHANGED');
+  assert.equal(fs.readFileSync(settings(r.kept), 'utf8'), theirs);
+  assert.deepEqual(fs.readdirSync(path.dirname(settings(r.kept))).filter(name => name.includes('hooks-sync')), [], 'no temp file left');
+  // Re-running merges the other writer's keys.
+  const [merged] = applyPlan(planSync({ source: settings(r.main), worktrees: [r.kept] }));
+  assert.equal(merged.applied, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(settings(r.kept), 'utf8')), { ...JSON.parse(theirs), hooks: HOOKS });
+});
