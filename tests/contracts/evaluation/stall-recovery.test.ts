@@ -297,3 +297,54 @@ describe.skipIf(process.platform === 'win32' || !process.env.DECKENT_TEST_DOCKER
     } finally { await supervisor.release(request).catch(() => undefined); }
   }, 60000);
 });
+
+describe.skipIf(process.platform === 'win32')('composed evaluation (evaluateConfiguredTask) wires the classifier and the installation backoff', () => {
+  const roots: string[] = [];
+  afterEach(async () => { const { clearConfigCache } = await import('#platform/index.js'); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+  it.each([['an installed docker profile is retried', true], ['an unclassified profile keeps the hold', false]] as const)('%s', async (_name, docker) => {
+    const { writeFile } = await import('node:fs/promises'); const { hostname, userInfo } = await import('node:os');
+    const { prepareProductDirectory } = await import('#platform/index.js');
+    const { openConfiguredAttemptStore } = await import('../../../src/composition/core/storage/index.js');
+    const { evaluateConfiguredTask } = await import('../../../src/composition/core/runs/index.js');
+    const root = await mkdtemp(join(tmpdir(), 'stall-compose-')); roots.push(root);
+    const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true });
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, runRuntime: { stallRecovery: { schemaVersion: 1, backoffMs: 7000 } } }));
+    const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
+    const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
+    const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: opened.layout.revision };
+    const base = structuredClone(fixtureExecution(graph));
+    base.criteria[0]!.evaluator.implementation = { id: 'process-exit', version: 1 };
+    const execution = { ...base, tasks: base.tasks.map(task => ({ ...task, ...(docker ? { profile: fixtureDockerRegistry(['fixture']).profiles[0]! } : {}), stall: { warnAfterMs: 1000, stopAfterMs: 2000, maxRetries: 1 } })) };
+    const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
+    const actor = { id: 'fixture', issuer: 'test', subject: 'fixture' };
+    await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
+    await store.createRun({ commandId: 'create', actor, identity: { runId: 'r', scopeId: 's', layoutRevision: identity.layoutRevision }, graph, execution, now: 0,
+      policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+    await store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: [identity] });
+    const claim = { owner: 'fixture', request: { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['test'] } };
+    await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
+    const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });
+    await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'partial', stdout: '', stderr: '' }))));
+    await store.finishDispatch(claim, { handle: 'h', exitCode: 137, interrupted: true, interruptCause: 'inactivity' });
+    store.close();
+    const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+    await writeFile(join(root, 'data/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'test', restrictions: [], grants: [
+      { id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
+      { id: 'run', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+      { id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output', 'recover-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } },
+    ] }), { mode: 0o600 });
+    const before = Date.now();
+    const result = await evaluateConfiguredTask(project, { schemaVersion: 1, commandId: 'evaluation', identity, expectedRevision: 2 }, options);
+    const reader = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
+    try {
+      const run = (await reader.loadRun('s', 'r'))!;
+      if (docker) {
+        expect(run.progress[0]).toMatchObject({ phase: 'pending', eligibility: { kind: 'not-before' } });
+        const at = (run.progress[0]!.eligibility as { at: number }).at;
+        expect(at - before).toBeGreaterThanOrEqual(7000); expect(at - Date.now()).toBeLessThanOrEqual(7000);
+        expect(run.previousBindings?.[0]).toMatchObject({ observedKind: 'stalled', stallCause: 'inactivity' });
+      } else expect(run.progress[0]).toMatchObject({ phase: 'awaiting-decision', decision: { reason: 'evaluation-not-ready' } });
+      expect(result.evaluation.run).toBeDefined();
+    } finally { reader.close(); }
+  });
+});
