@@ -16,6 +16,7 @@ import { RunsLiveWindow } from '#surfaces/core/terminal-work/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { RenderGlyphsContext, plainText, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { WORKER_LINE_EN } from '../support/worker-line-labels.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { fullSnapshot } from '../../fixtures/monitor/snapshots.js';
@@ -41,6 +42,13 @@ describe('live window content (pure)', () => {
       expect(liveWindowStatus({ workers: [worker(0)], runs: [run(0), run(1)] }, labels)).toBe(locale === 'en' ? '1 workers · 2 runs' : '1 işçi · 2 iş');
       expect(plainText(runsTabLine('runs', { workers: [worker(0)], runs: [run(0), run(1)] }, work.live!).spans)).toBe(`[${work.live!.tabRuns} 2]   ${work.live!.tabWorkers} 1 `);
       expect(liveWindowClosedText({ workers: [worker(0)], runs: [run(0)] }, work.live!)).toContain('1');
+    }
+  });
+  it('K5: the unfocused close key is named in the Runs window hints and in the ? shortcuts panel, in both languages; Ctrl+O/Ctrl+T keep their words', () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const work = workSurfaceLabels(locale), panel = terminalComposerLabels(locale).shortcuts;
+      expect(work.live!.runsHints).toContain('Ctrl+X'); expect(panel.split('\n').some(line => line.startsWith('Ctrl+X  '))).toBe(true);
+      expect(work.activeWork!.title).toContain('Ctrl+T');
     }
   });
   it('bounds a list at the ledger tail limit and says how many rows are not shown', () => {

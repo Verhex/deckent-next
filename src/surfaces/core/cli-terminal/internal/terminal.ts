@@ -247,7 +247,7 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
             if (delta.kind === 'compacted') agentHistory = [system, ...delta.messages.filter(message => message.role !== 'system')];
             if (delta.kind === 'done') note = delta.note ?? null;
           }
-          if (note) emit(project(note, 'prose'), sinks);
+          if (note) emit(project(note.replace(/^\[deckent\]\s*/u, ''), 'prose'), sinks);
         } catch (error) { emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' }); }
       }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.

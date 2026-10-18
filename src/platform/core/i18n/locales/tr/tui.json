@@ -254,7 +254,7 @@
   "tui.slash.desc.directives": "DIRECTIVES.md göster · '/directives set <metin>' ile yaz (onay ister)",
   "tui.slash.desc.do": "Bir hedefi planla ve çalıştır (örn: /do sağlık ucu ekle) — terminal.run_flow_v2",
   "tui.slash.desc.doctor": "Codebase sağlığını kontrol et",
-  "tui.slash.desc.exit": "REPL'den çık (takma ad: /quit)",
+  "tui.slash.desc.exit": "REPL'den çık",
   "tui.slash.desc.explain": "Run sonuçlarını açıkla",
   "tui.slash.desc.features": "Özellik manifestini sorgula",
   "tui.slash.desc.help": "Kullanılabilir komutları listele",

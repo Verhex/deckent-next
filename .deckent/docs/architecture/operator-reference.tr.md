@@ -4,7 +4,7 @@
 
 Etkileşimli terminal giriş alanını ve durum satırını son çıktının altında, ekran dolduğunda da en alt satırlarda tutar;
 açık pencereler ve canlı çıktı onları ekranın dışına itmez. Tamamlanan çıktı bir kez yazılır ve kaydırma geçmişinde kalır. Komutunuzla veya seçiminizle açılan
-pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
+pencere hemen odağı alır; Escape kapatıp girişe döner (odaktaki bir pencereden açılan kart, örneğin İşler satır tuşu, kapanınca odağı o pencereye geri verir). Otomatik /do planlama, ilerleme ve onay kartları, model
 turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
 arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Otomatik onay kartında
 karar tuşları ancak bu odak geçişinden sonra çalışır (bekleyen kart "Bu kartta karar için Ctrl+O" der); girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.

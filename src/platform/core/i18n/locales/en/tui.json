@@ -254,7 +254,7 @@
   "tui.slash.desc.directives": "Show DIRECTIVES.md · write with '/directives set <text>' (asks for confirmation)",
   "tui.slash.desc.do": "Plan and run a goal (e.g. /do add a health endpoint)",
   "tui.slash.desc.doctor": "Check codebase health",
-  "tui.slash.desc.exit": "Leave the REPL (alias: /quit)",
+  "tui.slash.desc.exit": "Leave the REPL",
   "tui.slash.desc.explain": "Explain run results",
   "tui.slash.desc.features": "Query the feature manifest",
   "tui.slash.desc.help": "List available commands",

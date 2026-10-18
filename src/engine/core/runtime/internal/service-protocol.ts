@@ -154,7 +154,8 @@ export function isRuntimeServiceStreamingOperation(operation: RuntimeServiceOper
 export const RUNTIME_SERVICE_EVENT_FRAME_EVENTS = 256;
 /**
  * `chatTurn` (v12; v13 adds `context` and `compacted`; v14 adds `approval.requested`, `approval.settled` and `tool.output`; v15
- * adds `tool.finished`'s optional `cleanup`, host shell calls only, added within v15 without a further version bump — CLEANUP-MARK)
+ * adds `tool.finished`'s optional `cleanup`, host shell calls only, added within v15 without a further version bump — CLEANUP-MARK; v30 adds the
+ * command's optional `compact` — K3 `/compact`: the turn compacts and finishes without a model round)
  * answers with zero or more ordered event frames, then exactly one response frame carrying the turn result. Unlike
  * delta frames, event frames carry required data (the turn's `message` events are the client's history): each frame is bounded,
  * the stream as a whole is not (a turn has no budget), and the producer waits for the peer to drain instead of dropping. A peer

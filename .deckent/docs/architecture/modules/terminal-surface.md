@@ -421,6 +421,8 @@ evidence: external `proof/K1-K8-2026-10-18/GAP.md`.
   The request digest binds `compact` (a compact turn never replays an old answer). The rich terminal runs it as one controller line (queued
   behind a running turn, Esc cancels); `/context` ends with "Compact now" and "Compact with a focus…" (a `DecisionCard` whose Tab field is the
   focus; `y` compacts, n/Esc keep). Line mode accepts `/compact`. Lifecycle window [30, 29]: a v29 terminal can describe/stop a v30 service only.
+- **Focus return (window stack, all windows).** A foreground window opened while another window held focus (a card from a Runs window
+  row key) gives focus back to the window below when it closes; one opened from input returns it to input (`returnFocus`, `window-stack.tsx`).
 - **Unfocused close (K5).** Ctrl+X closes the open live window while input is focused (`LiveWindowCloseKey`, inside the window stack; a
   focused card owns the keyboard), and inside the focused Runs window; Escape still closes a focused window. Ctrl+O and Ctrl+T keep their
   meaning. Ctrl+X is not composer text: a draft stays.

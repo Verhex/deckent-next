@@ -4,7 +4,7 @@ Detailed operator behavior behind the product summary in [README.md](../../../RE
 
 The interactive terminal keeps input and status under the latest output and, once the screen is full, on its bottom
 rows; open windows and live output never push them off the screen. Completed output is printed once and stays in native scrollback. A window opened by your command or selection takes
-focus immediately; Escape closes it back to input. Automatic /do planning, progress and approval cards, model-turn
+focus immediately; Escape closes it back to input (a card opened from a focused window, such as a Runs window row key, gives focus back to that window). Automatic /do planning, progress and approval cards, model-turn
 approvals and run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
 operation. Ctrl+O switches between input and the top window. Automatic approvals require this focus switch
 before their decision keys work (the waiting card says "Ctrl+O to decide this card"); typing y/n/s/a in input never answers a card. Existing decision, reason and verified-TTY requirements apply in the focused approval.

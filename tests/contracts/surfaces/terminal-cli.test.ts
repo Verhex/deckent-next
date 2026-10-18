@@ -335,3 +335,23 @@ it('W12 line mode masks a multiline known value across complete-line and delta b
   expect(code).toBe(0); expect(out.text()).toBe('prefix ‹secret:LINE_TEST› suffix\nprefix ‹secret:LINE_TEST› suffix\n');
   expect(histories[1]).toContain('W12-first-part\\nsecond-part-012345');
 });
+
+it('K3 line mode: /compact sends a compact turn of the conversation, prints its note without the [deckent] mark, and the next turn carries the compacted history', async () => {
+  registerProviderConfig();
+  const f = await fixture(), out = sink(), err = sink();
+  const sent: Array<{ messages: string[]; compact: boolean }> = [];
+  const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out.output, stderr: err.output,
+    stdin: Object.assign(Readable.from(['first\n', '/compact\n', 'next\n', '/exit\n']), { isTTY: false }), initialize() {}, async describeTerminalChatPlan() { return { ...plan, historyMessages: 40 }; },
+    async completeTerminalChat() { throw new Error('must use the streaming path'); },
+    async *streamTerminalChat(_root: string, input: { messages: readonly { role: string; content: string }[]; compact?: object }) {
+      sent.push({ messages: input.messages.map(message => message.content.split('\n')[0]!), compact: input.compact !== undefined });
+      if (input.compact) {
+        yield { kind: 'compacted', messages: [{ role: 'user', content: 'LINE-SUMMARY' }], replacedMessages: 2 };
+        yield { kind: 'done', finish: 'stop', note: '[deckent] LINE-COMPACTED' }; return;
+      }
+      yield { kind: 'text', text: 'ok\n' }; yield { kind: 'message', message: { role: 'assistant', content: 'ok', toolCalls: [] } }; yield { kind: 'done', finish: 'stop', note: null };
+    } });
+  expect(code).toBe(0); expect(out.text()).toContain('LINE-COMPACTED'); expect(out.text()).not.toContain('[deckent] LINE-COMPACTED');
+  expect(sent.map(call => call.compact)).toEqual([false, true, false]);
+  expect(sent[1]!.messages.slice(1)).toEqual(['first', 'ok']); expect(sent[2]!.messages.slice(1)).toEqual(['LINE-SUMMARY', 'next']);
+});
