@@ -30,6 +30,22 @@ const CURSOR_ONLY = Object.freeze(['deckent.mdc']);
  * is refused, so a copy Cursor would not load unconditionally, or would load with a different body, cannot pass.
  * The body stays a Buffer and is compared byte for byte; decoding first would fold invalid UTF-8 into U+FFFD.
  */
+/**
+ * The YAML subset these rules use (Cursor rules format, prod.cursor.com/docs/reference/plugins#rules-format, read 2026-10-18:
+ * description string, alwaysApply boolean, globs string or array). Astra 2648 F2: a line regex let `description: [` or an
+ * unbalanced quote through, which is not valid YAML. Accepted here: exactly `description` as a YAML plain scalar that
+ * resolves to a string, and `alwaysApply: true`. Flow collections, quotes, block scalars, anchors, tags, comments,
+ * `key: value` inside a value, YAML booleans/null/numbers as a description, and `globs` (unused) are refused.
+ */
+const PLAIN_SCALAR_START = /^[^\s\-?:,[\]{}#&*!|>'"%@`]/u;
+const NON_STRING_SCALAR = /^(?:true|false|yes|no|on|off|null|~|[-+]?(?:\.?\d[\d_]*(?:\.\d*)?(?:e[-+]?\d+)?|\.inf|\.nan))$/iu;
+const FRONTMATTER = Object.freeze({
+  description: value => !PLAIN_SCALAR_START.test(value) ? 'must be a plain YAML scalar (no flow collection, quote, block or indicator start)'
+    : /: |\s#|[\t\r]|\s$|:$/u.test(value) ? 'plain scalar contains ": ", " #", a tab or trailing space/colon'
+      : NON_STRING_SCALAR.test(value) ? 'would resolve to a non-string YAML scalar' : null,
+  alwaysApply: value => value === 'true' ? null : 'must be exactly true (always loaded on every surface)',
+});
+
 export function parseCursorRule(buffer) {
   const OPEN = Buffer.from('---\n'), CLOSE = Buffer.from('\n---\n');
   if (buffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))) throw new Error('starts with a UTF-8 BOM');
@@ -39,13 +55,16 @@ export function parseCursorRule(buffer) {
   if (end < 0) throw new Error('frontmatter block is not closed by a --- line');
   const fields = new Map();
   for (const line of buffer.subarray(OPEN.length, end).toString('utf8').split('\n')) {
-    const match = /^([A-Za-z][A-Za-z0-9]*): (\S.*)$/u.exec(line);
+    const match = /^([A-Za-z][A-Za-z0-9]*): (.*)$/u.exec(line);
     if (!match) throw new Error(`malformed frontmatter line: ${JSON.stringify(line)}`);
-    if (fields.has(match[1])) throw new Error(`duplicate frontmatter key ${match[1]}`);
-    fields.set(match[1], match[2]);
+    const [, key, value] = match;
+    if (!Object.hasOwn(FRONTMATTER, key)) throw new Error(`unsupported frontmatter key ${key}`);
+    if (fields.has(key)) throw new Error(`duplicate frontmatter key ${key}`);
+    const problem = FRONTMATTER[key](value);
+    if (problem) throw new Error(`${key}: ${problem}`);
+    fields.set(key, value);
   }
-  if (fields.get('alwaysApply') !== 'true') throw new Error('frontmatter must carry exactly alwaysApply: true');
-  if (!fields.get('description')) throw new Error('frontmatter needs a description');
+  for (const key of Object.keys(FRONTMATTER)) if (!fields.has(key)) throw new Error(`frontmatter needs ${key}`);
   return { fields, body: buffer.subarray(end + CLOSE.length) };
 }
 
@@ -122,7 +141,7 @@ test('.cursor/rules carries the same rules as .claude/rules, with the same body 
   for (const name of CURSOR_ONLY) assert.doesNotThrow(() => parseCursorRule(read(`.cursor/rules/${name}`)), `.cursor/rules/${name} must be a valid alwaysApply rule`);
 });
 
-test('the deckent-route router rule is always loaded on all three surfaces and stays at or below 12 lines', () => {
+test('the deckent-route router rule is present and alwaysApply on all three surfaces (source check, not a runtime load) and stays at or below 12 lines', () => {
   // Owner 2026-10-18 skill-surface decision 6: one cheap moment → skill router, byte-identical for Claude, Codex and Cursor.
   for (const file of ['.claude/rules/deckent-route.md', '.codex/rules/deckent-route.md', '.cursor/rules/deckent-route.mdc']) assert.ok(TRACKED.has(file), `${file} is not tracked`);
   assert.ok(read('.claude/rules/deckent-route.md').toString('utf8').trimEnd().split('\n').length <= 12, 'deckent-route.md exceeds 12 lines');
@@ -141,6 +160,17 @@ test('the Cursor rule parser refuses copies that Cursor would load differently o
     'duplicate key': rule('---\ndescription: d\nalwaysApply: false\nalwaysApply: true\n---\n'),
     'unterminated frontmatter': Buffer.from('---\ndescription: d\nalwaysApply: true\n'),
     'no description': rule('---\nalwaysApply: true\n---\n'),
+    // Astra 2648 F2: invalid YAML headers that the earlier line regex accepted.
+    'unclosed flow sequence': rule('---\ndescription: [\nalwaysApply: true\n---\n'),
+    'unbalanced double quote': rule('---\ndescription: "\nalwaysApply: true\n---\n'),
+    'unbalanced single quote': rule("---\ndescription: 'x\nalwaysApply: true\n---\n"),
+    'flow mapping': rule('---\ndescription: {a: b}\nalwaysApply: true\n---\n'),
+    'nested mapping in a value': rule('---\ndescription: a: b\nalwaysApply: true\n---\n'),
+    'block scalar': rule('---\ndescription: |\nalwaysApply: true\n---\n'),
+    'non-string description': rule('---\ndescription: true\nalwaysApply: true\n---\n'),
+    'empty description': rule('---\ndescription: \nalwaysApply: true\n---\n'),
+    'quoted boolean': rule('---\ndescription: d\nalwaysApply: "true"\n---\n'),
+    'unsupported key': rule('---\ndescription: d\nalwaysApply: true\nglobs: *.ts\n---\n'),
   };
   for (const [name, buffer] of Object.entries(refused)) assert.throws(() => parseCursorRule(buffer), Error, name);
   // A divergent body parses but must not equal the Claude copy, including invalid UTF-8 that decodes to the same U+FFFD.
