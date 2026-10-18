@@ -31,6 +31,7 @@ function run(runId: string, tasks: readonly { id: string; phase: Phase; dependen
 const conflict = Object.assign(new Error('PATCH_BASE_ADVANCED'), { code: 'PATCH_BASE_ADVANCED' });
 
 function fixture(options: { effects?: ReattemptEffects; advanced?: boolean; approval?: boolean } = {}) {
+  let preparing = true;
   const db = new DatabaseSync(':memory:'); migrateLedger(db, 'allow');
   const queue = new SqliteTargetQueue(db), app = new TargetQueueApplication(queue, { async authorize() {}, async validate() {} }, bounds, () => {});
   const runs = new Map<string, RunSnapshot>([['r', run('r', [{ id: 't', phase: 'accepted' }])]]);
@@ -56,7 +57,7 @@ function fixture(options: { effects?: ReattemptEffects; advanced?: boolean; appr
   let mcp = false;
   const service = createTargetQueueService({ instanceId: 'service', config: { targetQueue: { capacity: 8, candidateSlots: 2, batchWindowMs: 1 } },
     withScope: async (_scope, _peer, _read, work) => work(context), snapshot: async () => queue.pending(8), withActor: async (_record, work) => work(),
-    effects: async () => { throw new Error('no-effect-without-cards'); }, preparation: async () => preparation, isMcp: () => mcp, record: async () => {},
+    effects: async () => { throw new Error('no-effect-without-cards'); }, preparation: async () => { if (!preparing) throw new Error('target-turn-failed'); return preparation; }, isMcp: () => mcp, record: async () => {},
     captureProcess: async () => ({ processStart: 'start', terminal: 'tty' }),
     reattempts: async () => queue.reattemptable(0, 8), reattempt: (_c, record, act) => stepDeliveryReattempt(ports, record, act) });
   const peer = { pid: 42, uid: 1000 }, delivery = { maxResultBytes: 1 << 16 };
@@ -67,7 +68,7 @@ function fixture(options: { effects?: ReattemptEffects; advanced?: boolean; appr
   /** One service turn after the batch window: revalidation, verification, then the re-attempt scan. */
   const tick = async () => { await new Promise(resolve => setTimeout(resolve, 5)); await service.tick(); };
   return { db, queue, app, runs, admitted, submitted, ports, service, enqueue, inspect, tick, call, conflict: (...ids: string[]) => { conflicting = new Set(ids); },
-    mcp: (value: boolean) => { mcp = value; }, approve: () => { approval = false; },
+    mcp: (value: boolean) => { mcp = value; }, approve: () => { approval = false; }, failTargetTurn: () => { preparing = false; },
     accept: (runId: string) => { runs.set(runId, run(runId, [{ id: 't', phase: 'accepted' }])); }, fail: (runId: string) => { runs.set(runId, run(runId, [{ id: 't', phase: 'failed' }])); },
     close: () => db.close() };
 }
@@ -215,6 +216,21 @@ describe('delivery re-attempt after the target base advanced (D1a/D2b)', () => {
       expect(f.admitted).toHaveLength(1); expect(await f.inspect('first')).toMatchObject({ reattempt: { state: 'running' } });
       f.fail(reattemptCommandIds(record).run);
       expect(await f.inspect('first')).toMatchObject({ nextAction: 'new-attempt', responsibility: 'human', reattempt: { state: 'failed', reason: 'DELIVERY_REATTEMPT_FAILED' } });
+    } finally { f.close(); }
+  });
+});
+
+describe('re-attempt scan independence', () => {
+  it('a failing target turn does not pause the re-attempt scan in the same tick', async () => {
+    const f = fixture({ advanced: false });
+    try {
+      await f.enqueue('first', 'r'); f.conflict('first'); await f.tick();
+      expect(f.ports.admit).not.toHaveBeenCalled();
+      f.runs.set('r2', run('r2', [{ id: 't', phase: 'accepted' }])); await f.enqueue('second', 'r2', false);
+      f.failTargetTurn(); f.ports.baseAdvanced.mockResolvedValue(true);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      await expect(f.service.tick()).rejects.toThrow('target-turn-failed'); // the key's failure is still reported
+      expect(f.ports.admit).toHaveBeenCalledOnce(); // and the scan ran in that same tick
     } finally { f.close(); }
   });
 });

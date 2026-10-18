@@ -52,6 +52,7 @@ function targetKeyLock() {
  * The last step's result stays in memory for the view (last known): a pending Run-create card or a typed admission refusal is not durable. */
 function reattemptScheduler<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>) {
   const { targetQueue } = ports.config, backoff = new Map<string, { at: number; delay: number }>(), last = new Map<string, QueueReattemptView>();
+  let scanAt = 0; // the work list reads settled rows (no partial index covers them): at most one read per lease, not per batch window
   const key = (record: TargetQueueRecord) => `${record.request.identity.scopeId}:${record.request.commandId}`;
   return {
     /** A Run not yet admitted shows the service's last step (base not moved, card pending, typed refusal); every later fact is durable. */
@@ -60,6 +61,8 @@ function reattemptScheduler<C extends QueueServiceContext, Peer extends QueueSer
       return observed?.state === 'waiting-base' && previous && ['awaiting-approval', 'refused'].includes(previous.state) ? previous : observed;
     },
     async turn(): Promise<unknown> {
+      if (Date.now() < scanAt) return null;
+      scanAt = Date.now() + (targetQueue.leaseMs ?? targetQueue.batchWindowMs);
       const scanned = new Set<string>(); let failure: unknown = null;
       for (const record of await ports.reattempts?.() ?? []) {
         const id = key(record), due = backoff.get(id); scanned.add(id); if (due && due.at > Date.now()) continue;
@@ -133,7 +136,8 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
           await new TargetQueueDriver(c.app, c.bounds, await ports.preparation(c), instanceId, Date.now).advance(records);
         })));
       })); const failed = results.find(result => result.status === 'rejected'); if (failed?.status === 'rejected') failure = failed.reason; }
-      failure ??= await reattempts.turn();
+      // The scan runs every turn, even when a target's turn failed: one failing key never pauses every re-attempt.
+      const scanFailure = await reattempts.turn(); failure ??= scanFailure;
       if (failure) throw failure;
     },
     async execute(request: RuntimeServiceRequest, peer: Peer, responseMaxBytes: number) {

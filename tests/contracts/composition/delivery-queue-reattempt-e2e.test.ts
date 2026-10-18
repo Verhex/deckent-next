@@ -159,7 +159,8 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     // The batch: q1 is verified and waits for the owner; q2 met q1's candidate on its path and is refused with nothing written.
     const first = await until(() => view('q1'), record => record?.state === 'awaiting-confirmation' || record?.state === 'settled' || record?.state === 'parked', 'q1 waits for cards', () => ({ notes, progressed }));
     expect(first).toMatchObject({ state: 'awaiting-confirmation', verification: { phase: 'accepted' } });
-    expect(await view('q2')).toMatchObject({ state: 'settled', outcome: 'conflict-needs-reattempt', reason: 'PATCH_BASE_ADVANCED',
+    // q2 is revalidated in the same service turn right after q1 reaches the cards; read it once that turn settled it.
+    expect(await until(() => view('q2'), record => record?.state === 'settled', 'q2 settles', () => ({ notes, progressed }))).toMatchObject({ state: 'settled', outcome: 'conflict-needs-reattempt', reason: 'PATCH_BASE_ADVANCED',
       nextAction: 'wait-service', responsibility: 'service', reattempt: { state: 'waiting-base', count: 1, bound: 1, cause: 'PATCH_BASE_ADVANCED' } });
     // The live base has not moved (the owner has not adopted q1), so no re-attempt Run exists yet.
     await new Promise(resolve => setTimeout(resolve, 6000));
