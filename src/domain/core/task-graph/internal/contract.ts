@@ -8,10 +8,23 @@ import { workerNeedsInputSchema, workerReportLimits } from '#domain/core/worker-
 // Wire invariants, not configurable scheduling policy. Kind definitions live in registries.
 // v4 adds explicit accepted-patch dependency edges. Read migration accepts v2/v3 unchanged: their string edges keep fixed-base semantics.
 export const TASK_GRAPH_SCHEMA_VERSION = 4;
-export const taskDependencySchema = z.union([identity, z.object({ taskId: identity, startFrom: z.literal('accepted-patch').optional() }).strict().readonly()]);
+/** v5 (alpha.47 R4, owner D7a), additive: the system's `origin: 'scope-conflict'` order edge and a task's declared record `resources`.
+ * v2–v4 read unchanged; authors write v4 (v5 only to declare `resources`); the system raises a graph to v5 only when it inserts an edge. */
+export const TASK_GRAPH_RESOURCE_SCHEMA_VERSION = 5;
+export const taskDependencySchema = z.union([identity, z.object({ taskId: identity, startFrom: z.literal('accepted-patch').optional(),
+  origin: z.literal('scope-conflict').optional() }).strict().refine(edge => !edge.origin || edge.startFrom === 'accepted-patch').readonly()]);
 export type TaskDependency = z.infer<typeof taskDependencySchema>;
 export function dependencyTaskId(edge: TaskDependency): string { return typeof edge === 'string' ? edge : edge.taskId; }
 export function taskDependencyIds(task: { readonly dependencies: readonly TaskDependency[] }): readonly string[] { return task.dependencies.map(dependencyTaskId); }
+/** A system scope-conflict edge orders work only: a failed, cancelled or skipped predecessor releases the dependent (it starts from base). */
+export function isConflictEdge(edge: TaskDependency): boolean { return typeof edge !== 'string' && edge.origin === 'scope-conflict'; }
+/** Edges whose unavailable predecessor skips the dependent: every edge except a scope-conflict order edge. */
+export function blockingDependencyIds(task: { readonly dependencies: readonly TaskDependency[] }): readonly string[] {
+  return task.dependencies.filter(edge => !isConflictEdge(edge)).map(dependencyTaskId);
+}
+/** One business record a task declares it changes (ERP/CRM kind + id; same shape as an effect target ref). Orders work only (v5). */
+export const taskResourceSchema = z.object({ kind: identity, id: z.string().min(1).max(512)
+  .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) }).strict().readonly();
 
 export const taskInputNameSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 
@@ -23,15 +36,18 @@ export const taskDefinitionSchema = z.object({
   acceptanceCriteria: z.array(identity).min(1).readonly().describe('Only criterionDefinitions ids, never descriptions or sentences.'),
   inputs: z.array(z.object({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).strict().readonly()).readonly().optional(),
   workInput: workInputSchema.optional(),
+  resources: z.array(taskResourceSchema).min(1).max(64).readonly().optional(),
 }).strict().readonly();
 export const taskGraphSchema = z.object({
-  schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(TASK_GRAPH_SCHEMA_VERSION)]),
+  schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(TASK_GRAPH_SCHEMA_VERSION), z.literal(TASK_GRAPH_RESOURCE_SCHEMA_VERSION)]),
   revision: counterSchema.positive(),
   tasks: z.array(taskDefinitionSchema).min(1).readonly(),
   criterionDefinitions: z.array(criterionDefinitionSchema).readonly(),
 }).strict().superRefine((graph, context) => {
   graph.tasks.forEach((task, index) => {
-    if (graph.schemaVersion !== TASK_GRAPH_SCHEMA_VERSION && task.dependencies.some(edge => typeof edge !== 'string')) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'dependencies'], message: 'TASK_GRAPH_VERSION' });
+    if (graph.schemaVersion < TASK_GRAPH_SCHEMA_VERSION && task.dependencies.some(edge => typeof edge !== 'string')) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'dependencies'], message: 'TASK_GRAPH_VERSION' });
+    if (graph.schemaVersion < TASK_GRAPH_RESOURCE_SCHEMA_VERSION && (task.resources !== undefined || task.dependencies.some(isConflictEdge))) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index], message: 'TASK_GRAPH_VERSION' });
+    if (task.resources && new Set(task.resources.map(ref => JSON.stringify([ref.kind, ref.id]))).size !== task.resources.length) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'resources'], message: 'duplicate' });
     if (graph.schemaVersion === 2 && task.workInput !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'workInput'], message: 'TASK_GRAPH_VERSION' });
   });
 }).readonly();

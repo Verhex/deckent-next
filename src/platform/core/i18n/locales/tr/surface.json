@@ -338,6 +338,7 @@
   "monitor.blocker.waitingExecutionSlot": "yürütme için yer bekliyor",
   "monitor.blocker.poolHeld": "havuz bekletiliyor",
   "monitor.blocker.waitingDependency": "bağımlılığını bekliyor",
+  "monitor.blocker.waitingScopeConflict": "bekliyor: aynı kaynağı başka bir görev değiştiriyor",
   "monitor.blocker.awaitingApproval": "onay bekliyor",
   "monitor.blocker.workerRunning": "işçi çalışıyor",
   "monitor.blocker.workerStaleHeartbeat": "işçi sessiz (heartbeat eski)",

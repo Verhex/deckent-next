@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { encodeCommandProjection, targetQueueRequestSchema, targetQueueRecordSchema, TargetQueueError,
+import { encodeCommandProjection, targetQueueRequestSchema, targetQueueRecordSchema, queueDelegationSchema, TargetQueueError,
   type TargetQueueRequest, type TargetQueueRecord } from '#domain/index.js';
 import { targetQueueKey, decodeTargetQueueRow, assertTargetQueueBounds, newQueueRecord, assertQueueChange, type TargetQueueStore, type TargetQueueBounds, type TargetQueueAudit } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
@@ -44,6 +44,11 @@ export class SqliteTargetQueue implements TargetQueueStore {
     return this.db.prepare(`SELECT * FROM target_queue t WHERE state='settled' AND json_extract(record,'$.outcome')='conflict-needs-reattempt' AND json_extract(record,'$.reason')='PATCH_BASE_ADVANCED'
       AND json_extract(record,'$.request.deliveryIntent') IS NOT NULL AND json_extract(record,'$.request.submittedAt')>? AND NOT EXISTS (SELECT 1 FROM target_queue s
       WHERE s.scope_id=t.scope_id AND json_extract(s.record,'$.request.reattempt.sourceCommandId')=t.command_id) ORDER BY target_key,ordinal LIMIT ?`).all(since, limit).map(decodeTargetQueueRow);
+  }
+  /** D2b work list: Runs whose approved proposal carries a delivery intent, newest first, with the granting human (a pass per lease). */
+  intentRuns(limit: number) {
+    return this.db.prepare("SELECT scope_id,run_id,json_extract(snapshot,'$.proposal.delivery.grantedBy') AS granted FROM runs WHERE json_extract(snapshot,'$.proposal.delivery') IS NOT NULL ORDER BY rowid DESC LIMIT ?")
+      .all(limit).map(row => ({ scopeId: String(row.scope_id), runId: String(row.run_id), grantedBy: queueDelegationSchema.unwrap().shape.grantedBy.parse(JSON.parse(String(row.granted))) }));
   }
   ahead(record: TargetQueueRecord, limit: number): readonly TargetQueueRecord[] {
     return this.db.prepare(`SELECT * FROM target_queue WHERE scope_id=? AND target_key=? AND ordinal<? AND ${open} ORDER BY ordinal LIMIT ?`)

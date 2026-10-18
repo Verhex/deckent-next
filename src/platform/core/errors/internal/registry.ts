@@ -377,6 +377,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   WORKER_INACTIVITY_STOPPED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INACTIVITY_STOPPED', p, l) }) },
   TASK_STALL_RETRY_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.TASK_STALL_RETRY_EXHAUSTED', p, l) }) },
   WORKER_INACTIVITY_POLICY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INACTIVITY_POLICY_INVALID', p, l) }) },
+  // D2b (owner 2026-10-18): a Run's delivery intent is admitted only from a verified human with an approved card; the service re-queue is bounded.
+  DELIVERY_INTENT_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTENT_NOT_ADMITTED', p, l) }) },
+  QUEUE_REQUEUE_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_REQUEUE_EXHAUSTED', p, l) }) },
   CANDIDATE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_MISMATCH', p, l) }) },
   CANDIDATE_NOT_ACCEPTED: { category: 'error', render: (p, l) => ({ message: t('error.CANDIDATE_NOT_ACCEPTED', p, l) }) },
   DELIVERY_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTERACTIVE_REQUIRED', p, l) }) },

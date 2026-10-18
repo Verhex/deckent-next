@@ -27,6 +27,7 @@ export function parseRunProposalRecord(input: unknown): RunProposalRecord {
   if (r.digest !== runProposalDigest(r.proposal) || r.digest !== r.binding.digest || r.proposal.proposalId !== r.binding.proposalId
     || encodeCommandProjection('ceiling', r.proposal.budgetCeiling) !== encodeCommandProjection('ceiling', r.binding.budgetCeiling)
     || encodeCommandProjection('permissions', r.proposal.requiredPermissions) !== encodeCommandProjection('permissions', r.binding.requiredPermissions)
+    || encodeCommandProjection('delivery', r.proposal.delivery ? { ...r.proposal.delivery, grantedBy: r.proposal.proposer } : null) !== encodeCommandProjection('delivery', r.binding.delivery ?? null)
     || (r.status === 'accepted') !== (r.authority !== null) || (r.status === 'pending') !== (r.approval !== null)
     || (['accepted', 'pending'].includes(r.status) && r.binding.admission === null)
     || (['rejected', 'parked'].includes(r.status) && r.reason === null)) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');

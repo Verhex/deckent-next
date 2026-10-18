@@ -1,5 +1,5 @@
 import { sanitizeIssues } from '#domain/core/primitives/index.js';
-import { taskGraphSchema, taskDependencyIds, TaskGraphError, type TaskGraph } from './contract.js';
+import { taskGraphSchema, taskDependencyIds, blockingDependencyIds, TaskGraphError, type TaskGraph } from './contract.js';
 
 /** Validate once at admission. Iterative Kahn traversal avoids stack limits on deep plans. */
 export function validateTaskGraph(input: unknown): TaskGraph {
@@ -20,7 +20,7 @@ export function validateTaskGraphStructure(graph: Pick<TaskGraph, 'tasks'>): voi
     const dependencies = taskDependencyIds(task);
     if (new Set(dependencies).size !== dependencies.length) throw new TaskGraphError('TASK_DEPENDENCY_DUPLICATE');
     if (new Set((task.inputs ?? []).map(input => input.name)).size !== (task.inputs?.length ?? 0)
-      || task.inputs?.some(input => !dependencies.includes(input.taskId))) throw new TaskGraphError('TASK_GRAPH_INVALID');
+      || task.inputs?.some(input => !blockingDependencyIds(task).includes(input.taskId))) throw new TaskGraphError('TASK_GRAPH_INVALID');
     remaining.set(task.id, task.dependencies.length);
     if (!task.dependencies.length) ready.push(task.id);
     for (const dependency of dependencies) {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness } from '#domain/index.js';
+import { identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness, excludeConflicting } from '#domain/index.js';
 const schedulingInputSchema = z.object({
   schemaVersion: z.literal(2),
   capacity: z.object({ executionSlots: z.number().int().nonnegative().safe(), inFlightSlots: z.number().int().nonnegative().safe() }).strict(),
@@ -27,7 +27,9 @@ export function planSchedulingWave(graphInput: unknown, input: unknown) {
   const ready = new Set(readiness.filter(task => task.disposition === 'ready').map(task => task.taskId));
   const excluded = new Set(parsed.data.excludedTaskIds ?? []);
   if ([...excluded].some(id => !graphIds.has(id))) throw new SchedulingError('SCHEDULING_INPUT_INVALID');
-  const ordered = ordering.filter(id => ready.has(id) && !excluded.has(id));
+  // D7a: a ready task whose declared resources intersect in-flight work (or an earlier candidate) waits; same exclusion concept.
+  const candidates = ordering.filter(id => ready.has(id) && !excluded.has(id)), conflicting = new Set(excludeConflicting(graph, snapshot.progress, candidates));
+  const ordered = candidates.filter(id => !conflicting.has(id));
   const delayed = new Set(readiness.filter(task => task.disposition === 'delayed').map(task => task.taskId));
   let nextEligibleAt: number | undefined;
   for (const task of snapshot.progress) {
@@ -37,7 +39,8 @@ export function planSchedulingWave(graphInput: unknown, input: unknown) {
   return Object.freeze({ schemaVersion: 2 as const, graphRevision: graph.revision, observedAt: snapshot.now,
     selectedTaskIds: Object.freeze(ordered.slice(0, available)), deferredTaskIds: Object.freeze(ordered.slice(available)),
     ...(nextEligibleAt === undefined ? {} : { eligibilityGapMs: nextEligibleAt - snapshot.now }),
-    occupancy: Object.freeze({ execution: executionOccupied, inFlight: inFlightOccupied }), readiness });
+    occupancy: Object.freeze({ execution: executionOccupied, inFlight: inFlightOccupied }), readiness,
+    ...(conflicting.size ? { conflictTaskIds: Object.freeze([...conflicting]) } : {}) });
 }
 
 /** Shared occupancy semantics for per-Run plans and durable shared-pool admission. */

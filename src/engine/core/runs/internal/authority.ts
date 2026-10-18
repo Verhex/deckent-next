@@ -50,7 +50,8 @@ export class RunCreationAuthority {
     // A proposal may only lower the registry gate when every exact class declares low risk and standing admission.
     // It never lowers policy require-approval or deny.
     if (command.proposal && !command.proposal.admission) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
-    if (command.proposal && !command.proposal.admission!.standingAdmission && evaluation.verdict.decision === 'allow') {
+    // D2b: a delivery intent delegates queue submission to the service, so its Run always shows the human a card (never standing/allow).
+    if (command.proposal && (!command.proposal.admission!.standingAdmission || command.proposal.delivery) && evaluation.verdict.decision === 'allow') {
       evaluation = { ...evaluation, verdict: { decision: 'require-approval', revision: evaluation.verdict.revision, reason: 'APPROVAL_REQUIRED' } };
     }
     const record = this.seal(command, principal, evaluation, this.basis(create, workspace));

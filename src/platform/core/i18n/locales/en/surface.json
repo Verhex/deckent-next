@@ -338,6 +338,7 @@
   "monitor.blocker.waitingExecutionSlot": "waiting for an execution slot",
   "monitor.blocker.poolHeld": "pool on hold",
   "monitor.blocker.waitingDependency": "waiting for a dependency",
+  "monitor.blocker.waitingScopeConflict": "waiting: another task is changing the same resource",
   "monitor.blocker.awaitingApproval": "awaiting approval",
   "monitor.blocker.workerRunning": "worker running",
   "monitor.blocker.workerStaleHeartbeat": "worker silent (stale heartbeat)",

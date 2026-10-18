@@ -245,12 +245,20 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yapılandırılmış bir slot sayısı vardır (`executionSlots`, `inFlightSlots`).
 - **İşçiler arasındaki çakışmalar teslimde yakalanır, çalışırken önlenmez.** İki işçi ya da bir işçi ve bir kişi aynı
   dosyaları düzenlerse yama tabanı kontrolünde karşılaşır. Kaynak kilidi dışarıdaki bir kişiyi ya da bir ERP yazıcısını durdurmaz.
+  Tek bir Run içinde beyan edilen kapsam yolları ya da iş kayıtları kesişen görevler artık art arda çalışır (kart sırayı gösterir);
+  farklı Run'ların görevleri ve dallı bir Run'ın görevleri başlamadan önce hâlâ yalnız teslimde karşılaşır. Beyan edilen kayıt
+  `resources` alanı işi sıralar ama işçide henüz zorlanmaz.
 - **Tabanı ilerlemiş bir teslim bir kez, yalnız teslim niyetinizle yeniden denenir.** `deliveryIntent: "service-reattempt"` ile
   kuyruğa alırsanız servis o görevi güncel tabanda yeni bir Run olarak bir kez yeniden çalıştırır. Zincirli görev, öncülü
   benimsendikten sonra yeniden çalışır. Yeniden çalışan görev aynı iki teslim kartını alır. Niyet yoksa ya da sınır aşıldıysa
   (`targetQueue.reattempts`, varsayılan 1) yeni denemeyi siz oluşturursunuz. İş birleştirilmez, yeniden çalıştırılır; bu ikinci
   bir işçi çalışması demektir. Etkisi kanıtlanmamış ya da çözülmemiş görevler hiç yeniden çalıştırılmaz. `/deliver` penceresi
   niyeti henüz göndermiyor.
+- **Bir Run'ın teslim niyetini yalnız siz, öneri JSON'unda verebilirsiniz.** `deckent run propose` ile `delivery: { target,
+  mode: "enqueue-accepted" }` Run kartınızı açar; sonra servis kabul edilen her görevi kartlarınız için kuyruğa alır, herhangi bir
+  etki başlamadan duranı yeniden sıraya alır (en çok `targetQueue.requeueMax`, varsayılan 2) ve çakışmada bir kez yeniden dener.
+  `/do` için henüz seçenek yok; bir AI (MCP) önerici niyet taşıyamaz, AI'ın önerdiği bir plan da sizin onayınızla henüz niyet
+  alamaz. Yeniden deneme Run'ının kendi biletleri yeniden sıraya alınmaz. Servis niyetli Run'ları kuyruk kirası başına bir kez okur.
 - **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** İşçi başına henüz maliyet ya da kalite raporu yok.
 - **Defter (ledger), her sürecin paylaştığı tek bir yerel SQLite dosyasıdır.** Yazmalar sırayla yapılır; `storage.sqlite.busyTimeoutMs`
   süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. *Geçici çözüm:*

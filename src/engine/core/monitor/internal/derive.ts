@@ -3,7 +3,7 @@ import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.j
 import { summarizeWorkCosts } from '#domain/index.js';
 import { projectAttemptWorkCost, recommendRunWorkCosts } from '#engine/core/resource-observation/index.js';
 import { projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
-import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDependencyIds, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
+import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDependencyIds, dependencyTaskId, excludeConflicting, isConflictEdge, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorCloseReason, MonitorDeliveryOutlook, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
@@ -19,10 +19,10 @@ export interface MonitorRunEvidence {
  */
 export const MONITOR_BLOCKER_PRECEDENCE: readonly MonitorBlockerCode[] = Object.freeze(['parked', 'awaiting-decision', 'cancellation-pending', 'unresolved-effect', 'evaluation-unknown',
   'evaluation-not-ready', 'worker-stale-heartbeat', 'worker-silent', 'worker-exited-unevaluated', 'awaiting-approval', 'not-admitted', 'pool-held', 'waiting-pool-slot', 'waiting-execution-slot',
-  'unknown', 'worker-running', 'none', 'waiting-dependency']);
+  'unknown', 'worker-running', 'waiting-scope-conflict', 'none', 'waiting-dependency']);
 const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.freeze({ parked: 'parked', 'awaiting-decision': 'waiting', 'none': 'progressing', 'worker-running': 'progressing', 'worker-silent': 'progressing',
   'waiting-pool-slot': 'waiting', 'waiting-execution-slot': 'waiting', 'pool-held': 'waiting', 'awaiting-approval': 'waiting', 'cancellation-pending': 'waiting', 'worker-exited-unevaluated': 'waiting',
-  'waiting-dependency': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
+  'waiting-dependency': 'waiting', 'waiting-scope-conflict': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
   'unresolved-effect': 'blocked', 'not-admitted': 'blocked', 'unknown': 'blocked' });
 const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision']);
 const blocker = (code: MonitorBlockerCode, taskId: string | null, sinceMs: number | null = null, detail: string | null = null): MonitorBlocker =>
@@ -76,9 +76,13 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
   }
   return blocker('worker-stale-heartbeat', taskId, heartbeatAt(worker, e.observedAt), freshness === 'fresh' ? 'process-' + worker.process : freshness);
 }
-function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBlocker {
+function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence, conflicting: ReadonlySet<string> = new Set()): MonitorBlocker {
   if (task.disposition === 'ready' && channelBlocker(task.taskId, e)) return channelBlocker(task.taskId, e)!;
   const id = task.taskId;
+  // D7a: waiting only on system scope-conflict order edges, or ready but held back by in-flight work on the same resource.
+  const edges = e.run.snapshot.graph.tasks.find(row => row.id === id)!.dependencies.filter(isConflictEdge).map(dependencyTaskId);
+  if (task.disposition === 'waiting' && task.dependencies.every(dependency => edges.includes(dependency))) return blocker('waiting-scope-conflict', id, null, task.dependencies[0] ?? null);
+  if (task.disposition === 'ready' && conflicting.has(id)) return blocker('waiting-scope-conflict', id);
   if (task.disposition === 'waiting' || task.disposition === 'blocked') return blocker('waiting-dependency', id, null, task.dependencies[0] ?? null);
   if (task.disposition === 'delayed') return blocker('none', id, null, 'not-before');
   const approval = e.approvals.find(value => value.subjectKind === 'task' && value.runId === e.run.snapshot.identity.runId && value.taskId === id
@@ -100,13 +104,14 @@ export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];
+  const conflicting = new Set(excludeConflicting(snapshot.graph, snapshot.progress, snapshot.graph.tasks.map(task => task.id).filter(id => ready.get(id)?.disposition === 'ready')));
   for (const definition of snapshot.graph.tasks) {
     const task = snapshot.progress.find(value => value.taskId === definition.id)!;
     const attempt = attemptOf(e.run, task.taskId);
     if (task.unresolvedEffects || task.phase === 'reconciling') candidates.push(blocker('unresolved-effect', task.taskId, null, attempt?.observedKind ?? null));
     else if (task.phase === 'active' || task.phase === 'evaluating') candidates.push(boundBlocker(task.taskId, task.phase, attempt, attempt ? e.workers.get(attempt.attemptId) : undefined, e));
     else if (task.phase === 'awaiting-decision') candidates.push({ ...blocker('awaiting-decision', task.taskId, task.decision!.since, task.decision!.reason), deadlineMs: task.decision!.deadline });
-    else if (task.phase === 'pending') candidates.push(pendingBlocker(ready.get(task.taskId)!, e));
+    else if (task.phase === 'pending') candidates.push(pendingBlocker(ready.get(task.taskId)!, e, conflicting));
   }
   const rank = (value: MonitorBlocker) => MONITOR_BLOCKER_PRECEDENCE.indexOf(value.code);
   return candidates.reduce((best, value) => rank(value) < rank(best) ? value : best);

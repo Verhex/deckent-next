@@ -6,5 +6,5 @@ export type { OperationRef, OperationDescriptor, EffectTargetRef, EffectCommand,
 export { targetBindingSchema, candidateBindingSchema, candidateEvidenceSchema, assertCandidateEvidence, CandidateBindingError, targetDisplaySchema } from './internal/candidate.js';
 export type { TargetBinding, CandidateBinding, CandidateEvidence, TargetDisplay } from './internal/candidate.js';
 export { targetQueueRequestSchema, targetQueueStateSchema, targetQueueOutcomeSchema, targetQueueRecordSchema, queueReasonSchema, TargetQueueError, queueTerminal, queueNextState,
-  queueDeliveryIntentSchema, queueReattemptSchema, queueServiceActor, queueApprover } from './internal/queue.js';
+  queueDeliveryIntentSchema, queueReattemptSchema, queueDelegationSchema, queueRequeueCause, queueServiceActor, queueApprover } from './internal/queue.js';
 export type { TargetQueueRequest, TargetQueueRecord, TargetQueueState, TargetQueueOutcome } from './internal/queue.js';

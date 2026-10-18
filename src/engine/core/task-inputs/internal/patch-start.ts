@@ -1,4 +1,4 @@
-import { attemptIdentitySchema, runSnapshotSchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
+import { attemptIdentitySchema, isConflictEdge, runSnapshotSchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
 import type { ArtifactStore, ArtifactReceipt } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { RunBoundDispatchStore, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
@@ -23,10 +23,14 @@ export class TaskPatchStartApplication {
     const result: AcceptedPredecessorPatch[] = []; let remaining = this.maxBytes;
     for (const edge of starts) {
       if (typeof edge === 'string') continue;
-      const source = run.bindings.find(binding => binding.identity.taskId === edge.taskId)?.identity;
-      if (!source || run.progress.find(value => value.taskId === edge.taskId)?.phase !== 'accepted') throw new HandoffError('HANDOFF_SOURCE_NOT_ACCEPTED');
+      const source = run.bindings.find(binding => binding.identity.taskId === edge.taskId)?.identity, accepted = run.progress.find(value => value.taskId === edge.taskId)?.phase === 'accepted';
+      // D7a: a system scope-conflict edge only orders work. A predecessor that ended without acceptance, or whose accepted output holds no
+      // workspace patch (a record operation), leaves the dependent on base; the target still revalidates the base at delivery.
+      if (isConflictEdge(edge) && !accepted) continue;
+      if (!source || !accepted) throw new HandoffError('HANDOFF_SOURCE_NOT_ACCEPTED');
       await this.authorization.authorizeIdentity('read-output', source, principal);
       const record = await this.store.loadBoundDispatch(source);
+      if (isConflictEdge(edge) && !record?.patch) continue;
       if (!record?.patch || !record.terminal || !sameAttemptIdentity(record.request.identity, source)) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
       const receipt = record.patch;
       if (receipt.scopeId !== identity.scopeId || receipt.byteLength > remaining) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');

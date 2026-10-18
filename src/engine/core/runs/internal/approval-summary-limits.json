@@ -3,6 +3,7 @@
   "summaryChars": 2048,
   "taskRows": 5,
   "permissionRows": 3,
+  "edgeRows": 3,
   "titleChars": 80,
   "taskKindChars": 40,
   "workClassChars": 40,
