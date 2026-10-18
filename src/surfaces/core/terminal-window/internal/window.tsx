@@ -1,9 +1,10 @@
 import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
+import { Box, Text, useInput, usePaste, useWindowSize, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { SpanText, cells, fillTemplate, graphemes, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, useRenderGlyphs, wrapCells, wrapSpans, type Span } from '#surfaces/core/terminal-render/index.js';
 import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
 import { useWindowNote } from './window-note.js';
+import { DecisionArmContext, useQuietArming } from './arming.js';
 import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
 
 /** One logical body row: an optional field label kept in its own column (values wrap under the value column, never under the label; an
@@ -78,8 +79,12 @@ export interface WindowProps {
   /** `{from}`, `{to}`, `{total}`: shown when the body does not fit. */
   readonly position: string;
   readonly priority?: number;
-  /** Keys first go to the owner; `true` means handled. Unhandled scroll keys (arrows, page, first and last row) move the body. */
-  readonly onInput?: (input: string, key: Key) => boolean | void;
+  /** Keys first go to the owner; `true` means handled. Unhandled scroll keys (arrows, page, first and last row) move the body. A decision
+   * window delivers keys one stdin read at a time: a read that produced several key events comes with `burst` set, event by event, and the
+   * owner must treat them as text at most (never a decision); the first one it does not take ends the burst and re-arms the window. */
+  readonly onInput?: (input: string, key: Key, meta?: Readonly<{ burst: boolean }>) => boolean | void;
+  /** Pasted text while this decision window holds the keyboard (never a decision; the owner may take it as text). */
+  readonly onPaste?: (text: string) => void;
   /** Escape when the owner did not handle it: the window closes and the keyboard returns to the layer below. */
   readonly onClose?: () => void;
   /** A body line kept in view (the selected row of a list inside the body); the body scrolls to it when it changes. */
@@ -95,13 +100,16 @@ export interface WindowProps {
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
 export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
-  onFocusChange }: WindowProps) {
+  onFocusChange, onPaste }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const acceptsInput = useWindowLayerGuard(id);
   const owner = useFocusOwner(), queue = useDecisionQueue(id, priority);
   useEffect(() => { onFocusChange?.(focused); }, [focused, onFocusChange]);
+  // A decision (a card, a question, any approval-priority window) counts keys only after a quiet arming period from the moment it became
+  // the visible input owner; earlier keys are swallowed and restart the wait (arming.ts). Fail closed: nothing reaches its owner before.
+  const guarded = decision || priority >= WINDOW_PRIORITY.approval, arming = useQuietArming(focused && guarded && !queue.hidden, useContext(DecisionArmContext));
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   // A watch frame never takes focus (760c906e) but keeps its command's note until it closes, so it shows (and then consumes) the note too.
   const note = useWindowNote(), noteText = note && (focused || owner.top === id || !interactive) && priority !== WINDOW_PRIORITY.approval ? note.text : null;
@@ -123,16 +131,40 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (revealRow === undefined) return;
     setOffset(value => revealRow < value ? revealRow : revealRow >= value + visible ? revealRow - visible + 1 : value);
   }, [revealRow, visible]);
-  const latest = useRef({ total: rows.length, visible, onInput, onClose });
-  latest.current = { total: rows.length, visible, onInput, onClose };
-  useInput((input, key) => {
-    if (!acceptsInput() || (key.ctrl && input === 'o')) return;
+  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste });
+  latest.current = { total: rows.length, visible, onInput, onClose, onPaste };
+  const deliver = (input: string, key: Key) => {
     const current = latest.current;
     if (current.onInput?.(input, key) === true) return;
     const scroll = scrollKeyOf(key);
     if (scroll) { setOffset(value => scrollBy(value, scroll, current.total, current.visible)); return; }
     if (key.escape && current.onClose) current.onClose();
+  };
+  // Security review 2026-10-18 (keystroke race): Ink parses one stdin read into several key events and dispatches them synchronously, so a
+  // decision window gathers the events of one read and looks at them after the read: a single event is a key press; several (an escape
+  // sequence plus a letter, "text⌫y", a coalesced burst) never decide. Focus or card changes during the read drop it. Fail closed.
+  const burst = useRef<{ events: Array<readonly [string, Key]>; owned: boolean } | null>(null);
+  const flush = () => {
+    const read = burst.current; burst.current = null;
+    if (!read) return;
+    if (!read.owned || !acceptsInput() || !arming.armed()) { arming.touch(); return; }
+    if (read.events.length === 1) { const [input, key] = read.events[0]!; deliver(input, key); return; }
+    for (const [input, key] of read.events) if (latest.current.onInput?.(input, key, { burst: true }) !== true) { arming.restart(); return; }
+  };
+  useInput((input, key) => {
+    if (key.ctrl && input === 'o') { if (burst.current) burst.current.owned = false; return; }
+    if (!guarded) { if (acceptsInput()) deliver(input, key); return; }
+    if (!burst.current) { burst.current = { events: [], owned: true }; setImmediate(flush); }
+    burst.current.events.push([input, key]);
+    if (!acceptsInput()) burst.current.owned = false;
   }, { isActive: focused });
+  // A paste consumer stays active while a decision holds the keyboard, so a paste begun in the input and finished here is still a paste
+  // (Ink would otherwise deliver it as ordinary keys); pasted text never decides and restarts the arming wait.
+  usePaste(text => {
+    if (!acceptsInput()) return;
+    if (!arming.armed()) { arming.touch(); return; }
+    if (latest.current.onPaste) latest.current.onPaste(text); else arming.restart();
+  }, { isActive: focused && guarded });
   const first = clampScroll(offset, rows.length, visible);
   // A decision waiting behind the shown one draws nothing (its layer and keys stay registered); the shown one says "1/3".
   if (queue.hidden) return null;

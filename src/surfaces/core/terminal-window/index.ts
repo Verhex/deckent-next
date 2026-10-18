@@ -10,3 +10,4 @@ export * from './internal/system-summary.js';
 export * from './internal/viewport.js';
 export * from './internal/fullscreen-workline.js';
 export * from './internal/question.js';
+export * from './internal/arming.js';

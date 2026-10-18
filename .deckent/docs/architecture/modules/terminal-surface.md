@@ -139,7 +139,16 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
   and the window stack: one input owner. TERMINAL-SABIT R2 (owner 2026-10-14, author candidate) focuses user-opened windows
   immediately. Automatic /do/turn cards and run/worker watches keep composer focus; Ctrl+O transfers it to the top layer
-  (approval priority, then newest) and back. Each new automatic card requires a fresh focus switch, even after a focused card; while it waits behind the composer a decision card shows the catalog line `tui.focus.decide` (Ctrl+O to decide).
+  (approval priority, then newest) and back. TERMINAL-SABIT-DUZEN slice 2 (owner 2026-10-18; security review of 6d458d9d): approval-priority
+  layers (approval cards, `QuestionWindow`) take the keyboard by themselves, and so does the next queued decision when the shown one closes;
+  only one decision is drawn at a time (`useDecisionQueue`, "n/total"). Every decision window (`decision` or approval priority) is gated in
+  `Window`, fail closed: it counts keys only after `decision.json` `armMs` (300) with no key at all from the moment it became the visible
+  input owner (`arming.ts`; each key while unarmed restarts the wait, a focus change or a new card instance re-arms); keys of one stdin read
+  are gathered and looked at after the read — one event is a key press, several (escape sequence + letter, "text⌫y") reach the owner only as
+  `burst` text and never decide; a paste consumer stays active (paste never decides); Ctrl+O in a read drops it. `DecisionCard` lists its
+  answers through the shared question contract (`question.tsx`: ↑↓/j/k, 1–9, Enter, Esc, option letters; multi: Space) with the highlight on
+  No; session/always only as the service offers (G6). In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
+  mounted). Proof: `TERMINAL-SABIT-DUZEN-2026-10-18/race-*.txt` (failing first), `terminal-decision-race.test.ts`. While a card waits behind the composer (after Ctrl+O back) it shows `tui.focus.decide`.
   Standalone windows retain their modal default. TERMINAL-SABIT-DUZEN (owner 2026-10-18; the Claude Code fullscreen renderer's model,
   https://code.claude.com/docs/en/fullscreen): on a TTY `runTerminalWorkline` renders on Ink's alternate screen with incremental line
   updates and `FullscreenWorkline` (terminal-window) is exactly one frame tall (rows − 1 on win32, Ink's Windows-console clear): chat

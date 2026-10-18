@@ -11,7 +11,7 @@ import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 /** TERMINAL-SABIT-DUZEN (owner 2026-10-18): the full-window layout keeps the input bar on one row whatever the conversation does. */
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const view of mounted.splice(0)) view.unmount(); });
-const PGUP = '\u001b[5~', PGDN = '\u001b[6~', CTRL_END = '\u001b[1;5F', CTRL_HOME = '\u001b[1;5H', CTRL_O = '\u000f';
+const PGUP = '\u001b[5~', PGDN = '\u001b[6~', CTRL_END = '\u001b[1;5F', CTRL_HOME = '\u001b[1;5H';
 const focus = { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS', decide: 'DECIDE-HERE' };
 const labels = { ...WORKLINE_TEST_LABELS, focus, viewport: { below: 'BELOW {count}' } };
 
@@ -84,13 +84,15 @@ describe('full-window Workline: fixed bar', () => {
       view.stdin.write('go\r');
       await until(() => view.stdout.frame.includes('Approval needed') && view.stdout.frame.includes('CHAT-BEFORE-CARD'), 'card'); await settle(40);
       const open = frameOf(view);
-      expect(barRow(open, 24)).toBe(before);
-      // Capped at half the frame (internal scroll), never pushing the bar: the card occupies rows above the bar only.
+      // Slice 2 (Claude Code style): the focused card takes the bar's place — its bottom border sits on the bar's bottom row, the composer is
+      // hidden (kept mounted), and the card grows upward, capped at half the frame (internal scroll).
+      const bottom = 24 - fullscreenInfoRows(fullscreenFrameRows(24, 'linux')) - 1;
+      expect(open[bottom]).toMatch(/^╰/u); expect(open[bottom + 1]).toMatch(/READY|BUSY/u); expect(open.some(row => row.startsWith('│ > '))).toBe(false);
       const cardTop = open.findIndex(row => row.includes('Approval needed')) - 1;
-      expect(cardTop).toBeGreaterThan(0); expect(before - cardTop).toBeLessThanOrEqual(12);
+      expect(cardTop).toBeGreaterThan(0); expect(bottom - cardTop + 1).toBeLessThanOrEqual(12);
       // The conversation stays anchored to its bottom: its newest rows sit right above the card.
       expect(open.slice(0, cardTop).some(row => row.includes('CHAT-BEFORE-CARD'))).toBe(true);
-      view.stdin.write(CTRL_O); await settle(40); view.stdin.write('n');
+      view.stdin.write('n');
       await until(() => calls.length === 1 && !view.stdout.frame.includes('Approval needed'), 'card answered and closed');
       await settle(60);
       expect(barRow(frameOf(view), 24)).toBe(before);

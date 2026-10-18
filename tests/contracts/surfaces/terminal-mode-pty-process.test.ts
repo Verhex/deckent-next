@@ -508,7 +508,7 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
       ['Deckent workline', '/help\r'], [words.help, '\u001b'], [words.helpSummary, '/status\r'], [words.status, '\u001b'], [words.statusSummary, 'go\r'],
       // TERMINAL-SABIT R2: the card raised during the turn leaves the input focused; Ctrl+O moves to it (a fresh focus label, not the one the
       // /help and /status windows showed), then n declines.
-      [words.window, '\u000f'], [words.focused, 'n', 'fresh'], ['Mode turn done.', '/exit\r']], 100);
+      [words.window, ''], [words.focused, 'n'], ['Mode turn done.', '/exit\r']], 100); // slice 2: the card takes the keyboard by itself
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     // Each mark is the output length when a step's awaited text had appeared (before its keys were sent).
@@ -536,7 +536,7 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
     // The approval window (L1) is framed and titled; the full approval id is not on its title row.
     expect(window).toContain(words.window);
     expect(window.split('\n').find(row => row.includes(words.window))).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
-    // After Ctrl+O the same card is open and the footer says the window owns the keyboard (the n that follows is the card's decision).
+    // Slice 2: the card holds the keyboard by itself and the footer says so (the n that follows is the card's decision).
     expect(focused).toContain(words.window); expect(focused).toContain(words.focused);
     // Person and answer rows (L2): the rail with the person's label and the answer heading; the denial notice uses the short id (integration).
     expect(rows).toMatch(new RegExp(`│ ${words.you}\\n│ go`, 'u'));
@@ -560,7 +560,7 @@ describe.skipIf(process.platform !== 'linux')('the approval window shows the who
     const f = await modeProject('v2', { call: { name: 'run_shell', arguments: { command } }, shell: true });
     await startRuntime(f.projectRoot, f.env);
     // The window is capped (TERMINAL-SABIT-DUZEN: at most half the full window): the whole command continues below its first page and PgDn scrolls to it.
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['the whole command is below (↑↓ scrolls)', '\u000f\u001b[6~'],
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['the whole command is below (↑↓ scrolls)', '\u001b[6~'],
       ['Whole command (7 lines)', '\u001b[6~'], ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);

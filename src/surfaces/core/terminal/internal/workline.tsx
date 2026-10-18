@@ -18,7 +18,7 @@ import { freshContextHistory } from './workline-history.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote,
-  FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels } from '#surfaces/core/terminal-window/index.js';
+  FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -144,6 +144,8 @@ export interface WorklineProps {
   readonly fullscreen?: boolean;
   /** Rows the full-window conversation keeps to scroll back through (`terminal.viewportRows`). */
   readonly viewportRows?: number;
+  /** Decision arming override (tests); production uses the registry value (`terminal-window` decision.json). */
+  readonly decisionArmMs?: number;
   /** The opening frame drawn as the first block of the full-window conversation (until `/clear`). */
   readonly startup?: WorklineStartup;
   /** The full-window conversation as text, read once after the view closes so it is left in the terminal's own scrollback. */
@@ -690,6 +692,7 @@ export function WorklineApp(props: WorklineProps) {
       </PinnedWorkline>
     </Box>;
   return (
+    <DecisionArmContext.Provider value={props.decisionArmMs ?? DECISION_ARM_DEFAULT}>
     <HumanTextContext.Provider value={props.knownSecrets}>
     <WindowNoteContext.Provider value={argumentNote}>
     <WindowDecideHintContext.Provider value={labels.focus?.decide}>
@@ -697,6 +700,7 @@ export function WorklineApp(props: WorklineProps) {
     </WindowDecideHintContext.Provider>
     </WindowNoteContext.Provider>
     </HumanTextContext.Provider>
+    </DecisionArmContext.Provider>
   );
 }
 

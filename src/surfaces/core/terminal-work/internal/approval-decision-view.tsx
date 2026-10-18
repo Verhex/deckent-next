@@ -92,7 +92,8 @@ export function ApprovalDecisionCard({ presentation, work, labels, preview, scop
       taskId: presentation.displayTask, expiresAt: presentation.expiresAt, tool: presentation.tool, config: presentation.config }, win, known)}
     projectedLines={approvalDecisionCardLines(presentation, work, preview, scoped, known, context, now)} decisionLabels={labels}
     status={[span(left > 0 ? countdownClock(left) : win.expired, { role: left > 0 ? 'accent' : 'error' })]} priority={WINDOW_PRIORITY.approval} position={work.window.position}
-    reason={win.reason} prompt={approvalWindowHints(win, scoped?.scopes ?? [])} pendingText={work.approvalPending} {...(pending === undefined ? {} : { pending })} scopes={scoped?.scopes ?? []} onDecide={decide} />;
+    reason={win.reason} prompt={approvalWindowHints(win)} pendingText={work.approvalPending} {...(pending === undefined ? {} : { pending })} scopes={scoped?.scopes ?? []}
+    choices={win.choices} onDecide={decide} />;
 }
 type CancellationCardPresentation = Readonly<{ displayRun: string; displayScope: string; displayRevision: number; displayPhases: string; cancellationRequested: boolean }>;
 export function cancellationCardPresentation(run: RunView): CancellationCardPresentation {

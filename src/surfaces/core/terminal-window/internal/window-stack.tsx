@@ -48,7 +48,8 @@ export function WindowStackProvider({ children, reservedRows, composerDefault = 
     return () => {
       const wasTop = topWindowLayer(currentLayers.current) === layer;
       currentLayers.current = currentLayers.current.filter(item => item !== layer);
-      if (composerDefault && wasTop) { focus.current = false; setWindowFocused(false); }
+      // The next queued decision takes the keyboard (it arms afresh, arming.ts); anything else returns it to the composer.
+      if (composerDefault && wasTop) { const next = topWindowLayer(currentLayers.current), takes = next !== null && next.priority >= WINDOW_PRIORITY.approval; focus.current = takes; setWindowFocused(takes); }
       setLayers(currentLayers.current);
     };
   }, [composerDefault]);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mainScreenOutput, preserveMainScreenScrollback, PinnedWorkline } from '#surfaces/core/terminal-window/index.js';
+import { DECISION_ARM_DEFAULT, mainScreenOutput, preserveMainScreenScrollback, PinnedWorkline } from '#surfaces/core/terminal-window/index.js';
 import { createElement } from 'react';
 import { render, Text } from 'ink';
 import { cells } from '#surfaces/core/terminal-render/index.js';
@@ -97,21 +97,23 @@ describe('pinned Workline terminal', () => {
       listWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }), listApprovalPage: async () => ({ items: decided ? [] : [approval], nextAfter: null }),
       decideApproval: async (target: WorklineApproval, answer: 'allow' | 'deny') => { expect(target.approvalId).toBe(approval.approvalId); decisions.push(answer); decided = true;
         return { ...target, revision: 1, status: 'decided', decision: answer }; } } as WorklineLedgerPorts;
-    const view = mount({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, work: workSurfaceLabels('en') }, ledger, pollMs: 60_000,
+    const view = mount({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, work: workSurfaceLabels('en') }, ledger, pollMs: 60_000, decisionArmMs: DECISION_ARM_DEFAULT,
       doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST', lines: () => ['PLAN-RESULT'],
         plan: async () => { plans++; if (!decided) return pending; created++;
           return { ...pending, run: admitted, proposal: { ...pending.proposal, status: 'accepted', approval: null } }; } } }, 160, 60);
     await settle(80); view.stdin.write('/do original\r'); await until(() => view.stdout.frame.includes('Create proposed Run'), 'actual approval card');
-    // The self-appearing card says on itself how to reach its decision while the composer keeps focus; focused, it shows its keys only.
-    expect(view.stdout.frame).toContain('DECIDE-HERE Ctrl+O');
-    view.stdin.write('ynsa'); await settle(60); expect(view.stdout.frame).toContain('ynsa'); expect(decisions).toEqual([]); expect(created).toBe(0);
+    // TERMINAL-SABIT-DUZEN slice 2 (replaces R2's Ctrl+O rule): the card takes the keyboard by itself and arms first, so keys typed for the input
+    // at once (letters, Enter, a coalesced control+letter) never decide; Ctrl+O still moves between input and card, and each return re-arms it.
+    expect(view.stdout.frame).toContain('WINDOW-FOCUS'); expect(view.stdout.frame).not.toContain('DECIDE-HERE');
+    view.stdin.write('ynsa'); await settle(60); expect(decisions).toEqual([]); expect(created).toBe(0);
     view.stdin.write('\r'); await settle(60); expect(decisions).toEqual([]); expect(plans).toBe(1);
-    view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('WINDOW-FOCUS'); expect(view.stdout.frame).not.toContain('DECIDE-HERE');
-    // Ink treats this coalesced control+letter as an ambiguous input, never an explicit decision or focus switch.
-    view.stdin.write(`${SWITCH}y`); await settle(60); expect(decisions).toEqual([]); expect(view.stdout.frame).toContain('WINDOW-FOCUS');
     view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('INPUT-FOCUS'); expect(view.stdout.frame).toContain('DECIDE-HERE Ctrl+O');
-    view.stdin.write('n'); await settle(60); expect(decisions).toEqual([]); expect(created).toBe(0);
-    view.stdin.write(SWITCH); await settle(60); view.stdin.write('y');
+    view.stdin.write('n'); await settle(60); expect(decisions).toEqual([]); expect(created).toBe(0); expect(view.stdout.frame).toContain('n');
+    // Ink treats a coalesced control+letter as one ambiguous input: neither a focus switch nor a decision.
+    view.stdin.write(`${SWITCH}y`); await settle(60); expect(decisions).toEqual([]); expect(view.stdout.frame).toContain('INPUT-FOCUS');
+    view.stdin.write(SWITCH); await settle(60); expect(view.stdout.frame).toContain('WINDOW-FOCUS');
+    view.stdin.write('y'); await settle(60); expect(decisions).toEqual([]); // back on the card it re-arms: a key at once is no decision
+    await settle(DECISION_ARM_DEFAULT + 80); view.stdin.write('y');
     await until(() => decisions.length === 1, 'approve the original visible card');
     expect(decisions).toEqual(['allow']); await until(() => plans === 2, 'only then replay admission'); expect(created).toBe(1);
   });

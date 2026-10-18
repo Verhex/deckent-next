@@ -79,7 +79,6 @@ sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'rep
  * back to back, a loaded host reads both bytes in one chunk, which Ink 7.1.1 parses as one text input (`\x0fy`, not Ctrl+O) and the y lands
  * in the composer (CI run 38503250233; ALPHA36-CI2 DECISIONS).
  */
-const FOCUSED = 'Window focused · Ctrl+O return to input';
 async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string] | readonly [string, string, 'fresh']>, columns = 160) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps), String(columns)],
     { cwd, env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
@@ -175,7 +174,7 @@ describe.skipIf(process.platform !== 'linux')('fetch_url in a real pseudo-termin
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'check the local status page\r'],
-      ['https://localhost/status?probe=1', '\u000f'], [FOCUSED, 'y', 'fresh'],
+      ['https://localhost/status?probe=1', 'y'], // slice 2: the card takes the keyboard by itself; the driver's 0.5 s wait outlasts its arming
       ['Fetch turn done.', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();

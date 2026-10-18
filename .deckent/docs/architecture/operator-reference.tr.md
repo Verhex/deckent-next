@@ -15,8 +15,15 @@ kaydığını sınırlar. Mod renkleri: standart soluk, tam otomatik kendi rengi
 (NO_COLOR: modu sözcükler taşır). Komutunuzla veya seçiminizle açılan
 pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
 turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
-arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Otomatik onay kartında
-karar tuşları ancak bu odak geçişinden sonra çalışır (bekleyen kart "Bu kartta karar için Ctrl+O" der); girişte y/n/s/a yazmak hiçbir kartı cevaplamaz. Odaklanmış onayda mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
+arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Onay kartı (ve her soru) klavyeyi
+kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez. Cevaplar listedir — "Evet, bu sefer (y)", "Evet, bu
+oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis sunduğunda (taban öğelerinde ve her zaman sorulan
+kilitlerde asla), "Hayır (n)" — ↑↓, j/k ya da 1–9 ile seçilir, Enter ile onaylanır ya da harfle cevaplanır; seçim Hayır'da
+başlar, Esc reddeder. Kart, gösterildiği andan itibaren kısa bir sessiz süre (0,3 sn, `decision.json`) geçmeden tuş saymaz:
+girişe az önce yazılan tuşlar, basılı tutulan tuş, yapıştırma, az önce cevaplanan karttan ya da odak değişiminden gelen tuş
+kartı cevaplamaz; birden çok tuş olayı üreten tek bir okuma asla karar vermez. Taslak korunur ve barla geri gelir. Bekleyen
+kararlar tek tek gelir ("1/3"). "Hep izin ver" kendi kalıcı iznindir (`deckent policy grants --mine`, `deckent policy revoke`
+ile kaldırılır). Mevcut karar, gerekçe ve doğrulanmış TTY şartları geçerlidir.
 Escape odaklanmış pencereyi kapatır veya onayı reddeder; girişte mevcut taslak/iptal davranışı sürer. Uzun pencere
 içeriği oklar, PageUp/PageDown ve Home/End ile içeride kayar ve satır aralığını gösterir. Çok satırlı taslak,
 yükseklik bütçesi içinde imleci takip eder. `/watch-stop` gözlemi kapatır. Girişin altındaki "Aktif iş" özet satırı bu
