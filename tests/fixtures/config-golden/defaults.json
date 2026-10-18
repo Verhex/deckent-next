@@ -204,7 +204,7 @@
   "storage": {
     "driver": "sqlite",
     "sqlite": {
-      "busyTimeoutMs": 100,
+      "busyTimeoutMs": 5000,
       "durability": "full",
       "journalMode": "wal"
     }

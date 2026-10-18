@@ -41,5 +41,5 @@ it('scans after the tree is final and before any connection, supervisor or claim
   expect(at('.acquire(identity)')).toBeLessThan(gate); expect(at('const readOnlyMounts =')).toBeLessThan(gate); expect(at('start = await prepareTaskStart(')).toBeLessThan(gate); expect(at('applyAcceptedPredecessorPatches(lease')).toBeLessThan(gate);
   // Parity: every host source the container or the prompt receives is a view of the same scan (checkout, binds, inputs, handoff files, context).
   for (const source of ['inputs: start.inputs', 'handoffInputs: start.handoffInputs', '{ readOnlyMounts }', 'dependencyContext: start.dependencyContext', 'workspace: lease.workspace', 'argv: profile.argv']) at(source);
-  for (const later of ['recordAttemptHandoffStart(store', 'openNativeConnection({', 'new DockerSupervisor(', 'app.execute(request)', 'dispatching = true']) expect(at(later)).toBeGreaterThan(gate);
+  for (const later of ['recordAttemptHandoffStart(store', 'openNativeConnection({', 'new DockerSupervisor(', 'app.execute(request, undefined, silence.signal)', 'dispatching = true']) expect(at(later)).toBeGreaterThan(gate);
 });

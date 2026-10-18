@@ -64,7 +64,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   it('nested object defaults apply at every level (the leaf values a v4 short-circuit would drop)', () => {
     const d = CORE_SCHEMA.parse({});
     expect(d.layout).toEqual({ root: null, resources: {} });
-    expect(d.storage).toEqual({ driver: 'sqlite', sqlite: { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' } });
+    expect(d.storage).toEqual({ driver: 'sqlite', sqlite: { busyTimeoutMs: 5000, journalMode: 'wal', durability: 'full' } });
     // Incomplete literal `.default({ maxBytes: 16777216 })`: maxInputs and patchPreview come from the inner schema.
     expect(d.artifacts).toEqual({ maxBytes: 16_777_216, maxInputs: 64, patchPreview: { maxEntries: 10_000, maxDepth: 32, maxPathBytes: 1024 } });
     expect(d.installation).toEqual({ profileMaxBytes: 1_048_576, writeLockTimeoutMs: 2000, imageProbe: { timeoutMs: 5000, outputBytes: 65_536 },
