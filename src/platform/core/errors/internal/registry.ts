@@ -384,6 +384,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
     suggestion: t('remedy.WORKER_TREE_SECRET_REFUSED', p, l) }) },
   WORKER_TREE_SCAN_INCOMPLETE: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_INCOMPLETE.summary', p, l) : t('error.WORKER_TREE_SCAN_INCOMPLETE', p, l),
     suggestion: t('remedy.WORKER_TREE_SCAN_INCOMPLETE', p, l) }) },
+  // R2 (D3a 2026-10-18): a load-dependent `time` bound (limit timeoutMs or admissionTimeoutMs), retried on a later turn; params refusals, maxTimeRefusals.
+  WORKER_TREE_SCAN_DEFERRED: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_DEFERRED.summary', p, l) : t('error.WORKER_TREE_SCAN_DEFERRED', p, l),
+    suggestion: t('remedy.WORKER_TREE_SCAN_DEFERRED', p, l) }) },
   WORK_TARGET_PATH_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_PATH_INVALID', p, l) }) },
   WORK_TARGET_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_UNSAFE', p, l) }) },
   WORK_TARGET_IN_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IN_DATA_ROOT', p, l) }) },
