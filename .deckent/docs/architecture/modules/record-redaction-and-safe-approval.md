@@ -74,7 +74,8 @@ in it can reach the model provider through the worker's one egress. The terminal
   result or a cache entry (Astra 2626 F1), and an oversized native header that is also an archive signature stays `incomplete`, as does
   an oversized native body holding an archive start or end anywhere (engine `embeddedArchive`: zip local/central/end records, gzip
   members, xz, 7z, rar, bzip2, zstd, ustar), each judged by the structure its most lenient common extractor enforces (zip method and
-  offsets, but an end record in the last 65,558 bytes whatever its offsets because Python zipfile re-bases them; gzip method 8 and a
+  offsets, but an end record whose directory sits its stated size before it, or in the last 65,558 bytes, whatever its stated offsets,
+  because Python zipfile and Info-ZIP re-base them (Astra 2629 F2); gzip method 8 and a
   deflate stream that yields output, reserved flags ignored as Python's gzip does; xz header CRC; tar checksum unsigned or signed as GNU tar
   accepts) so chance signatures in machine code do not count. Compressed data without a container header (raw deflate, zlib, brotli,
   LZMA-alone, lz4) cannot be told from machine code and is a documented residual (`docs/known-limits.md`). A file above `maxFileBytes` (size and

@@ -60,7 +60,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   files (`.npmrc`, `.env`, keys) and configured secret values still refuse there; archives and any other oversized file
   are still unscannable; oversized binaries are read only in 1 MiB windows, and one whose window carry cannot be bounded
   (more than 1 MiB) or that holds an archive anywhere in its body (an appended zip, an embedded gzip member) is unscannable.
-  Archive detection follows each container's most lenient common extractor (a zip end record near the file's end whatever its
+  Archive detection follows each container's most lenient common extractor (a zip end record anywhere in the body, judged without its stated
   offsets, gzip with reserved flag bits, a signed tar checksum), but compressed or encoded data without a container header (raw
   deflate, zlib, brotli, LZMA-alone, lz4, a custom encoding) cannot be told apart from machine code: it passes inside the
   binary's digest exception, and a worker can decompress it at a known offset (for example with Node's own zlib). A native binary at or below `maxFileBytes` is read whole and an archive is recognised only at its start, so an archive embedded later in such a binary passes (closing it would refuse common dependency binaries such as esbuild; during beta this moves to scanning every offset with lockfile-pinned digest exceptions). Pattern results are cached per file content under the product's `state/tree-scan-cache`; a changed lockfile
