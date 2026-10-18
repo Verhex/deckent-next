@@ -68,7 +68,9 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const ref = config.execution?.workTargets?.targets[0]?.baseRef;
       if (!ref) throw ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
-      return context.deliveryQueue!.enqueueTargetQueue({ schemaVersion: 1, commandId, identity, target: { kind: 'git-ref', id: ref } });
+      // Owner 2026-10-18 (A): this window always asks for the one bounded service re-attempt, unless the installation disables it (0).
+      return context.deliveryQueue!.enqueueTargetQueue({ schemaVersion: 1, commandId, identity, target: { kind: 'git-ref', id: ref },
+        ...(config.targetQueue.reattempts > 0 ? { deliveryIntent: 'service-reattempt' as const } : {}) });
     },
     async inspect(scopeId: string, commandId: string) { return (await context.deliveryQueue!.inspectTargetQueue({ schemaVersion: 1, scopeId, commandId })).record; },
     confirm(scopeId: string, commandId: string, ask: Parameters<NonNullable<TerminalLaunchContext['confirmDeliveryQueue']>>[1]) { return context.confirmDeliveryQueue!({ schemaVersion: 1, scopeId, commandId }, ask); },
@@ -83,7 +85,8 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       return Object.freeze({ target, identity, ...stat, diffs, source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
         outOfScope: checked.scope.status === 'out-of-scope' ? checked.scope.outOfScope : [], adoptionTargets: Object.freeze([...config.execution?.adoption.targets ?? []]),
         verification: verification ? Object.freeze({ kind: verification.kind, required: verification.required }) : null,
-        ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef } : {}) });
+        ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef,
+          ...(config.targetQueue.reattempts > 0 ? { reattempt: true as const } : {}) } : {}) });
     },
     async deliver(preview, ids, answer) {
       const handlers = interactiveDelivery(answer);

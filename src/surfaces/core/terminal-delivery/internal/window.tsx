@@ -14,7 +14,7 @@ export interface DeliveryWindowLabels {
   readonly queue?: { readonly reprepare: string; readonly hints: string; readonly waiting: string;
     status(view: TargetQueueView): string; card(view: Omit<QueueConsent, 'capability'>): string };
   readonly title: string; readonly ids: string; readonly loading: string; readonly check: string; readonly outOfScope: string; readonly summary: string;
-  readonly file: string; readonly moreFiles: string; readonly where: string; readonly adoptionLater: string; readonly hints: string;
+  readonly file: string; readonly moreFiles: string; readonly where: string; readonly adoptionLater: string; readonly reattempt: string; readonly hints: string;
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
   readonly delivered: string; readonly adoptPrompt: string; readonly adoptTarget: string; readonly adoptHints: string; readonly adopting: string;
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
@@ -318,6 +318,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     if (!delivered) {
       rows.push(line(labels.where, { role: 'muted' }));
       if (preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
+      if (preview.queueTarget && preview.reattempt) rows.push(line(labels.reattempt, { role: 'muted' }));
     }
   }
   if (stage.kind === 'working' || stage.kind === 'adopting') rows.push(line(stage.kind === 'working' ? labels.working : labels.adopting, { role: 'accent' }));
