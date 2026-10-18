@@ -17,7 +17,7 @@ import { DRIVER, type Step } from '../support/pty-steps.js';
 import { terminalApplication } from '../support/approval-terminal.js';
 
 // alpha.47 S6 R4-b (owner D2b, 2026-10-18), real boundary: the owner proposes a coding Run whose proposal carries a delivery intent for one
-// target. Even a standing low-risk class asks the owner's Run-create card; the owner approves it in a terminal. The runtime service's own Run
+// target. The intent asks the owner's Run-create card; the owner approves it in a terminal. The runtime service's own Run
 // progression executes the task in Docker, and the service's scan submits the accepted Attempt to the queue as the owner's service principal
 // with the delegation recorded. Nobody enqueues by hand. The queue verifies the candidate; nothing reaches the target until the owner's two
 // cards adopt it on the shipped CLI's PTY.
@@ -33,10 +33,6 @@ const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
 const attemptActions = ['execute', 'read-output', 'recover-output', 'prepare-integration', 'deliver-integration', 'evaluate', 'adopt-integration', 'rollback-integration'];
 const criterion = { id: 'exit', version: 1, description: 'Zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } };
 const WORKERS: Readonly<Record<string, string>> = { 'append-first': "require('node:fs').appendFileSync('shared.txt','first\\n')", verify: "require('node:fs').accessSync('shared.txt')" };
-const workClasses = { schemaVersion: 2, revision: 'intent-v1', classes: [{ id: 'business', parentClassId: 'small', defaultEffort: 'high',
-  proposalAdmission: { risk: 'low', standingAdmission: true }, acceptanceProfile: { schemaVersion: 1, version: 1, criterionTypes: ['completion'],
-    evidenceTypes: ['verification-result'], rubric: [{ criterionType: 'completion', evidenceTypes: ['verification-result'], weight: 1 }],
-    ceilingRules: [], decisionThresholds: { rejectBelow: 0.2, acceptAt: 1 } } }], bindings: [{ kind: 'append-first', classId: 'business' }] };
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'dn-queue-intent-')); roots.push(root);
@@ -51,7 +47,7 @@ async function fixture() {
   const template = fixtureDockerRegistry(['x']).profiles[0]!;
   const parameters = { ...template.parameters, imageId: process.env.DECKENT_TEST_DOCKER_IMAGE! };
   const profiles = Object.entries(WORKERS).map(([kind, script]) => ({ ...template, id: `fixture-${kind}`, parameters: { ...parameters, argv: ['node', '-e', script] } }));
-  const registry = { ...fixtureDockerRegistry([]), profiles, kinds: Object.keys(WORKERS).map(kind => ({ kind, profile: { id: `fixture-${kind}`, version: 1 } })), workClasses };
+  const registry = { ...fixtureDockerRegistry([]), profiles, kinds: Object.keys(WORKERS).map(kind => ({ kind, profile: { id: `fixture-${kind}`, version: 1 } })) };
   const { argv: _argv, ...bounds } = parameters; void _argv;
   const env = { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') }, options = { env };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
@@ -120,9 +116,12 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const f = await fixture(), { id, issuer, subject } = readLocalOsIdentity(), owner = { id, issuer, subject };
     const proposal: RunProposal = { schemaVersion: 1, commandId: 'propose', proposalId: 'plan', scopeId: SCOPE, runId: 'r1', proposer: owner, source: { kind: 'human' },
       budgetCeiling: { currency: 'USD', limitMinorUnits: 200 }, requiredPermissions: [], delivery: { target: { kind: 'git-ref', id: TARGET }, mode: 'enqueue-accepted' },
-      graph: { schemaVersion: 4, revision: 1, tasks: [{ id: 't', kind: 'append-first', workClass: 'business', dependencies: [], acceptanceCriteria: ['exit'] }], criterionDefinitions: [criterion] } };
+      graph: { schemaVersion: 4, revision: 1, tasks: [{ id: 't', kind: 'append-first', workClass: 'small', dependencies: [], acceptanceCriteria: ['exit'] }], criterionDefinitions: [criterion] } };
     cleanup.push(() => f.release('r1'));
-    // A standing low-risk class would admit at once; the intent always asks the owner's Run-create card.
+    // The intent asks the owner's Run-create card. That it does so even under a standing low-risk work class is proved in
+    // tests/contracts/engine/run-proposal.test.ts (D2b). Here the task uses the Core `small` class (no acceptance profile): a standing class
+    // needs a v2 acceptance profile, whose typed evidence the `exit` (process-exit) evaluator does not emit, so such a task would park
+    // awaiting-decision and never be accepted (fan-in finding, lead item).
     const pending = await proposeRun(f.project, proposal, f.options);
     expect(pending.proposal).toMatchObject({ status: 'pending', binding: { delivery: { target: { kind: 'git-ref', id: TARGET }, mode: 'enqueue-accepted', grantedBy: owner } } });
     await terminalApplication({ project: f.project, env: f.env }, 'decide', SCOPE, { schemaVersion: 1, scopeId: SCOPE, approvalId: pending.proposal.approval!.approvalId,
