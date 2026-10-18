@@ -45,10 +45,11 @@ export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: N
   };
   real.on('data', onData);
   const input = Object.assign(out, {
-    isTTY: true as const, get isRaw() { return real.isRaw; },
+    isTTY: true as const,
     setRawMode(mode: boolean) { real.setRawMode(mode); return input; },
     ref() { real.ref(); return input; }, unref() { real.unref(); return input; },
   }) as unknown as NodeJS.ReadStream;
+  Object.defineProperty(input, 'isRaw', { get: () => real.isRaw });
   return { input, wheel: { subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     close: () => { real.off('data', onData); real.pause(); out.end(); } };
 }
