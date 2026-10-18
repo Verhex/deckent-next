@@ -17,15 +17,18 @@ vi.mock('node:fs/promises', async () => {
   } };
 });
 import { inspectProductFile, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { COMPANION_LIMITS } from '#platform/core/managed-files/index.js';
+const bound = COMPANION_LIMITS.companionReobservations;
 const roots: string[] = [];
 afterEach(async () => { race.path = ''; race.replace = undefined; await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 for (const operation of [prepareProductFile, inspectProductFile]) {
-  it.skipIf(process.platform === 'win32').each(['absent', 'private', 'unsafe', 'unstable', 'symlink', 'directory', 'hardlink'] as const)(`${operation.name} validates the current companion after an observed unlink: %s`, async state => {
+  it.skipIf(process.platform === 'win32').each(['absent', 'private', 'settling', 'unsafe', 'unstable', 'symlink', 'directory', 'hardlink'] as const)(`${operation.name} validates the current companion after an observed unlink: %s`, async state => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-companion-race-')); roots.push(root);
     const layout = resolveProductLayout({ projectRoot: root, root: join(root, 'data') });
     const file = await prepareProductFile(layout, 'ledger'); await writeFile(file, 'primary');
     const companion = file + '-wal'; await writeFile(companion, 'old', { mode: 0o600 });
-    race.path = companion; race.remaining = state === 'unstable' ? 2 : 1;
+    // R6: 'settling' meets a new zero-link generation on every look up to the registry bound, then a private file; 'unstable' one more.
+    race.path = companion; race.remaining = state === 'unstable' ? bound + 1 : state === 'settling' ? bound : 1;
     race.replace = async () => {
       await unlink(companion);
       if (state === 'symlink') { await symlink(file, companion); return; }
@@ -36,7 +39,7 @@ for (const operation of [prepareProductFile, inspectProductFile]) {
         if (state === 'unsafe') await chmod(companion, 0o644);
       }
     };
-    if (state !== 'absent' && state !== 'private') {
+    if (state !== 'absent' && state !== 'private' && state !== 'settling') {
       await expect(operation(layout, 'ledger', ['-wal'])).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSAFE',
         diagnostic: { reason: state === 'unsafe' ? 'mode' : state === 'symlink' || state === 'directory' ? 'file-type' : 'link-count', companion: '-wal' } });
     } else expect(await operation(layout, 'ledger', ['-wal'])).toBe(file);

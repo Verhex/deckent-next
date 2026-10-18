@@ -241,3 +241,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   bound (`targetQueue.reattempts`, default 1), you create the new attempt yourself. The work is re-run, not merged, so it costs a
   second worker run. Tasks with unproven or unresolved effects are never re-run. The `/deliver` window does not send the intent yet.
 - **A worker's resource use is measured in bounded local traces only.** There is no cost or quality report per worker yet.
+- **The ledger is one local SQLite file shared by every process.** Writes are serialized; a write that waits longer than
+  `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. *Workaround:*
+  retry the command; on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
+  lock and the running service keeps the ledger's side files in place; this was measured on one loaded core, not at fleet scale.

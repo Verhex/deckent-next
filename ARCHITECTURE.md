@@ -556,7 +556,7 @@ refresh, usage and dogfood closure remain open.
   support, and PostgreSQL isolation levels are not interchangeable with SQLite locking.
 - Bound connection pools, write queues, in-flight requests and result sizes. Parallelize independent operations
   within resource/scope limits; serialize conflicts at the relevant resource or aggregate. SQLite contention,
-  serialization conflicts and network failures have explicit typed handling, not one generic retry loop.
+  serialization conflicts and network failures have explicit typed handling, not one generic retry loop. Ledger opens, the service's anchor connection and companion re-observation (R6): [platform module note](.deckent/docs/architecture/modules/platform-and-layers.md#sqlite-ledger-concurrency-r6).
 - Retry only classified safe operations with bounded attempts/deadlines and idempotency or conditional writes.
   An unknown commit outcome requires reconciliation; retries do not repeat untracked external side effects.
   Admission accounts for query/deadline budgets; cancellation requests do not prove a remote write was undone.

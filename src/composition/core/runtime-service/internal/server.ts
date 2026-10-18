@@ -1,7 +1,7 @@
 import { createTargetQueueHost } from './queue-host.js';
 import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
 import { AuditCheckpointMonitor, type AuditServiceStatus, isRuntimeServiceQueueOperation, RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
-import { withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
+import { withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, openSqliteLedgerAnchor, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { executeRuntimeApproval } from './approvals.js';
@@ -46,11 +46,14 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
 /** LEDGER-SINGLETON (Astra 2054 R1): backup/upgrade under ledger and endpoint custody before accepting connections. */ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadComposedConfig>>, observer: ConfiguredRuntimeServiceObserver) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
-  catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
+  catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return undefined; throw error; }
   const upgrade = await upgradeExistingProductLedger(path, config.storage.sqlite, await prepareProductDirectory(config.productLayout, 'ledgerBackups'),
     new Date(), { validate: validateDockerSupervisorProfile }, config.company.id);
   if (upgrade) await observer.onLedgerUpgraded?.(upgrade);
+  return path;
 }
+/** R6: the service's lifetime ledger connection (adapter `openSqliteLedgerAnchor`), opened after the start-time upgrade; closed with the service's work, or when the start fails. */ type LedgerAnchor = { db?: ReturnType<typeof openSqliteLedgerAnchor> };
+const closeAnchor = (anchor: LedgerAnchor) => { const db = anchor.db; delete anchor.db; db?.close(); };
 /** Interrupt abandoned turns only under ledger custody; a second start cannot close a live service's turns. */ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadComposedConfig>>, observer: ConfiguredRuntimeServiceObserver, custodyId: string, options: ConfigLoadOptions) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
@@ -81,13 +84,14 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
   const endpoint = await prepareRuntimeSocket(config.productLayout);
   /* LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start. */ const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
-  try { return await startUnderCustody(projectRoot, observer, options, config, guard, ports); }
-  catch (error) { await guard.release(); throw error; }
+  const anchor: LedgerAnchor = {};
+  try { return await startUnderCustody(projectRoot, observer, options, config, guard, ports, anchor); }
+  catch (error) { closeAnchor(anchor); await guard.release(); throw error; }
 }
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
-  config: Awaited<ReturnType<typeof loadComposedConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts) {
+  config: Awaited<ReturnType<typeof loadComposedConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts, anchor: LedgerAnchor) {
   await prepareScheduledBackup(projectRoot, options, observer);
-  await upgradeLedgerAtStart(config, observer);
+  const ledger = await upgradeLedgerAtStart(config, observer); if (ledger) anchor.db = openSqliteLedgerAnchor(ledger, config.storage.sqlite);
   /* H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start). KAPANIS-KIMLIK-YARISI: the project identity's first publication is awaited here, before the listener: from a background page an incomplete stop's exit could cut it off. */ const scopes = await registerConfiguredScopesAtStart(config); await loadConfiguredProjectIdentity(projectRoot, options, 'write');
   const installation = await loadConfiguredInstallationIdentity(projectRoot, options);
   const auditMonitor = new AuditCheckpointMonitor(() => checkpointConfiguredAudit(projectRoot, installation.status === 'available' ? installation.value.installationId : null, options),
@@ -125,7 +129,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   let backupSchedule: Promise<void> = Promise.resolve(), auditSchedule: Promise<void> = Promise.resolve(), queueSchedule: Promise<void> = Promise.resolve();
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions, admissionWaitMs: config.service.admissionWaitMs }, () => {
     /* A scratch removal in flight, every MCP server the turns started (stdin closed, then SIGTERM/SIGKILL) and a toolchain refresh in flight end before the endpoint and ledger custody are released (finalize runs after this settles). */ controller.abort(); turnStop.abort();
-    return Promise.allSettled([recovery, scratchActivity.close(), chatTurnHost.mcp.close(), toolchainRefresh, backupSchedule, auditSchedule, queueSchedule]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
+    return Promise.allSettled([recovery, scratchActivity.close(), chatTurnHost.mcp.close(), toolchainRefresh, backupSchedule, auditSchedule, queueSchedule]).then(([settled]) => { closeAnchor(anchor); if (settled.status === 'rejected') throw settled.reason; });
   }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });

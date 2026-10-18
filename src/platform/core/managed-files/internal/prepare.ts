@@ -1,8 +1,12 @@
 import { constants, type Stats } from 'node:fs';
 import { lstat, mkdir, open, realpath } from 'node:fs/promises';
 import { dirname, join, parse, relative, resolve, sep } from 'node:path';
+import { setTimeout as wait } from 'node:timers/promises';
 import { productResourcePath, type ProductLayout, type ProductResource } from '#platform/core/host/index.js';
+import companionLimits from './companion-limits.json' with { type: 'json' };
 
+/** R6 registry: how often, and how far apart, a private companion seen mid-unlink is re-observed before it fails closed. */
+export const COMPANION_LIMITS = Object.freeze({ ...companionLimits });
 interface ManagedFileContext { readonly resource: ProductResource; readonly companion: string; readonly stage: 'path' | 'handle' }
 interface ManagedFileDiagnostic extends ManagedFileContext {
   readonly reason: 'file-type' | 'link-count' | 'owner' | 'mode'; readonly mode: number; readonly links: number;
@@ -23,14 +27,15 @@ function privateFile(stat: Stats, uid: number, context: ManagedFileContext): voi
   if (reason) throw new ManagedFileError('MANAGED_FILE_UNSAFE', Object.freeze({ ...context, reason,
     mode: stat.mode & 0o777, links: stat.nlink }));
 }
-/** SQLite and other trusted writers may unlink a private companion during stat.
- * Re-observe only that fully private zero-link generation once; a current unsafe file still fails closed.
+/** SQLite and other trusted writers may unlink a private companion during stat (each last close unlinks -wal/-shm). Under CPU load the
+ * unlinking process can be descheduled mid-unlink, so the same zero-link inode stays visible for several observations (R6: up to 9 in
+ * 6.6 ms on one loaded core). Re-observe only a fully private zero-link generation, at most `companionReobservations` times, each after
+ * `companionReobservationDelayMs` (`companion-limits.json`); a current unsafe file fails closed at once, one still zero-link after the bound as before.
  */
 async function inspectCompanion(path: string, uid: number, context: ManagedFileContext): Promise<void> {
   let stat = await inspect(path);
-  if (stat?.isFile() && !stat.isSymbolicLink() && stat.uid === uid && (stat.mode & 0o777) === 0o600 && stat.nlink === 0) {
-    stat = await inspect(path);
-  }
+  for (let left = COMPANION_LIMITS.companionReobservations; left > 0 && stat?.isFile() && !stat.isSymbolicLink() && stat.uid === uid
+    && (stat.mode & 0o777) === 0o600 && stat.nlink === 0; left--) { await wait(COMPANION_LIMITS.companionReobservationDelayMs); stat = await inspect(path); }
   if (stat) privateFile(stat, uid, context);
 }
 /** Trusted-host preflight. This is NOT openat custody or a sandbox against concurrent same-UID workers.
