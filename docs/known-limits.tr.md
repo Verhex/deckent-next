@@ -69,6 +69,13 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   makinede yapılan bir değişiklik işçiye taranmadan ulaşır (her bağlamada olduğu gibi).
   *Etki:* bir bağımlılık paketine düz metin olarak konmuş gerçek bir anahtar işçiye ulaşır, yalnız istisna olarak görünür.
   *Yol:* yalnız güvendiğiniz bir kilit dosyasından kurulan ağaçları bildirin ve Run kartındaki istisnaları gözden geçirin.
+- **Eşzamanlı işler aynı bağımlılık ağacının tek sır taramasını yalnız tek bir süreç içinde paylaşır.** Çalışma servisi aynı anda
+  `execution.secretGate.maxConcurrentScans` taramaya izin verir; bildirilmiş bağımlılık bağlaması aynı kaynak, hedef, kilit dosyası
+  baytları ve ayarlara sahip işler sürmekte olan taramayı bekler. Ayrı bir CLI `execute` süreci kendi taramasını yapar, okunabilir kilit
+  dosyası olmayan bir bağlama hiç paylaşılmaz ve süren bir taramaya katılan iş, o taramanın kendisi gelmeden önce okuduğu dosyalara
+  güvenir (taramadan sonraki her değişiklikle aynı pencere). Sınırlar artık işin kendi görünümlerine ve paylaşılan bağlamalara ayrı ayrı
+  uygulanır. Yük altında süresi dolan tarama, deneme reddedilmeden önce deneme başına en fazla `maxTimeRefusals` kez yinelenir.
+  *Yol:* büyük ağaçlar için `maxConcurrentScans` ya da `timeoutMs` değerini yükseltin; paralel CLI çalıştırmaları yerine servisi kullanın.
 - **Sır kapısının ayar kuralı yalnız ayar türü dosyalara bakar.** Sıradan kaynak koduna yazılmış bir parola yakalanmaz.
   *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 

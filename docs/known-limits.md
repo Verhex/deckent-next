@@ -69,6 +69,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the host after the scan reaches the worker unscanned (as for any bind).
   *Impact:* a real token planted in a dependency package as plain text reaches the worker, visible only as an exception.
   *Workaround:* declare only trees installed from a lockfile you trust, and review the exceptions on the Run card.
+- **Concurrent dispatches share one secret scan of an identical dependency tree only inside one process.** The runtime service admits
+  `execution.secretGate.maxConcurrentScans` scans at a time, and dispatches whose declared dependency bind has the same source, target,
+  lockfile bytes and configuration await the scan already in flight. A separate CLI `execute` process scans on its own, a bind without a
+  readable lockfile is never shared, and a dispatch that joins a scan in flight relies on files that scan read before the dispatch arrived
+  (the same window as any change after a scan). Bounds now apply to the dispatch's own views and to the shared binds separately. A scan
+  that runs out of time under load is retried up to `maxTimeRefusals` times per attempt before the attempt is refused.
+  *Workaround:* raise `maxConcurrentScans` or `timeoutMs` for large trees; run the service rather than parallel CLI executions.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
   detected. *Workaround:* keep secrets in a secret store, never in source.
 
