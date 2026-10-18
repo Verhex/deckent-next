@@ -23,6 +23,39 @@ const CORE_MEMORY_BROKEN = Object.freeze([]);
 // Cursor-only rules with no Claude/Codex counterpart.
 const CURSOR_ONLY = Object.freeze(['deckent.mdc']);
 
+/**
+ * Splits a Cursor `.mdc` rule on raw bytes the way Cursor loads it: a `---` frontmatter block of `key: value` lines,
+ * then the body that reaches the model. Strict on purpose (security review 2026-10-18, parser differential): a BOM,
+ * CR line ending, missing or unterminated block, malformed or duplicate key, or anything but exactly `alwaysApply: true`
+ * is refused, so a copy Cursor would not load unconditionally, or would load with a different body, cannot pass.
+ * The body stays a Buffer and is compared byte for byte; decoding first would fold invalid UTF-8 into U+FFFD.
+ */
+export function parseCursorRule(buffer) {
+  const OPEN = Buffer.from('---\n'), CLOSE = Buffer.from('\n---\n');
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))) throw new Error('starts with a UTF-8 BOM');
+  if (buffer.includes(0x0d)) throw new Error('contains a CR byte; rules use LF line endings');
+  if (!buffer.subarray(0, OPEN.length).equals(OPEN)) throw new Error('does not start with a --- frontmatter line');
+  const end = buffer.indexOf(CLOSE, OPEN.length - 1);
+  if (end < 0) throw new Error('frontmatter block is not closed by a --- line');
+  const fields = new Map();
+  for (const line of buffer.subarray(OPEN.length, end).toString('utf8').split('\n')) {
+    const match = /^([A-Za-z][A-Za-z0-9]*): (\S.*)$/u.exec(line);
+    if (!match) throw new Error(`malformed frontmatter line: ${JSON.stringify(line)}`);
+    if (fields.has(match[1])) throw new Error(`duplicate frontmatter key ${match[1]}`);
+    fields.set(match[1], match[2]);
+  }
+  if (fields.get('alwaysApply') !== 'true') throw new Error('frontmatter must carry exactly alwaysApply: true');
+  if (!fields.get('description')) throw new Error('frontmatter needs a description');
+  return { fields, body: buffer.subarray(end + CLOSE.length) };
+}
+
+/** Claude and Codex load `.claude/rules` / `.codex/rules` Markdown as-is; frontmatter (Claude `paths:` scoping) would load differently per tool. */
+function assertPlainRule(file, buffer) {
+  assert.ok(!buffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])), `${file} starts with a UTF-8 BOM`);
+  assert.ok(!buffer.includes(0x0d), `${file} contains a CR byte; rules use LF line endings`);
+  assert.ok(!buffer.subarray(0, 4).equals(Buffer.from('---\n')), `${file} has frontmatter; Claude would scope it while Codex and Cursor would not`);
+}
+
 /** True when a tracked file or directory exists at the target, following tracked symlinks (.codex/skills → .agents/skills). */
 function trackedTarget(absolute) {
   if (!fs.existsSync(absolute)) return false;
@@ -70,7 +103,10 @@ test('.claude/rules and .codex/rules carry the same tracked Markdown rules byte 
   const claude = names('.claude/rules'), codex = names('.codex/rules');
   assert.ok(claude.length > 0, 'no tracked .claude/rules/*.md');
   assert.deepEqual(codex, claude, 'rule sets differ between .claude/rules and .codex/rules');
-  for (const name of claude) assert.ok(read(`.claude/rules/${name}`).equals(read(`.codex/rules/${name}`)), `${name} differs; copy .claude/rules/${name} to .codex/rules/${name}`);
+  for (const name of claude) {
+    assertPlainRule(`.claude/rules/${name}`, read(`.claude/rules/${name}`));
+    assert.ok(read(`.claude/rules/${name}`).equals(read(`.codex/rules/${name}`)), `${name} differs; copy .claude/rules/${name} to .codex/rules/${name}`);
+  }
 });
 
 test('.cursor/rules carries the same rules as .claude/rules, with the same body under its frontmatter', () => {
@@ -79,17 +115,38 @@ test('.cursor/rules carries the same rules as .claude/rules, with the same body 
     .filter(name => !CURSOR_ONLY.includes(name)).map(name => name.slice(0, -'.mdc'.length)).sort();
   assert.deepEqual(cursor, claude, 'rule sets differ between .claude/rules and .cursor/rules');
   for (const name of claude) {
-    const match = /^---\n[\s\S]*?\n---\n([\s\S]*)$/u.exec(read(`.cursor/rules/${name}.mdc`).toString('utf8'));
-    assert.ok(match, `.cursor/rules/${name}.mdc needs a frontmatter block`);
-    assert.equal(match[1], read(`.claude/rules/${name}.md`).toString('utf8'), `.cursor/rules/${name}.mdc body differs from .claude/rules/${name}.md`);
+    let rule;
+    try { rule = parseCursorRule(read(`.cursor/rules/${name}.mdc`)); } catch (error) { assert.fail(`.cursor/rules/${name}.mdc: ${error.message}`); }
+    assert.ok(rule.body.equals(read(`.claude/rules/${name}.md`)), `.cursor/rules/${name}.mdc body differs byte for byte from .claude/rules/${name}.md`);
   }
+  for (const name of CURSOR_ONLY) assert.doesNotThrow(() => parseCursorRule(read(`.cursor/rules/${name}`)), `.cursor/rules/${name} must be a valid alwaysApply rule`);
 });
 
 test('the deckent-route router rule is always loaded on all three surfaces and stays at or below 12 lines', () => {
   // Owner 2026-10-18 skill-surface decision 6: one cheap moment → skill router, byte-identical for Claude, Codex and Cursor.
   for (const file of ['.claude/rules/deckent-route.md', '.codex/rules/deckent-route.md', '.cursor/rules/deckent-route.mdc']) assert.ok(TRACKED.has(file), `${file} is not tracked`);
   assert.ok(read('.claude/rules/deckent-route.md').toString('utf8').trimEnd().split('\n').length <= 12, 'deckent-route.md exceeds 12 lines');
-  assert.match(read('.cursor/rules/deckent-route.mdc').toString('utf8'), /^---\n[\s\S]*?\nalwaysApply: true\n[\s\S]*?---\n/u, 'the Cursor router rule must be alwaysApply');
+  assert.doesNotThrow(() => parseCursorRule(read('.cursor/rules/deckent-route.mdc')), 'the Cursor router rule must be a valid alwaysApply rule');
+});
+
+test('the Cursor rule parser refuses copies that Cursor would load differently or not at all', () => {
+  const body = Buffer.from('# rule\n\nSame body.\n');
+  const rule = text => Buffer.concat([Buffer.from(text), body]);
+  assert.ok(parseCursorRule(rule('---\ndescription: d\nalwaysApply: true\n---\n')).body.equals(body));
+  const refused = {
+    bom: Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), rule('---\ndescription: d\nalwaysApply: true\n---\n')]),
+    crlf: rule('---\r\ndescription: d\r\nalwaysApply: true\r\n---\r\n'),
+    'not always applied': rule('---\ndescription: d\nalwaysApply: false\n---\n'),
+    'alwaysApply only in the body': Buffer.from('---\ndescription: d\n---\nalwaysApply: true\n---\n'),
+    'duplicate key': rule('---\ndescription: d\nalwaysApply: false\nalwaysApply: true\n---\n'),
+    'unterminated frontmatter': Buffer.from('---\ndescription: d\nalwaysApply: true\n'),
+    'no description': rule('---\nalwaysApply: true\n---\n'),
+  };
+  for (const [name, buffer] of Object.entries(refused)) assert.throws(() => parseCursorRule(buffer), Error, name);
+  // A divergent body parses but must not equal the Claude copy, including invalid UTF-8 that decodes to the same U+FFFD.
+  const parsed = parseCursorRule(Buffer.concat([Buffer.from('---\ndescription: d\nalwaysApply: true\n---\n'), Buffer.from([0x61, 0xff])]));
+  assert.equal(parsed.body.toString('utf8'), Buffer.from([0x61, 0xfe]).toString('utf8'), 'both invalid bytes decode alike');
+  assert.ok(!parsed.body.equals(Buffer.from([0x61, 0xfe])), 'byte comparison still tells them apart');
 });
 
 test('board.mjs DOGFOOD_SOURCE names a tracked file that still contains the cited heading', () => {
