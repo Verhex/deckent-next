@@ -128,6 +128,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   Cursor) or whose installed version no longer offers it reads `unsupported` and is not gated. Typed report checks (`checkId`,
   `role`) are defined but the container bridge does not accept them yet. *Workaround:* prefer Claude or Codex workers for tasks
   whose completion must be proven.
+- **A silent worker is stopped and retried once, but only some tasks are watched.** Since 1.0.0-alpha.47 a native-subscription worker
+  that sends no event and no model traffic for the silence limit (default 10 minutes; warning after 3) is stopped. A task whose effects
+  stay in its own workspace is retried once on a new Attempt; any other task waits for a human as before. Runs created before
+  alpha.47, workers without the native gateway, and profiles whose deadline is shorter than the limit are bounded by the deadline
+  only. The monitor's `worker-silent` warning sees worker events, not model traffic, so it can warn while the worker is still
+  working. The stopped Attempt's workspace clone stays held. *Workaround:* lower `runRuntime.stallRecovery` or raise the profile
+  deadline so the limit comes first.
 - **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
   v29 and ledger v58 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load

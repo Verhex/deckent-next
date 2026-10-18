@@ -128,6 +128,13 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. Tipli
   rapor kontrolleri (`checkId`, `role`) tanımlıdır ama konteyner köprüsü onları henüz kabul etmez. *Geçici çözüm:* tamamlanması
   kanıtlanması gereken işlerde Claude ya da Codex işçilerini tercih edin.
+- **Sessiz bir işçi durdurulur ve bir kez yeniden denenir, ama yalnız bazı görevler izlenir.** 1.0.0-alpha.47'den beri sessizlik sınırı
+  boyunca (varsayılan 10 dakika; 3 dakikada uyarı) hiçbir olay ve model trafiği göndermeyen bir native abonelik işçisi durdurulur.
+  Etkileri yalnız kendi çalışma alanında kalan bir görev yeni bir Attempt ile bir kez yeniden denenir; diğer görevler eskisi gibi
+  insan kararını bekler. alpha.47'den önce oluşturulan Run'lar, native gateway'i olmayan işçiler ve süre sınırı (deadline) bu
+  sınırdan kısa olan profiller yalnız süre sınırıyla sınırlanır. İzlemedeki `worker-silent` uyarısı işçi olaylarını görür, model
+  trafiğini görmez; bu yüzden işçi hâlâ çalışırken uyarabilir. Durdurulan Attempt'in çalışma alanı kopyası tutulur. *Geçici çözüm:*
+  sınırın önce gelmesi için `runRuntime.stallRecovery` değerini düşürün ya da profilin süre sınırını artırın.
 - **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
   yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve ledger v58 yeniden build edilmiş
   binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek terminal/socket/crash ve N1 yük kabulü ayrı kapılardır;
