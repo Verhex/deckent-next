@@ -204,8 +204,8 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const f = await project();
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [
       ['Deckent workline', '/runs\r'],
-      // SLASH-WINDOWS (SW-2) / K1: the policy refusal is shown in the Runs window; Esc closes it and leaves the one system line.
-      ['POLICY_UNAVAILABLE', '\u001b'],
+      // SLASH-WINDOWS (SW-2) / K1: the policy refusal of the watch is shown in the Runs window; Esc closes it and leaves the one system line.
+      ['Watch access: denied', '\u001b'],
       ['◆ Deckent system · ', 'hello\r'],
       ['TERMINAL_CHAT_NOT_CONFIGURED', '/nope\r'],
       // SLASH-WINDOWS: an unknown command is a small window naming it (no error line in the chat); Esc closes it.
@@ -293,7 +293,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       ['/help', '\r'],
       // SW-1: /help opens its window (registry rows: name, two spaces, detail; the palette pads names to a column); Esc closes it and leaves
       // the one framed system summary line, then the composer owns the keyboard again.
-      ['Stop following workers and runs', '\u001b'],
+      ['Runs and workers in one window', '\u001b'],
       ['Help: ', 'see @READ'],
       ['> @README.md', '\r'],
       ['see @README.md |', '\r'],

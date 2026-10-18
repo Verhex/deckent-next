@@ -555,6 +555,9 @@ export function WorklineApp(props: WorklineProps) {
         }
         await openTaskAction(action, panel, execution, ledger, labels.work, { cancel: runId => work.run('cancel', '', execution, undefined, runId),
           control: (runId, control) => work.control(execution, runId, control), answer: runId => work.answer(execution, runId), errorText });
+        // A card changed (or tried to change) a Run: the open Runs window reads the Runs again now, so the next key matches the new state.
+        if (action.action !== 'run' && action.action !== 'transcript' && watchRef.current.runs && liveRef.current?.isOpen() && !execution.signal.aborted)
+          liveRef.current.setRuns((await loadRunViewsForWatch(ledger)).map((run, index) => liveRunEntry(run, `watch-run-${index}`)));
       }
       catch (error) { push([notice('error', errorText(error))]); }
       return;

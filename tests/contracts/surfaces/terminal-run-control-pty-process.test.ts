@@ -41,7 +41,8 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const result = await inPty(program, f.project, f.options.env, 'en', steps); await capture('runs-hold-close-resume-en.txt', result.output);
     const after = (await f.runtime.store.loadRun('s', 'r'))!;
     expect(after.state.kind).toBe('running'); expect(after.revision).toBe(before.revision + 2); // hold + resume; the refused close wrote nothing
-    const output = plain(result.output), ids = [...output.matchAll(/Command (terminal-run-(?:hold|resume)-[0-9a-f-]{36})/gu)].map(match => match[1]!);
+    // K1: results are transcript system lines now (they may wrap at the terminal width), so the rails and line breaks are folded first.
+    const output = plain(result.output).replace(/[│┃\s]+/gu, ' '), ids = [...output.matchAll(/Command (terminal-run-(?:hold|resume)-[0-9a-f-]{36})/gu)].map(match => match[1]!);
     expect(new Set(ids).size).toBe(2);
     for (const commandId of ids) expect(await f.runtime.store.loadRunReceipt!('s', commandId)).not.toBeNull();
     expect(squeeze(result.output)).toContain(squeeze('Run r hold recorded, now parked (revision'));

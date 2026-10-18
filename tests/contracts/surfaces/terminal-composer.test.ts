@@ -188,7 +188,7 @@ describe('composer paste and chunked input', () => {
 describe('composer completion, shortcuts panel and mentions', () => {
   it('opens the slash popup on a bare prefix; arrows select, Tab completes, Enter runs the highlighted command', () => {
     let { state } = run(typed('/mo'));
-    expect(composerMenu(state)!.items.map(command => command.name)).toEqual(['mode', 'monitor', 'model']);
+    expect(composerMenu(state)!.items.map(command => command.name)).toEqual(['mode', 'monitor', 'model', 'permissions']);
     state = run([K.down, K.tab], state).state;
     expect(state.text).toBe('/monitor ');
     expect(composerMenu(state)).toBeNull();
@@ -198,7 +198,7 @@ describe('composer completion, shortcuts panel and mentions', () => {
     expect([submitted(ran.intents), ran.state.text]).toEqual([['/runs'], '']);
     for (const name of ['runs', 'deliver', 'approvals', 'resume', 'mode']) expect(submitted(run([...typed(`/${name}`), K.submit]).intents)).toEqual([`/${name}`]);
     expect(submitted(run([text('/sta\r')]).intents)).toEqual(['/status']);
-    expect(composerMenu(run(typed('/rns')).state)!.items.map(command => command.name)).toEqual(['runs']);
+    expect(composerMenu(run(typed('/rns')).state)!.items.map(command => command.name)).toEqual(['runs', 'permissions']);
     expect(submitted(run([...typed('/zz'), K.submit]).intents)).toEqual(['/zz']);
     const dismissed = run([...typed('/mo'), K.esc]).state;
     expect(composerMenu(dismissed)).toBeNull();

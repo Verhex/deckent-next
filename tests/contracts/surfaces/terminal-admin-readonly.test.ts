@@ -194,8 +194,7 @@ describe('terminal read-only management (S09)', () => {
     expect(text).toContain('Scope: s'); expect(text).toContain('Installation identity: inst-1'); expect(text).toContain('Project identity: proj-1');
     expect(text).toContain('Permission mode: not read'); expect(text).toContain('POLICY_DENIED');
     expect(text).toContain('Surface access: runs, workers');
-    // No grant reader wired here: the part is named unavailable, never an empty list.
-    expect(text).toMatch(/your standing approvals/u); expect(text).not.toContain('None saved');
+    expect(text).toMatch(/your standing approvals/u); expect(text).not.toContain('None saved'); // no grant reader: named unavailable, never empty
     expect((await inspect.permissions!('x', { usage: EMPTY_SESSION_USAGE }))[0]).toContain('Usage: /permissions');
     const none = terminalAdminPorts({ ...base, locale: 'tr', context: { inspectSurfaceAccess: async () => null } }).inspect;
     expect((await none.permissions!('', { usage: EMPTY_SESSION_USAGE })).join('\n')).toContain('Yüzey erişimi: henüz yok');
