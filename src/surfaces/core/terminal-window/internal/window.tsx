@@ -85,6 +85,9 @@ export interface WindowProps {
   readonly onInput?: (input: string, key: Key, meta?: Readonly<{ burst: boolean }>) => boolean | void;
   /** Pasted text while this decision window holds the keyboard (never a decision; the owner may take it as text). */
   readonly onPaste?: (text: string) => void;
+  /** A decision window that takes plain text from a multi-event read right now (an open reason field); without it such a read is dropped
+   * whole. Fail closed: a read of unknown shape never reaches a decision owner. */
+  readonly burstText?: boolean;
   /** Escape when the owner did not handle it: the window closes and the keyboard returns to the layer below. */
   readonly onClose?: () => void;
   /** A body line kept in view (the selected row of a list inside the body); the body scrolls to it when it changes. */
@@ -100,7 +103,7 @@ export interface WindowProps {
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
 export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true, maxColumns, decision = false,
-  onFocusChange, onPaste }: WindowProps) {
+  onFocusChange, onPaste, burstText = false }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
@@ -131,8 +134,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (revealRow === undefined) return;
     setOffset(value => revealRow < value ? revealRow : revealRow >= value + visible ? revealRow - visible + 1 : value);
   }, [revealRow, visible]);
-  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste });
-  latest.current = { total: rows.length, visible, onInput, onClose, onPaste };
+  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, burstText });
+  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, burstText };
   const deliver = (input: string, key: Key) => {
     const current = latest.current;
     if (current.onInput?.(input, key) === true) return;
@@ -149,14 +152,19 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (!read) return;
     if (!read.owned || !acceptsInput() || !arming.armed()) { arming.touch(); return; }
     if (read.events.length === 1) { const [input, key] = read.events[0]!; deliver(input, key); return; }
+    // Several events in one read: only an owner taking plain text right now gets them (as text), and the first one it does not take ends
+    // the read and re-arms; any other owner never sees such a read (security review 2026-10-18, fail-open burst handling).
+    if (!latest.current.burstText) { arming.restart(); return; }
     for (const [input, key] of read.events) if (latest.current.onInput?.(input, key, { burst: true }) !== true) { arming.restart(); return; }
   };
+  const begin = () => { if (!burst.current) { burst.current = { events: [], owned: true }; setImmediate(flush); } return burst.current; };
   useInput((input, key) => {
-    if (key.ctrl && input === 'o') { if (burst.current) burst.current.owned = false; return; }
+    // A focus switch inside a read taints the whole read (it is dropped), whichever order the events came in.
+    if (key.ctrl && input === 'o') { if (guarded) begin().owned = false; return; }
     if (!guarded) { if (acceptsInput()) deliver(input, key); return; }
-    if (!burst.current) { burst.current = { events: [], owned: true }; setImmediate(flush); }
-    burst.current.events.push([input, key]);
-    if (!acceptsInput()) burst.current.owned = false;
+    const read = begin();
+    read.events.push([input, key]);
+    if (!acceptsInput()) read.owned = false;
   }, { isActive: focused });
   // A paste consumer stays active while a decision holds the keyboard, so a paste begun in the input and finished here is still a paste
   // (Ink would otherwise deliver it as ordinary keys); pasted text never decides and restarts the arming wait.

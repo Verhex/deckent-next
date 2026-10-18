@@ -144,8 +144,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   only one decision is drawn at a time (`useDecisionQueue`, "n/total"). Every decision window (`decision` or approval priority) is gated in
   `Window`, fail closed: it counts keys only after `decision.json` `armMs` (300) with no key at all from the moment it became the visible
   input owner (`arming.ts`; each key while unarmed restarts the wait, a focus change or a new card instance re-arms); keys of one stdin read
-  are gathered and looked at after the read — one event is a key press, several (escape sequence + letter, "text⌫y") reach the owner only as
-  `burst` text and never decide; a paste consumer stays active (paste never decides); Ctrl+O in a read drops it. `DecisionCard` lists its
+  are gathered and looked at after the read — one event is a key press; several (escape sequence + letter, "text⌫y") are dropped whole unless
+  the owner takes plain text right now (`burstText`: only an open reason field), and then only as text, never a decision; a paste consumer stays active (paste never decides); Ctrl+O in a read drops it. `DecisionCard` lists its
   answers through the shared question contract (`question.tsx`: ↑↓/j/k, 1–9, Enter, Esc, option letters; multi: Space) with the highlight on
   No; session/always only as the service offers (G6). In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
   mounted). Proof: `TERMINAL-SABIT-DUZEN-2026-10-18/race-*.txt` (failing first), `terminal-decision-race.test.ts`. While a card waits behind the composer (after Ctrl+O back) it shows `tui.focus.decide`.

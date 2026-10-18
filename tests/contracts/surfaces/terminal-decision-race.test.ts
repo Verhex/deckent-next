@@ -3,7 +3,7 @@ import { createElement, useState } from 'react';
 import { render, Text } from 'ink';
 import { PassThrough, Writable } from 'node:stream';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { DECISION_ARM_DEFAULT, DecisionArmContext, Window, WindowStackProvider, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
+import { DECISION_ARM_DEFAULT, DecisionArmContext, QuestionWindow, Window, WindowStackProvider, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
@@ -180,5 +180,46 @@ describe('queued decisions (one shown, "n/total"), each armed when it becomes vi
     expect(stdout.frame).toContain('CARD-rev-1'); expect(answers.filter(answer => answer.startsWith('rev-1'))).toEqual([]);
     await settle(ARM + 80); stdin.write('n');
     await until(() => answers.some(answer => answer.startsWith('rev-1')), 'answer after the replacement armed'); expect(answers.at(-1)).toBe('rev-1:n');
+  });
+});
+
+describe('review 2026-10-18 (fail-open burst handling, focus return onto a decision)', () => {
+  class Tty extends Writable { isTTY = true; rows = 30; columns = 80; frame = ''; override _write(chunk: Buffer, _e: string, done: () => void) { const text = chunk.toString('utf8'); if (!/^(?:\u001b\[\?2004[hl])+$/u.test(text)) this.frame = text; done(); } } // eslint-disable-line no-control-regex
+  const keyboard = () => { const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } }); return stdin; };
+  it('a question that does not take burst text drops a multi-event read whole: "\\x1b[Ay" never answers it, "\\x0fy" neither', async () => {
+    const answers: Array<readonly string[] | null> = [], stdout = new Tty(), stdin = keyboard();
+    const options = [{ id: 'go', label: 'Go', key: 'y' }, { id: 'stop', label: 'Stop', key: 'n' }];
+    const instance = render(createElement(DecisionArmContext.Provider, { value: ARM }, createElement(WindowStackProvider, { composerDefault: true },
+      createElement(QuestionWindow, { title: 'Q', kind: 'single', options, hints: 'H', position: '{from}-{to}/{total}', onAnswer: ids => { answers.push(ids); } }))),
+      { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, patchConsole: false, interactive: true, exitOnCtrlC: false });
+    mounted.push(instance);
+    await settle(ARM + 80);
+    stdin.write('\u001b[Ay'); await settle(60); expect(answers).toEqual([]);
+    await settle(ARM + 80); stdin.write('\u000fy'); await settle(60); expect(answers).toEqual([]);
+    await settle(ARM + 80); stdin.write('n'); await until(() => answers.length === 1, 'deliberate key'); expect(answers[0]).toEqual(['stop']);
+  });
+
+  it('focus returning to an armed decision after a later decision closes (K1–K8 return-focus rule) re-arms it: an in-flight key never answers it', async () => {
+    const answers: string[] = [];
+    let openB!: () => void;
+    function Card({ id, onDone }: { readonly id: string; readonly onDone?: () => void }) {
+      return createElement(Window, { title: [{ text: `DECISION-${id}` }], hints: 'H', position: '{from}-{to}/{total}', priority: WINDOW_PRIORITY.approval, decision: true,
+        onInput: (input: string) => { if (input === 'y' || input === 'n') { answers.push(`${id}:${input}`); onDone?.(); return true; } return false; } });
+    }
+    function Both() {
+      const [b, setB] = useState(false); openB = () => setB(true);
+      return createElement(WindowStackProvider, { composerDefault: true }, createElement(Card, { id: 'A' }), b ? createElement(Card, { id: 'B', onDone: () => setB(false) }) : null);
+    }
+    const stdout = new Tty(), stdin = keyboard();
+    const instance = render(createElement(DecisionArmContext.Provider, { value: ARM }, createElement(Both)),
+      { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, patchConsole: false, interactive: true, exitOnCtrlC: false });
+    mounted.push(instance);
+    await settle(ARM + 80); // A is armed
+    openB(); await settle(ARM + 80); // B took the keyboard and armed; A waits behind it
+    expect(stdout.frame).toContain('DECISION-B'); expect(stdout.frame).not.toContain('DECISION-A');
+    stdin.write('n'); await until(() => answers.length === 1, 'B answered'); expect(answers).toEqual(['B:n']);
+    stdin.write('y'); await settle(30); stdin.write('y'); await settle(60);
+    expect(answers).toEqual(['B:n']); // focus is back on A, which re-armed: the keys in flight never answer it
+    await settle(ARM + 80); stdin.write('n'); await until(() => answers.length === 2, 'deliberate key on A'); expect(answers).toEqual(['B:n', 'A:n']);
   });
 });

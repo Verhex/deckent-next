@@ -130,7 +130,7 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
   const reasonRow = reasonLabels && (editing || reason) ? 1 : 0, rows = reasonRow + options.length;
   return <Window title={title.spans} {...(status ? { status } : {})} body={[...decisionWarningLines(title.fields, decisionLabels), ...decisionWindowLines(projectedLines, decisionLabels)]}
     hints={(controlledPending ?? pending) ? pendingText : editing && reasonLabels ? reasonLabels.hint : prompt}
-    position={position} priority={priority} onInput={onInput} footerRows={rows} decision
+    position={position} priority={priority} onInput={onInput} footerRows={rows} decision burstText={editing}
     // Pasted text only ever fills an open reason field; otherwise the window drops it and re-arms.
     {...(editing ? { onPaste: (text: string) => write(reasonRef.current + text.replace(/[\r\n\t]+/gu, ' ')) } : {})}
     {...(rows ? { footer: (focused: boolean) => <>
