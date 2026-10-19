@@ -104,6 +104,12 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     installationId: identitySchema, setPathDigest: digest, targetPathDigest: digest.nullable(), ledgerDigest: digest.nullable(),
     phase: z.enum(['intent', 'succeeded', 'refused', 'failed', 'uncertain']), code: identitySchema.nullable(),
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict() }).strict(),
+  /** I-D2 (INIT-D2 cond. 4): the person's approved host install of one execution environment: intent before the first sudo step, then its end
+   * (the stopping step's number and exit code, the version the package manager resolved). Never a command line, password or path. */
+  z.object({ kind: z.literal('execution-environment-install'), operationId: identitySchema, environment: identitySchema,
+    source: z.object({ distribution: identitySchema, codename: identitySchema, fingerprint: z.string().regex(/^[0-9A-F]{40}$/) }).strict().nullable(),
+    phase: z.enum(['intent', 'succeeded', 'refused', 'failed', 'uncertain']), step: counterSchema.nullable(), exitCode: z.number().int().nullable(),
+    version: z.string().regex(/^[0-9A-Za-z.+:~_-]{1,64}$/).nullable(), decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict() }).strict(),
   z.object({ kind: z.literal('secret-store-switch'),
     from: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),
     to: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),
