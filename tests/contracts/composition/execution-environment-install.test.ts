@@ -74,8 +74,12 @@ describe('execution-environment install: who may reach it', () => {
     } };
     await walk('src');
     const users = async (pattern: RegExp) => (await Promise.all(files.map(async file => pattern.test(await readFile(file, 'utf8')) ? relative('src', file) : null))).filter(Boolean).sort();
-    expect(await users(/installExecutionEnvironment/u)).toEqual(['composition/core/setup/index.ts', 'composition/core/setup/internal/install.ts']);
-    expect(await users(/execution-environment\.install|EXECUTION_ENVIRONMENT_INSTALL\b/u)).toEqual(['adapters/core/execution-env-docker/index.ts', 'adapters/core/execution-env-docker/internal/card.ts']);
+    // I-S3: the only caller is bare `deckent init`'s window (a person on a real terminal; the window closes before the install runs): the
+    // composition hands the flow to the setup surface's foreground runner, whose registry names the operation. Nothing else may reach it.
+    expect(await users(/installExecutionEnvironment/u)).toEqual(['composition/core/setup/index.ts', 'composition/core/setup/internal/install.ts',
+      'composition/core/setup/internal/wiring.ts', 'surfaces/core/setup/internal/contract.ts', 'surfaces/core/setup/internal/foreground.ts']);
+    expect(await users(/execution-environment\.install|EXECUTION_ENVIRONMENT_INSTALL\b/u)).toEqual(['adapters/core/execution-env-docker/index.ts', 'adapters/core/execution-env-docker/internal/card.ts',
+      'surfaces/core/setup/internal/foreground.ts', 'surfaces/core/setup/internal/modes.json']);
     expect(await users(/runDockerInstall/u)).toEqual(['adapters/core/execution-env-docker/index.ts', 'adapters/core/execution-env-docker/internal/install.ts', 'composition/core/setup/internal/install.ts']);
     expect(await readFile('src/index.ts', 'utf8')).not.toMatch(/composition\/core\/setup|installExecutionEnvironment|execution-env-docker/u);
   });

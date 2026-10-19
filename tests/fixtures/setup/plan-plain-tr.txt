@@ -5,7 +5,7 @@ Deckent kurulum planı ab43de3c5809
 3. Klasör ve kapsam · tamam · "my-erp" kapsamı seçildi.
 4. Kurulumu kim kullanacak · tamam · Tek kullanıcı: ilk kurulum izinleri olduğu gibi kullanılır; başka bir şey yazılmaz.
 5. İzinler · cevabınızı bekliyor · Henüz izin kurulmamış.
-   ? Yukarıda gösterilen ilk kurulum izinleriyle kurulsun mu?
+   ? İlk kurulum izinleri kurulsun mu? (yönetici sizsiniz; düzenleme ve kabuk komutları önce sorulur)
    $ deckent init policy --scope my-erp --apply
 6. Komut korumalı alanı · tamam · Komut korumalı alanı çalışıyor (bubblewrap).
 7. Model bağlantısı · engelli · Önce İzinler aşamasının bitmesini bekliyor.

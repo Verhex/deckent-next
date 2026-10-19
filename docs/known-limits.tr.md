@@ -27,8 +27,17 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
 - **Bazı kurulum mesajları yalnız İngilizce** (derleme ve sandbox hazırlığı mesajları çeviri var olmadan önce çıkar).
-- **Kurulumdan Docker Engine kurmak yeni ve henüz `deckent init` penceresine bağlı değil** (alpha.48 I-D2; kurulum
-  bağlaması sonraki dilim). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
+- **`deckent init` kurulumu yapar, henüz ilk kodlama Run'ını değil** (alpha.48 I-S3). İlk kurulum izinlerini, dili,
+  sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
+  kontrolü, her birini kendi mevcut komutuyla uygular. *Etki:* worker kaydı, havuz, worker imajı ve teslim klonu henüz
+  kurulum aşaması değil: ilk `/do`'dan önce README'deki gibi `deckent init registry` ve `deckent init pool` çalıştırın.
+  Profil seçimi hatırlanmaz: tek kullanıcı hiçbir şey yazmaz (doctor yine kimlik profili ister), ekip ya da kurum yalnız
+  seçimi kaydeder (dağıtım `deckent identity distribute` olarak kalır) ve sonraki `deckent init` yeniden sorar. Son kontrol
+  doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur; bu yüzden
+  yeni kurulumda "uygulanmaya hazır" kalır (doctor kimlik profili ve worker havuzu için uyarır ve ikisi için de `deckent init`
+  der). Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
+- **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; I-S3'ten beri `deckent init` penceresinde, yalnız gerçek bir
+  terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
   Windows/macOS, WSL'de Docker Desktop, Linux Mint gibi türevler, çakışan `docker.io`/`containerd`/`runc` paketleri, eski bir
   `docker.list`, ağ yok) yalnız sonraki adımı yazar. *Etki:* gerçek kurulum yalnız kayıt tutan sahte bir `sudo` ile
@@ -37,7 +46,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   klasörde hazırlanır; reddedilen ya da yalnız yazdırılan bir çalıştırmadan sonra orada kalır. systemd'siz WSL'de motor
   kurulumdan sonra başlamayabilir; sonraki kontrol hizmetin durduğunu söyler. WSL'deki Docker Desktop denetimi Windows
   tarafındaki programa bakar (gözlenen bir düzen, belgelenmiş bir sözleşme değil). Terminal tanığı ret metni bu kurulumu
-  henüz adıyla anmıyor. *Yol:* yazılan komutları izleyin, hizmeti başlatın, `docker` grubu için oturumu kapatıp açın.
+  henüz adıyla anmıyor. Kurulum sürerken pencere kapanır (sudo düz terminalde sorar) ve sonra yeniden açılır. *Yol:* yazılan komutları izleyin, hizmeti başlatın, `docker` grubu için oturumu kapatıp açın.
 
 ## Yalıtım
 

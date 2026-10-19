@@ -45,8 +45,8 @@
   "setup.question.language": "Continue in {language}?",
   "setup.question.folder": "Install Deckent in this folder with the scope \"{scope}\"?",
   "setup.question.profile": "Will only you use this installation?",
-  "setup.question.policy": "Install with the first-run permissions shown above?",
-  "setup.question.policyUpgrade": "Upgrade the permissions to the current first-run rules shown above?",
+  "setup.question.policy": "Install the first-run permissions? (you administer; edits and shell commands ask first)",
+  "setup.question.policyUpgrade": "Upgrade to the current first-run rules? (each added rule is shown on a card first)",
   "setup.question.model": "Connect a model now?",
   "setup.reason.waitsFor": "Waits for the {stage} stage to finish first.",
   "setup.reason.platformUnsupported": "This platform ({platform}) is not supported; use Linux or WSL2 on Windows.",
@@ -67,7 +67,7 @@
   "setup.reason.policyHandBuilt": "The permissions were written by hand; setup leaves them unchanged.",
   "setup.reason.policyConflict": "Existing permission files differ from the first-run rules; nothing is written. Check them with deckent doctor.",
   "setup.reason.policyFresh": "No permissions are installed yet.",
-  "setup.reason.policyPending": "An earlier installation stopped midway; it can be completed.",
+  "setup.reason.policyPending": "An earlier install stopped midway; what it wrote is unknown until it is completed (its journal resumes it).",
   "setup.reason.policyUpgrade": "Newer first-run rules are available.",
   "setup.reason.declined": "Skipped at your request.",
   "setup.reason.sandboxReady": "The command sandbox works ({realm}).",
@@ -169,5 +169,11 @@
   "setup.window.finished": "Nothing more to answer here; close the window to see the summary.",
   "error.SETUP_APPLY_UNAVAILABLE": "Setup stages cannot be applied by this build yet; nothing was written. Run the command shown for each stage.",
   "error.SETUP_INSTALL_DENIED": "The policy does not let you install {environment} on this installation (action execution-environment install, over all scopes); nothing ran. An administrator can grant it.",
-  "error.SETUP_INSTALL_STATE_UNKNOWN": "Whether {runtime} is installed could not be checked; nothing is installed on an unknown state. Run deckent init again."
+  "error.SETUP_INSTALL_STATE_UNKNOWN": "Whether {runtime} is installed could not be checked; nothing is installed on an unknown state. Run deckent init again.",
+  "setup.window.connect": "Connect now",
+  "setup.foreground.upgradeTitle": "Upgrade the permissions",
+  "setup.foreground.upgradeBody": "These first-run rules are added in scope {scope}; every existing rule is kept and the previous documents are archived:",
+  "setup.foreground.upgradeApply": "Add these rules",
+  "setup.foreground.notApplied": "Nothing was changed.",
+  "error.SETUP_STAGE_REFUSED": "Setup stopped at the stage {stage} ({code}); nothing after it was applied. A stage that needs a person (a terminal, a card or sudo) runs only in deckent init on a terminal."
 }

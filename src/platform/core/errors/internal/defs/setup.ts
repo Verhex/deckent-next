@@ -13,4 +13,6 @@ export const setupErrors: ErrorDefinitions = Object.freeze({
   SETUP_INSTALL_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.SETUP_INSTALL_DENIED', p, l) }) },
   // I-D2: detection could not tell whether the runtime is installed; an install is never offered or run on an unknown state.
   SETUP_INSTALL_STATE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SETUP_INSTALL_STATE_UNKNOWN', p, l) }) },
+  // I-S3: a stage's owner refused (no terminal, no witness, no grant) in an unattended `deckent init --yes`; the stage is named, nothing after it ran.
+  SETUP_STAGE_REFUSED: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_REFUSED', p, l) }) },
 });

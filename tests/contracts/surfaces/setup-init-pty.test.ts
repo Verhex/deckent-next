@@ -71,7 +71,7 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
     await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'erp-demo' }));
     // A clean environment: no AI-agent or CI marker (the test runner may itself run inside one), English, a real terminal type.
     const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
-    const steps = [['Enter confirm', '1'], ['Enter confirm', '\r'], ['> 3. Folder and scope', '1'], ['Enter confirm', '\r'], ['> 4. Who uses', '\u001b']];
+    const steps = [['Enter confirm', '1'], ['Enter confirm', '\r'], ['> 3. Folder and scope', '1'], ['Enter confirm', '\r'], ['> 5. Who uses', '\u001b']];
     const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init']), root],
       { env: { ...env, PATH: process.env['PATH'] ?? '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
     const run = JSON.parse(stdout) as { status?: number | string; output: string; marks: number[]; timeout?: string };
@@ -82,11 +82,12 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
     const screen = (mark: number) => terminalBuffers(run.output.slice(0, complete(run.marks[mark]!)), COLUMNS, ROWS).text.split('\n');
     const bottom = (rows: readonly string[]) => rows.findLastIndex(row => /^[╰+└]/u.test(row));
     const rows = [0, 2, 4].map(mark => bottom(screen(mark)));
+    // I-S3: the detection families are registered (12 stages: Git repository after the folder, execution environment, sign-ins).
     // The language, folder and profile steps: the same window, the same bottom border row.
     expect(rows[0]).toBeGreaterThan(5);
     expect(rows).toEqual([rows[0], rows[0], rows[0]]);
     expect(screen(2).join('\n')).toContain('> 3. Folder and scope');
-    expect(screen(4).join('\n')).toContain('> 4. Who uses this installation'); expect(screen(4).join('\n')).toMatch(/1\. core:solo/u);
+    expect(screen(4).join('\n')).toContain('> 5. Who uses this installation'); expect(screen(4).join('\n')).toMatch(/1\. core:solo/u);
     // After Esc the plain summary stays in the scrollback; the folder holds only what the test put there.
     expect(run.output.slice(run.marks[4])).toContain('Deckent setup plan'); expect(run.output).toContain('Nothing was applied.');
     expect(await readdir(root)).toEqual(['package.json']);
