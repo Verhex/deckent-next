@@ -1,5 +1,8 @@
 import { resolve } from 'node:path';
-import { DeckentError, ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { formatDecimal, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { modelsInteractive } from './io.js';
 import { parseProviderSpendManagementCommand, type ProviderSpendManagementCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult, ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
@@ -28,7 +31,7 @@ function parse(argv: readonly string[]): Parsed {
     else if (key === '--help') result.help = true;
     else if (key === '--no-color') continue;
     else if (key === '--unfreeze' && action === 'revise-budget') result.unfreeze = true;
-    else if (key === '--input' || key === '--lang' || (['--scope', '--usd', '--command-id'].includes(key) && (action === 'create-budget' || action === 'revise-budget'))) {
+    else if (key === '--input' || key === '--lang' || (key === '--scope' && action === 'spending') || (['--scope', '--usd', '--command-id'].includes(key) && (action === 'create-budget' || action === 'revise-budget'))) {
       const value = argv[++index];
       if (!value || (value.startsWith('-') && value !== '-')) throw ErrorRegistry.createError('CLI_USAGE');
       if (key === '--input') result.source = value; else if (key === '--lang') result.language = value;
@@ -37,7 +40,9 @@ function parse(argv: readonly string[]): Parsed {
   }
   // Budget flags and --input are two forms of one command, never mixed; create-budget has only the flag form.
   const flags = result.scope !== undefined || result.usd !== undefined || result.commandId !== undefined || result.unfreeze === true;
-  const formed = result.source ? !flags && result.action !== 'create-budget' : result.scope !== undefined && result.usd !== undefined;
+  // C-MODELS: bare `models spending` (at most --scope) is the scope's budget summary, a read (owner CLI review 2026-10-19).
+  const formed = result.source ? !flags && result.action !== 'create-budget'
+    : result.action === 'spending' ? result.usd === undefined && result.commandId === undefined && !result.unfreeze : result.scope !== undefined && result.usd !== undefined;
   if ((!result.help && !formed) || (result.help && (result.source || result.json || flags))) throw ErrorRegistry.createError('CLI_USAGE');
   return result;
 }
@@ -66,9 +71,10 @@ function renderAudit(result: ProviderSpendAuditResult, locale: Locale): string {
 
 /** Account snapshots are read-only local evidence; they never claim an invoice or audited history. */
 export async function modelSpendingCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
-  const args = parse(argv), locale = resolveLocale(args.language, context.env); context.onLocale?.(locale);
+  const args = parse(argv), locale = commandLocale(context, args.language);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (args.help) { emit(args.action === 'create-budget' || args.action === 'revise-budget' ? t('cli.help.modelsBudget', {}, locale) : args.action === 'reconcile-spending' ? t('cli.help.modelsManageSpending', {}, locale) : args.action === 'spending' ? t('cli.help.modelsSpending', {}, locale) : t('cli.help.modelsAuditSpending', {}, locale), sinks); return; }
+  if (args.source === undefined && args.action === 'spending') return spendingSummary(args, context, locale, sinks);
   if (args.source === undefined) return budgetCommand(args, context, locale, sinks);
   if (args.action === 'spending' && !context.inspectProviderSpendAccount) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
   if (args.action === 'audit-spending' && !context.auditProviderSpendAccount) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
@@ -108,4 +114,29 @@ async function budgetCommand(args: Parsed, context: ModelCommandContext, locale:
       .then(current => built(() => scopeBudgetRevisionCommand(current, usd, args.unfreeze === true, 'cli', args.commandId)));
   const result = await context.manageProviderSpend(root, command, options);
   emit(result, { ...sinks, json: args.json, render: value => scopeBudgetLine(value, locale) });
+}
+
+/** Bare `models spending` (owner CLI review 2026-10-19): the scope's budget and what it has used, in money (a read; `--input` stays the AI form). */
+async function spendingSummary(args: Parsed, context: ModelCommandContext, locale: Locale, sinks: Parameters<typeof emit>[1]): Promise<void> {
+  if (!context.inspectProviderSpendAccount) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
+  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env, heal: false };
+  const configured = await loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const scope = await resolveCommandScope({ command: 'deckent models spending', locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
+    mutating: false, interactive: modelsInteractive(context, args.json), listScopes: () => scopeLister(context as never, root, options)().catch(() => []) });
+  if (!scope) return;
+  const result = await context.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId: scope.scopeId, current: true }, options);
+  if (!args.json) emit(scopeNotice(scope, locale), sinks);
+  emit(result, { ...sinks, json: args.json, render: value => {
+    if (!value.checkpoint) return t('climodels.spending.none', { scope: terminalSafeText(value.scopeId) }, locale);
+    const account = value.checkpoint.account, currency = terminalSafeText(account.budget.currency), digits = minorDigits(account.budget.currency);
+    const money = (minor: number) => `${formatDecimal(minor / 10 ** digits, locale, digits)} ${currency}`, used = Number(account.settledExactMinorUnits);
+    return [t('climodels.spending.limit', { amount: money(account.budget.limitMinorUnits) }, locale), t('climodels.spending.used', { amount: money(used) }, locale),
+      t('climodels.spending.held', { amount: money(account.reservedMinorUnits) }, locale),
+      t('climodels.spending.left', { amount: money(Math.max(0, account.budget.limitMinorUnits - used - account.reservedMinorUnits)) }, locale),
+      ...(account.frozen ? [t('climodels.spending.frozen', {}, locale)] : [])].join('\n');
+  } });
+}
+/** Minor units of an ISO 4217 currency (USD 2, JPY 0) from the runtime's own currency data; an unknown code shows the amount in minor units. */
+function minorDigits(currency: string): number {
+  try { return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 0; } catch { return 0; }
 }

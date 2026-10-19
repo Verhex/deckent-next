@@ -1,8 +1,12 @@
-import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { randomUUID } from 'node:crypto';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { modelActivationCommandSchema, modelActivationQuerySchema, parseModelReference,
   type ModelActivationCommand, type ModelActivationQuery } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
+import { askModelsCard, explainActivationDenial, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
 
 export type ModelActivationInspectionHandler = (root: string, query: ModelActivationQuery,
   options: ConfigLoadOptions) => Promise<ModelActivationInspection>;
@@ -103,9 +107,11 @@ function renderAdmission(value: ModelActivationResult, locale: Locale): string {
 }
 
 /** Exact durable activation state only; this command never infers provider reachability or execution readiness. */
-export async function modelActivationCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
-  const parsed = parse(argv), locale = resolveLocale(parsed.language, context.env); context.onLocale?.(locale);
-  const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
+export async function modelActivationCommand(argv: readonly string[], context: ModelCommandContext): Promise<void | ExitCode> {
+  const picked = pickOnly(argv);
+  if (picked && argv[1] !== 'activation' && modelsInteractive(context)) return activationByChoice(argv[1] as 'activate' | 'deactivate', picked, context);
+  const parsed = parse(argv), locale = commandLocale(context, parsed.language);
+  const sinks = modelsSinks(context);
   if (parsed.help) { emit(t('cli.help.modelsActivation', {}, locale), sinks); return; }
   const model = reference(parsed), root = context.root ?? process.cwd(), options: ConfigLoadOptions = { env: context.env ?? process.env };
   if (parsed.action === 'activation') {
@@ -124,4 +130,59 @@ export async function modelActivationCommand(argv: readonly string[], context: M
   if (!command.success) throw ErrorRegistry.createError('CLI_USAGE');
   const result = await context.admitModelActivation(root, command.data, options);
   emit(result, { ...sinks, json: parsed.json, render: item => renderAdmission(item, locale) });
+}
+
+/** `models activate|deactivate` with at most `--scope`/`--lang`: the values a person picks on a terminal (owner CLI review 2026-10-19). */
+function pickOnly(argv: readonly string[]): { scope?: string; language?: string } | null {
+  const picked: { scope?: string; language?: string } = {};
+  for (let index = 2; index < argv.length; index += 2) {
+    const flag = argv[index], value = argv[index + 1];
+    if ((flag !== '--scope' && flag !== '--lang') || !value || value.startsWith('-') || (flag === '--scope' ? picked.scope : picked.language) !== undefined) return null;
+    if (flag === '--scope') picked.scope = value; else picked.language = value;
+  }
+  return picked;
+}
+
+/**
+ * A person's activation (owner CLI review 2026-10-19): the scope (never a silent default for a change), the provider and the exact model id from
+ * the declared catalog (never an alias), then the system reads the binding digest, catalog revision and current activation revision, and a
+ * scoped card confirms. The command is the same typed `models activate|deactivate` the long AI form sends; nothing is written before the card.
+ */
+async function activationByChoice(action: 'activate' | 'deactivate', picked: { scope?: string; language?: string }, context: ModelCommandContext): Promise<void | ExitCode> {
+  const locale = commandLocale(context, picked.language), root = context.root ?? process.cwd(), options: ConfigLoadOptions = { env: context.env ?? process.env };
+  if (!context.inspectDeclaredModels || !context.inspectModelBinding || !context.inspectModelActivation || !context.admitModelActivation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const cancelled = () => { reportModelsCancelled(context, locale); return EXIT_CODES.error; };
+  const configured = await loadConfig(root, { ...options, heal: false }).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const scope = await resolveCommandScope({ command: `deckent models ${action}`, locale, explicit: picked.scope, configured: typeof configured === 'string' ? configured : undefined,
+    mutating: true, interactive: true, listScopes: () => scopeLister(context as never, root, options)().catch(() => []), pick: request => askModelsCard(context, locale, request) });
+  if (!scope) return cancelled();
+  const declared = await context.inspectDeclaredModels(root, options);
+  if (declared.status !== 'declared' || !declared.catalog.providers.some(provider => provider.models.length)) {
+    emit(t('climodels.models.pick.noneDeclared', {}, locale), { level: 'warning', ...modelsSinks(context) }); return EXIT_CODES.usage;
+  }
+  const providers = declared.catalog.providers.filter(provider => provider.models.length);
+  const providerId = await askModelsCard(context, locale, { title: t('climodels.models.pick.provider', {}, locale),
+    options: providers.map(provider => ({ id: `${provider.id}@${provider.version}`, label: terminalSafeText(provider.id) })) });
+  const provider = providers.find(entry => `${entry.id}@${entry.version}` === providerId);
+  if (!provider) return cancelled();
+  // Exact ids only (owner 2026-10-08): the declared native id is what the person reads and picks; aliases are never offered.
+  const modelId = await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: terminalSafeText(provider.id) }, locale),
+    options: provider.models.map(model => ({ id: `${model.id}@${model.version}`, label: terminalSafeText(model.nativeId) })) });
+  const model = provider.models.find(entry => `${entry.id}@${entry.version}` === modelId);
+  if (!model) return cancelled();
+  const ref = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
+  const binding = await context.inspectModelBinding(root, parseModelReference(ref), options);
+  if (binding.status !== 'declared') throw ErrorRegistry.createError('MODEL_ACTIVATION_NOT_FOUND');
+  const current = await context.inspectModelActivation(root, { schemaVersion: 1, scopeId: scope.scopeId, reference: ref }, options);
+  const shown = { model: terminalSafeText(model.nativeId) };
+  const answer = await askModelsCard(context, locale, { title: action === 'activate' ? t('climodels.models.card.activate', shown, locale) : t('climodels.models.card.deactivate', shown, locale),
+    body: [t('climodels.models.card.where', { scope: terminalSafeText(scope.scopeId), provider: terminalSafeText(provider.id) }, locale),
+      t('climodels.models.card.now', { state: current.activation ? stateLabel(current.activation.state, locale) : t('models.activation.inactive', {}, locale) }, locale),
+      t('climodels.models.card.system', {}, locale)], options: modelsConfirmOptions(locale) });
+  if (answer !== 'apply') return cancelled();
+  const command = modelActivationCommandSchema.parse({ schemaVersion: 1, action, scopeId: scope.scopeId, commandId: `models-${randomUUID()}`, reference: ref,
+    expectedRevision: current.activation?.revision ?? 0, expectedBinding: binding.binding, ...(action === 'activate' ? { catalogRevision: binding.catalogRevision } : {}) });
+  emit(scopeNotice(scope, locale), modelsSinks(context));
+  const result = await context.admitModelActivation(root, command, options).catch(error => explainActivationDenial(error, context, locale, action, scope.scopeId));
+  emit(result, { ...modelsSinks(context), render: item => renderAdmission(item, locale) });
 }

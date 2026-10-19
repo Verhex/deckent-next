@@ -436,7 +436,6 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // or runner); the sentence is chosen by the diagnosis kind.
   MCP_SANDBOX_COMMAND_UNREACHABLE: { category: 'error', render: (p, l) => ({ message: mcpSandboxUnreachable(p, l) }) },
   MCP_TOOL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TOOL_UNKNOWN', p, l) }) },
-  MCP_APPROVAL_NEEDS_TERMINAL: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_APPROVAL_NEEDS_TERMINAL', p, l) }) },
   MCP_REGISTRY_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_REGISTRY_FILE_INVALID', p, l) }) },
   MCP_SERVER_NOT_TRUSTED: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NOT_TRUSTED', p, l) }) },
   MCP_TRUST_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_TRUST_STORE_UNAVAILABLE', p, l) }) },

@@ -1171,7 +1171,9 @@
         "src/domain/core/model-invocation",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields"
       ],
       "plan": "SURFACES"
     },
@@ -1217,7 +1219,9 @@
         "src/surfaces/core/cli-run",
         "src/surfaces/core/cli-admin",
         "src/surfaces/core/cli-approval",
-        "src/surfaces/core/cli-task"
+        "src/surfaces/core/cli-task",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields"
       ],
       "plan": "SURFACES"
     },
@@ -2800,7 +2804,9 @@
         "src/platform/core/i18n",
         "src/platform/core/config",
         "src/platform/core/output",
-        "src/surfaces/core/cli-kit"
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields"
       ],
       "plan": "INSTALLATION"
     },

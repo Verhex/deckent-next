@@ -13,10 +13,11 @@ const declared: DeclaredModelsInspection = { schemaVersion: 1, status: 'declared
 const absent: DeclaredModelsInspection = { schemaVersion: 1, status: 'not-configured', availability: 'not-observed', catalog: null };
 function sink() { const values: string[] = []; return { values, output: { write(value: string) { values.push(value); } } }; }
 
+// C-MODELS (owner CLI review 2026-10-19): bare `models` is the scope's worker catalog table; the declarations are `models --declared`.
 it('CLI emits the injected declaration contract unchanged as JSON and treats absence as success', async () => {
   for (const result of [declared, absent]) {
     const target = sink(); let call: unknown;
-    const code = await main(['models', '--json'], { root: '/project', env: { HOME: '/tmp/models' }, stdout: target.output, stderr: target.output,
+    const code = await main(['models', '--declared', '--json'], { root: '/project', env: { HOME: '/tmp/models' }, stdout: target.output, stderr: target.output,
       initialize() {}, async inspectDeclaredModels(root, options) { call = { root, home: options.env?.['HOME'] }; return result; } });
     expect(code).toBe(0); expect(JSON.parse(target.values.join(''))).toEqual(result); expect(call).toEqual({ root: '/project', home: '/tmp/models' });
   }
@@ -25,7 +26,7 @@ it('CLI emits the injected declaration contract unchanged as JSON and treats abs
 it('CLI human output preserves native protocol declarations while denying observed availability', async () => {
   for (const [locale, semantic] of [['en', 'not observed'], ['tr', 'gözlemlenmedi']] as const) {
     const target = sink();
-    expect(await main(['models', '--lang', locale, '--no-color'], { stdout: target.output, stderr: target.output, initialize() {},
+    expect(await main(['models', '--declared', '--verbose', '--lang', locale, '--no-color'], { stdout: target.output, stderr: target.output, initialize() {},
       async inspectDeclaredModels() { return declared; } })).toBe(0);
     const text = target.values.join(''); expect(text).toContain('native/model-a'); expect(text).toContain('responses@v1');
     expect(text.toLowerCase()).toContain(semantic);

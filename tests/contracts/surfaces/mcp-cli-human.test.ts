@@ -1,6 +1,15 @@
 import { PassThrough } from 'node:stream';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { main } from '#surfaces/index.js';
+import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
+
+// C-MODELS: the trust card is an arrow-key card on a person's terminal; it is simulated here and its lines are printed as the card shows them.
+const shownCards = vi.hoisted(() => [] as string[]);
+vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
+  const real = await importOriginal<typeof import('#surfaces/core/cli-human/index.js')>();
+  return { ...real, cliMode: () => ({ mode: 'interactive' as const, reason: 'tty' as const }),
+    askCliCard: async (request: CliCardRequest) => { shownCards.push([request.title, ...(request.body ?? [])].join('\n')); return 'yes'; } };
+});
 
 // T3 integration (L1 i18n debt): `deckent mcp add` prints its trust card with the terminal window's localized fields (realm in words, URL and
 // header names, never a value) and the K1 grant outcome as one sentence — not the adapter's raw card object or a `grant: {…}` dump.
@@ -12,11 +21,10 @@ async function run(lang: 'en' | 'tr', grant: unknown) {
   const code = await main(['mcp', 'add', '--transport', 'http', '--header', 'Authorization: Bearer $DECK:GH', 'web', 'https://mcp.example.com/mcp', '--lang', lang], {
     root: '/p', env: {}, stdin, stdout: { write(value: string) { out.push(value); } },
     async runMcpCommand(_root: string, _request: unknown, _options: unknown, ask: (card: unknown) => Promise<boolean>) {
-      setTimeout(() => stdin.write('y\n'), 5);
       await ask(card);
       return { schemaVersion: 1, added: { name: 'web', scope: 'local', file: '/p/.deckent/mcp.local.json' }, trust: 'trusted', pinnedTools: 2, grant };
     } } as never);
-  return { code, text: out.join('') };
+  return { code, text: [...shownCards.splice(0), out.join('')].join('\n') };
 }
 it('prints the trust card in the person\'s words and the grant outcome as a sentence (EN, TR)', async () => {
   const en = await run('en', { status: 'granted' });

@@ -11,9 +11,14 @@ it('lists custom namespace/version/digest packages from bounded stdin in both lo
   const packages = [{ schemaVersion: 1, namespace: 'acme', source: 'local-package', definition, digest: sha256(encodeIdentityProfile(definition)), labels: { en: 'Local profile', tr: 'Yerel profil' } }];
   for (const language of ['en', 'tr']) {
     let output = '';
-    expect(await main(['identity', 'profiles', '--registry', '-', '--lang', language], { stdin: Readable.from([JSON.stringify(packages)]), listIdentityProfiles,
+    // C-MODELS (owner CLI review 2026-10-19): ids and digests are behind --verbose; the default line is the label and its meaning.
+    expect(await main(['identity', 'profiles', '--registry', '-', '--verbose', '--lang', language], { stdin: Readable.from([JSON.stringify(packages)]), listIdentityProfiles,
       stdout: { write: text => { output += text; } } })).toBe(0);
     expect(output).toContain(language === 'en' ? 'Local profile' : 'Yerel profil'); expect(output).toContain('acme:local@1'); expect(output).toContain(packages[0]!.digest);
+    let plain = '';
+    expect(await main(['identity', 'profiles', '--registry', '-', '--lang', language], { stdin: Readable.from([JSON.stringify(packages)]), listIdentityProfiles,
+      stdout: { write: text => { plain += text; } } })).toBe(0);
+    expect(plain).toContain(language === 'en' ? 'Local profile' : 'Yerel profil'); expect(plain).not.toContain(packages[0]!.digest);
   }
 });
 it('renders the same structured preview in EN/TR JSON and preserves typed namespace errors', async () => {

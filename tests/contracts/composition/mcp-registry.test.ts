@@ -47,7 +47,10 @@ function workspace() {
     await mcpCommand(['mcp', ...full], { root: project, env, stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: runConfiguredMcpCommand });
     return JSON.parse(out.join('')) as Record<string, unknown>;
   };
-  return { base, project, home, env, server, cli };
+  // C-MODELS (owner A48-D5/D6): the CLI decides trust only on a person's card (refused off a terminal, --yes included); the registry semantics here
+  // decide through the application with the card answered yes, as the card does.
+  const decide = async (request: Record<string, unknown>) => runConfiguredMcpCommand(project, request as never, { env }, async () => true) as Promise<Record<string, unknown>>;
+  return { base, project, home, env, server, cli, decide, approve: (name: string) => decide({ verb: 'approve', name }) };
 }
 const byName = (listed: Record<string, unknown>) => Object.fromEntries((listed['servers'] as { name: string }[]).map(server => [server.name, server as Record<string, unknown>]));
 
@@ -60,15 +63,17 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
     expect(statSync(join(w.home, '.deckent', 'mcp.json')).mode & 0o777).toBe(0o600);
     expect(byName(await w.cli('list'))['fx']).toMatchObject({ scope: 'local', status: 'pending-approval', health: 'not-started', shadows: ['project', 'user'] });
     expect([local.started(), project.started(), user.started()]).toEqual([0, 0, 0]);
-    expect(await w.cli('approve', 'fx', '--yes')).toMatchObject({ approved: true, scope: 'local', pinnedTools: 1 });
-    expect(byName(await w.cli('list'))['fx']).toMatchObject({ scope: 'local', status: 'trusted', health: 'connected', era: 'modern' });
+    await expect(w.cli('approve', 'fx', '--yes')).rejects.toMatchObject({ code: 'MCP_APPROVAL_NEEDS_TERMINAL' });
+    expect([local.started(), project.started(), user.started()]).toEqual([0, 0, 0]);
+    expect(await w.approve('fx')).toMatchObject({ approved: true, scope: 'local', pinnedTools: 1 });
+    expect(byName(await w.cli('list', '--check'))['fx']).toMatchObject({ scope: 'local', status: 'trusted', health: 'connected', era: 'modern' });
     expect(local.started()).toBeGreaterThan(0); expect([project.started(), user.started()]).toEqual([0, 0]);
     await expect(w.cli('remove', 'fx')).rejects.toMatchObject({ code: 'MCP_SERVER_SCOPE_AMBIGUOUS' });
     expect(await w.cli('remove', 'fx', '--scope', 'local')).toMatchObject({ removed: { scope: 'local' } });
     expect((await w.cli('get', 'fx'))['server']).toMatchObject({ scope: 'project', status: 'pending-approval', shadows: ['user'] });
-    await w.cli('list');
+    await w.cli('list', '--check');
     expect(project.started()).toBe(0);
-    await w.cli('approve', 'fx', '--yes');
+    await w.approve('fx');
     expect(project.started()).toBeGreaterThan(0); expect(user.started()).toBe(0);
     expect([local.calls(), project.calls(), user.calls()]).toEqual([0, 0, 0]);
   }, 90_000);
@@ -77,7 +82,7 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
     const w = workspace(), fx = w.server('fx');
     await w.cli('add-json', '--scope', 'project', 'fx', JSON.stringify({ command: process.execPath, args: fx.args.slice(4), realm: 'host' }));
     const file = join(w.project, '.deckent', 'mcp.json'), digest = () => createHash('sha256').update(readFileSync(file)).digest('hex'), before = digest();
-    await w.cli('approve', 'fx', '--yes');
+    await w.approve('fx');
     expect(digest()).toBe(before);
     // SEC-2 (F29): project trust lives in the global root's directory of this project, never in the project tree.
     const trust = join(await mcpProjectTrustDirectory(w.project, join(w.home, '.deckent'), false), 'mcp-trust.json');
@@ -94,19 +99,18 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
     // Any change of the approved entry (here one argument) asks again: nothing starts until approved.
     writeFileSync(file, JSON.stringify({ mcpServers: { fx: { ...raw.mcpServers['fx'], args: [...(raw.mcpServers['fx']!['args'] as string[]), '--token', 'changed'] } } }));
     const started = fx.started();
-    expect(byName(await w.cli('list'))['fx']).toMatchObject({ status: 'changed', health: 'not-started' });
+    expect(byName(await w.cli('list', '--check'))['fx']).toMatchObject({ status: 'changed', health: 'not-started' });
     expect(fx.started()).toBe(started);
-    await w.cli('approve', 'fx', '--yes');
-    expect(byName(await w.cli('list'))['fx']).toMatchObject({ status: 'trusted', health: 'connected' });
+    await w.approve('fx');
+    expect(byName(await w.cli('list', '--check'))['fx']).toMatchObject({ status: 'trusted', health: 'connected' });
     expect(fx.started()).toBeGreaterThan(started);
   }, 60_000);
 
   it('an expanded ${VAR} (a personal token in args) never shows on the approval card or the tool-call card; the definition stays the template', async () => {
     const w = workspace(), fx = w.server('fx');
     await w.cli('add', '--no-approve', 'fx', ...fx.args, '--token', '${MY_TOKEN}');
-    const approved = await (async () => { const out: string[] = []; await mcpCommand(['mcp', 'approve', 'fx', '--yes', '--json'], { root: w.project, env: w.env,
-      stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: async (root, request, options, confirm) =>
-        runConfiguredMcpCommand(root, request as never, options, async card => { out.push(JSON.stringify(card)); return confirm(card); }) }); return out.join(''); })();
+    const approved = await (async () => { const out: string[] = []; await runConfiguredMcpCommand(w.project, { verb: 'approve', name: 'fx' }, { env: w.env },
+      async card => { out.push(JSON.stringify(card)); return true; }); return out.join(''); })();
     expect(approved).toContain('"phase":"launch"'); expect(approved).toContain('"phase":"tools"');
     expect(approved).toContain('${MY_TOKEN}'); expect(approved).toContain('"name":"MY_TOKEN","set":true'); expect(approved).not.toContain('s3cr3t-value-xyz');
     const view = await loadMcpRegistry({ projectRoot: w.project, layout: resolveProductLayout({ platform: process.platform === 'win32' ? 'win32' : 'posix', projectRoot: w.project }), environment: w.env, secret: async () => undefined });
@@ -127,12 +131,14 @@ describe.skipIf(process.platform !== 'linux')('MCP trust decisions (owner 2026-0
     try { return db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String((row as { record: string }).record)) as
       { event: { subject: Record<string, unknown> } }).event.subject); } finally { db.close(); }
   };
-  it('adding a local server with --yes trusts and pins it in one step, audited; without a terminal and without --yes nothing is written', async () => {
+  it('adding a local server on its card trusts and pins it in one step, audited; without a terminal nothing is written, --yes included', async () => {
     const w = workspace(), fx = w.server('fx');
     await expect(w.cli('add', 'fx', ...fx.args)).rejects.toMatchObject({ code: 'MCP_APPROVAL_NEEDS_TERMINAL' });
-    expect(existsSync(join(w.home, '.deckent', 'mcp.json'))).toBe(false);
-    expect(await w.cli('add', '--yes', 'fx', ...fx.args)).toMatchObject({ added: { scope: 'local' }, trust: 'trusted', pinnedTools: 1 });
-    expect(byName(await w.cli('list'))['fx']).toMatchObject({ scope: 'local', status: 'trusted', health: 'connected' });
+    await expect(w.cli('add', '--yes', 'fx', ...fx.args)).rejects.toMatchObject({ code: 'MCP_APPROVAL_NEEDS_TERMINAL' });
+    expect(existsSync(join(w.home, '.deckent', 'mcp.json'))).toBe(false); expect(fx.started()).toBe(0);
+    expect(await w.decide({ verb: 'add', scope: 'local', name: 'fx', approve: true, entry: { command: process.execPath, args: fx.args.slice(4), realm: 'host' } }))
+      .toMatchObject({ added: { scope: 'local' }, trust: 'trusted', pinnedTools: 1 });
+    expect(byName(await w.cli('list', '--check'))['fx']).toMatchObject({ scope: 'local', status: 'trusted', health: 'connected' });
     expect(ledgerAudits(w.project)).toEqual([expect.objectContaining({ kind: 'mcp-trust', action: 'trust', scope: 'local', server: 'fx' })]);
     // A project entry is not decided at add: it asks on first use.
     expect(await w.cli('add', '--scope', 'project', 'px', ...fx.args)).toMatchObject({ trust: 'pending' });
@@ -140,12 +146,12 @@ describe.skipIf(process.platform !== 'linux')('MCP trust decisions (owner 2026-0
 
   it('a user-scope trust lives beside the personal registry and holds in another project without asking; no trust is written into the project tree', async () => {
     const w = workspace(), fx = w.server('fx');
-    expect(await w.cli('add', '--scope', 'user', '--yes', 'fx', ...fx.args)).toMatchObject({ trust: 'trusted' });
+    expect(await w.decide({ verb: 'add', scope: 'user', name: 'fx', approve: true, entry: { command: process.execPath, args: fx.args.slice(4), realm: 'host' } })).toMatchObject({ trust: 'trusted' });
     expect(statSync(join(w.home, '.deckent', 'mcp-trust.json')).mode & 0o777).toBe(0o600);
     expect(existsSync(join(w.project, '.deckent', 'integrations', 'mcp-trust.json'))).toBe(false);
     const other = join(w.base, 'other'); mkdirSync(join(other, '.deckent'), { recursive: true }); writeFileSync(join(other, '.deckent', 'config.json'), '{}\n');
     const out: string[] = [];
-    await mcpCommand(['mcp', 'list', '--json'], { root: other, env: w.env, stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: runConfiguredMcpCommand });
+    await mcpCommand(['mcp', 'list', '--check', '--json'], { root: other, env: w.env, stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: runConfiguredMcpCommand });
     expect(byName(JSON.parse(out.join('')) as Record<string, unknown>)['fx']).toMatchObject({ scope: 'user', status: 'trusted', health: 'connected' });
   }, 60_000);
 
@@ -163,7 +169,7 @@ createInterface({ input: process.stdin }).on('line', line => { const m = JSON.pa
 `;
     const script = join(elsewhere, 'server.mjs'), inside = join(w.project, 'tools', 'inside.mjs'), link = join(w.project, 'tools', 'server.mjs');
     writeFileSync(script, raw); writeFileSync(inside, raw);
-    const refused = await w.cli('add', '--yes', 'hidden', '--', process.execPath, script).catch((error: unknown) => error as { code: string; message: string });
+    const refused = await w.decide({ verb: 'add', scope: 'local', name: 'hidden', approve: true, entry: { command: process.execPath, args: [script] } }).catch((error: unknown) => error as { code: string; message: string });
     expect(refused).toMatchObject({ code: 'MCP_SANDBOX_COMMAND_UNREACHABLE' });
     expect((refused as { message: string }).message).toContain(script);
     // The catalog sentence of the path-hidden kind, in either locale (params are the typed contract; the message is rendered from them).
@@ -174,14 +180,14 @@ createInterface({ input: process.stdin }).on('line', line => { const m = JSON.pa
       .toContain(`hidden bubblewrap sandbox içinde başlatılamadı: argüman ${script} bu makinede var ama sandbox görünümünde yok`);
     // A path written with a `${VAR}` is named as written (the cards' rule: never an expanded value).
     (w.env as Record<string, string>)['MCP_ELSEWHERE'] = elsewhere;
-    const templated = await w.cli('add', '--yes', 'templated', '--', process.execPath, '${MCP_ELSEWHERE}/server.mjs').catch((error: unknown) => error as { code: string; message: string });
+    const templated = await w.decide({ verb: 'add', scope: 'local', name: 'templated', approve: true, entry: { command: process.execPath, args: ['${MCP_ELSEWHERE}/server.mjs'] } }).catch((error: unknown) => error as { code: string; message: string });
     expect(templated).toMatchObject({ code: 'MCP_SANDBOX_COMMAND_UNREACHABLE', params: { path: '${MCP_ELSEWHERE}/server.mjs', target: '' } });
     expect((templated as { message: string }).message).not.toContain(elsewhere);
     // A trusted server whose script is a link that later points outside the view: `list` carries the typed reason and the path, not only "start-failed".
     symlinkSync(inside, link);
-    expect(await w.cli('add', '--yes', 'linked', '--', process.execPath, link)).toMatchObject({ trust: 'trusted' });
+    expect(await w.decide({ verb: 'add', scope: 'local', name: 'linked', approve: true, entry: { command: process.execPath, args: [link] } })).toMatchObject({ trust: 'trusted' });
     rmSync(link); symlinkSync(script, link);
-    expect(byName(await w.cli('list'))['linked']).toMatchObject({ status: 'trusted', health: 'failed', failure: 'sandbox-unreachable',
+    expect(byName(await w.cli('list', '--check'))['linked']).toMatchObject({ status: 'trusted', health: 'failed', failure: 'sandbox-unreachable',
       diagnosis: { kind: 'path-hidden', role: 'argument', path: link, target: script } });
   }, 60_000);
 });
