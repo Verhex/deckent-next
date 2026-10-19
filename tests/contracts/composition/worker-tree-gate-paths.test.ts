@@ -33,10 +33,13 @@ it('has exactly one production launch site, and it is the gated one', () => {
 
 it('scans after the tree is final and before any connection, supervisor or claim in the gated path', () => {
   const text = files.find(file => file.path === TASK)!.text, at = (needle: string) => { const index = text.indexOf(needle); expect(index, needle).toBeGreaterThan(-1); return index; };
-  const gate = at('await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv)');
-  expect(text.indexOf('enforceWorkerTreeGate(')).toBe(text.lastIndexOf('enforceWorkerTreeGate('));
+  // R2 (D3a 2026-10-18): the gate runs through scan admission; its scan port is the adapter scan of exactly those views.
+  const gate = at('await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv)');
+  expect(text.indexOf('enforceAdmittedWorkerTreeGate(')).toBe(text.lastIndexOf('enforceAdmittedWorkerTreeGate(')); expect(at('scan: async views => scanWorkerTree(views,')).toBeGreaterThan(gate);
+  // The one decision stays `enforceWorkerTreeGate`, called only by the admitted gate (no second, unadmitted gate path in src).
+  expect(sites(/\benforceWorkerTreeGate\(/u)).toEqual(['src/engine/core/workspaces/internal/scan-admission.ts', 'src/engine/core/workspaces/internal/secret-gate.ts']);
   expect(at('.acquire(identity)')).toBeLessThan(gate); expect(at('const readOnlyMounts =')).toBeLessThan(gate); expect(at('start = await prepareTaskStart(')).toBeLessThan(gate); expect(at('applyAcceptedPredecessorPatches(lease')).toBeLessThan(gate);
   // Parity: every host source the container or the prompt receives is a view of the same scan (checkout, binds, inputs, handoff files, context).
   for (const source of ['inputs: start.inputs', 'handoffInputs: start.handoffInputs', '{ readOnlyMounts }', 'dependencyContext: start.dependencyContext', 'workspace: lease.workspace', 'argv: profile.argv']) at(source);
-  for (const later of ['recordAttemptHandoffStart(store', 'openNativeConnection({', 'new DockerSupervisor(', 'app.execute(request)', 'dispatching = true']) expect(at(later)).toBeGreaterThan(gate);
+  for (const later of ['recordAttemptHandoffStart(store', 'openNativeConnection({', 'new DockerSupervisor(', 'app.execute(request, undefined, silence.signal)', 'dispatching = true']) expect(at(later)).toBeGreaterThan(gate);
 });

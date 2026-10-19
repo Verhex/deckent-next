@@ -3,7 +3,7 @@ import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.j
 import { summarizeWorkCosts } from '#domain/index.js';
 import { projectAttemptWorkCost, recommendRunWorkCosts } from '#engine/core/resource-observation/index.js';
 import { projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
-import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDependencyIds, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
+import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDependencyIds, dependencyTaskId, excludeConflicting, isConflictEdge, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorCloseReason, MonitorDeliveryOutlook, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
@@ -18,11 +18,11 @@ export interface MonitorRunEvidence {
  * evidence) sits above the progressing codes so missing evidence is never shown as healthy progress.
  */
 export const MONITOR_BLOCKER_PRECEDENCE: readonly MonitorBlockerCode[] = Object.freeze(['parked', 'awaiting-decision', 'cancellation-pending', 'unresolved-effect', 'evaluation-unknown',
-  'evaluation-not-ready', 'worker-stale-heartbeat', 'worker-exited-unevaluated', 'awaiting-approval', 'not-admitted', 'pool-held', 'waiting-pool-slot', 'waiting-execution-slot',
-  'unknown', 'worker-running', 'none', 'waiting-dependency']);
-const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.freeze({ parked: 'parked', 'awaiting-decision': 'waiting', 'none': 'progressing', 'worker-running': 'progressing',
+  'evaluation-not-ready', 'worker-stale-heartbeat', 'worker-silent', 'worker-exited-unevaluated', 'awaiting-approval', 'not-admitted', 'pool-held', 'waiting-pool-slot', 'waiting-execution-slot',
+  'unknown', 'worker-running', 'waiting-scope-conflict', 'none', 'waiting-dependency']);
+const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.freeze({ parked: 'parked', 'awaiting-decision': 'waiting', 'none': 'progressing', 'worker-running': 'progressing', 'worker-silent': 'progressing',
   'waiting-pool-slot': 'waiting', 'waiting-execution-slot': 'waiting', 'pool-held': 'waiting', 'awaiting-approval': 'waiting', 'cancellation-pending': 'waiting', 'worker-exited-unevaluated': 'waiting',
-  'waiting-dependency': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
+  'waiting-dependency': 'waiting', 'waiting-scope-conflict': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
   'unresolved-effect': 'blocked', 'not-admitted': 'blocked', 'unknown': 'blocked' });
 const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision']);
 const blocker = (code: MonitorBlockerCode, taskId: string | null, sinceMs: number | null = null, detail: string | null = null): MonitorBlocker =>
@@ -49,7 +49,7 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
   if (phase === 'evaluating') {
     if (attempt?.evaluationObserved) return blocker('evaluation-unknown', taskId);
     if (!terminal) return blocker('evaluation-not-ready', taskId, null, 'terminal-missing');
-    if (terminal.interrupted === true) return blocker('evaluation-not-ready', taskId, endOf(attempt), 'interrupted');
+    if (terminal.interrupted === true) return blocker('evaluation-not-ready', taskId, endOf(attempt), terminal.interruptCause === 'inactivity' ? 'WORKER_INACTIVITY_STOPPED' : 'interrupted');
     if (!dispatch?.outputRecorded) return blocker('evaluation-not-ready', taskId, endOf(attempt), 'output-missing');
     // A work task whose dispatch holds no retained patch yet: the evaluation's patch preparation has not run or failed (its failure is reported to its caller, not recorded in the ledger).
     const work = e.run.snapshot.graph.tasks.find(value => value.id === taskId)?.workInput !== undefined;
@@ -67,12 +67,22 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
   // Observed without sidecars (output denied by policy, observation unavailable): no heartbeat was read, so neither running nor stale.
   if (!worker.files) return blocker('unknown', taskId, null, worker.diagnostics[0] ?? 'sidecars-missing');
   const freshness = worker.files.heartbeat.freshness;
-  if (freshness === 'fresh' && !['exited', 'missing'].includes(worker.process)) return blocker('worker-running', taskId, dispatch.grantedAtMs, worker.files.activity?.phase ?? null);
+  if (freshness === 'fresh' && !['exited', 'missing'].includes(worker.process)) {
+    // R3 warn: a running worker whose last host-received event (or its start) is older than the Run's frozen warn bound. Model traffic is
+    // not visible here, so this can warn while the watchdog still counts the worker active; only the watchdog stops it.
+    const stall = e.run.snapshot.execution.tasks.find(row => row.taskId === taskId)?.stall, heard = Math.max(dispatch.grantedAtMs ?? 0, worker.files.activity?.receivedAt ?? 0);
+    if (stall && dispatch.grantedAtMs !== null && e.observedAt - heard >= stall.warnAfterMs) return blocker('worker-silent', taskId, heard, 'no-worker-events');
+    return blocker('worker-running', taskId, dispatch.grantedAtMs, worker.files.activity?.phase ?? null);
+  }
   return blocker('worker-stale-heartbeat', taskId, heartbeatAt(worker, e.observedAt), freshness === 'fresh' ? 'process-' + worker.process : freshness);
 }
-function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBlocker {
+function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence, conflicting: ReadonlySet<string> = new Set()): MonitorBlocker {
   if (task.disposition === 'ready' && channelBlocker(task.taskId, e)) return channelBlocker(task.taskId, e)!;
   const id = task.taskId;
+  // D7a: waiting only on system scope-conflict order edges, or ready but held back by in-flight work on the same resource.
+  const edges = e.run.snapshot.graph.tasks.find(row => row.id === id)!.dependencies.filter(isConflictEdge).map(dependencyTaskId);
+  if (task.disposition === 'waiting' && task.dependencies.every(dependency => edges.includes(dependency))) return blocker('waiting-scope-conflict', id, null, task.dependencies[0] ?? null);
+  if (task.disposition === 'ready' && conflicting.has(id)) return blocker('waiting-scope-conflict', id);
   if (task.disposition === 'waiting' || task.disposition === 'blocked') return blocker('waiting-dependency', id, null, task.dependencies[0] ?? null);
   if (task.disposition === 'delayed') return blocker('none', id, null, 'not-before');
   const approval = e.approvals.find(value => value.subjectKind === 'task' && value.runId === e.run.snapshot.identity.runId && value.taskId === id
@@ -90,17 +100,18 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBloc
 export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   const snapshot = e.run.snapshot;
   if (snapshot.state.kind === 'terminal') return null;
-  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.failureCode ?? snapshot.state.reason), deadlineMs: snapshot.state.deadline };
+  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.failureCode ?? (snapshot.state.reason === 'dependency-failed' && snapshot.progress.some(task => task.notAcceptedReason === 'worker-stalled') ? 'TASK_STALL_RETRY_EXHAUSTED' : snapshot.state.reason)), deadlineMs: snapshot.state.deadline };
   if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];
+  const conflicting = new Set(excludeConflicting(snapshot.graph, snapshot.progress, snapshot.graph.tasks.map(task => task.id).filter(id => ready.get(id)?.disposition === 'ready')));
   for (const definition of snapshot.graph.tasks) {
     const task = snapshot.progress.find(value => value.taskId === definition.id)!;
     const attempt = attemptOf(e.run, task.taskId);
     if (task.unresolvedEffects || task.phase === 'reconciling') candidates.push(blocker('unresolved-effect', task.taskId, null, attempt?.observedKind ?? null));
     else if (task.phase === 'active' || task.phase === 'evaluating') candidates.push(boundBlocker(task.taskId, task.phase, attempt, attempt ? e.workers.get(attempt.attemptId) : undefined, e));
     else if (task.phase === 'awaiting-decision') candidates.push({ ...blocker('awaiting-decision', task.taskId, task.decision!.since, task.decision!.reason), deadlineMs: task.decision!.deadline });
-    else if (task.phase === 'pending') candidates.push(pendingBlocker(ready.get(task.taskId)!, e));
+    else if (task.phase === 'pending') candidates.push(pendingBlocker(ready.get(task.taskId)!, e, conflicting));
   }
   const rank = (value: MonitorBlocker) => MONITOR_BLOCKER_PRECEDENCE.indexOf(value.code);
   return candidates.reduce((best, value) => rank(value) < rank(best) ? value : best);

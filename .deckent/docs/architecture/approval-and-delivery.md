@@ -700,6 +700,58 @@ Graph v2 and tasks without workInput keep their existing criteria; analysis-type
 are not inferred. Legacy evaluation receipts replay unchanged. New fields are additive to current strict schemas; older builds
 refuse records carrying these fields, so downgrades across new evidence require the existing governed backup/restore path.
 
+### REPORT-REQUIRED (alpha.47 R5, owner D5a, 2026-10-18)
+
+A work task (`workInput`) that exits 0 must also leave a valid structured result report. The evaluation application records the
+host-read report status as optional `report` (`reported | missing | invalid | oversized | unsupported`) only for a clean exit of a
+work task that did not ask for input; the transition refuses it on any other exit. The domain floor fails `missing` as
+`notAcceptedReason: report-missing` and `invalid`/`oversized` as `report-invalid`, whether or not a work class is bound; with a
+bound profile the same absence also raises the `missing-evidence` ceiling. The report stays a claim: a valid report removes only
+this floor, never the patch, criterion, model or profile gates. Report checks may carry optional `checkId` and
+`role: acceptance | exploratory`; an acceptance check whose last outcome is not `passed` fails as `declared-check-not-passed`,
+exploratory and untyped checks never fail. Reasons have one owner (`inspectTaskEvaluation`); the report reason precedes
+`no-change-produced`. `worker-stalled` is reserved for the R3 silence retry. Report reasons are retry-classifiable; the bounded
+retry belongs to the run recovery owner (R3), not to evaluation. `unsupported` (a CLI without a structured result channel, today
+Cursor) is not gated and stays visible on the evaluation. Legacy receipts without `report` replay unchanged. Generic by design:
+for an ERP/CRM operation the report is the worker's structured result, with no Git or test assumption. Not yet wired: the
+container bridge still accepts only `{command, outcome}` checks, so typed checks are reachable only after its schema mirror changes.
+
+### SILENT-WORKER WATCHDOG (alpha.47 R3, owner D4a/D5a, 2026-10-18)
+
+Policy: `runRuntime.stallRecovery` (`warnAfterMs` 180000, `stopAfterMs` 3600000, `maxRetries` 1, `backoffMs` 30000; defaults in
+`stall-policy.json`); a v2/v3 work class may override warn/stop with `inactivity`. Admission freezes
+`execution.tasks[].stall {warnAfterMs, stopAfterMs, maxRetries}` only for a profile with a host-observed liveness channel (the
+native gateway; `dockerTaskSilenceDeadline`) whose deadline comes later. An explicit class policy that cannot stop before the deadline
+is refused (`WORKER_INACTIVITY_POLICY_INVALID`); the installation default simply does not apply to such a task. Older Runs carry no
+policy and keep only the deadline bound.
+The stop default is 1 hour (owner 2026-10-18, was 10 minutes): a single long tool call (build, test, lock wait) sends no worker
+event and no model traffic, so a short stop cut healthy workers. Consequences: a profile whose deadline is under an hour gets no frozen
+policy (no watchdog, no `worker-silent` warning; its deadline bounds it), and a silent watched worker can hold its slot up to the stop.
+Detection is pure (`inactivityVerdict`): silence counts from the dispatch start, the host receipt of the last worker event batch
+(accepted, dropped or refused) and the last host-side model traffic through the gateway; heartbeat freshness is not an input. The
+execution composition samples these gateway counters on the existing observation tick and aborts the execute signal with reason
+`inactivity`; the existing kill path follows (`docker kill`, then inspect). The dispatch terminal records the additive
+`interruptCause: deadline | inactivity | cancel` (absent on older records, read as none). `deadline` means interrupted without an
+abort (the profile deadline or a supervisor CLI failure); `cancel` is any other abort reason and has no caller yet. The cause is the
+FIRST stop, fixed where the supervisor decides it (the Docker command boundary records whether its deadline or the execute signal
+fired first, via `AbortSignal.any`) and carried on the sandbox result (`sandboxInterruptCause`); the dispatch never re-reads the signal
+after cleanup or output retention, so a later watchdog abort cannot relabel a deadline stop (Astra 2642 F1). A supervisor that reports
+no cause leaves none, which is never retried.
+Retry owner: `recoverStalledTask` (domain), reached only through the evaluation commit that the ledger re-runs. Under the frozen bound
+the binding moves to `previousBindings` as `observedKind: stalled` with `stallCause`, and the task returns to `pending` with a
+`not-before` backoff; the next Attempt is a new generation with a new id and lease. Over the bound the task fails with
+`worker-stalled` (or keeps `report-missing`/`report-invalid`) and never parks for a decision. Only `inactivity` stops and
+`report-missing`/`report-invalid` clean exits (D5a) share the bound; `deadline`, legacy and other interruptions keep today's
+evaluation-not-ready hold, and accepting it stays `RUN_DECISION_NOT_READY`. The evaluation readiness carve-out is keyed on the
+host-recorded cause and only allows the retry/fail transition, never a pass; the stopped worker's partial output is never read.
+Effect gate: a retry needs settled effects (`unresolvedEffects === false`), the one adapter classifier saying workspace-only
+(`classifyDockerTaskEffects`, shared with the delivery re-attempt) and no criterion that reads business operation settlements
+(`operation-evidence`). Anything else, for example an ERP/CRM task with external effects, keeps the existing hold and
+reconciliation path. Monitor: `worker-silent` (warn) when a fresh-heartbeat worker's last host-received event is older than the
+frozen warn bound; details `WORKER_INACTIVITY_STOPPED` (a stop awaiting evaluation) and `TASK_STALL_RETRY_EXHAUSTED` (a Run parked
+because the bound was used). The superseded Attempt's clone is not released automatically: EXEC-RELEASE treats an unbound Attempt as
+held, as for a quota resume.
+
 Docker terminal observations add `container` v1 to the existing dispatch terminal: immutable container Id, image digest,
 nullable daemon start/end timestamps (nanoseconds preserved), and the frozen CPU/memory/pids/tmp resource profile.
 The labelled exact-request observation is carried by execute/cancel/reconcile into the same attempt-bound dispatch record.
@@ -725,6 +777,16 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
 
 ### Typed work input and coding templates (K3 = A; owner 2026-09-30, Jev 97e59d70; lane Jev 22ea0d2c; nineteenth batch)
 
+- **Graph v5 (alpha.47 S6 R4-a, owner D7a).** Additive: a task may declare business-record `resources` (`{kind, id}`, the queue's
+  target ref shape) and the system, never an author, inserts `{ taskId, startFrom: 'accepted-patch', origin: 'scope-conflict' }` order
+  edges between tasks whose conflict keys intersect (work-input scope paths with a glob reduced to its static prefix, and exact record
+  keys; the path rule is the delivery revalidation's `patchPathsIntersect`). Run create and proposal admission insert them once at
+  ingress (a branch Run keeps its compiled diamond); an authored system edge is refused; the card lists them and the sealed admission
+  input binds them, while the proposal keeps the authored graph. A conflict edge only orders work: a failed, cancelled or skipped
+  predecessor releases the dependent from base, an accepted one without a workspace patch adds nothing, and the re-attempt eligibility
+  ignores it. `planSchedulingWave` additionally excludes a ready task that intersects in-flight work of its Run (or an earlier
+  candidate) through the same exclusion set; the monitor names it `waiting-scope-conflict`. Authors write v4 (v5 only to declare
+  `resources`); the system raises a graph to v5 only when it inserts an edge.
 - **Graph v4 (AOF-HANDOFF).** `TASK_GRAPH_SCHEMA_VERSION = 4`; the graph schema accepts 2, 3 and 4 side by side. v4 adds explicit accepted-patch dependency edges (see AOF-HANDOFF above). v3 adds optional
   `tasks[].workInput` `{ schemaVersion: 1, task, scope: { paths[1..64] }, acceptance, model: { channelId, modelId,
   auxiliaryModelIds[<=8] }, effort?, maxTurns? }` (domain `workInputSchema`; texts <=16 KiB; paths repository-relative POSIX/glob,
@@ -970,7 +1032,8 @@ that requires Run-create approval refuses that admission (`RUN_APPROVAL_REQUIRED
 The queue does not yet replay an approved verification admission (open); never weaken that policy. Missing/failed/cancelled/unknown verification cannot publish. The exact private commit, original source,
 criteria/profile and receipt are checked again before effects. Legacy delivery-pinned Run admission stays readable.
 
-`deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`.
+`deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`
+and an optional `deliveryIntent:"service-reattempt"` (below).
 Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
 `integration-queue-confirm` obtains separate publish and adoption cards (the adoption card asks "Move <branch> to the verified commit?";
 each action refuses flags it does not take; output follows `--lang`, then config `language`, then LANG); the second card is derived from the first frozen prefix,
@@ -979,6 +1042,52 @@ only `inspect_delivery_queue`/`list_delivery_queue`; submission, rollback, decis
 before opening a scope or writer. The SDK runtime client carries inspect/list only; the CLI/Terminal composition installs submission.
 The registered-target `/deliver` flow enqueues (no work target: `QUEUE_WORK_TARGET_REQUIRED` names `execution.workTargets`); `r` offers current-base preparation after drift or reads last-known queue state.
 `/runs` detail projects authorized positions, ownership and outcome. Neither view is acceptance authority.
+
+**Bounded delivery re-attempt (alpha.47 S5b; owner D1a + D2b, 2026-10-18).** It amends DESIGN §6 for one case only. The human may enqueue
+with `deliveryIntent:"service-reattempt"`: an explicit per-Run delivery intent naming this ticket's Run and target, recorded in the
+request (payload digest, audit). It is set only by the human's own enqueue; the MCP channel stays read-only. The verified-terminal
+`/deliver` window always sends it on its queue enqueue (owner 2026-10-18, option A; no per-delivery key) and shows one catalog line
+(`terminal.delivery.reattempt`) before the `y` that enqueues, and on a refused preview before the `r` that prepares on the current
+base (the port's read-only `queue.reattempt()`); with `targetQueue.reattempts` 0 it sends no intent and shows no line, so the
+record states the truth. The owner's delivery and adopt cards are unchanged. When such a ticket settles `conflict-needs-reattempt` with `PATCH_BASE_ADVANCED`, the service:
+- waits until the live target base actually moved past the original output (the work target's own integration check of that output
+  refuses it; a refusal against an earlier, not yet adopted candidate of the same batch only waits);
+- admits the same frozen Task (kind, work class, work input, criteria) as a single-task Run `queue-reattempt-<digest>` through normal
+  Run admission as the delegating human: policy, pool, ceilings and a Run-create card are unchanged, and only the proposal path has a
+  money budget gate (`budgetSemantics`), so a plain Run admission checks none, as before;
+- lets its own Run progression execute and evaluate that Run on the current base, and retains the accepted Attempt's patch when
+  evaluation did not (a kind without work input), as a human `patch-prepare` would;
+- enqueues the accepted Attempt as ticket `queue-reattempt-ticket-<digest>`, whose actor is the human's service principal (issuer
+  `<issuer>/service`, provenance only) with `reattempt {sourceCommandId, intentCommandId, count, cause, approvedBy}`.
+`TargetQueueApplication.submitReattempt` is the one owner of that transition: the source must be the approver's settled, base-advanced
+ticket of the same target under intent, the count exactly one more, and policy/validation run as the approver (never MCP/workload).
+Background work for that ticket runs as the approver. Its actor differs, so it forms its own batch with the same two owner cards.
+Never re-attempted (typed view reason): no intent; failed verification, stale, protected or parked tickets; a started effect; a Task
+whose accepted Attempt did not exit cleanly or has unresolved effects; a profile the installed Docker adapter (`--network none`) does
+not prove workspace-only (`DELIVERY_REATTEMPT_EFFECTS`); cross-task `inputs`, or an `accepted-patch` predecessor not adopted on this
+target (`DELIVERY_REATTEMPT_NOT_ELIGIBLE`). A chained dependent is re-run alone after its predecessor is adopted (no lineage acceptance;
+the lineage rule of S5a stays post-beta). Config `targetQueue.reattempts` (default 1, 0 disables) bounds the lineage. A ticket over it
+settles `DELIVERY_REATTEMPT_EXHAUSTED` (human, `new-attempt`); a failed re-attempt Run reads `DELIVERY_REATTEMPT_FAILED`.
+`targetQueue.reattemptWindowMs` (default 6 h after the human's enqueue) bounds the service's work list. The view field `reattempt`
+reports `waiting-base | awaiting-approval | running | enqueued | refused | failed | exhausted` with count, bound, cause, Run and ticket.
+A pending Run-create card shows `approve-run`; that state and a typed admission refusal are the service's in-memory last-known step,
+recomputed after a restart. For a non-Git target the same contract applies: "base advanced" is the adapter's own optimistic-concurrency
+refusal of the recorded target version.
+
+**Run delivery intent (alpha.47 S6 R4-b, owner D2b).** A proposal may carry `delivery: { target, mode: 'enqueue-accepted' }` (one Run,
+one target; additive in proposal v1, so the proposal digest covers it). Only a verified human (`os-user`, non-MCP) proposer grants it
+(`DELIVERY_INTENT_NOT_ADMITTED` otherwise, before any record); the binding retains it with `grantedBy` = that proposer, and such a
+Run always asks the Run-create card, even for a standing low-risk class. The queue service's existing scan (one pass per lease, same
+cadence as the re-attempt) reads Runs whose binding carries an intent and, as the grantor (`withActor`), submits each accepted,
+workspace-delivering Attempt once through `TargetQueueApplication.submitDelegated`: actor = the grantor's service principal, `deliveryIntent:
+'service-reattempt'` (so a base-advanced conflict goes to the bounded re-attempt above), `delegation { intentRef: {runId, proposalId,
+digest}, grantedBy, requeue? }`. Every admission re-proves the intent on the Run (`assertRunDeliveryIntent`: intent, target, grantor,
+proposal digest, consumed card). A delegated ticket that stopped before any effect (`parked` with no batch digest, or `expired`) is
+re-queued under a new command id with `requeue {sourceCommandId, count, cause, reason?}` up to `targetQueue.requeueMax` (default 2);
+past it the view reads `QUEUE_REQUEUE_EXHAUSTED` (human, `prepare-current`) and the application refuses a forged hop. Refusals
+(`verification-failed`, `stale-refused`, `target-protected`), started effects, cancelled tickets and the human's own tickets are never
+re-queued. The view carries `delegation {grantedBy, runId, requeues}`; the terminal status adds "Submitted for <human> by the delivery
+intent of Run <run>". Publish/adopt remain the human's two terminal cards; MCP stays read-only and has no path to an intent.
 
 A Git generation ref lives in the target repository's namespace, keyed by the full target ref; its payload binds queue key, instance
 and epoch. Only a consented execution (both cards answered) or startup recovery of work whose effect may be in flight writes it, always

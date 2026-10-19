@@ -8,6 +8,7 @@
     "changedFileChars": 256,
     "checks": 50,
     "checkCommandChars": 512,
+    "checkIdChars": 128,
     "openIssues": 50,
     "openIssueChars": 1000,
     "handoffTaskIdChars": 128,

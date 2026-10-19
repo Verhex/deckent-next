@@ -22,7 +22,7 @@ const applications = {
   inspectModelActivation: noop, admitModelActivation: noop, inspectModelInvocation: noop, invokeModel: noop,
   purgeModelInvocationContent: noop, cancelModelInvocation: noop, inspectProviderSpendAccount: noop,
   auditProviderSpendAccount: noop, inspectDeclaredModels: noop, inspectModelBinding: noop, inspectToolchainCurrency: noop,
-  updateToolchains: noop, createRun: noop, reserveRunTasks: noop, executeTask: noop, evaluateTask: noop,
+  updateToolchains: noop, proposeRun: noop, createRun: noop, reserveRunTasks: noop, executeTask: noop, evaluateTask: noop,
   reconcileAttempt: noop, deliverRunCancellation: noop, requestRunCancellation: noop, inspectRun: noop, inspectInventory: noop,
   describeService: noop, shutdownService: noop, inferencePlan: noop, inferenceBudget: noop,
   executeOperation: noop, compensateOperation: noop, inspectOperation: noop, operationCatalog: [descriptor('post-order', 'cancel-order'), descriptor('cancel-order')],
@@ -45,7 +45,7 @@ describe('MCP tool wire schema (zod 4 / JSON Schema dialect guard)', () => {
 
   it('dialect and root shape are explicit: draft-07 URI, object root, no outputSchema', async () => {
     const tools = await listTools();
-    expect(tools).toHaveLength(32);
+    expect(tools).toHaveLength(33);
     for (const tool of tools) {
       expect(tool.inputSchema['$schema'], tool.name).toBe('http://json-schema.org/draft-07/schema#');
       expect(tool.inputSchema.type, tool.name).toBe('object');
@@ -81,6 +81,44 @@ describe('MCP tool wire schema (zod 4 / JSON Schema dialect guard)', () => {
       expect(Object.hasOwn(received[0] as object, 'input')).toBe(false);
       expect(JSON.stringify(await client.callTool({ name: 'execute_operation', arguments: { ...command, extra: 1 } }))).toContain('MCP_INPUT_INVALID');
       expect(received).toHaveLength(1);
+    } finally { await client.close(); await server.close(); }
+  });
+
+  // D2b (lead 2026-10-18): MCP is an AI actor and never carries a Run delivery intent. Every optional application is supplied (a proxy), so
+  // every tool the server can advertise is checked, not only the golden's set.
+  it('no MCP tool advertises a delivery intent (`delivery` or `deliveryIntent`) anywhere in its inputSchema', async () => {
+    const every = new Proxy({} as Record<string, unknown>, { get: (_, key) => key === 'operationCatalog' ? applications.operationCatalog : noop }) as unknown as McpApplications;
+    const server = createMcpServer(every, { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en');
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: 'mcp-wire-schema-all', version: '1' });
+    await client.connect(clientTransport);
+    try {
+      const tools = (await client.listTools()).tools, keys = (value: unknown): string[] => value && typeof value === 'object'
+        ? Object.entries(value).flatMap(([key, inner]) => [key, ...keys(inner)]) : [];
+      expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['propose_run', 'plan_run', 'list_delivery_queue', 'inspect_delivery_queue', 'create_run']));
+      for (const tool of tools) for (const key of ['delivery', 'deliveryIntent']) expect(keys(tool.inputSchema), tool.name).not.toContain(key);
+    } finally { await client.close(); await server.close(); }
+  });
+
+  it('an MCP propose_run carrying `delivery` is MCP_INPUT_INVALID and reaches no application (nothing recorded); without it the same proposal does', async () => {
+    const received: unknown[] = [];
+    const server = createMcpServer({ ...applications, proposeRun: async (command: unknown) => { received.push(command); return {}; } } as McpApplications,
+      { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en');
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: 'mcp-propose-delivery', version: '1' });
+    await client.connect(clientTransport);
+    try {
+      const proposal = { schemaVersion: 1, commandId: 'propose', proposalId: 'plan', scopeId: 's', runId: 'r', proposer: { id: 'mcp', issuer: 'mcp', subject: 'mcp' },
+        source: { kind: 'human' }, budgetCeiling: { currency: 'USD', limitMinorUnits: 1 }, requiredPermissions: [],
+        graph: { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'k', dependencies: [], acceptanceCriteria: ['c'] }],
+          criterionDefinitions: [{ id: 'c', version: 1, description: 'd', evaluator: { id: 'e', version: 1 }, parameters: {} }] } };
+      const refused = await client.callTool({ name: 'propose_run', arguments: { ...proposal, delivery: { target: { kind: 'git-ref', id: 'refs/heads/main' }, mode: 'enqueue-accepted' } } });
+      expect(refused.isError).toBe(true); expect(JSON.stringify(refused)).toContain('MCP_INPUT_INVALID');
+      expect(received).toEqual([]);
+      expect((await client.callTool({ name: 'propose_run', arguments: proposal })).isError).toBeFalsy();
+      expect(received).toEqual([proposal]);
     } finally { await client.close(); await server.close(); }
   });
 });

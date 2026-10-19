@@ -1089,6 +1089,7 @@
   "terminal.delivery.moreFiles": "+{count} more files",
   "terminal.delivery.where": "Writes only a dedicated reference under refs/deckent/deliveries/; branches, index and working tree stay unchanged.",
   "terminal.delivery.adoptionLater": "After delivery, adopting into a branch is a separate choice: {targets}",
+  "terminal.delivery.reattempt": "If the target moves on, Deckent re-attempts this once on the new base; your cards still decide.",
   "terminal.delivery.hints": "y check, prepare and deliver · n/Esc leave it waiting",
   "terminal.delivery.working": "Checking, preparing and delivering…",
   "terminal.delivery.confirmBody": "The confirmation card differs from what was shown. Check it before answering:",

@@ -69,6 +69,13 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   makinede yapılan bir değişiklik işçiye taranmadan ulaşır (her bağlamada olduğu gibi).
   *Etki:* bir bağımlılık paketine düz metin olarak konmuş gerçek bir anahtar işçiye ulaşır, yalnız istisna olarak görünür.
   *Yol:* yalnız güvendiğiniz bir kilit dosyasından kurulan ağaçları bildirin ve Run kartındaki istisnaları gözden geçirin.
+- **Eşzamanlı işler aynı bağımlılık ağacının tek sır taramasını yalnız tek bir süreç içinde paylaşır.** Çalışma servisi aynı anda
+  `execution.secretGate.maxConcurrentScans` taramaya izin verir; bildirilmiş bağımlılık bağlaması aynı kaynak, hedef, kilit dosyası
+  baytları ve ayarlara sahip işler sürmekte olan taramayı bekler. Ayrı bir CLI `execute` süreci kendi taramasını yapar, okunabilir kilit
+  dosyası olmayan bir bağlama hiç paylaşılmaz ve süren bir taramaya katılan iş, o taramanın kendisi gelmeden önce okuduğu dosyalara
+  güvenir (taramadan sonraki her değişiklikle aynı pencere). Sınırlar artık işin kendi görünümlerine ve paylaşılan bağlamalara ayrı ayrı
+  uygulanır. Yük altında süresi dolan tarama, deneme reddedilmeden önce deneme başına en fazla `maxTimeRefusals` kez yinelenir.
+  *Yol:* büyük ağaçlar için `maxConcurrentScans` ya da `timeoutMs` değerini yükseltin; paralel CLI çalıştırmaları yerine servisi kullanın.
 - **Sır kapısının ayar kuralı yalnız ayar türü dosyalara bakar.** Sıradan kaynak koduna yazılmış bir parola yakalanmaz.
   *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 
@@ -90,6 +97,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   planlaması için bir Anthropic API anahtarı kullanın.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
+- **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
+  yalnız geçerli erişim token'ını (Codex'te kimlik token'ını da) kopyalar ve süresinin dolmadığını denetler; yenileme
+  token'ları, API anahtarları ve giriş dosyasının geri kalanı makinede kalır. *Etki:* işçinin CLI'ı, o token'ın süresi
+  dolana kadar abonelik hesabınız adına işlem yapabilir. *Yol:* yok; sınır, token'ın kendi süresidir.
 - **ChatGPT ile giriş henüz yok.** `/provider` bunu kullanılamıyor olarak listeler; görünür giriş beta sürecinde ele alınır. *Yol:* bir OpenAI API anahtarı ya da kendi
   girişiyle bir Codex işçisi.
 - **Aboneliklerden API modeline henüz otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli
@@ -116,6 +127,25 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Teslim ve dala alma
 
+- **Bir iş görevi geçerli bir sonuç raporu ister, ama raporu olmayan bir işçi CLI'ı denetlenmez.** 1.0.0-alpha.47'den beri 0 ile
+  çıkan ve geçerli rapor bırakmayan bir iş görevi `report-missing` ya da `report-invalid` ile başarısız olur. Yapılandırılmış sonuç
+  kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. Tipli
+  rapor kontrolleri (`checkId`, `role`) tanımlıdır ama konteyner köprüsü onları henüz kabul etmez. *Geçici çözüm:* tamamlanması
+  kanıtlanması gereken işlerde Claude ya da Codex işçilerini tercih edin.
+- **Sessiz bir işçi durdurulur ve bir kez yeniden denenir, ama yalnız bazı görevler izlenir.** 1.0.0-alpha.47'den beri sessizlik sınırı
+  boyunca (varsayılan 1 saat, `runRuntime.stallRecovery.stopAfterMs`; 3 dakikada uyarı) hiçbir olay ve model trafiği göndermeyen bir
+  native abonelik işçisi durdurulur. Etkileri yalnız kendi çalışma alanında kalan bir görev yeni bir Attempt ile bir kez yeniden
+  denenir; diğer görevler eskisi gibi insan kararını bekler. Sınır yalnız profilin süre sınırından (deadline) önce durdurabiliyorsa
+  uygulanır: profil süre sınırı bu sınırdan kısa olan bir görev (1 saatlik varsayılanla bir saatin altındaki her süre sınırı)
+  izlenmez, sessizlik uyarısı almaz ve yalnız süre sınırıyla sınırlanır. alpha.47'den önce oluşturulan Run'lar ve native gateway'i
+  olmayan işçiler de yalnız süre sınırıyla sınırlanır. Sessiz bir işçi durdurulana kadar yürütme yuvasını tutar; takılmış bir işçi bir
+  yuvayı sınır süresi boyunca tutabilir. İzlemedeki `worker-silent` uyarısı işçi olaylarını görür, model trafiğini görmez; bu yüzden
+  işçi hâlâ çalışırken uyarabilir. İşçinin içindeki tek bir uzun araç çağrısı (build, test koşusu ya da kilit beklemesi) sürdüğü
+  boyunca olay ve model trafiği göndermez, bu yüzden sessizlik sayılır: sınırdan uzun bir çağrı durdurulur, tekrarı görevi
+  `worker-stalled` ile başarısız kılar. Durdurulan Attempt'in çalışma alanı kopyası tutulur. *Geçici çözüm:*
+  `runRuntime.stallRecovery.stopAfterMs` değerini (ya da iş sınıfının `inactivity` değerini) en uzun araç çağrınızın üstünde tutun;
+  süre sınırı önce geliyorsa ve sessiz işçilerin daha erken durdurulmasını istiyorsanız bu değeri düşürün ya da profilin süre
+  sınırını artırın.
 - **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
   yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve ledger v58 yeniden build edilmiş
   binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek terminal/socket/crash ve N1 yük kabulü ayrı kapılardır;
@@ -219,4 +249,23 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yapılandırılmış bir slot sayısı vardır (`executionSlots`, `inFlightSlots`).
 - **İşçiler arasındaki çakışmalar teslimde yakalanır, çalışırken önlenmez.** İki işçi ya da bir işçi ve bir kişi aynı
   dosyaları düzenlerse yama tabanı kontrolünde karşılaşır. Kaynak kilidi dışarıdaki bir kişiyi ya da bir ERP yazıcısını durdurmaz.
+  Tek bir Run içinde beyan edilen kapsam yolları ya da iş kayıtları kesişen görevler artık art arda çalışır (kart sırayı gösterir);
+  farklı Run'ların görevleri ve dallı bir Run'ın görevleri başlamadan önce hâlâ yalnız teslimde karşılaşır. Beyan edilen kayıt
+  `resources` alanı işi sıralar ama işçide henüz zorlanmaz.
+- **Tabanı ilerlemiş bir teslim bir kez, yalnız teslim niyetinizle yeniden denenir.** `deliveryIntent: "service-reattempt"` ile
+  kuyruğa alırsanız servis o görevi güncel tabanda yeni bir Run olarak bir kez yeniden çalıştırır. Zincirli görev, öncülü
+  benimsendikten sonra yeniden çalışır. Yeniden çalışan görev aynı iki teslim kartını alır. Niyet yoksa ya da sınır aşıldıysa
+  (`targetQueue.reattempts`, varsayılan 1) yeni denemeyi siz oluşturursunuz. İş birleştirilmez, yeniden çalıştırılır; bu ikinci
+  bir işçi çalışması demektir. Etkisi kanıtlanmamış ya da çözülmemiş görevler hiç yeniden çalıştırılmaz. `/deliver` penceresi
+  niyeti her zaman gönderir ve bunu bir satırla söyler; `r` ile güncel tabanda hazırlamayı sunan reddedilmiş önizleme ekranında da.
+  `targetQueue.reattempts` 0 ise niyet gönderilmez, satır gösterilmez. Bu ayar satırla tuşunuz arasında değişirse istek o anki ayara uyar.
+- **Bir Run'ın teslim niyetini yalnız siz, öneri JSON'unda verebilirsiniz.** `deckent run propose` ile `delivery: { target,
+  mode: "enqueue-accepted" }` Run kartınızı açar; sonra servis kabul edilen her görevi kartlarınız için kuyruğa alır, herhangi bir
+  etki başlamadan duranı yeniden sıraya alır (en çok `targetQueue.requeueMax`, varsayılan 2) ve çakışmada bir kez yeniden dener.
+  `/do` için henüz seçenek yok; bir AI (MCP) önerici niyet taşıyamaz (MCP `propose_run` bu alanı kabul etmez), AI'ın önerdiği bir plan da sizin onayınızla henüz niyet
+  alamaz. Yeniden deneme Run'ının kendi biletleri yeniden sıraya alınmaz. Servis niyetli Run'ları kuyruk kirası başına bir kez okur.
 - **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** İşçi başına henüz maliyet ya da kalite raporu yok.
+- **Defter (ledger), her sürecin paylaştığı tek bir yerel SQLite dosyasıdır.** Yazmalar sırayla yapılır; `storage.sqlite.busyTimeoutMs`
+  süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. *Geçici çözüm:*
+  komutu yeniden çalıştırın; yavaş ya da çok yüklü bir makinede süreyi `.deckent/config.json` içinde artırın. Açılışlar artık yazma kilidini
+  beklemez ve çalışan servis defterin yan dosyalarını yerinde tutar; bu, filo ölçeğinde değil, yüklü tek bir çekirdekte ölçüldü.

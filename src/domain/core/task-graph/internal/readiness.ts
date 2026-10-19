@@ -1,5 +1,5 @@
 import { sanitizeIssues } from '#domain/core/primitives/index.js';
-import { readinessInputSchema, taskDependencyIds, TaskGraphError, type TaskProgress } from './contract.js';
+import { readinessInputSchema, blockingDependencyIds, dependencyTaskId, isConflictEdge, TaskGraphError, type TaskProgress } from './contract.js';
 import { validateTaskGraph } from './graph.js';
 
 export type TaskReadiness = Readonly<{
@@ -30,18 +30,21 @@ export function inspectTaskReadiness(graphInput: unknown, snapshotInput: unknown
   const blocked = (id: string): boolean => {
     const cached = blockedMemo.get(id); if (cached !== undefined) return cached;
     const state = progress.get(id)!;
-    const value = state.phase !== 'accepted' && (['failed', 'cancelled', 'skipped'].includes(state.phase) || taskDependencyIds(graph.tasks.find(task => task.id === id)!).some(blocked));
+    const value = state.phase !== 'accepted' && (['failed', 'cancelled', 'skipped'].includes(state.phase) || blockingDependencyIds(graph.tasks.find(task => task.id === id)!).some(blocked));
     blockedMemo.set(id, value); return value;
   };
   return Object.freeze(graph.tasks.map(task => {
     const state = progress.get(task.id)!;
     let disposition: TaskReadiness['disposition'];
-    const dependencies = taskDependencyIds(task).filter(id => progress.get(id)!.phase !== 'accepted');
+    // A scope-conflict edge is satisfied by any terminal predecessor: it orders work and never skips the dependent (owner D7a).
+    const dependencies = task.dependencies.filter(edge => !(isConflictEdge(edge) ? ['accepted', 'failed', 'cancelled', 'skipped'] : ['accepted'])
+      .includes(progress.get(dependencyTaskId(edge))!.phase)).map(dependencyTaskId);
+    const blocking = new Set(blockingDependencyIds(task));
     if (state.unresolvedEffects || state.phase === 'reconciling') disposition = 'reconciliation';
     else if (['accepted', 'failed', 'cancelled', 'skipped'].includes(state.phase)) disposition = 'terminal';
     else if (state.phase === 'awaiting-decision') disposition = 'awaiting-decision';
     else if (state.phase === 'active' || state.phase === 'evaluating') disposition = 'occupied';
-    else if (dependencies.some(blocked)) disposition = 'blocked';
+    else if (dependencies.some(id => blocking.has(id) && blocked(id))) disposition = 'blocked';
     else if (dependencies.length) disposition = 'waiting';
     else if (state.eligibility.kind === 'not-before' && state.eligibility.at > snapshot.now) disposition = 'delayed';
     else disposition = 'ready';

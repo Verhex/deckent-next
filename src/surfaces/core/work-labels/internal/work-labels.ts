@@ -264,7 +264,7 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     title: t('terminal.delivery.title', {}, locale), ids: t('terminal.delivery.ids', {}, locale), loading: t('terminal.delivery.loading', {}, locale),
     check: t('terminal.delivery.check', {}, locale), outOfScope: t('terminal.delivery.outOfScope', {}, locale), summary: t('terminal.delivery.summary', {}, locale),
     file: t('terminal.delivery.file', {}, locale), moreFiles: t('terminal.delivery.moreFiles', {}, locale), where: t('terminal.delivery.where', {}, locale),
-    adoptionLater: t('terminal.delivery.adoptionLater', {}, locale), hints: t('terminal.delivery.hints', {}, locale),
+    adoptionLater: t('terminal.delivery.adoptionLater', {}, locale), reattempt: t('terminal.delivery.reattempt', {}, locale), hints: t('terminal.delivery.hints', {}, locale),
     working: t('terminal.delivery.working', {}, locale), confirmBody: t('terminal.delivery.confirmBody', {}, locale),
     confirmRef: t('terminal.delivery.confirmRef', {}, locale), confirmHints: t('terminal.delivery.confirmHints', {}, locale),
     delivered: t('terminal.delivery.delivered', {}, locale), adoptPrompt: t('terminal.delivery.adoptPrompt', {}, locale),

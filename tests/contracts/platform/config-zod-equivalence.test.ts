@@ -64,7 +64,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   it('nested object defaults apply at every level (the leaf values a v4 short-circuit would drop)', () => {
     const d = CORE_SCHEMA.parse({});
     expect(d.layout).toEqual({ root: null, resources: {} });
-    expect(d.storage).toEqual({ driver: 'sqlite', sqlite: { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' } });
+    expect(d.storage).toEqual({ driver: 'sqlite', sqlite: { busyTimeoutMs: 5000, journalMode: 'wal', durability: 'full' } });
     // Incomplete literal `.default({ maxBytes: 16777216 })`: maxInputs and patchPreview come from the inner schema.
     expect(d.artifacts).toEqual({ maxBytes: 16_777_216, maxInputs: 64, patchPreview: { maxEntries: 10_000, maxDepth: 32, maxPathBytes: 1024 } });
     expect(d.installation).toEqual({ profileMaxBytes: 1_048_576, writeLockTimeoutMs: 2000, imageProbe: { timeoutMs: 5000, outputBytes: 65_536 },
@@ -75,7 +75,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8, maxServers: 20 });
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
       maxConcurrentExecutions: 8, headerTimeoutMs: 10_000, responseTimeoutMs: 10_000, acceptRetryDelayMs: 25, acceptRetryLimit: 3, shutdownGraceMs: 30_000, admissionWaitMs: 250, busyRetryLimit: 2, idleShutdown: { afterMs: 900_000 } });
-    expect(d.runRuntime).toEqual({ quotaRecovery: { schemaVersion: 1, maxResumes: 1, maxWaitMs: 604800000 }, parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, maxPreparationAborts: 2, pageSize: 64 });
+    expect(d.runRuntime).toEqual({ quotaRecovery: { schemaVersion: 1, maxResumes: 1, maxWaitMs: 604800000 }, stallRecovery: { schemaVersion: 1, warnAfterMs: 180000, stopAfterMs: 3600000, maxRetries: 1, backoffMs: 30000 }, parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, maxPreparationAborts: 2, pageSize: 64 });
     expect(d.inspection).toEqual({ maxPageSize: 64, policyMaxBytes: 1_048_576,
       workers: { heartbeatMs: 2000, staleMs: 10_000, maxFileBytes: 65_536, maxEntries: 4096, sources: [] } });
     expect(d.toolchains).toEqual({ currency: { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', timeoutMs: 5000, responseMaxBytes: 65_536 },
@@ -110,13 +110,16 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(parsed.execution).toEqual({ docker, git: { gitExecutable: 'git', timeoutMs: 1, outputBytes: 4_194_304 }, adoption: { targets: [], protectedTargets: [], verification: null },
       retention: { schemaVersion: 1, release: 'after-retained-patch', sweepLimit: 16 },
       // S6: the secret gate's acknowledgements default empty (refuse by default) and its bounds come from the inner schema.
-      secretGate: { schemaVersion: 1, allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 200_000, maxFileBytes: 16_777_216, maxTotalBytes: 1_073_741_824, timeoutMs: 120_000 } });
+      secretGate: { schemaVersion: 1, allowPatternPaths: [], acknowledgedDenyPaths: [], maxFiles: 200_000, maxFileBytes: 16_777_216, maxTotalBytes: 1_073_741_824, timeoutMs: 120_000,
+        // R2 (D3a): scan admission per process, the bounded slot wait and the deferred `time` refusals per Attempt.
+        maxConcurrentScans: 2, admissionTimeoutMs: 300_000, maxTimeRefusals: 2 } });
     // A retention section of an unknown version or with unknown keys is a typed config refusal, never a silent default.
     for (const retention of [{ schemaVersion: 2 }, { schemaVersion: 1, release: 'never' }, { schemaVersion: 1, extra: true }, { schemaVersion: 1, sweepLimit: 0 }])
       expect(CORE_SCHEMA.safeParse({ execution: { docker, git: { gitExecutable: 'git', timeoutMs: 1 }, retention } }).success).toBe(false);
     // An unknown gate version or key, an absolute or parent-escaping glob, a glob or `..` in an exact acknowledgement: refused, never defaulted.
     for (const secretGate of [{ schemaVersion: 2 }, { schemaVersion: 1, extra: true }, { schemaVersion: 1, allowPatternPaths: ['/etc/**'] }, { schemaVersion: 1, allowPatternPaths: ['../x'] },
-      { schemaVersion: 1, acknowledgedDenyPaths: ['**/.npmrc'] }, { schemaVersion: 1, acknowledgedDenyPaths: ['a/../.env'] }, { schemaVersion: 1, maxFiles: 0 }])
+      { schemaVersion: 1, acknowledgedDenyPaths: ['**/.npmrc'] }, { schemaVersion: 1, acknowledgedDenyPaths: ['a/../.env'] }, { schemaVersion: 1, maxFiles: 0 },
+      { schemaVersion: 1, maxConcurrentScans: 0 }, { schemaVersion: 1, admissionTimeoutMs: 2_147_483_648 }, { schemaVersion: 1, maxTimeRefusals: -1 }, { schemaVersion: 1, maxTimeRefusals: 1.5 }])
       expect(CORE_SCHEMA.safeParse({ execution: { docker, git: { gitExecutable: 'git', timeoutMs: 1 }, secretGate } }).success).toBe(false);
     expect(parsed.cancellation).toEqual({ maxConcurrentDeliveries: 1, recoveryPageSize: 64, maxAttempts: 3, retryDelayMs: 1000, claimTtlMs: 30_000 });
     expect(parsed.cancellationRuntime).toEqual({ scopeIds: ['a'], pollIntervalMs: 1000, failureBackoffMs: 5000 });

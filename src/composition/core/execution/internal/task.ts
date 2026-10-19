@@ -1,12 +1,12 @@
 import { userInfo } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
+import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, type WorkerEventSealing } from '#adapters/index.js';
-import { authenticate, AuditApplication, enforceWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
-  RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
+import { authenticate, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
+  RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -50,9 +50,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const broker = new GitWorkspaceBroker(git, privateSource); await preparation.enter('workspace');
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches); await preparation.enter('secret-gate');
-      // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim; a refusal is audited (paths, rules) and its checkout released.
-      await enforceWorkerTreeGate(await scanWorkerTree(workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv), { ...config.execution.secretGate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, getConfigKnownSecrets(config)), { identity, principal, policyRevision: document.revision, now: Date.now, journal: store },
-        audit, () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
+      // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.
+      const gate = config.execution.secretGate, lockfile = (path: string) => open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).then(async file => { try { const info = await file.stat(); return info.isFile() && info.size <= gate.maxFileBytes ? await file.readFile() : null; } finally { await file.close(); } }); await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv), settings: gate, fingerprint: [config, git.sourceRoot], lockfile, sharesTree: pathsShareTree,
+        refusals: jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'secret-gate-time')), scan: async views => scanWorkerTree(views, { ...gate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, getConfigKnownSecrets(config)) }, { identity, principal, policyRevision: document.revision, now: Date.now, journal: store }, audit, () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
       const events = profile.nativeSubscription ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
@@ -67,8 +67,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
       for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
+      // R3: the frozen silence policy stops a worker whose gateway saw no event or model traffic; the existing kill path follows.
+      const stall = run!.execution.tasks.find(row => row.taskId === identity.taskId)?.stall, silence = new AbortController();
+      const watch = stall && connection ? inactivityWatch(stall, Date.now()) : undefined;
       const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
         config.inspection.workers.maxFileBytes, async () => {
+          if (watch?.(Date.now(), connection!.statistics()) === 'stop') silence.abort('inactivity');
           let record = await store.loadBoundDispatch(identity); if (!record) return null;
           const activity = await supervisor.inspectActivity(request).catch(() => ({ handle: null, state: 'unknown' as const }));
           // Supervisor observation must also settle a missed exit while the execute controller is
@@ -83,7 +87,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
             terminal: record.terminal, outputRecorded: !!record.output };
         });
       let result; dispatching = true;
-      try { result = await app.execute(request); } finally { await observation.close(); }
+      try { result = await app.execute(request, undefined, silence.signal); } finally { await observation.close(); }
       outcome = { status: result.kind, terminal: result.record.terminal, outputRecorded: !!result.record.output };
       } finally {
         await connection?.close();

@@ -7,13 +7,13 @@ const identity = Object.freeze({ runId: 'r', scopeId: 's', taskId: 't', attemptI
 const graph = Object.freeze({ schemaVersion: 2 as const, revision: 1, tasks: Object.freeze([{ id: 't', kind: 'fixture', dependencies: Object.freeze([]), acceptanceCriteria: Object.freeze(['verified']) }]),
   criterionDefinitions: Object.freeze([{ id: 'verified', version: 1, description: 'Verify fixture task', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }]) });
 
-function fixture() {
+function fixture(exitCode = 0) {
   const reserved = reserveRunTasks(createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, 0, fixtureExecution(graph)), 0, [identity], 0);
-  const attempt = applyAttemptObservation(createAttempt(identity), { protocolVersion: 1 as const, identity, sequence: 1, eventId: 'exit', result: { kind: 'exited' as const, exitCode: 0 } }, 0);
+  const attempt = applyAttemptObservation(createAttempt(identity), { protocolVersion: 1 as const, identity, sequence: 1, eventId: 'exit', result: { kind: 'exited' as const, exitCode } }, 0);
   const run = observeRunAttempt(reserved, 1, attempt);
   const dispatch = { schemaVersion: 2 as const, request: { protocolVersion: 1 as const, identity, workspace: '/recorded/workspace', argv: ['tool'] }, owner: 'supervisor',
     profile: { schemaVersion: 1 as const, adapterId: 'test-supervisor', adapterVersion: 1, parameters: { fixture: 'strict-custody-profile' } }, launch: 'granted' as const,
-    grant: { generation: 1, grantedAt: 1, principal: { id: 'launcher', issuer: 'test', subject: 'fixture' } }, terminal: { handle: 'handle', exitCode: 0, interrupted: false },
+    grant: { generation: 1, grantedAt: 1, principal: { id: 'launcher', issuer: 'test', subject: 'fixture' } }, terminal: { handle: 'handle', exitCode, interrupted: false },
     output: { schemaVersion: 1 as const, scopeId: 's', digest: 'a'.repeat(64), byteLength: 1 } };
   return { run, attempt, dispatch };
 }
@@ -49,4 +49,11 @@ it('rejects terminal disagreement and invalid stored execution fingerprints', ()
   expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, { ...f.dispatch, terminal: { ...f.dispatch.terminal, exitCode: 1 } }, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_STALE');
   const run = { ...f.run, execution: { ...f.run.execution, criteria: f.run.execution.criteria.map(value => ({ ...value, fingerprint: 'f'.repeat(64) })) } };
   expect(() => proposeTaskEvaluationCommit(run, f.attempt, f.dispatch, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_INVALID');
+});
+
+it('R5 report evidence is recorded only for a clean exit: a non-zero exit carrying it is refused before any transition', () => {
+  const f = fixture(1); const before = JSON.stringify(f);
+  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, f.dispatch, f.run.revision, { ...evaluation('fail'), report: { status: 'missing' } }, { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_NOT_READY');
+  expect(proposeTaskEvaluationCommit(f.run, f.attempt, f.dispatch, f.run.revision, evaluation('fail'), { now: 100, timeoutMs: 1000 }).snapshot.progress[0]!.notAcceptedReason).toBeUndefined();
+  expect(JSON.stringify(f)).toBe(before);
 });

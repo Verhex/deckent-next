@@ -69,6 +69,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the host after the scan reaches the worker unscanned (as for any bind).
   *Impact:* a real token planted in a dependency package as plain text reaches the worker, visible only as an exception.
   *Workaround:* declare only trees installed from a lockfile you trust, and review the exceptions on the Run card.
+- **Concurrent dispatches share one secret scan of an identical dependency tree only inside one process.** The runtime service admits
+  `execution.secretGate.maxConcurrentScans` scans at a time, and dispatches whose declared dependency bind has the same source, target,
+  lockfile bytes and configuration await the scan already in flight. A separate CLI `execute` process scans on its own, a bind without a
+  readable lockfile is never shared, and a dispatch that joins a scan in flight relies on files that scan read before the dispatch arrived
+  (the same window as any change after a scan). Bounds now apply to the dispatch's own views and to the shared binds separately. A scan
+  that runs out of time under load is retried up to `maxTimeRefusals` times per attempt before the attempt is refused.
+  *Workaround:* raise `maxConcurrentScans` or `timeoutMs` for large trees; run the service rather than parallel CLI executions.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
   detected. *Workaround:* keep secrets in a secret store, never in source.
 
@@ -88,6 +95,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use an Anthropic API key for terminal chat and `/do` planning.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
+- **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
+  access token (for Codex also the ID token) into the worker's container and checks that it has not expired; refresh tokens,
+  API keys and the rest of the login file stay on the host. *Impact:* the worker's CLI can act as your subscription account
+  until that token expires. *Workaround:* none; the token's own lifetime is the bound.
 - **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available; a visible sign-in is worked on during the beta process. *Workaround:* an OpenAI API key, or a
   Codex worker with its own login.
 - **No automatic fallback from a subscription to an API model yet.** Deckent does not switch to a paid API by itself when a
@@ -116,6 +127,23 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Delivery and adoption
 
+- **A work task needs a valid result report, but a worker CLI without one is not checked.** Since 1.0.0-alpha.47 a work task that
+  exits 0 without a valid report fails as `report-missing` or `report-invalid`. A CLI that has no structured result channel (today
+  Cursor) or whose installed version no longer offers it reads `unsupported` and is not gated. Typed report checks (`checkId`,
+  `role`) are defined but the container bridge does not accept them yet. *Workaround:* prefer Claude or Codex workers for tasks
+  whose completion must be proven.
+- **A silent worker is stopped and retried once, but only some tasks are watched.** Since 1.0.0-alpha.47 a native-subscription worker
+  that sends no event and no model traffic for the silence limit (default 1 hour, `runRuntime.stallRecovery.stopAfterMs`; warning
+  after 3 minutes) is stopped. A task whose effects stay in its own workspace is retried once on a new Attempt; any other task waits
+  for a human as before. The limit applies only when it stops before the profile deadline: a task whose profile deadline is shorter
+  than the limit (with the 1-hour default, any deadline under an hour) is not watched, gets no silence warning and is bounded by its
+  deadline only. Runs created before alpha.47 and workers without the native gateway are also bounded by the deadline only. A silent
+  worker keeps its execution slot until it is stopped, so a hung worker can hold a slot for up to the limit. The monitor's
+  `worker-silent` warning sees worker events, not model traffic, so it can warn while the worker is still working. A single long
+  tool call inside the worker (a build, a test run or a lock wait) sends no event and no model traffic while it runs, so it counts as
+  silence: a call longer than the limit is stopped, and a repeat fails the task as `worker-stalled`. The stopped Attempt's workspace
+  clone stays held. *Workaround:* keep `runRuntime.stallRecovery.stopAfterMs` (or a work class's `inactivity`) above your longest
+  tool call; lower it, or raise the profile deadline, when the deadline comes first and you want silent workers stopped earlier.
 - **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
   v29 and ledger v58 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load
@@ -219,4 +247,23 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   configured slot count (`executionSlots`, `inFlightSlots`).
 - **Conflicts between workers are caught at delivery, not prevented while they work.** Two workers, or a worker and a person,
   editing the same files meet at the patch base check. A source lock does not stop an outside person or an ERP writer.
+  Inside one Run, tasks whose declared scope paths or business records overlap now run one after another (the card shows the
+  order); tasks of different Runs, and a branch Run's tasks before they start, still meet only at delivery. Declared record
+  `resources` order work but are not enforced on the worker yet.
+- **A delivery whose base advanced is re-attempted once, and only under your delivery intent.** Enqueue with
+  `deliveryIntent: "service-reattempt"` and the service re-runs that task once as a new Run on the current base. A chained task
+  is re-run after its predecessor is adopted. The re-run task gets the same two delivery cards. Without the intent, or past the
+  bound (`targetQueue.reattempts`, default 1), you create the new attempt yourself. The work is re-run, not merged, so it costs a
+  second worker run. Tasks with unproven or unresolved effects are never re-run. The `/deliver` window always sends the intent and says so in one
+  line, also on the refused-preview screen where `r` prepares on the current base; with `targetQueue.reattempts` 0 it sends none
+  and shows no line. If that setting changes between the line and your key, the request follows the setting at that moment.
+- **A Run's delivery intent can be given only in the proposal JSON, by you.** `deckent run propose` with `delivery: { target,
+  mode: "enqueue-accepted" }` asks your Run card and then lets the service queue each accepted task for your cards, re-queue one
+  that stopped before any effect (up to `targetQueue.requeueMax`, default 2) and re-attempt once on a conflict. `/do` has no
+  option for it yet; an AI (MCP) proposer can never carry one (MCP `propose_run` does not accept the field), and an AI-proposed plan cannot get one through your approval yet.
+  A re-attempt Run's own tickets are not re-queued. The service reads the intent Runs once per queue lease.
 - **A worker's resource use is measured in bounded local traces only.** There is no cost or quality report per worker yet.
+- **The ledger is one local SQLite file shared by every process.** Writes are serialized; a write that waits longer than
+  `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. *Workaround:*
+  retry the command; on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
+  lock and the running service keeps the ledger's side files in place; this was measured on one loaded core, not at fleet scale.

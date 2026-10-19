@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { freezeTaskAcceptance, assertAcceptanceCriteria, readWorkerModelPin, type FrozenWorkClassProfile, executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput } from '#domain/index.js';
+import { freezeTaskAcceptance, assertAcceptanceCriteria, readWorkerModelPin, resolveTaskWorkClass, type TaskStallPolicy, type FrozenWorkClassProfile, executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput } from '#domain/index.js';
 export interface ExecutionRegistryValidation {
   /** Installed adapter/evaluator selection; data cannot introduce executable code or grant policy. */
   profile(profile: ExecutionProfileDefinition): undefined;
@@ -8,10 +8,12 @@ export interface ExecutionRegistryValidation {
   prepareProfile?(profile: ExecutionProfileDefinition, kind: string, taskId: string): ExecutionProfileDefinition;
   isTemplate?(profile: ExecutionProfileDefinition): boolean;
   compile?(template: ExecutionProfileDefinition, workInput: WorkInput, kind: string, taskId: string): ExecutionProfileDefinition;
+  /** R3 (owner D4a): the installation silence policy and the deadline a profile's policy must stop before (null: no host liveness channel). */
+  silence?: Readonly<{ policy: TaskStallPolicy; deadline(profile: ExecutionProfileDefinition): number | null }>;
 }
 export class ExecutionRegistryError extends Error {
   constructor(readonly code: 'TASK_KIND_NOT_REGISTERED' | 'TASK_EVALUATOR_NOT_REGISTERED' | 'EXECUTION_REGISTRY_VALIDATOR_INVALID' | 'RUN_EXECUTION_INTEGRITY'
-    | 'WORK_INPUT_REQUIRED' | 'WORK_INPUT_TEMPLATE_REQUIRED') { super(code); this.name = 'ExecutionRegistryError'; }
+    | 'WORK_INPUT_REQUIRED' | 'WORK_INPUT_TEMPLATE_REQUIRED' | 'WORKER_INACTIVITY_POLICY_INVALID') { super(code); this.name = 'ExecutionRegistryError'; }
 }
 
 /** Stored selections must remain an exact, verifiable record of the Run graph at admission. */
@@ -60,7 +62,8 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
     // EXEC-RELEASE C2 (owner B): the kind's explicit no-workspace-delivery declaration is frozen with the Run, only when present.
     const acceptance = freezeTaskAcceptance(task, graph.criterionDefinitions, registry.workClasses);
     if (acceptance && !workClassProfiles.some(row => row.workClass === acceptance.frozen.workClass && row.policyRevision === acceptance.frozen.policyRevision && row.profileVersion === acceptance.frozen.profileVersion)) workClassProfiles.push(acceptance.frozen);
-    return Object.freeze({ taskId: task.id, profile, ...(acceptance ? { acceptance: acceptance.reference } : {}), ...(kind.workspaceDelivery ? { workspaceDelivery: kind.workspaceDelivery } : {}) });
+    const stall = freezeSilencePolicy(task, profile, registry.workClasses, validation.silence);
+    return Object.freeze({ taskId: task.id, profile, ...(acceptance ? { acceptance: acceptance.reference } : {}), ...(kind.workspaceDelivery ? { workspaceDelivery: kind.workspaceDelivery } : {}), ...(stall ? { stall } : {}) });
   });
   const criteria = graph.criterionDefinitions.map(criterion => {
     const evaluator = registry.evaluators.find(entry => entry.id === criterion.evaluator.id && entry.version === criterion.evaluator.version);
@@ -70,4 +73,16 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
   });
   return assertRunExecution(graph, { schemaVersion: 1 as const, registryRevision: registry.revision,
     ...(workClassProfiles.length ? { workClassProfiles } : {}), tasks: Object.freeze(tasks), criteria: Object.freeze(criteria) });
+}
+/** R3: a watchable task freezes its work class's silence policy (an explicit class policy that cannot stop before the deadline is refused) or
+ * the installation default, which simply does not apply to a profile whose deadline comes first: that task keeps the deadline bound alone. */
+function freezeSilencePolicy(task: TaskGraph['tasks'][number], profile: ExecutionProfileDefinition, classes: Parameters<typeof resolveTaskWorkClass>[2], silence: ExecutionRegistryValidation['silence']) {
+  const deadline = silence?.deadline(profile) ?? null;
+  if (!silence || deadline === null) return undefined;
+  const workClass = resolveTaskWorkClass(task.kind, task.workClass ?? task.workInput?.workClass, classes).workClass;
+  const override = workClass && 'inactivity' in workClass ? workClass.inactivity : undefined;
+  const policy = { ...silence.policy, ...override };
+  if (policy.stopAfterMs < deadline) return policy;
+  if (override) throw new ExecutionRegistryError('WORKER_INACTIVITY_POLICY_INVALID');
+  return undefined;
 }

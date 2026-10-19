@@ -1,6 +1,6 @@
 import type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';
 import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
-import type { AcceptanceView, TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
+import type { AcceptanceView, TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult, TaskNotAcceptedReason } from '#domain/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 import { z } from 'zod';
@@ -23,8 +23,8 @@ export interface MonitorService {
   readonly build: MonitorBuild | null;
 }
 /** Why a non-terminal Run is not progressing; `none` only when it is progressing normally. */
-export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'waiting-execution-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
-  | 'worker-running' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
+export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'waiting-execution-slot' | 'pool-held' | 'waiting-dependency' | 'waiting-scope-conflict' | 'awaiting-approval'
+  | 'worker-running' | 'worker-silent' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
   | 'unresolved-effect' | 'cancellation-pending' | 'not-admitted' | 'unknown';
 export interface MonitorBlocker {
   readonly pool?: import('#engine/core/runs/index.js').PoolWait;
@@ -69,7 +69,7 @@ export interface MonitorTask {
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
-  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null; readonly reason?: 'no-change-produced' };
+  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null; readonly reason?: TaskNotAcceptedReason };
   readonly dependencies: readonly string[]; readonly handoffs?: readonly HandoffReceiptView[];
   /** S6: hits the operator's `execution.secretGate` lists lifted for the last attempt (path, rule, lifting entry; never a value). */
   readonly configExclusions?: { readonly count: number; readonly entries: readonly import('#engine/core/workspaces/index.js').WorkerTreeExclusion[] };

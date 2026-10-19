@@ -3,6 +3,7 @@ import { TargetQueueError, sameAttemptIdentity, type AttemptIdentity, type Targe
 import { AuditApplication } from '#engine/core/audit/index.js';
 import { TargetQueueApplication, type TargetQueueStore, type TargetQueueBounds, type TargetQueueAudit } from '#engine/core/effect/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
+import { assertRunDeliveryIntent } from './run-intent.js';
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export function createWorkspaceQueueAdmission(queue: TargetQueueStore, authorization: DispatchIdentityAuthorization, principal: VerifiedPrincipal,
   policyRevision: string, bounds: TargetQueueBounds, integrity: ConstructorParameters<typeof AuditApplication>[1] | null,
@@ -13,6 +14,7 @@ export function createWorkspaceQueueAdmission(queue: TargetQueueStore, authoriza
     const { run, outputDigest } = await ports.read(request.identity), task = run?.progress.find(row => row.taskId === request.identity.taskId);
     if (!run || run.revision < request.acceptedRevision || task?.phase !== 'accepted'
       || !run.bindings.some(row => sameAttemptIdentity(row.identity, request.identity)) || outputDigest !== request.outputDigest) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    if (request.delegation) assertRunDeliveryIntent(run, request);
   };
   const audit: TargetQueueAudit = (store, record) => {
     if (!integrity) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');

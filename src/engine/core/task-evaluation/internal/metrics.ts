@@ -11,7 +11,8 @@ export function deriveAcceptanceMetric(command: string, input: RunSnapshot): Dec
   if (payload['action'] === 'apply-task-evaluation') {
     const value = { ...payload }; delete value['action'];
     const commit = taskEvaluationCommitSchema.parse(value); evaluation = taskEvaluationSchema.parse(commit.evaluation);
-    if (evaluation.quota) return null;
+    // A quota park or an R3 stall retry is not an outcome: the task runs again (an exhausted stall is recorded as failed).
+    if (evaluation.quota || (evaluation.stall && run.progress.find(row => row.taskId === evaluation!.identity.taskId)?.phase === 'pending')) return null;
     identity = evaluation.identity;
     if (commit.dispatch.output) references.set('dispatch-output', commit.dispatch.output.digest);
     if (commit.dispatch.patch) references.set('workspace-patch', commit.dispatch.patch.digest);

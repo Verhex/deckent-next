@@ -12,6 +12,7 @@ import { clearConfigCache } from '#platform/index.js';
 import { identifyDockerRequest } from '#adapters/index.js';
 import { cliChildEnv } from '../support/child-env.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
+import { storeStep } from '../support/store-failure.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE; const exec = promisify(execFile);
 type Child = ReturnType<typeof spawn>;
@@ -62,15 +63,15 @@ it.skipIf(!imageId || process.platform !== 'linux')('recovers request-only cance
   try {
     let record;
     for (let i = 0; i < 500; i++) {
-      const store = await openConfiguredAttemptStore(project, options);
-      try { record = await store.store.loadBoundDispatch(identity); } finally { store.store.close(); }
+      record = await storeStep(`POLL_LAUNCH_${i}`, async () => { const store = await openConfiguredAttemptStore(project, options);
+        try { return await store.store.loadBoundDispatch(identity); } finally { store.store.close(); } });
       if (record?.launch === 'granted') { try { if (await readFile(join(record.request.workspace, readyName), 'utf8') === 'yes') break; } catch { /* starting */ } }
       await new Promise(resolveWait => setTimeout(resolveWait, 10));
     }
     expect(record?.launch).toBe('granted'); expect(await readFile(join(record!.request.workspace, readyName), 'utf8')).toBe('yes');
     const parameters = record!.profile.parameters as { endpoint: string }; endpoint = parameters.endpoint;
     handle = identifyDockerRequest(record!.request, { ...docker, workspaceRoot: resolve(data, 'workspaces'), uid: userInfo().uid, gid: userInfo().gid }).handle;
-    await requestRunCancellation(project, { schemaVersion: 1, commandId: 'cancel', action: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 }, options);
+    await storeStep('REQUEST_CANCELLATION', () => requestRunCancellation(project, { schemaVersion: 1, commandId: 'cancel', action: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 }, options));
     const db = new DatabaseSync(opened.path);
     try { expect(db.prepare('SELECT record FROM cancellation_deliveries WHERE scope_id=? AND attempt_id=?').get('s', identity.attemptId)).toBeUndefined(); }
     finally { db.close(); }
@@ -82,7 +83,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('recovers request-only cance
     const code = await bounded(closed(recovery), recovery, 'RECOVERY_CHILD_TIMEOUT'); expect({ code, stderr }).toEqual({ code: 0, stderr: '' });
     expect(JSON.parse(stdout).recovery.outcomes).toMatchObject([{ identity, outcome: { status: 'terminal', delivery: { state: 'terminal', attempts: 1 } } }]);
     expect((await exec('/usr/bin/docker', ['--host', endpoint, 'inspect', '--format', '{{.State.Running}}', handle])).stdout.trim()).toBe('false');
-    const proof = await openConfiguredAttemptStore(project, options);
+    const proof = await storeStep('PROOF_OPEN', () => openConfiguredAttemptStore(project, options));
     try {
       expect(await proof.store.load('s', identity.attemptId)).toMatchObject({ cancelRequested: true, lastObservation: { result: { kind: 'exited' } } });
       const journal = new DatabaseSync(opened.path, { readOnly: true });

@@ -4,7 +4,7 @@ import { projectHumanState, resolveWorkerUsage, type MonitorApproval, type Monit
   type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, agoText, blockerLabel, quotaWaitText, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
-  taskPhaseLabel, verdictLabel, workerPhaseLabel, type MonitorTab } from './labels.js';
+  taskPhaseLabel, verdictLabel, workerPhaseLabel, notAcceptedLabel, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { describeDiagnostics } from './diagnostics.js';
 import { humanWorkerLines } from './human-worker.js';
@@ -219,7 +219,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.handoffs ?? []).map(receipt => [span(`    ${(receipt.kind === 'workspace-started-from-patch' ? t('monitor.detail.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('monitor.detail.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))}`, 'success')]),
       ...(task.configExclusions ? [[span(`    ${t('monitor.detail.configExcluded', { count: task.configExclusions.count }, locale)}`, 'warning')],
         ...task.configExclusions.entries.map(entry => [span(t('monitor.detail.configExcludedEntry', { path: entry.path, rule: entry.rule, by: entry.by }, locale), 'muted')])] : []),
-      ...(task.evaluation.reason ? [[span(`    ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')]] : []),
+      ...(task.evaluation.reason ? [[span(`    ${notAcceptedLabel(task.evaluation.reason, locale)}`, 'error')]] : []),
       ...(task.dependencies.length ? [[span(`    ${t('monitor.detail.dependencies', { list: task.dependencies.join(', ') }, locale)}`, 'muted')]] : []),
     ]; }),
     run.delivery === undefined ? [span(t('monitor.detail.deliveryUnknown', {}, locale), 'muted')]
@@ -408,7 +408,7 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
         span(w.age(run.blocker!.sinceMs)), span(run.scopeId, 'muted'), ...w.installCell(install)])) },
     ...stuck.flatMap(({ value: run }) => run.blocker!.deadlineMs === undefined ? [] : [{ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} ${run.tasks.filter(task => task.decision).map(task => blockerLabel(task.decision!.reason === 'needs-input' ? 'awaiting-decision' : task.decision!.reason, locale)).join(', ')} ${w.sep} ${expiryText(w.now, run.blocker!.deadlineMs, locale)}`, 'warning')] }]),
     ...runs.filter(({ value: run }) => run.deliveryOutlook === 'patch-not-prepared').map(({ value: run }) => ({ kind: 'line' as const, line: [span(`${marks.warn} ${t('monitor.summary.patchNotPrepared', { run: run.runId }, locale)}`, 'warning')] })),
-    ...runs.flatMap(({ value: run }) => run.tasks.filter(task => task.evaluation.reason).map(task => ({ kind: 'line' as const, line: [span(`${run.runId}/${task.taskId} ${w.sep} ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')] }))),
+    ...runs.flatMap(({ value: run }) => run.tasks.flatMap(task => task.evaluation.reason ? [{ kind: 'line' as const, line: [span(`${run.runId}/${task.taskId} ${w.sep} ${notAcceptedLabel(task.evaluation.reason, locale)}`, 'error')] }] : [])),
     ...(failed.length ? [blank, heading(t('monitor.summary.failed', { count: failed.length }, locale)), { kind: 'table' as const, empty: '',
       columns: [w.col(t('monitor.col.run', {}, locale), 0, 20, 44), w.col(t('monitor.col.firstFailure', {}, locale), 1, 24, 90),
         w.col(t('monitor.col.activity', {}, locale), 2, 14, 20), w.col(t('monitor.col.scope', {}, locale), 4, 8, 24), ...w.installColumn(3)],

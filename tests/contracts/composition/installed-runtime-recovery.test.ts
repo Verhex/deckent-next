@@ -12,6 +12,7 @@ import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { installationProfile } from '../support/installation-profile.js';
 import { waitForRecoveredOutput } from '../support/recovered-output-event.js';
+import { describeStoreFailure } from '../support/store-failure.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE, exec = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
@@ -27,13 +28,13 @@ async function bounded<T>(promise: Promise<T>, child: Child, label: string, mill
     const captured = diagnostics.get(child); reject(new Error(`${label}: stdout=${captured?.stdout ?? ''} stderr=${captured?.stderr ?? ''}`)); }, milliseconds); })]); }
   finally { if (timer) clearTimeout(timer); }
 }
-// The service may hold the ledger write lock while this observer opens it; on a loaded runner the open can exceed the busy
-// timeout (ATTEMPT_STORE_BUSY, hosted ubuntu node 26). That is "not observable yet" for this bounded poll, never a result.
-async function observe<T>(read: () => Promise<T | undefined>): Promise<T | undefined> {
-  try { return await read(); } catch (error) { if ((error as { code?: unknown }).code === 'ATTEMPT_STORE_BUSY') return undefined; throw error; }
+// Before R6 every writer open took the ledger write lock (hosted ubuntu node 26 refused it ATTEMPT_STORE_BUSY on a loaded runner). A
+// current ledger's open is now lock-free, but a read can still meet a busy ledger: that is "not observable yet" for this poll, never a result.
+async function observe<T>(read: () => Promise<T | undefined>, label: string): Promise<T | undefined> {
+  try { return await read(); } catch (error) { if ((error as { code?: unknown }).code === 'ATTEMPT_STORE_BUSY') return undefined; throw describeStoreFailure(error, label); }
 }
 async function poll<T>(read: () => Promise<T | undefined>, label: string): Promise<T> {
-  for (let count = 0; count < 1_000; count++) { const value = await observe(read); if (value !== undefined) return value;
+  for (let count = 0; count < 1_000; count++) { const value = await observe(read, label); if (value !== undefined) return value;
     await new Promise(resolveWait => setTimeout(resolveWait, 20)); }
   throw new Error(label);
 }

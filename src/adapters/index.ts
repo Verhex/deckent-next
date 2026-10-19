@@ -6,7 +6,7 @@ export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions 
 export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
-export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
+export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
   resolveDockerReadOnlyMounts, dockerProfileObservesWorker } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LOCAL_AUTHENTICATOR_INVENTORY, LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal, captureLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
@@ -91,7 +91,7 @@ export * from '#adapters/core/project-instructions/index.js';
 export * from '#adapters/core/backup-store/index.js';
 export { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 
-export { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+export { openSqliteLedger, openSqliteLedgerReadOnly, openSqliteLedgerAnchor, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
 export { inspectInstallationStartabilityFiles, type InstallationStartability } from '#adapters/core/installation-files/index.js';
 export { firstSessionTargets, firstSessionPublication } from '#adapters/core/installation-files/index.js';
 export { openSqliteRunProposalStore, openSqliteRunProposalReader } from '#adapters/core/run-proposal-store/index.js';

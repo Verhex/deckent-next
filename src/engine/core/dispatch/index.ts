@@ -1,8 +1,10 @@
-export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError } from './internal/port.js';
+export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, DISPATCH_INTERRUPT_CAUSES, dispatchRecordSchema, DispatchError } from './internal/port.js';
 export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, LaunchDecision, DispatchTerminal, DispatchRecord, DispatchStore, RunBoundDispatchStore } from './internal/port.js';
 export { decideDispatchLaunch, validateLaunchRequest } from './internal/launch.js';
 export type { DispatchLaunchState, DispatchLaunchTransition } from './internal/launch.js';
 export { DispatchApplication } from './internal/application.js';
+export { inactivityVerdict, inactivityWatch } from './internal/inactivity.js';
+export type { InactivityVerdict, GatewayActivityCounters } from './internal/inactivity.js';
 export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from './internal/application.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from './internal/settle.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from './internal/inventory.js';

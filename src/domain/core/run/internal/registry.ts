@@ -44,10 +44,15 @@ export function encodeExecutionProfileDefinition(input: unknown): string {
 export type ExecutionRegistry = z.infer<typeof executionRegistrySchema>;
 export type ExecutionProfileDefinition = z.infer<typeof executionProfileDefinitionSchema>;
 export type EvaluatorDefinition = z.infer<typeof evaluatorDefinitionSchema>;
+/** R3 (owner D4a): the silence policy frozen per watchable task at admission: warn and stop after this much host-observed silence, and at
+ * most `maxRetries` automatic re-runs of a stalled Attempt. Absent (older Runs, unwatchable profiles): only the profile deadline bounds it. */
+export const taskStallPolicySchema = z.object({ warnAfterMs: counterSchema.positive(), stopAfterMs: counterSchema.positive(), maxRetries: counterSchema })
+  .strict().refine(value => value.warnAfterMs < value.stopAfterMs, 'WORKER_INACTIVITY_POLICY_INVALID').readonly();
+export type TaskStallPolicy = z.infer<typeof taskStallPolicySchema>;
 /** The selected definitions belong to the Run, not the current installation config. */
 export const runExecutionSnapshotSchema = z.object({ schemaVersion: z.literal(1), registryRevision: identitySchema,
   workClassProfiles: z.array(frozenWorkClassProfileSchema).max(256).readonly().optional(),
-  tasks: z.array(z.object({ taskId: identitySchema, acceptance: taskAcceptanceReferenceSchema.optional(), profile: executionProfileDefinitionSchema, workspaceDelivery: workspaceDeliveryDeclarationSchema.optional() }).strict().readonly()).min(1).readonly(),
+  tasks: z.array(z.object({ taskId: identitySchema, acceptance: taskAcceptanceReferenceSchema.optional(), profile: executionProfileDefinitionSchema, workspaceDelivery: workspaceDeliveryDeclarationSchema.optional(), stall: taskStallPolicySchema.optional() }).strict().readonly()).min(1).readonly(),
   criteria: z.array(z.object({ criterionId: identitySchema, evaluator: evaluatorDefinitionSchema,
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   }).strict().readonly()).min(1).readonly(),

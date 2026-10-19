@@ -29,7 +29,9 @@ async function assertUnsupported(f: Awaited<ReturnType<typeof fixtureConfig>>, p
   expect(() => new FileArtifactStore({ root: join(f.root, 'data', 'artifacts'), maxBytes: 65536 })).toThrow(expect.objectContaining({ code: 'ARTIFACT_UNSUPPORTED' }));
   await expect(stat(join(f.root, 'data'))).rejects.toMatchObject({ code: 'ENOENT' });
 }
-async function fixture(context: TestContext, files: number | null, noChangeAllowed?: boolean) {
+const reportLine = (report: unknown) => JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', ...(report === null ? { status: 'unavailable', reason: 'missing' } : { status: 'reported', report }) });
+const workerReport = (checks: unknown[] = []) => reportLine({ schemaVersion: 1, summary: 'done', changedFiles: ['test.txt'], checks, openIssues: [] });
+async function fixture(context: TestContext, files: number | null, noChangeAllowed?: boolean, stdout = workerReport()) {
   const { root, project, options } = await fixtureConfig();
   if (process.platform === 'win32') {
     await assertUnsupported({ root, project, options });
@@ -53,7 +55,7 @@ async function fixture(context: TestContext, files: number | null, noChangeAllow
   const claim = { owner: 'fixture', request: { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['test'] } };
   await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
   const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });
-  await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: '', stderr: '' }))));
+  await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout, stderr: '' }))));
   await store.finishDispatch(claim, { handle: 'h', exitCode: 0, interrupted: false });
   if (files !== null) await store.retainDispatchPatch(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'workspace-patch', identity: files === 2 ? { ...identity, generation: 2 } : identity,
     source: { schemaVersion: 1, adapter: { id: 'git', version: 1 }, sourceFingerprint: 'c'.repeat(64) }, baseCommit: 'a'.repeat(40), snapshotDigest: 'b'.repeat(64), exclusions: patchExclusions,
@@ -135,4 +137,43 @@ it('an explicitly allowed no-change task still refuses a foreign retained patch 
   const store = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid');
   try { expect((await store.loadRun('s', 'r'))!.progress[0]!.phase).toBe('evaluating'); expect(await store.loadRunReceipt('s', 'evaluation')).toBeNull(); }
   finally { store.close(); }
+});
+
+// R5 (owner D5a): a work task's clean exit without a valid structured result report fails with a typed, retry-classifiable reason.
+// The report stays a claim: a valid report never accepts by itself (the patch and criteria still decide), it only removes this floor.
+it.for([
+  ['no report record', 1, '', 'report-missing', 'task.acceptance.reportMissing'],
+  ['worker-declared missing report', 1, reportLine(null), 'report-missing', 'task.acceptance.reportMissing'],
+  ['no report and no change (report cause first)', 0, '', 'report-missing', 'task.acceptance.reportMissing'],
+  ['duplicate report records', 1, `${workerReport()}\n${workerReport()}`, 'report-invalid', 'task.acceptance.reportInvalid'],
+  ['schema-invalid report', 1, reportLine({ schemaVersion: 1, summary: 'done' }), 'report-invalid', 'task.acceptance.reportInvalid'],
+  ['oversized report', 1, JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', status: 'unavailable', reason: 'oversized' }), 'report-invalid', 'task.acceptance.reportInvalid'],
+  ['failed acceptance check claim', 1, workerReport([{ command: 'npm test', outcome: 'failed', checkId: 'unit', role: 'acceptance' }]), 'declared-check-not-passed', 'task.acceptance.declaredCheckNotPassed'],
+  ['acceptance check last outcome not passed', 1, workerReport([{ command: 'npm test', outcome: 'passed', checkId: 'unit', role: 'acceptance' }, { command: 'npm test', outcome: 'not-run', checkId: 'unit', role: 'acceptance' }]), 'declared-check-not-passed', 'task.acceptance.declaredCheckNotPassed'],
+] as const)('exit 0 with %s -> failed/%s, shown by inspect and monitor (EN/TR)', async ([, files, stdout, reason, key], context) => {
+  const f = await fixture(context, files, undefined, stdout); const result = await evaluateConfiguredTask(f.project, f.command, f.options);
+  expect(result.evaluation.run.tasks[0]).toMatchObject({ phase: 'failed', notAcceptedReason: reason });
+  expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(result);
+  const reading = await readMonitorLedger(f.path, { busyTimeoutMs: 20, maxRuns: 10 });
+  const run = projectMonitorRun({ run: reading.runs[0]!, approvals: [], pool: reading.pools[0]!, workers: new Map(), observedAt: Date.now() });
+  expect(run.tasks[0]!.evaluation.reason).toBe(reason);
+  const surface = await loadMonitorSurface();
+  for (const locale of ['en', 'tr'] as const) {
+    const text = surface.renderMonitorText({ ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs: [run] }] }, { locale, width: 200, ascii: true });
+    expect(text).toContain(t(key, {}, locale)); expect(text).not.toContain(t('task.acceptance.noChangeProduced', {}, locale));
+  }
+});
+it.for([
+  ['exploratory failed check', workerReport([{ command: 'npm run lint', outcome: 'failed', checkId: 'lint', role: 'exploratory' }])],
+  ['untyped failed check (legacy claim)', workerReport([{ command: 'npm run lint', outcome: 'failed' }])],
+  ['acceptance check re-run until passed', workerReport([{ command: 'npm test', outcome: 'failed', checkId: 'unit', role: 'acceptance' }, { command: 'npm test', outcome: 'passed', checkId: 'unit', role: 'acceptance' }])],
+  ['worker CLI without a structured result channel', JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', status: 'unavailable', reason: 'unsupported' })],
+] as const)('exit 0 with a patch and %s -> accepted as before', async ([, stdout], context) => {
+  const f = await fixture(context, 1, undefined, stdout); const result = await evaluateConfiguredTask(f.project, f.command, f.options);
+  expect(result.evaluation.run.tasks[0]!.phase).toBe('accepted'); expect(result.evaluation.run.tasks[0]).not.toHaveProperty('notAcceptedReason');
+});
+it('a valid report never accepts by itself: no patch and no exception still fails as no-change-produced', async context => {
+  const f = await fixture(context, 0, undefined, workerReport([{ command: 'npm test', outcome: 'passed', checkId: 'unit', role: 'acceptance' }]));
+  const result = await evaluateConfiguredTask(f.project, f.command, f.options);
+  expect(result.evaluation.run.tasks[0]).toMatchObject({ phase: 'failed', notAcceptedReason: 'no-change-produced' });
 });

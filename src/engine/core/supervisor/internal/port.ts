@@ -21,8 +21,14 @@ export const sandboxObservationSchema = z.object({ handle: identitySchema, resul
 export const sandboxOutputSchema = z.object({ stdout: z.string(), stderr: z.string(), completeness: z.literal('partial') }).strict().readonly();
 export const sandboxResultSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, worker: workerIncarnationSchema.optional(), container: containerEvidenceSchema.optional(),
   outputCompleteness: z.enum(['complete', 'partial', 'unavailable']), stdout: z.string(), stderr: z.string(), interrupted: z.boolean(),
+  interruptCause: z.enum(['deadline', 'inactivity', 'cancel']).optional(),
 }).strict().readonly();
 export type SandboxResult = z.infer<typeof sandboxResultSchema>;
+/** R3 (Astra 2642 F1): the one mapping of the FIRST stop the supervisor saw (its own deadline, or the execute signal with its reason) to
+ * the recorded cause. Supervisors call it where they decide to stop, before any cleanup, so a later abort can never relabel the stop. */
+export function sandboxInterruptCause(stop: 'deadline' | 'signal', reason?: unknown): NonNullable<SandboxResult['interruptCause']> {
+  return stop === 'deadline' ? 'deadline' : reason === 'inactivity' ? 'inactivity' : 'cancel';
+}
 export type SupervisorTermination = Readonly<{ worker: import('#domain/index.js').WorkerIncarnation } & ({ kind: 'worker-absent' } | { kind: 'supervisor-exit'; result: import('#domain/index.js').ProcessExitCause })>;
 export interface ExecutionSupervisor {
   /** Exact retained incarnation lookup; missing names/PIDs cannot certify termination. */

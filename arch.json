@@ -572,6 +572,7 @@
         "src/composition/core/runs",
         "src/composition/core/runtime",
         "src/composition/core/scoped-request",
+        "src/composition/core/workspace-patch",
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
@@ -3140,9 +3141,9 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 28000,
+      "adapters": 28300,
       "surfaces": 45000,
-      "composition": 7200
+      "composition": 7350
     },
     "totalSrcLines": 200000,
     "testCases": 8000,

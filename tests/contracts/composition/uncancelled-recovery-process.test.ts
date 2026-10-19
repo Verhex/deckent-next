@@ -74,9 +74,9 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
     { cwd: process.cwd(), env, stdio: ['ignore', 'pipe', 'pipe'] }) as Child;
   const controllerClosed = closed(controller); let handle: string | undefined; let endpoint: string | undefined;
   try {
-    // The controller process is the writer while it runs. Observe through the read-only reader: a writer open (BEGIN IMMEDIATE +
-    // migration check) competes for the ledger write lock and is refused ATTEMPT_STORE_BUSY within the default busy timeout whenever a
-    // controller commit outlasts it on a loaded host (hosted node 26, 2026-10-14), and it would equally make the controller's own writes wait.
+    // The controller process is the writer while it runs. Observe through the read-only reader, which never asks for the write lock
+    // (before R6 every writer open took it for the migration check and was refused ATTEMPT_STORE_BUSY on a loaded host, hosted node 26,
+    // 2026-10-14; a current ledger's writer open is lock-free now, but an observer has no reason to be a writer).
     const record = await poll(async () => {
       const store = await openSqliteInventoryReader(ledgerPath, { busyTimeoutMs: getConfigFieldDefault('storage').sqlite.busyTimeoutMs });
       try {

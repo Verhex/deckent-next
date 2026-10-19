@@ -173,6 +173,13 @@
       "maxResumes": 1,
       "maxWaitMs": 604800000,
       "schemaVersion": 1
+    },
+    "stallRecovery": {
+      "backoffMs": 30000,
+      "maxRetries": 1,
+      "schemaVersion": 1,
+      "stopAfterMs": 3600000,
+      "warnAfterMs": 180000
     }
   },
   "schema_version": 4,
@@ -197,7 +204,7 @@
   "storage": {
     "driver": "sqlite",
     "sqlite": {
-      "busyTimeoutMs": 100,
+      "busyTimeoutMs": 5000,
       "durability": "full",
       "journalMode": "wal"
     }
@@ -211,6 +218,9 @@
     "chainSize": 16,
     "leaseMs": 60000,
     "perTarget": 256,
+    "reattemptWindowMs": 21600000,
+    "reattempts": 1,
+    "requeueMax": 2,
     "revalidations": 2,
     "schemaVersion": 1,
     "ttlMs": 600000,

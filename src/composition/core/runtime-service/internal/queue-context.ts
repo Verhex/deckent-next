@@ -1,6 +1,6 @@
 import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
-import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { TargetQueueError } from '#domain/index.js';
 import { createWorkspaceQueueAdmission, describeWorkspaceQueueCandidate, DispatchPolicyAuthorization, workTargetAttemptAuthorization } from '#engine/index.js';
 import { FileArtifactStore, GitQueueTarget, openLocalIntegrityAuthority, openSqliteAttemptStore, resolveGitWorkTarget, selectWorkTarget, SqliteTargetQueue, openSqliteLedger, openSqliteLedgerReadOnly, type LocalPeerIdentity } from '#adapters/index.js';
@@ -14,10 +14,11 @@ async function openQueueContext(root: string, scopeId: string, options: ConfigLo
   const selected = selectWorkTarget(config.execution);
   const resolved = await resolveGitWorkTarget(resolve(root), config.execution, layout);
   if (!selected || resolved.id !== selected.id) throw selected ? new TargetQueueError('QUEUE_AUTHORITY_REQUIRED') : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
-  const git = { ...config.execution.git, ...resolved.git, workspaceRoot: await inspectProductDirectory(layout, 'workspaces') };
+  // The service owns the execution plane's private directories (as run create and task execution do): a fresh installation that has not run a task yet still lists its queue and runs the intent pass.
+  const git = { ...config.execution.git, ...resolved.git, workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
   const limits = { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes };
   const target = new GitQueueTarget(git, installationId, selected.id, config.execution.adoption.targets, config.execution.adoption.protectedTargets);
-  const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
+  const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
   const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
   const authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selected.id);
   const path = await context.path(), db = readOnly ? openSqliteLedgerReadOnly(path, config.storage.sqlite) : openSqliteLedger(path, config.storage.sqlite, 'forbid');

@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
 import { targetQueueKey } from './queue-key.js';
 import { assertCandidateEvidence, targetQueueRequestSchema, targetQueueRecordSchema, TargetQueueError, queueTerminal, queueNextState,
-  encodeCommandProjection, type TargetQueueRequest, type TargetQueueRecord, type TargetBinding, type VerifiedPrincipal } from '#domain/index.js';
+  encodeCommandProjection, isMcpPrincipal, queueApprover, queueRequeueCause, sameAttemptIdentity, type TargetQueueRequest, type TargetQueueRecord, type TargetBinding, type VerifiedPrincipal } from '#domain/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
 
 export interface TargetQueueBounds { readonly capacity: number; readonly perTarget: number; readonly activeTargets: number;
-  readonly batchSize: number; readonly batchWindowMs: number; readonly leaseMs: number; readonly verificationTimeoutMs: number; readonly revalidations: number }
+  readonly batchSize: number; readonly batchWindowMs: number; readonly leaseMs: number; readonly verificationTimeoutMs: number; readonly revalidations: number;
+  /** D1a: automatic re-attempts per intent lineage after the target base advanced (config `targetQueue.reattempts`; absent = 0). */
+  readonly reattempts?: number;
+  /** D2b: service re-queues per delegated Attempt after a pre-effect stop (config `targetQueue.requeueMax`; absent = 0). */
+  readonly requeueMax?: number }
 /** All callback work is synchronous under the shared ledger transaction. No target/process/TTY I/O while holding the writer. */
 export interface TargetQueueStore {
   enqueue(request: TargetQueueRequest, bounds: TargetQueueBounds, audit: (store: AuditStore, record: TargetQueueRecord) => void): TargetQueueRecord;
@@ -31,8 +35,38 @@ export class TargetQueueApplication {
   async submit(input: unknown, principal: VerifiedPrincipal): Promise<TargetQueueRecord> {
     const request = targetQueueRequestSchema.parse(input);
     await this.authority.authorize(request, principal, 'submit');
-    if (request.actor.id !== principal.id || request.actor.issuer !== principal.issuer || request.actor.subject !== principal.subject
-      || !principal.scopeIds.includes(request.identity.scopeId)) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    if (request.reattempt || request.delegation || !sameActor(request.actor, principal) || !principal.scopeIds.includes(request.identity.scopeId)) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    return this.admit(request);
+  }
+  /** D1a/D2b: the service enqueues a re-attempt only for the human whose intent ticket it continues: the source is that human's settled,
+   * base-advanced ticket of the same target, the count is one more, and policy and validation run as that human (never MCP/workload). */
+  async submitReattempt(input: unknown, principal: VerifiedPrincipal): Promise<TargetQueueRecord> {
+    const request = targetQueueRequestSchema.parse(input), lineage = request.reattempt;
+    const source = lineage ? this.store.load(request.identity.scopeId, lineage.sourceCommandId) : null;
+    if (!lineage || !source || isMcpPrincipal(principal) || principal.assurance === 'workload-verified' || !sameActor(lineage.approvedBy, principal)
+      || !sameActor(queueApprover(source.request), principal) || source.state !== 'settled' || source.outcome !== 'conflict-needs-reattempt'
+      || source.reason !== 'PATCH_BASE_ADVANCED' || lineage.cause !== source.reason
+      || source.key !== targetQueueKey(request.target) || !source.request.deliveryIntent || source.request.operation === 'rollback'
+      || (source.request.reattempt?.intentCommandId ?? source.request.commandId) !== lineage.intentCommandId
+      || lineage.count !== (source.request.reattempt?.count ?? 0) + 1 || !principal.scopeIds.includes(request.identity.scopeId)) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    await this.authority.authorize(request, principal, 'submit');
+    return this.admit(request);
+  }
+  /** D2b: the service submits, or re-queues, an accepted Attempt of a Run under its human-approved delivery intent, as the granting human
+   * (never MCP/workload). `validate` proves the intent on the Run; a re-queue continues only the same Attempt's delegated ticket of the same
+   * intent and target that stopped before any effect, one count more, within `requeueMax` (`QUEUE_REQUEUE_EXHAUSTED`). */
+  async submitDelegated(input: unknown, principal: VerifiedPrincipal): Promise<TargetQueueRecord> {
+    const request = targetQueueRequestSchema.parse(input), delegation = request.delegation, requeue = delegation?.requeue;
+    const source = requeue ? this.store.load(request.identity.scopeId, requeue.sourceCommandId) : null, origin = source?.request.delegation;
+    if (!delegation || isMcpPrincipal(principal) || principal.assurance !== 'os-user' || !sameActor(delegation.grantedBy, principal) || !principal.scopeIds.includes(request.identity.scopeId)
+      || (requeue && (!source || !origin || encodeCommandProjection('intent:1', origin.intentRef) !== encodeCommandProjection('intent:1', delegation.intentRef)
+        || !sameActor(origin.grantedBy, delegation.grantedBy) || !sameAttemptIdentity(source.request.identity, request.identity) || source.key !== targetQueueKey(request.target)
+        || requeue.cause !== queueRequeueCause(source) || requeue.count !== (origin.requeue?.count ?? 0) + 1))) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+    if (requeue && requeue.count > (this.bounds.requeueMax ?? 0)) throw new TargetQueueError('QUEUE_REQUEUE_EXHAUSTED');
+    await this.authority.authorize(request, principal, 'submit');
+    return this.admit(request);
+  }
+  private async admit(request: TargetQueueRequest): Promise<TargetQueueRecord> {
     const previous = this.store.load(request.identity.scopeId, request.commandId);
     if (previous) {
       if (encodeCommandProjection('queue-request:1', previous.request) !== encodeCommandProjection('queue-request:1', request)) throw new TargetQueueError('QUEUE_CONFLICT');
@@ -131,6 +165,8 @@ export function assertQueueChange(previous: TargetQueueRecord, next: TargetQueue
     assertCandidateEvidence(next.candidate, next.verification);
   }
 }
+const sameActor = (a: { id: string; issuer: string; subject: string }, b: { id: string; issuer: string; subject: string }) =>
+  a.id === b.id && a.issuer === b.issuer && a.subject === b.subject;
 export function sameQueueTarget(a: TargetBinding, b: TargetBinding): boolean { return targetQueueKey(a) === targetQueueKey(b); }
 
 /** No implicit worker counts or mutable policy literals: the caller supplies the complete effective configuration. */

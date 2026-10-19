@@ -17,6 +17,10 @@ async function setup(journalMode: 'wal' | 'delete' = 'wal', lock: 'write' | 'rea
   const root = await mkdtemp(join(tmpdir(), 'deckent-contention-')); roots.push(root); const path = join(root, 'state.db');
   const options = { busyTimeoutMs: 40, journalMode, durability: 'full' } as const;
   const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
+  return { path, store, child: await holdLock(path, lock), options };
+}
+/** A separate process holding the write lock (BEGIN IMMEDIATE) or a read snapshot until stdin says release. */
+async function holdLock(path: string, lock: 'write' | 'read') {
   const child = spawn(process.execPath, ['--input-type=module', '-e', `
     import {DatabaseSync} from 'node:sqlite';
     const db=new DatabaseSync(process.argv[1]);
@@ -28,7 +32,7 @@ async function setup(journalMode: 'wal' | 'delete' = 'wal', lock: 'write' | 'rea
     child.once('error', reject); child.once('exit', code => reject(new Error('lock-holder-exited:'+code)));
     child.stdout.once('data', data => String(data) === 'locked' ? resolve() : reject(new Error('lock-protocol-invalid')));
   });
-  return { path, store, child, options };
+  return child;
 }
 describe('separate-process SQLite lock contention', () => {
   it('returns typed bounded busy and accepts the same command after the holder releases', async () => {
@@ -39,10 +43,23 @@ describe('separate-process SQLite lock contention', () => {
     await expect(f.store.commit(input)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
     expect(performance.now() - started).toBeLessThan(2000);
     expect(await f.store.load('s', 'a')).toBeNull(); expect(await f.store.receipt('s', 'create')).toBeNull();
-    await expect(openSqliteAttemptStore(f.path, f.options, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
+    // R6: a current ledger's open takes no write lock, so it is admitted beside the held lock; its first write is still the bounded busy.
+    const second = await openSqliteAttemptStore(f.path, f.options, { now: Date.now, timeoutMs: 86400000 }); stores.push(second);
+    await expect(second.commit(input)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
     const closed = once(f.child, 'close'); f.child.stdin.write('release'); await closed;
     const receipt = await f.store.commit(input); expect(receipt.snapshot.revision).toBe(0);
     expect(await f.store.commit(input)).toEqual(receipt);
+  });
+  it('an open that must migrate still takes the write lock: bounded busy beside a held lock, migrated once it is released (R6)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-contention-')); roots.push(root); const path = join(root, 'state.db');
+    const options = { busyTimeoutMs: 40, journalMode: 'wal', durability: 'full' } as const;
+    const child = await holdLock(path, 'write'); // an empty database: version 0, so every open must migrate
+    const started = performance.now();
+    await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
+    expect(performance.now() - started).toBeLessThan(2000);
+    const closed = once(child, 'close'); child.stdin.write('release'); await closed;
+    const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
+    expect(await store.load('s', 'a')).toBeNull();
   });
   it('rejects invalid budgets before opening a database', async () => {
     for (const busyTimeoutMs of [-1, Infinity, 2.5, 2_147_483_648]) {

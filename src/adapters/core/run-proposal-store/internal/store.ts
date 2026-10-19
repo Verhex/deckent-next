@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { encodeCommandProjection, runSnapshotSchema } from '#domain/index.js';
-import { parseRunProposalRecord, parseProviderSpendCheckpoint, classifyWorkSpending, type RunProposalRecord, type RunCreate, type RunReceipt } from '#engine/index.js';
+import { parseRunProposalRecord, parseProviderSpendCheckpoint, classifyWorkSpending, proposalRunGraph, type RunProposalRecord, type RunCreate, type RunReceipt } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { requireLedgerVersion, RUN_PROPOSAL_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 export function readRunProposal(db: DatabaseSync, scopeId: string, commandId: string): RunProposalRecord | null {
@@ -74,7 +74,7 @@ export class SqliteRunProposals {
     if (!create.proposal) return null;
     const record = readRunProposal(this.db, create.identity.scopeId, create.commandId);
     if (!record || !['recorded', 'pending'].includes(record.status) || !record.binding.admission
-      || record.proposal.runId !== create.identity.runId || JSON.stringify(record.proposal.graph) !== JSON.stringify(create.graph)
+      || record.proposal.runId !== create.identity.runId || JSON.stringify(proposalRunGraph(record.proposal.graph)) !== JSON.stringify(create.graph)
       || encodeCommandProjection('actor', record.proposal.proposer) !== encodeCommandProjection('actor', create.actor)
       || JSON.stringify(record.binding) !== JSON.stringify(create.proposal)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
     if (record.binding.admission.budgetSemantics) {
