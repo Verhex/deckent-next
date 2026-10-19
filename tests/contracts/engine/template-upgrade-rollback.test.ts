@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
@@ -176,6 +176,11 @@ it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, det
   // J3: a fresh install written by the current template has no upgrade to undo — "nothing to roll back" with its typed reason, never "not a first-run policy".
   const fresh = await fixture(undefined, false), initial = await fresh.bytes();
   expect(await fresh.rollback()).toMatchObject({ status: 'nothing-to-roll-back', reason: 'no-upgrade-recorded' });
+  expect(await fresh.bytes()).toBe(initial); expect(fresh.cards).toBe(0);
+  // NEGATIVE: the same template policy with an older bindings revision (an exact installer upgrade whose archive is gone) is not provably fresh.
+  const bindingsPath = join(dirname(fresh.archive), 'bindings.json'), bindings = JSON.parse(await readFile(bindingsPath, 'utf8'));
+  await writeFile(bindingsPath, JSON.stringify({ ...bindings, revision: 'first-run-template-v12-bindings' }), { mode: 0o600 });
+  expect(await fresh.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
   expect(await fresh.bytes()).toBe(initial); expect(fresh.cards).toBe(0);
   const restored = await fixture(), before = JSON.parse(await restored.bytes());
   await restored.source.updateAuthority(() => ({ write: { policy: { ...before, revision: 'a-edited', grants: before.grants.map((rule: { id: string }) =>
