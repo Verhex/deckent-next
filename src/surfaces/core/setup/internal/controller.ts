@@ -20,7 +20,9 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
   if (!stage) return [{ id: 'close', label: t('setup.window.close', {}, locale), action: 'close' }];
   if (stage.state === 'ready') return [{ id: 'apply', label: t('setup.window.apply', {}, locale), action: 'apply' }, later];
   if (stage.id === 'core:language') return [...['en', 'tr'].map((code): Choice => ({ id: code, label: languageName(code, locale), answer: code, action: 'answer' })), later];
-  if (stage.id === 'core:profile') return [...observation.profile.available.slice(0, registry.windowOptionRows - 1)
+  // The default (solo, INIT-D4) comes first; the other registered profiles follow in registry order.
+  if (stage.id === 'core:profile') return [...[...observation.profile.available].sort((a, b) => Number(b.id === 'core:solo') - Number(a.id === 'core:solo'))
+    .slice(0, registry.windowOptionRows - 1)
     .map((entry): Choice => ({ id: entry.id, label: entry.id, answer: { id: entry.id, version: entry.version }, action: 'answer' })), later];
   const yes = (answer: unknown): Choice => ({ id: 'yes', label: t('setup.window.yes', {}, locale), answer, action: 'answer' });
   if (stage.id === 'core:folder') return typeof stage.default === 'string' && stage.default ? [yes(stage.default), later] : [later];
