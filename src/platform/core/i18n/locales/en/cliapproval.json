@@ -3,6 +3,7 @@
   "cli.policy.grants.row": "  {id} · {tool} · {kind} · {text}",
   "cli.policy.grants.none": "You have no persisted standing approvals in this scope.",
   "cli.policy.grantsAll.header": "{count} standing approval(s) of {people} person(s) in this scope:",
+  "cli.policy.grantsAll.headerPage": "This page: {count} standing approval(s) of {people} person(s):",
   "cli.policy.grantsAll.none": "No one has a persisted standing approval in this scope.",
   "cli.policy.grantsAll.column.person": "Person",
   "cli.policy.grantsAll.column.rule": "Rule",

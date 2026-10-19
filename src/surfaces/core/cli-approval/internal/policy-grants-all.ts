@@ -18,11 +18,11 @@ export async function policyGrantsAll(context: ApprovalCommandContext, input: { 
   try { page = await context.listAllStandingGrants(input.root, { scopeId: input.scopeId, ...(input.after === undefined ? {} : { after: input.after }) }, { env: input.env }); }
   catch (error) { const code = (error as { code?: unknown } | null)?.code; if (code === 'POLICY_DENIED' || code === 'POLICY_APPROVAL_UNSUPPORTED') throw refuse(); throw error; }
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
-  emit(page, { ...sinks, json: input.json, render: view => standingGrantsAllText(view, input.flagged, input.locale, cliTableStyle(context)) });
+  emit(page, { ...sinks, json: input.json, render: view => standingGrantsAllText(view, input.flagged, input.locale, cliTableStyle(context), input.after !== undefined) });
 }
 
-/** The readable page: scope line, count, table, and the since / next-page notes. Every cell goes through the table's redaction. */
-export function standingGrantsAllText(view: StandingGrantsPage, flagged: boolean, locale: Locale, style: ReturnType<typeof cliTableStyle>): string {
+/** The readable page: scope line, count (of this page when paged), table, and the since / next-page notes. Every cell goes through the table's redaction. */
+export function standingGrantsAllText(view: StandingGrantsPage, flagged: boolean, locale: Locale, style: ReturnType<typeof cliTableStyle>, later = false): string {
   const head = scopeNotice({ scopeId: view.scopeId, source: flagged ? 'flag' : 'default' }, locale);
   if (view.rows.length === 0) return [head, t('cli.policy.grantsAll.none', {}, locale)].join('\n');
   const scopes = (value: 'all' | readonly string[]) => value === 'all' ? t('cli.policy.grantsAll.allScopes', {}, locale) : value.join(', ');
@@ -34,7 +34,7 @@ export function standingGrantsAllText(view: StandingGrantsPage, flagged: boolean
   const table = renderCliTable(columns.map((header, index) => ({ header, shrink: index === 1 || index === 3 })),
     view.rows.map(row => [row.principals.length ? row.principals.map(person => `${person.issuer}/${person.subject}`).join(', ') : t('cli.policy.grantsAll.everyone', {}, locale),
       row.id, `${row.tool} (${row.kind})`, row.pattern, scopes(row.scopes), row.sinceMs === null ? '—' : formatClock(row.sinceMs, locale)]), style);
-  return [head, t('cli.policy.grantsAll.header', { count: view.rows.length, people: people.size }, locale), table,
+  return [head, (view.next || later ? t('cli.policy.grantsAll.headerPage', { count: view.rows.length, people: people.size }, locale) : t('cli.policy.grantsAll.header', { count: view.rows.length, people: people.size }, locale)), table,
     ...(view.since === 'complete' && view.rows.every(row => row.sinceMs !== null) ? [] : [since]),
     ...(view.next ? [t('cli.policy.grantsAll.more', { command: safeCell(`deckent policy grants --all --scope ${view.scopeId} --after ${view.next}`) }, locale)] : []),
     t('cli.policy.grantsAll.noValues', {}, locale)].join('\n');

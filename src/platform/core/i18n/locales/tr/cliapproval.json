@@ -3,6 +3,7 @@
   "cli.policy.grants.row": "  {id} — {tool} — {kind} — {text}",
   "cli.policy.grants.none": "Bu kapsamda kayıtlı kalıcı onayınız yok.",
   "cli.policy.grantsAll.header": "Bu kapsamda {people} kişinin {count} kalıcı onayı:",
+  "cli.policy.grantsAll.headerPage": "Bu sayfa: {people} kişinin {count} kalıcı onayı:",
   "cli.policy.grantsAll.none": "Bu kapsamda kimsenin kayıtlı kalıcı onayı yok.",
   "cli.policy.grantsAll.column.person": "Kişi",
   "cli.policy.grantsAll.column.rule": "Kural",

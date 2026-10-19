@@ -28,19 +28,26 @@ it('admin: a readable table on a pipe (EN and TR), raw page only with --json, th
   const listAllStandingGrants = async (_root: string, input: { scopeId: string; after?: string }) => { seen.push(input); return page; };
   const en = sink();
   expect(await main(['policy', 'grants', '--all', '--lang', 'en'], { ...f, stdout: en.stream, listAllStandingGrants })).toBe(0);
-  for (const text of ['scope: live', '2 standing approval(s) of 2 person(s)', 'Person', 'Since', 'host/1000', 'idp.example/colleague', 'standing-a', 'run_shell (command)', 'npm test',
+  for (const text of ['scope: live', 'This page: 2 standing approval(s) of 2 person(s)', 'Person', 'Since', 'host/1000', 'idp.example/colleague', 'standing-a', 'run_shell (command)', 'npm test',
     '2026-10-19', 'no audited change created this rule', 'deckent policy grants --all --scope live --after Y3Vyc29y', 'no secret value is shown']) expect(en.out.text).toContain(text);
   expect(en.out.text).not.toContain('{'); expect(() => JSON.parse(en.out.text)).toThrow();
   const tr = sink();
   expect(await main(['policy', 'grants', '--all', '--lang', 'tr'], { ...f, stdout: tr.stream, listAllStandingGrants })).toBe(0);
-  for (const text of ['2 kişinin 2 kalıcı onayı', 'Kişi', 'Başlangıç', 'İzin verdiği', 'elle eklenmiş', 'Daha fazla kural']) expect(tr.out.text).toContain(text);
+  for (const text of ['Bu sayfa: 2 kişinin 2 kalıcı onayı', 'Kişi', 'Başlangıç', 'İzin verdiği', 'elle eklenmiş', 'Daha fazla kural']) expect(tr.out.text).toContain(text);
   const json = sink();
   expect(await main(['policy', 'grants', '--all', '--json', '--scope', 'live', '--after', 'Y3Vyc29y'], { ...f, stdout: json.stream, listAllStandingGrants })).toBe(0);
   expect(JSON.parse(json.out.text)).toEqual(page);
+  // The last page reached by --after is still a page, not the whole scope.
+  const lastPaged = sink();
+  expect(await main(['policy', 'grants', '--all', '--after', 'Y3Vyc29y', '--lang', 'en'], { ...f, stdout: lastPaged.stream, listAllStandingGrants: async () => ({ ...page, next: null }) })).toBe(0);
+  expect(lastPaged.out.text).toContain('This page: 2 standing approval(s)'); expect(lastPaged.out.text).not.toContain('More rules');
   expect(seen).toEqual([{ scopeId: 'live' }, { scopeId: 'live' }, { scopeId: 'live', after: 'Y3Vyc29y' }]);
   const none = sink();
   expect(await main(['policy', 'grants', '--all', '--lang', 'tr'], { ...f, stdout: none.stream, listAllStandingGrants: async () => ({ ...page, rows: [], next: null }) })).toBe(0);
   expect(none.out.text).toContain('kimsenin kayıtlı kalıcı onayı yok');
+  const last = sink();
+  expect(await main(['policy', 'grants', '--all', '--lang', 'en'], { ...f, stdout: last.stream, listAllStandingGrants: async () => ({ ...page, next: null }) })).toBe(0);
+  expect(last.out.text).toContain('2 standing approval(s) of 2 person(s) in this scope'); expect(last.out.text).not.toContain('--after');
 });
 
 it('refused by policy (a person without the grant, a revoked rule, the MCP actor): typed refusal naming the permission and the next step, EN and TR', async () => {
