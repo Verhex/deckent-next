@@ -89,6 +89,8 @@ export interface MonitorTarget { readonly id: string; readonly path: string }
 export interface MonitorScopeObservation {
   /** The scope `inspect` decision of the target's own policy; only admitted scopes contribute Runs, approvals and workers. */
   readonly access: 'admitted' | 'denied' | 'unavailable';
+  /** The refusal's typed code (e.g. `POLICY_DENIED`); shown only to a viewer holding the scope-diagnostics grant (MON-NAMES). */
+  readonly reason?: string;
   readonly workers: readonly WorkerObservation[]; readonly workerStatus: string; readonly truncated: boolean;
   /** The approval list decision (`approval inspect` over the scope); absent or false withholds approval summary text. */
   readonly approvals?: boolean;
@@ -107,6 +109,9 @@ export interface MonitorPorts {
   /** Rejects with a coded error; `LOCAL_RUNTIME_UNAVAILABLE` means no service is listening. */
   describeService(target: MonitorTarget): Promise<RuntimeServiceDescriptor>;
   observeScope(target: MonitorTarget, scopeId: string): Promise<MonitorScopeObservation>;
+  /** MON-NAMES: the viewer's installation-wide `monitor inspect-scope-diagnostics` decision (`scopeIds`: the ledger's scopes, admitted first);
+   * true only on an allow. Absent, false or a rejection keep refused and failed scopes as counts. */
+  observeScopeDiagnostics?(target: MonitorTarget, scopeIds: readonly string[]): Promise<boolean>;
   /** WORKER-AUTO-REFRESH: the install's worker image refresh status (updating / current / failed with a typed reason); absent port or `unknown` adds nothing. */
   /** Whether the answering service started with the restart-apply configuration this target has now; absent: not reported. */
   readConfigFreshness?(target: MonitorTarget, descriptor: RuntimeServiceDescriptor): Promise<'current' | 'stale' | 'unknown'>;

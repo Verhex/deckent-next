@@ -76,6 +76,18 @@ describe('Installs: status and next step first, developer details last', () => {
       expect(text).not.toContain('scope-legacy-name');
     }
   });
+  it('a viewer holding the scope-diagnostics grant reads refused and failed scopes by name and reason; a failed decision is one nameless line (MON-NAMES)', () => {
+    const named: MonitorInstall = { ...n1Like, diagnostics: ['scope-refused:POLICY_DENIED:scope-alpha', 'scope-failed:LEDGER_LOCKED:team:beta', 'scope-failed::scope-gamma',
+      'scope-diagnostics-unavailable:POLICY_UNAVAILABLE'] };
+    for (const [locale, words] of [['en', ['access to scope scope-alpha was refused (POLICY_DENIED)', 'scope team:beta could not be read (LEDGER_LOCKED)',
+      'scope scope-gamma could not be read', 'Scope names could not be checked (POLICY_UNAVAILABLE); only counts are shown']],
+    ['tr', ['scope-alpha kapsamına erişim reddedildi (POLICY_DENIED)', 'team:beta kapsamı okunamadı (LEDGER_LOCKED)', 'scope-gamma kapsamı okunamadı',
+      'Kapsam adlarını görme izni denetlenemedi (POLICY_UNAVAILABLE); yalnız sayılar gösteriliyor']]] as const) {
+      const text = surface.renderMonitorText(one(named), { locale, width: 160, ascii: false });
+      for (const line of words) expect(text).toContain(line);
+      expect(text).not.toContain('scope-gamma could not be read ()'); expect(text).not.toContain('scope-gamma kapsamı okunamadı ()');
+    }
+  });
 });
 
 describe('Map: tables, collapsed old profile versions, grouped permissions', () => {

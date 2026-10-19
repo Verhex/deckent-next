@@ -2,7 +2,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { indexMonitorInstall, listSurfaceRunIds, prepareMonitorInstall, stampMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
-import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, PoolControlPolicyAuthorization, assertPoolControlAllowed, MonitorSourceMemo, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type MonitorRecall } from '#engine/index.js';
+import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, PoolControlPolicyAuthorization, assertPoolControlAllowed, MonitorSourceMemo, monitorScopeDiagnosticsAllowed, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type MonitorRecall } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -49,6 +49,11 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
       return (await recall(target.path))(JSON.stringify(['pool', poolId, scopeIds]), async () => { for (const scopeId of new Set([...scopeIds, ...home])) if (await granted(async () => { const c = await scope(target.path, scopeId);
         assertPoolControlAllowed(await new PoolControlPolicyAuthorization({ async load() { return c.document; } }).decide('inspect', poolId, scopeId, c.principal)); })) return true;
       return false; }); },
+    // MON-NAMES: the installation-wide decision needs the viewer's policy and principal only, the same from any scope's context (first that loads).
+    observeScopeDiagnostics: async (target, scopeIds) => { const { home } = await installed(target.path); let failure: unknown = null;
+      return (await recall(target.path))('scope-diagnostics', async () => { for (const scopeId of new Set([...scopeIds, ...home])) {
+        const c = await scope(target.path, scopeId).catch((error: unknown) => { failure = error; return null; }); if (c) return monitorScopeDiagnosticsAllowed(c.document, c.principal); }
+      if (failure) throw queryFailure(failure); return false; }); },
     readLedger: async (target, readScope) => { const { config: installedConfig, home } = await installed(target.path);
       // The ledger capture is recalled (a reading with an unavailable part is not kept); readShown below still reads open workers' live tails every call.
       const captured = await (await recall(target.path))(JSON.stringify(['ledger', readScope]), () => prepareMonitorInstall(installedConfig, options.env, identity => granted(async () => {
@@ -77,7 +82,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
       // One walk per scope: one context and reader for all its pages up to `maxEntries` (was one inventory call per page).
       const recalled = await recall(target.path); let page;
       try { page = (await inspectConfiguredWorkers(target.path, { schemaVersion: 1, scopeId, source: 'current', after: null, open: true }, options, { recall: recalled, entries: config.inspection.workers.maxEntries })).sources[0]!; }
-      catch (error) { if (DENIED.has(queryFailure(error).code)) return { access: 'denied', workers: [], workerStatus: 'denied', truncated: false }; throw error; }
+      catch (error) { const reason = queryFailure(error).code; if (DENIED.has(reason)) return { access: 'denied', reason, workers: [], workerStatus: 'denied', truncated: false }; throw error; }
       return { access: 'admitted', workers: page.workers, workerStatus: page.status, truncated: page.nextAfter !== null, approvals: await recalled(`approvals\0${scopeId}`, () => granted(async () => {
         const c = await scope(target.path, scopeId); authorizeApproval(c.document, 'inspect', scopeId, scopeId, c.principal); })) };
     } }).inspect(targets, selection);

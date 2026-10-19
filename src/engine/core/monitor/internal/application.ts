@@ -59,26 +59,31 @@ export class MonitorApplication {
         approvals: [], pools: [], diagnostics: Object.freeze(diagnostics) }); };
     let index: MonitorLedgerIndex, reading: MonitorLedgerReading;
     try { index = await this.ports.indexLedger(target); } catch (error) { return unavailable(error); }
-    const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = []; let refused = 0;
-    const scopeNotes: string[] = [], failed = new Map<string, number>(); const fail = (reason: string) => failed.set(reason, (failed.get(reason) ?? 0) + 1);
+    const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = [];
+    const scopeNotes: string[] = [], refused: (readonly [string, string])[] = [], failed: (readonly [string, string])[] = [];
     for (const scopeId of index.scopeIds) {
       try {
         const scope = await this.ports.observeScope(target, scopeId);
-        // MON-SCOPE-NAMES: a refused scope or one whose access check failed is counted, never named (its id is the viewer's only clue that it exists).
-        if (scope.access === 'denied') { refused += 1; continue; }
-        if (scope.access !== 'admitted') { fail(''); continue; }
+        if (scope.access === 'denied') { refused.push([scopeId, scope.reason ?? '']); continue; }
+        if (scope.access !== 'admitted') { failed.push([scopeId, scope.reason ?? '']); continue; }
         admitted.add(scopeId); workers.push(...scope.workers); if (scope.approvals === true) summaries.add(scopeId);
         if (scope.workerStatus !== 'available') scopeNotes.push(`workers-${scope.workerStatus}:${scopeId}`);
         if (scope.truncated) scopeNotes.push('info:workers-truncated:' + scopeId);
-      } catch (error) { fail(code(error)); }
+      } catch (error) { failed.push([scopeId, code(error)]); }
     }
-    // One count per reason code (a code is never a scope name): `scopes-unavailable:<n>[:<CODE>]`.
-    for (const [reason, count] of failed) scopeNotes.push(`scopes-unavailable:${count}${reason ? ':' + reason : ''}`);
+    // MON-SCOPE-NAMES / MON-NAMES (owner 2026-10-19): refused and failed scopes are named (`scope-refused|scope-failed:<CODE>:<id>`, the code never holds
+    // `:`) only on the viewer's installation-wide scope-diagnostics allow; otherwise, and when that decision fails (one nameless reason), counts.
+    const decide = this.ports.observeScopeDiagnostics?.bind(this.ports), unnamed: string[] = [];
+    const named = refused.length + failed.length > 0 && !!decide && await Promise.resolve().then(() => decide(target, [...admitted, ...index.scopeIds.filter(id => !admitted.has(id))]))
+      .then(value => value === true, error => { unnamed.push('scope-diagnostics-unavailable:' + code(error)); return false; });
+    const counts = new Map<string, number>(); for (const [, reason] of failed) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    if (named) scopeNotes.push(...failed.map(([id, reason]) => `scope-failed:${reason}:${id}`));
+    else scopeNotes.push(...[...counts].map(([reason, count]) => `scopes-unavailable:${count}${reason ? ':' + reason : ''}`), ...unnamed);
     // M-VIS: a pool is shown only on the viewer's own `pool inspect` allow; a failed decision hides it too, reported once without any pool id.
     const visible = new Set<string>(), undecided = new Set<string>();
     for (const poolId of index.poolIds) if (await this.ports.observePool(target, poolId, [...admitted]).catch(error => { undecided.add(code(error)); return false; }) === true) visible.add(poolId);
     for (const failure of undecided) scopeNotes.push('pool-decisions-unavailable:' + failure);
-    if (refused) scopeNotes.unshift(`scopes-denied:${refused}`);
+    if (refused.length) scopeNotes.unshift(...named ? refused.map(([id, reason]) => `scope-refused:${reason}:${id}`) : [`scopes-denied:${refused.length}`]);
     try { reading = await this.ports.readLedger(target, Object.freeze({ scopeIds: Object.freeze([...admitted]), poolIds: Object.freeze([...visible]) })); }
     catch (error) { diagnostics.push(...scopeNotes); return unavailable(error); }
     diagnostics.push(...reading.diagnostics, ...scopeNotes);
@@ -137,7 +142,7 @@ export class MonitorApplication {
     const poolViews: MonitorPool[] = shownPools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
       held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution }));
     const hiddenPools = index.poolIds.length - visible.size, open = !index.scopeIds.length || admitted.size > 0;
-    const status = open ? 'available' : refused ? 'denied' : 'unavailable';
+    const status = open ? 'available' : refused.length ? 'denied' : 'unavailable';
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,
       runs: Object.freeze(runs),
       workers: Object.freeze(shown.map(enrich)), map: open ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews),

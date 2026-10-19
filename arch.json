@@ -2486,7 +2486,9 @@
         "src/engine/core/supervisor",
         "src/domain/core/attempt",
         "src/domain/core/work-cost",
-        "src/engine/core/resource-observation"
+        "src/engine/core/resource-observation",
+        "src/domain/core/policy",
+        "src/domain/core/principal"
       ],
       "plan": "MONITOR"
     },
