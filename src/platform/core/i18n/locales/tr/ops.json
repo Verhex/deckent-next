@@ -462,7 +462,6 @@
   "error.BACKUP_LIMIT": "Kurtarma seti yapılandırılmış boyut veya kayıt sınırını aşıyor.",
   "error.BACKUP_KEY_INVALID": "Kurulum yetki anahtarı eksik veya geçersiz.",
   "error.BACKUP_SET_INVALID": "Kurtarma setinin biçimi geçersiz.",
-  "error.BACKUP_MANIFEST_INVALID": "Kurtarma manifesti setin içeriğiyle eşleşmiyor.",
   "error.BACKUP_FINGERPRINT_INVALID": "Ledger parmak izi setle eşleşmiyor.",
   "error.BACKUP_LEDGER_INVALID": "Kurtarma ledger’ı bütünlük denetimini geçemedi.",
   "error.BACKUP_STATE_MISSING": "Kurtarma için gereken kurulum durumu eksik.",

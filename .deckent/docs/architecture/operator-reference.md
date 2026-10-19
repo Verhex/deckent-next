@@ -171,6 +171,10 @@ layers are archived apart. Worker clones, provider logins and secret-store crede
 excluded. Set files are 0600 in a 0700 directory and no `ledger.db-wal/-shm` is left in a set.
 SHA hashes alone do not authenticate a changed set: verification also opens the AEAD envelope, so
 `BACKUP_PASSPHRASE_INVALID` means a wrong passphrase or a modified set.
+Before any decryption, verify and restore name the other causes with their own codes (exit 78):
+`BACKUP_SET_NOT_FOUND` (no folder with `MANIFEST.sha256` at the path), `BACKUP_SET_UNREADABLE`
+(this user cannot read the set), `BACKUP_PASSPHRASE_REQUIRED` (empty passphrase) and
+`BACKUP_MANIFEST_INVALID` (a file no longer matches the manifest: the set was modified).
 
 Stop the target service first. An empty target needs no replacement confirmation; for an
 existing target add `--confirm-target /exact/absolute/target`. A target bound to another

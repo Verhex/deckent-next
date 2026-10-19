@@ -462,7 +462,6 @@
   "error.BACKUP_LIMIT": "The recovery set exceeds the configured size or entry bound.",
   "error.BACKUP_KEY_INVALID": "The installation authority key is missing or invalid.",
   "error.BACKUP_SET_INVALID": "The recovery set format is invalid.",
-  "error.BACKUP_MANIFEST_INVALID": "The recovery manifest does not match the set.",
   "error.BACKUP_FINGERPRINT_INVALID": "The ledger fingerprint does not match the set.",
   "error.BACKUP_LEDGER_INVALID": "The recovery ledger fails its integrity check.",
   "error.BACKUP_STATE_MISSING": "Required installation recovery state is missing.",

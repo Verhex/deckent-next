@@ -178,6 +178,10 @@ kalır. Set dosyaları 0700 dizinde 0600'dür; sette `ledger.db-wal/-shm` kalmaz
 Değiştirilmiş bir setin SHA değerlerini yeniden yazmak yeterli değildir; verify şifreli
 zarfın doğrulamasını da yapar; bu yüzden `BACKUP_PASSPHRASE_INVALID` yanlış parola ya da
 değiştirilmiş set demektir.
+Şifre çözmeden önce verify ve restore diğer nedenleri kendi kodlarıyla söyler (çıkış 78):
+`BACKUP_SET_NOT_FOUND` (yolda `MANIFEST.sha256` içeren klasör yok), `BACKUP_SET_UNREADABLE`
+(bu kullanıcı seti okuyamıyor), `BACKUP_PASSPHRASE_REQUIRED` (boş parola) ve
+`BACKUP_MANIFEST_INVALID` (bir dosya manifestle eşleşmiyor: set değiştirilmiş).
 
 Önce hedef servisi durdurun. Boş hedef doğrudan kullanılabilir; dolu hedef için
 `--confirm-target /tam/mutlak/hedef` ekleyin. Başka kurulum kimliğine bağlı hedef reddedilir.
