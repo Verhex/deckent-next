@@ -161,6 +161,27 @@ her yazma (aday + teslim, dala alma, kuyruk partisi) kendi birebir kartını bek
 `deckent task` eksik argümanı adlandırır ve eylemleri dört grupta listeler (İncele, Yürüt ve değerlendir, Teslim,
 Kuyruk), çıkış 2. AI yolu tüm uzun adları ve bayrakları korur.
 
+İnsan için `deckent run`, `report` ve `inventory` (alpha.48 C-RUN). `deckent run list`, terminalin `/runs` penceresiyle aynı
+Run kimliklerini ve her Run'ı aynı inceleme uygulamasıyla okur: bekleyen (bekletilmiş) Run'lar önce, sonra en yenisi; kısa
+kimlik, `/runs` durum sözcükleri, kabul edilen görevler ve başlık; `--json` Run görünümlerini döndürür. Var olan bir Run'ı
+adlandıran her `run` eylemi kısa kimlik alır (benzersiz önek; birden çok aday `CLI_ID_AMBIGUOUS`, çıkış 2; diğerleri olduğu
+gibi geçer); `create --id` hiç çözülmez, yeni Run'ın adıdır. `--scope` olmayan bir okuma yapılandırılmış `terminal.scopeId`'yi
+kullanır ve ilk satırda söyler; yoksa terminal dışında geçerli kapsamları sayan `CLI_SCOPE_REQUIRED` döner. `run inspect`
+istek, sonuç ve görevleri okur (her görevde kabul edilmiş sonucun neye dayandığı, ör. "kabul: çıkış kodu · içerik bağımsız
+doğrulanmadı", sonra teslim); yetki kaydı, maliyet özeti, kabul meta satırı, profil ve kriter satırları, tam kimlikler ve beş
+yoldan uzun gizli bilgi kapısı listesi `--verbose` ile gelir. Gerçek terminalde kimliksiz `run inspect` ve `report` Run'ı
+seçtirir; `--command-id`/`--expected-revision` olmadan `run cancel|hold|resume|close` kapsamı (değişiklik varsayılanı sessizce
+almaz) ve Run'ı (yalnız durumu o denetimi sunan Run'lar; `/runs` tuşlarıyla aynı kural) seçtirir, revizyonu kartın hemen
+öncesinde okur, kart kapsamı, Run'ı, durumu ve sonucu adıyla gösterir ve sistemin ürettiği komut kimliğiyle gönderir; `n`,
+Esc ya da sessizlik hiçbir şey göndermez, arada değişen Run yeniden okunup yeniden sorulur. AI ve otomasyon yolunda tüm
+yazılı bayraklar zorunlu kalır; ajana ya da boruya hiçbir zaman soru sorulmaz. `deckent report` Bilinen (sonuç, kabulün
+dayandığı kanıt, okunur birimlerle süre, CPU, bellek, model) ve Ölçülemeyen (her alan nedeniyle, ör. abonelik çağrısında
+çağrı başına ücret ölçülemez) bölümlerini gösterir; `--run` yoksa kapsamın son Run'larını listeler. `deckent inventory` bu
+kurulumun dağıtım günlüğünün geliştirici görünümüdür (kısa kimlik, `--verbose` ile tam kimlik); `workers list` yapılandırılmış
+`inspection.workers.sources` kaynaklarını da okuduğu için daha çok kayıt gösterebilir. `inspection.maxPageSize` üstü sayfa en
+çok değeri söyleyen `DISPATCH_INVENTORY_LIMIT` olur. Yalın `report`/`inventory` çağrıları ve `run list` katalog deltası
+uygulanınca erişilir.
+
 Hazırlama, yapılandırılmış workspaces kaynağının `integrations` dizininde ayrı Git adayı oluşturur.
 Aday kayıtlı base ve patch'i içerir; kaynak dosya, HEAD ve index değişmez. Hazırlanmış aday Task kabulü
 veya canlı teslim değildir. Tamamlanmış komut tekrarlandığında aday doğrulanır; kesilmiş komut

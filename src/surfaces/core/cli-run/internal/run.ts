@@ -1,61 +1,66 @@
 import { runProposalCommand } from './run-proposal.js';
-import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
-import { cliUsage, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { cliUsage, commandLocale, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
+import { cliMode } from '#surfaces/core/cli-human/index.js';
+import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunView, type RunReservationCommand } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { RunCommandContext } from './context.js';
-import { notAcceptedLabel, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
-import type { RunCancellationDeliveryHandler } from '#surfaces/core/cli-terminal/index.js';
+import { renderRunCancellation } from './cancellation.js';
+import { renderRunInspect } from './run-inspect.js';
+import { runList } from './run-list.js';
+import { runControlFlow } from './run-control.js';
+import { familyScope, pickRun, readScopeRuns, resolveRunId, runHumanIo, scopeLine } from './run-human.js';
+import REGISTRY from './run.json' with { type: 'json' };
+export { renderRunCancellation } from './cancellation.js';
 export type { RunCancellationDeliveryHandler, RunQueryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly Readonly<{ code: string; taskId: string; modelId: string; minCliVersion: string; cliVersion: string | null }>[] }>>;
 /** Local (not runtime-service) admission of a Run pinned to a completed delivery's commit (B06-2a `createDeliveryRun`). */
 export type RunDeliveryAdmissionHandler = (root: string, command: RunDeliveryAdmission, options: ConfigLoadOptions) => ReturnType<RunAdmissionHandler>;
 export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
-/** Human rendering of a typed cancellation delivery; shared by `run cancel` and the terminal `/cancel` card. */
-export function renderRunCancellation(data: Awaited<ReturnType<RunCancellationDeliveryHandler>>, commandId: string, scopeId: string, runId: string, locale: Locale): string {
-  const labels = {
-    terminal: t('cli.run.cancel.terminal', {}, locale), unresolved: t('cli.run.cancel.unresolved', {}, locale),
-    denied: t('cli.run.cancel.denied', {}, locale), unavailable: t('cli.run.cancel.unavailable', {}, locale),
-    prevented: t('cli.run.cancel.prevented', {}, locale),
-    'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
-  };
-  const deliveryLabels = { queued: t('cli.run.cancel.deliveryQueued', {}, locale), claimed: t('cli.run.cancel.deliveryClaimed', {}, locale), exhausted: t('cli.run.cancel.deliveryExhausted', {}, locale), terminal: labels.terminal, prevented: labels.prevented };
-  const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched' && item.status !== 'prevented').length;
-  return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
-    ...(unconfirmed ? [t('cli.run.cancel.unconfirmed', { count: unconfirmed, total: data.delivery.outcomes.length }, locale)] : []),
-    ...data.delivery.outcomes.flatMap(item => [t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale),
-      ...(item.delivery && ['queued', 'claimed', 'exhausted'].includes(item.delivery.state)
-        ? [t('cli.run.cancel.delivery', { count: item.delivery.attempts, state: deliveryLabels[item.delivery.state] }, locale)] : [])]),
-    ...(data.delivery.outcomes.length ? [] : [t('cli.run.cancel.empty', {}, locale)]),
-    t('cli.run.cancel.notice', { scope: scopeId, run: runId }, locale),
-  ].join('\n');
-}
 export async function runCommand(argv: readonly string[], context: RunCommandContext): Promise<void> {
   const action = argv[1];
   const languageAt = argv.indexOf('--lang');
   const requestedLanguage = languageAt >= 0 ? argv[languageAt + 1] : undefined;
-  const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
-  context.onLocale?.(earlyLocale);
+  const earlyLocale = commandLocale(context, requestedLanguage?.startsWith('-') ? undefined : requestedLanguage);
   const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
   if (action === 'propose' || action === 'inspect-proposal') return runProposalCommand(argv, context, earlyLocale);
   if (!hasCliAction('run', action)) throw usage();
-  const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
+  const control = action === 'cancel' || action === 'close' || action === 'hold' || action === 'resume';
+  const allowed = action === 'list' ? ['--scope', '--limit', '--lang'] : action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
     ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(action === 'hold' ? ['--reason'] : action === 'resume' ? ['--task', '--answer'] : [])];
-  const values = new Map<string, string>(); let json = false;
+  const values = new Map<string, string>(); let json = false, verbose = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--json') { if (json) throw usage(); json = true; continue; }
+    if (arg === '--verbose' && action === 'inspect') { if (verbose) throw usage(arg); verbose = true; continue; }
     if (arg === '--no-color') continue;
     if (!allowed.includes(arg)) throw usage();
     if (values.has(arg)) throw usage(arg);
     const value = argv[++i]; if (!value || value.startsWith('--')) throw usage(arg); values.set(arg, value);
   }
-  const scopeId = values.get('--scope'); const runId = values.get('--id');
-  if (!scopeId || !runId) throw usage(!scopeId ? '--scope' : '--id');
-  const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
+  if (verbose && json) throw usage('--verbose');
+  const locale = commandLocale(context, values.get('--lang'));
+  if (action === 'list') {
+    const limit = values.get('--limit');
+    if (limit !== undefined && (!/^[1-9][0-9]*$/.test(limit) || !Number.isSafeInteger(Number(limit)))) throw usage('--limit');
+    await runList(values, json, context, locale); return;
+  }
+  const interactive = cliMode(context, json).mode === 'interactive';
+  if (action === 'inspect') { await inspectRunAction(values, json, verbose, interactive, context, locale, usage); return; }
+  // CLI review §run: on a person's terminal a control with neither --command-id nor --expected-revision picks, reads the revision and asks;
+  // the AI and automation path keeps every typed flag mandatory (one of them typed: the usage error below, as before).
+  if (control && interactive && !values.has('--command-id') && !values.has('--expected-revision')) {
+    const answer = values.get('--answer'), taskId = values.get('--task');
+    if ((answer !== undefined) !== (taskId !== undefined) || (answer !== undefined && !answer.trim())) throw usage('--answer');
+    await runControlFlow(action, context, await runHumanIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--id'), reason: values.get('--reason'), taskId, answer });
+    return;
+  }
+  const scopeId = values.get('--scope'); const typedRunId = values.get('--id');
+  if (!scopeId || !typedRunId) throw usage(!scopeId ? '--scope' : '--id');
+  // A short id resolves on every action that names an existing Run; never on `create`, whose --id names the new Run.
+  const runId = action === 'create' ? typedRunId : await resolveRunId(context, scopeId, typedRunId);
   if (action === 'create') {
     const commandId = values.get('--command-id'); const source = values.get('--graph');
     if (!commandId || !source) throw usage(!commandId ? '--command-id' : '--graph');
@@ -119,50 +124,25 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderRunCancellation(data, commandId, scopeId, runId, locale) });
     return;
   }
-  if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const result = await context.inspectRun(context.root ?? process.cwd(), { schemaVersion: 1, scopeId, runId }, { env: context.env ?? process.env });
-  if (!result.run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
-  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
-    const phases = {
-      skipped: t('cli.run.inspect.states.skipped', {}, locale), 'awaiting-decision': t('cli.run.inspect.states.awaitingDecision', {}, locale),
-      pending: t('cli.run.inspect.states.pending', {}, locale), active: t('cli.run.inspect.states.active', {}, locale),
-      evaluating: t('cli.run.inspect.states.evaluating', {}, locale), accepted: t('cli.run.inspect.states.accepted', {}, locale),
-      failed: t('cli.run.inspect.states.failed', {}, locale), cancelled: t('cli.run.inspect.states.cancelled', {}, locale),
-      reconciling: t('cli.run.inspect.states.reconciling', {}, locale),
-    };
-    const run = data.run;
-    if (!run) return '';
-    // SEC-5S F35: the needs-input question, model names, notes and reasons are worker-written; the human view reaches the terminal only safe.
-    return terminalSafeText([...(run.costReport ? [renderCostSummary(run.costReport, locale)] : []), ...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []), t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
-      ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
-      t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
-      ...(run.channelWaits ?? []).map(wait => `${wait.taskId}: ${quotaWaitText(wait.deadline, wait.resetsAtMs !== null, locale)}`),
-      ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
-      ...(run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? [quotaWaitText(run.state.deadline, (run.quotaWaits ?? []).every(wait => wait.resetsAtMs !== null), locale, (run.quotaWaits ?? []).some(wait => wait.retryLimitReached))] : []),
-      ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
-      ...(run.state.kind === 'parked' && run.state.failureCode ? [t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
-      // Crash-loop breaker: the typed park reason in words (the per-attempt count and phase are in the audit event and the service journal).
-      ...(run.state.kind === 'parked' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED' ? [t('error.DISPATCH_PREPARATION_ABORTED.summary', {}, locale)] : []),
-      ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),
-      ...(run.authority ? [t('cli.run.inspect.authority', { record: run.authority.decision.eventId, sequence: run.authority.decision.sequence,
-        approval: run.authority.approval?.approvalId ?? '-' }, locale)] : []),
-      run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
-      ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale).map(line => `  ${line}`) : []),
-      ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
-        ...renderBriefLines(task.taskBrief, task.resultBrief, locale),
-        t('cli.run.inspect.stateLabel', { phase: task.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : phases[task.phase] }, locale),
-        ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale)] : []),
-        ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
-        ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
-        ...(task.decision?.question ? [t('cli.run.lifecycle.question', { question: task.decision.question }, locale)] : []),
-        ...(task.acceptance ? [renderAcceptanceLine(task.acceptance, locale)] : []),
-        t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale),
-        ...(data.models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', { attempt: model.attemptId ?? '—', line: renderWorkerModelLine(model, locale) }, locale)),
-        ...(task.handoffs ?? []).map(receipt => (receipt.kind === 'workspace-started-from-patch' ? t('cli.run.inspect.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))),
-        ...(task.configExclusions ? [t('cli.run.inspect.configExcluded', { count: task.configExclusions.count }, locale), ...task.configExclusions.entries.map(entry => t('cli.run.inspect.configExcludedEntry', { path: entry.path, rule: entry.rule, by: entry.by }, locale))] : []),
-        ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : [])]),
-      ...run.criteria.map(criterion => t('cli.run.inspect.criterion', { criterion: criterion.id, description: criterion.description, evaluator: criterion.evaluator.id, version: criterion.evaluator.version }, locale)),
-    ].join('\n'));
-  } });
+  throw usage();
 }
-import { renderCostSummary } from '#surfaces/core/monitor/index.js';
+
+/** `run inspect` (CLI review §run): read scope rule; a short id resolves; on a person's terminal without --id, the Run is picked. */
+async function inspectRunAction(values: ReadonlyMap<string, string>, json: boolean, verbose: boolean, interactive: boolean, context: RunCommandContext, locale: Locale,
+  usage: (flag?: string) => Error): Promise<void> {
+  if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const typed = values.get('--id');
+  const io = interactive && (!values.get('--scope') || !typed) ? await runHumanIo(context, locale) : undefined;
+  const scope = await familyScope(context, { command: 'deckent run inspect', locale, explicit: values.get('--scope'), mutating: false, interactive, ...(io ? { ask: io.ask } : {}) });
+  if (!scope) return;
+  let runId = typed ? await resolveRunId(context, scope.scopeId, typed) : undefined;
+  if (!runId) {
+    if (!io) throw usage('--id');
+    const picked = await pickRun(io, scope.scopeId, (await readScopeRuns(context, scope.scopeId)).slice(0, REGISTRY.list.runsShown), t('cli.run.inspect.pick', { scope: scope.scopeId }, locale));
+    if (!picked) return;
+    runId = picked.runId;
+  }
+  const result = await context.inspectRun(context.root ?? process.cwd(), { schemaVersion: 1, scopeId: scope.scopeId, runId }, { env: context.env ?? process.env });
+  if (!result.run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
+  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderRunInspect(data, locale, verbose, scopeLine(scope, locale)) });
+}

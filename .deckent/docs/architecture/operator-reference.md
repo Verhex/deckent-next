@@ -154,6 +154,27 @@ and Enter alone, Esc or silence (the session approval time) answer no. A pipe, A
 asked: bare `deckent task` names the missing argument and lists the actions in four groups (Inspect, Execute and
 evaluate, Deliver, Queue), exit 2. The AI path keeps every long name and flag.
 
+`deckent run`, `report` and `inventory` for a person (alpha.48 C-RUN). `deckent run list` reads the same Run ids as the
+terminal's `/runs` and each Run through the same inspect application: waiting (parked) Runs first, then newest, with a
+short id, the `/runs` state words, accepted tasks and the title; `--json` returns the Run views. Every `run` action that
+names an existing Run takes a short id (a unique prefix; several candidates are `CLI_ID_AMBIGUOUS`, exit 2; anything else
+is passed on unchanged); `create --id` never resolves, it names the new Run. A read without `--scope` uses the
+configured `terminal.scopeId` and says so on its first line; without one, off a terminal, it is `CLI_SCOPE_REQUIRED`
+with the valid scopes. `run inspect` reads request, result, tasks (each with what an accepted result rests on, e.g.
+"accepted on: exit code · content not independently verified", then delivery); the authority record, cost summary,
+acceptance metadata, profile and criteria lines, full ids and a secret-gate list longer than five paths are `--verbose`.
+On a real terminal, `run inspect` and `report` without an id pick the Run, and `run cancel|hold|resume|close` without
+`--command-id`/`--expected-revision` pick scope (a change never takes the default silently) and Run (only Runs whose
+state offers the control, the same rule as the `/runs` keys), read the revision just before a card that names scope,
+Run, state and consequence, and send with a system command id; `n`, Esc or silence send nothing, and a Run that changed
+meanwhile is read and asked again. The AI and automation path keeps every typed flag mandatory; an agent or a pipe is
+never asked. `deckent report` shows Known (result, what acceptance rests on, duration, CPU, memory, model in readable
+units) and Not measurable (each axis with its reason, e.g. a subscription call has no per-call charge); without
+`--run` it lists the scope's recent Runs. `deckent inventory` is the developer view of this installation's dispatch
+journal (short ids, `--verbose` full ids); `workers list` also reads the configured `inspection.workers.sources`, so it
+can show more records. A page above `inspection.maxPageSize` is `DISPATCH_INVENTORY_LIMIT` naming the maximum. The
+bare `report`/`inventory` calls and `run list` are reachable once the catalog delta lands.
+
 Preparation creates a separate Git candidate under the configured workspaces resource's
 `integrations` directory. It contains the recorded base plus patch and leaves source files,
 HEAD and index unchanged. A prepared candidate is not Task acceptance or live delivery.
