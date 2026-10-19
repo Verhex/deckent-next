@@ -18,7 +18,7 @@ import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { DRIVER, type Step } from '../support/pty-steps.js';
 import { DOWNGRADE_TO_V57_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // TESLIM-KUYRUGU phase 2 proof at the real boundary: a live project repository runs the installation; its registered work target is an
 // independent clone whose base branch is the (unprotected) queue target. Four coding Runs execute in Docker from the same base H0 and each
@@ -29,7 +29,7 @@ import { startTestRuntimeService, stopTestRuntimeService } from '../support/runt
 // nothing. A fourth Attempt whose path overlaps the adopted prefix ends as conflict-needs-reattempt with nothing written to the target.
 const exec = promisify(execFile);
 const roots: string[] = [], cleanup: (() => Promise<void>)[] = [];
-afterEach(async () => {
+afterEach(async () => { await stopTestRuntimeServices();
   vi.restoreAllMocks();
   for (const close of cleanup.splice(0).reverse()) await close();
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));

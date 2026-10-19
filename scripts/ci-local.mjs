@@ -27,7 +27,7 @@ export function parseEnvFile(text) {
 export function cleanBaseEnv(source) {
   const out = {};
   for (const [key, value] of Object.entries(source)) {
-    // VITEST_*/NODE_OPTIONS/GIT_*/npm_*: lane-worker tuning or owner repo state must not change the 4-worker CI shape.
+    // VITEST_*/NODE_OPTIONS/GIT_*/npm_*: lane tuning or owner repo state must not change the default local full-verification shape.
     if (/^(DECKENT_|GITHUB_|RUNNER_|LC_|LANG$|LANGUAGE$|XDG_|HOME$|USERPROFILE$|TMPDIR$|TMP$|TEMP$|VITEST_|NODE_OPTIONS$|GIT_|npm_|NPM_)/u.test(key)) continue;
     out[key] = value;
   }

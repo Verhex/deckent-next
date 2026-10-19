@@ -13,14 +13,14 @@ import { openSqliteAttemptStore } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
 import { cliChildEnv } from '../support/child-env.js';
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // H34 S3: company-aware authorization at every port. The one company rule (engine scope membership, H34 S1) decides every principal a
 // port sees, for the requesting installation's company; a scope pinned to another company is refused as SCOPE_UNKNOWN on CLI, SDK and
 // the runtime peer path, without naming the other company. The same company is unchanged.
 const exec = promisify(execFile); const roots: string[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js');
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const actor = { issuer: hostname(), subject: String(userInfo().uid) };
 const kinds = ['scope', 'run', 'approval', 'model-activation', 'operation', 'provider-spend-account', 'attempt'] as const;
 /** Every grant names `s` explicitly (a declared scope): only the company pin decides. */

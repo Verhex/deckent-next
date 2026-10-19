@@ -11,14 +11,14 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { conditionalRecordServer } from '../support/conditional-record-server.js';
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // Astra 2137/2139 R2 (reviewer repro astra-2137-compensation.test.ts.txt): a settled effect pins its descriptor, including the
 // compensation it names. The compensating command's operation is resolved from the current catalog, the pairing from the pinned
 // descriptor — so after the original leaves the live catalog its compensation is still reachable. A fresh MCP server built from the
 // current catalog must not advertise `compensate_operation` as read-only / closed-world while it performs a real external write.
 const cleanup: (() => Promise<void>)[] = [];
-afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); clearConfigCache(); });
+afterEach(async () => { await stopTestRuntimeServices(); for (const close of cleanup.splice(0).reverse()) await close(); clearConfigCache(); });
 const ref = (id: string) => ({ id, version: 1 });
 const descriptor = (id: string, extra: Record<string, unknown> = {}) => ({ schemaVersion: 1, operation: ref(id), targetKind: 'records',
   effectClass: 'write', approval: 'policy', precondition: 'record-version', compensation: null, inputMaxBytes: 4096, ...extra });

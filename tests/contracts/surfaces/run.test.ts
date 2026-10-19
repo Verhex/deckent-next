@@ -13,9 +13,9 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { clearConfigCache } from '#platform/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { cliChildEnv } from '../support/child-env.js';
-import { startTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 const roots: string[] = [];
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-query-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
