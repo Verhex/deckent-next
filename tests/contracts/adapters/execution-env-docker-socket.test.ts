@@ -43,11 +43,12 @@ describe.skipIf(process.platform !== 'linux' || !reachable)('I-D2 cond. 5: a doc
     const { stdout } = await execute('python3', ['-c', `import socket; s=socket.socket(socket.AF_UNIX); s.connect("${SOCKET}"); s.sendall(b"GET /_ping HTTP/1.0\\r\\nHost: d\\r\\n\\r\\n"); print("REACHED", s.recv(64))`]);
     expect(stdout).toContain('REACHED');
   });
-  for (const [provider, open] of [['bubblewrap', false], ['bubblewrap', true], ['landlock', false]] as const) {
+  for (const [provider, open] of [['bubblewrap', false], ['bubblewrap', true], ['landlock', false], ['landlock', true]] as const) {
     const available = provider === 'bubblewrap' ? measured.bubblewrap.status === 'available' : measured.landlock.status === 'available';
     it.skipIf(!available)(`${provider}${open ? ' full access' : ''}: the agent shell's connect to ${SOCKET} fails`, async () => {
-      const out = await shell(provider, open);
-      expect(out.status, out.output).toBe('exited');
+      // A realm that refuses the requested view also never connects; a connect that happened would be a finding.
+      const out = await shell(provider, open).catch((error: unknown) => ({ status: 'refused', exitCode: -1, output: String(error) }));
+      expect(['exited', 'refused'], out.output).toContain(out.status);
       expect(out.exitCode, out.output).not.toBe(0);
       expect(out.output).not.toContain('REACHED');
     }, 30_000);

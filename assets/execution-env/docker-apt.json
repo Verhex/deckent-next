@@ -1,5 +1,5 @@
 {
-  "$comment": "Docker Engine apt install data for deckent init (alpha.48 I-D2; INIT ANALYSIS §11(c)3). Dated, sourced registry data; the signing key is shipped here and pinned by fingerprint (tests recompute it from the armored key). Sources checked 2026-10-19: docs.docker.com/engine/install/ubuntu and /debian (context7 /docker/docs and the live pages: supported releases, deb822 sources file, package list, conflicting packages), https://download.docker.com/linux/{ubuntu,debian}/gpg (primary key 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88, signing subkey D330 6A01 8370 199E 527A E799 7EA0 A9C3 F273 FCD8; the same file for both distributions, sha256 below) and the repository dists/ listings. The current docs no longer print the apt key fingerprint; the pin is the downloaded key and its long-published primary fingerprint. existingSources: the older one-line source file whose Signed-By would conflict with the deb822 file (apt refuses both); an earlier docker.sources is overwritten (idempotent). Derivatives (ID_LIKE only) are not supported by Docker: print only. desktopMarkers: the Windows-side Docker Desktop program seen from WSL (observed convention, not a documented contract).",
+  "$comment": "Docker Engine apt install data for deckent init (alpha.48 I-D2; INIT ANALYSIS \u00a711(c)3). Dated, sourced registry data; the signing key is shipped here and pinned by fingerprint (tests recompute it from the armored key). Sources checked 2026-10-19: docs.docker.com/engine/install/ubuntu and /debian (context7 /docker/docs and the live pages: supported releases, deb822 sources file, package list, conflicting packages), https://download.docker.com/linux/{ubuntu,debian}/gpg (primary key 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88, signing subkey D330 6A01 8370 199E 527A E799 7EA0 A9C3 F273 FCD8; the same file for both distributions, sha256 below) and the repository dists/ listings. The current docs no longer print the apt key fingerprint; the pin is the downloaded key and its long-published primary fingerprint. existingSources: the older one-line source file whose Signed-By would conflict with the deb822 file (apt refuses both); an earlier docker.sources is overwritten (idempotent). Derivatives (ID_LIKE only) are not supported by Docker: print only. desktopMarkers: the Windows-side Docker Desktop program seen from WSL (observed convention, not a documented contract).",
   "schemaVersion": 1,
   "environment": "docker",
   "checked": "2026-10-19",
@@ -149,7 +149,7 @@
   "timeoutsMs": {
     "probe": 5000,
     "network": 5000,
-    "directory": 120000,
+    "directory": 330000,
     "key": 60000,
     "sources": 60000,
     "update": 600000,

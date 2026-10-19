@@ -1,4 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { withMcpPrincipal, type DockerHostPorts, type ExecutionDetectPorts } from '#adapters/index.js';
@@ -52,6 +53,18 @@ describe('execution-environment install: who may reach it', () => {
     expect(await installExecutionEnvironment('/nonexistent', 'installation', printed.io(), printed.deps)).toBe('printed');
     expect(printed.calls.filter(call => call.startsWith('spawn'))).toEqual([]);
     expect(printed.sink.join('')).toContain('derivatives are not');
+  });
+  it('preview (dry run) from a pipe: the exact card for a supported release, nothing staged, asked or run, no witness needed', async () => {
+    const { calls, sink, deps, io } = recording();
+    const host: DockerHostPorts = { ...deps.host!, read: async path => path === '/etc/os-release' ? 'ID=ubuntu\nVERSION_CODENAME=noble\nUBUNTU_CODENAME=noble\n' : null };
+    const before = new Set(await readdir(tmpdir()));
+    expect(await installExecutionEnvironment('/nonexistent', 'installation', io(person, { isTTY: false }), { ...deps, host, witness: { attest: async () => false }, preview: true })).toBe('printed');
+    const text = sink.join('');
+    expect(text).toContain('Preview only');
+    for (const line of ['sudo install -m 0755 -d /etc/apt/keyrings', 'sudo install -m 0644 <staging>/docker.asc /etc/apt/keyrings/docker.asc', 'sudo apt-get update',
+      'sudo usermod -aG docker alice', '9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88']) expect(text).toContain(line);
+    expect(calls.filter(call => call.startsWith('spawn') || call === 'witness')).toEqual([]);
+    expect([...await readdir(tmpdir())].filter(name => name.startsWith('deckent-docker-') && !before.has(name))).toEqual([]);
   });
   it('neither an MCP tool, an operation catalog, the SDK nor any other surface can call it (source scan)', async () => {
     const files: string[] = [];

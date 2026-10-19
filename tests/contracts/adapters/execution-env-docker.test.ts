@@ -73,7 +73,7 @@ describe('planner (cond. 3, 6)', () => {
   it('the card shows every command, the source, the pinned key, the root-equivalent group, NOPASSWD and how to undo (EN and TR)', () => {
     const plan = install(planDockerInstall(facts(), '/tmp/s'));
     for (const locale of ['en', 'tr'] as const) {
-      const body = dockerCardBody(plan, locale, true).join('\n');
+      const body = dockerCardBody(plan, locale).join('\n');
       for (const line of dockerCommandLines(plan.steps)) expect(body).toContain(line);
       expect(body).toContain('9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88');
       expect(body).toContain('https://download.docker.com/linux/ubuntu');
@@ -81,7 +81,6 @@ describe('planner (cond. 3, 6)', () => {
       expect(body).toContain('NOPASSWD');
       expect(body).toContain('apt-get purge docker-ce');
     }
-    expect(dockerCardBody(plan, 'en', false).join('\n')).not.toContain('NOPASSWD');
   });
 });
 

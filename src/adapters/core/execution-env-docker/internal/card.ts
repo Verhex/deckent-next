@@ -16,13 +16,13 @@ export const dockerInstallOffer = (person: boolean, data: DockerAptData = DOCKER
     question: { key: 'setup.execution.install', params: { runtime: row.label } }, cli: null } : null;
 };
 const fingerprint = (data: DockerAptData) => data.key.fingerprint.replace(/(.{4})(?!$)/g, '$1 ');
-/** The approval card's body (EN/TR): the exact commands first, then source and key, the version rule, the root-equivalent group, NOPASSWD,
- * interruption and how to undo it (compensation is manual). */
-export function dockerCardBody(plan: Extract<DockerInstallPlan, { kind: 'install' }>, locale: Locale, nopasswd: boolean, data: DockerAptData = DOCKER_APT): readonly string[] {
+/** The approval card's body (EN/TR): the exact commands first, then source and key, the version rule, the root-equivalent group, sudo's own
+ * prompt (NOPASSWD stated; no sudo call happens before the card, cond. 2 order), interruption and how to undo it (compensation is manual). */
+export function dockerCardBody(plan: Extract<DockerInstallPlan, { kind: 'install' }>, locale: Locale, data: DockerAptData = DOCKER_APT): readonly string[] {
   const user = plan.steps.at(-1)!.argv.at(-1)!;
   return [t('setup.docker.card.sudo', {}, locale), ...dockerCommandLines(plan.steps).map(line => `  $ ${line}`),
     t('setup.docker.card.source', { ...plan.source, fingerprint: fingerprint(data) }, locale), t('setup.docker.card.version', {}, locale),
-    t('setup.docker.card.group', { user, group: data.group }, locale), nopasswd ? t('setup.docker.card.nopasswd', {}, locale) : t('setup.docker.card.again', {}, locale),
+    t('setup.docker.card.group', { user, group: data.group }, locale), t('setup.docker.card.nopasswd', {}, locale),
     t('setup.docker.card.interrupt', {}, locale), t('setup.docker.card.undo', { packages: data.packages.join(' ') }, locale)];
 }
 type PrintParams = Readonly<Record<string, string>>;

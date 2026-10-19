@@ -113,8 +113,8 @@ describe.skipIf(process.platform !== 'linux')('I-D2: the Docker install card on 
     for (const text of ['sudo install -m 0755 -d /etc/apt/keyrings', 'sudo apt-get update', 'sudo usermod -aG docker fake', '9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88',
       'root yetkisine eşittir', 'Deckent onu hiç görmez']) expect(run.output, text).toContain(text);
     expect(run.output).toContain('DRIVER-STATUS=declined');
-    // Only the NOPASSWD probe ran before the card (`-k`, then `-n -v`: never prompts, runs no command); no step, no prompt.
-    expect(await f.argv()).toEqual(['-k', '-n -v']);
+    // Cond. 2 order: no sudo call of any kind before the person's answer.
+    expect(await f.argv()).toEqual([]);
     expect(run.output).not.toContain('[fake-sudo] password');
     expect(await f.audit()).toEqual([]);
   }, 160_000);
@@ -127,8 +127,8 @@ describe.skipIf(process.platform !== 'linux')('I-D2: the Docker install card on 
     expect(run.output).toContain('Docker 5:29.0.0-1~ubuntu.24.04~noble is installed.');
     expect(run.output).toContain('Docker 29.0.0 is ready');
     const argv = await f.argv();
-    expect(argv.slice(0, 3)).toEqual(['-k', '-n -v', '-k']);
-    expect(argv.slice(3)).toEqual([expect.stringMatching(/^-- install -m 0755 -d \/etc\/apt\/keyrings$/u), expect.stringMatching(/^-- install -m 0644 \/.+\/docker\.asc \/etc\/apt\/keyrings\/docker\.asc$/u),
+    expect(argv[0]).toBe('-k');
+    expect(argv.slice(1)).toEqual([expect.stringMatching(/^-- install -m 0755 -d \/etc\/apt\/keyrings$/u), expect.stringMatching(/^-- install -m 0644 \/.+\/docker\.asc \/etc\/apt\/keyrings\/docker\.asc$/u),
       expect.stringMatching(/^-- install -m 0644 \/.+\/docker\.sources \/etc\/apt\/sources\.list\.d\/docker\.sources$/u), '-- apt-get update',
       '-- apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin', '-- usermod -aG docker fake']);
     expect((await readFile(join(f.work, 'typed-length.log'), 'utf8')).trim()).toBe(String(PASSWORD.length));

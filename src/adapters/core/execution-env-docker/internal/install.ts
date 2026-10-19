@@ -23,11 +23,6 @@ export const spawnForeground: DockerInstallPorts['spawn'] = (file, args, options
   child.once('error', () => done({ code: null, signal: null }));
   child.once('close', (code, signal) => done({ code, signal }));
 });
-/** Whether sudo will run without asking (NOPASSWD): `-k` drops a remembered sign-in first, `-n -v` never prompts and runs no command. */
-export async function sudoWithoutPassword(sudo: string, env: DetectEnvironment, data: DockerAptData = DOCKER_APT): Promise<boolean> {
-  const options = { env: sudoEnvironment(env), timeoutMs: data.timeoutsMs.probe, outputBytes: data.outputBytes, signal: AbortSignal.timeout(data.timeoutsMs.probe) };
-  return (await runDetectCommand(sudo, ['-k'], options)).code === 0 && (await runDetectCommand(sudo, ['-n', '-v'], options)).code === 0;
-}
 export const installedDockerVersion = (env: DetectEnvironment, data: DockerAptData = DOCKER_APT) => async () => {
   const listed = await runDetectCommand('dpkg-query', ['-W', '-f', '${Version}', data.packages[0]!], { env, timeoutMs: data.timeoutsMs.probe, outputBytes: data.outputBytes,
     signal: AbortSignal.timeout(data.timeoutsMs.probe) });
