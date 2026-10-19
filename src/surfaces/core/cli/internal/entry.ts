@@ -52,7 +52,9 @@ function interactiveTerminal(context: CommandContext): boolean {
 }
 
 export async function main(argv: readonly string[] = process.argv.slice(2), context: CommandContext = {}): Promise<ExitCode> {
-  let locale = resolveLocale(undefined, context.env);
+  // L-KIT: the host resolved the call's locale once (config language included), so an error before a command reports its own locale
+  // renders in the same language as its heading.
+  let locale = context.locale ?? resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
     const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));

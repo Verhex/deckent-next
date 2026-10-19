@@ -67,7 +67,10 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     /** APPROVER-NOTE: the most characters (code points) of an approver's own note a tool-call turn gives the model; the record keeps it whole. */
     approverNoteMaxChars: z.number().int().positive().max(2048).safe().default(500),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  cli: field('config.field.cli', { state: 'bound', consumers: ['src/surfaces/core/cli-run'] }, 'live', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  cli: field('config.field.cli', { state: 'bound', consumers: ['src/surfaces/core/cli-run', 'src/surfaces/core/cli-human'] }, 'live', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576),
+    /** INIT-D7 (UX only, never a security boundary): exact environment variable names that mark an AI agent caller (no prefix match); any
+     * non-empty value other than 0/false makes the CLI plain and never asks a question. Evidence of each default: L-KIT HANDOFF (2026-10-19). */
+    agentEnvironment: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/)).max(64).default(['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI']) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   mcp: field('config.field.mcp', { state: 'bound', consumers: ['src/composition/core/agent-turn'] }, 'restart', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),

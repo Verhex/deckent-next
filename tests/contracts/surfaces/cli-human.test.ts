@@ -4,14 +4,15 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ErrorRegistry, clearConfigCache, exitCodeFor, resolveGlobalConfigPaths, snapshotKnownSecrets, type Locale } from '../../../src/platform/index.js';
+import { ErrorRegistry, clearConfigCache, exitCodeFor, getConfigFieldDefault, resolveGlobalConfigPaths, validateConfig, snapshotKnownSecrets, type Locale } from '../../../src/platform/index.js';
 import { commandLocale, resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
+import { projectInputSchema } from '#engine/core/config/index.js';
 import {
-  acceptanceEvidenceText, cliCardGate, cliTableStyle, detectCliMode, displayId, formatAgo, formatBytes, formatClock, formatDecimal, formatDuration,
+  AGENT_ENVIRONMENT, acceptanceEvidenceText, cliCardGate, cliTableStyle, detectCliMode, displayId, formatAgo, formatBytes, formatClock, formatDecimal, formatDuration,
   listRunIds, matchIdPrefix, orderPendingFirst, renderCliTable, renderInputSchema, requireIdPrefix, resolveCommandScope, safeCell, schemaRequested,
   scopeLister, scopeNotice, standingCardOptions, textCells, type CliCardRequest,
 } from '#surfaces/core/cli-human/index.js';
-import { hostLocale } from '#composition/core/cli/index.js';
+import { hostAgentEnvironment, hostLocale } from '#composition/core/cli/index.js';
 
 /** L-KIT (alpha.48): the CLI toolkit's observable contract. */
 const caught = async (work: () => unknown): Promise<{ code?: string; message: string; exit: number }> => {
@@ -74,6 +75,18 @@ describe('host locale (composition, resolved once per call)', () => {
     expect(await hostLocale(['--version'], f.dir, { ...f.env, LANG: 'tr_TR.UTF-8' })).toBe('tr');
     const invalid = await fixture('{"language":"xx"}');
     expect(await hostLocale(['doctor'], invalid.dir, { ...invalid.env, LC_ALL: '', LANG: 'tr_TR.UTF-8' })).toBe('tr');
+  });
+  it('INIT-D7: the agent list is one config field; the host reads the configured list, else the registry default', async () => {
+    expect(AGENT_ENVIRONMENT).toEqual(getConfigFieldDefault('cli').agentEnvironment);
+    expect(AGENT_ENVIRONMENT).toEqual(expect.arrayContaining(['CLAUDECODE', 'AI_AGENT', 'CURSOR_AGENT']));
+    const configured = await fixture('{"cli":{"agentEnvironment":["MY_AGENT"]}}');
+    expect(await hostAgentEnvironment(configured.dir, configured.env)).toEqual(['MY_AGENT']);
+    expect(await hostAgentEnvironment((await fixture('{}')).dir, configured.env)).toBeUndefined();
+    // Exact upper-case names only (no prefix or pattern); an invalid or unreadable config never blocks: the kit default decides.
+    expect(() => validateConfig({ cli: { agentEnvironment: ['CODEX_*'] } })).toThrow();
+    expect(() => validateConfig({ cli: { agentEnvironment: ['lower'] } })).toThrow();
+    expect(await hostAgentEnvironment((await fixture('{"cli":{"agentEnvironment":["CODEX_*"]}}')).dir, configured.env)).toBeUndefined();
+    expect(await hostAgentEnvironment((await fixture('{broken')).dir, configured.env)).toBeUndefined();
   });
 });
 
@@ -263,6 +276,8 @@ describe('--schema and acceptance wording', () => {
     expect(schemaRequested(['run', 'create'])).toBe(false);
     const projected = zodToJsonSchema(z.object({ scopeId: z.string().min(1) }).strict(), { $refStrategy: 'none' });
     expect(JSON.parse(renderInputSchema(projected))).toMatchObject({ type: 'object', required: ['scopeId'], additionalProperties: false });
+    // J1 option B: the engine's one projection helper gives the MCP tool list's exact JSON Schema (one contract, no new owner).
+    expect(projectInputSchema(z.object({ scopeId: z.string().min(1) }).strict())).toEqual(projected);
     expect(() => renderInputSchema('nope')).toThrow('CLI_INPUT_SCHEMA_OBJECT_REQUIRED');
   });
   it('says what an acceptance rests on (law 1)', () => {

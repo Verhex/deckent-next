@@ -70,15 +70,26 @@ export async function loadGlobalConfig(options: Pick<ConfigLoadOptions, 'env' | 
 }
 /** Presentation-only projection through the same layer readers. No provider registration, secrets, healing or locks.
  * Absent language stays absent so the caller can use the system locale; this is not execution config validation. */
-export async function loadConfigLanguage(projectRoot = process.cwd(), options: Pick<ConfigLoadOptions, 'env' | 'platform'> = {}): Promise<Locale | undefined> {
+async function presentationLayers(projectRoot: string, options: Pick<ConfigLoadOptions, 'env' | 'platform'>, path: string) {
   const platform = options.platform ?? process.platform;
   const layout = resolveProductLayout({ projectRoot: resolve(projectRoot), platform: platform === 'win32' ? 'win32' : 'posix' });
   const global = await loadGlobalConfig(options);
   const project = await readProjectConfig(productResourcePath(layout, 'config'), { heal: false });
-  if (!isRecord(project)) throw new ConfigValidationError([{ path: 'language', reason: 'OBJECT_REQUIRED' }]);
-  const normalized = versionedConfig(project);
-  const language = Object.hasOwn(normalized, 'language') ? normalized['language'] : global?.['language'];
+  if (!isRecord(project)) throw new ConfigValidationError([{ path, reason: 'OBJECT_REQUIRED' }]);
+  return { global, project: versionedConfig(project) };
+}
+export async function loadConfigLanguage(projectRoot = process.cwd(), options: Pick<ConfigLoadOptions, 'env' | 'platform'> = {}): Promise<Locale | undefined> {
+  const { global, project } = await presentationLayers(projectRoot, options, 'language');
+  const language = Object.hasOwn(project, 'language') ? project['language'] : global?.['language'];
   return language === undefined ? undefined : CORE_SCHEMA.shape.language.parse(language);
+}
+/** INIT-D7, presentation only like the language: the configured `cli.agentEnvironment` (project over installation), through the same layer
+ * readers without healing, secrets or locks; absent stays absent so the caller uses the registry default. An invalid value throws. */
+export async function loadConfigAgentEnvironment(projectRoot = process.cwd(), options: Pick<ConfigLoadOptions, 'env' | 'platform'> = {}): Promise<readonly string[] | undefined> {
+  const { global, project } = await presentationLayers(projectRoot, options, 'cli');
+  const pick = (layer: JsonRecord | null) => isRecord(layer?.['cli']) && Object.hasOwn(layer['cli'], 'agentEnvironment') ? layer['cli']['agentEnvironment'] : undefined;
+  const value = pick(project) ?? pick(global);
+  return value === undefined ? undefined : CORE_SCHEMA.shape.cli.parse({ agentEnvironment: value }).agentEnvironment;
 }
 export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoadOptions = {}): Promise<ResolvedConfig> {
   const root = resolve(projectRoot), env = { ...(options.env ?? process.env) };

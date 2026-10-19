@@ -33,3 +33,16 @@ export function standingCardOptions(locale: Locale, offer: Readonly<{ session?: 
     ...(offer.always && !offer.hardFloor ? [{ id: 'always', label: t('terminal.approval.window.choice.always', {}, locale), key: 'a' }] : []),
     { id: 'no', label: t('terminal.approval.window.choice.no', {}, locale), key: 'n' }]);
 }
+
+/**
+ * Ask one question on the person's terminal with the terminal's own window and question keys (↑↓ or j/k, 1–9, Enter, the option letter;
+ * Esc/Ctrl+C cancel; armed against keys typed before it appeared). Returns the chosen option id, or null when cancelled or aborted, so the
+ * caller applies nothing. `cliCardGate` refuses first (TERMINAL_TTY_REQUIRED / CLI_USAGE). Ink loads only here, never at CLI start.
+ */
+export async function askCliCard(request: CliCardRequest, io: CliCardIo): Promise<string | null> {
+  const { stdin, stdout, env } = cliCardGate(request, io);
+  if (io.signal?.aborted) return null;
+  return (await import('./card-view.js')).mountCliCard(request, { stdin: stdin as NodeJS.ReadStream, stdout: stdout as NodeJS.WriteStream, env, locale: io.locale,
+    ...(io.signal ? { signal: io.signal } : {}), ...(io.known ? { known: io.known } : {}), hints: t('cli.human.card.hints', {}, io.locale) });
+}
+// Scope picker for resolveCommandScope: `pick: request => askCliCard(request, io)`.

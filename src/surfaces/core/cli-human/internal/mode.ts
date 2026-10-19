@@ -1,4 +1,4 @@
-import { envValue } from '#platform/index.js';
+import { envValue, getConfigFieldDefault } from '#platform/index.js';
 import registry from './human.json' with { type: 'json' };
 
 /** How a CLI call talks to its caller: typed JSON, an interactive person on a terminal, or plain lines (pipe, CI, agent, dumb terminal). */
@@ -6,8 +6,9 @@ export type CliMode = 'json' | 'interactive' | 'plain';
 export type CliModeReason = 'json' | 'agent' | 'ci' | 'dumb' | 'pipe' | 'tty';
 type Stream = { readonly isTTY?: boolean } | undefined;
 
-/** The kit's registry list of exact agent-marker variable names (no prefix match); the host may pass the config list instead (INIT-D7). */
-export const AGENT_ENVIRONMENT: readonly string[] = Object.freeze([...registry.agentEnvironment]);
+/** INIT-D7: the config registry's default list of exact agent-marker variable names (`cli.agentEnvironment`, no prefix match); the host
+ * passes the installation's configured list on the context (`agentEnvironment`), so this default is used only when none was read. */
+export const AGENT_ENVIRONMENT: readonly string[] = Object.freeze([...getConfigFieldDefault('cli').agentEnvironment]);
 
 const marked = (env: Readonly<Record<string, string | undefined>>, names: readonly string[]) =>
   names.some(name => { const value = envValue(env, name)?.trim().toLowerCase(); return value !== undefined && value !== '0' && value !== 'false'; });
