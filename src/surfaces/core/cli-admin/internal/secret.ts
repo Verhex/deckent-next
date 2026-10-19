@@ -156,15 +156,15 @@ export async function secretCommand(argv: readonly string[], context: AdminComma
         body: [users.length ? t('cli.secret.card.deleteUsers', { users: users.join(', ') }, locale) : t('cli.secret.card.deleteUnused', {}, locale)], options: confirmOptions(locale) });
       if (answer !== 'apply') return cancelled();
     }
-    notice();
-    emit(await deleteSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name }, options), { ...sinks, render });
+    const removed = await deleteSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name }, options);
+    notice(); emit(removed, { ...sinks, render });
     return;
   }
   const stdin = (context.stdin ?? process.stdin) as Input;
   const value = stdin.isTTY ? await readHidden(stdin, context.stderr ?? process.stderr, name) : await readPiped(stdin);
   if (!value || Buffer.byteLength(value, 'utf8') > VALUE_MAX_BYTES) throw ErrorRegistry.createError('SECRET_VALUE_INVALID');
-  notice();
-  emit(await setSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name, value }, options), { ...sinks, render });
+  const stored = await setSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name, value }, options);
+  notice(); emit(stored, { ...sinks, render });
 }
 
 /** Owner CLI review 2026-10-19 (`secret`): name · used by · store; a referenced key the store lacks is listed as missing. Never a value. */

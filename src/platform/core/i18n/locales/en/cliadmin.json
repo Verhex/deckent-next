@@ -80,7 +80,7 @@
   "cli.backup.list.column.verified": "Last verified",
   "cli.backup.list.column.name": "Name",
   "cli.backup.list.neverVerified": "not on record",
-  "cli.backup.list.none": "none in the default folder",
+  "cli.backup.list.none": "none yet",
   "cli.backup.kind.scheduled": "automatic",
   "cli.backup.kind.manual": "by hand",
   "cli.backup.card.restoreTitle": "Restore this recovery set?",

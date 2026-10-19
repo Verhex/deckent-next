@@ -80,7 +80,7 @@
   "cli.backup.list.column.verified": "Son doğrulama",
   "cli.backup.list.column.name": "Ad",
   "cli.backup.list.neverVerified": "kayıt yok",
-  "cli.backup.list.none": "varsayılan klasörde yok",
+  "cli.backup.list.none": "henüz yok",
   "cli.backup.kind.scheduled": "otomatik",
   "cli.backup.kind.manual": "elle",
   "cli.backup.card.restoreTitle": "Bu kurtarma seti geri yüklensin mi?",

@@ -87,9 +87,9 @@ export async function secretStoreCommand(argv: readonly string[], context: Admin
   const resolved = await resolveCommandScope({ command: 'deckent secret store', locale, explicit: scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: true, interactive, listScopes: () => scopeLister(context, root, options)().catch(() => []), pick: request => askAdminCard(context, locale, request) });
   if (!resolved) return cancelled();
+  const switched = await context.switchSecretStore(root, { schemaVersion: 1, scopeId: resolved.scopeId, to: target, confirmDowngrade: confirm, ...(confirmEnv ? { confirmEnvMissing: true } : {}) }, options);
   if (!json) emit(scopeNotice(resolved, locale), adminSinks(context));
-  emit(await context.switchSecretStore(root, { schemaVersion: 1, scopeId: resolved.scopeId, to: target, confirmDowngrade: confirm, ...(confirmEnv ? { confirmEnvMissing: true } : {}) }, options),
-    { ...sinks, render: result => result.status === 'current' ? t('cli.secret.store.done.current', { store: storeLabel(result.to, locale) }, locale)
+  emit(switched, { ...sinks, render: result => result.status === 'current' ? t('cli.secret.store.done.current', { store: storeLabel(result.to, locale) }, locale)
       : t('cli.secret.store.done.switched', { from: storeLabel(result.from, locale), to: storeLabel(result.to, locale), entries: result.entries,
         cleaned: result.cleaned ? t('cli.secret.store.done.cleaned', {}, locale) : t('cli.secret.store.done.notCleaned', {}, locale) }, locale) });
 }

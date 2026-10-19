@@ -59,7 +59,7 @@ async function layoutSection(inspection: Inspection, locale: Locale, style: CliT
   for (const group of [...GROUPS, 'other' as const]) {
     const names = group === 'other' ? Object.keys(resources).filter(name => !LISTED.has(name)) : registry.groups[group].filter(name => resources[name]);
     const rows = await Promise.all(names.map(name => row(describe(name, locale), resources[name]!, locale)));
-    if (group === 'configuration') rows.unshift(await row(t('cli.paths.bootstrapConfig', {}, locale), inspection.bootstrapConfigPath, locale));
+    if (group === 'configuration' && inspection.bootstrapConfigPath !== resources['config']) rows.unshift(await row(t('cli.paths.bootstrapConfig', {}, locale), inspection.bootstrapConfigPath, locale));
     if (group === 'runtime' && extras?.runtimeSocket) rows.splice(1, 0, await row(t('cli.paths.socketActual', {}, locale), extras.runtimeSocket, locale));
     if (!rows.length) continue;
     lines.push('', groupTitles(locale)[group]!, renderCliTable(columns(locale), rows, style));

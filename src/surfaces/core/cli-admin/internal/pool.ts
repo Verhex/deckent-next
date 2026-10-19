@@ -92,8 +92,9 @@ export async function poolCommand(argv: readonly string[], context: AdminCommand
     const channelId = values.get('--channel'); if (!channelId) throw usage('--channel');
     if (!context.releaseQuota) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     if (!await confirmed(t('cli.pool.card.quotaRelease', { channel: terminalSafeText(channelId) }, locale), [t('cli.pool.card.quotaReleaseWhat', {}, locale)])) return cancelled();
+    const released = await context.releaseQuota(root, { schemaVersion: 1, scopeId, commandId, channelId, ...(pool ? { poolId: pool } : {}) }, options);
     notice();
-    emit(await context.releaseQuota(root, { schemaVersion: 1, scopeId, commandId, channelId, ...(pool ? { poolId: pool } : {}) }, options), { ...sinks,
+    emit(released, { ...sinks,
       render: receipt => t('cli.pool.quotaReleased', { channel: terminalSafeText(receipt.channelId), released: receipt.released }, locale) });
     return;
   }
@@ -113,9 +114,9 @@ export async function poolCommand(argv: readonly string[], context: AdminCommand
       execution = picked; inFlight = values.has('--in-flight-slots') ? slots('--in-flight-slots') : Math.max(picked, current?.capacity.inFlightSlots ?? picked);
     }
     if (!await confirmed(t('cli.pool.card.setCapacity', { slots: execution, inFlight }, locale), [t('cli.pool.card.setCapacityWhat', {}, locale)])) return cancelled();
+    const resized = await context.applyPoolCapacity(root, { schemaVersion: 1, scopeId, commandId, ...(pool ? { poolId: pool } : {}), capacity: { executionSlots: execution, inFlightSlots: inFlight } }, options);
     notice();
-    emit(await context.applyPoolCapacity(root, { schemaVersion: 1, scopeId, commandId, ...(pool ? { poolId: pool } : {}), capacity: { executionSlots: execution, inFlightSlots: inFlight } }, options),
-      { ...sinks, render: receipt => receipt.changed ? t('cli.pool.capacityChanged', { pool: terminalSafeText(receipt.poolId), oldExecution: receipt.previous.executionSlots,
+    emit(resized, { ...sinks, render: receipt => receipt.changed ? t('cli.pool.capacityChanged', { pool: terminalSafeText(receipt.poolId), oldExecution: receipt.previous.executionSlots,
         oldInFlight: receipt.previous.inFlightSlots, execution: receipt.next.executionSlots, inFlight: receipt.next.inFlightSlots }, locale)
         : t('cli.pool.capacityUnchanged', { pool: terminalSafeText(receipt.poolId), execution: receipt.next.executionSlots, inFlight: receipt.next.inFlightSlots }, locale) });
     return;
@@ -132,9 +133,9 @@ export async function poolCommand(argv: readonly string[], context: AdminCommand
   if (!await confirmed(action === 'hold' ? t('cli.pool.card.hold', {}, locale) : t('cli.pool.card.resume', {}, locale),
     [action === 'hold' ? t('cli.pool.card.holdWhat', {}, locale) : t('cli.pool.card.resumeWhat', {}, locale),
       reason ? t('cli.pool.view.reason', { reason: terminalSafeText(reason) }, locale) : t('cli.pool.card.noReason', {}, locale)])) return cancelled();
+  const receipt = await context.applyPoolHold(root, { schemaVersion: 1, scopeId, commandId, action, ...(pool ? { poolId: pool } : {}), ...(reason ? { reason } : {}) }, options);
   notice();
-  emit(await context.applyPoolHold(root, { schemaVersion: 1, scopeId, commandId, action, ...(pool ? { poolId: pool } : {}), ...(reason ? { reason } : {}) }, options),
-    { ...sinks, render: receipt => renderReceipt(receipt, locale) });
+  emit(receipt, { ...sinks, render: receipt => renderReceipt(receipt, locale) });
 }
 
 /** The execution-slot choice: presets, the current value and this machine's recommendation, ascending; the current one preselected. */
