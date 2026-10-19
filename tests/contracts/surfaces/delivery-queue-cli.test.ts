@@ -115,13 +115,12 @@ describe('delivery queue list table (C-PRIO)', () => {
     await expect(queueCommand(['task', 'integration-queue-list', '--scope', 's', '--verbose', '--verbose'], p.context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
     await expect(queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'c', '--verbose'], p.context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
-  it('J1: inside each group the newest submission comes first when the view carries submittedAt; JSON keeps the page order', async () => {
-    const at = (view: ReturnType<typeof ticket>, submittedAt: number) => targetQueueViewSchema.parse({ ...view, submittedAt });
-    const records = [at(ticket('q-old', 'task-old', 'queued', null, 'wait-service'), 100), at(ticket('q-done', 'task-done', 'settled', 'adopted', 'inspect-receipt'), 300),
-      at(ticket('q-new', 'task-new', 'queued', null, 'wait-service'), 200)];
+  it('inside each group the service page order stays (protocol v29 has no submission time, Astra 2661 R2); JSON keeps the page order', async () => {
+    const records = [ticket('q-b', 'task-b', 'queued', null, 'wait-service'), ticket('q-done', 'task-done', 'settled', 'adopted', 'inspect-receipt'),
+      ticket('q-a', 'task-a', 'queued', null, 'wait-service'), ticket('q-old', 'task-old', 'settled', 'adopted', 'inspect-receipt')];
     const rows = renderQueueList({ records }, 's', 10, 'en').split('\n').slice(2).map(line => line.split(/\s+/)[0]);
-    expect(rows).toEqual(['task-new', 'task-old', 'task-done']);
-    expect(records.map(view => view.commandId)).toEqual(['q-old', 'q-done', 'q-new']);
+    expect(rows).toEqual(['task-b', 'task-a', 'task-done', 'task-old']);
+    expect(records.map(view => view.commandId)).toEqual(['q-b', 'q-done', 'q-a', 'q-old']);
   });
   it('--json prints the client page byte-identical (one JSON line), and the page itself is never reordered', async () => {
     const p = listing('tr'), before = JSON.stringify(page);

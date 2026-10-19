@@ -1037,8 +1037,9 @@ criteria/profile and receipt are checked again before effects. Legacy delivery-p
 `deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`
 and an optional `deliveryIntent:"service-reattempt"` (below).
 Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The human list is a
-table (task, target, state or outcome, next step, ticket; tickets in flight first, then the rest, each group newest submission first by the
-view's optional `submittedAt`; the ticket is the shortest prefix unique on the page, `--verbose` prints full ids; a typed reason such as
+table (task, target, state or outcome, next step, ticket; tickets in flight first, then the rest, each group in the service's page order:
+the protocol v29 view carries no submission time, so newest-first waits for a protocol bump (Astra 2661 R2); the ticket is the shortest
+prefix unique on the page, `--verbose` prints full ids; a typed reason such as
 a parked ticket's on its own line); `--json` prints the unchanged page. The verified terminal's
 `integration-queue-confirm` obtains separate publish and adoption cards (the adoption card asks "Move <branch> to the verified commit?";
 each action refuses flags it does not take; output follows `--lang`, then config `language`, then LANG); the second card is derived from the first frozen prefix,
