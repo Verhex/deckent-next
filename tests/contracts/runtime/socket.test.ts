@@ -228,6 +228,9 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket peer identit
     await expect(lstat(parent)).rejects.toMatchObject({ code: 'ENOENT' });
     // A reader (client, doctor) sees a stopped service, not an unsafe endpoint.
     await expect(prepareRuntimeSocket(layout, false)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_UNAVAILABLE' });
+    // J3 (full suite 1d30f87a): a client racing the stop after `prepareRuntimeSocket` also reads a stopped service, not an unsafe endpoint.
+    await expect(requestLocalRuntime({ ...options, endpoint }, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', operation: 'inspectRun', input: {} }))
+      .rejects.toSatisfy(error => { expectCode(error, 'LOCAL_RUNTIME_UNAVAILABLE'); return true; });
     await prepareRuntimeSocket(layout); await (await acquireLocalRuntimeSocketGuard({ ...options, endpoint })).release();
     await expect(lstat(parent)).rejects.toMatchObject({ code: 'ENOENT' });
     await prepareRuntimeSocket(layout); await writeFile(join(parent, 'keep'), 'kept', { mode: 0o600 });

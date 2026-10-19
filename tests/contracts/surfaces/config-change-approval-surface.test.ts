@@ -109,6 +109,9 @@ describe('the model cannot reach a config write', () => {
       'src/composition/core/installation/internal/policy-template.ts',
       'src/composition/core/model-connect/internal/connect.ts',
       'src/composition/core/native-coding/internal/template.ts', // RUN-HAZIR-B: human coding CLI only, through the governed writer
+      // I-S3 (alpha.48): `deckent init` applies the language and the team/enterprise profile selection through the same governed writer;
+      // reached only from the human CLI entry (asserted below), never from the SDK, MCP or an agent unit.
+      'src/composition/core/setup/internal/wiring.ts',
       'src/composition/core/toolchains/internal/refresh.ts',
       'src/surfaces/core/cli-terminal/internal/cache-panel.ts', // CACHE-SLICE1 (34270fae): the terminal cache-choice window writes profiles through the same writer
       'src/surfaces/core/cli-terminal/internal/model-panel.ts',
@@ -129,8 +132,19 @@ describe('the model cannot reach a config write', () => {
     // Only composition and surfaces can call composition (engine's own `PolicyTemplateInstallationApplication` is a name match, not a caller).
     expect([...files('src/composition'), ...files('src/surfaces')].filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/installation/'))
       .filter(path => installer.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/')).sort())
-      .toEqual(['src/composition/core/cli/internal/entry.ts', 'src/surfaces/core/cli-installation/internal/context.ts', 'src/surfaces/core/cli-installation/internal/init.ts']);
+      .toEqual(['src/composition/core/cli/internal/entry.ts',
+        // I-S3 (alpha.48): `deckent init`'s permissions stage reaches the same installer through the setup wiring and the setup window's
+        // foreground owner, on a person's terminal only; no agent or MCP unit names the setup surface (asserted below).
+        'src/composition/core/setup/internal/wiring.ts',
+        'src/surfaces/core/cli-installation/internal/context.ts', 'src/surfaces/core/cli-installation/internal/init.ts',
+        'src/surfaces/core/setup/internal/contract.ts', 'src/surfaces/core/setup/internal/foreground.ts']);
+    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+      .filter(path => /surfaces\/core\/setup|setupInitCommand/.test(readFileSync(path, 'utf8')))).toEqual([]);
     expect(readFileSync('src/index.ts', 'utf8') + readFileSync('src/composition/index.ts', 'utf8')).not.toMatch(installer);
+    // I-S3: the setup wiring is composed only by the CLI entry; no SDK/composition export and no agent or MCP unit names it.
+    expect(files('src').filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/setup/'))
+      .filter(path => /configuredSetup\b/.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/'))).toEqual(['src/composition/core/cli/internal/entry.ts']);
+    expect(readFileSync('src/index.ts', 'utf8') + readFileSync('src/composition/index.ts', 'utf8')).not.toMatch(/composition\/core\/setup|configuredSetup/);
     const mcp = readFileSync('src/surfaces/core/mcp/internal/server.ts', 'utf8');
     expect([...mcp.matchAll(/name: '([a-z_]+)'/g)].map(match => match[1]).filter(name => /config/.test(name!))).toEqual([]);
   });

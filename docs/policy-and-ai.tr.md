@@ -115,7 +115,7 @@ deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 ```
 
 `grants` (`--mine` ile ya da onsuz) bütün devir hücrelerini değil, kendi kalıcı araç onaylarınızı listeler; herkesin
-onayları (`deckent policy grants --all [--after SAYFA_İŞARETİ]`) verilebilir okuma eylemi `policy`/`inspect-standing-grants` ister
+onayları (`deckent policy grants --all [--after PAGE_MARK]`) verilebilir okuma eylemi `policy`/`inspect-standing-grants` ister
 (ilk kurulum şablonu v13 bunu kuran kişiye verir; bir politika kuralı adlandırmadıkça hiçbir AI aktörü almaz). Önce politika karar
 verir; eylem yoksa komut `CLI_POLICY_GRANTS_ALL_UNAVAILABLE` ile reddeder ve başka hiçbir şey okumaz. İzin varsa sınırlı bir sayfa
 gösterir (kişi, kural, araç, maskelenmiş desen, kapsam, başlangıç: kuralı oluşturan mühürlü denetim değişikliği, elle yazılmış

@@ -75,7 +75,8 @@ it('doctor runs one command through the selected sandbox with the turn\'s own la
     selfTest: { status: 'failed' as const, detail: 'spawn-failed: [deckent] the command could not be started: E2BIG (argument list too long); nothing was run.', durationMs: 3 } }) });
   const text = failed.lines.join('');
   expect(text).toContain('sandbox: bubblewrap [terminal.shell.realm prefer-sandbox]\nsandbox self-test FAILED: spawn-failed: [deckent] the command could not be started: E2BIG');
-  expect(text).toContain('Status: degraded');
+  // J3 (C-DOCTOR follow-up d082a9a7): --verbose states the status once, in the grouped summary's words; a failed self-test needs attention.
+  expect(text).toMatch(/^Status: needs attention · 1 error\(s\)/u);
   const passed = capture();
   await runKernelCommand(['doctor', '--verbose'], { root: f.project, env: f.env, stdout: passed.sink, inspectShellRealm: async () => ({ ...view, selfTest: { status: 'ok' as const, detail: null, durationMs: 1200 } }) });
   expect(passed.lines.join('')).toContain('sandbox self-test: ok (a command ran in this project\'s real sandbox view; 1200 ms from start to exit, view preparation not counted)');
