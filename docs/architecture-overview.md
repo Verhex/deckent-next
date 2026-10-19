@@ -75,7 +75,11 @@ A **Run** admits a graph of **Tasks**. Each **Attempt** records one execution tr
 worker, workspace and evidence. Applications reserve capacity, respect dependencies and policy,
 record execution observations and evaluate outputs. Acceptance, patch integration and delivery
 are distinct from process exit. A failed prerequisite can close dependent tasks as skipped;
-that is not work that ran successfully.
+that is not work that ran successfully. `deckent do` (`/do` in the terminal) asks one connected, active model
+(Brain) to plan an intent into a Run proposal; the plan passes the existing admission and approval gates and
+grants no authority itself. Delivery to a registered Git integration target goes through that target's queue:
+publish and adopt each show their frozen batch and need a separate confirmation, and rollback is its own
+confirmed operation.
 
 The transactional SQLite ledger stores work, reservations, approvals, effect records and
 receipts. Sealed audit records bind decisions to their context. Resource limits, cancellation,
@@ -106,8 +110,8 @@ and permission to act are checked separately. Policy may allow, deny or require 
 mandatory restrictions cannot be relaxed by a user setting.
 
 Approval requests bind the action and context, expiry and authorized decision. Permission
-modes automate only eligible actions. **Full access** needs a company grant and lasts for the
-session; it deliberately broadens host filesystem, home, network and Git access. Denies and
+modes automate only eligible actions. **Full access** needs a company grant, re-checked at every launch
+and call; it can be switched on for one terminal session or stored as the person's start mode. It deliberately broadens host filesystem, home, network and Git access. Denies and
 the hard floor remain effective, with effect calls audited. Full access should be understood
 as a different exposure level from closed sandbox execution.
 
@@ -126,8 +130,10 @@ risks. Check filesystem, process, network and secret boundaries together.
 
 ## Extension points and current limits
 
-Public SDK exports are explicit. `deckent/extensions` currently exposes operation-adapter and
-secret-store registration plus a CLI entry for a distribution that adds those registrations.
+Public SDK exports are explicit. `deckent/extensions` currently exposes operation-adapter,
+secret-store, approval-assurance-producer, MCP-capability-group and provider no-charge-certification
+registration, a secret-helper factory, and CLI (`runCli`) and MCP (`runMcp`) entries for a distribution
+that adds those registrations.
 Registration must happen before composition seals the registries; late registration is refused.
 Configuration selects registered implementations and policy authorizes their use. Registering
 an adapter gives it no execution grant.
@@ -140,8 +146,8 @@ sandbox. Existing store-migration restrictions and platform limits still apply.
 
 The extension model lets a separate package supply a target adapter through the existing effect
 contract, or a secret store through its port, without editing Core. It does not promise that
-every internal registry is public. Service and MCP extension startup wiring is not yet proven
-end to end. ERP integrations and customer identity/SIEM adapters are architectural extension
+every internal registry is public. Service and MCP startup replay of a distribution's registrations is
+wired (`runCli`, `runMcp`) and exercised by the manual `npm run smoke:dist`; it is not part of CI. ERP integrations and customer identity/SIEM adapters are architectural extension
 boundaries, not verified available connectors.
 
 The supported execution path today is Linux and Windows WSL2. macOS and native Windows have

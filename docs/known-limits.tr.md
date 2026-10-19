@@ -3,7 +3,7 @@
 [English](known-limits.md) · [README](../README.tr.md) · [Mimariye genel bakış](architecture-overview.tr.md)
 
 Bu sayfa Deckent'in henüz neyi yapmadığını, neyin denenmediğini ve onun yerine ne yapmanız gerektiğini açıkça söyler.
-güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde ve [CHANGELOG](../CHANGELOG.md) dosyasının ilk satırındadır). Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
+Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde ve [CHANGELOG](../CHANGELOG.md) dosyasının ilk satırındadır). Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
 çalıştığı görüldüğünde çıkar, daha önce değil. Her madde sınırın **ne** olduğunu, size **etkisini** ve varsa bir
 **yolunu** verir. [CHANGELOG.md](../CHANGELOG.md) her sürümün o günkü sınırlarını listeler.
 
@@ -107,6 +107,16 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   bir API'ye geçmez; bildirilen aday listesi üzerinden yönlendirme planlı. *Yol:* bir API modelini kendiniz bağlayın ve seçin.
 - **Doğrulanmış yayımlanmış fiyatı olmayan uzak model kilitlidir.** Zhipu GLM Çin, fiyatları CNY olduğu için kilitli kalır.
   DeepSeek yayımlanmış tepe fiyattan kesinleşir ve üst sınır olarak etiketlenir. *Yol:* fiyatı olan ya da yerel bir model kullanın.
+- **Başka bir makinedeki model sunucusu henüz bağlanamaz.** Düz `http` yalnız bu makinede (`127.0.0.1` ya da `[::1]`) kabul
+  edilir; uzak bir OpenAI uyumlu sunucu yayımlanmış bir fiyat satırı ister. Bugün bu satırlar yalnız OpenAI, DeepSeek ve Z.ai
+  API'leri için var ve kendi fiyatınızı bildirmenin yolu yok. *Etki:* ağınızdaki bir şirket model sunucusu kullanılamaz.
+  *Yol:* model sunucusunu bu makinede çalıştırın.
+- **Codex ya da Cursor işçisinin kullandığı model doğrulanamaz.** Model başına kullanımı yalnız Claude Code bildirir; Codex ve
+  Cursor sonuçları doğrulanmamış olarak kaydedilir ve ölçütlerine göre kabul edilir. *Etki:* böyle bir işçi başka bir modelle
+  çalıştıysa iş yine kabul edilir.
+- **Cursor için paketli işçi model kataloğu yok.** İşçi yalnız etkin bir `native-cli` katalog kanalıyla kabul edilir; Claude Code
+  ve Codex'in paketli katalogları var, Cursor'ın yok. *Yol:* bir katalog yazıp `deckent models catalog register --file` ile
+  kaydedin.
 - **Deckent sağlayıcı tarafındaki ayarları göremez.** OpenRouter için "Prevent overrides" eklenti ayarını ya da OpenRouter kredi
   sınırınızı göremez. *Yol:* ilk ücretli çağrıdan önce ikisine de kendiniz bakın.
 - **OAuth ile MCP sunucuları desteklenmiyor.** Streamable HTTP sunucuları OAuth olmadan çalışır. *Yol:* yerel bir stdio sunucusu ya da
@@ -121,8 +131,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Etki:* sınırları Deckent'in değil, sağlayıcı planınızın sınırlarıdır.
 - **Sağlayıcı başına harcama sınırı yapılmadı.** Kapsam başına tek ortak USD bütçesi var. *Yol:* sınırları her sağlayıcı
   hesabında belirleyin.
-- **Kesinleşen harcama Deckent'in kendi hesabıdır:** sağlayıcının bildirdiği kullanım çarpı doğrulanmış fiyat. Sağlayıcının
-  faturası değildir.
+- **Kesinleşen harcama Deckent'in kendi hesabıdır:** sağlayıcının bildirdiği kullanım çarpı doğrulanmış fiyat (OpenRouter
+  çağrıları OpenRouter'ın bildirdiği ücretten kesinleşir). Sağlayıcının faturası değildir.
 - **Son kullanımı hiç bildirilmeyen çağrı tutulu kalır;** `deckent models reconcile-spending` ile çözene kadar.
 
 ## Teslim ve dala alma
@@ -188,14 +198,17 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Komut satırındaki `deckent do` siz onaylayınca devam etmez.** Öneriyi planlar ve kaydeder; karardan sonra aynı komutu aynı
   `--command-id` ile yinelersiniz; kimlik basılmaz, bu yüzden `--command-id` ile kendinizinkini verin. Terminalde `/do` kendiliğinden
   devam eder.
-- **Soru soran bir işçiye terminalden cevap verme henüz yapılmadı.**
+- **Soru soran bir işçiye terminalden cevap verme henüz yapılmadı.** *Yol:* `deckent run resume --scope <id> --id <run>
+  --command-id <id> --expected-revision <n> --task <id> --answer <metin>`.
 - **Otonom teslim tasarlandı ama kapalı.** Her teslim ve dala alma, doğrulanmış bir terminalde sizin `y`'nizi ister.
 
 ## ERP ve operasyonlar
 
 - **ERP bağlayıcısı yok.** Operasyon sözleşmesi (niyet, koşullu yazım, tekrarsız yeniden gönderim, kanıtla kabul, telafi) ve
   uzantı girişi var; IFS, SAP, Oracle, Microsoft, Uyumsoft ya da Logo adaptörleri yok. Çalışan tek örnek hedef bir test
-  fixture'ıdır. *Etki:* ERP etkilerini çalıştırmak için kendi adaptörünüzü yazmalısınız.
+  fixture'ıdır. Core ayrıca genel bir `http-conditional` REST hedefi sunar (ETag, `If-Match`, `Idempotency-Key`; operasyonları
+  ayarda tanımlanır); kimlik bilgisi göndermez. *Etki:* kimlik doğrulama isteyen ERP'ler dahil, ERP etkilerini çalıştırmak
+  için kendi adaptörünüzü yazmalısınız.
 - **`deckent operation list` yok.** Tek bir operasyona `deckent operation inspect --scope <id> --command-id <id>` ile
   bakabilirsiniz, yani kullandığınız komut kimliklerini saklamalısınız. *Etki:* bekleyen ve belirsiz etkiler listelenemez.
 - **Belirsiz bir ERP yazımından yeniden göndermeden başka çıkış yok.** Hedef yazımın olup olmadığını söyleyemiyorsa Deckent onu
@@ -220,8 +233,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   arşivi düz dosyadır. *Yol:* kümeleri şifreli depolamada saklayın, parolayı ayrı tutun.
 - **Geri yükleme yedek zamanlamasını kapatır** ve sağlayıcı anahtarları ile yedek parolası kümede değildir. *Yol:* geri
   yüklemeden sonra `backup.schedule`'ı yeniden seçin ve her anahtar için `deckent secret set` çalıştırın.
-- **Geri yükleme servisin durmuş olmasını ister** ve mesaj komutu söylemez. *Yol:* `deckent runtime shutdown --service <id>
-  --instance <id> --command-id <id> --reason <metin>`, açık terminalleri kapatın, sonra geri yüklemeyi yeniden çalıştırın.
+- **Geri yükleme servisin durmuş olmasını ister** ve mesaj komutu söylemez. *Yol:* `deckent runtime shutdown` (`--service`, `--instance`,
+  `--command-id` ve `--reason` içeren uzun biçim de çalışır), açık terminalleri kapatın, sonra geri yüklemeyi yeniden çalıştırın.
 - **Yedek kümesinin göreli yolu yanıltıcı bir mesajla reddedilir.** Mutlak yol kullanın.
 - **Ledger yükseltmesinden sonra eski bir Deckent'e dönemezsiniz;** yükseltmeden önce alınan yedeği geri yüklemeden olmaz
   (yeni ledger sürümlerini eski derlemeler açamaz).

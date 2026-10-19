@@ -4,7 +4,7 @@ A trusted customer distribution can use an external credential source through th
 SecretStore v1 port. `deckent/extensions` exports `createSecretHelperFactory` and
 `registerSecretStoreBackend`. Register the resulting factory before starting any composed
 entry, then select its store id with the existing secret-store picker or
-`deckent secret store switch`. Core ships no vendor helper or automatically discovered command.
+`deckent secret store --to <store-id>`. Core ships no vendor helper or automatically discovered command.
 The encrypted-file store remains the installation default.
 
 ## Registration and policy

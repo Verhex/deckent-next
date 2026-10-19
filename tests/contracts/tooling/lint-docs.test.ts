@@ -7,15 +7,18 @@ import { afterEach, describe, expect, it } from 'vitest';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const release = (n: number, ref = 'abcdef12', receipt = 'PR #12') => `- **1.0.0-alpha.${n}** — 2026-10-08 · \`${ref}\` (${receipt}) · features`;
-async function fixture(changes: Record<string, string> = {}) {
+async function fixture(changes: Record<string, string | null> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-docs-gate-')); roots.push(root);
   await mkdir(join(root, 'scripts'));
   await mkdir(join(root, '.deckent/docs/architecture/nested'), { recursive: true });
+  await mkdir(join(root, 'docs'));
   await cp(new URL('../../../scripts/lint-docs.mjs', import.meta.url), join(root, 'scripts/lint-docs.mjs'));
   const files = { 'package.json': '{"version":"1.0.0-alpha.17"}', 'CHANGELOG.md': '# Changelog\n\n' + release(17) + '\n' + release(9),
     'PLAN.md': '# Plan\n', 'ARCHITECTURE.md': '# Architecture\n', 'README.md': 'Current alpha.17. Historical screenshot alpha.10.',
-    'README.tr.md': 'Güncel alpha.17. Eski görüntü alpha.10.', 'SECURITY.md': 'Supports alpha.17.', ...changes };
-  for (const [name, value] of Object.entries(files)) await writeFile(join(root, name), value);
+    'README.tr.md': 'Güncel alpha.17. Eski görüntü alpha.10.', 'SECURITY.md': 'Supports alpha.17.',
+    'docs/guide.md': '# Guide\n[Türkçe](guide.tr.md) · [readme](../README.md)\n', 'docs/guide.tr.md': '# Kılavuz\n[English](guide.md) · [readme](../README.md)\n',
+    'docs/secret-helpers.md': '# Optional secret helpers\n', ...changes };
+  for (const [name, value] of Object.entries(files)) if (value !== null) await writeFile(join(root, name), value);
   return root;
 }
 // A regular-file receipt avoids pipe-capture EPERM in restricted hosts; exit status remains the child's own.
@@ -99,5 +102,39 @@ describe('documentation release drift gate', () => {
     expect(lint(await fixture({ 'PLAN.md': 'x\n'.repeat(31_000) })).output).toContain('bytes >');
     expect(lint(await fixture({ 'ARCHITECTURE.md': 'x\n'.repeat(1201) })).output).toContain('1201 lines');
     expect(lint(await fixture({ 'package.json': '{"version":"bad"}' })).status).toBe(1);
+  });
+  it('resolves relative links to existing files and GitHub heading anchors; URLs, code and fenced blocks are not links', async () => {
+    const target = ['# Contract', '## Audit integrity and pull witnesses', '### S6 pre-dispatch worker-tree secret gate — author candidate (2026-10-14)',
+      '## `deckent run` [stop](links.md) Başlarken', '## Repeat', '## Repeat', '<a id="beta-oncesi"></a>'].join('\n');
+    const links = ['[a](contract.md#audit-integrity-and-pull-witnesses)', '[b](contract.md#s6-pre-dispatch-worker-tree-secret-gate--author-candidate-2026-10-14)',
+      '[c](contract.md#deckent-run-stop-başlarken)', '[d](contract.md#repeat-1)', '[e](contract.md#beta-oncesi)', '[f](../../../README.md)',
+      '[g](https://example.com/missing.md#x)', '[h](mailto:a@example.com)', '`[i](missing.md)`', '```', '[j](missing.md)', '```', '[ref]: ./contract.md'];
+    const root = await fixture({ '.deckent/docs/architecture/contract.md': target, '.deckent/docs/architecture/links.md': links.join('\n') });
+    expect(lint(root)).toMatchObject({ status: 0, output: expect.stringContaining('0 violation(s)') });
+  });
+  it.each([
+    ['[x](missing.md)', 'links.md:1: link target missing.md does not exist'],
+    ['ok\n[x](contract.md#audit-integrity-and-pull-witness)', 'links.md:2: link anchor #audit-integrity-and-pull-witness not found'],
+    ['[x](#nowhere)', 'link anchor #nowhere not found in .deckent/docs/architecture/links.md'],
+    ['[x]: ../gone/', 'link target ../gone/ does not exist'],
+  ])('rejects a broken relative link or anchor: %s', async (body, error) => {
+    const result = lint(await fixture({ '.deckent/docs/architecture/contract.md': '# Contract\n## Audit integrity and pull witnesses', '.deckent/docs/architecture/links.md': body }));
+    expect(result.status).toBe(1); expect(result.output).toContain(error);
+  });
+  it('requires docs/X.tr.md for every docs/X.md with the same link targets, ignoring anchors and the language switch', async () => {
+    const missing = lint(await fixture({ 'docs/guide.tr.md': null }));
+    expect(missing.status).toBe(1); expect(missing.output).toContain('docs/guide.md: missing Turkish pair docs/guide.tr.md');
+    const extra = lint(await fixture({ 'docs/guide.tr.md': '# Kılavuz\n[English](guide.md) · [readme](../README.md) · [sec](../SECURITY.md)' }));
+    expect(extra.status).toBe(1); expect(extra.output).toContain('docs/guide.md: missing link target SECURITY.md present in docs/guide.tr.md');
+    const fewer = lint(await fixture({ 'docs/guide.tr.md': '# Kılavuz\n[English](guide.md)' }));
+    expect(fewer.status).toBe(1); expect(fewer.output).toContain('docs/guide.tr.md: missing link target README.md present in docs/guide.md');
+  });
+  it('keeps the unpaired baseline shrink-only and fails closed without docs/', async () => {
+    const paired = lint(await fixture({ 'docs/secret-helpers.tr.md': '# İsteğe bağlı sır yardımcıları\n' }));
+    expect(paired.status).toBe(1); expect(paired.output).toContain('remove docs/secret-helpers.md from the unpaired baseline');
+    const gone = lint(await fixture({ 'docs/secret-helpers.md': null }));
+    expect(gone.status).toBe(1); expect(gone.output).toContain('docs/secret-helpers.md: unpaired baseline entry no longer exists');
+    const root = await fixture(); await rm(join(root, 'docs'), { recursive: true });
+    expect(lint(root).output).toContain('lint-docs: input:');
   });
 });

@@ -107,6 +107,16 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A remote model without a verified published price is locked.** Zhipu GLM China stays locked because its prices are in
   CNY. DeepSeek settles at the published peak price, labelled an upper bound. *Workaround:* use a priced model or a local
   one.
+- **A model server on another machine cannot be connected yet.** Plain `http` is accepted only on this machine
+  (`127.0.0.1` or `[::1]`), and a remote OpenAI-compatible server needs a published price row; today those exist only for
+  the OpenAI, DeepSeek and Z.ai APIs, and there is no way to declare your own price. *Impact:* a company model server on
+  your network cannot be used. *Workaround:* run the model server on this machine.
+- **The model a Codex or Cursor worker used cannot be verified.** Only Claude Code reports per-model usage; Codex and Cursor
+  results are recorded as unverified and accepted by their criteria. *Impact:* if such a worker ran another model, the work
+  is still accepted.
+- **Cursor has no packaged worker model catalog.** A worker is admitted only on an active `native-cli` catalog channel;
+  Claude Code and Codex have packaged catalogs, Cursor does not. *Workaround:* write a catalog and register it with
+  `deckent models catalog register --file`.
 - **Deckent cannot see provider-side settings.** For OpenRouter it cannot see the "Prevent overrides" plugin setting or your
   OpenRouter credit limit. *Workaround:* check both yourself before the first paid call.
 - **MCP servers over OAuth are not supported.** Streamable HTTP servers work without OAuth. *Workaround:* use a local stdio server or an
@@ -121,8 +131,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   budget. *Impact:* their limits are your provider plan's limits, not Deckent's.
 - **Per-provider spend limits are not built.** There is one shared USD budget per scope. *Workaround:* set limits in each
   provider account.
-- **Settled spend is Deckent's own calculation,** from the usage the provider reports times a verified price. It is not the
-  provider's invoice.
+- **Settled spend is Deckent's own calculation,** from the usage the provider reports times a verified price (OpenRouter
+  calls settle from the cost OpenRouter reports). It is not the provider's invoice.
 - **A call that never reported final usage stays held** until you resolve it with `deckent models reconcile-spending`.
 
 ## Delivery and adoption
@@ -186,14 +196,17 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **`deckent do` on the command line does not continue after you approve.** It plans and records the proposal, then you
   repeat the same command with the same `--command-id` after the decision; the id is not printed, so pass your own with
   `--command-id`. In the terminal `/do` continues by itself.
-- **A worker that asks you a question cannot be answered from the terminal yet.**
+- **A worker that asks you a question cannot be answered from the terminal yet.** *Workaround:* `deckent run resume --scope <id>
+  --id <run> --command-id <id> --expected-revision <n> --task <id> --answer <text>`.
 - **Autonomous delivery is designed but off.** Every delivery and adoption needs your `y` in a verified terminal.
 
 ## ERP and operations
 
 - **There are no ERP connectors.** The operation contract (intent, conditional write, idempotent resend, evidence-based
   acceptance, compensation) and the extension entry exist; IFS, SAP, Oracle, Microsoft, Uyumsoft or Logo adapters do not.
-  The only worked target is a test fixture. *Impact:* you must write your own adapter to run ERP effects.
+  The only worked target is a test fixture. Core also ships a generic `http-conditional` REST target (ETag, `If-Match`,
+  `Idempotency-Key`; its operations are declared in config); it sends no credentials. *Impact:* you must write your own
+  adapter to run ERP effects, including any ERP that requires authentication.
 - **There is no `deckent operation list`.** You can look up one operation with `deckent operation inspect --scope <id>
   --command-id <id>`, so you must keep the command ids you used. *Impact:* pending and uncertain effects cannot be listed.
 - **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, Deckent does not
@@ -218,8 +231,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the state archive are plain files. *Workaround:* store sets on encrypted storage and keep the passphrase apart.
 - **A restore turns the backup schedule off,** and provider keys and the backup passphrase are not in the set. *Workaround:*
   after a restore, choose `backup.schedule` again and run `deckent secret set` for each key.
-- **A restore needs the service stopped,** and the message does not name the command. *Workaround:* `deckent runtime shutdown
-  --service <id> --instance <id> --command-id <id> --reason <text>`, close open terminals, then run the restore again.
+- **A restore needs the service stopped,** and the message does not name the command. *Workaround:* `deckent runtime shutdown`
+  (the long form with `--service`, `--instance`, `--command-id` and `--reason` also works), close open terminals, then run
+  the restore again.
 - **The relative path of a backup set is refused with a misleading message.** Use an absolute path.
 - **You cannot go back to an older Deckent after a ledger upgrade** without restoring the backup taken before the upgrade
   (newer ledger versions cannot be opened by older builds).
