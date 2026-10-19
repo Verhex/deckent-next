@@ -47,7 +47,7 @@ Execute work:
       [--scope <id>] [--pool <id>]
   decide      Prepare, ask and record advisory decisions
       prepare | ask | record | outcome | inspect
-      --input <file|->
+      [--scope <id>] [--input <file|->]
 
 Models:
   models      Inspect and manage models
@@ -58,12 +58,12 @@ Models:
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Approvals:
-  approval    Inspect and decide approval requests
+  approval    Inspect and decide approval requests (without an action: list)
       list | inspect | decide | renew
-      --input <file|->
+      [--scope <id>] [--input <file|->]
   policy      Inspect policy and standing grants (without an action: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | mcp list|grant|revoke
+      revoke | upgrade | mcp list|grant|revoke | scopes
       [--scope <id>]
 
 Setup / Maintenance:

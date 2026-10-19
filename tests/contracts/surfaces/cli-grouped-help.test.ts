@@ -222,7 +222,9 @@ it('passes an action word to its handler unchanged and refuses a bare family by 
 
 it('keeps exactly the reviewed planned names out of dispatch and help until their slice implements them', async () => {
   const planned = (CLI_CATALOG as readonly CliCommandSpec[]).flatMap(spec => (spec.children ?? []).filter(child => child.planned).map(child => `${spec.name} ${child.name}`));
-  expect(planned).toEqual(['policy scopes']);
+  expect(planned).toEqual([]);
+  // C-APPROVE (alpha.48): `policy scopes` is implemented and dispatches.
+  expect(hasCliAction('policy', 'scopes')).toBe(true); expect(CLI_COMMANDS.map(command => command.path.join(' '))).toContain('policy scopes');
   // C-RUN (alpha.48): `run list` is implemented (the CLI counterpart of `/runs`) and dispatches.
   expect(hasCliAction('run', 'list')).toBe(true); expect(CLI_COMMANDS.map(command => command.path.join(' '))).toContain('run list');
   for (const name of planned) {
@@ -232,14 +234,10 @@ it('keeps exactly the reviewed planned names out of dispatch and help until thei
     expect(renderTopHelp('en', [spec])).not.toMatch(new RegExp(`[ |]${child}(?=[ |\\n]|$)`));
     expect(renderCommandHelp(CLI_COMMANDS.find(command => command.path.join(' ') === family)!, 'en')).not.toMatch(new RegExp(`^  ${child} `, 'm'));
   }
-  let errors = '';
-  expect(await main(['policy', 'scopes'], { root: mkdtempSync(join(tmpdir(), 'deckent-cli-planned-')), env: { NO_COLOR: '1' }, stdout: { write: () => undefined },
-    stderr: { write: (text: string) => { errors += text; } } })).toBe(2);
-  expect(errors).toContain('CLI_USAGE');
 });
 
 /** The reviewed read-only defaults (owner 2026-10-19 CLI review): a new default needs the same review (stop: a default would mutate). */
-const READ_DEFAULTS = { audit: 'verify', workers: 'list', pool: 'status', policy: 'status', secret: 'list', runtime: 'describe' };
+const READ_DEFAULTS = { audit: 'verify', workers: 'list', pool: 'status', policy: 'status', approval: 'list', secret: 'list', runtime: 'describe' };
 
 it('runs only the reviewed read action when a family is called without one', async () => {
   const reads = Object.fromEntries((CLI_CATALOG as readonly CliCommandSpec[]).flatMap(spec => spec.bare && spec.bare !== 'handler' && spec.bare.read ? [[spec.name, spec.bare.read]] : []));
@@ -264,7 +262,7 @@ it.each(['en', 'tr'] as const)('names the missing argument for every family with
   // C-RUN: bare `report` and `inventory` are handler-owned reads (default scope; off a terminal without one: CLI_SCOPE_REQUIRED, below).
   // C-DOCTOR: bare `workers` reads the default scope (no `--scope` required by the catalog).
   const runnable = new Set([...Object.keys(READ_DEFAULTS), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
-    'coding', 'inference', 'operation', 'report', 'inventory']);
+    'coding', 'inference', 'operation', 'report', 'inventory', 'decide']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';

@@ -26,9 +26,8 @@ export interface CliCommandSpec { readonly name: string; readonly group: HelpGro
 function action(name: string, group: HelpGroup, summary: MessageKey, detail: MessageKey, installation?: CliInstallationContract): CliCommandSpec {
   return { name, group, summary, detail, ...(installation ? { installation } : {}) };
 }
-function planned(name: string, group: HelpGroup, summary: MessageKey, detail: MessageKey): CliCommandSpec {
-  return { name, group, summary, detail, planned: true };
-}
+// J2e: no reserved (planned) name is left after `run list` (C-RUN) and `policy scopes` (C-APPROVE); a later reservation adds
+// `{ …, planned: true }` again and the grouped-help test names it.
 
 /** The dispatch catalog: the one inventory of commands, actions, help and bare behaviour (help = behaviour, owner 2026-10-19).
  * Register a command here with its group, localized summary and detail; the main help shows every entry (no hidden or `--all` tier).
@@ -110,7 +109,7 @@ export const CLI_CATALOG = [
     action('resume', 'work', 'cli.help.action.pool.resume', 'cli.help.pool'),
     action('quota-release', 'work', 'cli.help.action.pool.quotaRelease', 'cli.help.pool'),
   ] },
-  { name: 'decide', group: 'work', summary: 'cli.help.summary.decide', detail: 'cli.help.decide', args: '--input <file|->', children: [
+  { name: 'decide', group: 'work', summary: 'cli.help.summary.decide', detail: 'cli.help.decide', args: '[--scope <id>] [--input <file|->]', bare: 'handler', children: [
     action('prepare', 'work', 'cli.help.action.prepare-case', 'cli.help.decide'),
     action('ask', 'work', 'cli.help.action.ask', 'cli.help.decide'),
     action('record', 'work', 'cli.help.action.record', 'cli.help.decide'),
@@ -139,7 +138,7 @@ export const CLI_CATALOG = [
       action('deactivate', 'models', 'cli.help.action.models.catalog.deactivate', 'cli.help.modelsCatalog'),
     ] },
   ] },
-  { name: 'approval', group: 'approvals', summary: 'cli.help.summary.approval', detail: 'cli.approval.help', args: '--input <file|->', children: [
+  { name: 'approval', group: 'approvals', summary: 'cli.help.summary.approval', detail: 'cli.approval.help', args: '[--scope <id>] [--input <file|->]', bare: { read: 'list' }, children: [
     action('list', 'approvals', 'cli.help.action.approval.list', 'cli.approval.help'),
     action('inspect', 'approvals', 'cli.help.action.approval.inspect', 'cli.approval.help'),
     action('decide', 'approvals', 'cli.help.action.decide', 'cli.approval.help'),
@@ -165,7 +164,7 @@ export const CLI_CATALOG = [
       action('grant', 'approvals', 'cli.help.action.policy.mcp.grant', 'cli.help.policy'),
       action('revoke', 'approvals', 'cli.help.action.policy.mcp.revoke', 'cli.help.policy'),
     ] },
-    planned('scopes', 'observe', 'cli.help.action.policy.scopes', 'cli.help.policy'),
+    action('scopes', 'observe', 'cli.help.action.policy.scopes', 'cli.help.policy'),
   ] },
   { name: 'config', group: 'setup', summary: 'cli.help.summary.config', detail: 'config.surface.help', installation: 'owned', args: '[<key> [<value>]] [--global]',
     bare: 'handler', children: [

@@ -47,7 +47,7 @@ Başlarken:
       [--scope <id>] [--pool <id>]
   decide      Danışman kararlarını hazırla, sor ve kaydet
       prepare | ask | record | outcome | inspect
-      --input <dosya|->
+      [--scope <id>] [--input <dosya|->]
 
 Modeller:
   models      Modelleri incele ve yönet
@@ -58,12 +58,12 @@ Modeller:
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Onaylar:
-  approval    Onay isteklerini incele ve karara bağla
+  approval    Onay isteklerini incele ve karara bağla (eylemsiz: list)
       list | inspect | decide | renew
-      --input <dosya|->
+      [--scope <id>] [--input <dosya|->]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | mcp list|grant|revoke
+      revoke | upgrade | mcp list|grant|revoke | scopes
       [--scope <id>]
 
 Kurulum/Bakım:

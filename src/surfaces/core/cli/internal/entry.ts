@@ -1,6 +1,6 @@
 import { identityCommand } from '#surfaces/core/cli-identity/index.js';
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
-import { approvalsCommand, policyGrantsCommand } from '#surfaces/core/cli-approval/index.js';
+import { approvalsCommand, policyGrantsCommand, policyScopesCommand } from '#surfaces/core/cli-approval/index.js';
 import { monitorCommand } from '#surfaces/core/monitor/index.js';
 import { terminalInfoCommand, workersCommand } from '#surfaces/core/cli-observe/index.js';
 import { runCommand, doCommand, reportCommand, inventoryCommand } from '#surfaces/core/cli-run/index.js';
@@ -28,7 +28,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
   inventory: inventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
   inference: inferenceCommand, operation: operationCommand, decide: decisionCommand,
-  policy: (argv, context) => (argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? policyGrantsCommand : runKernelCommand)(argv, context),
+  policy: (argv, context) => (argv[1] === 'scopes' ? policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */

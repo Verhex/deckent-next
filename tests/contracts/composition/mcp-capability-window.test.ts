@@ -164,3 +164,18 @@ describe.skipIf(process.platform !== 'linux')('selection-only MCP capability adm
     expect(audits()).toHaveLength(baseline + 2);
   }, 60_000);
 });
+
+// J2e join (C-APPROVE smoke finding): `deckent policy mcp list` in a folder with no installation answered a raw `ENOENT … [UNKNOWN]`. Now it is
+// the J2d setup step (CLI_INSTALLATION_MISSING: run `deckent init`), and the read creates nothing.
+it('a folder with no installation answers CLI_INSTALLATION_MISSING for the MCP capability reads, not a raw ENOENT, and writes nothing', async () => {
+  const { mkdtemp, mkdir, rm } = await import('node:fs/promises'), { tmpdir } = await import('node:os');
+  const root = await mkdtemp(join(tmpdir(), 'dn-mcp-cap-noinstall-'));
+  try {
+    await mkdir(join(root, '.deckent'), { recursive: true }); await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'd') } }));
+    clearConfigCache();
+    const options = { env: { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') } };
+    await expect(listConfiguredMcpCapabilityScopes(root, options)).rejects.toMatchObject({ code: 'CLI_INSTALLATION_MISSING' });
+    await expect(inspectConfiguredMcpCapabilities(root, 'scope', options)).rejects.toMatchObject({ code: 'CLI_INSTALLATION_MISSING' });
+    expect(await readdir(root)).toEqual(['.deckent']);
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});

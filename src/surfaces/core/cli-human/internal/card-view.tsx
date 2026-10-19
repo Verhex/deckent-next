@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { render, useApp } from 'ink';
-import { colorCapability, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
+import { colorCapability, terminalSafeText, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, humanRecordText, prefersAsciiGlyphs, resolveRenderGlyphs, span } from '#surfaces/core/terminal-render/index.js';
 import { QuestionRows, Window, WindowStackProvider, WINDOW_PRIORITY, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
@@ -13,9 +13,12 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
   const [state, setState] = useState<QuestionState>({ at: request.options.findIndex(option => option.id === request.initial), ticked: [] });
   const current = useRef(state); current.current = state;
   const answer = (id: string | null) => { if (done.current) return; done.current = true; finish(id); exit(); };
+  // J2e (lead, C-APPROVE note): option labels are drawn through the terminal-safe text rule like the title and body, so a label built from a stored
+  // record (a server, Run or approval name) can never carry a control sequence onto the person's terminal, whatever the caller did.
+  const options = request.options.map(option => ({ ...option, label: terminalSafeText(option.label) }));
   return <Window title={[span(humanRecordText(request.title, known))]} body={(request.body ?? []).map(line => ({ spans: [span(humanRecordText(line, known))] }))}
     hints={hints} position="{from}-{to}/{total}" decision priority={WINDOW_PRIORITY.approval} footerRows={request.options.length}
-    footer={owns => <QuestionRows kind="single" options={request.options} state={state} focused={owns} />} onClose={() => answer(null)}
+    footer={owns => <QuestionRows kind="single" options={options} state={state} focused={owns} />} onClose={() => answer(null)}
     onInput={(input, key, meta) => {
       // A burst read (several key events at once) is never an answer, as on the terminal's decision cards.
       if (done.current || meta?.burst) return true;

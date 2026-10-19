@@ -11,7 +11,10 @@ import { withPolicyAdministration } from './standing.js';
 /** Existing policy-declared scopes, filtered through the same company membership port as every request. Nothing is created. */
 export async function listConfiguredMcpCapabilityScopes(root: string, options: ConfigLoadOptions = {}): Promise<readonly string[]> {
   const config = await loadComposedConfig(root, { ...options, heal: false }), actor = readLocalOsIdentity();
-  const document = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load();
+  // J2e (C-APPROVE smoke finding): a folder with no installation answers the J2d setup step (CLI_INSTALLATION_MISSING: run `deckent init`), not a
+  // raw ENOENT. Only a missing policy file means "no installation"; an unsafe, changed or invalid one keeps its own refusal.
+  const document = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load()
+    .catch((error: unknown) => { if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING'); throw error; });
   const candidates = mcpCapabilityScopeCandidates(document, actor);
   return candidates.length ? resolveConfiguredScopeMembership(config, document, actor, candidates, 'read') : [];
 }

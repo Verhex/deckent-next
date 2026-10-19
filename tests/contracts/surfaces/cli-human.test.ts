@@ -314,6 +314,15 @@ describe('TTY card contract', () => {
     expect(await settledWithin(asked, 2000)).toBeNull();
     expect(io.written.join('')).toBe('');
   });
+  it('J2e (C-APPROVE note): a hostile option label is drawn inert: no OSC, BEL or screen-clearing sequence from the label reaches the terminal', async () => {
+    const ESC = String.fromCharCode(27), BEL = String.fromCharCode(7);
+    const request = { title: 'Pick', options: [{ id: 'a', label: `evil-label${ESC}]52;c;cHduZWQ=${BEL}${ESC}[2Jtail` }, { id: 'b', label: 'B' }] }, controller = new AbortController();
+    const io = terminalPair(() => controller.abort()); // the first frame drawn cancels the command
+    expect(await settledWithin(askCliCard(request, { locale: 'en', env: {}, stdin: io.stdin, stdout: io.stdout, signal: controller.signal }), 2000)).toBeNull();
+    const drawn = io.written.join('');
+    expect(drawn).toContain('evil-label');
+    expect(drawn).not.toContain(`${ESC}]52`); expect(drawn).not.toContain(BEL); expect(drawn).not.toContain(`${ESC}[2J`);
+  });
   it('Astra 2661 P2: a cancellation that lands while the card mounts (before its abort listener exists) still closes it with no answer', async () => {
     const request = { title: 'x', options: [{ id: 'a', label: 'A' }] }, controller = new AbortController();
     const io = terminalPair(() => controller.abort()); // the first frame drawn cancels the command
