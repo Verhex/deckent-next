@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runMcpCommand, type McpCommandContext, type McpCommandRequest } from '#adapters/core/mcp-client/index.js';
+import { mcpProjectTrustDirectory } from '#adapters/core/mcp-trust/index.js';
 import { clearConfigCache, loadConfig, type DeckentError } from '#platform/index.js';
 
 // MCP-REGISTRY-AUDIT (top-20 #5, 2026-10-06): the registry file is written only after the audited trust decision. `add` and `remove` used to write the
@@ -31,7 +32,7 @@ async function workspace() {
     audit: async change => { if (state.failAudit) throw new Error('audit refused'); audits.push({ action: change.action, scope: change.scope, name: change.name }); } };
   const run = (request: McpCommandRequest) => runMcpCommand(request, context);
   const files = { project: join(project, '.deckent', 'mcp.json'), personal: join(home, '.deckent', 'mcp.json'),
-    projectTrust: join(project, '.deckent', 'integrations', 'mcp-trust.json'), userTrust: join(home, '.deckent', 'mcp-trust.json') };
+    projectTrust: join(await mcpProjectTrustDirectory(project, join(home, '.deckent'), false), 'mcp-trust.json'), userTrust: join(home, '.deckent', 'mcp-trust.json') };
   const read = (path: string) => existsSync(path) ? readFileSync(path, 'utf8') : null;
   return { run, entry, audits, asked, state, files, read };
 }

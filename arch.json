@@ -2408,7 +2408,9 @@
         "src/platform/core/config",
         "src/domain/core/agent-turn",
         "src/platform/core/config-fields",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/adapters/core/mcp-trust",
+        "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
     },
@@ -3298,7 +3300,12 @@
       "plan": "MONITOR"
     },
     "src/adapters/core/mcp-trust": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/platform/core/redaction",
+        "src/platform/core/output"
+      ],
       "plan": "SECURITY"
     }
   },

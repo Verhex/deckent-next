@@ -127,6 +127,20 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   kaydedin.
 - **Deckent sağlayıcı tarafındaki ayarları göremez.** OpenRouter için "Prevent overrides" eklenti ayarını ya da OpenRouter kredi
   sınırınızı göremez. *Yol:* ilk ücretli çağrıdan önce ikisine de kendiniz bakın.
+- **alpha.48'den önceki MCP güveni bir kez yeniden sorulur.** Proje ve yerel MCP sunucularının güveni proje klasöründen
+  Deckent genel köküne taşındı; bir depo artık güveni kendisiyle getiremez. alpha.48'den önce güvenilen bir sunucu kartını
+  bekler (`mcp list` nedeni `trust-moved`); `deckent mcp approve <ad> --yes` onu `MCP_TRUST_NEEDS_CARD` ile reddeder. Veri
+  klasöründeki eski `integrations/mcp-trust.json` yerinde kalır ve güven olarak hiç okunmaz. *Yol:* terminalde ilk kullanımda
+  kartı yanıtlayın ya da bir terminalde `deckent mcp approve <ad>` çalıştırın; sonra isterseniz eski dosyayı silin.
+- **Proje MCP dosyası yalnız birkaç ortam değişkeni okur.** Proje `.deckent/mcp.json` içindeki `${VAR}` yalnız `HOME`, `USER`,
+  `LOGNAME`, `LANG`, `LC_ALL`, `TZ` ve `TMPDIR` okur; başka bir ad yazılı varsayılanını ya da boş okur, kimlik bilgisi taşıyan
+  bir değer sunucuyu reddettirir. Bilinen kurulum sırlarıyla karşılaştırma henüz yok (yalnız kimlik bilgisi kalıpları).
+  *Yol:* başka değişken isteyen bir sunucuyu yerel ya da kullanıcı kapsamına koyun (`deckent mcp add`).
+- **Proje MCP güveni proje dışında bir genel kök ister.** `DECKENT_GLOBAL_HOME` (yoksa `DECKENT_HOME`) projenin içini
+  gösterirse proje ve yerel sunucular `trust-store-unavailable` gösterir ve hiç başlamaz. *Yol:* `DECKENT_GLOBAL_HOME`'u
+  projenin dışına yöneltin.
+- **`--yes` yeni bir proje MCP sunucusunu hâlâ kartsız onaylar.** Kart yalnız alpha.48'den önceki bir kayıt için zorunludur.
+  *Yol:* proje sunucularını terminalde, kartı okuyarak onaylayın.
 - **OAuth ile MCP sunucuları desteklenmiyor.** Streamable HTTP sunucuları OAuth olmadan çalışır. *Yol:* yerel bir stdio sunucusu ya da
   OAuth gerektirmeyen bir HTTP sunucusu kullanın.
 

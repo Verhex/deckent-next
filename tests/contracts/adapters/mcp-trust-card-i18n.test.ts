@@ -17,10 +17,12 @@ const tools: McpTrustCard = {
   ],
 };
 
-// Literal pre-change output: do not derive the English oracle from the catalogs or renderer.
+// Literal output: do not derive the English oracle from the catalogs or renderer. SEC-2 (F28): one field per line, each argument on its own line.
 const launchEnglish = [
   'MCP server local-catalog (project scope, /project/mcp.json) — start it?',
-  'command: node catalog.mjs ${TOKEN}',
+  'command: node',
+  '  argument 1: catalog.mjs',
+  '  argument 2: ${TOKEN}',
   'variables: TOKEN, OPTIONAL (unset)',
   'env: none',
   'realm: sandbox-net — read-only /project',
@@ -57,7 +59,7 @@ describe('MCP trust card i18n', () => {
     // HTTP's realm value "none" is protocol data, not the translated empty-list label.
     const labels = values.reduce((remaining, value) => remaining.replaceAll(value, ''), text);
     for (const label of ['MCP server', 'scope', 'start it?', 'trust it and pin these tools?', 'url:', 'command:', 'variables:',
-      'none', '(unset)', 'headers:', 'env:', 'realm:', 'definition:', 'note:', 'tools (', 'always-ask']) {
+      'none', '(unset)', 'headers:', 'env:', 'realm:', 'definition:', 'note:', 'tools (', 'always-ask', 'argument']) {
       expect(labels).not.toContain(label);
     }
     expect(text).toContain('MCP sunucusu');

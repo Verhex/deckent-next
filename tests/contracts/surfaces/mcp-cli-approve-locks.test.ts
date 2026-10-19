@@ -9,7 +9,8 @@ async function requestOf(...args: string[]) {
   return requests[0];
 }
 it('an approve without lock flags sends no list; --always-ask replaces; --no-always-ask is the explicit release', async () => {
-  expect(await requestOf('--yes')).toEqual({ verb: 'approve', name: 'fx' });
-  expect(await requestOf('--yes', '--always-ask', 'drop')).toEqual({ verb: 'approve', name: 'fx', alwaysAsk: ['drop'] });
-  expect(await requestOf('--yes', '--no-always-ask')).toEqual({ verb: 'approve', name: 'fx', alwaysAsk: [] });
+  // SEC-2 (D6): `--yes` marks the request unattended (no card), which a record waiting for its re-approval refuses.
+  expect(await requestOf('--yes')).toEqual({ verb: 'approve', name: 'fx', unattended: true });
+  expect(await requestOf('--yes', '--always-ask', 'drop')).toEqual({ verb: 'approve', name: 'fx', alwaysAsk: ['drop'], unattended: true });
+  expect(await requestOf('--yes', '--no-always-ask')).toEqual({ verb: 'approve', name: 'fx', alwaysAsk: [], unattended: true });
 });

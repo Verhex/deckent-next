@@ -3,16 +3,21 @@ import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
-import { MCP_SCOPES, MCP_SERVER_NAME } from './registry.js';
+import REGISTRY from './registry.json' with { type: 'json' };
 
 /**
  * MCP trust and tool pins as product state (MCP-CLIENT): the registry files say which servers exist; this record says which exact server
- * definitions the owner trusted (or declined) and which tool definitions were pinned then. Project and local trust live in the data root's
- * `integrations` directory (no layout or ledger schema change); user trust lives beside the personal registry in the Deckent global root, so it
- * holds in every project (owner 2026-09-28). Private (0600), replaced atomically under the cross-process config write lock; the agent tools
- * and both sandboxes never reach either place.
+ * definitions the owner trusted (or declined) and which tool definitions were pinned then. SEC-2 (F29): every record lives outside the project
+ * tree — user trust beside the personal registry in the Deckent global root (owner 2026-09-28), project and local trust in that root's
+ * per-project directory (`location.ts`); a file inside the project is never read as trust. Private (0600, owner, one link), bounded, replaced
+ * atomically under the cross-process config write lock; the agent tools and both sandboxes never reach the global root (hard floor).
  */
 export const MCP_TRUST_FILE = 'mcp-trust.json';
+/** The scopes of the MCP registry, highest precedence first (`registry.ts` re-exports them). */
+export const MCP_SCOPES = ['managed', 'local', 'project', 'user'] as const;
+/** 1–32 chars, lower case, digits and single inner hyphens. No `--` and no edge hyphen: the wire name maps `-` to `_`, and the first `__` after `mcp__` must stay the
+ * server/tool separator, so two different names can never share a wire prefix (`mcp__a_b__x` is only `a-b`, never server `a` with tool `b__x`). */
+export const MCP_SERVER_NAME = /^(?=.{1,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const scope = z.enum(MCP_SCOPES);
 export const mcpTrustRecordSchema = z.object({
@@ -29,12 +34,14 @@ const fileSchema = z.object({ schemaVersion: z.literal(1), revision: z.number().
 export type McpTrustState = z.infer<typeof fileSchema>;
 const EMPTY: McpTrustState = Object.freeze({ schemaVersion: 1, revision: 0, servers: [] });
 
-/** The trust record: absent → nothing is trusted; unreadable or invalid → `ok: false` (callers trust nothing: fail closed). */
+/** The trust record: absent → nothing is trusted; not a private single-link file of this user, too large, unreadable or invalid → `ok: false`
+ * (callers trust nothing: fail closed). */
 export async function readMcpTrust(directory: string): Promise<{ readonly ok: true; readonly state: McpTrustState } | { readonly ok: false; readonly reason: string }> {
   const path = join(directory, MCP_TRUST_FILE);
   try {
-    const info = await lstat(path);
-    if (!info.isFile() || (info.mode & 0o077) !== 0) return { ok: false, reason: 'trust-store-unsafe' };
+    const info = await lstat(path), uid = process.getuid?.();
+    if (!info.isFile() || (info.mode & 0o077) !== 0 || info.nlink !== 1 || (uid !== undefined && info.uid !== uid)) return { ok: false, reason: 'trust-store-unsafe' };
+    if (info.size > REGISTRY.trustMaxBytes) return { ok: false, reason: 'trust-store-too-large' };
     const parsed = fileSchema.safeParse(JSON.parse(await readFile(path, 'utf8')));
     return parsed.success ? { ok: true, state: parsed.data } : { ok: false, reason: 'trust-store-invalid' };
   } catch (error) {

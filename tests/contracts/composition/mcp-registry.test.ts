@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { agentWorkspaceDeny, buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpTurnTools,
   openMcpAgentTools } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { mcpProjectTrustDirectory } from '#adapters/core/mcp-trust/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
@@ -78,7 +79,9 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
     const file = join(w.project, '.deckent', 'mcp.json'), digest = () => createHash('sha256').update(readFileSync(file)).digest('hex'), before = digest();
     await w.cli('approve', 'fx', '--yes');
     expect(digest()).toBe(before);
-    const trust = join(w.project, '.deckent', 'integrations', 'mcp-trust.json');
+    // SEC-2 (F29): project trust lives in the global root's directory of this project, never in the project tree.
+    const trust = join(await mcpProjectTrustDirectory(w.project, join(w.home, '.deckent'), false), 'mcp-trust.json');
+    expect(existsSync(join(w.project, '.deckent', 'integrations', 'mcp-trust.json'))).toBe(false);
     expect(statSync(trust).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(trust, 'utf8'))).toMatchObject({ schemaVersion: 1, servers: [{ scope: 'project', name: 'fx', tools: [{ name: 'echo' }] }] });
     expect(byName(await w.cli('list'))['fx']).toMatchObject({ status: 'trusted' });
@@ -135,7 +138,7 @@ describe.skipIf(process.platform !== 'linux')('MCP trust decisions (owner 2026-0
     expect(await w.cli('add', '--scope', 'project', 'px', ...fx.args)).toMatchObject({ trust: 'pending' });
   }, 60_000);
 
-  it('a user-scope trust lives beside the personal registry and holds in another project without asking; project trust stays in its data root', async () => {
+  it('a user-scope trust lives beside the personal registry and holds in another project without asking; no trust is written into the project tree', async () => {
     const w = workspace(), fx = w.server('fx');
     expect(await w.cli('add', '--scope', 'user', '--yes', 'fx', ...fx.args)).toMatchObject({ trust: 'trusted' });
     expect(statSync(join(w.home, '.deckent', 'mcp-trust.json')).mode & 0o777).toBe(0o600);

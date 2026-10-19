@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
+import { mcpProjectTrustDirectory } from '#adapters/core/mcp-trust/index.js';
 
 // MCP-CLIENT: the compiled `deckent mcp` commands as a real process over a real project (add → list → approve → list → remove), with a
 // real SDK server whose own log shows when it was started.
@@ -11,7 +12,7 @@ const CLI = resolve('dist/composition/core/cli/internal/entry.js'), FIXTURE = re
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove through the compiled CLI; approval without a terminal needs --yes', () => {
+it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove through the compiled CLI; approval without a terminal needs --yes', async () => {
   const base = mkdtempSync(join(tmpdir(), 'deckent-mcp-cli-')); roots.push(base);
   const project = join(base, 'project'), home = join(base, 'home'), tools = join(base, 'tools.json'), log = join(base, 'log.jsonl');
   mkdirSync(join(project, '.deckent'), { recursive: true }); mkdirSync(home, { mode: 0o700 });
@@ -41,5 +42,8 @@ it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove thro
     .toMatchObject({ added: { name: 'lx', scope: 'local' }, trust: 'trusted', pinnedTools: 1 });
   const gone = run('get', 'fx');
   expect(gone.code).not.toBe(0); expect(gone.err + gone.out).toContain('MCP_SERVER_UNKNOWN');
-  expect(JSON.parse(readFileSync(join(project, '.deckent', 'integrations', 'mcp-trust.json'), 'utf8'))).toMatchObject({ servers: [{ name: 'lx', scope: 'local', decision: 'trusted' }] });
+  // SEC-2 (F29): local and project trust live in the global root's directory of this project, never in the project tree.
+  expect(existsSync(join(project, '.deckent', 'integrations', 'mcp-trust.json'))).toBe(false);
+  expect(JSON.parse(readFileSync(join(await mcpProjectTrustDirectory(project, join(home, '.deckent'), false), 'mcp-trust.json'), 'utf8')))
+    .toMatchObject({ servers: [{ name: 'lx', scope: 'local', decision: 'trusted' }] });
 }, 120_000);

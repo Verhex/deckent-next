@@ -5,4 +5,6 @@ export const securityErrors: ErrorDefinitions = Object.freeze({
   // SEC-3 (F33): config issue reasons; the text names no reference, secret name or value.
   SECRET_REFERENCE_PROJECT_LAYER: { category: 'config', render: (p, l) => ({ message: t('error.SECRET_REFERENCE_PROJECT_LAYER', p, l) }) },
   SECRET_REFERENCE_LEAVES_HOST: { category: 'config', render: (p, l) => ({ message: t('error.SECRET_REFERENCE_LEAVES_HOST', p, l) }) },
+  // SEC-2 (F29, owner A48-D6): a trust record from before the move is re-approved on its card only; nothing is asked, audited or written.
+  MCP_TRUST_NEEDS_CARD: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TRUST_NEEDS_CARD', p, l) }) },
 });

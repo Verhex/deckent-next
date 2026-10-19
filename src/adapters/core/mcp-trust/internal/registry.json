@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "description": "SEC-2 (F30): the only environment variables a project MCP registry file (someone else's commit) may read with ${VAR}. Each is non-secret by design; any other name reads as its written default or empty. A personal (local/user) file is the owner's own and reads its environment unrestricted.",
+  "projectVariables": [
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+    "TMPDIR"
+  ],
+  "trustMaxBytes": 8388608,
+  "trustMaxBytesNote": "The largest trust record read (256 servers x 512 pins fit well below it); a larger file is refused unread."
+}

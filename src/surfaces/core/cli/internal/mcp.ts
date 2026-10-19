@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { ErrorRegistry, emit, formatValue, resolveLocale, t } from '#platform/index.js';
+import { ErrorRegistry, emit, formatValue, resolveLocale, t, terminalSafeText } from '#platform/index.js';
 import type { ConfigLoadOptions, Locale } from '#platform/index.js';
 import { mcpTrustQuestion } from '#surfaces/core/cli-terminal/index.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -9,7 +9,7 @@ type Scope = 'local' | 'project' | 'user';
 export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boolean } | { readonly verb: 'get'; readonly name: string }
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
-  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined }
+  | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined; readonly unattended?: boolean }
   | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string }
   | { readonly verb: 'import'; readonly from: 'claude-code' | 'claude-desktop' | { readonly file: string }; readonly scope?: 'local' | 'user' };
 /** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision; `locale` is this
@@ -56,7 +56,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   if (verb === 'list' && !positionals.length && !scope && !command.length) request = { verb };
   else if (verb === 'get' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
   else if (verb === 'remove' && positionals.length === 1 && !command.length) request = { verb, name: name!, ...(scope ? { scope } : {}) };
-  else if (verb === 'approve' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name!, ...(alwaysAsk.length || releaseLocks ? { alwaysAsk } : {}) };
+  else if (verb === 'approve' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name!, ...(alwaysAsk.length || releaseLocks ? { alwaysAsk } : {}), ...(yes ? { unattended: true } : {}) };
   else if (verb === 'revoke' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
   else if (verb === 'add' && positionals.length === 2 && !command.length && transport !== 'stdio' && (transport === 'http' || /^https?:\/\//iu.test(positionals[1]!))
     && !Object.keys(env).length && !realm) request = { verb, scope: scope ?? 'local', name: name!, approve: !noApprove,
@@ -81,8 +81,13 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
     if (yes) return true;
     const input = context.stdin!;
     // The same localized fields as the terminal's trust window (one renderer): what runs, where (realm in words), env or header names, tools.
-    const shown = mcpTrustQuestion(card, locale);
-    emit(card, { ...sinks, json: false, render: () => [shown.title, ...shown.lines.map(line => line.label ? `${line.label}: ${line.text}` : `  ${line.text}`)].join('\n') });
+    // SEC-2 (F3): one field per line with escapes inert (a repository writes these values); every argument on its own line.
+    const shown = mcpTrustQuestion(card, locale), safe = (text: string) => terminalSafeText(text).replace(/\n/gu, '\\n');
+    const { command, args } = card as { command?: unknown; args?: unknown }, argv = Array.isArray(args) ? args.map(String) : [];
+    const launch = argv.length ? [String(command ?? ''), ...argv].join(' ') : null;
+    emit(card, { ...sinks, json: false, render: () => [safe(shown.title), ...shown.lines.flatMap(line => line.text === launch
+      ? [`${safe(line.label)}: ${safe(String(command))}`, ...argv.map((value, index) => `  ${t('security.mcp.trustCard.argument', { index: index + 1, value: safe(value) }, locale)}`)]
+      : [line.label ? `${safe(line.label)}: ${safe(line.text)}` : `  ${safe(line.text)}`])].join('\n') });
     const question = (card as { phase?: unknown }).phase === 'tools' ? t('cli.mcp.toolsPrompt', {}, locale) : t('cli.mcp.launchPrompt', {}, locale);
     const rl = createInterface({ input, output: process.stdout, terminal: true });
     try { return await new Promise<boolean>(resolve => rl.question(question, answer => resolve(/^y(es)?$/iu.test(answer.trim())))); }
