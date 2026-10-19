@@ -114,7 +114,8 @@ deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 ```
 
 `grants` (`--mine` ile ya da onsuz) bütün devir hücrelerini değil, kendi kalıcı araç onaylarınızı listeler; herkesin
-onayları (`--all`) bir sonraki politika şablonunun ekleyeceği okuma eylemini bekler ve o zamana kadar reddedilir.
+onayları (`--all`) verilebilir okuma eylemi `policy`/`inspect-standing-grants` ister (ilk kurulum şablonu v13 bunu kuran kişiye verir);
+komut, okuyucusu gelene kadar `--all` isteğini yine reddeder.
 Kendi terminalinizde `deckent policy` scope özetini (yöneticiler, kalıcı onaylarınız, AI adımları ve MCP grupları açık/kapalı)
 gösterir; `deckent policy mcp` / `deckent policy delegations` ile grup ya da adım seçer, değişikliğin önizlemesini kartta
 okur ve yukarıdaki komutlarla aynı yönetilen değişiklikle uygularsınız.

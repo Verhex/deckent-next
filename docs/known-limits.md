@@ -309,8 +309,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the next protocol version. The status shows build, configuration, running work and socket only.
 - **The monitor shows only the pools you may inspect** (`pool inspect`); other pools appear as one count ("Other work: N
   pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
-  shows no pool-wait reason. The MCP actor's first-run rules include no `pool inspect`, so `inspect_monitor` over MCP shows only
-  that count. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
+  shows no pool-wait reason. Before first-run template v13 the MCP actor's rules include no `pool inspect`, so `inspect_monitor` over
+  MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
 - **The monitor does not say which scope it could not read.** A refused scope and a scope whose access check could not run (for
   example a locked ledger) are both shown only as counts ("access to N scope(s) was refused", "N scope(s) could not be read
   (<code>)"), never by name. *Workaround:* none needed for refused scopes; for a failed check, `deckent doctor` and the named code.

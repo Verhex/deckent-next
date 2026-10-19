@@ -225,7 +225,7 @@ policy revision and the runtime service identity, so a change of either in betwe
    the result.
 4. **Restart the service** so it reads the new configuration: `deckent runtime restart` (or `/service-restart` in the
    terminal). It answers `Runtime service restarted (pid 494385, instance 8b1e2392-…).` A fresh `init policy --apply`
-   (first-run policy v12) already names the service (`service.identity`) and lets you, and only you, stop it. On an older
+   (first-run policy v12 and later) already names the service (`service.identity`) and lets you, and only you, stop it. On an older
    first-run installation run the upgrade above first; if it says it set the service identity, stop the running service
    once by hand (see [The runtime service](#the-runtime-service)) before `runtime restart` works.
    **Before step 5, once: a model and a worker login.** `/do` needs one connected model with a budget, and the worker CLI

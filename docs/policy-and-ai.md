@@ -116,7 +116,8 @@ deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 ```
 
 `grants` (with or without `--mine`) lists your standing tool approvals, not every delegation cell; everyone's
-grants (`--all`) wait for their grantable read action in the next policy template and are refused until then.
+grants (`--all`) need the grantable read action `policy`/`inspect-standing-grants` (first-run template v13 gives it to the installing
+person); the command still refuses `--all` until its reader lands.
 On your own terminal `deckent policy` summarises the scope (administrators, your grants, AI steps and MCP groups
 on/off), and `deckent policy mcp` / `deckent policy delegations` let you pick a group or step, read the change's
 preview on a card and apply it through the same governed change as the commands above. `policy revoke`
