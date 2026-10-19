@@ -51,7 +51,9 @@ it('refuses interactive stdin rather than waiting for input', async () => {
 
 it('defaults and validates the CLI graph input byte limit', () => {
   const schema = CONFIG_FIELDS.cli.schema;
-  expect(schema.parse(undefined)).toEqual({ graphInputMaxBytes: 1048576, invocationInputMaxBytes: 1048576 });
-  expect(schema.parse({ graphInputMaxBytes: 7 })).toEqual({ graphInputMaxBytes: 7, invocationInputMaxBytes: 1048576 });
+  // INIT-D7 (alpha.48 J1a) added `agentEnvironment` to the same `cli` object; the graph input limits keep their defaults beside it.
+  const agentEnvironment = ['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI'];
+  expect(schema.parse(undefined)).toEqual({ graphInputMaxBytes: 1048576, invocationInputMaxBytes: 1048576, agentEnvironment });
+  expect(schema.parse({ graphInputMaxBytes: 7 })).toEqual({ graphInputMaxBytes: 7, invocationInputMaxBytes: 1048576, agentEnvironment });
   expect(() => schema.parse({ graphInputMaxBytes: 0 })).toThrow();
 });

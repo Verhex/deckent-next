@@ -71,7 +71,9 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
       identityProbe: { timeoutMs: 2000, outputBytes: 65_536 }, machineIdentity: { source: null }, requireMachineBinding: false,
       packageMeasurement: { maxFiles: 8192, maxFileBytes: 67_108_864, maxTotalBytes: 536_870_912, maxDepth: 32 } });
     expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, assuranceProducers: [{ id: 'core.turn-bound', version: 1 }], keyFile: 'authority.key', approverNoteMaxChars: 500 });
-    expect(d.cli).toEqual({ graphInputMaxBytes: 1_048_576, invocationInputMaxBytes: 1_048_576 });
+    // INIT-D7 (alpha.48 J1a): `cli.agentEnvironment` is a nested array default of the `cli` object; it must apply when `cli` itself defaults.
+    expect(d.cli).toEqual({ graphInputMaxBytes: 1_048_576, invocationInputMaxBytes: 1_048_576,
+      agentEnvironment: ['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI'] });
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8, maxServers: 20 });
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
       maxConcurrentExecutions: 8, headerTimeoutMs: 10_000, responseTimeoutMs: 10_000, acceptRetryDelayMs: 25, acceptRetryLimit: 3, shutdownGraceMs: 30_000, admissionWaitMs: 250, busyRetryLimit: 2, idleShutdown: { afterMs: 900_000 } });
