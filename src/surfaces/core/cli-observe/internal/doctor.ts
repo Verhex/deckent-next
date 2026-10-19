@@ -107,7 +107,7 @@ export async function doctorCommand(call: KernelCall, context: KernelCommandCont
   const show = (measured: Awaited<ReturnType<typeof measure>>) => output(measured.data, result => {
     const grouped = renderDoctorChecks(measured.checks, call.locale);
     return args.verbose ? [grouped, '', t('doctor.details', {}, call.locale),
-      renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale)].join('\n') : grouped;
+      renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale, { status: false })].join('\n') : grouped;
   });
   let measured = await measure(call, context);
   show(measured);

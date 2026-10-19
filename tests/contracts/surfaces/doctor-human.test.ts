@@ -103,6 +103,8 @@ describe('deckent doctor (command)', () => {
     const verbose = await run(['--verbose']);
     expect(verbose).toContain('Details (--verbose):');
     expect(verbose).toContain('Platform: ');
+    // C-DOCTOR follow-up (J3): one status only — the grouped summary; the old report's ready/degraded line is not repeated.
+    expect(verbose.match(/^Status: /gmu)).toHaveLength(1);
     const json = JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''));
     expect(json.schemaVersion).toBe(2);
     expect(Object.keys(json)).not.toContain('checks');
