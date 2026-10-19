@@ -260,7 +260,7 @@ it('runs only the reviewed read action when a family is called without one', asy
 });
 
 it.each(['en', 'tr'] as const)('names the missing argument for every family without a runnable default (%s, exit 2, never the bare usage)', async language => {
-  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths']);
+  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths', 'coding', 'inference', 'operation']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';

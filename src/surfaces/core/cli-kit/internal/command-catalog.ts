@@ -204,16 +204,16 @@ export const CLI_CATALOG = [
     action('shutdown', 'developer', 'cli.help.action.shutdown', 'cli.help.runtime'),
     action('restart', 'developer', 'cli.help.action.restart', 'cli.help.runtime'),
   ] },
-  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'cli.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', children: [
+  { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'cli.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
     action('prepare', 'developer', 'cli.help.action.prepare', 'cli.coding.help'),
     action('template', 'developer', 'cli.help.action.codingTemplate', 'cli.coding.template.help'),
   ] },
-  { name: 'inference', group: 'developer', summary: 'cli.help.summary.inference', detail: 'cli.help.inference', args: '[--profile <id>]', children: [
+  { name: 'inference', group: 'developer', summary: 'cli.help.summary.inference', detail: 'cli.help.inference', args: '[--profile <id>]', bare: 'handler', children: [
     action('plan', 'developer', 'cli.help.action.plan', 'cli.help.inference'),
     action('budget', 'developer', 'cli.help.action.budget', 'cli.help.inference'),
     action('metrics', 'developer', 'cli.help.action.metrics', 'cli.help.inference'),
   ] },
-  { name: 'operation', group: 'developer', summary: 'cli.help.summary.operation', detail: 'cli.operation.help', args: '--input <file|-> [--wait <ms>]', children: [
+  { name: 'operation', group: 'developer', summary: 'cli.help.summary.operation', detail: 'cli.operation.help', args: '--input <file|-> [--wait <ms>]', bare: 'handler', children: [
     action('execute', 'developer', 'cli.help.action.operation.execute', 'cli.operation.help'),
     action('compensate', 'developer', 'cli.help.action.compensate', 'cli.operation.help'),
     action('inspect', 'developer', 'cli.help.action.operation.inspect', 'cli.operation.help'),

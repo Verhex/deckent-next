@@ -28,7 +28,6 @@
   "config.surface.explain": "Key: {key}\n{description}\nValue: {value}\nDefault: {defaultValue}\nSource: {source}\nBinding: {binding}\nApply: {apply}\nSchema: {schema}",
   "config.surface.unavailable": "Configuration application is unavailable.",
   "config.surface.slashUsage": "/config [key] · view. /config set <key> <json> · /config unset <key> · change the project layer (policy authorization; an approval may be asked).",
-  "config.surface.help": "deckent config [--json] [--global] [--lang en|tr]\n\nInspect\n  get [key]         compatible value output\n  explain <key>     description, schema, source and binding\n  validate          validate the full effective configuration\n\nChange (policy authorization required; a policy may ask for an approval first — nothing is written until it is allowed)\n  set <key> <json> [--global] [--expect <digest|absent>] [--scope <id>]\n  unset <key> [--global] [--expect <digest|absent>] [--scope <id>]\n  --command-id <id>       audit command identity\nUse --expect absent to require a missing document. Explain uses the project view; --global is refused. Project is the default write layer. Secrets use deckent secret.\nUse explain to see environment overrides and restart requirements.",
   "config.surface.monitorTab": "Config",
   "config.surface.slashDescription": "Inspect configuration, sources and bindings",
   "config.surface.fieldRetired": "Removed unused setting {key}; document schema 3 is read as schema 4.",

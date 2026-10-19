@@ -303,7 +303,8 @@
         "src/composition/core/run-planner",
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
-        "src/composition/core/audit"
+        "src/composition/core/audit",
+        "src/surfaces/core/config-window"
       ],
       "plan": "SURFACES"
     },
@@ -2577,6 +2578,19 @@
         "src/platform/core/common",
         "src/domain/core/provider-spend",
         "src/surfaces/core/cli-human"
+      ],
+      "plan": "CONFIG-SURFACE"
+    },
+    "src/surfaces/core/config-window": {
+      "dependencies": [
+        "src/platform/core/output",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/work-labels",
+        "src/surfaces/core/config"
       ],
       "plan": "CONFIG-SURFACE"
     },
