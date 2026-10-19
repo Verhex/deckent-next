@@ -2047,7 +2047,6 @@
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/file-artifacts",
         "src/adapters/core/worker-observation",
-        "src/composition/core/inventory",
         "src/composition/core/policy",
         "src/composition/core/query-errors",
         "src/composition/core/scoped-request",
@@ -2058,7 +2057,9 @@
         "src/platform/core/config",
         "src/platform/core/managed-files",
         "src/platform/core/common",
-        "src/composition/core/resource-observation"
+        "src/composition/core/resource-observation",
+        "src/engine/core/dispatch",
+        "src/engine/core/monitor"
       ],
       "plan": "EXECUTION"
     },
@@ -2525,7 +2526,6 @@
         "src/composition/core/runtime-service",
         "src/composition/core/worker-observation",
         "src/engine/core/monitor",
-        "src/engine/core/worker-observation",
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/composition/core/scoped-request",

@@ -2,7 +2,7 @@ import { configCommand } from '#surfaces/core/config/index.js';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { ErrorRegistry, colorTier, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
+import type { MonitorQuery, MonitorSnapshot, MonitorSourceMemo } from '#engine/index.js';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { prefersAsciiGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { MonitorCommandContext } from './context.js';
@@ -10,8 +10,8 @@ import { MonitorApp } from './app.js';
 import { renderMonitorText } from './text.js';
 import { filterSnapshot, type MonitorFilters } from './view.js';
 
-/** The data lane's read (composition): every observed install as one observe-only MonitorSnapshot. */
-export type MonitorHandler = (root: string, options: ConfigLoadOptions, query?: MonitorQuery) => Promise<MonitorSnapshot>;
+/** The data lane's read (composition): every observed install as one observe-only MonitorSnapshot; the live view passes its memo (MON-CPU-FIX). */
+export type MonitorHandler = (root: string, options: ConfigLoadOptions, query?: MonitorQuery, memo?: MonitorSourceMemo) => Promise<MonitorSnapshot>;
 interface Parsed { once: boolean; json: boolean; help: boolean; noColor: boolean; install?: string; scope?: string; language?: string }
 const DEFAULT_TEXT_WIDTH = 120;
 const FLAGS = { '--help': 'help', '--once': 'once', '--json': 'json', '--no-color': 'noColor' } as const;
@@ -75,7 +75,7 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   const config = await loadConfig(root, { ...options, heal: false });
   locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
   const read = context.inspectMonitor, query: MonitorQuery = { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) };
-  const inspect = (at: string, configOptions: ConfigLoadOptions) => read(at, configOptions, query);
+  const inspect = (at: string, configOptions: ConfigLoadOptions, memo?: MonitorSourceMemo) => read(at, configOptions, query, memo);
   const filters = filtersOf(parsed), ascii = prefersAsciiGlyphs(env);
   if (parsed.json) { emit(filterSnapshot(await inspect(root, options), filters), { ...sinks, json: true }); return; }
   if (parsed.once || !interactive(context)) {
@@ -84,7 +84,7 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   }
   // The command already selected the interactive TTY lane; do not let Ink infer a different lane from ambient CI.
   const palette = resolveWorklinePalette(colorTier({ env, isTTY: true, noColor: parsed.noColor }));
-  const instance = render(createElement(MonitorApp, { load: () => inspect(root, options), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters,
+  const instance = render(createElement(MonitorApp, { load: memo => inspect(root, options, memo), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters,
     ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}),
     errorText: (error: unknown) => monitorFailureText(error, locale) }), { interactive: true, alternateScreen: true, patchConsole: false,
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}), ...(context.stdin ? { stdin: context.stdin as unknown as NodeJS.ReadStream } : {}) });

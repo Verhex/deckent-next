@@ -27,6 +27,11 @@ export async function indexMonitorInstall(config: import('#platform/index.js').R
   const { indexMonitorInstall: index } = await import('./internal/install.js');
   return index(config);
 }
+/** MON-CPU-FIX: the viewer and the stat identity of the install's ledger, policy and bindings (nothing opened or read). */
+export async function stampMonitorInstall(config: import('#platform/index.js').ResolvedConfig) {
+  const { stampMonitorInstall: stamp } = await import('./internal/install.js');
+  return stamp(config);
+}
 
 export { readMonitorRunResults } from './internal/run-brief.js';
 export { listSurfaceRunIds, followLedgerSurface, type RuntimeSurfaceEvent } from './internal/surface-follow.js';

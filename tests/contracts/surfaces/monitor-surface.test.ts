@@ -14,6 +14,7 @@ import { cells } from '#surfaces/core/terminal-render/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, until as untilWorkline, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { BLOCKER_CODES, emptySnapshot, fullSnapshot, longIdSnapshot, OBSERVED_AT } from '../../fixtures/monitor/snapshots.js';
+import { MonitorSourceMemo } from '#engine/index.js';
 
 /** MONITOR-SURFACE: the text snapshot, `--json`, the typed unavailable error and the fullscreen view, all from fixture MonitorSnapshots. */
 const surface = await loadMonitorSurface();
@@ -170,7 +171,7 @@ class Screen extends Writable {
 }
 const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check: () => boolean, label: string) { for (let i = 0; i < 300; i++) { if (check()) return; await settle(10); } throw new Error(`timed out: ${label}`); }
-function mount(props: { load: () => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr'; now?: () => number; loadConfigView?: () => Promise<Awaited<ReturnType<import('#engine/index.js').ConfigApplication['inspect']>>> }) {
+function mount(props: { load: (memo?: unknown) => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr'; now?: () => number; loadConfigView?: () => Promise<Awaited<ReturnType<import('#engine/index.js').ConfigApplication['inspect']>>> }) {
   const stdout = new Screen(props.columns ?? 120, props.rows ?? 40);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const instance = render(createElement(surface.MonitorApp, { load: props.load, intervalMs: props.intervalMs ?? 60_000, locale: props.locale ?? 'en', ascii: false,
@@ -552,12 +553,33 @@ it('fullscreen Config tab reads the shared inspect, exposes source/binding/apply
     binding: { state: 'bound' as const, consumers: ['src/composition/core/runs'] }, apply: 'restart' as const, redacted: false }] };
   const view = mount({ load: async () => fullSnapshot, loadConfigView: async () => { reads++; return config; }, columns: 80 });
   try {
-    await until(() => reads > 0 && view.stdout.frame.includes('Stuck or waiting'), 'config inspected');
-    await view.press('8'); expect(view.stdout.frame).toContain('[8 Config]'); expect(view.stdout.frame).toContain('max_workers');
+    await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+    expect(reads).toBe(0); // MON-CPU-FIX: the Config tab is read only while it is shown
+    await view.press('8'); await until(() => reads > 0 && view.stdout.frame.includes('max_workers'), 'config inspected on entering the tab');
+    expect(view.stdout.frame).toContain('[8 Config]');
     // PB-MON-UX: a human name beside the key, the source in words and when it takes effect (the binding shows only when a setting is not read).
     expect(view.stdout.frame).toContain('Worker ceiling (max_workers)'); expect(view.stdout.frame).toContain('global (user)'); expect(view.stdout.frame).toContain('after restart');
     await view.press(KEY.enter); expect(view.stdout.frame).toContain('Key: max_workers'); expect(view.stdout.frame).toContain('Installation ceiling');
     expect(widest(view.stdout.frame)).toBeLessThanOrEqual(80);
+  } finally { view.instance.unmount(); }
+});
+
+it('MON-CPU-FIX: one memo per view across heartbeats and a fresh one on `r`; the Config tab is read only while shown, with every heartbeat there', async () => {
+  const memos: unknown[] = []; let reads = 0;
+  const config = { schemaVersion: 1 as const, layer: 'project' as const, digest: null, fields: [{ key: 'max_workers', value: 2,
+    defaultValue: 'auto', source: 'global' as const, descriptionKey: 'config.field.max_workers', description: 'Worker ceiling', schema: {},
+    binding: { state: 'bound' as const, consumers: ['src/composition/core/runs'] }, apply: 'restart' as const, redacted: false }] };
+  const view = mount({ load: async memo => { memos.push(memo); return fullSnapshot; }, intervalMs: 40, loadConfigView: async () => { reads++; return config; } });
+  try {
+    await until(() => memos.length >= 3, 'three heartbeats');
+    expect(memos[0]).toBeInstanceOf(MonitorSourceMemo); expect(new Set(memos).size).toBe(1);
+    expect(reads).toBe(0);
+    await view.press('8'); await until(() => reads >= 1 && view.stdout.frame.includes('max_workers'), 'config read on entering the tab');
+    const entered = reads; await until(() => reads >= entered + 2, 'config re-read with the heartbeat while shown');
+    await view.press('1'); await settle(80); const left = reads; await settle(200);
+    expect(reads).toBe(left);
+    const before = memos.length; await view.press('r'); await until(() => memos.length > before, 'manual refresh');
+    expect(memos.at(-1)).toBeInstanceOf(MonitorSourceMemo); expect(memos.at(-1)).not.toBe(memos[0]);
   } finally { view.instance.unmount(); }
 });
 

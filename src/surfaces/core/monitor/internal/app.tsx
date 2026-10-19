@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
 import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
-import type { MonitorSnapshot } from '#engine/index.js';
+import { MonitorSourceMemo, type MonitorSnapshot } from '#engine/index.js';
 import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
 import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
 import { wrapDetail } from './text.js';
@@ -11,8 +11,10 @@ import { applyControls, changeMarks, GROUP_CYCLE, NO_CONTROLS, signatures, SORT_
 import { CHANGE_GLYPHS, legendLines } from './legend.js';
 
 export interface MonitorAppProps {
-  /** One observe-only read of the whole snapshot (the CLI's `inspectMonitor`); never called while a previous call is still running. */
-  readonly load: () => Promise<MonitorSnapshot>;
+  /** One observe-only read of the whole snapshot (the CLI's `inspectMonitor`); never called while a previous call is still running. The memo is
+   * this view's (MON-CPU-FIX): unchanged ledger/policy/config sources are not re-collected; `r` starts a fresh one (a full re-read). */
+  readonly load: (memo: MonitorSourceMemo) => Promise<MonitorSnapshot>;
+  /** Read only while the Config tab is shown: on entering it and with every heartbeat there (never for a hidden tab). */
   readonly loadConfigView?: () => Promise<ConfigMonitorInspection>;
   /** `inspection.workers.heartbeatMs`: the next read starts this long after the previous one settled. */
   readonly intervalMs: number;
@@ -53,6 +55,18 @@ function detailBody(row: MonitorRow | null, width: number, requestedOffset: numb
   return body;
 }
 interface Failure { readonly text: string; readonly at: number }
+/** MON-CPU-FIX: the Config tab's read, one at a time; the view calls it only while that tab is shown (on entering it and with each heartbeat there). */
+function useConfigRead(load: MonitorAppProps['loadConfigView'], errorText: (error: unknown) => string, alive: { readonly current: boolean }) {
+  const [view, setView] = useState<ConfigMonitorInspection | null>(null), [failure, setFailure] = useState<string | null>(null), inFlight = useRef(false);
+  const read = useCallback(async () => {
+    if (!load || inFlight.current) return;
+    inFlight.current = true;
+    try { const value = await load(); if (alive.current) { setView(value); setFailure(null); } }
+    catch (error) { if (alive.current) { setView(null); setFailure(errorText(error)); } }
+    finally { inFlight.current = false; }
+  }, [alive, errorText, load]);
+  return { view, failure, read };
+}
 /** The snapshot with the local time it arrived and its change marks against the previous one (shown until the next snapshot). */
 interface Received { readonly snapshot: MonitorSnapshot; readonly at: number; readonly marks: ReadonlyMap<string, string>; readonly signatures: ReadonlyMap<string, string> }
 
@@ -67,8 +81,6 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const { exit } = useApp(), onClose = props.onClose ?? exit;
   const now = props.now ?? Date.now;
   const tabs = props.loadConfigView ? [...MONITOR_TABS, 'config' as const] : MONITOR_TABS;
-  const [configView, setConfigView] = useState<ConfigMonitorInspection | null>(null);
-  const [configFailure, setConfigFailure] = useState<string | null>(null);
   const window = useWindowSize(), { columns, rows } = props.size ?? window;
   const width = Math.max(20, columns || 80), height = Math.max(props.minRows ?? 10, rows || 24), ellipsis = ascii ? '...' : '…';
   const [received, setReceived] = useState<Received | null>(() => props.initial
@@ -85,16 +97,15 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const [controls, setControls] = useState<MonitorControls>(NO_CONTROLS);
   const [editing, setEditing] = useState(false), [configAll, setConfigAll] = useState(false); // `a` on Config: view state only, the read never changes
   const [clock, setClock] = useState(() => now());
-  const alive = useRef(true), inFlight = useRef(false);
+  const alive = useRef(true), inFlight = useRef(false), memo = useRef<MonitorSourceMemo | null>(null), configShown = useRef(false);
+  const { view: configView, failure: configFailure, read: readConfig } = useConfigRead(props.loadConfigView, errorText, alive);
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      const [observed, inspectedConfig] = await Promise.allSettled([Promise.resolve().then(load), Promise.resolve().then(() => props.loadConfigView?.())]);
+      const [observed] = await Promise.allSettled([Promise.resolve().then(() => load(memo.current ??= new MonitorSourceMemo())), configShown.current ? readConfig() : undefined]);
       if (alive.current) {
-        if (inspectedConfig.status === 'fulfilled') { setConfigView(inspectedConfig.value ?? null); setConfigFailure(null); }
-        else { setConfigView(null); setConfigFailure(errorText(inspectedConfig.reason)); }
         if (observed.status === 'fulfilled') {
           const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii).tabs);
           setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
@@ -103,7 +114,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
       }
     } catch (error) { if (alive.current) setFailure({ text: errorText(error), at: now() }); }
     finally { inFlight.current = false; if (alive.current) { setGeneration(value => value + 1); setClock(now()); } }
-  }, [ascii, errorText, filters, load, locale, now, props.loadConfigView]);
+  }, [ascii, errorText, filters, load, locale, now, readConfig]);
   useEffect(() => { alive.current = true; if (!props.initial) void refresh(); return () => { alive.current = false; }; }, []);
   // One read timer at a time: re-armed only after a read settled (generation) and never while paused.
   useEffect(() => {
@@ -116,6 +127,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
 
   const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii) : null, [ascii, filters, locale, snapshot]);
   const current = tabs[tab]!;
+  useEffect(() => { configShown.current = current === 'config'; if (configShown.current) void readConfig(); }, [current, readConfig]);
   const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : configFailure
     ? [{ kind: 'line' as const, line: [span(t('config.surface.unavailable', {}, locale), 'warning')] }, { kind: 'line' as const, line: [span(configFailure, 'error')] }]
     : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
@@ -162,7 +174,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (key.escape) { if (help) setHelp(false); else if (detail !== null) setDetail(null); else if (controls.filter) setControls(value => ({ ...value, filter: '' })); else if (props.escapeCloses) onClose(); return; }
     if (help) return;
     if (input === '/') { setEditing(true); setDetail(null); return; }
-    if (input === 'r') { void refresh(); return; }
+    if (input === 'r') { memo.current = null; void refresh(); return; }
     if (input === 'p' || (input === 'a' && current === 'config')) { if (input === 'p') setPaused(value => !value); else { setConfigAll(value => !value); move(-items.length); } return; }
     if (input === 's') { setControls(value => { const next = cycle(SORT_CYCLE, value.sort?.key ?? null); return { ...value, sort: next ? { key: next, reverse: false } : null }; }); return; }
     if (input === 'S') { setControls(value => ({ ...value, sort: { key: value.sort?.key ?? 'age', reverse: !(value.sort?.reverse ?? false) } })); return; }

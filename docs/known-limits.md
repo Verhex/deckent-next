@@ -310,9 +310,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   (<code>)"), never by name. *Workaround:* none needed for refused scopes; for a failed check, `deckent doctor` and the named code.
 - **The monitor shows no build time and no release number for a service.** The service reports only its commit and source tree, so
   Installs shows `build <commit> · source tree <hash>`. *Workaround:* `deckent --version` on the machine that runs the service.
-- **An idle interactive `deckent monitor` keeps using CPU** because it re-reads everything on every refresh
-  (`inspection.workers.heartbeatMs`, default 2 s). It grows with the number of Runs and scopes. *Workaround:* press `p` to
-  pause it, raise `inspection.workers.heartbeatMs`, or use `deckent monitor --once`.
+- **The interactive `deckent monitor` still uses some CPU while idle, and as much as before while work changes the ledger.** It
+  re-reads Runs, workers and permission decisions only after the ledger, policy, bindings or configuration changed (and once
+  more in the refresh after a change). Worker files, process state and model availability are still read on every refresh
+  (`inspection.workers.heartbeatMs`, default 2 s), and the Config tab only while it is shown. Measured on a test installation
+  with 2,000 Runs: about 9–10 % of one core while nothing changes (it was 31–34 %); a live installation was not measured. The
+  terminal's `/monitor` window, `--once`, `--json` and MCP read everything on each call. *Workaround:* press `p` to pause it,
+  `r` for a full re-read, or use `deckent monitor --once`.
 - **`deckent run list`, `report` and the Run pickers show only the Runs the `/runs` query returns** (newest first, at most
   `inspection.workers.maxEntries`) and read each of them once, as `/runs` does; a short id resolves only among those Runs, so an
   older Run needs its full id. Not measured on a large scope. *Workaround:* `deckent run inspect --id <full id>`; `deckent
