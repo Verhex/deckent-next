@@ -12,6 +12,8 @@ export { ErrorRegistry, ERROR_CODES } from '#platform/core/errors/index.js';
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';
 export type { ExitCode } from '#platform/core/errors/index.js';
 export { lintErrorRegistry, assertErrorRegistry } from '#platform/core/errors/index.js';
+export { mergeErrorDefinitions, ERROR_DEFINITION_FRAGMENTS } from '#platform/core/errors/index.js';
+export type { ErrorDefinition, ErrorDefinitions } from '#platform/core/errors/index.js';
 export { redactSensitive, unexpectedQueryFailure, takeQueryErrorRecord, reportQueryError, queryErrorClientParams, sanitizeQueryFailure } from '#platform/core/errors/index.js';
 export { EMPTY_KNOWN_SECRETS, REDACTION_CONFIG_SECRET, REDACTION_GATE_PATTERNS, REDACTION_PATTERNS, snapshotKnownSecrets, redactForRecord, redactForDecision, hasSecret } from '#platform/core/redaction/index.js';
 export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionMatch, RedactionResult } from '#platform/core/redaction/index.js';
