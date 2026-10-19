@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
 
-it.each(['en', 'tr'] as const)('renders the approved compact %s golden through main', async language => {
+it.each(['en', 'tr'] as const)('renders the detailed %s main help golden through main (owner 2026-10-19: 100–150 lines)', async language => {
   let output = ''; let errors = '';
   const code = await main(['--help', '--lang', language], {
     env: { DECKENT_LANG: language, NO_COLOR: '1' },
@@ -12,12 +12,13 @@ it.each(['en', 'tr'] as const)('renders the approved compact %s golden through m
   });
   expect(code).toBe(0); expect(errors).toBe('');
   await expect(output).toMatchFileSnapshot(`../../fixtures/cli-help/top-${language}.txt`);
-  expect(output.trimEnd().split('\n').length).toBeLessThanOrEqual(30);
+  const lines = output.trimEnd().split('\n').length;
+  expect(lines).toBeGreaterThanOrEqual(100); expect(lines).toBeLessThanOrEqual(150);
   expect(output.split('\n').every(line => [...line].length <= 80)).toBe(true);
 });
 
 import { CLI_COMMANDS } from '#surfaces/core/cli/index.js';
-import { CLI_CATALOG, HELP_GROUPS, renderTopHelp, renderCommandHelp, registerCliCommands, wrapHelp } from '#surfaces/core/cli-kit/index.js';
+import { CLI_CATALOG, HELP_GROUPS, renderTopHelp, renderCommandHelp, registerCliCommands, wrapHelp, catalogDispatch, hasCliAction, type CliCommandSpec } from '#surfaces/core/cli-kit/index.js';
 import { MESSAGE_REGISTRY } from '#platform/index.js';
 import { displayWidth } from '#surfaces/core/terminal-composer/index.js';
 
@@ -58,28 +59,36 @@ it.each(['en', 'tr'] as const)('every registered command has side-effect-free %s
   await expect(JSON.stringify(golden, null, 2) + '\n').toMatchFileSnapshot(`../../fixtures/cli-help/commands-${language}.json`);
 });
 
-it.each(['en', 'tr'] as const)('keeps developer commands discoverable in %s with --all', async language => {
-  let output = '';
-  expect(await main(['--help', '--all', '--lang', language], {
-    stdout: { write: text => { output += text; } }, initialize: () => { throw new Error('initialized'); },
-  })).toBe(0);
-  const ordinary = renderTopHelp(language);
-  for (const command of CLI_CATALOG) {
+it.each(['en', 'tr'] as const)('shows every command, its actions and synopsis in the %s main help; --all is retired and side-effect free', async language => {
+  let output = '', plain = '';
+  const context = (sink: (text: string) => void) => ({ env: { NO_COLOR: '1' }, stdout: { write: sink }, initialize: () => { throw new Error('initialized'); } });
+  expect(await main(['--help', '--all', '--lang', language], context(text => { output += text; }))).toBe(0);
+  expect(await main(['--help', '--lang', language], context(text => { plain += text; }))).toBe(0);
+  expect(output).toBe(plain);
+  const catalog = MESSAGE_REGISTRY.catalogs[language];
+  for (const command of CLI_CATALOG as readonly CliCommandSpec[]) {
     expect(output).toContain(`  ${command.name.padEnd(12)}`);
-    if (command.group === 'developer') expect(ordinary).not.toContain(`  ${command.name.padEnd(12)}`);
+    for (const child of command.children ?? []) if (!child.planned) expect(output, `${command.name} ${child.name}`).toMatch(new RegExp(`[ |]${child.name}(?=[ |\\n])`));
   }
-  for (const line of output.split('\n')) expect(displayWidth(line)).toBeLessThanOrEqual(80);
-  await expect(output).toMatchFileSnapshot(`../../fixtures/cli-help/all-${language}.txt`);
+  for (const heading of ['cli.help.group.developer', 'cli.help.top.surfaces', 'cli.help.top.options'] as const) expect(output).toContain(catalog[heading]!.split('\n')[0]);
+  expect(output).toContain('deckent-mcp');
+  expect(output).not.toContain('--help --all');
 });
 
-it('derives placement from registration metadata rather than a renderer command list', () => {
+it('derives placement from registration metadata rather than a renderer command list', async () => {
   const added = { ...CLI_CATALOG[0], name: 'new-command', group: 'work' as const };
   const output = renderTopHelp('tr', false, [...CLI_CATALOG, added]);
   expect(output.indexOf('  new-command')).toBeGreaterThan(output.indexOf('İş yürütme:'));
   expect(output.indexOf('  new-command')).toBeLessThan(output.indexOf('Modeller:'));
-  const handlers = Object.fromEntries(CLI_CATALOG.map(command => [command.name, async () => undefined]));
+  const calls: string[][] = [];
+  const handlers = Object.fromEntries(CLI_CATALOG.map(command => [command.name, async (argv: readonly string[]) => { calls.push([...argv]); }]));
   const bound = registerCliCommands(handlers as Parameters<typeof registerCliCommands>[0]);
-  for (const entry of bound) expect(entry.run).toBe(handlers[entry.path[0]!]);
+  // Every registered path reaches its own family handler with argv unchanged (a full action path is never rewritten).
+  for (const entry of bound.filter(item => item.path.length > 1)) {
+    calls.length = 0;
+    await entry.run([...entry.path, '--json'], {});
+    expect(calls, entry.path.join(' ')).toEqual([[...entry.path, '--json']]);
+  }
 });
 
 it.each([{ argv: [] }, { argv: ['-h'] }, { argv: ['--help'] }])('honors the environment locale in piped help: %j', async ({ argv }) => {
@@ -90,8 +99,8 @@ it.each([{ argv: [] }, { argv: ['-h'] }, { argv: ['--help'] }])('honors the envi
 
 
 it('enforces 80 display columns independently of golden matching', () => {
-  for (const locale of ['en', 'tr'] as const) for (const all of [false, true]) {
-    for (const line of renderTopHelp(locale, all).split('\n')) expect(displayWidth(line), line).toBeLessThanOrEqual(80);
+  for (const locale of ['en', 'tr'] as const) {
+    for (const line of renderTopHelp(locale).split('\n')) expect(displayWidth(line), line).toBeLessThanOrEqual(80);
   }
 });
 
@@ -159,5 +168,106 @@ it.each(['en', 'tr'] as const)('shows the terminal-specific example in %s and om
 it('removes unused help headings in both locales', () => {
   for (const language of ['en', 'tr'] as const) for (const heading of ['arguments', 'global_options', 'options', 'usage']) {
     expect(MESSAGE_REGISTRY.catalogs[language]).not.toHaveProperty(`cli.help.heading.${heading}`);
+  }
+});
+
+/* Help = behaviour (owner 2026-10-19). Each family's handler sources, read for the action words they dispatch on. */
+const HANDLER_SOURCES: Readonly<Record<string, readonly string[]>> = {
+  audit: ['cli-admin/internal/audit.ts'], backup: ['cli-admin/internal/backup.ts'], terminal: ['cli-terminal/internal/terminal.ts'],
+  init: ['cli-installation/internal/init.ts'], workers: ['cli-observe/internal/workers.ts'], run: ['cli-run/internal/run.ts', 'cli-run/internal/run-proposal.ts'],
+  task: ['cli-task/internal/task.ts', 'delivery-queue/internal/cli.ts'], pool: ['cli-admin/internal/pool.ts'], decide: ['cli-decision/internal/command.ts'],
+  models: ['cli-models/internal/models.ts', 'cli-models/internal/model-catalog.ts'], approval: ['cli-approval/internal/approvals.ts'],
+  identity: ['cli-identity/internal/command.ts', 'cli-identity/internal/distribution.ts'],
+  policy: ['cli/internal/entry.ts', 'cli-approval/internal/policy-grants.ts', 'cli-approval/internal/policy-delegations.ts', 'cli-approval/internal/policy-mcp.ts', 'cli-observe/internal/policy-vocabulary.ts'],
+  config: ['config/internal/command.ts'], mcp: ['cli/internal/mcp.ts#mcpCommand'], secret: ['cli-admin/internal/secret.ts'], toolchains: ['cli-admin/internal/toolchains.ts'],
+  runtime: ['cli-admin/internal/runtime.ts'], coding: ['cli-admin/internal/coding.ts'], inference: ['cli-models/internal/inference.ts'], operation: ['cli-admin/internal/operation.ts'],
+};
+/** Action words a handler source dispatches on: `argv[1]|action|verb === 'x'`, `[...].includes(argv[1]|action)` and an `ACTIONS` list.
+ * `file#name` reads only that exported function (a file that also holds a terminal slash handler with its own verbs). */
+function handlerActions(family: string): Set<string> {
+  const words = new Set<string>();
+  for (const entry of HANDLER_SOURCES[family]!) {
+    const [file, only] = entry.split('#') as [string, string | undefined];
+    const whole = readFileSync(new URL(`../../../src/surfaces/core/${file}`, import.meta.url), 'utf8');
+    const from = only ? whole.indexOf(`function ${only}(`) : 0, to = only ? whole.indexOf('\nexport ', from) : -1;
+    expect(from, entry).toBeGreaterThanOrEqual(0);
+    const source = whole.slice(from, to < 0 ? undefined : to);
+    const lists = [...source.matchAll(/\[([^[\]]*)\]\.includes\((?:argv\[1\]|action|verb)/g), ...source.matchAll(/ACTIONS[^=]*=\s*\[([^\]]*)\]/g)].map(match => match[1]!);
+    const compared = [...source.matchAll(/(?:argv\[1\]|\baction|\bverb|\.action)\s*[!=]==\s*('[^']*')/g)].map(match => match[1]!);
+    for (const text of [...lists, ...compared]) for (const [, word] of text.matchAll(/'([a-z][a-z-]*)'/g)) words.add(word!);
+  }
+  return words;
+}
+const catalogActions = (spec: CliCommandSpec): string[] => (spec.children ?? []).filter(child => !child.planned).flatMap(child => [child.name, ...catalogActions(child)]);
+
+it.each(CLI_CATALOG.filter(command => command.children).map(command => command.name))('dispatches exactly the catalog actions of %s (both directions)', family => {
+  const spec = CLI_CATALOG.find(command => command.name === family)! as CliCommandSpec;
+  expect([...handlerActions(family)].sort(), `${family}: handler actions not in the catalog, or catalog actions no handler reads`).toEqual([...new Set(catalogActions(spec))].sort());
+});
+
+it('passes an action word to its handler unchanged and refuses a bare family by naming the missing argument (exit 2)', async () => {
+  for (const spec of CLI_CATALOG.filter(command => command.children) as CliCommandSpec[]) {
+    expect(catalogDispatch(spec, [spec.name, 'not-an-action'])).toEqual({ argv: [spec.name, 'not-an-action'] });
+    for (const child of spec.children!.filter(item => !item.planned)) expect(catalogDispatch(spec, [spec.name, child.name, '--json'])).toEqual({ argv: [spec.name, child.name, '--json'] });
+  }
+  let errors = '';
+  const context = { root: mkdtempSync(join(tmpdir(), 'deckent-cli-gate-')), env: { NO_COLOR: '1', DECKENT_LANG: 'en' }, stdout: { write: () => undefined }, stderr: { write: (text: string) => { errors += text; } } };
+  expect(await main(['backup', '--json'], context)).toBe(2);
+  expect(errors).toContain('Missing argument: <action>.');
+  expect(errors).toContain('Actions: create | verify | restore');
+  expect(errors).toContain('Details: deckent backup --help');
+});
+
+it('keeps exactly the reviewed planned names out of dispatch and help until their slice implements them', async () => {
+  const planned = (CLI_CATALOG as readonly CliCommandSpec[]).flatMap(spec => (spec.children ?? []).filter(child => child.planned).map(child => `${spec.name} ${child.name}`));
+  expect(planned).toEqual(['run list', 'policy scopes']);
+  expect(hasCliAction('run', 'list')).toBe(false);
+  for (const name of planned) {
+    const [family, child] = name.split(' ') as [string, string];
+    const spec = CLI_CATALOG.find(command => command.name === family)! as CliCommandSpec;
+    expect(CLI_COMMANDS.map(command => command.path.join(' '))).not.toContain(name);
+    expect(renderTopHelp('en', false, [spec])).not.toMatch(new RegExp(`[ |]${child}(?=[ |\\n]|$)`));
+    expect(renderCommandHelp(CLI_COMMANDS.find(command => command.path.join(' ') === family)!, 'en')).not.toMatch(new RegExp(`^  ${child} `, 'm'));
+  }
+  let errors = '';
+  expect(await main(['run', 'list'], { root: mkdtempSync(join(tmpdir(), 'deckent-cli-planned-')), env: { NO_COLOR: '1' }, stdout: { write: () => undefined },
+    stderr: { write: (text: string) => { errors += text; } } })).toBe(2);
+  expect(errors).toContain('[CLI_USAGE]');
+});
+
+/** The reviewed read-only defaults (owner 2026-10-19 CLI review): a new default needs the same review (stop: a default would mutate). */
+const READ_DEFAULTS = { audit: 'verify', workers: 'list', pool: 'status', identity: 'profiles', policy: 'status', mcp: 'list', secret: 'list', runtime: 'describe' };
+
+it('runs only the reviewed read action when a family is called without one', async () => {
+  const reads = Object.fromEntries((CLI_CATALOG as readonly CliCommandSpec[]).flatMap(spec => spec.bare && spec.bare !== 'handler' && spec.bare.read ? [[spec.name, spec.bare.read]] : []));
+  expect(reads).toEqual(READ_DEFAULTS);
+  const calls: string[][] = [];
+  const handlers = Object.fromEntries(CLI_CATALOG.map(command => [command.name, async (argv: readonly string[]) => { calls.push([...argv]); }]));
+  const bound = registerCliCommands(handlers as Parameters<typeof registerCliCommands>[0]);
+  const family = (name: string) => bound.find(entry => entry.path.join(' ') === name)!;
+  for (const [name, read] of Object.entries(READ_DEFAULTS)) {
+    const flags = name === 'workers' ? ['--scope', 'live'] : [];
+    calls.length = 0; await family(name).run([name, ...flags, '--lang', 'tr'], {});
+    expect(calls, name).toEqual([[name, read, ...flags, '--lang', 'tr']]);
+  }
+  // A family that acts on its own keeps its argv; flags with values never turn into a default action.
+  for (const argv of [['terminal'], ['init'], ['models', '--json'], ['config'], ['doctor'], ['monitor', '--once'], ['policy', '--json', 'vocabulary'], ['inventory', '--scope', 'live']]) {
+    calls.length = 0; await family(argv[0]!).run(argv, {});
+    expect(calls, argv.join(' ')).toEqual([argv]);
+  }
+});
+
+it.each(['en', 'tr'] as const)('names the missing argument for every family without a runnable default (%s, exit 2, never the bare usage)', async language => {
+  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'config', 'monitor', 'doctor', 'paths']);
+  const catalog = MESSAGE_REGISTRY.catalogs[language];
+  for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
+    let errors = '';
+    const code = await main([spec.name], { root: mkdtempSync(join(tmpdir(), 'deckent-cli-bare-')), env: { NO_COLOR: '1', DECKENT_LANG: language },
+      initialize: () => undefined, stdout: { write: () => undefined }, stderr: { write: (text: string) => { errors += text; } } });
+    expect(code, spec.name).toBe(2);
+    const missing = spec.bare && spec.bare !== 'handler' && spec.bare.requires?.length ? spec.bare.requires[0]!.split(' ')[0]! : `<${catalog['cli.help.placeholder.action']}>`;
+    expect(errors, spec.name).toContain(catalog['cli.help.bare.missing']!.split('{')[0]!);
+    expect(errors, spec.name).toContain(missing);
+    expect(errors, spec.name).toContain(`deckent ${spec.name} --help`);
   }
 });
