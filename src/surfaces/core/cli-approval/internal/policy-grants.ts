@@ -5,6 +5,7 @@ import type { ApprovalCommandContext } from './context.js';
 import { policyMcpCommand } from './policy-mcp.js';
 import { policyDelegationsCommand } from './policy-delegations.js';
 import { policyStatusCommand } from './policy-summary.js';
+import { policyGrantsAll } from './policy-grants-all.js';
 
 /** A persisted standing approval as the CLI shows it (the engine's view; the surface owns no rule of its own). */
 export interface StandingGrantRow { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
@@ -18,7 +19,7 @@ export type PolicyUpgradeHandler = (root: string, scopeId: string, input: { read
   options: { readonly env: NodeJS.ProcessEnv }) => Promise<PolicyUpgradeView>;
 
 /**
- * `deckent policy grants --mine [--scope <id>] [--json]` lists the caller's own persisted standing approvals (read-only);
+ * `deckent policy grants [--mine] [--scope <id>] [--json]` lists the caller's own persisted standing approvals (read-only); `--all [--after <mark>]` everyone's (CA-1);
  * `deckent policy revoke <id> [--scope <id>] [--yes]` removes one through the same `policy.administer@1` operation that created it.
  * Until `/policy` exists (PERSISTENT-APPROVALS G6). A revoke asks `y/N` on a terminal; without one it needs an explicit `--yes`.
  */
@@ -27,7 +28,7 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
   if (argv[1] === 'status') return policyStatusCommand(argv, context);
   if (argv[1] === 'mcp') return policyMcpCommand(argv, context);
   if (argv[1] === 'upgrade') return policyUpgradeCommand(argv, context);
-  const action = argv[1]; let json = false, mine = false, all = false, yes = false, scope: string | undefined, language: string | undefined, id: string | undefined;
+  const action = argv[1]; let json = false, mine = false, all = false, yes = false, scope: string | undefined, language: string | undefined, id: string | undefined, after: string | undefined;
   if (action !== 'grants' && action !== 'revoke') throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i]!;
@@ -35,23 +36,23 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
     else if (flag === '--mine' && !mine && !all && action === 'grants') mine = true;
     else if (flag === '--all' && !all && !mine && action === 'grants') all = true;
     else if (flag === '--yes' && !yes && action === 'revoke') yes = true;
-    else if ((flag === '--scope' || flag === '--lang') && (flag === '--scope' ? scope : language) === undefined) {
+    else if ((flag === '--scope' || flag === '--lang' || (flag === '--after' && action === 'grants')) && (flag === '--scope' ? scope : flag === '--lang' ? language : after) === undefined) {
       const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
-      if (flag === '--scope') scope = value; else language = value;
+      if (flag === '--scope') scope = value; else if (flag === '--lang') language = value; else after = value;
     } else if (!flag.startsWith('-') && action === 'revoke' && id === undefined) id = flag;
     else throw ErrorRegistry.createError('CLI_USAGE');
   }
-  // C-APPROVE: `grants` lists the caller's own grants by default (`--mine` kept). Everyone's grants (`--all`) need a grantable read action the
-  // v13 template adds (I-POL, delta/policy-actions.md); until then the refusal names that, never a hard-coded admin check.
-  if (action === 'revoke' && !id) throw ErrorRegistry.createError('CLI_USAGE');
+  // C-APPROVE: `grants` lists the caller's own grants by default (`--mine` kept). CA-1: everyone's grants (`--all`) need the grantable read action
+  // `policy inspect-standing-grants` (v13 first-run: the founding admin); the policy decides, never a hard-coded admin check. `--after` pages `--all`.
+  if ((action === 'revoke' && !id) || (after !== undefined && !all)) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env };
   const config = await loadConfig(root, options);
   const locale = commandLocale(context, language);
-  if (all) throw ErrorRegistry.createError('CLI_POLICY_GRANTS_ALL_UNAVAILABLE');
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = scope ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  if (all) return policyGrantsAll(context, { root, scopeId, flagged: scope !== undefined, json, locale, env, ...(after === undefined ? {} : { after }) });
   const row = (grant: StandingGrantRow) => t('cli.policy.grants.row', { id: grant.id, tool: grant.tool, kind: grant.kind, text: grant.text }, locale);
   if (action === 'grants') {
     if (!context.listStandingGrants) throw ErrorRegistry.createError('CLI_USAGE');

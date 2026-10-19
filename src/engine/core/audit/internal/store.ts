@@ -12,6 +12,8 @@ export interface AuditStore {
   append(event: AuditEvent, seal: (sequence: number) => AuditRecord): AuditRecord;
   /** Records of one scope with `sequence > afterSequence`, ascending, at most `limit`; other scopes are never visible. */
   page(scopeId: string, afterSequence: number, limit: number): readonly AuditRecord[];
+  /** Records of one scope and subject kind with `sequence > afterSequence`, ascending, at most `limit` (optional: a reader that needs one kind). */
+  pageOfKind?(scopeId: string, kind: AuditEvent['subject']['kind'], afterSequence: number, limit: number): readonly AuditRecord[];
   /** Adds `by` to a summary counter of one scope (created at zero); `atMs` is the caller's trusted clock. */
   increment(scopeId: string, counter: string, by: number, atMs: number): AuditCounter;
   counters(scopeId: string): readonly AuditCounter[];

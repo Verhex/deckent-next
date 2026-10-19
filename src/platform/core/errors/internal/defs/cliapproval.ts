@@ -7,6 +7,6 @@ export const cliapprovalErrors: ErrorDefinitions = Object.freeze({
   // C-APPROVE: JSON input (`approval`, `decide`) checked against the application's own schema; names the first wrong field, exit 2 (usage).
   CLI_INPUT_FIELD_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INPUT_FIELD_INVALID', { ...p,
     problem: problem(p['problem'], l) }, l) }) },
-  // C-APPROVE: `policy grants --all` waits for its grantable read action (v13, I-POL); only the caller's own grants until then.
+  // C-APPROVE/CA-1: `policy grants --all` refused because policy does not grant `policy inspect-standing-grants` here (nothing read); names the next step.
   CLI_POLICY_GRANTS_ALL_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_POLICY_GRANTS_ALL_UNAVAILABLE', p, l) }) },
 });

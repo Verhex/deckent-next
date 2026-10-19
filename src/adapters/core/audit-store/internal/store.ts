@@ -58,6 +58,11 @@ export class SqliteAuditStore implements AuditCheckpointStore {
     return this.guard(() => Object.freeze(this.db.prepare('SELECT scope_id,sequence,event_id,kind,at_ms,key_id,mac,record FROM audit_events WHERE scope_id=? AND sequence>? ORDER BY sequence LIMIT ?')
       .all(scopeId, afterSequence, limit).map(row => this.decode(row as Record<string, unknown>))));
   }
+  pageOfKind(scopeId: string, kind: string, afterSequence: number, limit: number): readonly AuditRecord[] {
+    if (!identitySchema.safeParse(scopeId).success || !identitySchema.safeParse(kind).success || !Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1) throw new AuditError('AUDIT_INVALID');
+    return this.guard(() => Object.freeze(this.db.prepare('SELECT scope_id,sequence,event_id,kind,at_ms,key_id,mac,record FROM audit_events WHERE scope_id=? AND kind=? AND sequence>? ORDER BY sequence LIMIT ?')
+      .all(scopeId, kind, afterSequence, limit).map(row => this.decode(row as Record<string, unknown>))));
+  }
   increment(scopeId: string, counter: string, by: number, atMs: number): AuditCounter {
     if (!identitySchema.safeParse(scopeId).success || !identitySchema.safeParse(counter).success || !Number.isSafeInteger(by) || by < 1
       || !Number.isSafeInteger(atMs) || atMs < 0) throw new AuditError('AUDIT_INVALID');

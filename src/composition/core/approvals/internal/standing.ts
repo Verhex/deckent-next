@@ -1,9 +1,9 @@
 import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, resolveAuditedApprovalAssurance, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
-  PolicyAdministrationInspection, PolicyTemplateUpgrade, firstRunServiceIdentity, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
+  PolicyAdministrationInspection, PolicyTemplateUpgrade, StandingGrantsInspection, firstRunServiceIdentity, type StandingGrantsPage, type PolicyAdministrationQuery, type PolicyAdministrationStatus, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -42,6 +42,20 @@ export async function withPolicyAdministration<T>(root: string, scopeId: string,
 }
 export function listConfiguredStandingGrants(root: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<readonly StandingGrantView[]> {
   return withStanding(root, scopeId, options, 'read', (standing, person) => standing.list(scopeId, person));
+}
+/** CA-1 `deckent policy grants --all`: everyone's standing approvals, only if `policy inspect-standing-grants` allows this person; the ledger opens read-only after that. */
+export async function listConfiguredAllStandingGrants(root: string, input: { readonly scopeId: string; readonly after?: string }, options: ConfigLoadOptions = {}): Promise<StandingGrantsPage> {
+  try {
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(root, input.scopeId, options, 'read');
+    const history = { open: async (scopeId: string) => {
+      const store = await openReadOnlyAuditStore(await path(), config.storage.sqlite);
+      try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile));
+        return { page: (after: number, limit: number) => audit.listKind(scopeId, 'authority-change', after, limit).map(({ sequence, event }) =>
+          ({ sequence, atMs: event.atMs, inputDigest: event.subject.kind === 'authority-change' ? event.subject.inputDigest : '' })), close: () => store.close() };
+      } catch (error) { store.close(); throw error; } } };
+    return await new StandingGrantsInspection({ policy: createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), history })
+      .list({ schemaVersion: 1, scopeId: input.scopeId, ...(input.after === undefined ? {} : { after: input.after }) }, principal);
+  } catch (error) { throw queryFailure(error); }
 }
 /** Removes one of the caller's own standing grants after `confirm` (shown the grant); false = the person declined, nothing changed. */
 export function revokeConfiguredStandingGrant(root: string, input: { readonly scopeId: string; readonly id: string; readonly reason: string;

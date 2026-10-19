@@ -16,6 +16,7 @@ export { McpToolGrants, type McpToolGrantOutcome, type McpToolGrantTarget } from
 export { PolicyTemplateUpgrade, type TemplateUpgradeMissing, type TemplateUpgradeResult } from './internal/template-upgrade.js';
 export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
 export type { SessionStandingBinding } from './internal/standing.js';
+export { STANDING_GRANTS_LIST, StandingGrantsInspection, standingGrantsQuerySchema, type AuthorityChangeHistory, type StandingGrantEntry, type StandingGrantsPage } from './internal/standing-inspection.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';
 export type { StandingCellName } from './internal/standing.js';
 export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceRegistry, createTurnDecisionCapabilities, minimumApprovalAssurance, operationApprovalFacts,
