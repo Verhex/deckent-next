@@ -215,9 +215,12 @@ function fakePort(log: string[], options: { queue?: boolean; targets?: string[] 
     },
     async verificationRuns() { return []; },
     ...(options.queue ? { queue: {
-      async prepareCurrent(_t: unknown, commandId: string) { log.push('enqueued'); return { commandId, state: 'awaiting-confirmation' }; },
+      async prepareCurrent(_t: unknown, commandId: string) { log.push('enqueued'); return { commandId, state: 'awaiting-confirmation', target: { kind: 'git-ref', id: 'refs/heads/main' },
+        display: { labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.next.prepare-current' }, basis: null,
+        position: 1, outcome: null, reason: null, responsibility: 'human', nextAction: 'confirm-batch' }; },
       async reattempt() { return false; }, async inspect() { return null; },
-      async confirm(_s: string, _c: string, ask: (view: unknown) => Promise<boolean>) { if (!await ask({ operation: 'publish', target: { id: 'refs/heads/main' } })) throw refuse(); log.push('confirmed'); return {}; },
+      async confirm(_s: string, _c: string, ask: (view: unknown) => Promise<boolean>) { if (!await ask({ operation: 'publish', target: { kind: 'git-ref', id: 'refs/heads/main' }, display: { labelKey: 'queue.git.target' }, digest: 'd'.repeat(64),
+        expiresAt: 0, items: [] })) throw refuse(); log.push('confirmed'); return {}; },
     } } : {}),
   };
 }
@@ -245,5 +248,8 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
   const adopted = await run(['deliver', 'deliver', 'yes', 'ref:refs/heads/main', 'yes', 'exit'], { targets: ['refs/heads/main'] });
   expect(adopted.log).toEqual(['preview', 'delivered', 'adopted:refs/heads/main']);
   // A queue target: enqueue, then the exact batch card; declining it publishes nothing.
-  expect((await run(['deliver', 'deliver', 'no'], { queue: true })).log).toEqual(['preview', 'enqueued', 'error:DELIVERY_CONFIRMATION_DECLINED']);
+  const queued = await run(['deliver', 'deliver', 'no'], { queue: true });
+  expect(queued.log).toEqual(['preview', 'enqueued', 'error:DELIVERY_CONFIRMATION_DECLINED']);
+  expect(queued.printed.join('\n')).toContain('Awaiting human confirmation');
+  expect(queued.cards[2]!.body).toContain('Write refs/heads/main?');
 });
