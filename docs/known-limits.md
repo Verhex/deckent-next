@@ -217,6 +217,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   adapter to run ERP effects, including any ERP that requires authentication.
 - **There is no `deckent operation list`.** You can look up one operation with `deckent operation inspect --scope <id>
   --command-id <id>`, so you must keep the command ids you used. *Impact:* pending and uncertain effects cannot be listed.
+  (`deckent operation` alone lists the configured operation catalog, not the commands that ran.)
+- **`deckent operation execute` takes the command as JSON on a terminal too.** There is no guided flow yet (catalog operation →
+  target → parameters from a schema → preview → approval → wait on one screen); `--schema` prints the contract and a bad document
+  names its field. *Impact:* a person writes the command document by hand or uses a script.
 - **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, Deckent does not
   retry it by itself and the record keeps the target busy. When the target can confirm afterwards, resend the same command id and
   its evidence settles the record; if it cannot, the record stays unresolved. *Impact:* a person cannot close it yet. Closing

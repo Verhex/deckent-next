@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { ErrorRegistry } from '#platform/index.js';
 import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
-import { resolveLocale, t, type Locale } from '#platform/index.js';
+import { MESSAGE_REGISTRY, resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-import { configServiceState, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type DescribeService } from '#engine/index.js';
-import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
-import { applyWord, renderConfigExplanation, renderConfigInspection, sourceWord } from './render.js';
+import { configServiceState, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type ConfigFieldView, type DescribeService } from '#engine/index.js';
+import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
+import { cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
+import { applyWord, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
+import { configValueModel } from './choices.js';
+import { configChoiceWords, narrowConfigPanel, renderConfigKeyList, renderConfigLeaves, renderConfigOverrides, type ConfigPanelOpener } from './cli-view.js';
 
 export type ConfigApplicationFactory = (root: string, options: ConfigLoadOptions) => ConfigApplication;
 export interface ConfigCommandContext extends CliBaseContext {
@@ -16,15 +19,17 @@ export interface ConfigCommandContext extends CliBaseContext {
   /** Read-only service describe: a restart-apply change is compared with what the running service started with. */
   describeRuntimeService?: DescribeService;
   resolveConfigPrincipal?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<VerifiedPrincipal>;
+  /** C-SETUP: the `/config` window on a person's terminal (bare `deckent config`, `config set <key>` without a value). */
+  openConfigPanel?: ConfigPanelOpener;
 }
-interface Parsed { readonly args: string[]; json: boolean; global: boolean; help: boolean; language?: string; expect?: string; scope?: string; commandId?: string }
+interface Parsed { readonly args: string[]; json: boolean; global: boolean; help: boolean; verbose: boolean; language?: string; expect?: string; scope?: string; commandId?: string }
 function parse(argv: readonly string[]): Parsed {
-  const result: Parsed = { args: [], json: false, global: false, help: false };
+  const result: Parsed = { args: [], json: false, global: false, help: false, verbose: false };
   const valued = { '--lang': 'language', '--expect': 'expect', '--scope': 'scope', '--command-id': 'commandId' } as const;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (arg === '--json' || arg === '--global' || arg === '--help' || arg === '-h') {
-      const key = arg === '--json' ? 'json' : arg === '--global' ? 'global' : 'help'; if (result[key]) throw ErrorRegistry.createError('CLI_USAGE'); result[key] = true;
+    if (arg === '--json' || arg === '--global' || arg === '--help' || arg === '-h' || arg === '--verbose') {
+      const key = arg === '--json' ? 'json' : arg === '--global' ? 'global' : arg === '--verbose' ? 'verbose' : 'help'; if (result[key]) throw ErrorRegistry.createError('CLI_USAGE'); result[key] = true;
     } else if (arg === '--no-color') continue;
     else if (Object.hasOwn(valued, arg)) {
       const key = valued[arg as keyof typeof valued], value = argv[++i];
@@ -36,35 +41,62 @@ function parse(argv: readonly string[]): Parsed {
 }
 export async function configCommand(argv: readonly string[], context: ConfigCommandContext): Promise<void> {
   const parsed = parse(argv), root = context.root ?? process.cwd(), env = context.env ?? process.env;
-  let locale = resolveLocale(parsed.language, env); context.onLocale?.(locale);
+  // L-KIT: one language per call (flag, environment, config `language`, system); the host already read config, so `explain`/`validate` follow it too.
+  let locale = commandLocale(context, parsed.language);
+  const relocale = (language: unknown) => {
+    if (!parsed.language && !context.locale) { locale = resolveLocale(undefined, env, typeof language === 'string' ? language : undefined); context.onLocale?.(locale); }
+  };
   const sinks = { json: parsed.json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const action = parsed.args[0], keyPath = parsed.args[1], isWrite = action === 'set' || action === 'unset';
   const options: ConfigLoadOptions = { env, heal: false, onWarning: warning => emit(warning, { ...sinks, level: 'warning', render: value => value.message }) };
+  const style = () => cliTableStyle(context), person = () => cliMode(context, parsed.json).mode === 'interactive';
   if (parsed.help) { emit(t('config.surface.help', {}, locale), { ...sinks, json: false }); return; }
   if (!isWrite && (parsed.expect || parsed.scope || parsed.commandId)) throw ErrorRegistry.createError('CLI_USAGE');
+  if (parsed.verbose && action !== 'explain') throw ErrorRegistry.createError('CLI_USAGE');
   if (action === 'get') {
     if (parsed.args.length > 2) throw ErrorRegistry.createError('CLI_USAGE');
     const config = await loadConfig(root, { ...options, heal: true, globalOnly: parsed.global });
-    locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
+    relocale(config.language);
     // Config owns its bootstrap fence, recovery lock and warnings. Identity observation follows that load,
     // so the dispatcher's non-healing language/identity probe cannot preempt recovery or inspect project for --global.
     await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
-    const display = configDisplayView(config), value = keyPath === undefined ? display : getConfigValue(display, keyPath);
-    emit(value, { ...sinks, mode: config.output_mode, render: formatValue }); return;
+    const display = configDisplayView(config);
+    let value: unknown;
+    try { value = keyPath === undefined ? display : getConfigValue(display, keyPath); }
+    catch (error) {
+      // An optional section (inference_serving, operations, ...) the registry declares but this installation leaves out is "not defined", not unknown.
+      if (keyPath === undefined || !await declared(context, root, options, keyPath)) throw error;
+      emit(null, { ...sinks, mode: config.output_mode, render: () => t('clisetup.config.undefined', { key: keyPath }, locale) }); return;
+    }
+    // A person reads a group as rows (one per leaf, cut to the width); JSON and a single value keep the compatible output.
+    const grouped = !parsed.json && config.output_mode !== 'json' && value !== null && typeof value === 'object';
+    emit(value, { ...sinks, mode: config.output_mode, render: grouped ? data => renderConfigLeaves(data, keyPath ?? '', locale, style()) : formatValue }); return;
   }
   await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
   if (!context.configApplication) throw ErrorRegistry.createError('CLI_USAGE', { params: { usage: t('config.surface.unavailable', {}, locale) } });
   const app = context.configApplication(root, options), layer = parsed.global ? 'global' as const : 'project' as const;
   if (action === undefined && parsed.args.length === 0) {
+    // A person on a terminal gets the terminal's own `/config` window (one implementation); everyone else the overrides summary.
+    if (!parsed.json && !parsed.global && context.openConfigPanel && person()) { await openPanel(context, root, options, locale, null, sinks); return; }
     const view = await app.inspect({ layer });
-    locale = resolveLocale(parsed.language, env, view.fields.find(field => field.key === 'language')?.value as string | undefined); context.onLocale?.(locale);
-    emit(view, { ...sinks, render: value => renderConfigInspection(value, locale) }); return;
+    relocale(view.fields.find(field => field.key === 'language')?.value);
+    emit(view, { ...sinks, render: value => renderConfigOverrides(value, locale, style()) }); return;
   }
   if (action === 'explain' && parsed.global) throw ErrorRegistry.createError('CLI_USAGE');
+  if (action === 'explain' && parsed.args.length === 1) {
+    const view = await app.inspect({});
+    emit(view.fields.map(field => ({ key: field.key, description: describe(field, locale) })), { ...sinks,
+      render: () => renderConfigKeyList(view.fields, field => describe(field, locale), locale, style()) }); return;
+  }
   if (action === 'explain' && keyPath && parsed.args.length === 2) {
-    emit(await app.explain({ keyPath }), { ...sinks, render: value => renderConfigExplanation(value, locale) }); return;
+    emit(await app.explain({ keyPath }), { ...sinks, render: value => renderConfigExplanation(value, locale, 80, parsed.verbose) }); return;
   }
   if (action === 'validate' && parsed.args.length === 1) { emit(await app.validate(), { ...sinks, render: () => t('config.surface.valid', {}, locale) }); return; }
+  if (action === 'set' && keyPath && parsed.args.length === 2) {
+    // A value is chosen, never typed, by a person (owner 10-08): the window narrowed to this key; off a terminal the refusal lists what it takes.
+    if (!parsed.json && !parsed.global && context.openConfigPanel && person()) { await openPanel(context, root, options, locale, keyPath, sinks); return; }
+    throw await valueMissing(context, root, options, locale, keyPath);
+  }
   if (!isWrite || !keyPath || parsed.args.length !== (action === 'set' ? 3 : 2)) throw ErrorRegistry.createError('CLI_USAGE');
   let value: unknown;
   if (action === 'set') { try { value = JSON.parse(parsed.args[2]!); } catch { throw ErrorRegistry.createError('CLI_USAGE'); } }
@@ -81,6 +113,32 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
   const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
   emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale).join('\n') });
+}
+/** The registry declares `keyPath` (its explain resolves) although this installation's configuration leaves the section out. */
+async function declared(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, keyPath: string): Promise<boolean> {
+  if (!context.configApplication) return false;
+  try { return (await context.configApplication(root, options).explain({ keyPath })).key === keyPath; } catch { return false; }
+}
+const describe = (field: ConfigFieldView, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description;
+/** `config set <key>` without a value off a terminal: exit 2, naming the missing value and what this key takes (its choices or schema). */
+async function valueMissing(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, keyPath: string) {
+  const field = await context.configApplication!(root, options).explain({ keyPath });
+  const model = await configValueModel(field, root, locale, context.configChoiceSources?.(root, options));
+  return ErrorRegistry.createError('CLI_CONFIG_VALUE_MISSING', { params: { key: keyPath, values: configChoiceWords(model.choices, schemaWord(field.schema, locale), locale) }, locale });
+}
+/** Opens the `/config` window (whole, or narrowed to one key) and prints what it left: its summaries, then an approval to decide. */
+async function openPanel(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, keyPath: string | null,
+  sinks: { stdout?: import('#platform/index.js').OutputSink; stderr?: import('#platform/index.js').OutputSink }) {
+  const { configPanelPort } = await import('./panel.js');
+  // Every write the window makes leaves its full outcome (a pending approval names the command that applies it); printed once the window closes.
+  const written: string[] = [], keep = <T extends { readonly lines: readonly string[] }>(outcome: T) => { written.push(...outcome.lines); return outcome; };
+  const base = configPanelPort(root, context, options, locale, undefined, 'cli'), records = base.records;
+  const port = { ...base, write: async (request: Parameters<typeof base.write>[0]) => keep(await base.write(request)),
+    records: { ...records, commit: async (token: string) => keep(await records.commit(token)) } };
+  const pushed = await context.openConfigPanel!(keyPath ? narrowConfigPanel(port, keyPath) : port, { stdin: (context.stdin ?? process.stdin) as NodeJS.ReadStream,
+    stdout: (context.stdout ?? process.stdout) as NodeJS.WriteStream, env: context.env ?? process.env, locale, ...(context.signal ? { signal: context.signal } : {}) });
+  const lines = written.length ? written : pushed;
+  if (lines.length) emit(lines.join('\n'), { ...sinks, json: false });
 }
 function renderConfigChanged(keyPath: string, layer: 'project' | 'global', apply: 'live' | 'restart', result: { readonly backupPath: string | null; readonly overridden: boolean },
   service: Awaited<ReturnType<typeof configServiceState>>, locale: Locale): string[] {
@@ -117,7 +175,7 @@ const PENDING_WRITES_KEPT = 32;
 
 /** One terminal config write (`/config set|unset`, `/config key=value`, the `/config` panel, T3 L4): the principal'd port with the pending-command memory. */
 export async function terminalConfigWrite(root: string, request: Omit<ConfigWriteRequest, 'scopeId' | 'commandId'>, context: ConfigCommandContext, options: ConfigLoadOptions,
-  locale: Locale): Promise<{ readonly status: ConfigChangeOutcome['status']; readonly lines: readonly string[]; readonly approvalId: string | null }> {
+  locale: Locale, surface: 'terminal' | 'cli' = 'terminal'): Promise<{ readonly status: ConfigChangeOutcome['status']; readonly lines: readonly string[]; readonly approvalId: string | null }> {
   const scopeId = ((await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   const layer = request.layer ?? 'project';
@@ -128,7 +186,11 @@ export async function terminalConfigWrite(root: string, request: Omit<ConfigWrit
   if (outcome.status === 'approval-pending') {
     pendingWrites.delete(key); pendingWrites.set(key, { commandId: outcome.commandId, expect: outcome.expect });
     while (pendingWrites.size > PENDING_WRITES_KEPT) pendingWrites.delete(pendingWrites.keys().next().value!);
-    return { status: outcome.status, lines: renderConfigPending(outcome, locale, 'terminal'), approvalId: outcome.approval.approvalId };
+    // `deckent config` (C-SETUP) is one process: the window's pending memory ends with it, so the line names the exact command that applies it.
+    const lines = surface === 'terminal' ? renderConfigPending(outcome, locale, 'terminal') : [renderConfigPending(outcome, locale, 'cli')[0]!,
+      t('clisetup.config.approvalApply', { action: request.action, key: request.keyPath, scope: scopeId, commandId: outcome.commandId, expect: outcome.expect ?? 'absent',
+        value: request.action === 'set' ? ` '${JSON.stringify(request.value ?? null).replace(/'/gu, `'\\''`)}'` : '', layer: layer === 'global' ? ' --global' : '' }, locale)];
+    return { status: outcome.status, lines, approvalId: outcome.approval.approvalId };
   }
   pendingWrites.delete(key);
   const field = await context.configApplication!(root, options).explain({ keyPath: request.keyPath });

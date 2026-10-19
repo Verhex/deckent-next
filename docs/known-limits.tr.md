@@ -219,6 +219,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   için kendi adaptörünüzü yazmalısınız.
 - **`deckent operation list` yok.** Tek bir operasyona `deckent operation inspect --scope <id> --command-id <id>` ile
   bakabilirsiniz, yani kullandığınız komut kimliklerini saklamalısınız. *Etki:* bekleyen ve belirsiz etkiler listelenemez.
+  (Tek başına `deckent operation` yapılandırılmış işlem kataloğunu listeler, çalışmış komutları değil.)
+- **`deckent operation execute` terminalde de komutu JSON olarak alır.** Adım adım akış henüz yok (katalogdan işlem → hedef →
+  şemadan parametreler → önizleme → onay → aynı ekranda bekleme); `--schema` sözleşmeyi basar ve hatalı belge alanını adıyla
+  söyler. *Etki:* kişi komut belgesini elle ya da bir betikle yazar.
 - **Belirsiz bir ERP yazımından yeniden göndermeden başka çıkış yok.** Hedef yazımın olup olmadığını söyleyemiyorsa Deckent onu
   kendiliğinden yeniden denemez ve kayıt hedefi meşgul tutar. Hedef sonradan doğrulayabiliyorsa aynı komut kimliğini yeniden
   gönderin, kanıtı kaydı kesinleştirir; doğrulayamıyorsa kayıt çözümsüz kalır. *Etki:* bir kişi onu henüz kapatamaz.

@@ -25,7 +25,8 @@ export interface ConfigRecordPort {
 }
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 export function configRecordSupported(key: string) { return (CONFIG_RECORD_KEYS as readonly string[]).includes(key) || (CONFIG_IMPORT_KEYS as readonly string[]).includes(key); }
-export function configRecordPort(root: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, discovery?: ConfigChoiceSourcePort): ConfigRecordPort {
+export function configRecordPort(root: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, discovery?: ConfigChoiceSourcePort,
+  surface: 'terminal' | 'cli' = 'terminal'): ConfigRecordPort {
   let session: { view: ConfigRecordView; value: unknown[]; writeKey: string; container: Record<string, unknown> | null; layoutRoot: string } | null = null;
   let prepared: { token: string; action: 'set' | 'unset'; writeKey: string; value: unknown; expect: string | null } | null = null;
   const paths = new Set<string>();
@@ -158,7 +159,7 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
     async commit(token) {
       if (!prepared || prepared.token !== token) throw refused();
       const { value, expect, writeKey, action } = prepared, { view } = active(); prepared = null;
-      return terminalConfigWrite(root, { action, keyPath: writeKey, value, layer: view.layer, expect }, context, options, locale);
+      return terminalConfigWrite(root, { action, keyPath: writeKey, value, layer: view.layer, expect }, context, options, locale, surface);
     },
   };
 }
