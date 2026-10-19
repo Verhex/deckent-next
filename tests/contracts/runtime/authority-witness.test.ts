@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RUNTIME_SERVICE_AUTHORITY_WRITE_OPERATIONS, requireAuthorityWitness, runtimeServiceOperationSchema } from '#engine/index.js';
+import { RUNTIME_SERVICE_AUTHORITY_WRITE_OPERATIONS, assertAuthorityWitness, requireAuthorityWitness, runtimeServiceOperationSchema } from '#engine/index.js';
 
 // SEC-1 (owner A48-D5): the engine contract alone — which operations need the witness, that the MCP actor never passes, and that every other
 // operation is untouched (the witness is not even asked).
@@ -22,5 +22,12 @@ describe('authority witness contract (SEC-1)', () => {
       await expect(requireAuthorityWitness(operation, 'mcp', probe.port)).resolves.toBeUndefined();
       expect(probe.asked()).toBe(0);
     }
+  });
+  it('the same assertion serves any other authority write (MCP server trust): witness required, MCP actor refused', async () => {
+    await expect(assertAuthorityWitness('mcpTrust', undefined, witness(true).port)).resolves.toBeUndefined();
+    await expect(assertAuthorityWitness('mcpTrust', undefined, witness(false).port)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED', params: { operation: 'mcpTrust' } });
+    const probe = witness(true);
+    await expect(assertAuthorityWitness('mcpTrust', 'mcp', probe.port)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(probe.asked()).toBe(0);
   });
 });
