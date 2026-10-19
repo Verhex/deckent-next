@@ -13,7 +13,7 @@ export interface TemplateUpgradeResult {
   readonly schemaVersion: 1;
   /** `preview`: would add `rules`; `upgraded`: added now; `current`: nothing to add; `refused`: `missing` names why (nothing written);
    * `unavailable`: not a first-run lineage, or (rollback) its archived history is missing (`reason`); `rolled-back` / `nothing-to-roll-back`: upgrade
-   * rules removed / none held (`reason` `installed-with-template`: the installer wrote this policy with a template that already had the delta). */
+   * rules removed / none held (`reason` `no-upgrade-recorded`: a current-template policy with no archived upgrade). */
   readonly status: 'preview' | 'upgraded' | 'current' | 'refused' | 'unavailable' | 'rolled-back' | 'nothing-to-roll-back' | 'conflict';
   readonly revision: string;
   readonly rules: readonly PolicyGrant[];
@@ -82,8 +82,9 @@ export class PolicyTemplateUpgrade {
     if (input.mode === 'rollback') {
       const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, this.names);
       const history = await this.deps.policy.authorityHistory?.();
-      // J3: a policy still at the installer's own revision of a template that already carried the delta (v13+; no `a-`/`m-` write since) has no
-      // upgrade to undo, even with an empty archive. Any later write without archived history stays `history-unavailable` (fail closed).
+      // J3: a policy at a template's own revision that already carries the delta (v13+; no `a-`/`m-` write since) with no archived upgrade has nothing
+      // provable to undo (a fresh install, or an exact installer upgrade whose archive is gone: the two are identical on disk) → `nothing-to-roll-back`
+      // `no-upgrade-recorded`, nothing written. Any other policy without archived history stays `history-unavailable` (fail closed).
       const template = policy.revision.split('+').some(part => part.startsWith('a-') || part.startsWith('m-')) ? null : matchFirstRunPolicyTemplate(policy.policyRevision);
       const installed = template !== null && template.version >= FIRST_RUN_DELTA_VERSION;
       if (!history || history.length === 0 && !installed) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
@@ -111,7 +112,7 @@ export class PolicyTemplateUpgrade {
         if (changes[0] === added && JSON.stringify(added.after.grants.find(item => item.id === rule.id)) === JSON.stringify(rule)) held.push(rule.id);
         else conflicts.push(rule.id);
       }
-      if (!held.length) return result('nothing-to-roll-back', { conflicts, ...(installed && chain.length === 0 ? { reason: 'installed-with-template' } : {}) });
+      if (!held.length) return result('nothing-to-roll-back', { conflicts, ...(installed && chain.length === 0 ? { reason: 'no-upgrade-recorded' } : {}) });
       const change = { schemaVersion: 1 as const, changes: held.map(id => ({ kind: 'grant.remove' as const, id })) };
       const planned = planPolicyChange(files.policy, files.bindings, change);
       const missing = this.missing(policy, input.principal, input.scopeId, planned.touched);

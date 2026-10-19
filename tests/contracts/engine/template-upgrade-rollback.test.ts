@@ -175,7 +175,7 @@ it.skipIf(process.platform !== 'linux')('Astra 2598: a governed upgrade whose `l
 it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, detects changed-then-restored content, and refuses missing history without a card or write', async () => {
   // J3: a fresh install written by the current template has no upgrade to undo — "nothing to roll back" with its typed reason, never "not a first-run policy".
   const fresh = await fixture(undefined, false), initial = await fresh.bytes();
-  expect(await fresh.rollback()).toMatchObject({ status: 'nothing-to-roll-back', reason: 'installed-with-template' });
+  expect(await fresh.rollback()).toMatchObject({ status: 'nothing-to-roll-back', reason: 'no-upgrade-recorded' });
   expect(await fresh.bytes()).toBe(initial); expect(fresh.cards).toBe(0);
   const restored = await fixture(), before = JSON.parse(await restored.bytes());
   await restored.source.updateAuthority(() => ({ write: { policy: { ...before, revision: 'a-edited', grants: before.grants.map((rule: { id: string }) =>

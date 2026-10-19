@@ -108,7 +108,7 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
       : view.status === 'refused' ? t('cli.policy.upgrade.refused', {}, locale) : view.status === 'conflict' ? t('cli.policy.upgrade.conflict', { revision: view.revision }, locale)
       : view.status === 'rolled-back' ? t('cli.policy.upgrade.rolledBack', { ids: view.reason ?? '-' }, locale)
       // J3: a fresh first-run install has no upgrade to undo; a rollback without archived history is refused — neither is "not a first-run policy".
-      : view.status === 'nothing-to-roll-back' ? view.reason === 'installed-with-template' ? t('cli.policy.upgrade.installed', { scope: scopeId }, locale) : t('cli.policy.upgrade.nothing', {}, locale)
+      : view.status === 'nothing-to-roll-back' ? view.reason === 'no-upgrade-recorded' ? t('cli.policy.upgrade.noUpgradeRecorded', { scope: scopeId }, locale) : t('cli.policy.upgrade.nothing', {}, locale)
       : view.reason === 'history-unavailable' ? t('cli.policy.upgrade.historyMissing', { scope: scopeId }, locale)
       : t('cli.policy.upgrade.unavailable', { reason: upgradeReason(view.reason, locale) }, locale);
     // A preview that would be refused says so before anything is tried.
