@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "groups": {
+    "inspect": ["inspect", "transcript", "patch-preview", "integration-inspect"],
+    "work": ["execute", "evaluate", "accept", "reject"],
+    "deliver": ["patch-prepare", "integration-check", "integration-prepare", "integration-deliver", "integration-adopt", "integration-rollback"],
+    "queue": ["integration-queue-enqueue", "integration-queue-list", "integration-queue-inspect", "integration-queue-confirm", "integration-queue-rollback"]
+  },
+  "menu": { "runsShown": 20, "tasksShown": 50, "filesShown": 50, "staleRetries": 2, "staleCodes": ["RUN_STORE_CONFLICT"] },
+  "inspect": { "denyPathsShown": 5, "exclusionsListedUpTo": 5 }
+}

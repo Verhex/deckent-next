@@ -3135,7 +3135,11 @@
         "src/engine/core/task-evaluation",
         "src/engine/core/dispatch",
         "src/engine/core/workspace-patch",
-        "src/capabilities/core/artifacts"
+        "src/capabilities/core/artifacts",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/effect-confirmation",
+        "src/surfaces/core/terminal-delivery",
+        "src/engine/core/effect"
       ],
       "plan": "SURFACES"
     },

@@ -136,6 +136,24 @@ against HEAD and the affected index/worktree files. Use the same identity flags 
 and the check's `--proposal <code>`, and requires `prepare-integration` policy permission.
 Both commands support `--json` and use local storage without a runtime service.
 
+`deckent task` for a person (alpha.48 C-TASK). Every `task` view uses the call's language (`--lang`, then
+`DECKENT_LANGUAGE`, then config `language`, then the system locale); `transcript` and `patch-preview` keep their
+format. `--run` takes a short id: an exact id or the unique prefix of a Run the terminal's `/runs` lists resolves;
+several candidates are `CLI_ID_AMBIGUOUS` (exit 2); anything else is passed on unchanged. `task inspect` reads in
+`run inspect` order (task and state, request, result, what an accepted result rests on, delivery); a secret-gate list
+longer than five paths is one line naming the deny-list exceptions, and `--verbose` adds every path and the acceptance
+metadata line. In `patch-preview` a diff line whose control characters were neutralised is followed by a
+`\ control characters in the line above were neutralised` meta line (`--stat` and `--json` unchanged). On a real
+terminal, `task inspect|transcript|patch-preview` without `--run`/`--task` pick scope, Run and task; bare
+`deckent task` (once the catalog marks the family bare-handled) opens a menu of only the task's valid actions:
+inspect, transcript and diff once an attempt exists, accept/reject while a decision is open, delivery for an accepted
+patch awaiting delivery. Accept/reject read the revision just before their card and generate the command id; a Run
+that changed meanwhile is refused (`RUN_STORE_CONFLICT`), read again and asked again. Delivery uses the same port and
+applications as `/deliver`; every write (candidate + delivery, adoption, queue batch) waits for its own exact card,
+and Enter alone, Esc or silence (the session approval time) answer no. A pipe, AI agent, CI or `--json` caller is never
+asked: bare `deckent task` names the missing argument and lists the actions in four groups (Inspect, Execute and
+evaluate, Deliver, Queue), exit 2. The AI path keeps every long name and flag.
+
 Preparation creates a separate Git candidate under the configured workspaces resource's
 `integrations` directory. It contains the recorded base plus patch and leaves source files,
 HEAD and index unchanged. A prepared candidate is not Task acceptance or live delivery.
