@@ -251,6 +251,19 @@ altındadır; ledger'ın değiştirilmesi restore niyetini silemez. Güvenilir y
 desteklenmeyen platformda restore reddedilir. KMS, bağımsız inceleme, paket kabulü ve
 owner DOGFOOD kararı ayrı kapılardır.
 
+## Yönetim komutları insan diliyle (alpha.48, owner CLI incelemesi 2026-10-19)
+
+Eylemsiz `deckent pool`, `audit`, `secret`, `runtime`, `backup` ve `toolchains` okur: havuzun durumu ve kapasitesi, son checkpoint ile
+audit sonucu, anahtarlar (ad · kullanan · depo, değer asla), servis durumu (derleme, yapılandırma, çalışan işler, soket; başlangıç
+zamanı bir sonraki protokol sürümüne kadar yok), kurtarma setleri (`state/backups/recovery`: tarih · boyut · tür · son doğrulama ·
+ad) ve araç tablosu (ağ kullanımı önce yazılır). `deckent paths` yerleşimi var/yok bilgisiyle gruplar ve gerçekte kullanılan soketi
+(`/tmp/dk-<uid>-<sha256>/s`) adlandırır. Boru hattında çıktı metindir; JSON yalnız `--json` ile, aynı sözleşmelerle.
+Değişiklik sessiz kapsam almaz: terminal dışında `pool hold|resume|set-capacity|quota-release`, `secret set|delete|store --to` ve
+`backup create|restore` `--scope` ister; kimliksiz `runtime shutdown` `--reason` ister. Kişinin terminalinde kapsam, set, anahtar ya da
+depo seçilir ve değişiklik önce kartta onaylanır (AI, CI ya da boru hattına asla sorulmaz): daha zayıf gizli depo için ikinci bir uyarı
+kartı gerekir, geri yükleme hedefi, servis durumunu ve değiştirilen dosyaların nerede saklandığını gösterir, `toolchains update`
+derlemeden önce planı gösterir, `audit rebaseline` kartla onaylanır.
+
 ## Sağlayıcı anahtarları, modeller ve harcama
 
 Anahtarlar: `deckent secret set AD` (gizli istem ya da stdin) anahtarı `secrets.store` ile seçilen depoya yazar

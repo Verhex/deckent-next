@@ -241,8 +241,13 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   arşivi düz dosyadır. *Yol:* kümeleri şifreli depolamada saklayın, parolayı ayrı tutun.
 - **Geri yükleme yedek zamanlamasını kapatır** ve sağlayıcı anahtarları ile yedek parolası kümede değildir. *Yol:* geri
   yüklemeden sonra `backup.schedule`'ı yeniden seçin ve her anahtar için `deckent secret set` çalıştırın.
-- **Geri yükleme servisin durmuş olmasını ister** ve mesaj komutu söylemez. *Yol:* `deckent runtime shutdown` (`--service`, `--instance`,
-  `--command-id` ve `--reason` içeren uzun biçim de çalışır), açık terminalleri kapatın, sonra geri yüklemeyi yeniden çalıştırın.
+- **Geri yükleme servisin durmuş olmasını ister** ve mesaj komutu söylemez. *Yol:* `deckent runtime shutdown` (terminalde kartla
+  sorar; başka yerde `--reason <metin>` ekleyin; `--service`, `--instance`, `--command-id` ve `--reason` içeren uzun biçim de
+  çalışır), açık terminalleri kapatın, sonra geri yüklemeyi yeniden çalıştırın. Terminalde `deckent backup restore` bunu parolayı
+  sormadan önce denetler.
+- **`deckent backup` yalnız varsayılan kurtarma klasörünü listeler** (`state/backups/recovery`); `--set` ile başka yerde oluşturulan
+  setler görünmez. "Son doğrulama" yalnız bu kurulumun mühürlü yedek audit kayıtlarından, aynı mutlak set yolu için gelir; yolu başka
+  yazımla doğrulanan bir set "kayıt yok" görünür. *Yol:* böyle bir seti `--set` ile verin.
 - **Yedek kümesinin göreli yolu yanıltıcı bir mesajla reddedilir.** Mutlak yol kullanın.
 - **Ledger yükseltmesinden sonra eski bir Deckent'e dönemezsiniz;** yükseltmeden önce alınan yedeği geri yüklemeden olmaz
   (yeni ledger sürümlerini eski derlemeler açamaz).
@@ -268,6 +273,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 - **Masaüstü uygulaması, web paneli ve uzak HTTP API yok.** Terminali, `deckent` komutunu, MCP'yi ya da SDK'yı kullanın.
   `deckent monitor` salt okunur canlı bir görünümdür. Masaüstü beta sonrası için planlı.
+- **`deckent runtime` servisin ne zamandan beri çalıştığını göstermez.** Çalışma protokolü (v29) başlangıç zamanı taşımaz; bir
+  sonraki protokol sürümünü bekler. Durum yalnız derleme, yapılandırma, çalışan işler ve soketi gösterir.
 - **Monitor yalnız inceleme izniniz olan havuzları gösterir** (`pool inspect`); diğer havuzlar tek bir sayı olarak görünür
   ("Diğer işler: N havuz size gösterilmiyor"), adı, kapasitesi ve tutanı gösterilmez. *Etki:* görebildiğiniz bir Run, inceleyemediğiniz
   bir havuzda bekliyorsa havuz bekleme nedeni görünmez. MCP aktörünün ilk kurulum kurallarında `pool inspect` yoktur; MCP
