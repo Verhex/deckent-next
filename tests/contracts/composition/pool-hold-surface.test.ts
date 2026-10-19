@@ -79,7 +79,8 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     // Usage errors never reach the application.
     for (const argv of [['pause'], ['status', '--reason', 'x'], ['hold', '--bogus', 'x'], ['hold', '--reason']]) expect((await f.cli(...argv)).code).toBe(2);
     // Without --scope the configured terminal scope is required (none here): a typed usage refusal, nothing applied.
-    expect(await f.cli('hold', '--no-scope')).toMatchObject({ code: 2, stderr: expect.stringContaining('TERMINAL_SCOPE_REQUIRED') });
+    // C-ADMIN (owner CLI review 2026-10-19): a change off a terminal never takes a silent scope, configured or not.
+  expect(await f.cli('hold', '--no-scope')).toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_SCOPE_REQUIRED') });
   });
 
   it('refuses a hold held only in the caller scope (installation-level authority) with no hold state, over SDK, CLI and MCP alike', async () => {

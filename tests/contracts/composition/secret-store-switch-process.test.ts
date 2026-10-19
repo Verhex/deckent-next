@@ -65,13 +65,13 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   children.add(service); let serviceOut = ''; service.stdout.on('data', chunk => { serviceOut += String(chunk); }); service.stderr.on('data', chunk => { serviceOut += String(chunk); });
   await ready(service);
   const printed: string[] = [];
-  const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
+  const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
   expect(set.code, set.stderr).toBe(0);
   expect((await readFile(join(globalRoot, 'secrets.json'))).includes(Buffer.from(CANARY))).toBe(true);
 
   const listed = await run(['secret', 'store', '--list', '--json'], project, env); printed.push(listed.stdout, listed.stderr);
   expect(JSON.parse(listed.stdout)).toEqual({ schemaVersion: 1, current: FILE, stores: ['core.secret-store.env@1', FILE, SEALED] });
-  const switched = await run(['secret', 'store', '--to', SEALED, '--json'], project, env); printed.push(switched.stdout, switched.stderr);
+  const switched = await run(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env); printed.push(switched.stdout, switched.stderr);
   expect(switched.code, switched.stderr).toBe(0);
   expect(JSON.parse(switched.stdout)).toEqual({ schemaVersion: 1, scopeId: 'installation', status: 'switched', from: FILE, to: SEALED, entries: 1, downgrade: false, cleaned: true });
   // The plaintext copy is gone; the installation config selects the sealed store (other keys kept); the key opens with the installation key.
@@ -79,12 +79,12 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   expect(JSON.parse(await readFile(globalPath, 'utf8'))).toMatchObject({ secrets: { store: SEALED } });
   expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).get('PROVIDER_TOKEN')).toBe(CANARY);
   // The running service uses the new selection without a restart: the next change lands in the sealed store.
-  const next = await run(['secret', 'set', 'SECOND_TOKEN', '--json'], project, env, 'synthetic-second-value\n'); printed.push(next.stdout, next.stderr);
+  const next = await run(['secret', 'set', 'SECOND_TOKEN', '--scope', 'installation', '--json'], project, env, 'synthetic-second-value\n'); printed.push(next.stdout, next.stderr);
   expect(JSON.parse(next.stdout)).toMatchObject({ action: 'set', backend: SEALED });
   // The same switch again is current (nothing left to clean); a downgrade without confirmation moves nothing.
-  const again = await run(['secret', 'store', '--to', SEALED, '--json'], project, env); printed.push(again.stdout, again.stderr);
+  const again = await run(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env); printed.push(again.stdout, again.stderr);
   expect(JSON.parse(again.stdout)).toMatchObject({ status: 'current', cleaned: true });
-  const downgrade = await run(['secret', 'store', '--to', FILE, '--json'], project, env); printed.push(downgrade.stdout, downgrade.stderr);
+  const downgrade = await run(['secret', 'store', '--to', FILE, '--scope', 'installation', '--json'], project, env); printed.push(downgrade.stdout, downgrade.stderr);
   expect(downgrade.code).not.toBe(0);
   expect(downgrade.stdout + downgrade.stderr).toContain('SECRET_STORE_DOWNGRADE_UNCONFIRMED');
   expect(JSON.parse(await readFile(globalPath, 'utf8'))).toMatchObject({ secrets: { store: SEALED } });
@@ -122,12 +122,12 @@ it.skipIf(process.platform !== 'linux')('compiled env guard and direct runtime c
   children.add(service); let printed = '';
   service.stdout.on('data', chunk => { printed += String(chunk); }); service.stderr.on('data', chunk => { printed += String(chunk); });
   await ready(service).catch(error => { throw new Error(`${(error as Error).message}: ${printed.split(CANARY).join('[canary]')}`); });
-  const blocked = await run(['secret', 'store', '--to', SEALED, '--json'], project, env);
+  const blocked = await run(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env);
   expect(blocked.code).toBe(1); expect(blocked.stderr).toContain('PROVIDER_TOKEN'); printed += blocked.stdout + blocked.stderr;
   const client = createConfiguredRuntimeClient(project, { env });
   await expect(client.switchSecretStore({ schemaVersion: 1, scopeId: 'installation', to: SEALED, confirmDowngrade: false }))
     .rejects.toMatchObject({ code: 'SECRET_STORE_ENV_UNCONFIRMED' });
-  const switched = await run(['secret', 'store', '--to', SEALED, '--confirm-env-missing', '--json'], project, env);
+  const switched = await run(['secret', 'store', '--to', SEALED, '--confirm-env-missing', '--scope', 'installation', '--json'], project, env);
   expect(switched.code, switched.stderr).toBe(0); expect(JSON.parse(switched.stdout)).toMatchObject({ status: 'switched', entries: 0 });
   printed += switched.stdout + switched.stderr;
   expect(await createEncryptedFileSecretStore({ root: env['DECKENT_GLOBAL_HOME']!, platform: 'linux' }).get('PROVIDER_TOKEN')).toBeUndefined();

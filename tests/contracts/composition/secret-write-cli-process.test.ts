@@ -67,7 +67,7 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   await ready(service);
 
   const printed: string[] = [];
-  const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
+  const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
   expect(set.code, set.stderr).toBe(0);
   expect(JSON.parse(set.stdout)).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend, removed: null });
   if (sealed) {
@@ -88,7 +88,7 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   // A value on argv is a usage refusal before anything is sent.
   const argv = await run(['secret', 'set', 'OTHER', CANARY, '--json'], project, env); printed.push(argv.stdout, argv.stderr);
   expect(argv.code).toBe(2);
-  const removed = await run(['secret', 'delete', 'PROVIDER_TOKEN', '--json'], project, env); printed.push(removed.stdout, removed.stderr);
+  const removed = await run(['secret', 'delete', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env); printed.push(removed.stdout, removed.stderr);
   expect(JSON.parse(removed.stdout)).toMatchObject({ action: 'delete', removed: true });
   if (sealed) expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).listNames()).toEqual([]);
   else expect(JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8'))).toEqual({ schemaVersion: 1, secrets: {} });

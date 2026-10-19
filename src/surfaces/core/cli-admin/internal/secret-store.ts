@@ -1,8 +1,9 @@
-import { createInterface } from 'node:readline/promises';
-import type { Readable } from 'node:stream';
-import { ErrorRegistry, emit, formatValue, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { isSecretStoreDowngrade } from '#engine/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
+import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 
 /** The registered stores and the installation's selection, for the picker (store ids only; never a secret name or value). */
 export interface SecretStoresView { readonly schemaVersion: 1; readonly current: string; readonly stores: readonly string[];
@@ -15,34 +16,30 @@ export interface SecretStoreSwitchView {
 }
 export type SecretStoreSwitchHandler = (root: string, input: { readonly schemaVersion: 1; readonly scopeId: string; readonly to: string; readonly confirmDowngrade: boolean; readonly confirmEnvMissing?: boolean },
   options: ConfigLoadOptions) => Promise<SecretStoreSwitchView>;
-type Input = Readable & { isTTY?: boolean };
-type Sink = { write(text: string): unknown };
 
-/** A numbered choice on the terminal (stderr; stdout stays the result): the store is picked, never typed (owner 2026-10-08). */
-async function pick(stdin: Input, stderr: Sink, view: SecretStoresView, locale: Locale): Promise<string> {
-  stderr.write(`${t('cli.secret.store.pickTitle', { current: view.current }, locale)}\n`);
-  view.stores.forEach((id, index) => stderr.write(`  ${index + 1}. ${id}${id === view.current ? ` ${t('cli.secret.store.currentMark', {}, locale)}` : ''}\n`));
-  const answer = await ask(stdin, stderr, t('cli.secret.store.pickPrompt', { count: view.stores.length }, locale));
-  const index = /^[0-9]+$/.test(answer) ? Number(answer) - 1 : -1;
-  if (index < 0 || index >= view.stores.length) throw ErrorRegistry.createError('SECRET_INPUT_CANCELLED');
-  return view.stores[index]!;
-}
-async function ask(stdin: Input, stderr: Sink, prompt: string): Promise<string> {
-  const reader = createInterface({ input: stdin, output: stderr as NodeJS.WritableStream, terminal: false });
-  const cancellation = new AbortController(), cancel = () => cancellation.abort();
-  reader.once('close', cancel); reader.once('SIGINT', cancel);
-  try { return (await reader.question(`${prompt} `, { signal: cancellation.signal })).trim(); }
-  catch { throw ErrorRegistry.createError('SECRET_INPUT_CANCELLED'); }
-  finally { reader.removeListener('close', cancel); reader.removeListener('SIGINT', cancel); reader.close(); }
+/** Core's stores by id, with a short human name and what it means for keys on disk; an extension's store keeps its id and a generic note. */
+const coreStores = (locale: Locale): Readonly<Record<string, Readonly<{ name: string; note: string }>>> => ({
+  'core.secret-store.env@1': { name: t('cli.secret.store.name.env', {}, locale), note: t('cli.secret.store.note.env', {}, locale) },
+  'core.secret-store.file@1': { name: t('cli.secret.store.name.file', {}, locale), note: t('cli.secret.store.note.file', {}, locale) },
+  'core.secret-store.encrypted-file@1': { name: t('cli.secret.store.name.encryptedFile', {}, locale), note: t('cli.secret.store.note.encryptedFile', {}, locale) } });
+/** A store's short human name (owner CLI review 2026-10-19 `secret store`). */
+export function storeLabel(id: string, locale: Locale): string { return Object.hasOwn(coreStores(locale), id) ? coreStores(locale)[id]!.name : terminalSafeText(id); }
+const storeNote = (id: string, locale: Locale) => Object.hasOwn(coreStores(locale), id) ? coreStores(locale)[id]!.note : t('cli.secret.store.note.other', {}, locale);
+/** The current store and every option, each with what it means for the keys on disk. */
+function renderStores(view: SecretStoresView, locale: Locale): string {
+  return [t('cli.secret.store.current', { store: storeLabel(view.current, locale), id: terminalSafeText(view.current) }, locale), t('cli.secret.store.options', {}, locale),
+    ...view.stores.map(id => `  ${storeLabel(id, locale)}${id === view.current ? ` ${t('cli.secret.store.currentMark', {}, locale)}` : ''} — ${storeNote(id, locale)}`),
+    t('cli.secret.store.howTo', {}, locale)].join('\n');
 }
 
 /**
  * `deckent secret store [--to <store>] [--confirm-downgrade] [--list] [--scope <id>] [--json]` (SECRET-STORE-SWITCH, owner 2026-10-08, option B):
- * moves every secret into another registered store and selects it, through the runtime service (`secret`/`switch` cell, audited). On a terminal
- * the store is chosen from a numbered list and a move to a weaker store asks yes/no; without a terminal `--to` names a registered store and a
- * downgrade needs `--confirm-downgrade`. `--list` shows the stores and the selection only.
+ * moves every secret into another registered store and selects it, through the runtime service (`secret`/`switch` cell, audited). Owner CLI
+ * review 2026-10-19: without `--to` off a terminal (or with `--list`) it shows the current store and the options explained; on a terminal the
+ * store is picked on a card, a move to a weaker store needs a second, separate warning card, and the scope is never a silent default.
+ * Off a terminal a downgrade still needs `--confirm-downgrade` and the scope `--scope`.
  */
-export async function secretStoreCommand(argv: readonly string[], context: AdminCommandContext): Promise<void> {
+export async function secretStoreCommand(argv: readonly string[], context: AdminCommandContext): Promise<void | ExitCode> {
   let json = false, list = false, confirm = false, confirmEnv = false, language: string | undefined, scope: string | undefined, to: string | undefined;
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i]!;
@@ -54,36 +51,45 @@ export async function secretStoreCommand(argv: readonly string[], context: Admin
     else if (flag === '--lang' && language === undefined) language = next();
     else if (flag === '--scope' && scope === undefined) scope = next();
     else if (flag === '--to' && to === undefined) to = next();
-    else throw ErrorRegistry.createError('CLI_USAGE');
+    else if (flag !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (list && (to !== undefined || confirm || confirmEnv)) throw ErrorRegistry.createError('CLI_USAGE');
-  const root = context.root ?? process.cwd(), env = context.env ?? process.env, locale = resolveLocale(language, env);
-  context.onLocale?.(locale);
-  const sinks = { json, render: (data: unknown) => formatValue(data), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
+  const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env }, locale = commandLocale(context, language);
+  const sinks = { json, ...adminSinks(context) }, interactive = adminInteractive(context, json);
   if (!context.listSecretStores) throw ErrorRegistry.createError('CLI_USAGE');
-  const view = await context.listSecretStores(root, { env });
-  if (list) { emit(view, sinks); return; }
-  if (!context.switchSecretStore) throw ErrorRegistry.createError('CLI_USAGE');
-  const stdin = (context.stdin ?? process.stdin) as Input, stderr = context.stderr ?? process.stderr;
-  const terminal = Boolean(stdin.isTTY);
-  if (!terminal && to === undefined) throw ErrorRegistry.createError('CLI_USAGE');
-  const target = to ?? await pick(stdin, stderr, view, locale);
+  const view = await context.listSecretStores(root, options);
+  if (list || (!interactive && to === undefined && !confirm && !confirmEnv)) { emit(view, { ...sinks, render: () => renderStores(view, locale) }); return; }
+  if (!context.switchSecretStore || (!interactive && to === undefined)) throw ErrorRegistry.createError('CLI_USAGE');
+  const cancelled = () => { reportCancelled(context, locale); return EXIT_CODES.error; };
+  const target = to ?? await askAdminCard(context, locale, { title: t('cli.secret.store.pickTitle', { current: storeLabel(view.current, locale) }, locale),
+    options: view.stores.map(id => ({ id, label: `${storeLabel(id, locale)}${id === view.current ? ` ${t('cli.secret.store.currentMark', {}, locale)}` : ''} — ${storeNote(id, locale)}` })),
+    initial: view.current });
+  if (target === null) return cancelled();
   if (!view.stores.includes(target)) throw ErrorRegistry.createError('SECRET_STORE_UNKNOWN', { params: { backend: target } });
-  if (terminal && !confirm && target !== view.current && isSecretStoreDowngrade(view.current, target)) {
-    const answer = await ask(stdin, stderr, t('cli.secret.store.downgradePrompt', { from: view.current, to: target }, locale));
-    confirm = /^(y|yes|e|evet)$/i.test(answer);
+  if (interactive && !confirm && target !== view.current && isSecretStoreDowngrade(view.current, target)) {
+    // The separate warning card (owner review): only an explicit "apply" here confirms a move to weaker protection.
+    const answer = await askAdminCard(context, locale, { title: t('cli.secret.store.downgradeTitle', {}, locale), body: [t('cli.secret.store.downgradePrompt',
+      { from: storeLabel(view.current, locale), to: storeLabel(target, locale) }, locale), storeNote(target, locale)], options: confirmOptions(locale) });
+    confirm = answer === 'apply';
     if (!confirm) throw ErrorRegistry.createError('SECRET_STORE_DOWNGRADE_UNCONFIRMED', { params: { from: view.current, to: target } });
   }
   const guard = view.envGuard?.[target];
   if (view.current === 'core.secret-store.env@1' && target !== view.current && guard) {
     if (guard.code) throw ErrorRegistry.createError(guard.code);
-    if (guard.names.length) {
-      stderr.write(`${t('cli.secret.store.envMissing', { to: target, names: guard.names.join(', ') }, locale)}\n`);
-      if (terminal && !confirmEnv) confirmEnv = /^(y|yes|e|evet)$/i.test(await ask(stdin, stderr, t('cli.secret.store.envPrompt', {}, locale)));
-      if (!confirmEnv) throw ErrorRegistry.createError('SECRET_STORE_ENV_UNCONFIRMED', { params: { to: target, names: guard.names.join(', ') } });
+    if (guard.names.length && !confirmEnv) {
+      const names = guard.names.join(', ');
+      if (interactive) confirmEnv = await askAdminCard(context, locale, { title: t('cli.secret.store.envTitle', {}, locale),
+        body: [t('cli.secret.store.envMissing', { to: storeLabel(target, locale), names }, locale)], options: confirmOptions(locale) }) === 'apply';
+      if (!confirmEnv) throw ErrorRegistry.createError('SECRET_STORE_ENV_UNCONFIRMED', { params: { to: target, names } });
     }
   }
-  const configured = scope ?? ((await loadConfig(root, { env }))['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
-  if (typeof configured !== 'string' || !configured) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
-  emit(await context.switchSecretStore(root, { schemaVersion: 1, scopeId: configured, to: target, confirmDowngrade: confirm, ...(confirmEnv ? { confirmEnvMissing: true } : {}) }, { env }), sinks);
+  const configured = await loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const resolved = await resolveCommandScope({ command: 'deckent secret store', locale, explicit: scope, configured: typeof configured === 'string' ? configured : undefined,
+    mutating: true, interactive, listScopes: () => scopeLister(context, root, options)().catch(() => []), pick: request => askAdminCard(context, locale, request) });
+  if (!resolved) return cancelled();
+  if (!json) emit(scopeNotice(resolved, locale), adminSinks(context));
+  emit(await context.switchSecretStore(root, { schemaVersion: 1, scopeId: resolved.scopeId, to: target, confirmDowngrade: confirm, ...(confirmEnv ? { confirmEnvMissing: true } : {}) }, options),
+    { ...sinks, render: result => result.status === 'current' ? t('cli.secret.store.done.current', { store: storeLabel(result.to, locale) }, locale)
+      : t('cli.secret.store.done.switched', { from: storeLabel(result.from, locale), to: storeLabel(result.to, locale), entries: result.entries,
+        cleaned: result.cleaned ? t('cli.secret.store.done.cleaned', {}, locale) : t('cli.secret.store.done.notCleaned', {}, locale) }, locale) });
 }

@@ -1,9 +1,12 @@
 import { renderAuditReason } from '#surfaces/core/doctor/index.js';
-import { ErrorRegistry, emit, formatDuration, loadConfig, resolveLocale, t, type DeckentError, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
+import { ErrorRegistry, EXIT_CODES, emit, formatDuration, loadConfig, readBuildIdentity, t, terminalSafeText, type DeckentError, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
+import { configServiceState, shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
   type ServiceShutdownAdmissionResult, type ShutdownCommand, type BackupScheduleObserver } from '#engine/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { formatDuration as humanDuration } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
+import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 
 export interface RuntimeServiceHost {
   readonly endpoint: string;
@@ -28,13 +31,53 @@ export interface RuntimeServiceObserver extends BackupScheduleObserver {
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
 export type RuntimeServiceDescribeHandler = (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
 export type RuntimeServiceShutdownHandler = (root: string, command: ShutdownCommand, options: ConfigLoadOptions) => Promise<ServiceShutdownAdmissionResult>;
+/** The files the product layout does not list (composition reads them; nothing is created): the real runtime socket, MCP definition files,
+ * the selected secret store's files. */
+export interface AdminPathsView { readonly schemaVersion: 1; readonly runtimeSocket: string | null; readonly mcp: Readonly<{ project: string; personal: string }> | null;
+  readonly secretStore: Readonly<{ store: string; files: readonly string[] }> }
+export type AdminPathsHandler = (root: string, options: ConfigLoadOptions) => Promise<AdminPathsView>;
+
+/** What the service is running now, from the configured scope's pool (local ledger read; null when it cannot be read). */
+async function runningWork(context: AdminCommandContext, root: string, options: ConfigLoadOptions) {
+  const scopeId = await loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  if (typeof scopeId !== 'string' || !context.inspectPoolHold) return null;
+  return context.inspectPoolHold(root, { schemaVersion: 1, scopeId }, options).then(view => ({ scopeId, running: view.occupancy.execution,
+    evaluating: Math.max(0, view.occupancy.inFlight - view.occupancy.execution) }), () => null);
+}
+/**
+ * Owner CLI review 2026-10-19 (`runtime`), A48-D8: the status from what protocol v29 already carries — build (and whether it is this CLI's),
+ * configuration freshness, running work, socket. No start time or uptime: the descriptor has no such field until a v30 bump.
+ */
+async function renderDescriptor(descriptor: RuntimeServiceDescriptor, context: AdminCommandContext, root: string, options: ConfigLoadOptions, locale: Locale): Promise<string> {
+  const own = readBuildIdentity(), build = descriptor.build;
+  const commit = build ? build.sourceCommit?.slice(0, 12) ?? build.sourceTreeSha256.slice(0, 12) : '', ownCommit = own?.sourceCommit?.slice(0, 12) ?? own?.sourceTreeSha256.slice(0, 12) ?? '-';
+  const buildText = !build ? t('cli.runtime.status.buildUnknown', {}, locale) : !own ? t('cli.runtime.status.build', { commit }, locale)
+    : own.sourceTreeSha256 === build.sourceTreeSha256 ? t('cli.runtime.status.buildSame', { commit }, locale) : t('cli.runtime.status.buildOther', { commit, own: ownCommit }, locale);
+  const freshness = await configServiceState(root, options, async () => descriptor);
+  const work = await runningWork(context, root, options), paths = context.inspectAdminPaths ? await context.inspectAdminPaths(root, options).catch(() => null) : null;
+  const started = descriptor.autoStarted ? t('cli.runtime.status.auto', {}, locale) : t('cli.runtime.status.manual', {}, locale);
+  return [t('cli.runtime.status.running', { build: buildText }, locale),
+    freshness === 'current' ? t('cli.runtime.status.config.current', {}, locale) : freshness === 'stale' ? t('cli.runtime.status.config.stale', {}, locale) : t('cli.runtime.status.config.unknown', {}, locale),
+    work ? t('cli.runtime.status.work', { running: work.running, evaluating: work.evaluating, scope: terminalSafeText(work.scopeId) }, locale) : t('cli.runtime.status.workUnknown', {}, locale),
+    ...(paths?.runtimeSocket ? [t('cli.runtime.status.socket', { path: terminalSafeText(paths.runtimeSocket) }, locale)] : []),
+    descriptor.shutdownAvailable ? t('cli.runtime.status.service', { service: terminalSafeText(descriptor.identity.serviceId), instance: descriptor.instanceId.slice(0, 8), started }, locale)
+      : t('cli.runtime.status.serviceUnconfigured', { instance: descriptor.instanceId.slice(0, 8), started }, locale),
+    ...(descriptor.idleStopMs ? [t('cli.runtime.status.idle', { duration: humanDuration(descriptor.idleStopMs, locale) }, locale)] : [])].join('\n');
+}
+/** A person on a terminal confirms a stop or restart after seeing the work it affects; null work = not readable now (said so). */
+async function confirmStop(context: AdminCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, restart: boolean): Promise<boolean> {
+  const work = await runningWork(context, root, options);
+  return await askAdminCard(context, locale, { title: restart ? t('cli.runtime.card.restartTitle', {}, locale) : t('cli.runtime.card.shutdownTitle', {}, locale), body: [
+    work ? t('cli.runtime.card.work', { running: work.running, evaluating: work.evaluating, scope: terminalSafeText(work.scopeId) }, locale) : t('cli.runtime.status.workUnknown', {}, locale),
+    t('cli.runtime.card.effect', {}, locale), ...(restart ? [t('cli.runtime.card.restartEffect', {}, locale)] : [])], options: confirmOptions(locale) }) === 'apply';
+}
 
 function waitForStop(signal: AbortSignal): Promise<void> {
   return signal.aborted ? Promise.resolve() : new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
 }
 /** Foreground local host. Normal CLI/MCP calls never start it; only the interactive terminal starts `runtime serve` in the
  * background when no service answers (owner 2026-09-23). */
-export async function runtimeCommand(argv: readonly string[], context: AdminCommandContext): Promise<void> {
+export async function runtimeCommand(argv: readonly string[], context: AdminCommandContext): Promise<void | ExitCode> {
   const action = argv[1];
   if (!['serve', 'describe', 'shutdown', 'restart', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   let json = false; let language: string | undefined; const shutdown: Record<string, string> = {};
@@ -51,35 +94,46 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     }
     throw ErrorRegistry.createError('CLI_USAGE');
   }
-  const locale = resolveLocale(language, context.env); context.onLocale?.(locale);
+  const locale = commandLocale(context, language);
   if (action === '--help' || action === '-h') {
     if (json) throw ErrorRegistry.createError('CLI_USAGE');
-    emit(t('cli.help.runtime', {}, locale), { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
+    emit(t('cli.help.runtime', {}, locale), adminSinks(context));
     return;
   }
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
-  const output = (value: unknown, render: () => string, level: 'info' | 'error' = 'info') => emit(value, { json, level,
-    ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render });
+  const output = (value: unknown, render: () => string, level: 'info' | 'error' = 'info') => emit(value, { json, level, ...adminSinks(context), render });
+  const interactive = adminInteractive(context, json), cancelled = () => { reportCancelled(context, locale); return EXIT_CODES.error; };
   if (action === 'describe') {
     if (!context.describeRuntimeService || Object.keys(shutdown).length) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-    const descriptor = await context.describeRuntimeService(root, options);
-    output(descriptor, () => descriptor.shutdownAvailable
-      ? t('cli.runtime.descriptorAvailable', { serviceId: descriptor.identity.serviceId, instanceId: descriptor.instanceId }, locale)
-      : t('cli.runtime.descriptorUnavailable', { instanceId: descriptor.instanceId }, locale));
+    let descriptor: RuntimeServiceDescriptor;
+    try { descriptor = await context.describeRuntimeService(root, options); }
+    catch (error) {
+      // A person asking for the status of a stopped service gets the status, not an error dump (`--json` keeps the typed refusal).
+      if (json || (error as { code?: unknown } | null)?.code !== 'LOCAL_RUNTIME_UNAVAILABLE') throw error;
+      const paths = context.inspectAdminPaths ? await context.inspectAdminPaths(root, options).catch(() => null) : null;
+      emit([t('cli.runtime.status.stopped', {}, locale), ...(paths?.runtimeSocket ? [t('cli.runtime.status.socketAbsent', { path: terminalSafeText(paths.runtimeSocket) }, locale)] : [])].join('\n'), adminSinks(context));
+      return EXIT_CODES.error;
+    }
+    const text = json ? '' : await renderDescriptor(descriptor, context, root, options, locale);
+    output(descriptor, () => text);
     return;
   }
   if (action === 'restart') {
     // Managed restart: the governed stop (waits for drain and the endpoint's absence), then a start from the current build and configuration.
     if (!context.restartRuntimeService || Object.keys(shutdown).length) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+    if (interactive && !await confirmStop(context, root, options, locale, true)) return cancelled();
     const restarted = await context.restartRuntimeService(root, options);
-    output(restarted, () => t('cli.runtime.restarted', { pid: restarted.pid ?? '-', instanceId: restarted.instanceId }, locale));
+    output(restarted, () => t('cli.runtime.restarted', { pid: restarted.pid ?? '-', instanceId: restarted.instanceId.slice(0, 8) }, locale));
     return;
   }
-  if (action === 'shutdown' && Object.keys(shutdown).length === 0 && context.stopRuntimeService) {
-    // No command fields: stop this project's service with a governed command built from its live descriptor.
-    const stopped = await context.stopRuntimeService(root, options);
-    output(stopped.result, () => t('cli.runtime.shutdownAdmitted', { serviceId: stopped.command.serviceId,
-      instanceId: stopped.command.instanceId, commandId: stopped.command.commandId }, locale));
+  const { reason, ...ids } = shutdown;
+  if (action === 'shutdown' && Object.keys(ids).length === 0 && context.stopRuntimeService) {
+    // No identity fields: the system builds the governed command from the live descriptor. Owner CLI review 2026-10-19: a person confirms on a
+    // card after seeing the running work (the reason is optional there); any other caller names its reason (`--reason`, audited).
+    if (!interactive && !reason?.trim()) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_REASON_REQUIRED');
+    if (interactive && !await confirmStop(context, root, options, locale, false)) return cancelled();
+    const stopped = await context.stopRuntimeService(root, options, reason?.trim() || t('cli.runtime.reason.terminal', {}, locale));
+    output(stopped.result, () => t('cli.runtime.shutdownAdmitted', { serviceId: terminalSafeText(stopped.command.serviceId), instanceId: stopped.command.instanceId.slice(0, 8) }, locale));
     return;
   }
   if (action === 'shutdown') {
@@ -87,8 +141,7 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     const command = shutdownCommandSchema.safeParse({ schemaVersion: 1, ...shutdown });
     if (!command.success) throw ErrorRegistry.createError('CLI_USAGE');
     const result = await context.shutdownRuntimeService(root, command.data, options);
-    output(result, () => t('cli.runtime.shutdownAdmitted', { serviceId: command.data.serviceId,
-      instanceId: command.data.instanceId, commandId: command.data.commandId }, locale));
+    output(result, () => t('cli.runtime.shutdownAdmitted', { serviceId: terminalSafeText(command.data.serviceId), instanceId: command.data.instanceId.slice(0, 8) }, locale));
     return;
   }
   if (!context.startRuntimeService || !context.signal) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');

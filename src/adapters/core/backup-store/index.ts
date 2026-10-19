@@ -4,3 +4,4 @@ export { recordBackupAudit } from './internal/audit.js';
 export type { BackupLimits, BackupState } from './internal/archive.js';
 export { readBackupConfig, archivedConfigDocument } from './internal/archive.js';
 export { inspectScheduledSets, pruneScheduledSets } from './internal/scheduled.js';
+export { listBackupSets, lastBackupVerifications, type BackupSetEntry } from './internal/list.js';

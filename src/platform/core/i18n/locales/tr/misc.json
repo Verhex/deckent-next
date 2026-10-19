@@ -593,7 +593,6 @@
   "cli.runtime.toolCallApprovalsExpired": "Artık çalışmayan turların bekleyen {expired} araç onayı süresi dolmuş olarak kapatıldı; kapatılamayan: {failed}.",
   "cli.runtime.toolCallApprovalsKeyUnavailable": "Bekleyen araç onayları var ama onay bütünlük anahtarı açılamadı; hiçbiri kapatılmadı (hiçbiri bir şeye izin vermez, süresi dolunca geçersiz olur).",
   "cli.runtime.ready": "Runtime servisi hazır: {endpoint}.",
-  "cli.toolchains.update": "Toolchain güncelleme: {decision}; sonraki sürüm {version}; imaj {image}; öneri {proposal}",
   "cli.runtime.toolchains": "Açılışta toolchain güncelliği: {count} eski sağlayıcı (yalnız rapor).",
   "cli.runtime.toolchainRefreshStarted": "Worker imajı güncellemesi arka planda başladı; yeni imaj hazır olana kadar Run'lar mevcut imajı kullanır.",
   "cli.runtime.toolchainRefreshFailed": "Worker imajı yenilemesi başarısız ({code}); önceki imaj kullanılmaya devam eder, sonraki denetim yeniden dener.",

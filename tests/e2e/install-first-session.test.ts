@@ -12,7 +12,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 describe.skipIf(process.platform !== 'linux')('README first session, actual binary, no Docker or provider call', () => {
-  it.each(['short', 'long'] as const)('initializes and serves a fresh %s path; stdin secrets use the selected default scope', async kind => {
+  it.each(['short', 'long'] as const)('initializes and serves a fresh %s path; stdin secrets name the selected scope (C-ADMIN: a change off a terminal never takes a silent scope)', async kind => {
     const root = await mkdtemp('/tmp/dk-first-'); roots.push(root);
     const project = join(root, kind === 'long' ? 'a project with spaces '.repeat(9) : 'project');
     const home = join(root, 'home'), global = join(root, 'global');
@@ -50,7 +50,7 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
       expect(Buffer.byteLength(endpoint)).toBeLessThan(108); expect(endpoint).not.toContain(project);
       expect((await lstat(dirname(endpoint))).mode & 0o777).toBe(0o700);
       expect((await lstat(endpoint)).mode & 0o777).toBe(0o600);
-      const set = spawn(process.execPath, [binary, 'secret', 'set', 'INSTALL_FLOW_TEST'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
+      const set = spawn(process.execPath, [binary, 'secret', 'set', 'INSTALL_FLOW_TEST', '--scope', 'my-project'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
       let secretLog = ''; set.stdout.on('data', chunk => { secretLog += String(chunk); }); set.stderr.on('data', chunk => { secretLog += String(chunk); });
       const saved = new Promise<number | null>(resolve => set.once('exit', resolve)); set.stdin.end('offline-fixture-key\n');
       expect(await saved, secretLog).toBe(0); expect(secretLog).not.toContain('offline-fixture-key');

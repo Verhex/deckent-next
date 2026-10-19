@@ -303,7 +303,10 @@
         "src/composition/core/run-planner",
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
-        "src/composition/core/audit"
+        "src/composition/core/audit",
+        "src/adapters/core/secret-store",
+        "src/adapters/core/mcp-client",
+        "src/adapters/core/local-runtime-socket"
       ],
       "plan": "SURFACES"
     },
@@ -3176,7 +3179,10 @@
         "src/platform/core/utils",
         "src/platform/core/host",
         "src/engine/core/run-progression",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields",
+        "src/engine/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -3198,7 +3204,8 @@
         "src/platform/core/config-fields",
         "src/domain/core/policy",
         "src/engine/core/worker-observation",
-        "src/surfaces/core/monitor"
+        "src/surfaces/core/monitor",
+        "src/surfaces/core/cli-human"
       ],
       "plan": "SURFACES"
     },
