@@ -115,7 +115,11 @@ deckent policy revoke STANDING_GRANT_ID --scope SCOPE_ID --json
 deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 ```
 
-`grants --mine` lists your standing tool approvals, not every delegation cell. `policy revoke`
+`grants` (with or without `--mine`) lists your standing tool approvals, not every delegation cell; everyone's
+grants (`--all`) wait for their grantable read action in the next policy template and are refused until then.
+On your own terminal `deckent policy` summarises the scope (administrators, your grants, AI steps and MCP groups
+on/off), and `deckent policy mcp` / `deckent policy delegations` let you pick a group or step, read the change's
+preview on a card and apply it through the same governed change as the commands above. `policy revoke`
 revokes one of those entries, not an arbitrary policy grant. Non-TTY standing revocation has
 a `--yes` confirmation flag; it does not bypass authority, policy or the AI floor.
 
@@ -123,7 +127,8 @@ a `--yes` confirmation flag; it does not bypass authority, policy or the AI floo
 
 The CLI and the terminal `/policy` → **AI delegation** section share one versioned command.
 List first; select a step from that inventory, then confirm its actor, scope, resource class/id
-and policy revision on the y/N card. Only `y`/`yes` confirms CLI; the terminal card uses `y`.
+and policy revision on the card. The CLI card is answered with the arrow keys or `y`/`n` (the change re-reads the
+view, and the card shows exactly that); the terminal card uses `y`.
 Enter, N and Escape cancel the terminal card. Writes require verified interactive stdin/output;
 there is no `--yes` bypass. SDK `inspectConfiguredDecisionDelegations(root, query, options)` is
 read-only. No MCP mutation or new decision tool is exposed.

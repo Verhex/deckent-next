@@ -113,7 +113,11 @@ deckent policy revoke STANDING_GRANT_ID --scope SCOPE_ID --json
 deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 ```
 
-`grants --mine` bütün devir hücrelerini değil, kendi kalıcı araç onaylarınızı listeler.
+`grants` (`--mine` ile ya da onsuz) bütün devir hücrelerini değil, kendi kalıcı araç onaylarınızı listeler; herkesin
+onayları (`--all`) bir sonraki politika şablonunun ekleyeceği okuma eylemini bekler ve o zamana kadar reddedilir.
+Kendi terminalinizde `deckent policy` scope özetini (yöneticiler, kalıcı onaylarınız, AI adımları ve MCP grupları açık/kapalı)
+gösterir; `deckent policy mcp` / `deckent policy delegations` ile grup ya da adım seçer, değişikliğin önizlemesini kartta
+okur ve yukarıdaki komutlarla aynı yönetilen değişiklikle uygularsınız.
 `policy revoke` rastgele politika grant'ini değil, bu kayıtlardan birini kaldırır.
 TTY dışındaki kalıcı izin geri alımında `--yes` teyit bayrağı vardır; yetki, politika veya AI
 tabanını aşmaz.
@@ -122,7 +126,8 @@ tabanını aşmaz.
 
 CLI ve terminal `/policy` → **Yapay zekâya devir** bölümü tek sürümlü komutu kullanır.
 Önce listeleyin; aynı envanterden adımı seçin ve y/N kartındaki aktör, kapsam, kaynak sınıfı/kimliği
-ve politika revizyonunu inceleyin. CLI yalnız `y`/`yes`, terminal kartı yalnız `y` ile onaylar.
+ve politika revizyonunu inceleyin. CLI kartı ok tuşlarıyla ya da `y`/`n` ile yanıtlanır (değişiklik görünümü yeniden okur,
+kart tam onu gösterir); terminal kartı yalnız `y` ile onaylar.
 Terminal kartında Enter, N ve Escape vazgeçer. Yazım doğrulanmış etkileşimli girdi/çıktı ister;
 `--yes` geçişi yoktur. SDK `inspectConfiguredDecisionDelegations(root, query, options)` yalnız
 okur. MCP yazma veya yeni karar aracı sunulmaz.
