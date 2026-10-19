@@ -20,7 +20,7 @@ export function installState(w: Words, install: MonitorInstall): MonitorSpan {
 }
 /** The warning count (or "no problems") the header and the card heading show. */
 export function problemsSpan(w: Words, install: MonitorInstall): MonitorSpan {
-  const count = w.warnings(install).length;
+  const count = w.problemCount(install);
   return count ? span(`${w.marks.warn} ${t('monitor.diagnostics', { count }, w.locale)}`, 'warning') : span(`${w.marks.ok} ${t('monitor.install.noProblems', {}, w.locale)}`, 'success');
 }
 
@@ -79,7 +79,7 @@ export function installsBlocks(w: Words, installs: readonly MonitorInstall[]): M
         entry(t('monitor.card.folder', {}, locale), install.path, 'keyLabel')],
       [entry(t('monitor.card.version', {}, locale), w.buildText(install), 'keyLabel'), ...service]],
     row: { key: install.id, cells: [span(install.id), installState(w, install)], detail: detail(install), facets: { state: install.status, install: install.id.toLowerCase() },
-      signature: `${install.status}|${install.service?.state ?? ''}|${install.service?.build?.sourceCommit ?? ''}|${w.warnings(install).length}` } };
+      signature: `${install.status}|${install.service?.state ?? ''}|${install.service?.build?.sourceCommit ?? ''}|${w.problemCount(install)}` } };
   });
   if (!installs.length) return [{ kind: 'line', line: [span(`  ${t('monitor.empty.installs', {}, locale)}`, 'muted')] }];
   return [...cards.flatMap((card, index) => index ? [{ kind: 'line' as const, line: [span('')] }, card] : [card]),

@@ -90,6 +90,39 @@ describe('Installs: status and next step first, developer details last', () => {
   });
 });
 
+describe('J3: named scope lines are bounded in text and window; --verbose shows every one (MON-NAMES item 4)', () => {
+  // 45 refused scopes (an ERP installation with dozens of scopes): the first N in the reader's order, then one "and K more" line; the count stays true.
+  const scopes = Array.from({ length: 45 }, (_, index) => `erp-${String(index).padStart(2, '0')}`);
+  const many: MonitorInstall = { ...n1Like, diagnostics: [...scopes.map(id => `scope-refused:POLICY_DENIED:${id}`), 'runs-truncated:259', 'info:image-current'] };
+  const named = (text: string) => scopes.filter(id => text.includes(`scope ${id} was refused`) || text.includes(`${id} kapsamına erişim reddedildi`));
+  for (const [locale, more] of [['en', 'and 40 more scope(s) (all of them: deckent monitor --verbose)'], ['tr', 've 40 kapsam daha (hepsi için: deckent monitor --verbose)']] as const) {
+    it(`text and the Installs card show 5 names, then one line for the rest (${locale})`, () => {
+      const text = surface.renderMonitorText(one(many), { locale, width: 200, ascii: false });
+      expect(named(text)).toEqual(scopes.slice(0, 5));
+      expect(text).toContain(more);
+      expect(installsOf(text, locale)).toContain('! 46');
+      expect(text.split('\n').length).toBeLessThan(surface.renderMonitorText(one(many), { locale, width: 200, ascii: false, verbose: true }).split('\n').length - 35);
+      const card = surface.buildMonitorView(one(many), locale, false).tabs.installs.flatMap(block => block.kind === 'card' ? block.sections.flat() : [])
+        .map(entry => entry.value.map(part => part.text).join(''));
+      expect(card.filter(value => value.includes('erp-'))).toHaveLength(5); expect(card.some(value => value.includes(more))).toBe(true);
+    });
+    it(`--verbose shows every name and no "more" line (${locale})`, () => {
+      const text = surface.renderMonitorText(one(many), { locale, width: 200, ascii: false, verbose: true });
+      expect(named(text)).toEqual(scopes); expect(text).not.toContain(more);
+      const card = surface.buildMonitorView(one(many), locale, false, true).tabs.installs.flatMap(block => block.kind === 'card' ? block.sections.flat() : [])
+        .map(entry => entry.value.map(part => part.text).join(''));
+      expect(card.filter(value => value.includes('erp-'))).toHaveLength(45);
+    });
+  }
+  it('NEGATIVE: a counts-only viewer still sees one count line and no name, verbose or not', () => {
+    const counted: MonitorInstall = { ...n1Like, diagnostics: ['scopes-denied:45', 'runs-truncated:259'] };
+    for (const verbose of [false, true]) {
+      const text = surface.renderMonitorText(one(counted), { locale: 'en', width: 200, ascii: false, verbose });
+      expect(text).toContain('access to 45 scope(s) was refused (their names are not shown)'); expect(text).not.toMatch(/erp-|more scope/u);
+    }
+  });
+});
+
 describe('Map: tables, collapsed old profile versions, grouped permissions', () => {
   const map = fullSnapshot.installs[0]!.map!;
   const mapped: MonitorInstall = { ...fullSnapshot.installs[0]!, map: { ...map,

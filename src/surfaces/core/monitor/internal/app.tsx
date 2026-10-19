@@ -20,6 +20,8 @@ export interface MonitorAppProps {
   readonly intervalMs: number;
   readonly locale: Locale; readonly ascii: boolean; readonly palette: WorklineInkPalette;
   readonly filters?: MonitorFilters;
+  /** `--verbose`: every named scope line on the Installs card (J3); otherwise the display registry's bound. */
+  readonly verbose?: boolean;
   /** Typed failure → catalog sentence; an unknown failure never echoes transport text. */
   readonly errorText: (error: unknown) => string;
   /** A snapshot to show at once (frame dumps and tests); without it the view opens on a loading line and reads immediately. */
@@ -76,7 +78,7 @@ interface Received { readonly snapshot: MonitorSnapshot; readonly at: number; re
  * Keys: Tab/←→ or tab numbers, ↑↓/PgUp/PgDn select, Enter details, Esc back, / filter, s/S sort, g group, r refresh, p pause, ? help, q quit.
  */
 export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProps, 'active' | 'onClose' | 'escapeCloses' | 'minRows'>>) {
-  const { load, intervalMs, locale, ascii, palette, filters, errorText } = props;
+  const { load, intervalMs, locale, ascii, palette, filters, errorText } = props, verbose = props.verbose ?? false;
   // Fullscreen: `q` leaves the program. A host window passes its own `onClose` (see MonitorBody).
   const { exit } = useApp(), onClose = props.onClose ?? exit;
   const now = props.now ?? Date.now;
@@ -84,7 +86,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const window = useWindowSize(), { columns, rows } = props.size ?? window;
   const width = Math.max(20, columns || 80), height = Math.max(props.minRows ?? 10, rows || 24), ellipsis = ascii ? '...' : '…';
   const [received, setReceived] = useState<Received | null>(() => props.initial
-    ? { snapshot: props.initial, at: now(), marks: new Map(), signatures: signatures(buildMonitorView(filterSnapshot(props.initial, filters ?? {}), locale, ascii).tabs) } : null);
+    ? { snapshot: props.initial, at: now(), marks: new Map(), signatures: signatures(buildMonitorView(filterSnapshot(props.initial, filters ?? {}), locale, ascii, verbose).tabs) } : null);
   const snapshot = received?.snapshot ?? null;
   const [failure, setFailure] = useState<Failure | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -107,7 +109,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
       const [observed] = await Promise.allSettled([Promise.resolve().then(() => load(memo.current ??= new MonitorSourceMemo())), configShown.current ? readConfig() : undefined]);
       if (alive.current) {
         if (observed.status === 'fulfilled') {
-          const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii).tabs);
+          const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii, verbose).tabs);
           setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
           setFailure(null);
         } else setFailure({ text: errorText(observed.reason), at: now() });
@@ -125,7 +127,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   // The age indicator ticks once per interval even when reads hang or are paused (no per-second churn).
   useEffect(() => { const handle = setInterval(() => setClock(now()), intervalMs); return () => clearInterval(handle); }, [intervalMs, now]);
 
-  const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii) : null, [ascii, filters, locale, snapshot]);
+  const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii, verbose) : null, [ascii, filters, locale, snapshot, verbose]);
   const current = tabs[tab]!;
   useEffect(() => { configShown.current = current === 'config'; if (configShown.current) void readConfig(); }, [current, readConfig]);
   const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : configFailure
