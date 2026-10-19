@@ -29,8 +29,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Bazı kurulum mesajları yalnız İngilizce** (derleme ve sandbox hazırlığı mesajları çeviri var olmadan önce çıkar).
 - **`deckent init` kurulumu yapar, henüz ilk kodlama Run'ını değil** (alpha.48 I-S3). İlk kurulum izinlerini, dili,
   sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
-  kontrolü, her birini kendi mevcut komutuyla uygular. *Etki:* worker kaydı, havuz, worker imajı ve teslim klonu henüz
-  kurulum aşaması değil: ilk `/do`'dan önce README'deki gibi `deckent init registry` ve `deckent init pool` çalıştırın.
+  kontrolü, her birini kendi mevcut komutuyla uygular. *Etki:* kurulum worker imajını oluşturmaz, kaydı ve havuzu yazmaz:
+  özeti (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla listeler (kaynak kodda
+  `npm run worker:image` ile worker imajı, `deckent config set execution`, `deckent init registry`, `deckent init pool`), doctor'un
+  havuz satırı ilkini gösterir; liste yalnız yapılandırmayı ve havuz defterini okur, ayarlı imajın makinede olup olmadığını
+  denetlemez; teslim klonu da kurulum aşaması değildir.
   Kurulum kaydedilmiş profili geri okumaz: tek kullanıcı hiçbir şey yazmaz (doctor yine kimlik profili ister), ekip ya da
   kurum seçimi kullanıcınızın genel yapılandırmasına kaydeder (dağıtım `deckent identity distribute` olarak kalır) ve
   sonraki `deckent init` yeniden sorar. Son kontrol

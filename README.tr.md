@@ -165,7 +165,7 @@ deckent init policy --scope my-project --apply
 bir kodlama işçisi Docker içinde yapar ve değişiklik Git'e teslim edilir. 1 ile 4 arası adımlar bir kez yapılan operatör
 kurulumudur; yolun temiz bir makinede 2026-10-15/16'da yapılan provası model adımına kadar
 gitti (model adımı ve boş bir Docker daemon'unda işçi imajı derlemesi denenmedi; [bilinen sınırlar](docs/known-limits.tr.md)). Aşağıdaki komutlar ve mesajlar güncel kaynaktan ve mesaj
-kataloglarından gelir; kimlikler, yollar ve saatler örnektir.
+kataloglarından gelir; kimlikler, yollar ve saatler örnektir. `deckent init` ve `deckent doctor` bu adımlardan hangilerinin eksik olduğunu tam komutuyla gösterir.
 
 ```mermaid
 flowchart LR

@@ -165,7 +165,7 @@ deckent init policy --scope my-project --apply
 "Your first session" ends with a governed chat. This path goes on to a real job: Deckent plans it, you approve the plan,
 a coding worker does it in Docker, and the change is delivered to Git. Steps 1 to 4 are one-time operator setup; a clean-machine rehearsal on 2026-10-15/16 ran the path up to the model step
 (the model step and a worker image build on an empty Docker daemon were not exercised; [known limits](docs/known-limits.md)). Commands and messages below come from the current source and its message
-catalogs; ids, paths and times are examples.
+catalogs; ids, paths and times are examples. `deckent init` and `deckent doctor` show which of these steps are still missing, with the exact command.
 
 ```mermaid
 flowchart LR
