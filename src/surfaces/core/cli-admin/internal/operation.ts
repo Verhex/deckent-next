@@ -52,8 +52,9 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
     const scopeId = values.get('--scope'), commandId = values.get('--command-id');
     if (!scopeId || !commandId || !context.inspectOperation) throw ErrorRegistry.createError('CLI_USAGE');
     const result = await context.inspectOperation(root, { scopeId, commandId }, options);
-    // A command this scope has no record of is a failed read (exit 1), as for `run inspect`.
-    if (!result.record) throw ErrorRegistry.createError('CLI_OPERATION_NOT_FOUND', { params: { command: commandId, scope: scopeId }, locale });
+    // A command this scope has no record of is a failed read (exit 1) for a person, as for `run inspect`. J2e: `--json` keeps the unchanged machine
+    // contract (`record: null`, exit 0) that the SDK, MCP and the ERP process fixture read.
+    if (!result.record && !json) throw ErrorRegistry.createError('CLI_OPERATION_NOT_FOUND', { params: { command: commandId, scope: scopeId }, locale });
     emit(result, { ...sinks, json, render: data => t('cli.operation.inspect', { command: commandId, state: data.record!.state, sequence: data.record!.sequence }, locale) });
     return;
   }

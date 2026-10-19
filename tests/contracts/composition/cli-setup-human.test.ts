@@ -101,6 +101,9 @@ describe.skipIf(process.platform === 'win32')('C-SETUP operation', () => {
     const f = await project({}), inspectOperation = vi.fn(async () => ({ schemaVersion: 1 as const, record: null }));
     const result = await run(f, ['operation', 'inspect', '--scope', 's', '--command-id', 'none', '--lang', 'tr'], { inspectOperation });
     expect(result.code).toBe(1); expect(result.stderr).toContain('s kapsamında none için kayıtlı işlem yok'); expect(result.stdout).toBe('');
+    // J2e: the --json contract is unchanged (record null, exit 0), the same answer as the SDK and MCP.
+    const machine = await run(f, ['operation', 'inspect', '--scope', 's', '--command-id', 'none', '--json'], { inspectOperation });
+    expect(machine.code).toBe(0); expect(JSON.parse(machine.stdout)).toEqual({ schemaVersion: 1, record: null });
   });
   it('NEGATIVE: execute with a document that is not an effect command names the field, sends nothing; --schema prints the contract', async () => {
     const f = await project({}), executeOperation = vi.fn(), input = join(f.projectRoot, 'op.json');
