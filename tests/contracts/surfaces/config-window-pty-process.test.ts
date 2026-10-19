@@ -6,12 +6,12 @@ import { promisify } from 'node:util';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
-// J3 (TERMINAL-SABIT-DUZEN, owner 2026-10-18): the built `deckent config` window in a pseudo-terminal. While the person moves within one level
-// (the sections, then one section's keys), its bottom row (the frame's closing border) and the key-hint row above it stay on the same screen rows,
-// and no row is wider than the terminal. The window's PATH holds only Node (python3 is found on the driver's own PATH): no Docker or Git
-// discovery runs, so the first frame does not wait on host tools (that wait is measured in the J3 handoff).
-// Known open defect (J3 HANDOFF, terminal-panels owner): the window's height still changes between levels and while a filter row is shown, and
-// the title and key hints are drawn twice (the window's and the embedded list's); this test pins only what holds today.
+// J3 (TERMINAL-SABIT-DUZEN, owner 2026-10-18) and TERM-PANEL (owner 2026-10-19, alpha.48): the built `deckent config` window in a
+// pseudo-terminal. Its bottom row (the frame's closing border) and the key-hint row above it stay on the same screen rows on the Loading frame,
+// across the levels (sections, one section's keys, one key's values), while a filter row is shown and after going back; the title is drawn
+// once and the key hints once (the window's chrome, not also the embedded list's), and no row is wider than the terminal. The window's PATH
+// holds only Node (python3 is found on the driver's own PATH): no Docker or Git discovery runs, so the first frame does not wait on host tools
+// (that wait is measured in the J3 handoff, part B).
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const roots: string[] = [];
@@ -56,7 +56,15 @@ except OSError: pass
 sys.stdout.write(json.dumps({'marks': [len(out[:mark].decode('utf8', 'replace')) for mark in marks], 'output': out.decode('utf8', 'replace')}))
 `;
 
-it('the built config window keeps its bottom border and key-hint rows fixed while moving within a level (PTY)', async () => {
+/** The screen once `upto` characters of output were drawn: its lines, the closing border's row and the lines that hold the title or the hints. */
+function screenAt(output: string, upto: number, columns: number, rows: number) {
+  const lines = terminalBuffers(output.slice(0, upto).replace(/\r?\n/g, '\r\n'), columns, rows).text.split('\n');
+  return { lines, bottom: lines.findLastIndex(line => line.startsWith('╰')), titles: lines.filter(line => line.includes('Configuration ·')).length,
+    hints: lines.filter(line => line.includes('↑↓')).length, text: lines.join('\n') };
+}
+
+// 30×100, and 24×60 where the list's and the filter's key hints wrap to two rows and the Loading frame's to one (the body gives way to them).
+it.each([[30, 100], [24, 60]])('%i×%i: the built config window keeps one title, one key-hint row and its bottom border fixed across levels, the filter and the Loading frame (PTY)', async (rows, columns) => {
   await access(cli).catch(() => { throw new Error(`BUILD_REQUIRED: ${cli}`); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-config-pty-')); roots.push(root);
   const project = join(root, 'project'), home = join(root, 'home');
@@ -64,23 +72,33 @@ it('the built config window keeps its bottom border and key-hint rows fixed whil
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, inspection: { workers: { sources: [] } } }), { mode: 0o600 });
   const env = { PATH: dirname(process.execPath), HOME: home, LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
   await execute(process.execPath, [cli, 'init', 'policy', '--scope', 'pty', '--apply'], { cwd: project, env, timeout: 60_000 });
-  const rows = 30, columns = 100;
   // Each step waits for its screen's text (counted from the previous mark), records the settled screen, then presses its keys:
-  // sections ↓ ↓ ↑, Enter (the `layout` section's keys), keys ↓ ↑, Esc (back), Esc (close).
-  const steps: [string, string, 'sections' | 'keys' | null][] = [['Configuration ·', '\u001b[B', 'sections'], ['layout', '\u001b[B', 'sections'], ['storage', '\u001b[A', 'sections'],
-    ['layout', '\r', 'sections'], ['›', '\u001b[B', 'keys'], ['›', '\u001b[A', 'keys'], ['›', '\u001b', 'keys'], ['general', '\u001b', null]];
+  // sections: `e` (filter) · Backspace · ↓ · ↑ · Enter (the `general` section's keys) · ↓ · Enter (`output_mode`'s values) · Esc · Esc · Esc (close).
+  const steps: [string, string, string][] = [['Configuration ·', 'e', 'sections'], ['filter: e', '\u007f', 'sections, filter "e"'], ['general', '\u001b[B', 'sections'],
+    ['layout', '\u001b[A', 'sections'], ['general', '\r', 'sections'], ['Takes:', '\u001b[B', 'general keys'], ['output_mode', '\r', 'general keys'],
+    ['explanatory', '\u001b', 'output_mode values'], ['Takes:', '\u001b', 'general keys (back)'], ['general', '\u001b', 'sections (back)']];
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'config']), JSON.stringify(steps.map(([wait, send]) => [wait, send])), String(rows), String(columns)],
     { cwd: project, env: { ...env, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, CHILD_PATH: env.PATH }, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   const result = JSON.parse(stdout) as { marks?: number[]; timeout?: string; output: string };
   if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-4000)}`);
-  const bottoms = { sections: new Set<number>(), keys: new Set<number>() };
-  for (const [index, mark] of result.marks!.entries()) {
-    const screen = terminalBuffers(result.output.slice(0, mark).replace(/\r?\n/g, '\r\n'), columns, rows);
-    const lines = screen.text.split('\n'), bottom = lines.findLastIndex(line => line.startsWith('╰')), level = steps[index]![2];
-    expect(bottom, `step ${index}\n${screen.text}`).toBeGreaterThan(0);
-    expect(lines[bottom - 1], `step ${index}\n${screen.text}`).toMatch(/Esc back/u);
-    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
-    if (level) bottoms[level].add(bottom);
+  // The Loading frame: the first frame that says "Loading…", up to the end of its synchronized update.
+  const loadingAt = result.output.indexOf('Loading…'), loadingEnd = result.output.indexOf('\u001b[?2026l', loadingAt);
+  expect(loadingAt, result.output.slice(0, 2000)).toBeGreaterThan(-1);
+  const loading = screenAt(result.output, loadingEnd > loadingAt ? loadingEnd : result.marks![0]!, columns, rows);
+  const screens = result.marks!.map((mark, index) => ({ label: steps[index]![2], ...screenAt(result.output, mark, columns, rows) }));
+  const table = [`Loading…: border row ${loading.bottom}, title rows ${loading.titles}, hint rows ${loading.hints}`,
+    ...screens.map(screen => `${screen.label}: border row ${screen.bottom}, title rows ${screen.titles}, hint rows ${screen.hints}`)];
+  if (process.env['DECKENT_TERM_PANEL_ROWS']) await writeFile(`${process.env['DECKENT_TERM_PANEL_ROWS']}-${rows}x${columns}.txt`, [...table, '', `===== Loading…\n${loading.text}`, ...screens.map(screen => `===== ${screen.label}\n${screen.text}`)].join('\n'));
+  expect(loading.bottom, loading.text).toBeGreaterThan(0);
+  for (const screen of screens) {
+    const where = `${screen.label}\n${screen.text}`;
+    expect(screen.bottom, where).toBeGreaterThan(0);
+    // The key hints sit right above the closing border (wrapped to two rows on a narrow terminal).
+    const hint = screen.lines.findLastIndex(line => line.includes('↑↓'));
+    expect(screen.bottom - hint, where).toBeLessThanOrEqual(2); expect(screen.lines.slice(hint, screen.bottom).join(' '), where).toMatch(/Esc /u);
+    expect(screen.titles, `the title once: ${where}`).toBe(1);
+    expect(screen.hints, `one key-hint row: ${where}`).toBe(1);
+    for (const line of screen.lines) expect(line.length, line).toBeLessThanOrEqual(columns);
   }
-  expect([...bottoms.sections], result.output.slice(-3000)).toHaveLength(1); expect([...bottoms.keys], result.output.slice(-3000)).toHaveLength(1);
+  expect(new Set([loading.bottom, ...screens.map(screen => screen.bottom)]).size, table.join('\n')).toBe(1);
 }, 150_000);

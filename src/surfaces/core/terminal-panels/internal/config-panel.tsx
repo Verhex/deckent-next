@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, pickerView, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { pickerView, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { configEntryAllowed } from '#platform/index.js';
 import { ConfigRecordWindow } from './config-records.js';
 import { ConfigNumberWindow } from './config-stepper.js';
 import { EntryWindow } from './entry.js';
-import { usePickerRoom } from './lines.js';
+import { PickerWindow } from './picker-window.js';
 import type { ConfigPanelField, ConfigPanelLabels, ConfigPanelLayer, ConfigPanelPort, ConfigPanelView, PanelLabels, PanelNotice } from './contract.js';
 
 /** Value-level row ids that are not schema choices (a schema choice id never starts with `:`). */
@@ -62,12 +62,12 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
   const [step, setStep] = useState<Step>({ kind: 'pick' });
-  const room = usePickerRoom(FOCUS_ROWS);
   const reload = useCallback(async () => { setView(await port.inspect()); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
   useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
-  if (!view) return <Window title={[span(labels.loading)]} hints={words.hints} position={labels.position} onClose={onClose} />;
+  if (!view) return <PickerWindow title={[span(labels.loading)]} bodyRows={FOCUS_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position} onClose={onClose}
+    onResult={onClose} />;
   const focusedKey = state.trail.length >= 2 ? state.trail[1]!.id : null;
   const tree = configPanelTree(view, words, focusedKey);
   const shown = pickerView(tree, state), row = shown.rows[shown.pos];
@@ -122,8 +122,6 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
       }} />;
   }
   const body = [...focusLines(field, words), ...(state.trail.length ? [] : view.notes.map(note => ({ spans: [span(note, { role: 'warning' })] })))];
-  return <Window title={[span(view.title)]} body={body}
-    hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-    footer={focusedWindow => <ListPicker key={generation} tree={tree} labels={labels.picker} active={focusedWindow} initial={state} onState={setState} maxRows={room.rows}
-      onResult={result => chosen(result, state)} />} />;
+  return <PickerWindow title={[span(view.title)]} body={body} bodyRows={FOCUS_ROWS} tree={tree} labels={labels.picker} position={labels.position}
+    pickerKey={generation} initial={state} onState={setState} onResult={result => chosen(result, state)} />;
 }

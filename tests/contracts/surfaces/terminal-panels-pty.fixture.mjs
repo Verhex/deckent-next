@@ -59,6 +59,16 @@ const model = { async inspect() { return { title: w('tui.model.title'), notes: [
   label: 'Fixture switched', providerLabel: 'OpenRouter', detail: '', group: 'openrouter-api', blocked: null, exact: '', command: null, configured: false,
 }] }; } };
 
+// TERM-PANEL: a `/provider` port with three kinds (one takes an address from a list, one is locked with a long policy reason); nothing connects.
+const kind = (id, label, extra) => ({ id, label, detail: 'not connected', blocked: null, keyName: null, keyStored: false, endpointEditable: false, endpointDefault: null,
+  keyRequired: true, endpointChoices: [], models: [], modelBlocked: null, ...extra });
+const LOCKED = 'Your company keeps this provider closed in this scope (resource `provider`, action `connect`, id corporate); an administrator can open it with a '
+  + 'grant, and until then no key is stored and no request leaves this machine. FIXTURE-REASON-END';
+const provider = { transparency: [], endpoint: () => ({ ok: false, reason: 'fixture' }), connect: async () => { throw new Error('fixture connects nothing'); },
+  disconnect: async () => [], async inspect() { return { title: w('tui.panel.provider.title'), notes: [], kinds: [kind('openai', 'OpenAI'),
+    kind('local', 'Local server', { endpointEditable: true, keyRequired: false, endpointChoices: [{ id: 'here', label: 'This machine', url: 'http://127.0.0.1:8000' }] }),
+    kind('corporate', 'Corporate gateway', { blocked: LOCKED })] }; } };
+
 const view = createElement(WorklinePaletteProvider, {
   palette: resolveWorklinePalette(tier === 'none' ? 'none' : 'ansi256'),
   children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(false) }, createElement(WorklineApp, {
@@ -69,7 +79,7 @@ const view = createElement(WorklinePaletteProvider, {
     async *streamTurn() { yield { kind: 'usage', promptTokens: 20, completionTokens: 3, reasoningTokens: null };
       yield { kind: 'text', text: 'FIXTURE-ANSWER' }; yield { kind: 'done', finish: 'stop' }; },
     info: admin.info,
-    panels: { labels: terminalPanelLabels(locale), ports: { model, config: configPanelPort(root, configContext, options, locale), mcp: mcpPanelPort(root, mcpRun, options, locale) } },
+    panels: { labels: terminalPanelLabels(locale), ports: { model, config: configPanelPort(root, configContext, options, locale), mcp: mcpPanelPort(root, mcpRun, options, locale), provider } },
   })),
 });
 const instance = render(view, { exitOnCtrlC: false, patchConsole: false, interactive: true });

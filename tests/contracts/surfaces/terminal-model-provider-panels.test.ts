@@ -671,3 +671,66 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     expect(JSON.stringify(turns[1]!.messages)).not.toContain('ANSWER-1');
   });
 });
+
+/** TERM-PANEL (owner 2026-10-19): the window in a frame — its height (border to border), how often a text shows inside it, its key-hint rows. */
+function windowShape(frame: string, title: string) {
+  const lines = frame.split('\n'), top = lines.findIndex(line => line.startsWith('╭')), bottom = lines.findIndex((line, index) => index > top && line.startsWith('╰'));
+  const inside = lines.slice(top + 1, bottom);
+  return { height: bottom - top + 1, titles: inside.filter(line => line.includes(title)).length, hints: inside.filter(line => /Esc /u.test(line)).length };
+}
+
+describe('TERM-PANEL: /provider, /model, budget and cache windows draw one title and one key-hint row and keep one height', () => {
+  it('/provider: Loading, the kinds, a kind\'s actions, the address list and a locked kind', async () => {
+    const loading = mount(panel('provider', { provider: { ...providerPort().port, inspect: () => new Promise<ProviderPanelView>(() => undefined) } }).element);
+    await settle(80);
+    const height = windowShape(loading.frame(), 'Providers').height;
+    const view = mount(panel('provider', { provider: providerPort().port }).element);
+    await settle(80);
+    const shapes = [windowShape(view.frame(), 'Providers')];
+    await view.press(`${DOWN}${ENTER}`); shapes.push(windowShape(view.frame(), 'Providers'));
+    expect(view.frame()).toContain('Providers › Local server');
+    await view.press(ENTER);
+    expect(view.frame()).toContain('vLLM on this machine');
+    const address = windowShape(view.frame(), 'Address');
+    await view.press(ESC, 80); await view.press(DOWN);
+    expect(view.frame()).toContain('Not available yet.'); shapes.push(windowShape(view.frame(), 'Providers'));
+    expect([...shapes, address]).toEqual([...shapes, address].map(() => ({ height, titles: 1, hints: 1 })));
+  });
+  it('/model: the models, a blocked one with its reason and the scope step', async () => {
+    const view = mount(panel('model', { model: modelPort(MODELS).port }).element);
+    await settle(80);
+    const shapes = [windowShape(view.frame(), 'Models · scope')];
+    await view.press(DOWN); expect(view.frame()).toContain('NOT-ACTIVE'); shapes.push(windowShape(view.frame(), 'Models · scope'));
+    await view.press(`\u001B[A${ENTER}`); expect(view.frame()).toContain('This session only'); shapes.push(windowShape(view.frame(), 'Models · scope'));
+    expect(shapes.every(shape => shape.titles === 1 && shape.hints === 1 && shape.height === shapes[0]!.height), JSON.stringify(shapes)).toBe(true);
+  });
+  it('budget (amount, then confirm with its question as the title) and the cache confirm', async () => {
+    const budget: BudgetPanelPort = { inspect: async () => ({ action: 'create', current: null, note: null, frozen: false, presets: [5, 10], min: 1, max: 100, step: 1, start: 5 }),
+      apply: async () => ({ ok: true, line: 'set' }) };
+    const view = mount(panel('model', { model: { ...modelPort(MODELS).port, budget } }).element);
+    await settle(80); await view.press(ENTER);
+    const amount = windowShape(view.frame(), 'Create budget');
+    await view.press(ENTER);
+    const confirm = windowShape(view.frame(), "Set this scope's shared budget to 5 USD?");
+    expect([amount, confirm]).toEqual([{ height: amount.height, titles: 1, hints: 1 }, { height: amount.height, titles: 1, hints: 1 }]);
+    const cache = { inspect: async () => ({ detail: 'one', lines: [{ label: '', text: 'WHAT-CHANGES' }] }),
+      apply: async (): Promise<ConfigPanelOutcome> => ({ status: 'applied', lines: ['on'], approvalId: null }) };
+    const cached = mount(panel('model', { model: { ...modelPort(MODELS).port, cache } }).element);
+    await settle(80); await cached.press(ENTER);
+    expect(windowShape(cached.frame(), 'Turn on prompt cache (5 min)?')).toMatchObject({ titles: 1, hints: 1 });
+  });
+  it('workspace: the profiles, the Loading frame while the list is read and the workspaces', async () => {
+    let release: () => void = () => undefined;
+    const listed = new Promise<void>(resolve => { release = resolve; });
+    const workspace = { inspect: async () => [{ id: 'profile-a', label: 'Profile A', detail: 'openai-api' }],
+      list: async () => { await listed; return [{ id: 'ws-1', name: 'Workspace one' }, { id: 'ws-2', name: 'Workspace two' }]; },
+      apply: async (): Promise<ConfigPanelOutcome> => ({ status: 'applied', lines: ['set'], approvalId: null }) };
+    const view = mount(panel('model', { model: { ...modelPort(MODELS).port, workspace } }).element);
+    await settle(80); await view.press(ENTER);
+    const shapes = [windowShape(view.frame(), 'Provider workspace')];
+    await view.press(ENTER); expect(view.frame()).toContain('Loading'); shapes.push(windowShape(view.frame(), 'Provider workspace'));
+    release(); await settle(80); expect(view.frame()).toContain('Workspace two'); shapes.push(windowShape(view.frame(), 'Provider workspace'));
+    expect(shapes).toEqual(shapes.map(() => ({ height: shapes[0]!.height, titles: 1, hints: 1 })));
+  });
+});
+

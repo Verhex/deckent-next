@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ConfigRecordDraft, ConfigRecordField, ConfigRecordPort, ConfigRecordPreview, ConfigRecordView, ConfigFileChoice } from '#surfaces/core/config/index.js';
 import { CONFIG_IMPORT_KEYS } from '#surfaces/core/config/index.js';
-import { ListPicker, type PickerNode, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import type { PickerNode, PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window } from '#surfaces/core/terminal-window/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { ConfigNumberWindow } from './config-stepper.js';
-import { usePickerRoom } from './lines.js';
+import { PickerWindow } from './picker-window.js';
 import type { ConfigPanelLayer, ConfigPanelOutcome, PanelLabels } from './contract.js';
 
 type Step = { kind: 'members' } | { kind: 'form'; member: string | null; draft: ConfigRecordDraft }
@@ -18,7 +18,7 @@ export function ConfigRecordWindow({ port, keyPath, title, layer, labels, onResu
   readonly onResult: (outcome: ConfigPanelOutcome) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void;
 }) {
   const [view, setView] = useState<ConfigRecordView | null>(null), [step, setStep] = useState<Step>({ kind: 'members' }), [generation, setGeneration] = useState(0);
-  const busy = useRef(false), room = usePickerRoom(1), words = labels.config.records;
+  const busy = useRef(false), words = labels.config.records;
   const callbacks = useRef({ onError, onClose }); callbacks.current = { onError, onClose };
   useEffect(() => { let live = true;
     port.open(keyPath, layer).then(value => { if (live) setView(value); }).catch(error => { if (live) { callbacks.current.onError(error); callbacks.current.onClose(); } });
@@ -77,8 +77,8 @@ export function ConfigRecordWindow({ port, keyPath, title, layer, labels, onResu
   }
   const tree: PickerTree = { title, items };
   const close = () => { if (step.kind === 'members') onClose(); else { setStep({ kind: 'members' }); setGeneration(n => n + 1); } };
-  return <Window title={[span(view ? title : labels.loading, { bold: true })]} status={[span(labels.config.scopes[layer], { role: 'muted' })]}
-    body={[{ spans: [span(view?.note ?? keyPath, { role: view?.note ? 'warning' : 'muted' })] }]} hints={labels.config.hints} position={labels.position} onClose={close} onInput={() => true}
-    footerRows={room.footerRows} footer={focused => <ListPicker key={`${step.kind}-${generation}`} tree={tree} labels={labels.picker} active={focused && !busy.current}
-      maxRows={room.rows} onResult={result => { if (result.kind === 'selected') { selected(result.path); setGeneration(n => n + 1); } else close(); }} />} />;
+  return <PickerWindow title={[span(view ? title : labels.loading, { bold: true })]} status={[span(labels.config.scopes[layer], { role: 'muted' })]}
+    body={[{ spans: [span(view?.note ?? keyPath, { role: view?.note ? 'warning' : 'muted' })] }]} bodyRows={1} tree={tree} labels={labels.picker} position={labels.position}
+    pickerKey={`${step.kind}-${generation}`} active={!busy.current}
+    onResult={result => { if (result.kind === 'selected') { selected(result.path); setGeneration(n => n + 1); } else close(); }} />;
 }

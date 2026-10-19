@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider, useFocusOwner } from '#surfaces/core/terminal-window/index.js';
-import { ListPicker, type PickerResult, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { ListPicker, PICKER_INITIAL, embeddedPickerLayout, pickerHints, pickerView, type PickerResult, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { pickerWindowGeometry } from '#surfaces/core/terminal-panels/index.js';
 import { pickerLabels } from '#surfaces/core/work-labels/index.js';
 
 // Ink görünümü: dar terminal (40 sütun), NO_COLOR/ASCII, engelli satır, pencere yığınıyla odak devri.
@@ -122,3 +123,44 @@ describe('ListPicker view', () => {
     expect(typed).toEqual(['z']);
   });
 });
+
+// TERM-PANEL (owner 2026-10-19): inside a window the list draws neither the title nor the key hints and keeps one height; on its own it is unchanged.
+describe('embedded ListPicker (TERM-PANEL)', () => {
+  const labels = pickerLabels('en');
+  it('the hints that are true now: the list\'s (or the panel\'s more exact words), the open filter\'s, the scope step\'s', () => {
+    expect(pickerHints(labels, PICKER_INITIAL)).toBe(labels.hintList);
+    expect(pickerHints(labels, PICKER_INITIAL, 'PANEL')).toBe('PANEL');
+    expect(pickerHints(labels, { ...PICKER_INITIAL, filter: 'x' }, 'PANEL')).toBe(labels.hintFilter);
+    expect(pickerHints(labels, { ...PICKER_INITIAL, stage: 'scope' }, 'PANEL')).toBe(labels.hintScope);
+  });
+  it('a blocked row\'s reason keeps one row and borrows page rows down to the minimum; the rest ends in an ellipsis; the total never changes', () => {
+    const view = (reason: string) => pickerView({ title: 'T', items: [{ id: 'a', label: 'A', blocked: { reason } }] }, PICKER_INITIAL);
+    expect(embeddedPickerLayout(pickerView(TREE, PICKER_INITIAL), 6, 20, 'x', '~')).toEqual({ listRows: 6, reason: [] });
+    expect(embeddedPickerLayout(view('short'), 6, 20, 'x', '~')).toEqual({ listRows: 6, reason: ['x short'] });
+    const long = embeddedPickerLayout(view('one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen'), 6, 20, 'x', '~');
+    expect(long.listRows + long.reason.length).toBe(7); expect(long.reason).toHaveLength(4); expect(long.reason.at(-1)!.endsWith('~')).toBe(true);
+    for (const row of long.reason) expect(cells(row)).toBeLessThanOrEqual(20);
+  });
+  it('the window geometry: the same page and body room whatever the hints wrap to; the body room never exceeds what the body keeps', () => {
+    const one = pickerWindowGeometry({ terminalRows: 40, reserved: 8, bodyRows: 4, hintRows: 1, minimumBody: 1 });
+    expect(one).toEqual({ pageSize: 6, footerRows: 24, body: 4 });
+    expect(pickerWindowGeometry({ terminalRows: 40, reserved: 8, bodyRows: 4, hintRows: 2, minimumBody: 1 })).toEqual({ ...one, body: 3 });
+    expect(pickerWindowGeometry({ terminalRows: 20, reserved: 8, bodyRows: 4, hintRows: 1, minimumBody: 1 })).toEqual({ pageSize: 3, footerRows: 5, body: 3 });
+  });
+  it('embedded: no breadcrumb and no hint row; the same number of rows at the root, in a section, with a filter and on a blocked row', async () => {
+    const heights: number[] = [];
+    const view = mount(createElement(ListPicker, { tree: TREE, labels, onResult: () => undefined, embedded: true, maxRows: 6 }), 60);
+    await settle();
+    expect(view.frame()).not.toContain('Settings'); expect(view.frame()).not.toContain('Enter select');
+    heights.push(view.frame().split('\n').length);
+    for (const keys of [ENTER, ESC, 'e', '\u007f', `${DOWN}${DOWN}`]) { await view.press(keys); heights.push(view.frame().split('\n').length); }
+    expect(view.frame()).toContain('managed by policy');
+    expect(heights).toEqual(heights.map(() => 6 + 2));
+  });
+  it('on its own (not embedded) the list still draws its breadcrumb and its hints', async () => {
+    const view = mount(createElement(ListPicker, { tree: TREE, labels, onResult: () => undefined }), 100);
+    await settle();
+    expect(view.frame()).toContain('Settings'); expect(view.frame()).toContain(labels.hintList);
+  });
+});
+
