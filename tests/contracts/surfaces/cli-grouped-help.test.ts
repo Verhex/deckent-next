@@ -212,12 +212,13 @@ it('passes an action word to its handler unchanged and refuses a bare family by 
   }
   let errors = '';
   const context = { root: mkdtempSync(join(tmpdir(), 'deckent-cli-gate-')), env: { NO_COLOR: '1', DECKENT_LANG: 'en' }, stdout: { write: () => undefined }, stderr: { write: (text: string) => { errors += text; } } };
-  expect(await main(['backup', '--json'], context)).toBe(2);
+  // C-ADMIN: bare `backup` now lists the sets (handler-owned); `run` is a family that still has no runnable default.
+  expect(await main(['run', '--json'], context)).toBe(2);
   expect(errors).toContain('Missing argument: <action>.');
   // J1b lead decision: a typed CLI_ARGUMENT_MISSING (usage category, exit 2), not the generic CLI_USAGE "Invalid … for …".
-  expect(JSON.parse(errors)).toMatchObject({ code: 'CLI_ARGUMENT_MISSING' }); expect(errors).toContain('Incomplete command: deckent backup.'); expect(errors).not.toContain('CLI_USAGE');
-  expect(errors).toContain('Actions: create | verify | restore');
-  expect(errors).toContain('Details: deckent backup --help');
+  expect(JSON.parse(errors)).toMatchObject({ code: 'CLI_ARGUMENT_MISSING' }); expect(errors).toContain('Incomplete command: deckent run.'); expect(errors).not.toContain('CLI_USAGE');
+  expect(errors).toContain('Actions: list | create | propose');
+  expect(errors).toContain('Details: deckent run --help');
 });
 
 it('keeps exactly the reviewed planned names out of dispatch and help until their slice implements them', async () => {
@@ -262,7 +263,7 @@ it.each(['en', 'tr'] as const)('names the missing argument for every family with
   // C-RUN: bare `report` and `inventory` are handler-owned reads (default scope; off a terminal without one: CLI_SCOPE_REQUIRED, below).
   // C-DOCTOR: bare `workers` reads the default scope (no `--scope` required by the catalog).
   const runnable = new Set([...Object.keys(READ_DEFAULTS), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
-    'coding', 'inference', 'operation', 'report', 'inventory', 'decide']);
+    'coding', 'inference', 'operation', 'report', 'inventory', 'decide', 'backup', 'toolchains']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';

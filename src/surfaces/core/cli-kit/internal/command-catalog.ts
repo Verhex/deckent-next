@@ -41,7 +41,7 @@ export const CLI_CATALOG = [
     action('verify', 'setup', 'cli.audit.summary', 'cli.audit.help'),
     action('rebaseline', 'setup', 'cli.audit.rebaseline.summary', 'cli.audit.help'),
   ] },
-  { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', args: '--scope <id> --set <path>', children: [
+  { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', args: '[<action> --scope <id> --set <path>]', bare: 'handler', children: [
     action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup'),
     action('verify', 'setup', 'cli.help.action.backup.verify', 'cli.help.backup'),
     action('restore', 'setup', 'cli.help.action.backup.restore', 'cli.help.backup'),
@@ -190,7 +190,7 @@ export const CLI_CATALOG = [
     action('delete', 'setup', 'cli.help.action.delete', 'cli.help.secret'),
     action('store', 'setup', 'cli.help.action.secret.store', 'cli.help.secret'),
   ] },
-  { name: 'toolchains', group: 'setup', summary: 'cli.help.summary.toolchains', detail: 'cli.help.toolchains', args: '[--apply]', children: [
+  { name: 'toolchains', group: 'setup', summary: 'cli.help.summary.toolchains', detail: 'cli.help.toolchains', args: '[update [--apply]]', bare: 'handler', children: [
     action('update', 'setup', 'cli.help.action.update', 'cli.help.toolchains'),
   ] },
   { name: 'doctor', group: 'setup', summary: 'cli.help.summary.doctor', detail: 'cli.help.doctor', args: '[--verbose] [--toolchains] [--json]' },

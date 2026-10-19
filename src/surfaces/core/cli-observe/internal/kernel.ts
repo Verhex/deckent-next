@@ -44,6 +44,6 @@ export async function runKernelCommand(argv: readonly string[], context: KernelC
   };
   context.onLocale?.(call.locale);
   if (command === 'policy') return policyVocabularyCommand(call);
-  if (command === 'paths') return pathsCommand(call);
+  if (command === 'paths') return pathsCommand(call, context);
   return doctorCommand(call, context);
 }

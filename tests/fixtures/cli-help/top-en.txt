@@ -73,7 +73,7 @@ Setup / Maintenance:
       [--scope <id>]
   backup      Create, verify and restore recovery sets
       create | verify | restore
-      --scope <id> --set <path>
+      [<action> --scope <id> --set <path>]
   identity    Identity profiles, draft previews and governed distribution
       profiles | preview | choices | distribute
       [--scope <id>] [--verbose]
@@ -88,7 +88,7 @@ Setup / Maintenance:
       [<name>] [--scope <id>]
   toolchains  Check or update worker toolchains
       update
-      [--apply]
+      [update [--apply]]
   doctor      Check installation health
       [--verbose] [--toolchains] [--json]
 

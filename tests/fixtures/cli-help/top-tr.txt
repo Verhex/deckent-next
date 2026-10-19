@@ -72,7 +72,7 @@ Kurulum/Bakım:
       [--scope <id>]
   backup      Kurtarma seti oluştur, doğrula ve geri yükle
       create | verify | restore
-      --scope <id> --set <yol>
+      [<eylem> --scope <id> --set <yol>]
   identity    Kimlik profilleri, taslak önizleme ve yönetilen dağıtım
       profiles | preview | choices | distribute
       [--scope <id>] [--verbose]
@@ -87,7 +87,7 @@ Kurulum/Bakım:
       [<ad>] [--scope <id>]
   toolchains  İşçi araçlarını kontrol et veya güncelle
       update
-      [--apply]
+      [update [--apply]]
   doctor      Kurulum sağlığını kontrol et
       [--verbose] [--toolchains] [--json]
 
