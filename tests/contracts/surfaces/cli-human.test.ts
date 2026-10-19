@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -274,6 +275,27 @@ describe('TTY card contract', () => {
     expect(await caught(() => askCliCard(request, { locale: 'en', env: {}, stdin: pipe, stdout: tty }))).toMatchObject({ code: 'TERMINAL_TTY_REQUIRED' });
     const cancelled = new AbortController(); cancelled.abort();
     expect(await askCliCard(request, { locale: 'en', env: {}, stdin: tty, stdout: tty, signal: cancelled.signal })).toBeNull();
+  });
+  /** A raw-mode terminal pair that records every byte drawn; nothing answers, so a card that mounts would wait for input. */
+  const terminalPair = (onWrite?: () => void) => {
+    const written: string[] = [];
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => stdin, ref: () => stdin, unref: () => stdin });
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { written.push(String(chunk)); onWrite?.(); done(); } }), { isTTY: true, columns: 80, rows: 24 });
+    return { stdin, stdout, written };
+  };
+  const settledWithin = <T,>(work: Promise<T>, ms: number) => Promise.race([work, new Promise<'still-waiting'>(resolve => { setTimeout(() => resolve('still-waiting'), ms).unref(); })]);
+  it('Astra 2661 P2: a card cancelled while its view is still loading returns null at once, draws nothing and never waits for input', async () => {
+    const request = { title: 'x', options: [{ id: 'a', label: 'A' }] }, io = terminalPair(), controller = new AbortController();
+    const asked = askCliCard(request, { locale: 'en', env: {}, stdin: io.stdin, stdout: io.stdout, signal: controller.signal });
+    controller.abort(); // the gate and the first check already ran; the view module is still loading
+    expect(await settledWithin(asked, 2000)).toBeNull();
+    expect(io.written.join('')).toBe('');
+  });
+  it('Astra 2661 P2: a cancellation that lands while the card mounts (before its abort listener exists) still closes it with no answer', async () => {
+    const request = { title: 'x', options: [{ id: 'a', label: 'A' }] }, controller = new AbortController();
+    const io = terminalPair(() => controller.abort()); // the first frame drawn cancels the command
+    expect(await settledWithin(askCliCard(request, { locale: 'en', env: {}, stdin: io.stdin, stdout: io.stdout, signal: controller.signal }), 2000)).toBeNull();
+    expect(controller.signal.aborted).toBe(true);
   });
 });
 

@@ -42,7 +42,10 @@ export function standingCardOptions(locale: Locale, offer: Readonly<{ session?: 
 export async function askCliCard(request: CliCardRequest, io: CliCardIo): Promise<string | null> {
   const { stdin, stdout, env } = cliCardGate(request, io);
   if (io.signal?.aborted) return null;
-  return (await import('./card-view.js')).mountCliCard(request, { stdin: stdin as NodeJS.ReadStream, stdout: stdout as NodeJS.WriteStream, env, locale: io.locale,
+  const view = await import('./card-view.js');
+  // A cancellation that landed while the view loaded fired no event the view could hear (Astra 2661 P2): never draw or wait then.
+  if (io.signal?.aborted) return null;
+  return view.mountCliCard(request, { stdin: stdin as NodeJS.ReadStream, stdout: stdout as NodeJS.WriteStream, env, locale: io.locale,
     ...(io.signal ? { signal: io.signal } : {}), ...(io.known ? { known: io.known } : {}), hints: t('cli.human.card.hints', {}, io.locale) });
 }
 // Scope picker for resolveCommandScope: `pick: request => askCliCard(request, io)`.

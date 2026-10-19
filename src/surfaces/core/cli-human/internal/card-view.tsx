@@ -29,6 +29,8 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
 export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin: NodeJS.ReadStream; stdout: NodeJS.WriteStream; env: NodeJS.ProcessEnv;
   locale: Locale; hints: string; signal?: AbortSignal; known?: KnownSecretSnapshot }>): Promise<string | null> {
   let chosen: string | null = null;
+  // An abort event fires once: a signal already aborted at mount is never heard by a later listener, so exit before drawing (Astra 2661 P2).
+  if (io.signal?.aborted) return null;
   const palette = resolveWorklinePalette(colorCapability({ env: io.env, isTTY: true, argv: [] }));
   const view = render(<WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={resolveRenderGlyphs(prefersAsciiGlyphs(io.env))}>
     <WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider>
@@ -36,6 +38,8 @@ export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin
   // Cancellation of the command closes the card with no answer.
   const abort = () => { chosen = null; view.unmount(); };
   io.signal?.addEventListener('abort', abort, { once: true });
+  // Ink draws the first frame inside render(); a cancellation during that draw preceded the listener above.
+  if (io.signal?.aborted) abort();
   try { await view.waitUntilExit(); } finally { io.signal?.removeEventListener('abort', abort); view.unmount(); }
   return io.signal?.aborted ? null : chosen;
 }
