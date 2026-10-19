@@ -34,7 +34,9 @@ export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
       || ![pid, uid, gid].every(value => Number.isSafeInteger(value) && value >= 0) || pid === 0) return;
     const fd = handoff.takeFd();
     // Same namespaces as the service, read after accept and confirmed against the still-connected peer (a reused pid fails the witness).
-    if (service === null || namespaces(pid) !== service || !native.isConnectionActive(fd, pid, uid, gid)) { closeSync(fd); return; }
+    let admitted = false;
+    try { admitted = service !== null && namespaces(pid) === service && native.isConnectionActive(fd, pid, uid, gid); } catch { /* refused below */ }
+    if (!admitted) { closeSync(fd); return; }
     let socket: Socket;
     try { socket = new Socket({ fd, readable: true, writable: true, allowHalfOpen: true }); }
     catch { closeSync(fd); return; }
