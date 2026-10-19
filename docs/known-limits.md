@@ -28,6 +28,17 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
 - **Some install-time messages are English only** (build and sandbox preparation messages appear before translation exists).
+- **Docker Engine install from setup is new and not yet wired into the `deckent init` window** (alpha.48 I-D2; the setup
+  wiring is the next slice). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
+  lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
+  Desktop on WSL, derivatives such as Linux Mint, conflicting `docker.io`/`containerd`/`runc` packages, an older
+  `docker.list`, no network) only prints the next step. *Impact:* a real install has only been rehearsed with a recording
+  fake `sudo`, never run by Deckent's tests. If Docker changes its key, apt refuses the repository until a Deckent update
+  ships the new key (fail closed). The key and source files are staged in a private folder under `$TMPDIR` that stays
+  after a declined or print-only run. On WSL without systemd the engine may not start after the install; the next check
+  then says the service is stopped. The Docker Desktop check on WSL looks for the Windows-side program (an observed
+  convention, not a documented contract). The terminal-witness refusal text does not name this install yet.
+  *Workaround:* follow the printed commands, start the service, log out and in again for the `docker` group.
 
 ## Isolation
 

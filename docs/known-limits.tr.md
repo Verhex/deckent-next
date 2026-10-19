@@ -27,6 +27,17 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
 - **Bazı kurulum mesajları yalnız İngilizce** (derleme ve sandbox hazırlığı mesajları çeviri var olmadan önce çıkar).
+- **Kurulumdan Docker Engine kurmak yeni ve henüz `deckent init` penceresine bağlı değil** (alpha.48 I-D2; kurulum
+  bağlaması sonraki dilim). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
+  (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
+  Windows/macOS, WSL'de Docker Desktop, Linux Mint gibi türevler, çakışan `docker.io`/`containerd`/`runc` paketleri, eski bir
+  `docker.list`, ağ yok) yalnız sonraki adımı yazar. *Etki:* gerçek kurulum yalnız kayıt tutan sahte bir `sudo` ile
+  prova edildi; Deckent testleri onu hiç çalıştırmaz. Docker anahtarını değiştirirse apt depoyu yeni anahtar bir Deckent
+  güncellemesiyle gelene kadar reddeder (güvenli tarafta kapanır). Anahtar ve kaynak dosyaları `$TMPDIR` altında özel bir
+  klasörde hazırlanır; reddedilen ya da yalnız yazdırılan bir çalıştırmadan sonra orada kalır. systemd'siz WSL'de motor
+  kurulumdan sonra başlamayabilir; sonraki kontrol hizmetin durduğunu söyler. WSL'deki Docker Desktop denetimi Windows
+  tarafındaki programa bakar (gözlenen bir düzen, belgelenmiş bir sözleşme değil). Terminal tanığı ret metni bu kurulumu
+  henüz adıyla anmıyor. *Yol:* yazılan komutları izleyin, hizmeti başlatın, `docker` grubu için oturumu kapatıp açın.
 
 ## Yalıtım
 
