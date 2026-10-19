@@ -128,14 +128,25 @@ describe('deckent doctor (command)', () => {
   });
 });
 
-/** A raw-mode terminal pair: the doctor writes the report and the card to `stdout`; `answer` is typed once the card has drawn. */
+/**
+ * A raw-mode terminal pair: the doctor writes the report and the card to `stdout`. Once the card's key hints are drawn (the window is armed
+ * then), `answer` is typed every 300 ms until the doctor reports the outcome, so a slow machine never drops the only key press.
+ */
 function terminal(answer: string) {
   const written: string[] = [];
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => stdin, ref: () => stdin, unref: () => stdin });
-  let sent = false;
+  let typing: ReturnType<typeof setInterval> | null = null, tries = 0;
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) {
     written.push(String(chunk));
-    if (!sent && written.join('').includes('Update the worker tools?')) { sent = true; setTimeout(() => stdin.write(answer), 400).unref(); }
+    const text = written.join('');
+    if (!typing && text.includes('↑↓ choose · Enter confirm · Esc cancel')) {
+      typing = setInterval(() => {
+        const now = written.join('');
+        if (++tries > 30 || now.includes('Not applied') || now.includes('Applying')) { clearInterval(typing!); return; }
+        stdin.write(answer);
+      }, 300);
+      typing.unref();
+    }
     done();
   } }), { isTTY: true, columns: 120, rows: 40 });
   return { stdin, stdout, written };
