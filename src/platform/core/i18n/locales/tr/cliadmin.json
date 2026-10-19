@@ -246,5 +246,6 @@
   "cli.paths.resource.terminalSessions": "terminal oturumları",
   "cli.backup.card.pickVerify": "Hangi kurtarma seti doğrulansın?",
   "cli.backup.card.pickRestore": "Hangi kurtarma seti geri yüklensin?",
-  "cli.runtime.status.build": "derleme {commit}"
+  "cli.runtime.status.build": "derleme {commit}",
+  "error.SECRET_SET_TERMINAL_REQUIRED": "Anahtar yalnız kişinin terminalinden, gizli istemde kaydedilir: boru, script ya da ajan çağrısı anahtar okunmadan reddedilir ve hiçbir şey kaydedilmedi. Terminalinizde çalıştırın: deckent secret set <AD>."
 }

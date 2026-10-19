@@ -8,6 +8,8 @@ import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { lastJson, runInTerminal } from '../support/terminal-cli.js';
+import { personEnv } from '../support/person-env.js';
 import { cliChildEnv } from '../support/child-env.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 
@@ -65,8 +67,9 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   children.add(service); let serviceOut = ''; service.stdout.on('data', chunk => { serviceOut += String(chunk); }); service.stderr.on('data', chunk => { serviceOut += String(chunk); });
   await ready(service);
   const printed: string[] = [];
-  const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
-  expect(set.code, set.stderr).toBe(0);
+  // C-ADMIN (SEC-1 lead note): a key is set only at a terminal's hidden prompt (a real PTY here).
+  const set = await runInTerminal([process.execPath, cli, 'secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, personEnv(env), [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]);
+  printed.push(set.output); expect(set.code, set.output).toBe(0);
   expect((await readFile(join(globalRoot, 'secrets.json'))).includes(Buffer.from(CANARY))).toBe(true);
 
   const listed = await run(['secret', 'store', '--list', '--json'], project, env); printed.push(listed.stdout, listed.stderr);
@@ -79,8 +82,8 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   expect(JSON.parse(await readFile(globalPath, 'utf8'))).toMatchObject({ secrets: { store: SEALED } });
   expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).get('PROVIDER_TOKEN')).toBe(CANARY);
   // The running service uses the new selection without a restart: the next change lands in the sealed store.
-  const next = await run(['secret', 'set', 'SECOND_TOKEN', '--scope', 'installation', '--json'], project, env, 'synthetic-second-value\n'); printed.push(next.stdout, next.stderr);
-  expect(JSON.parse(next.stdout)).toMatchObject({ action: 'set', backend: SEALED });
+  const next = await runInTerminal([process.execPath, cli, 'secret', 'set', 'SECOND_TOKEN', '--scope', 'installation', '--json'], project, personEnv(env), [{ when: 'SECOND_TOKEN: ', send: 'synthetic-second-value\r' }]);
+  printed.push(next.output); expect(lastJson(next.output)).toMatchObject({ action: 'set', backend: SEALED });
   // The same switch again is current (nothing left to clean); a downgrade without confirmation moves nothing.
   const again = await run(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env); printed.push(again.stdout, again.stderr);
   expect(JSON.parse(again.stdout)).toMatchObject({ status: 'current', cleaned: true });

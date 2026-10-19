@@ -262,7 +262,8 @@ Değişiklik sessiz kapsam almaz: terminal dışında `pool hold|resume|set-capa
 `backup create|restore` `--scope` ister; kimliksiz `runtime shutdown` `--reason` ister. Kişinin terminalinde kapsam, set, anahtar ya da
 depo seçilir ve değişiklik önce kartta onaylanır (AI, CI ya da boru hattına asla sorulmaz): daha zayıf gizli depo için ikinci bir uyarı
 kartı gerekir, geri yükleme hedefi, servis durumunu ve değiştirilen dosyaların nerede saklandığını gösterir, `toolchains update`
-derlemeden önce planı gösterir, `audit rebaseline` kartla onaylanır.
+derlemeden önce planı gösterir, `audit rebaseline` kartla onaylanır. `secret set` anahtarı yalnız kişinin terminalinde (gizli istem)
+alır: boru, script, ajan ya da CI'dan stdin okunmadan reddedilir (`SECRET_SET_TERMINAL_REQUIRED`).
 
 ## Sağlayıcı anahtarları, modeller ve harcama
 

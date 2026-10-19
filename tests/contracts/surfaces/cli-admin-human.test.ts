@@ -191,12 +191,15 @@ it('secret list: name · used by · store, a referenced key the store lacks show
   expect(text).toMatch(/UNUSED_KEY\s+not referenced/u); expect(text).not.toContain('{');
 });
 
-it('secret set/delete off a terminal need --scope before any value is read; on a terminal set offers the missing names and delete shows the users', async () => {
+it('off a terminal: secret set is refused before stdin is read (SEC-1 note), delete needs --scope; on a terminal set offers the missing names and delete shows the users', async () => {
   const f = await project(); await withGlobal(f, { probe: { token: '$DECK:DECKENT_OPENAI_KEY', other: '$DECK:MISSING_KEY' } });
   const calls: unknown[] = [];
   const pipe = io(f, { ...secretHandlers(calls), stdin: piped(CANARY) });
-  expect(await main(['secret', 'set', 'MISSING_KEY'], pipe.context)).toBe(2);
-  expect(pipe.err.text()).toContain('CLI_SCOPE_REQUIRED'); expect(calls).toEqual([]);
+  expect(await main(['secret', 'set', 'MISSING_KEY', '--scope', 'live'], pipe.context)).toBe(1);
+  expect(pipe.err.text()).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect((pipe.context.stdin as Readable).readableEnded).toBe(false);
+  const del = io(f, secretHandlers(calls));
+  expect(await main(['secret', 'delete', 'DECKENT_OPENAI_KEY'], del.context)).toBe(2);
+  expect(del.err.text()).toContain('CLI_SCOPE_REQUIRED'); expect(calls).toEqual([]);
   card.interactive = true; card.answers = ['MISSING_KEY', 'live'];
   const set = io(f, { ...secretHandlers(calls), stdin: piped(`${CANARY}\n`) });
   expect(await main(['secret', 'set'], set.context)).toBe(0);

@@ -3,7 +3,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { ErrorRegistry, EXIT_CODES, emit, loadConfig, loadGlobalConfig, resolveConfigSecrets, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { isSecretName } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { cliMode, cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 import { secretStoreCommand, storeLabel } from './secret-store.js';
@@ -131,6 +131,9 @@ export async function secretCommand(argv: readonly string[], context: AdminComma
   }
   const { setSecret, deleteSecret } = context;
   if (action === 'set' ? !setSecret : !deleteSecret) throw ErrorRegistry.createError('CLI_USAGE');
+  // SEC-1 (owner A48-D5): a key is stored only from a person's terminal (the service requires the terminal witness). A pipe, script, agent or
+  // CI caller is refused here, before stdin is read, so a piped key never reaches this process's memory. `--json` at a terminal is allowed.
+  if (action === 'set' && cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError(name === undefined ? 'CLI_USAGE' : 'SECRET_SET_TERMINAL_REQUIRED');
   const cancelled = () => { reportCancelled(context, locale); return EXIT_CODES.error; };
   if (!name) {
     // A person on a terminal picks a name the config already references but the store lacks; anyone else names the key.

@@ -10,6 +10,8 @@ export const cliadminErrors: ErrorDefinitions = Object.freeze({
   // is its own cause (C-PRIO finding), never "wrong passphrase".
   BACKUP_SET_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.BACKUP_SET_REQUIRED', p, l) }) },
   BACKUP_PASSPHRASE_PROMPT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PASSPHRASE_PROMPT_UNAVAILABLE', p, l) }) },
+  // SEC-1 lead note: refused before stdin is read (the join reconciles it with SEC-1's AUTHORITY_WITNESS_REQUIRED at the service).
+  SECRET_SET_TERMINAL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_SET_TERMINAL_REQUIRED', p, l) }) },
   SECRET_NAME_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.SECRET_NAME_REQUIRED', p, l) }) },
   AUDIT_CHECKPOINT_EXPORT_EMPTY: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_CHECKPOINT_EXPORT_EMPTY', p, l) }) },
   AUDIT_CHECKPOINT_EXPORT_EXISTS: { category: 'usage', render: (p, l) => ({ message: t('error.AUDIT_CHECKPOINT_EXPORT_EXISTS', p, l) }) },

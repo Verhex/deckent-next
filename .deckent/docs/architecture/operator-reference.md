@@ -254,7 +254,8 @@ A change never takes a silent scope: off a terminal `pool hold|resume|set-capaci
 and `backup create|restore` need `--scope`, and `runtime shutdown` without identities needs `--reason`. On a person's terminal the
 scope, the set, the key or the store are picked and the change is confirmed on a card first (an AI, CI or pipe is never asked):
 a weaker secret store needs a second warning card, a restore shows target, service state and where replaced files are kept,
-`toolchains update` shows the plan before it builds, `audit rebaseline` confirms on a card.
+`toolchains update` shows the plan before it builds, `audit rebaseline` confirms on a card. `secret set` takes the key only at a
+person's terminal (hidden prompt): from a pipe, script, agent or CI it is refused before stdin is read (`SECRET_SET_TERMINAL_REQUIRED`).
 
 ## Provider keys, models and spending
 
