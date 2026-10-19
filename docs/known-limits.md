@@ -41,6 +41,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   start; Deckent falls back to Landlock visibly and refuses full-access shell calls. *Workaround:* an administrator installs
   bubblewrap root-owned as `/usr/local/bin/bwrap` with an AppArmor profile that allows `userns` for it (see
   [Get started](../README.md#get-started)).
+- **On a Landlock-only host a large `.gitignore`d folder can refuse the shell.** Landlock now checks folders named in
+  `.gitignore` for credential files like bubblewrap does, so they count toward its 20,000-entry limit (bubblewrap: 50,000).
+  *Impact:* a project over the limit gets the shell refused with a visible reason instead of running. *Workaround:* make
+  bubblewrap usable, or keep large generated folders out of the project folder.
 - **The `prefer-sandbox` host fallback has no enforced filesystem boundary.** In the closed modes, when no sandbox is
   usable the call may run on the host. *Workaround:* set `require-sandbox` when confinement is required.
 - **Credential and home-folder hiding is bounded.** The shared registry covers gh, Docker, kube, Codex, Git credentials and

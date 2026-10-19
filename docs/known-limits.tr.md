@@ -39,6 +39,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   başlayamaz; Deckent görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder. *Yol:* bir yönetici
   bubblewrap'ı root sahipli `/usr/local/bin/bwrap` olarak, ona `userns` izni veren bir AppArmor profiliyle kurar
   ([Başlarken](../README.tr.md#başlarken)).
+- **Yalnız Landlock olan bir host'ta büyük bir `.gitignore` klasörü kabuğu durdurabilir.** Landlock artık `.gitignore`'da adı
+  geçen klasörlerde de bubblewrap gibi kimlik bilgisi dosyası arar; bu yüzden bu klasörler 20.000 girdilik sınırına sayılır
+  (bubblewrap: 50.000). *Etki:* sınırı aşan bir projede kabuk çalışmaz, görünür bir nedenle reddedilir. *Yol:* bubblewrap'ı
+  kullanılabilir yapın ya da büyük üretilmiş klasörleri proje klasörünün dışında tutun.
 - **`prefer-sandbox` host yedeğinin zorlanan bir dosya sistemi sınırı yoktur.** Kapalı modlarda kullanılabilir sandbox
   yoksa çağrı host'ta çalışabilir. *Yol:* sınırlama gerekiyorsa `require-sandbox` seçin.
 - **Kimlik bilgisi ve ev dizini gizleme sınırlıdır.** Ortak kayıt gh, Docker, kube, Codex, Git kimlik bilgileri ve yaygın
