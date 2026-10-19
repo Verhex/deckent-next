@@ -3084,6 +3084,8 @@
         "src/platform/core/output",
         "src/platform/core/config",
         "src/platform/core/i18n",
+        "src/platform/core/redaction",
+        "src/domain/core/effect",
         "src/engine/core/effect",
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/effect-confirmation"

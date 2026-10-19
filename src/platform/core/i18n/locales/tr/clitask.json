@@ -24,5 +24,14 @@
   "queue.cli.summary.confirm": "Sıradaki tam partiyi terminalde onayla",
   "queue.cli.summary.rollback": "Kuyruğun son benimsemesini geri almayı sıraya al",
   "queue.cli.help": "deckent task integration-queue-enqueue --input <dosya|-> [--json]\n  Girdi: {schemaVersion:1, commandId, identity, target}\n  identity: scopeId, runId, taskId, attemptId, generation, layoutRevision\n  target: {kind:\"git-ref\", id:\"refs/heads/<dal>\"}\ndeckent task integration-queue-list --scope <id> [--after <id>] [--limit <n>] [--json]\ndeckent task integration-queue-inspect --scope <id> --command-id <id> [--json]\ndeckent task integration-queue-confirm --scope <id> --command-id <id>\nOnay doğrulanmış insan terminali gerektirir. Yayın ve benimseme tam partiyi ayrı gösterip y/N sorar.\ndeckent task integration-queue-rollback --scope <id>\n    --source-command-id <kuyruk-bileti> --command-id <yeni-id>\nArdından geri alma bileti için integration-queue-confirm kullanın; tek ve tam y/N kartı.",
-  "queue.cli.result": "Kuyruk sonucu: {result}"
+  "queue.cli.result": "Kuyruk sonucu: {result}",
+  "queue.cli.list.title": "Teslim kuyruğu · kapsam {scope} · bilet: {count} (sürmekte olanlar önce)",
+  "queue.cli.list.empty": "{scope} kapsamında teslim kuyruğu bileti yok.",
+  "queue.cli.list.column.task": "Görev",
+  "queue.cli.list.column.target": "Hedef",
+  "queue.cli.list.column.state": "Durum",
+  "queue.cli.list.column.next": "Sonraki adım",
+  "queue.cli.list.column.ticket": "Bilet",
+  "queue.cli.list.reason": "    Neden: {reason}",
+  "queue.cli.list.more": "Daha fazla bilet var: --after {after} ile yeniden çalıştırın."
 }
