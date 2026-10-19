@@ -2,7 +2,7 @@ import { renderAcceptanceLine } from './acceptance.js';
 import { t, type Locale } from '#platform/index.js';
 import { projectHumanState, resolveWorkerUsage, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
   type MonitorWorker } from '#engine/index.js';
-import { describeDiagnostics, mapBlocks, span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from '#surfaces/core/monitor-view/index.js';
+import { boundNamedScopes, describeDiagnostics, mapBlocks, span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from '#surfaces/core/monitor-view/index.js';
 import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, agoText, blockerLabel, quotaWaitText, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
   taskPhaseLabel, verdictLabel, workerPhaseLabel, notAcceptedLabel, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
@@ -61,7 +61,7 @@ const each = <T>(installs: readonly MonitorInstall[], pick: (install: MonitorIns
   installs.flatMap(install => pick(install).map(value => ({ install, value })));
 
 /** Words and cells shared by every block of one view (one locale, one observation time, one marker set). */
-function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
+function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, verbose: boolean) {
   const marks = ascii ? ASCII : UNICODE, now = snapshot.observedAt, multi = snapshot.installs.length > 1, sep = ` ${marks.sep} `;
   const builtAt = (value: string | null) => { const ms = value === null ? NaN : Date.parse(value); return Number.isFinite(ms) ? clockText(ms) : value ?? '—'; };
   // Every worker finds its Run task and attempt by identity (finished, ledger-only workers have no sidecar files: model and events come from here).
@@ -110,7 +110,9 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
       const parts = [t('monitor.build', { commit: short(build.sourceCommit, 12) }, locale), t('monitor.detail.tree', { tree: short(build.sourceTreeSha256, 12) }, locale)];
       return [...parts, ...(build.builtAt ? [t('monitor.build.builtAt', { builtAt: builtAt(build.builtAt) }, locale)] : [])].join(sep); },
     ledgerText: (install: MonitorInstall) => install.ledgerVersion === null ? t('monitor.ledger.unknown', {}, locale) : t('monitor.ledger', { version: install.ledgerVersion }, locale),
-    warnings: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => !entry.note),
+    /** The warnings a person reads (named scope lines bounded unless `verbose`); `problemCount` is the true number. */
+    warnings: (install: MonitorInstall) => boundNamedScopes(describeDiagnostics(install.diagnostics, locale).filter(entry => !entry.note), locale, verbose),
+    problemCount: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => !entry.note).length,
     notes: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => entry.note),
     /** A bare age for table cells whose header already says since/for (`3 h 12 min`); details keep the full sentence. */
     age: (since: number | null) => since === null ? t('monitor.time.unknown', {}, locale) : durationText(now - since, locale),
@@ -414,8 +416,8 @@ function headerLines(w: Words, installs: readonly MonitorInstall[]): MonitorLine
   ];
 }
 
-export function buildMonitorView(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean): MonitorView {
-  const w = wordsFor(snapshot, locale, ascii), installs = snapshot.installs;
+export function buildMonitorView(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, verbose = false): MonitorView {
+  const w = wordsFor(snapshot, locale, ascii, verbose), installs = snapshot.installs;
   const runs = each(installs, install => install.runs);
   const stuck = runs.filter(entry => OPEN.includes(entry.value.state) && entry.value.blocker && !MOVING.has(entry.value.blocker.code))
     .sort((a, b) => (a.value.blocker!.sinceMs ?? Infinity) - (b.value.blocker!.sinceMs ?? Infinity) || w.runName(a.value).localeCompare(w.runName(b.value)));

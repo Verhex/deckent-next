@@ -69,6 +69,16 @@ describe.skipIf(process.platform === 'win32')('C-SETUP coding', () => {
     const kind = await run(f, ['coding', 'template', '--provider', 'claude', '--preview'], { configureCodingTemplate: template });
     expect(kind.code).toBe(2); expect(kind.stderr).toContain('claude-coding'); expect(template).not.toHaveBeenCalled();
   });
+  it('J3: an empty installation says in words that there are no admitted choices yet (EN/TR), never a bare "-"', async () => {
+    const f = await project({}), template = vi.fn();
+    for (const [lang, words] of [['en', 'Admitted choices here: none yet.'], ['tr', 'Bu kurulumda kabul edilmiş seçenekler: henüz yok.']] as const) {
+      // No admitted coding CLI yet: the provider list is empty (the task kinds always offer the template's own kinds).
+      const result = await run(f, ['coding', 'template', '--kind', 'coding', '--preview', '--lang', lang], { configureCodingTemplate: template });
+      expect(result.code).toBe(2); expect(result.stderr).toContain('CLI_CODING_TEMPLATE_CHOICE_MISSING'); expect(result.stderr).toContain(words);
+      expect(result.stderr).not.toMatch(/: -\./u);
+    }
+    expect(template).not.toHaveBeenCalled();
+  });
   it('root cause: TOOLCHAIN_REQUIRED on a configured image with no admitted CLI names the admitted images and the command that works', async () => {
     const f = await project(codingConfig());
     const template = vi.fn(async () => { throw ErrorRegistry.createError('CODING_TEMPLATE_TOOLCHAIN_REQUIRED'); });

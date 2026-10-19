@@ -148,6 +148,7 @@
   "monitor.diagnostic.scopeRefused": "{scope} kapsamına erişim reddedildi{code}",
   "monitor.diagnostic.scopeFailed": "{scope} kapsamı okunamadı{code}",
   "monitor.diagnostic.scopeDiagnosticsUnavailable": "Kapsam adlarını görme izni denetlenemedi ({detail}); yalnız sayılar gösteriliyor",
+  "monitor.diagnostic.scopeNamesMore": "…ve {count} kapsam daha (hepsi için: deckent monitor --verbose)",
   "monitor.installState.running": "ÇALIŞIYOR",
   "monitor.installState.stopped": "SERVİS DURDU",
   "monitor.installState.unknown": "SERVİS BİLİNMİYOR",

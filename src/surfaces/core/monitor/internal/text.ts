@@ -5,7 +5,9 @@ import { clipLine, flattenBlocks, lineText, span, type MonitorBlock, type Monito
 import { MONITOR_TABS, tabLabel } from './labels.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
 
-export interface MonitorTextOptions { readonly locale: Locale; readonly width: number; readonly ascii: boolean; readonly filters?: MonitorFilters }
+export interface MonitorTextOptions { readonly locale: Locale; readonly width: number; readonly ascii: boolean; readonly filters?: MonitorFilters;
+  /** `--verbose`: every named scope line (J3); otherwise the display registry's bound. */
+  readonly verbose?: boolean }
 
 /** Detail lines wrap (a summary or a model line must stay readable whole); table lines are clipped by the layout instead. */
 export function wrapDetail(lines: readonly MonitorLine[], width: number): MonitorLine[] {
@@ -23,7 +25,7 @@ export function wrapDetail(lines: readonly MonitorLine[], width: number): Monito
  */
 export function renderMonitorText(snapshot: MonitorSnapshot, options: MonitorTextOptions): string {
   const width = Math.max(20, options.width), ellipsis = options.ascii ? '...' : '…';
-  const view = buildMonitorView(filterSnapshot(snapshot, options.filters ?? {}), options.locale, options.ascii);
+  const view = buildMonitorView(filterSnapshot(snapshot, options.filters ?? {}), options.locale, options.ascii, options.verbose);
   const rule = (title: string) => clipLine([span(`${options.ascii ? '==' : '──'} ${title} ${(options.ascii ? '=' : '─').repeat(Math.max(0, width - cells(title) - 4))}`)], width, '');
   const lines: MonitorLine[] = [...view.header.map(line => clipLine(line, width, ellipsis))];
   for (const tab of MONITOR_TABS) {

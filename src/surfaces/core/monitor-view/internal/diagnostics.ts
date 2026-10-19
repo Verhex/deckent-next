@@ -1,4 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
+import DISPLAY from './display.json' with { type: 'json' };
 
 /**
  * Install diagnostics in words (MONITOR v1.1). A data-lane code is `name[:detail]` (split on the first `:` only — `scopes-unavailable:<n>:<CODE>`
@@ -70,3 +71,19 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
   return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body, ...(Object.hasOwn(actions, code) ? { action: actions[code]!() } : {}) };
 }
 export const describeDiagnostics = (codes: readonly string[], locale: Locale) => codes.map(code => describeDiagnostic(code, locale));
+
+const NAMED_SCOPE = new Set(['scope-refused', 'scope-failed']);
+/**
+ * J3 (MON-NAMES item 4): a person's text and window show the first `namedScopeLines` (data: `display.json`) named scope lines in the reader's order,
+ * then one "and K more (--verbose)" line; `verbose` shows every one. Other lines and the counts-only form pass through unchanged (JSON is never bounded).
+ */
+export function boundNamedScopes(entries: readonly MonitorDiagnostic[], locale: Locale, verbose = false): MonitorDiagnostic[] {
+  const limit = DISPLAY.namedScopeLines, named = entries.filter(entry => NAMED_SCOPE.has(entry.code)).length;
+  if (verbose || named <= limit) return [...entries];
+  let shown = 0;
+  return entries.flatMap(entry => {
+    if (!NAMED_SCOPE.has(entry.code)) return [entry];
+    shown += 1;
+    return shown <= limit ? [entry] : shown === limit + 1 ? [{ code: 'scope-names-more', note: false, text: t('monitor.diagnostic.scopeNamesMore', { count: named - limit }, locale) }] : [];
+  });
+}

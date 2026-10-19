@@ -38,6 +38,7 @@
   "clisetup.coding.result.kind": "Task kind: {kind}",
   "clisetup.coding.result.toolchain": "CLI: {provider} {cli} · image {image}",
   "clisetup.coding.result.registry": "Registry revision: {revision}",
+  "clisetup.coding.noChoices": "none yet",
   "clisetup.coding.applyHint": "To write it: repeat with --apply (or run it on a terminal and confirm). Full document: --json",
   "error.CLI_CODING_TEMPLATE_CHOICE_MISSING": "Missing {flag}. Admitted choices here: {values}. On a terminal, deckent coding template asks for them.",
   "error.CLI_CODING_TEMPLATE_IMAGE_UNADMITTED": "No admitted {provider} CLI runs on image {image} (the configured execution.docker.imageId or --image). Admitted {provider} images: {images}. Use one: deckent coding template --provider {provider} --kind {kind} --image {admitted}",

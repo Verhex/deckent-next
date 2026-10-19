@@ -148,6 +148,7 @@
   "monitor.diagnostic.scopeRefused": "access to scope {scope} was refused{code}",
   "monitor.diagnostic.scopeFailed": "scope {scope} could not be read{code}",
   "monitor.diagnostic.scopeDiagnosticsUnavailable": "Scope names could not be checked ({detail}); only counts are shown",
+  "monitor.diagnostic.scopeNamesMore": "…and {count} more scope(s) (all of them: deckent monitor --verbose)",
   "monitor.installState.running": "RUNNING",
   "monitor.installState.stopped": "SERVICE STOPPED",
   "monitor.installState.unknown": "SERVICE UNKNOWN",
