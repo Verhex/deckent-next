@@ -14,9 +14,10 @@ const USAGE = 'Usage: prepare <patch-dir> --card <ID> --scope <glob>... [--allow
 const CARD_RE = /^[A-Z0-9][A-Z0-9-]{1,63}$/;
 const RUN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const FLAGS = new Set(['json', 'push', 'allow-protected-paths']);
-/** CI/automation and review-ownership paths (SEC F40): a pushed lane branch runs its own workflows with a write token, so a worker patch
- * touching them is refused unless the lead passes --allow-protected-paths; the scope must still name them. */
-const PROTECTED = Object.freeze(['.github/**', 'CODEOWNERS', 'docs/CODEOWNERS']);
+/** CI/automation, review-ownership and agent-instruction paths (SEC F40): a pushed lane branch runs its own workflows with a write token,
+ * and agent instructions steer every later session, so a worker patch touching them is refused unless the lead passes
+ * --allow-protected-paths; the scope must still name them. Host tooling under `.agents/refactor/` stays an ordinary lane path. */
+const PROTECTED = Object.freeze(['.github/**', 'CODEOWNERS', 'docs/CODEOWNERS', '.claude/**', '.cursor/**', '.codex/**', '.agents/skills/**']);
 const OPTIONS = new Set(['card', 'scope', 'repo', 'remote', 'timeout-ms']);
 const fail = (code, detail, extra = {}) => Object.assign(new Error(`${code}${detail ? `: ${detail}` : ''}`), { code, detail: detail ?? null, ...extra });
 const asString = value => (value == null ? '' : Buffer.isBuffer(value) ? value.toString('utf8') : String(value));

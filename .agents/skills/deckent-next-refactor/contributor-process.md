@@ -150,8 +150,9 @@ node .agents/refactor/pr.mjs prepare <patch-dir> --card <id> --scope <glob>...
 node .agents/refactor/pr.mjs open <patch-dir> --card <id> --push --scope <glob>...
 ```
 
-`--scope` is required (the card's owned paths). A patch touching `.github/**` or `CODEOWNERS` is refused
-unless the lead adds `--allow-protected-paths`, and the scope must still name those paths.
+`--scope` is required (the card's owned paths). A patch touching `.github/**`, `CODEOWNERS` or agent instructions
+(`.claude/**`, `.cursor/**`, `.codex/**`, `.agents/skills/**`) is refused unless the lead adds `--allow-protected-paths`,
+and the scope must still name those paths. Host tooling under `.agents/refactor/` is an ordinary scoped path.
 
 [PLAN.md](../../../.deckent/docs/plan/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
 replay/failure checks and the owner test status.

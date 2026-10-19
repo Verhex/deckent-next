@@ -308,6 +308,29 @@ execTest('SEC F40: a patch without --scope is refused, and a .github/** change i
   assert.equal(lines(fx.gitLog).some(args => args[0] === 'push'), false);
 });
 
+const added = file => `diff --git a/${file} b/${file}
+new file mode 100644
+--- /dev/null
++++ b/${file}
+@@ -0,0 +1 @@
++worker
+`;
+execTest('SEC F40: agent-instruction paths are protected like .github, while .agents/refactor host tooling stays an ordinary scoped path', async t => {
+  const fx = fixture(t); const before = capture(fx.repo);
+  const protectedFiles = ['.claude/rules/worker.md', '.cursor/rules/worker.mdc', '.codex/config.toml', '.agents/skills/deckent-next-refactor/SKILL.md', 'CODEOWNERS', 'docs/CODEOWNERS'];
+  for (const [index, file] of protectedFiles.entries()) {
+    const patch = writePatch(path.join(fx.dir, `protected-${index}`), { base: fx.base, runId: `p${index}`, diff: added(file) });
+    const refused = expectCode(await runPr(['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', file, '--json'], fx.env, fx.repo), 'PR_PROTECTED_PATH');
+    assert.deepEqual(refused.paths, [file]);
+  }
+  assertFrozen(fx.repo, before);
+  assert.equal(lines(fx.gitLog).some(args => args[0] === 'push'), false);
+  const tooling = writePatch(path.join(fx.dir, 'tooling'), { base: fx.base, runId: 'tool1', diff: added('.agents/refactor/x.mjs') });
+  const prepared = await runPr(['prepare', tooling, '--card', CARD, '--repo', fx.repo, '--scope', '.agents/refactor/**', '--json'], fx.env, fx.repo);
+  assert.equal(prepared.code, 0, `${prepared.stderr}\n${prepared.stdout}`);
+  assert.equal(gitSync(['show', `lane/${CARD}-tool1:.agents/refactor/x.mjs`], fx.repo), 'worker\n');
+});
+
 execTest('SEC F40: only the explicit --allow-protected-paths flag admits a scoped .github change, and a later open without it is refused', async t => {
   const fx = fixture(t);
   const workflow = writePatch(path.join(fx.dir, 'workflow'), { base: fx.base, runId: 'wf1', diff: WORKFLOW });
