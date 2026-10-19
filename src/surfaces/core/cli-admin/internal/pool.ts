@@ -163,7 +163,11 @@ export async function assessPoolReadiness(root: string, context: AdminCommandCon
     const view = await context.inspectPoolCapacity(root, { schemaVersion: 1, scopeId, poolId: admission.poolId }, options);
     const drift = poolCapacityDrift(view.poolId, admission, view.capacity, 'admission');
     return { status: drift ? 'drift' as const : 'ready' as const, drift, pool: view };
-  } catch { return { status: 'unavailable' as const, code: 'INVENTORY_UNAVAILABLE', drift: null }; }
+  } catch (error) {
+    // I-S7: the admission names a pool whose ledger row does not exist yet: not set up (`deckent init pool`), not unreadable.
+    if ((error as { code?: unknown } | null)?.code === 'RUN_POOL_REQUIRED') return { status: 'missing' as const, code: 'RUN_POOL_REQUIRED', drift: null };
+    return { status: 'unavailable' as const, code: 'INVENTORY_UNAVAILABLE', drift: null };
+  }
 }
 
 export function poolDriftLine(drift: PoolDrift, locale: Locale): string {
@@ -175,6 +179,7 @@ export function poolWaitLine(task: string, wait: PoolWait, locale: Locale): stri
   return t('cli.pool.wait', { task, code: wait.code, reason, pool: wait.poolId, execution: wait.occupancy.execution, inFlight: wait.occupancy.inFlight, executionSlots: wait.effectiveCapacity.executionSlots, inFlightSlots: wait.effectiveCapacity.inFlightSlots }, locale);
 }
 export function poolReadinessLines(readiness: Awaited<ReturnType<typeof assessPoolReadiness>>, locale: Locale): string[] {
-  const statuses = { ready: t('doctor.poolReadiness.status.ready', {}, locale), drift: t('doctor.poolReadiness.status.drift', {}, locale), unavailable: t('doctor.poolReadiness.status.unavailable', {}, locale), unconfigured: t('doctor.poolReadiness.status.unconfigured', {}, locale) };
+  const statuses = { ready: t('doctor.poolReadiness.status.ready', {}, locale), drift: t('doctor.poolReadiness.status.drift', {}, locale), unavailable: t('doctor.poolReadiness.status.unavailable', {}, locale), unconfigured: t('doctor.poolReadiness.status.unconfigured', {}, locale),
+    missing: t('doctor.poolReadiness.status.missing', {}, locale) };
   return [t('doctor.poolReadiness', { status: statuses[readiness.status], code: readiness.code ?? '-' }, locale), ...(readiness.drift ? [poolDriftLine(readiness.drift, locale)] : [])];
 }

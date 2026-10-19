@@ -1,14 +1,15 @@
 import { t, type Locale } from '#platform/index.js';
 import type { SetupObservation, SetupPlan, SetupStage, SetupStageRegistry } from '#engine/index.js';
 import type { SetupWindowModel } from '#surfaces/core/project-instructions/index.js';
+import { firstJobCommand, firstJobSteps, firstJobTitle, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { planFor, unattendedAnswers, type SetupFlags } from './command.js';
 import { observeSetup } from './observe.js';
 import { isForegroundStage, runForegroundStage } from './foreground.js';
-import { languageName, stageCommand, stageText, stageTitle, stateLabel } from './render.js';
+import { languageName, setupScope, stageCommand, stageText, stageTitle, stateLabel } from './render.js';
 import registry from './modes.json' with { type: 'json' };
 
-type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry }>;
+type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts }>;
 type Choice = Readonly<{ id: string; label: string; answer?: unknown; action: 'answer' | 'apply' | 'later' | 'close' }>;
 
 /** The stage the person works on now: the first one waiting for an answer or ready to apply that was not put off in this session. */
@@ -52,10 +53,13 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
   const scopeId = () => typeof values['core:folder'] === 'string' ? values['core:folder'] : observed.observation.folder.configuredScope ?? null;
   const model = (): SetupWindowModel => {
     const current = plan(), stage = activeStage(current, later), at = stage ? current.stages.indexOf(stage) : -1;
+    // Nothing left to answer: the same rows name the first step the first job still needs (I-S7), or that it is ready; the height never changes.
+    const first = !stage && observed.firstJob ? firstJobSteps(observed.firstJob, setupScope(current))[0] ?? null : null;
+    const next = !stage && observed.firstJob ? first ? t('setup.firstJob.window', { step: firstJobTitle(first, locale) }, locale) : t('doctor.firstJob.ready', {}, locale) : '';
     const rows = [...current.stages.map((item, index) => `${index === at ? '>' : ' '} ${index + 1}. ${stageTitle(item, locale)} · ${stateLabel(item.state, locale)}`), '',
       stage ? stageText(current, stage.reason.code, stage.reason.params, locale) : t('setup.window.finished', {}, locale),
-      stage?.question ? stageText(current, stage.question.key, stage.question.params, locale) : '',
-      note || (stage && stageCommand(stage) ? `$ ${stageCommand(stage)}` : '')];
+      stage?.question ? stageText(current, stage.question.key, stage.question.params, locale) : next,
+      note || (stage && stageCommand(stage) ? `$ ${stageCommand(stage)}` : first ? `$ ${firstJobCommand(first)}` : '')];
     return { title: t('setup.window.title', {}, locale), rows, options: stageChoices(stage, observed.observation, locale).map(({ id, label }) => ({ id, label })),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
@@ -93,5 +97,5 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     await settle(stage, await runForegroundStage(context, root, stage, scopeId(), locale));
     return true;
   };
-  return { model, step, runPending, outcome: () => ({ plan: plan(), results: [...results] }) };
+  return { model, step, runPending, outcome: () => ({ plan: plan(), results: [...results], ...(observed.firstJob ? { firstJob: observed.firstJob } : {}) }) };
 }

@@ -5,6 +5,8 @@ import { FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
 import { LOCALES, NODE_ENGINE_RANGE, assessNodeSupport, envValue, isWslHost, loadConfig, loadConfigLanguage, productResourcePath, type Locale } from '#platform/index.js';
 import { SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY, projectInstructionFacts, projectSkeleton } from '#surfaces/core/project-instructions/index.js';
+import { assessPoolReadiness } from '#surfaces/core/cli-admin/index.js';
+import { poolProvisioned, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import type { SetupCommandContext } from './contract.js';
 
 const locale = (value: string | undefined): Locale | null => {
@@ -31,7 +33,7 @@ export async function observeSetup(context: SetupCommandContext, root: string, f
   if (context.observeSetup) return context.observeSetup(root, { env: context.env ?? process.env, person, ...(flagLanguage === undefined ? {} : { language: flagLanguage }) });
   return observeCoreSetup(context, root, flagLanguage);
 }
-type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry }>;
+type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts }>;
 /** The Core facts and the instructions family, plus the families a composition detected (`extra`: their packages and facts). */
 export async function observeCoreSetup(context: SetupCommandContext, root: string, flagLanguage: string | undefined,
   extra: Readonly<{ packages: readonly SetupFamilyPackage[]; facts: Readonly<Record<string, unknown>> }> = { packages: [], facts: {} }): Promise<Observed> {
@@ -65,5 +67,8 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
       .flatMap(channel => channel.access === 'denied' ? [] : channel.models.filter(entry => entry.activation?.state === 'active')).length, () => 0) : 0 },
     check: { state: 'not-run' },
     families: { ...extra.facts, ...(instructions ? { instructions: projectInstructionFacts(instructions) } : {}) } };
-  return { observation, registry: new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, ...extra.packages]) };
+  // I-S7: the first-job steps after setup, from configuration and the pool ledger only (never the registry preview: it starts a container).
+  const pool = config && scopeId ? poolProvisioned((await assessPoolReadiness(root, context.inspectPoolCapacity ? { inspectPoolCapacity: context.inspectPoolCapacity } : {}, options, config.admission, scopeId)).status) : false;
+  return { observation, registry: new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, ...extra.packages]),
+    firstJob: { execution: !!config?.execution?.docker, registry: !!config?.admission?.registry, pool } };
 }

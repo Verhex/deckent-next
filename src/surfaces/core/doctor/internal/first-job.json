@@ -1,0 +1,13 @@
+{
+  "$comment": "I-S7: the steps still needed after `deckent init` before the first /do, in order, and the one fact that settles each (read from configuration and the pool ledger only; never the registry preview, which starts a container). One source for `deckent init`'s summary and doctor's work rows. `{scope}` and `{providers}` are filled when rendered; `<...>` are the person's values.",
+  "schemaVersion": 1,
+  "steps": [
+    { "id": "worker-image", "fact": "execution", "title": "doctor.firstJob.workerImage", "command": ["npm", "run", "worker:image", "--", "<receipt.json>"] },
+    { "id": "execution", "fact": "execution", "title": "doctor.firstJob.execution",
+      "command": ["deckent", "config", "set", "execution", "{\"docker\":{\"executable\":\"<docker path>\",\"imageId\":\"<image id>\"},\"git\":{\"gitExecutable\":\"<git path>\"}}"] },
+    { "id": "registry", "fact": "registry", "title": "doctor.firstJob.registry",
+      "command": ["deckent", "init", "registry", "--scope", "{scope}", "--provider", "{providers}", "--kind", "<kind>", "--pool", "<pool>", "--execution-slots", "<n>",
+        "--in-flight-slots", "<n>", "--discovery", "<repository|disabled>", "--preview"] },
+    { "id": "pool", "fact": "pool", "title": "doctor.firstJob.pool", "command": ["deckent", "init", "pool", "--scope", "{scope}", "--preview"] }
+  ]
+}

@@ -178,5 +178,6 @@
   "setup.foreground.upgradeBody": "Bu ilk kurulum kuralları {scope} kapsamına eklenir; mevcut her kural korunur ve önceki belgeler arşivlenir:",
   "setup.foreground.upgradeApply": "Bu kuralları ekle",
   "setup.foreground.notApplied": "Hiçbir şey değiştirilmedi.",
-  "error.SETUP_STAGE_REFUSED": "Kurulum {stage} aşamasında durdu ({code}); ondan sonrası uygulanmadı. Bir kişi isteyen aşama (terminal, kart ya da sudo) yalnız terminalde deckent init içinde çalışır."
+  "error.SETUP_STAGE_REFUSED": "Kurulum {stage} aşamasında durdu ({code}); ondan sonrası uygulanmadı. Bir kişi isteyen aşama (terminal, kart ya da sudo) yalnız terminalde deckent init içinde çalışır.",
+  "setup.firstJob.window": "İlk işten önce: {step}"
 }

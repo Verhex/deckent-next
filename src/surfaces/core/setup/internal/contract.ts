@@ -3,6 +3,8 @@ import type { ModelCatalogQuery } from '#domain/index.js';
 import type { IdentityProfileListing, ModelCatalogInspection, ProjectInstructionPort, SetupObservation, SetupStage, SetupStageRegistry } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { CliCardIo } from '#surfaces/core/cli-human/index.js';
+import type { PoolCapacityInspectHandler } from '#surfaces/core/cli-admin/index.js';
+import type { FirstJobFacts } from '#surfaces/core/doctor/index.js';
 
 /** What applying one stage did. `not-wired`: this build has no apply owner for the stage yet (I-S3 wires each operation to its existing
  * owner); nothing was written. A surface never reports a stage as done from an apply result, only from the next observation. */
@@ -15,7 +17,9 @@ export type SetupApplyHandler = (root: string, stage: SetupStage, options: Setup
 /** `person`: a person on a real terminal answers this plan (the window); only then may a family offer a host install (I-D2). */
 export type SetupObserveOptions = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string }>;
 /** Read-only observation and the stage registry for one root (I-S2/I-S3 detection). */
-export type SetupObserveHandler = (root: string, options: SetupObserveOptions) => Promise<Readonly<{ observation: SetupObservation; registry: SetupStageRegistry }>>;
+export type SetupObserveHandler = (root: string, options: SetupObserveOptions) => Promise<Readonly<{ observation: SetupObservation; registry: SetupStageRegistry;
+  /** I-S7: what the first job still needs after setup (configuration and pool ledger reads only). */
+  firstJob?: FirstJobFacts }>>;
 
 /** The shell realm doctor reports (structural: only the fields setup reads). */
 export type SetupShellRealmView = Readonly<{ selected: string | null; rejected: readonly Readonly<{ restricted: boolean }>[];
@@ -38,6 +42,8 @@ export interface SetupCommandContext extends CliBaseContext {
   upgradePolicyTemplateInstallation?: (root: string, scopeId: string, apply: boolean, expect?: string) => Promise<Readonly<{ status: string; expect?: string | null;
     rules?: readonly unknown[] }>>;
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
+  /** The pool ledger read doctor uses (`deckent pool status`); read-only. */
+  inspectPoolCapacity?: PoolCapacityInspectHandler;
   configChoiceSources?: (root: string, options: ConfigLoadOptions) => { list(source: 'scopes', keyPath: string): Promise<readonly { readonly value: unknown }[]> };
 }
 

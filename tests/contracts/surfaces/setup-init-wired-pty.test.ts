@@ -113,6 +113,14 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     for (const line of ['2. Language · done', '6. Permissions · done', '3. Folder and scope · done · This folder already uses the scope "erp-demo"', '11. Project instructions · skipped'])
       expect(summary).toContain(line);
     expect(summary).toContain('core:policy: applied'); expect(summary).toContain('core:language: applied'); expect(summary).toContain('core:final-check: applied');
+    // I-S7: the summary ends with what the first job still needs, in order, each with its exact command (configuration and ledger reads only).
+    const firstJob = summary.slice(summary.indexOf('Before the first job (/do), still to do, in this order:'));
+    expect(firstJob.length).toBeLessThan(summary.length);
+    for (const command of ['$ npm run worker:image -- <receipt.json>', "$ deckent config set execution '{", '$ deckent init registry --scope erp-demo --provider',
+      '$ deckent init pool --scope erp-demo --preview']) expect(firstJob).toContain(command);
+    expect(firstJob.indexOf('worker:image')).toBeLessThan(firstJob.indexOf('config set execution'));
+    expect(firstJob.indexOf('config set execution')).toBeLessThan(firstJob.indexOf('init registry'));
+    expect(firstJob.indexOf('init registry')).toBeLessThan(firstJob.indexOf('init pool'));
     // No hand-written JSON: the folder holds the installation the owners wrote; nothing else (no DECKENT.md: the bridges were declined).
     expect((await readdir(f.root)).sort()).toEqual(['.deckent']);
     // Done stages are detected again on the next run, not remembered.
