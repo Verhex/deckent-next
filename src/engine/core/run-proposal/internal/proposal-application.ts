@@ -4,7 +4,7 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 import { RunAdmissionApplication, RunCreationAuthority, systemOrderedGraph, type BoundRunAdmission, type RunAuthorization, type RunView } from '#engine/core/runs/index.js';
 import { parseRunProposal, runProposalDigest, runProposalQuerySchema, type RunProposalQuery, type RunProposalRecord, type RunProposalStore } from './proposal-contract.js';
-import { validateRunProposal } from './proposal-validation.js';
+import { stableRunProposalBasis, validateRunProposal } from './proposal-validation.js';
 export interface RunProposalContext {
   readonly registry?: WorkClassRegistry | undefined;
   readonly clock: TrustedClock;
@@ -74,8 +74,11 @@ export class RunProposalApplication {
       const replay = await this.runs.hasReceipt(proposal.scopeId, proposal.commandId);
       if (!replay) {
         await this.context.verifySource(proposal, principal);
+        // validate rechecks the approved ceiling against today's money; a parallel charge that still leaves the ceiling covered does not park.
         const current = await this.validate(proposal, principal, record.recordedAt);
-        if (encodeCommandProjection('proposal-basis', current) !== encodeCommandProjection('proposal-basis', record.binding.admission)) throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
+        if (encodeCommandProjection('proposal-basis', stableRunProposalBasis(current)) !== encodeCommandProjection('proposal-basis', stableRunProposalBasis(record.binding.admission))) {
+          throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
+        }
       }
       const admitted = await this.runs.admitEvaluated(bound, principal, evaluation);
       const completed = await this.store.loadProposal(proposal.scopeId, proposal.commandId);

@@ -197,11 +197,29 @@ it('budget gates subtract reserved and settled money, accept equality using exac
   expect(refused.localize('en').message).toContain('$2.00'); expect(refused.localize('en').message).toContain('$2.01');
   expect(refused.localize('tr').message).toContain('2,00'); expect(refused.localize('tr').message).toContain('kalan');
 });
-it.each(['budget', 'registry'] as const)('a pending proposal parks after %s drift rather than consuming its old approval', async changed => {
-  const f = await fixture(false); await f.app().propose(proposal); await f.decide();
-  if (changed === 'budget') f.budget(createProviderSpendCheckpoint({ ...f.checkpoint().account, reservedMinorUnits: 1 }, 2, 0));
-  else f.state.registry = workClassRegistrySchema.parse({ ...f.state.registry, revision: 'business-v2' });
+// recheck_ceiling (owner 2026-10-18, Jev b7d6c0cf): the person approved the declared ceiling, never the moving balance. Registry, budget identity,
+// budget revision and currency stay exact; a parallel charge that still leaves the ceiling covered admits, one that does not is refused.
+it.each(['registry', 'budget-id', 'budget-revision'] as const)('a pending proposal parks after %s drift rather than consuming its old approval', async changed => {
+  const f = await fixture(false); await f.app().propose(proposal); await f.decide(); const account = f.checkpoint().account;
+  if (changed === 'registry') f.state.registry = workClassRegistrySchema.parse({ ...f.state.registry, revision: 'business-v2' });
+  else f.budget(createProviderSpendCheckpoint({ ...account, budget: changed === 'budget-id' ? { ...account.budget, budgetId: 'other-budget' } : { ...account.budget, revision: 2 } }, 2, 0));
   expect((await f.app().propose(proposal)).proposal).toMatchObject({ status: 'parked', reason: 'RUN_PROPOSAL_BASIS_STALE' }); noRun(f);
+});
+it('a pending proposal admits after a parallel charge that still leaves its approved ceiling covered', async () => {
+  const f = await fixture(false), pending = await f.app().propose(proposal); await f.decide();
+  f.budget(createProviderSpendCheckpoint({ ...f.checkpoint().account, reservedMinorUnits: 1 }, 2, 0));
+  const admitted = await f.app().propose(proposal);
+  expect(admitted).toMatchObject({ proposal: { status: 'accepted' }, run: { runId: 'r' } });
+  // The Run keeps the basis the person approved; the moved balance never rewrites the sealed binding.
+  expect(admitted.proposal.binding).toEqual(pending.proposal.binding);
+  expect(admitted.proposal.binding.admission!.budget!.checkpointDigest).not.toBe(f.checkpoint().digest);
+});
+it.each(['below-ceiling', 'frozen'] as const)('a pending proposal is refused with the money left when the balance is %s', async changed => {
+  const f = await fixture(false); await f.app().propose(proposal); await f.decide(); const account = f.checkpoint().account;
+  f.budget(createProviderSpendCheckpoint(changed === 'frozen' ? { ...account, frozen: true } : { ...account, reservedMinorUnits: 801 }, 2, 0));
+  const refused = await f.app().propose(proposal);
+  expect(refused.proposal).toMatchObject({ status: 'rejected', reason: 'RUN_PROPOSAL_BUDGET_EXCEEDED' });
+  expect(refused.reasonParams).toMatchObject({ ceiling: 200, currency: 'USD', remaining: changed === 'frozen' ? 1000 : 199 }); noRun(f);
 });
 it('an expired approval is a durable typed park; repeated submission never creates a new approval', async () => {
   const f = await fixture(false); await f.app().propose(proposal); f.state.now = 1100;
@@ -233,12 +251,19 @@ it.each(['proposal', 'decision', 'acceptance'] as const)('%s write failure leave
   await expect(f.app().propose(proposal)).rejects.toBeDefined(); noRun(f);
   if (failed === 'acceptance') expect((await f.proposals.loadProposal('s', 'propose'))!.status).toBe('recorded');
 });
-it('a budget change during execution-registry resolution is refused inside the same Run transaction', async () => {
-  const f = await fixture(); const original = f.store.createRun.bind(f.store);
-  const port = { loadRunReceipt: f.store.loadRunReceipt.bind(f.store), loadRunWorkspaceCustody: f.store.loadRunWorkspaceCustody.bind(f.store),
-    createRun: async (...args: Parameters<typeof original>) => { f.budget(createProviderSpendCheckpoint({ ...f.checkpoint().account, reservedMinorUnits: 1 }, 2, 0)); return original(...args); } };
-  expect((await f.app(f.proposals, port).propose(proposal)).proposal.status).toBe('parked'); noRun(f);
-});
+// The Run transaction repeats the recheck under the writer lock against the account a parallel charge moved after validation (recheck_ceiling).
+it.each([['covered', 'accepted', null], ['revision', 'parked', 'RUN_PROPOSAL_BASIS_STALE'], ['below-ceiling', 'rejected', 'RUN_PROPOSAL_BUDGET_EXCEEDED']] as const)(
+  'a %s budget change during execution-registry resolution is decided inside the same Run transaction', async (change, status, reason) => {
+    const f = await fixture(); const original = f.store.createRun.bind(f.store), account = f.checkpoint().account;
+    const moved = change === 'revision' ? { ...account, budget: { ...account.budget, revision: 2 } } : { ...account, reservedMinorUnits: change === 'covered' ? 1 : 900 };
+    const port = { loadRunReceipt: f.store.loadRunReceipt.bind(f.store), loadRunWorkspaceCustody: f.store.loadRunWorkspaceCustody.bind(f.store),
+      createRun: async (...args: Parameters<typeof original>) => { f.budget(createProviderSpendCheckpoint(moved, 2, 0)); return original(...args); } };
+    const result = await f.app(f.proposals, port).propose(proposal);
+    expect(result.proposal).toMatchObject({ status, reason });
+    if (status === 'accepted') { expect(result.run).toMatchObject({ runId: 'r' }); return; }
+    if (reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED') expect(result.reasonParams).toMatchObject({ remaining: 100, ceiling: 200, currency: 'USD' });
+    noRun(f);
+  });
 it('inspect authorizes the exact Run before reading proposal content; spoofed attribution and wire authority are refused', async () => {
   const f = await fixture(); await f.app().propose(proposal); f.state.inspect = false;
   await expect(f.inspect().inspect({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'propose' })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
