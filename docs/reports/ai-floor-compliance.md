@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=262 floor=184 policy=1572 steps=48 uyumlu=1620 İHLAL=0
+ai-floor: routes=262 floor=186 policy=1572 steps=48 uyumlu=1620 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -1245,18 +1245,18 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | decision / fixture-target / record | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | decision / fixture-target / record | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | decision / fixture-target / record | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| execution-environment / fixture-target / install | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
-| execution-environment / fixture-target / install | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| execution-environment / fixture-target / install | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| execution-environment / fixture-target / install | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| execution-environment / fixture-target / install | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| execution-environment / fixture-target / install | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| installation / fixture-target / repair | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
-| installation / fixture-target / repair | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| installation / fixture-target / repair | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| installation / fixture-target / repair | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| installation / fixture-target / repair | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
-| installation / fixture-target / repair | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| execution-environment / fixture-target / install | host | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| execution-environment / fixture-target / install | host | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| execution-environment / fixture-target / install | host | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| execution-environment / fixture-target / install | host | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| execution-environment / fixture-target / install | host | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| execution-environment / fixture-target / install | host | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| installation / fixture-target / repair | host | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| installation / fixture-target / repair | host | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| installation / fixture-target / repair | host | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| installation / fixture-target / repair | host | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| installation / fixture-target / repair | host | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| installation / fixture-target / repair | host | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | mcp-server / fixture-target / invoke | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | mcp-server / fixture-target / invoke | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | mcp-server / fixture-target / invoke | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1648,7 +1648,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/index.ts`: `b33acc0768c61d72f4c359cb2913f50a23ebbba2ec5be7886c51afae33f73372`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0`
-- `src/domain/core/policy/internal/ai-floor.ts`: `d7f7c65905a2c67a85e791f12cb99b6b186c3d8adeba557414d9fc89dc80eeb7`
+- `src/domain/core/policy/internal/ai-floor.ts`: `0634a53500e224bada3d582879e6fb5a1703efbd16783cfb802a772f9db4b106`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`

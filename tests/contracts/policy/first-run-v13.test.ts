@@ -148,3 +148,13 @@ it('rollback (D3c) removes exactly the held v13 delta; v11 delivery and v12 owne
   expect(matchFirstRunPolicyTemplate('first-run-template-v13')).toEqual({ id: 'first-run-template', version: 13 });
   expect(matchFirstRunPolicyTemplate('first-run-template-v14')).toBeNull();
 });
+
+it('owner 2026-10-19: install and repair are on the AI floor — a rule naming the MCP actor is refused, the person keeps them', () => {
+  const granted = { ...built.policy, revision: 'a-granted', grants: [...built.policy.grants,
+    { id: 'mcp-install', effect: 'allow', actions: ['install'], scopes: 'all', principals: [mcpRef], resource: { kind: 'execution-environment', ids: 'all' } },
+    { id: 'mcp-repair', effect: 'allow', actions: ['repair'], scopes: 'all', principals: [mcpRef], resource: { kind: 'installation', ids: 'all' } }] };
+  for (const [kind, action, id] of [['execution-environment', 'install', 'docker'], ['installation', 'repair', 'installation-directory-private']] as const) {
+    expect(evaluatePolicy(resolved(granted), { principal: mcp, scopeId: 'installation', action, resource: { kind, id } })).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
+    expect(allows(granted, person, 'installation', kind, action, id)).toBe(true);
+  }
+});

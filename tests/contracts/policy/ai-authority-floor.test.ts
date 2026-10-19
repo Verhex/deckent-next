@@ -15,6 +15,9 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['permission mode', 'permission-mode', 'full-auto', 'set'],
   ['full access', 'permission-mode', 'full-access', 'set'],
   ['backup restore of authority', 'backup', 'set', 'restore'],
+  // Owner 2026-10-19 (I-POL v13): host changes outside the sandbox stay a person's at a terminal.
+  ['execution environment install (Docker group is root-equivalent)', 'execution-environment', 'docker', 'install'],
+  ['installation repair (doctor fix of the installation itself)', 'installation', 'installation-directory-private', 'repair'],
   ['secret write', 'secret', 'OPENAI_API_KEY', 'set'],
   ['secret delete', 'secret', 'OPENAI_API_KEY', 'delete'],
   ['secret store switch', 'secret', 'all', 'switch'],
