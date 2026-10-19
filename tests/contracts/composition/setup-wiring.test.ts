@@ -73,6 +73,11 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     expect(doc.apply).toEqual({ requested: false, results: [] });
     expect(doc.stages.find(stage => stage.id === 'execution:runtime')).toMatchObject({ state: 'blocked', operation: null });
     expect(await readdir(f.root)).toEqual([]);
+    // The same without an agent marker: `--json` and `--yes` are never a person answering, so no install offer either (I-D2 delta §1).
+    for (const args of [['init', '--json'], ['init', '--yes', '--scope', 'erp-demo', '--json']]) {
+      const document = f.document((await f.run(args, { PATH: f.empty })).stdout);
+      expect(document.stages.find(stage => stage.id === 'execution:runtime'), args.join(' ')).toMatchObject({ state: 'blocked', operation: null });
+    }
     const yes = await f.run(['init', '--yes', '--scope', 'erp-demo'], { CLAUDECODE: '1', PATH: f.empty });
     const applied = f.document(yes.stdout);
     expect(applied.apply.results.every(result => ELIGIBLE.includes(result.operation)), yes.stdout).toBe(true);
