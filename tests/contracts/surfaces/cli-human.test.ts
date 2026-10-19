@@ -8,7 +8,7 @@ import { ErrorRegistry, clearConfigCache, exitCodeFor, getConfigFieldDefault, re
 import { commandLocale, resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { projectInputSchema } from '#engine/core/config/index.js';
 import {
-  AGENT_ENVIRONMENT, acceptanceEvidenceText, cliCardGate, cliTableStyle, detectCliMode, displayId, formatAgo, formatBytes, formatClock, formatDecimal, formatDuration,
+  AGENT_ENVIRONMENT, acceptanceEvidenceText, askCliCard, cliCardGate, cliTableStyle, detectCliMode, displayId, formatAgo, formatBytes, formatClock, formatDecimal, formatDuration,
   listRunIds, matchIdPrefix, orderPendingFirst, renderCliTable, renderInputSchema, requireIdPrefix, resolveCommandScope, safeCell, schemaRequested,
   scopeLister, scopeNotice, standingCardOptions, textCells, type CliCardRequest,
 } from '#surfaces/core/cli-human/index.js';
@@ -267,6 +267,13 @@ describe('TTY card contract', () => {
     }
     expect(await caught(() => cliCardGate({ title: 'x', options: [{ id: 'a', label: 'A' }, { id: 'a', label: 'B' }] }, { locale: 'en', env: {}, stdin: tty, stdout: tty })))
       .toMatchObject({ code: 'CLI_USAGE' });
+  });
+  it('J1: askCliCard passes the same gate before its Ink view loads, and an already cancelled command gets no answer', async () => {
+    const request = { title: 'x', options: [{ id: 'a', label: 'A' }] };
+    expect(await caught(() => askCliCard(request, { locale: 'en', env: { CLAUDECODE: '1' }, stdin: tty, stdout: tty }))).toMatchObject({ code: 'TERMINAL_TTY_REQUIRED' });
+    expect(await caught(() => askCliCard(request, { locale: 'en', env: {}, stdin: pipe, stdout: tty }))).toMatchObject({ code: 'TERMINAL_TTY_REQUIRED' });
+    const cancelled = new AbortController(); cancelled.abort();
+    expect(await askCliCard(request, { locale: 'en', env: {}, stdin: tty, stdout: tty, signal: cancelled.signal })).toBeNull();
   });
 });
 
