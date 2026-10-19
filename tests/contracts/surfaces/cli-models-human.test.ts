@@ -90,8 +90,19 @@ it('bare models: one table of the scope\'s models grouped by channel, state in w
   expect(text).not.toMatch(/model-b-later retires/u);
   expect(text).not.toMatch(/@1|aliases|alias-of|catalog r1|—|\{/u);
   const json = host(f);
-  expect(await main(['models', '--json'], json.context)).toBe(0);
+  expect(await main(['models', '--catalog', '--json'], json.context)).toBe(0);
   expect(JSON.parse(json.out.text())).toEqual(catalog);
+  // Lead J2e (C-MODELS decision 2): plain `models --json` keeps the declared-list contract; the catalog JSON is behind `--catalog` (or `--scope`).
+  const plain = host(f);
+  expect(await main(['models', '--json'], plain.context)).toBe(0);
+  expect(JSON.parse(plain.out.text())).toEqual(declared);
+  expect(plain.calls).toEqual([{ kind: 'declared', value: null }]);
+  const scoped = host(f);
+  expect(await main(['models', '--scope', 'live', '--json'], scoped.context)).toBe(0);
+  expect(JSON.parse(scoped.out.text())).toEqual(catalog);
+  const both = host(f);
+  expect(await main(['models', '--declared', '--catalog', '--json'], both.context)).toBe(2);
+  expect(both.err.text()).toContain('CLI_USAGE'); expect(both.calls).toEqual([]);
 });
 
 it('the retirement warning threshold is the config field (law 6): 30 days warns about a model 20 days away; the TR table reads in Turkish', async () => {

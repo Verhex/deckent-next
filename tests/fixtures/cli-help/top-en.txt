@@ -55,7 +55,7 @@ Models:
       purge-content | cancel | spending | reconcile-spending | create-budget |
       revise-budget | audit-spending | connect |
       catalog list|register|activate|deactivate
-      [--scope <id>] [--input <file|->]
+      [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Approvals:
   approval    Inspect and decide approval requests
@@ -75,15 +75,14 @@ Setup / Maintenance:
       create | verify | restore
       --scope <id> --set <path>
   identity    Identity profiles, draft previews and governed distribution
-              (without an action: profiles)
       profiles | preview | choices | distribute
-      [--scope <id>] [--profile <id>]
+      [--scope <id>] [--verbose]
   config      Inspect and change configuration
       get | explain | validate | set | unset
       [<key> [<value>]] [--global]
-  mcp         Manage MCP servers (without an action: list)
+  mcp         Manage MCP servers
       add | add-json | import | list | get | remove | approve | revoke
-      [<name>] [--scope local|project|user]
+      [<name>] [--check] [--scope local|project|user]
   secret      Manage stored secrets (without an action: list)
       list | set | delete | store
       [<name>] [--scope <id>]

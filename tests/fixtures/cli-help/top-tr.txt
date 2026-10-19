@@ -55,7 +55,7 @@ Modeller:
       purge-content | cancel | spending | reconcile-spending | create-budget |
       revise-budget | audit-spending | connect |
       catalog list|register|activate|deactivate
-      [--scope <id>] [--input <dosya|->]
+      [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Onaylar:
   approval    Onay isteklerini incele ve karara bağla
@@ -73,16 +73,15 @@ Kurulum/Bakım:
   backup      Kurtarma seti oluştur, doğrula ve geri yükle
       create | verify | restore
       --scope <id> --set <yol>
-  identity    Kimlik profilleri, taslak önizleme ve
-              yönetilen dağıtım (eylemsiz: profiles)
+  identity    Kimlik profilleri, taslak önizleme ve yönetilen dağıtım
       profiles | preview | choices | distribute
-      [--scope <id>] [--profile <id>]
+      [--scope <id>] [--verbose]
   config      Yapılandırmayı incele ve değiştir
       get | explain | validate | set | unset
       [<anahtar> [<değer>]] [--global]
-  mcp         MCP sunucularını yönet (eylemsiz: list)
+  mcp         MCP sunucularını yönet
       add | add-json | import | list | get | remove | approve | revoke
-      [<ad>] [--scope local|project|user]
+      [<ad>] [--check] [--scope local|project|user]
   secret      Saklanan gizli değerleri yönet (eylemsiz: list)
       list | set | delete | store
       [<ad>] [--scope <id>]

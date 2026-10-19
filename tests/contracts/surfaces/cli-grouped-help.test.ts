@@ -238,7 +238,7 @@ it('keeps exactly the reviewed planned names out of dispatch and help until thei
 });
 
 /** The reviewed read-only defaults (owner 2026-10-19 CLI review): a new default needs the same review (stop: a default would mutate). */
-const READ_DEFAULTS = { audit: 'verify', workers: 'list', pool: 'status', identity: 'profiles', policy: 'status', mcp: 'list', secret: 'list', runtime: 'describe' };
+const READ_DEFAULTS = { audit: 'verify', workers: 'list', pool: 'status', policy: 'status', secret: 'list', runtime: 'describe' };
 
 it('runs only the reviewed read action when a family is called without one', async () => {
   const reads = Object.fromEntries((CLI_CATALOG as readonly CliCommandSpec[]).flatMap(spec => spec.bare && spec.bare !== 'handler' && spec.bare.read ? [[spec.name, spec.bare.read]] : []));
@@ -253,14 +253,14 @@ it('runs only the reviewed read action when a family is called without one', asy
     expect(calls, name).toEqual([[name, read, ...flags, '--lang', 'tr']]);
   }
   // A family that acts on its own keeps its argv; flags with values never turn into a default action.
-  for (const argv of [['terminal'], ['init'], ['models', '--json'], ['config'], ['doctor'], ['monitor', '--once'], ['policy', '--json', 'vocabulary'], ['inventory', '--scope', 'live']]) {
+  for (const argv of [['terminal'], ['init'], ['models', '--json'], ['identity'], ['mcp'], ['config'], ['doctor'], ['monitor', '--once'], ['policy', '--json', 'vocabulary'], ['inventory', '--scope', 'live']]) {
     calls.length = 0; await family(argv[0]!).run(argv, {});
     expect(calls, argv.join(' ')).toEqual([argv]);
   }
 });
 
 it.each(['en', 'tr'] as const)('names the missing argument for every family without a runnable default (%s, exit 2, never the bare usage)', async language => {
-  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'config', 'monitor', 'doctor', 'paths']);
+  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';

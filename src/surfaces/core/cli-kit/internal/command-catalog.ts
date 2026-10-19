@@ -117,7 +117,7 @@ export const CLI_CATALOG = [
     action('outcome', 'work', 'cli.help.action.outcome', 'cli.help.decide'),
     action('inspect', 'work', 'cli.help.action.decide.inspect', 'cli.help.decide'),
   ] },
-  { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', args: '[--scope <id>] [--input <file|->]', bare: 'handler', children: [
+  { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', args: '[--scope <id>] [--declared] [--catalog] [--verbose]', bare: 'handler', children: [
     action('binding', 'models', 'cli.help.action.binding', 'cli.help.modelsBinding'),
     action('activation', 'models', 'cli.help.action.activation', 'cli.help.modelsActivation'),
     action('activate', 'models', 'cli.help.action.models.activate', 'cli.help.modelsActivation'),
@@ -145,7 +145,7 @@ export const CLI_CATALOG = [
     action('decide', 'approvals', 'cli.help.action.decide', 'cli.approval.help'),
     action('renew', 'approvals', 'cli.help.action.renew', 'cli.approval.help'),
   ] },
-  { name: 'identity', group: 'setup', summary: 'identity.summary', detail: 'identity.help', args: '[--scope <id>] [--profile <id>]', bare: { read: 'profiles' }, children: [
+  { name: 'identity', group: 'setup', summary: 'identity.summary', detail: 'identity.help', args: '[--scope <id>] [--verbose]', bare: 'handler', children: [
     action('profiles', 'setup', 'identity.profilesSummary', 'identity.help'),
     action('preview', 'setup', 'identity.previewSummary', 'identity.help'),
     action('choices', 'setup', 'identity.choicesSummary', 'identity.distributionHelp'),
@@ -175,7 +175,7 @@ export const CLI_CATALOG = [
     action('set', 'setup', 'cli.help.action.config.set', 'config.surface.help'),
     action('unset', 'setup', 'cli.help.action.unset', 'config.surface.help'),
   ] },
-  { name: 'mcp', group: 'setup', summary: 'cli.help.summary.mcp', detail: 'cli.help.mcp', args: '[<name>] [--scope local|project|user]', bare: { read: 'list' }, children: [
+  { name: 'mcp', group: 'setup', summary: 'cli.help.summary.mcp', detail: 'cli.help.mcp', args: '[<name>] [--check] [--scope local|project|user]', bare: 'handler', children: [
     action('add', 'setup', 'cli.help.action.add', 'cli.help.mcp'),
     action('add-json', 'setup', 'cli.help.action.add-json', 'cli.help.mcp'),
     action('import', 'setup', 'cli.help.action.import', 'cli.help.mcp'),

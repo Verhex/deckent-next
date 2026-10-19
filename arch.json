@@ -1672,7 +1672,8 @@
         "src/composition/core/config",
         "src/adapters/core/provider-connect",
         "src/engine/core/workspaces",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/engine/core/runtime"
       ],
       "plan": "SURFACES"
     },

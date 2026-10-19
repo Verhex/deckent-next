@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 // MCP-REVOKE (Astra 2174/2175/2176, common P1): a one-shot approval of a tool call is not the server's trust. While a call waits at its card,
@@ -34,7 +35,8 @@ const writeRegistry = (project: string, entry: unknown) => {
 };
 type Harness = Awaited<ReturnType<typeof runtime>>;
 const command = (f: Harness, request: Parameters<typeof runConfiguredMcpCommand>[1]) => runConfiguredMcpCommand(f.project, request, { env: f.env }, async () => true);
-const approve = (f: Harness) => command(f, { verb: 'approve', name: 'fx', alwaysAsk: [] });
+// SEC-1 (J2e): the trust decision is refused without a terminal, then decided with a real PTY peer.
+const approve = (f: Harness) => witnessedMcpCommand(f.project, { verb: 'approve', name: 'fx', alwaysAsk: [] }, { env: f.env }, async () => true);
 
 /** One turn calling `mcp__fx__echo`; `meanwhile` runs while its card waits (after the card is shown, before the owner's allow). */
 async function turn(f: Harness, turnId: string, meanwhile: () => Promise<unknown> = async () => undefined, decision: 'allow' | 'deny' = 'allow') {
@@ -119,7 +121,7 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
 
   it('a user-scope server (trust in the global root) reset while the card waits: nothing is sent', async () => {
     const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
-    expect(await command(f, { verb: 'add', scope: 'user', name: 'fx', entry: m.entry() })).toMatchObject({ trust: 'trusted' });
+    expect(await witnessedMcpCommand(f.project, { verb: 'add', scope: 'user', name: 'fx', entry: m.entry() }, { env: f.env }, async () => true)).toMatchObject({ trust: 'trusted' });
     let status: unknown;
     const stale = await turn(f, 'user-reset', async () => { await command(f, { verb: 'reset', name: 'fx' }); status = await command(f, { verb: 'get', name: 'fx' }); });
     expect(status).toMatchObject({ server: { scope: 'user', status: 'pending-approval', trust: null } });

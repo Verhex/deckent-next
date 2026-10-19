@@ -7,6 +7,7 @@ import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { runMcpCommand, type McpLiveTool } from '#adapters/index.js';
 import { ErrorRegistry, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
+import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
@@ -33,12 +34,13 @@ function mcpFixture(mode: 'legacy' | 'dual' = 'dual', tools: unknown[] = [echo, 
     realm: 'host', ...extraEntry });
   return { calls, starts, entry, setTools: (next: unknown[]) => writeFileSync(toolsFile, JSON.stringify(next)) };
 }
-/** The project registry file and the owner's approval (the real composition command; the card is answered yes). */
+/** The project registry file and the owner's approval (the real composition command; the card is answered yes; SEC-1: refused without a terminal,
+ * then decided with a real PTY peer). */
 function registry(project: string, servers: Record<string, unknown>) {
   mkdirSync(join(project, '.deckent'), { recursive: true }); writeFileSync(join(project, '.deckent', 'mcp.json'), JSON.stringify({ mcpServers: servers }));
 }
 const approve = (project: string, env: Record<string, string>, name = 'fx', alwaysAsk: string[] = []) =>
-  runConfiguredMcpCommand(project, { verb: 'approve', name, alwaysAsk }, { env }, async () => true);
+  witnessedMcpCommand(project, { verb: 'approve', name, alwaysAsk }, { env }, async () => true);
 /** Approval through the adapter with the harness's sandbox list (the composition command always uses the shipped providers). */
 const approveWithout = (f: { project: string; data: string; env: Record<string, string> }) => runMcpCommand({ verb: 'approve', name: 'fx', alwaysAsk: [] },
   { projectRoot: f.project, layout: resolveProductLayout({ projectRoot: f.project, root: f.data }), environment: f.env, secret: async () => undefined, sandboxes: [],
@@ -375,7 +377,7 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
     expect(floored).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     // G3: a re-approval that gives no alwaysAsk list (the terminal's) keeps the owner's lock: the floor cell still asks.
-    await runConfiguredMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env: auto.env }, async () => true);
+    await witnessedMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env: auto.env }, async () => true);
     expect(await auto.call('mcp__fx__drop', {})).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     const ask = await modeRuntime({ grants: both('require-approval', true), mode: 'ask' });

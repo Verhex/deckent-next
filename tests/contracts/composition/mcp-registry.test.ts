@@ -14,6 +14,7 @@ import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
 import { mcpCommand } from '#surfaces/core/cli/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 
 // MCP-CLIENT registry (owner 2026-09-28): servers live in scoped files outside configuration — project `.deckent/mcp.json`, personal
@@ -48,8 +49,9 @@ function workspace() {
     return JSON.parse(out.join('')) as Record<string, unknown>;
   };
   // C-MODELS (owner A48-D5/D6): the CLI decides trust only on a person's card (refused off a terminal, --yes included); the registry semantics here
-  // decide through the application with the card answered yes, as the card does.
-  const decide = async (request: Record<string, unknown>) => runConfiguredMcpCommand(project, request as never, { env }, async () => true) as Promise<Record<string, unknown>>;
+  // decide through the application with the card answered yes, as the card does. SEC-1 (J2e): that decision is witnessed by a real terminal, so
+  // each one is first refused from this non-TTY process (AUTHORITY_WITNESS_REQUIRED, nothing written) and then decided on a PTY.
+  const decide = async (request: Record<string, unknown>) => witnessedMcpCommand(project, request as never, { env }, async () => true) as Promise<Record<string, unknown>>;
   return { base, project, home, env, server, cli, decide, approve: (name: string) => decide({ verb: 'approve', name }) };
 }
 const byName = (listed: Record<string, unknown>) => Object.fromEntries((listed['servers'] as { name: string }[]).map(server => [server.name, server as Record<string, unknown>]));
@@ -109,7 +111,7 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
   it('an expanded ${VAR} (a personal token in args) never shows on the approval card or the tool-call card; the definition stays the template', async () => {
     const w = workspace(), fx = w.server('fx');
     await w.cli('add', '--no-approve', 'fx', ...fx.args, '--token', '${MY_TOKEN}');
-    const approved = await (async () => { const out: string[] = []; await runConfiguredMcpCommand(w.project, { verb: 'approve', name: 'fx' }, { env: w.env },
+    const approved = await (async () => { const out: string[] = []; await witnessedMcpCommand(w.project, { verb: 'approve', name: 'fx' }, { env: w.env },
       async card => { out.push(JSON.stringify(card)); return true; }); return out.join(''); })();
     expect(approved).toContain('"phase":"launch"'); expect(approved).toContain('"phase":"tools"');
     expect(approved).toContain('${MY_TOKEN}'); expect(approved).toContain('"name":"MY_TOKEN","set":true'); expect(approved).not.toContain('s3cr3t-value-xyz');

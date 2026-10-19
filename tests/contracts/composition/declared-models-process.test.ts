@@ -48,7 +48,7 @@ it('returns one unchanged declared catalog through SDK, compiled CLI, and real s
   await Promise.all([cli, mcp].map(path => access(path).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); })));
   const f = await fixture({ provider_catalog: catalog }), before = await snapshot(f.project, f.home);
   const sdk = await inspectDeclaredModels(f.project, { env: f.env });
-  const cliResult = JSON.parse((await execute(process.execPath, [cli, 'models', '--declared', '--json'], {
+  const cliResult = JSON.parse((await execute(process.execPath, [cli, 'models', '--json'], {
     cwd: f.project, env: f.env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as unknown;
   const transport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
   const client = new Client({ name: 'declared-models-process', version: '1' });

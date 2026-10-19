@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.map(root => rm(root, {recursive:true,force:true}))); });
@@ -17,7 +18,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
  {id:'decide',effect:'allow',actions:['inspect','decide'],scopes:['scope'],principals:me,resource:{kind:'approval',ids:'all'}}]}); await f.start();
  mkdirSync(join(f.project,'.deckent'),{recursive:true});
  writeFileSync(join(f.project,'.deckent','mcp.json'),JSON.stringify({mcpServers:{fx:{command:process.execPath,args:[resolve('tests/fixtures/mcp-stdio-server.mjs'),'--mode','dual','--tools',toolsFile,'--log',logFile],realm:'host'}}}));
- await runConfiguredMcpCommand(f.project,{verb:'approve',name:'fx',alwaysAsk:[]},{env:f.env},async()=>true);
+ await witnessedMcpCommand(f.project,{verb:'approve',name:'fx',alwaysAsk:[]},{env:f.env},async()=>true); // SEC-1 (J2e): refused off a terminal, then a real PTY peer
  f.state.script=[{toolCall:{name:'mcp__fx__echo',arguments:JSON.stringify({text:'after revoke'})}},{content:'Done.'}];
  const client=f.client(),pending:Promise<unknown>[]=[]; let revokedStatus:unknown;
  await client.chatTurn({schemaVersion:1,scopeId:'scope',turnId:'revoke',sessionId:'session-m',messages:[{role:'user',content:'use'}]},event=>{

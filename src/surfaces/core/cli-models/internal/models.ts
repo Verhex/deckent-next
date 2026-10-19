@@ -11,7 +11,7 @@ import { modelConnectCommand } from './model-connect.js';
 import { renderModelsTable } from './models-table.js';
 import { modelsInteractive, retirementWarningDays } from './io.js';
 
-interface Parsed { action: 'list' | 'binding'; json: boolean; noColor: boolean; help: boolean; language?: string; declared: boolean; verbose: boolean; scopeId?: string;
+interface Parsed { action: 'list' | 'binding'; json: boolean; noColor: boolean; help: boolean; language?: string; declared: boolean; catalog: boolean; verbose: boolean; scopeId?: string;
   providerId?: string; providerVersion?: number; modelId?: string; modelVersion?: number }
 function positiveVersion(value: string | undefined): number {
   if (!value || !/^[1-9]\d*$/.test(value)) throw ErrorRegistry.createError('CLI_USAGE');
@@ -20,12 +20,13 @@ function positiveVersion(value: string | undefined): number {
 function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'models') throw ErrorRegistry.createError('CLI_USAGE');
   const action = argv[1] === 'binding' ? 'binding' : 'list';
-  const parsed: Parsed = { action, json: false, noColor: false, help: false, declared: false, verbose: false }; const seen = new Set<string>();
+  const parsed: Parsed = { action, json: false, noColor: false, help: false, declared: false, catalog: false, verbose: false }; const seen = new Set<string>();
   for (let index = action === 'binding' ? 2 : 1; index < argv.length; index++) {
     const value = argv[index]!;
-    if (value === '--json' || value === '--no-color' || value === '--help' || value === '-h' || (action === 'list' && (value === '--declared' || value === '--verbose'))) {
+    if (value === '--json' || value === '--no-color' || value === '--help' || value === '-h' || (action === 'list' && (value === '--declared' || value === '--catalog' || value === '--verbose'))) {
       const key = value === '-h' ? '--help' : value; if (seen.has(key)) throw ErrorRegistry.createError('CLI_USAGE'); seen.add(key);
       if (key === '--json') parsed.json = true; else if (key === '--no-color') parsed.noColor = true; else if (key === '--declared') parsed.declared = true;
+      else if (key === '--catalog') parsed.catalog = true;
       else if (key === '--verbose') parsed.verbose = true; else parsed.help = true;
     } else if (value === '--lang' || (action === 'list' && value === '--scope')) {
       if (seen.has(value)) throw ErrorRegistry.createError('CLI_USAGE'); seen.add(value); const supplied = argv[++index];
@@ -41,7 +42,10 @@ function parse(argv: readonly string[]): Parsed {
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (parsed.help && (parsed.json || parsed.noColor)) throw ErrorRegistry.createError('CLI_USAGE');
-  if (parsed.declared && parsed.scopeId) throw ErrorRegistry.createError('CLI_USAGE');
+  if (parsed.declared && (parsed.scopeId || parsed.catalog)) throw ErrorRegistry.createError('CLI_USAGE');
+  // Lead J2e (C-MODELS decision 2): plain `models --json` keeps the declared-list contract scripts and AI read; the catalog JSON needs `--catalog`
+  // (or `--scope`, which only the catalog takes).
+  if (action === 'list' && parsed.json && !parsed.catalog && !parsed.scopeId) parsed.declared = true;
   if (action === 'binding' && !parsed.help && (!parsed.providerId || parsed.providerVersion === undefined
     || !parsed.modelId || parsed.modelVersion === undefined)) throw ErrorRegistry.createError('CLI_USAGE');
   return parsed;

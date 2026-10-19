@@ -7,6 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { mcpProjectTrustDirectory } from '#adapters/core/mcp-trust/index.js';
 import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { lastJson, runInTerminal } from '../support/terminal-cli.js';
 
 // MCP-CLIENT: the compiled `deckent mcp` commands as a real process over a real project (add → list → approve → list → remove), with a
 // real SDK server whose own log shows when it was started.
@@ -15,7 +16,8 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 // C-MODELS (owner A48-D5/D6): trust is a person's card on a terminal; off a terminal the compiled CLI refuses it, `--yes` included, before anything starts
-// or is written. The trusted half of this flow is decided here through the application with its card answered (the card itself is PTY-proven).
+// or is written. SEC-1 (J2e join): two layers, each pinned here — the CLI refuses first (MCP_APPROVAL_NEEDS_TERMINAL); the application behind it
+// keeps the witness as the backstop (AUTHORITY_WITNESS_REQUIRED for any non-TTY caller). The trusted half is the compiled CLI on a real PTY, cards answered.
 it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove through the compiled CLI; approval without a terminal is refused, --yes included', async () => {
   const base = mkdtempSync(join(tmpdir(), 'deckent-mcp-cli-')); roots.push(base);
   const project = join(base, 'project'), home = join(base, 'home'), tools = join(base, 'tools.json'), log = join(base, 'log.jsonl');
@@ -43,8 +45,14 @@ it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove thro
   expect(json(run('list', '--check', '--json'))).toMatchObject({ servers: [{ name: 'fx', status: 'pending-approval', health: 'not-started' }] });
   expect(started()).toBe(0);
   clearConfigCache();
-  expect(await runConfiguredMcpCommand(project, { verb: 'approve', name: 'fx' }, { env: { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' } }, async () => true))
-    .toMatchObject({ approved: true, scope: 'project', pinnedTools: 1 });
+  const env = { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' }, cards = [
+    { when: 'to read its tools?', send: '' }, { when: 'Esc cancel', send: 'y' }, { when: 'and pin these tools?', send: '' }, { when: 'Esc cancel', send: 'y' }];
+  // The backstop layer: the application refuses a caller without a terminal even with its card answered yes; nothing is started.
+  await expect(runConfiguredMcpCommand(project, { verb: 'approve', name: 'fx' }, { env }, async () => true)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(started()).toBe(0);
+  const approved = await runInTerminal([process.execPath, CLI, 'mcp', 'approve', 'fx', '--json'], project, env, cards);
+  expect(approved.code, approved.output).toBe(0);
+  expect(lastJson(approved.output)).toMatchObject({ approved: true, scope: 'project', pinnedTools: 1 });
   const startedAfterCard = started();
   expect(json(run('list', '--json'))).toMatchObject({ servers: [{ name: 'fx', status: 'trusted', health: 'not-started' }] });
   expect(started()).toBe(startedAfterCard);
@@ -58,8 +66,14 @@ it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove thro
   }
   expect(existsSync(join(home, '.deckent', 'mcp.json'))).toBe(false);
   clearConfigCache();
-  expect(await runConfiguredMcpCommand(project, { verb: 'add', scope: 'local', name: 'lx', approve: true, entry: { command: process.execPath, args: [FIXTURE, '--mode', 'legacy', '--tools', tools, '--log', log], realm: 'host' } },
-    { env: { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' } }, async () => true)).toMatchObject({ added: { name: 'lx', scope: 'local' }, trust: 'trusted', pinnedTools: 1 });
+  const entry = { command: process.execPath, args: [FIXTURE, '--mode', 'legacy', '--tools', tools, '--log', log], realm: 'host' };
+  await expect(runConfiguredMcpCommand(project, { verb: 'add', scope: 'local', name: 'lx', approve: true, entry }, { env }, async () => true))
+    .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(existsSync(join(home, '.deckent', 'mcp.json'))).toBe(false);
+  const added = await runInTerminal([process.execPath, CLI, 'mcp', 'add', '--realm', 'host', 'lx', '--json', '--', process.execPath, FIXTURE, '--mode', 'legacy', '--tools', tools, '--log', log],
+    project, env, cards);
+  expect(added.code, added.output).toBe(0);
+  expect(lastJson(added.output)).toMatchObject({ added: { name: 'lx', scope: 'local' }, trust: 'trusted', pinnedTools: 1 });
   const gone = run('get', 'fx');
   expect(gone.code).not.toBe(0); expect(gone.err + gone.out).toContain('MCP_SERVER_UNKNOWN');
   // SEC-2 (F29): local and project trust live in the global root's directory of this project, never in the project tree.

@@ -142,10 +142,12 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     expect(f.mcpGrants().map(grant => grant.scopes)).toEqual(['all']);
   }, 90_000);
 
-  it('W3-AUTHORITY negative: a headless approver (no controlling terminal) keeps the trust but writes no grant', async () => {
+  it('W3-AUTHORITY negative: a headless approver (no controlling terminal) is refused before the trust card: no trust, no grant, no registry entry', async () => {
+    // SEC-1 (owner A48-D5, J2e join): the trust decision itself now needs the witness, so a headless approver no longer reaches "trusted without a grant".
     const f = await fixture({ headless: true });
-    expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ trust: 'trusted', grant: { status: 'refused', reason: 'APPROVAL_INTERACTIVE_REQUIRED' } });
+    await expect(f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     expect(f.mcpGrants()).toEqual([]); expect(f.authorityChanges()).toEqual([]);
+    expect(await f.run({ verb: 'list', health: false })).toMatchObject({ servers: [] });
   }, 90_000);
 
   it('a person without that authority keeps the trust and is told why; nothing is written to policy', async () => {

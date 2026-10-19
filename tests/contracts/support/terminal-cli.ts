@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 
 // SEC-1 (A48-D5): the compiled CLI on a real controlling PTY (stdin and stdout on it), the way a person runs it; nothing is mocked. Each
 // answer is typed only after its prompt appeared (a hidden prompt switches the terminal to raw mode first, so the value is never echoed).
+// J2e join: a prompt is looked for only in the output after the previous answer, and the answer waits 0.3 s after it, so an arrow-key card
+// (L-KIT, drawn before Ink switches stdin to raw mode) is answered once it listens, and the next card is not matched on an earlier frame.
 const DRIVER = String.raw`
 import json, os, pty, select, sys, time
 spec = json.loads(sys.argv[1])
@@ -9,7 +11,7 @@ pid, terminal = pty.fork()
 if pid == 0:
     os.chdir(spec['cwd'])
     os.execve(spec['argv'][0], spec['argv'], spec['env'])
-seen, answers, deadline = b'', list(spec['answers']), time.time() + 30
+seen, answers, deadline, mark = b'', list(spec['answers']), time.time() + 30, 0
 while time.time() < deadline:
     ready, _, _ = select.select([terminal], [], [], 0.05)
     if ready:
@@ -17,9 +19,10 @@ while time.time() < deadline:
         except OSError: data = b''
         if not data: break
         seen += data
-    if answers and answers[0]['when'].encode() in seen:
-        time.sleep(0.05)
+    if answers and answers[0]['when'].encode() in seen[mark:]:
+        time.sleep(0.3)
         os.write(terminal, answers.pop(0)['send'].encode())
+        mark = len(seen)
 _, status = os.waitpid(pid, 0)
 sys.stdout.write(json.dumps({ 'code': os.waitstatus_to_exitcode(status), 'output': seen.decode('utf-8', 'replace') }))
 `;
@@ -38,8 +41,10 @@ export function runInTerminal(argv: readonly string[], cwd: string, env: NodeJS.
     });
   });
 }
-/** The last line of terminal output that parses as a JSON object (the command's `--json` result). */
+/** Terminal control sequences (CSI: cursor, mode, colour) an Ink card leaves before the next output on the same line. */
+const CSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`, 'gu');
+/** The last line of terminal output that parses as a JSON object (the command's `--json` result), control sequences removed. */
 export function lastJson(output: string): unknown {
-  for (const line of output.split('\n').reverse()) { const text = line.trim(); if (text.startsWith('{')) { try { return JSON.parse(text); } catch { /* not JSON */ } } }
+  for (const line of output.split('\n').reverse()) { const text = line.replace(CSI, '').trim(); if (text.startsWith('{')) { try { return JSON.parse(text); } catch { /* not JSON */ } } }
   return null;
 }
