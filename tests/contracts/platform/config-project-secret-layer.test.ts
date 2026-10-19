@@ -1,9 +1,9 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { clearConfigCache, ConfigValidationError, loadConfig, registerConfigSection, resolveGlobalConfigPaths } from '../../../src/platform/index.js';
+import { clearConfigCache, ConfigValidationError, loadConfig, registerConfigSection, resolveGlobalConfigPaths, writeConfig } from '../../../src/platform/index.js';
 
 // SEC-3 (Claude Security F33): a project `.deckent/config.json` is someone else's commit; it must never pull an installation secret
 // with `$DECK:NAME`. Every case keeps the risky input and asserts the typed refusal before any resolver read.
@@ -78,6 +78,17 @@ describe('project config layer secret references (SEC-3, F33)', () => {
     expect(error.issues).toEqual([{ path: 'execution.git.deliveryIdentity', reason: 'SECRET_REFERENCE_LEAVES_HOST' }]);
     expectContentFree(error, 'GITHUB_TOKEN');
     expect(f.calls()).toBe(0);
+  });
+
+  it('refuses to write a delivery identity reference into either config file, leaving the file unchanged', async () => {
+    const f = await fixture();
+    for (const path of [f.globalPath, f.projectPath]) {
+      await writeFile(path, '{}');
+      const error = await refusal(writeConfig(path, { execution: execution('$DECK:GITHUB_TOKEN') }));
+      expect(error.issues).toEqual([{ path: 'execution.git.deliveryIdentity', reason: 'SECRET_REFERENCE_LEAVES_HOST' }]);
+      expectContentFree(error, 'GITHUB_TOKEN');
+      expect(await readFile(path, 'utf8')).toBe('{}');
+    }
   });
 
   it('still resolves installation-layer references outside host-leaving fields, and plain project text that only mentions $DECK:', async () => {

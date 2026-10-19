@@ -55,8 +55,9 @@ describe('registered config secret-reference policy', () => {
 
   it('does not resolve an earlier allowed-section reference when any forbidden section fails', async () => {
     const f = await fixture(); let resolverCalls = 0;
+    // SEC-3: the allowed reference lives in the installation (global) layer, the only layer that may hold one.
+    await writeFile(f.globalPath, JSON.stringify({ secret_policy_allowed_probe: { token: '$DECK:ALLOWED_FIRST' } }));
     await writeFile(f.projectPath, JSON.stringify({
-      secret_policy_allowed_probe: { token: '$DECK:ALLOWED_FIRST' },
       secret_policy_forbid_probe: { token: '$DECK:FORBIDDEN_SECOND', nested: [] },
     }));
     await expectForbidden(loadConfig(f.project, { env: f.env, heal: false, secretResolver: async () => { resolverCalls++; return 'not-used'; } }), () => resolverCalls);
