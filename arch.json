@@ -3299,11 +3299,19 @@
       "plan": "INSTALLATION"
     },
     "src/adapters/core/setup-detect-execution": {
-      "dependencies": [],
+      "dependencies": [
+        "src/engine/core/setup"
+      ],
       "plan": "INSTALLATION"
     },
     "src/adapters/core/setup-detect-coding": {
-      "dependencies": [],
+      "dependencies": [
+        "src/engine/core/setup",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/agent-workspace-floor",
+        "src/adapters/core/setup-detect-execution"
+      ],
       "plan": "INSTALLATION"
     },
     "src/adapters/core/execution-env-docker": {

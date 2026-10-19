@@ -1,0 +1,26 @@
+{
+  "$comment": "Execution-environment registry for setup detection (alpha.48 I-S2; INIT ANALYSIS §11(b)/(c)7). Order is preference order. `support: unsupported` entries are only reported as present, never probed further. Read-only argv only: version, context inspect, info. Markers are data: `desktop.operatingSystem` is the `docker info` OperatingSystem value Docker Desktop reports and `desktop.cliPrefixes` the WSL integration's CLI location (observed convention, not a documented contract; checked 2026-10-19); `rootless.securityOptions` follows the Engine API (GET /info SecurityOptions contains name=rootless; docs.docker.com engine/security/rootless, checked 2026-10-19).",
+  "schemaVersion": 1,
+  "runtimes": [
+    {
+      "id": "docker",
+      "label": "Docker",
+      "support": "supported",
+      "executable": "docker",
+      "versionArgs": ["version", "--format", "{{json .}}"],
+      "endpointArgs": ["context", "inspect", "--format", "{{json .Endpoints.docker}}"],
+      "infoArgs": ["info", "--format", "{{json .}}"],
+      "groupArgs": ["-G", "--"],
+      "groupExecutable": "id",
+      "userSocketPrefix": "/run/user/",
+      "desktop": { "operatingSystem": ["Docker Desktop"], "cliPrefixes": ["/mnt/wsl/docker-desktop"] },
+      "rootless": { "securityOptions": ["name=rootless"] }
+    },
+    {
+      "id": "podman",
+      "label": "Podman",
+      "support": "unsupported",
+      "executable": "podman"
+    }
+  ]
+}
