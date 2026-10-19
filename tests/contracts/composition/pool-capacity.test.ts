@@ -88,7 +88,7 @@ it('shows drift and typed waits without writes, raises 2/2 to 8/8 and allows eig
   await expect(applyPoolCapacity(f.project, command('resize', 9), f.options)).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
   expect((await inspectRun(f.project, query, f.options)).run?.pool).toMatchObject({ drift: [], waiting: [] });
   expect(JSON.parse((await f.cli(['pool', 'status', '--json'])).out)).toMatchObject({ capacity: { receipt } });
-  expect(await f.cli(['doctor', '--lang', 'tr'])).toMatchObject({ code: 0, out: expect.stringContaining('Havuz hazırlığı') });
+  expect(await f.cli(['doctor', '--verbose', '--lang', 'tr'])).toMatchObject({ code: 0, out: expect.stringContaining('Havuz hazırlığı') });
   expect(await f.cli(['pool', 'status', '--lang', 'tr'])).toMatchObject({ out: expect.stringContaining('kapasite 8/8') });
   for (let i = 2; i < 8; i++) await f.reserve('r' + i);
   expect(await inspectPoolCapacity(f.project, { schemaVersion: 1, scopeId: 's' }, f.options)).toMatchObject({ occupancy: { execution: 8, inFlight: 8 }, receipt });

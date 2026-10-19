@@ -281,6 +281,14 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Boşta duran etkileşimli `deckent monitor` CPU kullanmaya devam eder,** çünkü her yenilemede her şeyi yeniden okur
   (`inspection.workers.heartbeatMs`, varsayılan 2 sn). Run ve kapsam sayısıyla artar. *Yol:* `p` ile duraklatın,
   `inspection.workers.heartbeatMs` değerini büyütün ya da `deckent monitor --once` kullanın.
+- **`deckent doctor` henüz Docker'ı sınamaz** ve o satırda "sınanmadı" der; worker imajı yenileme ve havuz satırları son yenilemenin
+  ve havuz okumasının bulduğunu göstermeye devam eder. *Yol:* makinede `docker info`. Etkileşimli doctor yalnız mevcut bir ürün
+  komutunun uyguladığı düzeltmeleri önerir (bugün: worker araç güncellemesi); kurulum klasörünü özel yapmak kendi politika eylemini
+  bekler, bu yüzden o satır sizin çalıştıracağınız `chmod 700 <klasör>` adımını gösterir.
+- **`deckent terminal status` sohbet modeline bağlanmaz,** bu yüzden erişim "sınanmadı" görünür; `deckent` içindeki ilk yanıt ya da
+  `/provider` kontrolü gösterir. Bağlam penceresi ilk yanıt ölçülene kadar "?" görünür.
+- **`deckent workers watch` satır seçmeye izin vermez.** Terminalde tek pencereyi yeniden çizer (Esc ya da q kapatır); ayrıntı
+  `deckent workers --verbose` ile gelir. `--json`, `--all` ne derse desin geçmiş dahil tüm gözlem raporunu döndürür.
 - **SDK hâlâ ham yazıcıları da dışa aktarır,** yönetilenlerin yanında; sonraki sürümlü bir SDK sözleşmesinin yalnız
   yönetilenleri bırakması hedeflenir.
 

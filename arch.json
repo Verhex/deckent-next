@@ -3198,7 +3198,11 @@
         "src/platform/core/config-fields",
         "src/domain/core/policy",
         "src/engine/core/worker-observation",
-        "src/surfaces/core/monitor"
+        "src/surfaces/core/monitor",
+        "src/engine/core/model-activation",
+        "src/domain/core/model-activation",
+        "src/surfaces/core/cli-human",
+        "src/engine/core/inference-serving"
       ],
       "plan": "SURFACES"
     },

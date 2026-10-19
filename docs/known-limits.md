@@ -280,6 +280,14 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **An idle interactive `deckent monitor` keeps using CPU** because it re-reads everything on every refresh
   (`inspection.workers.heartbeatMs`, default 2 s). It grows with the number of Runs and scopes. *Workaround:* press `p` to
   pause it, raise `inspection.workers.heartbeatMs`, or use `deckent monitor --once`.
+- **`deckent doctor` does not test Docker yet** and says "not tested" on that row; worker image refresh and pool rows still show
+  what the last refresh and pool read found. *Workaround:* `docker info` on the machine. The interactive doctor offers only fixes that
+  an existing product command applies (today: the worker tool update); making the installation folder private waits for its policy
+  action, so that row shows the `chmod 700 <folder>` step to run yourself.
+- **`deckent terminal status` does not contact the chat model**, so its reachability reads "not tested"; the first answer in
+  `deckent` or the `/provider` check shows it. The context window reads "?" until the first answer is measured.
+- **`deckent workers watch` has no row selection.** It redraws one window on a terminal (Esc or q closes); details come from
+  `deckent workers --verbose`. `--json` returns the whole observation report, history included, whatever `--all` says.
 - **The SDK still exports raw writers** next to the managed ones; a later versioned SDK contract is meant to keep only the
   managed ones.
 

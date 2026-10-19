@@ -424,7 +424,7 @@ profili ya da `.env` dosyasına koymayın: başka araçlar oraları okur.
 Ajan ve worker istekleri anahtara adıyla başvurur; çalışma zamanı anahtarı isteme veya shell ortamına koymadan çözer.
 Desteklenen sandbox'lar depoyu gizler; host'a düşen yol dosya sistemi yalıtımı sağlamaz. Anahtarı geri yansıtan sağlayıcı
 yanıtı reddedilir.
-`deckent doctor` hangi deponun etkin olduğunu ve kimin okuyabileceğini gösterir. Sağlayıcı anahtarı reddederse (401/403) ya da
+`deckent doctor` hangi deponun etkin olduğunu gösterir; `deckent doctor --verbose` kimin okuyabileceğini de söyler. Sağlayıcı anahtarı reddederse (401/403) ya da
 bir limit dolarsa terminal bunu açık sözlerle söyler; harcama limitleri sağlayıcı hesabınızda kalır.
 
 **Katı kurulum**, anahtarı makinedeki başka hiçbir programın okumaması gerekiyorsa:
@@ -552,7 +552,7 @@ Sonraki build için yeni bir `--out` dizini kullanın. Build `bubblewrap=present
 Linux'ta kilitli bubblewrap yerleştirilemezse build bitmez, `BUBBLEWRAP_BUILD_REQUIRED` ile durur; Docker'ı başlatıp
 yeniden çalıştırın. Yalnız Linux dışında `bubblewrap=absent (not Linux)` basar; bu bubblewrap sandbox'ının olmadığı
 demektir; yalıtım durumunu `deckent doctor` ile inceleyin. Hiçbir servis çalışmadan yapılan ilk `doctor` bubblewrap yerine
-Landlock gösterebilir: `doctor` yalnız ölçer, paketlenmiş bubblewrap'ı `.deckent/bin` altına runtime servisi, ana makineyi
+Landlock gösterebilir (`doctor --verbose` nedenini söyler): `doctor` yalnız ölçer, paketlenmiş bubblewrap'ı `.deckent/bin` altına runtime servisi, ana makineyi
 ölçerken yerleştirir. Servisi başlatın (`deckent`) ve `doctor`'ı yeniden çalıştırın. Ön koşullar ve sağlayıcı anahtarı
 gerektirmeyen tek test için [katkıcı hızlı başlangıcına (EN)](CONTRIBUTING.md#a-30-minute-quickstart) bakın.
 

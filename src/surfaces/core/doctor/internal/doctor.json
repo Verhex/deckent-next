@@ -1,0 +1,41 @@
+{
+  "groups": [
+    "setup",
+    "security",
+    "work",
+    "tools"
+  ],
+  "retirementStates": [
+    "deprecated",
+    "retired"
+  ],
+  "backupPassphraseSecret": "BACKUP_PASSPHRASE",
+  "fixes": [
+    {
+      "id": "toolchain-update",
+      "checks": [
+        "tools.toolchains",
+        "work.image"
+      ],
+      "port": "updateToolchains",
+      "hardFloor": false
+    },
+    {
+      "id": "installation-directory-private",
+      "checks": [
+        "security.directory"
+      ],
+      "port": "repairInstallationDirectory",
+      "hardFloor": false,
+      "policyAction": "installation/repair"
+    },
+    {
+      "id": "audit-rebaseline",
+      "checks": [
+        "security.audit"
+      ],
+      "port": "rebaselineAudit",
+      "hardFloor": true
+    }
+  ]
+}

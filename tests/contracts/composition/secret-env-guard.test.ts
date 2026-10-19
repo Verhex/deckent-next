@@ -41,7 +41,7 @@ it.skipIf(process.platform === 'win32')('names only: sorted/deduplicated env ref
   expect(await missingEnvironmentReferenceNames(f.project, { env: f.env }, noValueTarget)).toEqual(['A_KEY']);
   const json = capture(), text = capture();
   await runKernelCommand(['doctor', '--json'], { root: f.project, env: f.env, stdout: json.sink, inspectSecretStore: inspectConfiguredSecretStore });
-  await runKernelCommand(['doctor'], { root: f.project, env: f.env, stdout: text.sink, inspectSecretStore: inspectConfiguredSecretStore });
+  await runKernelCommand(['doctor', '--verbose'], { root: f.project, env: f.env, stdout: text.sink, inspectSecretStore: inspectConfiguredSecretStore });
   expect(JSON.parse(json.text()).secretStore.envGuard).toEqual(view.envGuard);
   expect(text.text()).toContain(`Env references missing in ${FILE}: A_KEY`);
   expect(JSON.stringify(view) + json.text() + text.text()).not.toContain(CANARY);

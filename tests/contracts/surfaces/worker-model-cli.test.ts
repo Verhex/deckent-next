@@ -36,13 +36,13 @@ it('workers list prints one model row per pinned worker in en and tr, and JSON c
       { taskId: 'plain', identity: null, authority: 'legacy-activity', provider: 'docker', workspace: null, process: 'exited', handle: null, terminal: null,
         outputRecorded: false, patchRecorded: false, files: null, diagnostics: [] }] }] };
   const handlers = { async inspectWorkers() { return report; } };
-  const english = await run(['workers', 'list', '--scope', 's', '--lang', 'en'], handlers, root);
+  const english = await run(['workers', 'list', '--scope', 's', '--verbose', '--lang', 'en'], handlers, root);
   expect(english.code).toBe(0);
   expect(english.text).toContain('  Task t: Model on claude-cli-subscription: requested claude-sonnet-5-5 (declared auxiliary: claude-haiku-4-5-20251001) → init claude-sonnet-5-5'
     + ' → usage claude-sonnet-5-5, claude-opus-5-5 → SUBSTITUTED (undeclared model; attempt not accepted) [sealed log] · undeclared models used: claude-opus-5-5');
   expect(english.text).toContain('  Task u: Model on codex-cli: requested gpt-exact-1 (declared auxiliary: none) → init none → usage none → unverified [sealed log]');
   expect(english.text).not.toContain('Task plain:');
-  const turkish = await run(['workers', 'watch', '--scope', 's', '--samples', '1', '--lang', 'tr'], handlers, root);
+  const turkish = await run(['workers', 'watch', '--scope', 's', '--verbose', '--samples', '1', '--lang', 'tr'], handlers, root);
   expect(turkish.text).toContain('  Görev t: claude-cli-subscription kanalında model: istenen claude-sonnet-5-5');
   expect(turkish.text).toContain('İKAME EDİLDİ (beyan edilmemiş model; deneme kabul edilmez) [mühürlü günlük] · beyan edilmemiş kullanılan modeller: claude-opus-5-5');
   expect(turkish.text).toContain('→ doğrulanmadı [mühürlü günlük]');

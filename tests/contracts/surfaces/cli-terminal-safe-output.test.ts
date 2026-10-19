@@ -99,12 +99,21 @@ it('F37: workers list/watch neutralise worker-reported model names; --json stays
     nextAfter: null, truncated: false, workers: [{ taskId: 't', identity, authority: 'next-ledger', provider: 'claude', workspace: null, process: 'exited', handle: null,
       terminal: null, outputRecorded: true, patchRecorded: false, files: null, diagnostics: [], model }] }] };
   const handlers = { async inspectWorkers() { return report; } };
-  for (const argv of [['workers', 'list', '--scope', 's', '--lang', 'en'], ['workers', 'watch', '--scope', 's', '--samples', '1', '--lang', 'tr']]) {
+  // C-DOCTOR: the per-source detail moved behind --verbose (same rendering as before); the default view is a table of open workers, and
+  // `--all` adds finished ones. Both paths must neutralise the worker-reported model name.
+  for (const argv of [['workers', 'list', '--scope', 's', '--verbose', '--lang', 'en'], ['workers', 'watch', '--scope', 's', '--verbose', '--samples', '1', '--lang', 'tr']]) {
     const { code, text } = await run(argv, handlers, root);
     expect(code).toBe(0);
     expectNeutralised(text);
     expect(text).toContain('claude-x');
     expect(text).toContain('aux1A');
+    expect(text).not.toContain('evil-title');
+  }
+  for (const argv of [['workers', 'list', '--scope', 's', '--all', '--lang', 'en'], ['workers', 'watch', '--scope', 's', '--all', '--samples', '1', '--lang', 'tr']]) {
+    const { code, text } = await run(argv, handlers, root);
+    expect(code).toBe(0);
+    expectNeutralised(text);
+    expect(text).toContain('claude-x');
     expect(text).not.toContain('evil-title');
   }
   expect(JSON.parse((await run(['workers', 'list', '--scope', 's', '--json'], handlers, root)).text)).toEqual(report);
