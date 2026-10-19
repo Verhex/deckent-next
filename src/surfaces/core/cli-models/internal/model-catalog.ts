@@ -1,10 +1,14 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { randomUUID } from 'node:crypto';
+import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { modelCatalogCommandSchema, modelCatalogQuerySchema, type ModelCatalogCommand, type ModelCatalogQuery } from '#domain/index.js';
 import type { ModelCatalogInspection, ModelCatalogResult } from '#engine/index.js';
-import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
+import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
+import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ModelCommandContext } from './context.js';
+import { askModelsCard, explainActivationDenial, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
+import { channelLabel } from './models-table.js';
 
 export type ModelCatalogInspectionHandler = (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
 export type ModelCatalogApplyHandler = (root: string, command: ModelCatalogCommand, options: ConfigLoadOptions) => Promise<ModelCatalogResult>;
@@ -69,8 +73,10 @@ function renderResult(value: ModelCatalogResult, locale: Locale): string {
 }
 
 /** `models catalog list|register|activate|deactivate` (WORKER-CURRENCY-2): the same application contract as SDK `applyModelCatalog` and MCP. */
-export async function modelCatalogCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
-  const parsed = parse(argv), env = context.env ?? process.env, locale = resolveLocale(parsed.language, env); context.onLocale?.(locale);
+export async function modelCatalogCommand(argv: readonly string[], context: ModelCommandContext): Promise<void | ExitCode> {
+  const choosing = (argv[2] === 'activate' || argv[2] === 'deactivate') ? scopeOnly(argv) : null;
+  if (choosing && modelsInteractive(context)) return catalogByChoice(argv[2] as 'activate' | 'deactivate', choosing, context);
+  const parsed = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.language);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (parsed.help) { emit(t('cli.help.modelsCatalog', {}, locale), sinks); return; }
   const root = context.root ?? process.cwd(), options: ConfigLoadOptions = { env }, value = (flag: string) => parsed.values.get(flag);
@@ -93,4 +99,54 @@ export async function modelCatalogCommand(argv: readonly string[], context: Mode
   // An invalid catalog document is the command's typed refusal, not a usage error.
   if (!command.success) throw parsed.action === 'register' ? ErrorRegistry.createError('MODEL_CATALOG_INVALID') : ErrorRegistry.createError('CLI_USAGE');
   emit(await context.applyModelCatalog(root, command.data, options), { ...sinks, json: parsed.json, render: item => renderResult(item, locale) });
+}
+
+/** `models catalog activate|deactivate` with at most `--scope`/`--lang`/`--channel`: what a person picks on a terminal. */
+function scopeOnly(argv: readonly string[]): { scope?: string; language?: string; channel?: string } | null {
+  const picked: { scope?: string; language?: string; channel?: string } = {};
+  for (let index = 3; index < argv.length; index += 2) {
+    const flag = argv[index], value = argv[index + 1], key = flag === '--scope' ? 'scope' : flag === '--lang' ? 'language' : flag === '--channel' ? 'channel' : null;
+    if (!key || !value || value.startsWith('-') || picked[key] !== undefined) return null;
+    picked[key] = value;
+  }
+  return picked;
+}
+
+/**
+ * A person switches a catalog model (or a whole channel) on or off in a scope (owner CLI review 2026-10-19): the scope, the channel and the exact
+ * model id from this scope's catalog (aliases are never offered), the expected revision read by the system from the same inspection, then a
+ * scoped card. A refusal of policy keeps its typed code and names the step that resolves it. Nothing is written before the card.
+ */
+async function catalogByChoice(action: 'activate' | 'deactivate', picked: { scope?: string; language?: string; channel?: string }, context: ModelCommandContext): Promise<void | ExitCode> {
+  const locale = commandLocale(context, picked.language), root = context.root ?? process.cwd(), options: ConfigLoadOptions = { env: context.env ?? process.env };
+  if (!context.inspectModelCatalog || !context.applyModelCatalog) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const cancelled = () => { reportModelsCancelled(context, locale); return EXIT_CODES.error; };
+  const configured = await loadConfig(root, { ...options, heal: false }).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const scope = await resolveCommandScope({ command: `deckent models catalog ${action}`, locale, explicit: picked.scope, configured: typeof configured === 'string' ? configured : undefined,
+    mutating: true, interactive: true, listScopes: () => scopeLister(context as never, root, options)().catch(() => []), pick: request => askModelsCard(context, locale, request) });
+  if (!scope) return cancelled();
+  const inspection = await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId: scope.scopeId, ...(picked.channel ? { channelId: picked.channel } : {}) }, options);
+  const channels = inspection.channels.flatMap(channel => channel.access === 'allowed' ? [channel] : []);
+  if (!channels.length) { emit(t('climodels.models.pick.noChannel', { scope: terminalSafeText(scope.scopeId) }, locale), { level: 'warning', ...modelsSinks(context) }); return EXIT_CODES.usage; }
+  const channelId = picked.channel && channels.some(channel => channel.channelId === picked.channel) ? picked.channel
+    : await askModelsCard(context, locale, { title: t('climodels.models.pick.channel', {}, locale), options: channels.map(channel => ({ id: channel.channelId, label: channelLabel(channel, locale) })) });
+  const channel = channels.find(entry => entry.channelId === channelId);
+  if (!channel) return cancelled();
+  const WHOLE = '\u0000channel';
+  const modelId = await askModelsCard(context, locale, { title: t('climodels.models.pick.catalogModel', { channel: channelLabel(channel, locale) }, locale),
+    options: [...channel.models.map(entry => ({ id: entry.modelId, label: `${terminalSafeText(entry.modelId)} · ${activation(entry.activation, locale)}` })),
+      { id: WHOLE, label: t('climodels.models.pick.wholeChannel', { state: activation(channel.activation, locale) }, locale) }] });
+  const entry = channel.models.find(item => item.modelId === modelId);
+  if (modelId === null || (!entry && modelId !== WHOLE)) return cancelled();
+  const target = entry ? terminalSafeText(entry.modelId) : channelLabel(channel, locale), revision = (entry ? entry.activation : channel.activation)?.revision ?? 0;
+  const answer = await askModelsCard(context, locale, { title: action === 'activate' ? t('climodels.models.card.activate', { model: target }, locale) : t('climodels.models.card.deactivate', { model: target }, locale),
+    body: [t('climodels.models.card.whereCatalog', { scope: terminalSafeText(scope.scopeId), channel: channelLabel(channel, locale) }, locale),
+      t('climodels.models.card.now', { state: activation(entry ? entry.activation : channel.activation, locale) }, locale), t('climodels.models.card.system', {}, locale)],
+    options: modelsConfirmOptions(locale) });
+  if (answer !== 'apply') return cancelled();
+  const command = modelCatalogCommandSchema.parse({ schemaVersion: 1, commandId: `models-${randomUUID()}`, scopeId: scope.scopeId, action, channelId: channel.channelId,
+    modelId: entry ? entry.modelId : null, expectedRevision: revision });
+  emit(scopeNotice(scope, locale), modelsSinks(context));
+  const result = await context.applyModelCatalog(root, command, options).catch(error => explainActivationDenial(error, context, locale, action, scope.scopeId));
+  emit(result, { ...modelsSinks(context), render: item => renderResult(item, locale) });
 }

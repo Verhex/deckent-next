@@ -131,6 +131,9 @@
     "maxServers": 20,
     "responseMaxBytes": 1048576
   },
+  "models": {
+    "retirementWarningDays": 15
+  },
   "operations": {
     "catalog": [],
     "targets": []

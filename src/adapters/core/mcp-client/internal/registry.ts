@@ -2,26 +2,25 @@ import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { DECKENT_DIR } from '#platform/index.js';
+import { DECKENT_DIR, type KnownSecretSnapshot } from '#platform/index.js';
+import { MCP_PROJECT_VARIABLES, MCP_SCOPES as TRUST_SCOPES, MCP_SERVER_NAME as TRUST_SERVER_NAME, mcpLaunchTextValid, mcpProjectValueRefused } from '#adapters/core/mcp-trust/index.js';
 
 /**
  * Scoped MCP server registry files (MCP-CLIENT, owner 2026-09-28: servers are not configuration; managed like Claude Code's scoped files).
  * `project`: `<project>/.deckent/mcp.json` (shared, committed); `user`: the Deckent global root's `mcp.json` top-level `mcpServers`; `local`:
  * the same file's `projects.<real project path>.mcpServers`; `managed`: the company policy's servers and allow/deny lists (read interface
  * only in Core). The same name in several scopes connects once from the highest one — managed > local > project > user — as a whole entry,
- * never merged. Trust and tool pins are product state (`trust.ts`), never these files.
+ * never merged. Trust and tool pins are product state (unit `adapters/core/mcp-trust`), never these files.
  */
-/** The scopes, highest precedence first. */
-export const MCP_SCOPES = ['managed', 'local', 'project', 'user'] as const;
+/** The scopes, highest precedence first, and the server name rule: the trust store's own (it records both), the registry's public names. */
+export const MCP_SCOPES = TRUST_SCOPES;
+export const MCP_SERVER_NAME = TRUST_SERVER_NAME;
 export type McpScope = typeof MCP_SCOPES[number];
 export const MCP_SCOPE_PRECEDENCE: readonly McpScope[] = Object.freeze([...MCP_SCOPES]);
 export const MCP_REGISTRY_FILE = 'mcp.json';
 /** The project registry, relative to the project root; the agent's read floor protects it (an MCP entry widens authority). */
 export const MCP_PROJECT_REGISTRY_PATH = `${DECKENT_DIR}/${MCP_REGISTRY_FILE}`;
 export const MCP_REGISTRY_MAX_BYTES = 1_048_576;
-/** 1–32 chars, lower case, digits and single inner hyphens. No `--` and no edge hyphen: the wire name maps `-` to `_`, and the first `__` after `mcp__` must stay the
- * server/tool separator, so two different names can never share a wire prefix (`mcp__a_b__x` is only `a-b`, never server `a` with tool `b__x`). */
-export const MCP_SERVER_NAME = /^(?=.{1,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u;
 
 /** An HTTP header name (RFC 9110 token) and a value without control characters (no CR/LF header injection). */
@@ -30,7 +29,7 @@ const headerValue = (text: string) => [...text].every(char => { const code = cha
 /** A remote server over Streamable HTTP (MCP 2026-07-28; the SDK falls back to the 2025-11-25 shape): no local process, so no realm or env. */
 const httpEntryFields = z.object({
   type: z.literal('http'),
-  url: z.string().min(1).max(4_096),
+  url: z.string().min(1).max(4_096).refine(mcpLaunchTextValid),
   headers: z.record(z.string().regex(HEADER_NAME), z.string().max(8_192).refine(headerValue)).refine(headers => Object.keys(headers).length <= 64, 'MCP_HEADERS_TOO_MANY').optional(),
 });
 /** One server as a registry file declares it: stdio (`type` absent or `stdio`; Claude-compatible shape, `realm` and `timeoutMs` are Deckent's) or
@@ -38,8 +37,8 @@ const httpEntryFields = z.object({
  * neither is a standard transport of 2026-07-28). */
 export const mcpServerEntrySchema = (stdio => z.union([stdio, httpEntryFields.extend({ timeoutMs: stdio.shape.timeoutMs }).strict()]))(z.object({
   type: z.literal('stdio').optional(),
-  command: z.string().min(1).max(4_096),
-  args: z.array(z.string().max(4_096)).max(64).optional(),
+  command: z.string().min(1).max(4_096).refine(mcpLaunchTextValid),
+  args: z.array(z.string().max(4_096).refine(mcpLaunchTextValid)).max(64).optional(),
   env: z.record(z.string().regex(ENV_NAME), z.string().max(4_096)).refine(env => Object.keys(env).length <= 64, 'MCP_ENV_TOO_MANY').optional(),
   realm: z.enum(['sandbox-net', 'require-sandbox', 'prefer-sandbox', 'host']).optional(),
   timeoutMs: z.number().int().min(1_000).max(3_600_000).optional(),
@@ -67,7 +66,7 @@ export interface ManagedMcpPolicy {
 
 export interface McpRegistrySource { readonly scope: McpScope; readonly file: string; readonly servers: Readonly<Record<string, unknown>> }
 export interface McpRegistryEntry { readonly name: string; readonly scope: McpScope; readonly file: string; readonly entry: McpServerEntry;
-  /** Digest of the entry as written (before `${VAR}` expansion): trust binds it, so any change asks again. */
+  /** Digest of the entry as written (a project entry also binds its allowlisted variables' values, `mcpScopedDigest`): trust binds it, so any change asks again. */
   readonly definitionDigest: string; readonly shadows: readonly McpScope[] }
 export interface McpRegistryProblem { readonly name: string | null; readonly scope: McpScope; readonly file: string; readonly reason: string }
 export interface McpRegistry { readonly servers: readonly McpRegistryEntry[]; readonly problems: readonly McpRegistryProblem[] }
@@ -80,8 +79,19 @@ function canonical(value: unknown): string {
 }
 /** The digest trust binds: the entry as written, a stdio entry's realm as it takes effect (K4: an entry that names none runs in the default realm, so a
  * changed default changes what was trusted and asks again; an entry that names its realm keeps its digest). */
-export const mcpDefinitionDigest = (name: string, entry: McpServerEntry) =>
-  createHash('sha256').update(`mcp-server-definition:1\0${name}\0${canonical(isMcpHttpEntry(entry) ? entry : { ...entry, realm: entry.realm ?? MCP_DEFAULT_REALM })}`).digest('hex');
+export const mcpDefinitionDigest = (name: string, entry: McpServerEntry, bound: readonly (readonly [string, string | null])[] = []) =>
+  createHash('sha256').update(`mcp-server-definition:1\0${name}\0${canonical(isMcpHttpEntry(entry) ? entry : { ...entry, realm: entry.realm ?? MCP_DEFAULT_REALM })}${
+    bound.length ? `\0${canonical(bound)}` : ''}`).digest('hex');
+/** SEC-2 (F30): a project entry's digest also binds the values of the allowlisted variables it reads (a `${TZ:-UTC}` approved while unset asks
+ * again once TZ is set); a personal entry binds its template only (its variables may hold the owner's secrets, never hashed into a record). */
+export function mcpScopedDigest(name: string, scope: McpScope, entry: McpServerEntry, environment: Readonly<Record<string, string | undefined>>): string {
+  if (scope !== 'project') return mcpDefinitionDigest(name, entry);
+  const texts = isMcpHttpEntry(entry) ? [entry.url, ...Object.values(entry.headers ?? {})] : [entry.command, ...(entry.args ?? []), ...Object.values(entry.env ?? {})];
+  const names = [...new Set(texts.flatMap(text => [...text.matchAll(VARIABLE)].map(match => match[1]!)))].filter(name => MCP_PROJECT_VARIABLES.has(name)).sort();
+  // A value that carries a credential is refused at launch and never hashed (the digest is shown by `mcp list`).
+  return mcpDefinitionDigest(name, entry, names.map(variable => { const value = environment[variable];
+    return [variable, value && !mcpProjectValueRefused(value) ? value : null] as const; }));
+}
 
 /** Reads one registry file: absent → empty; unreadable, over the bound, writable by others or not the declared shape → a problem, no servers. */
 export async function readMcpRegistryFile(path: string, kind: 'project' | 'personal', projectKey?: string):
@@ -109,7 +119,7 @@ export const mcpRegistryPaths = (projectRoot: string, globalRoot: string) =>
   ({ project: join(projectRoot, MCP_PROJECT_REGISTRY_PATH), personal: join(globalRoot, MCP_REGISTRY_FILE) });
 
 /** Resolves the effective servers: each name from its highest scope (whole entry), invalid entries and policy removals as problems. */
-export function resolveMcpRegistry(sources: readonly McpRegistrySource[], managed: ManagedMcpPolicy | null): McpRegistry {
+export function resolveMcpRegistry(sources: readonly McpRegistrySource[], managed: ManagedMcpPolicy | null, environment: Readonly<Record<string, string | undefined>> = {}): McpRegistry {
   const all = [...(managed ? [{ scope: 'managed' as const, file: '(company policy)', servers: managed.servers }] : []), ...sources.filter(source => source.scope !== 'managed')]
     .sort((a, b) => MCP_SCOPE_PRECEDENCE.indexOf(a.scope) - MCP_SCOPE_PRECEDENCE.indexOf(b.scope));
   // A name is decided by its highest scope: an invalid or refused entry there blocks the name (a broken override never re-enables a lower one).
@@ -124,13 +134,11 @@ export function resolveMcpRegistry(sources: readonly McpRegistrySource[], manage
       problem(name, source, managed.denied.includes(name) ? 'denied-by-company' : 'not-allowed-by-company'); continue;
     }
     taken.add(name);
-    chosen.set(name, { entry: { name, scope: source.scope, file: source.file, entry: parsed.data, definitionDigest: mcpDefinitionDigest(name, parsed.data), shadows: [] }, shadows: [] });
+    chosen.set(name, { entry: { name, scope: source.scope, file: source.file, entry: parsed.data, definitionDigest: mcpScopedDigest(name, source.scope, parsed.data, environment), shadows: [] }, shadows: [] });
   }
   return { servers: [...chosen.values()].map(({ entry, shadows }) => Object.freeze({ ...entry, shadows: Object.freeze([...shadows]) })), problems };
 }
 
-/** Names a project file may not read from the environment: credential-shaped, Deckent's own and cloud credentials (they read as empty). */
-const CREDENTIAL_NAME = /(KEY|TOKEN|SECRET|PASSW(?:OR)?D|CREDENTIAL|AUTH)|^(?:DECKENT_|AWS_)/iu;
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/gu;
 const SECRET_REFERENCE = /^\$DECK:([A-Z_][A-Z0-9_]*)$/u;
 /** A secret reference inside a header value (`Bearer $DECK:GITHUB_TOKEN`). */
@@ -151,16 +159,18 @@ export type McpExpandedEntry = { readonly ok: true; readonly command: string; re
   | { readonly ok: false; readonly reason: string };
 /**
  * The launch values of one entry: `${VAR}` / `${VAR:-default}` in `command`, `args`, `env` values, `url` and header values from the service
- * environment. A project file (someone else's commit) reads credential-shaped names as empty and may not use a Deckent secret reference; a
+ * environment. A project file (someone else's commit) reads only the allowlisted non-secret variables (SEC-2, F30: any other name reads as its
+ * written default or empty; an allowlisted value carrying a credential refuses the entry) and may not use a Deckent secret reference; a
  * personal file may give an `env` value as exactly `$DECK:NAME`, or name `$DECK:NAME` inside a header value, resolved by the installation's
  * secret resolver. An unset variable without a default makes the entry invalid; an HTTP endpoint must pass `mcpEndpointRefusal`.
  */
 export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, environment: Readonly<Record<string, string | undefined>>,
-  secret: (name: string) => Promise<string | undefined>): Promise<McpExpandedEntry> {
-  let missing: string | null = null;
+  secret: (name: string) => Promise<string | undefined>, known?: KnownSecretSnapshot): Promise<McpExpandedEntry> {
+  let missing: string | null = null, refused: string | null = null;
   const expand = (text: string) => text.replace(VARIABLE, (_match, name: string, fallback: string | undefined) => {
-    if (scope === 'project' && CREDENTIAL_NAME.test(name)) return '';
+    if (scope === 'project' && !MCP_PROJECT_VARIABLES.has(name)) return fallback ?? '';
     const value = environment[name];
+    if (value !== undefined && value !== '' && scope === 'project' && mcpProjectValueRefused(value, known)) { refused ??= name; return ''; }
     if (value !== undefined && value !== '') return value;
     if (fallback !== undefined) return fallback;
     missing ??= name; return '';
@@ -185,9 +195,10 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
       if (!headerValue(text)) return { ok: false, reason: `header-invalid:${name}` };
       headers[name] = text;
     }
+    if (refused !== null) return { ok: false, reason: `variable-value-refused:${refused as string}` };
     if (missing !== null) return { ok: false, reason: `variable-unset:${missing as string}` };
-    const refused = mcpEndpointRefusal(url);
-    if (refused) return { ok: false, reason: refused };
+    const endpoint = mcpEndpointRefusal(url);
+    if (endpoint) return { ok: false, reason: endpoint };
     return { ok: true, url, headers: Object.freeze(headers), secrets: Object.freeze(secrets) };
   }
   const command = expand(entry.command), args = (entry.args ?? []).map(expand), env: Record<string, string> = {};
@@ -199,6 +210,7 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
     if (resolved === null) return { ok: false, reason: `secret-unresolved:${reference}` };
     env[name] = resolved;
   }
+  if (refused !== null) return { ok: false, reason: `variable-value-refused:${refused as string}` };
   if (missing !== null) return { ok: false, reason: `variable-unset:${missing as string}` };
   if (!command) return { ok: false, reason: 'empty-command' };
   return { ok: true, command, args: Object.freeze(args), env: Object.freeze(env), secrets: Object.freeze(secrets) };

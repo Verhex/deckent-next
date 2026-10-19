@@ -267,9 +267,13 @@ managed on top, `mcp add|add-json|list|get|remove`), never in configuration: pro
 Claude-compatible `mcpServers`, plus Deckent `realm`/`timeoutMs`), personal `<Deckent global root>/mcp.json` (0600; top-level
 `mcpServers` = user, `projects.<real project path>.mcpServers` = local). The same name connects once from its highest scope, whole entry:
 managed > local > project > user; an invalid override blocks the name. The company policy is a read interface (`ManagedMcpPolicy`:
-servers, allowed, denied; no Core source yet). `${VAR}`/`${VAR:-default}` expand in command, args and env; a project file reads
-credential-shaped names as empty and may not use `$DECK:NAME` (personal files may). Trust and tool pins are product state
-(`<data root>/integrations/mcp-trust.json`, 0600, atomic; no layout or ledger schema change), bound to the entry's definition digest (stricter
+servers, allowed, denied; no Core source yet). `${VAR}`/`${VAR:-default}` expand in command, args and env; a project file reads only the
+allowlisted non-secret variables of `adapters/core/mcp-trust/internal/registry.json` (SEC-2 F30: any other name reads as its default or empty;
+an allowlisted value with URL user info or a credential pattern refuses the entry; the project digest also binds those values) and may not
+use `$DECK:NAME` (personal files may). Command, args and url refuse control characters and bidi overrides at load (F28). Trust and tool pins
+are product state in unit `adapters/core/mcp-trust` (SEC-2 F29: project/local trust in `<global root>/mcp-project-trust/<sha256(real project
+path, dev, ino)>/mcp-trust.json`, never inside the project tree — an in-project or non-private directory is `trust-store-unavailable`; the
+file is 0600, owner, one link, ≤ `trustMaxBytes`, atomic), bound to the entry's definition digest (stricter
 than Claude Code, which binds approval to the name and asks only for project servers): an unapproved or changed server is never started nor
 offered; `deckent mcp approve` starts it in its realm, shows the card (the registry template, never an expanded `${VAR}`) and pins its
 tools; every scope needs approval (no silent trust on first use). The agent's read floor protects `.deckent/mcp.json` (read tools, shell
@@ -321,7 +325,10 @@ signed server bundles. The tool list is read with all its pages (SDK 2.2.0 follo
 decision (cards, or `--yes`; `--no-approve` skips); a project entry is decided on its first use. Cards come in two phases — `launch`
 (definition as written, variables set/unset, env names, realm; nothing runs before yes) and `tools` (started in its realm; live tools with
 digests; yes pins them); no records `declined` for that definition; an unanswered card records nothing. User trust lives beside the
-personal registry (`<global root>/mcp-trust.json`) and holds in every project; project/local trust in the data root. Trust and registry
+personal registry (`<global root>/mcp-trust.json`) and holds in every project; project/local trust in the global root's project directory.
+A record left in the alpha.47 place (`<data root>/integrations/mcp-trust.json`) is never trust: its server is `pending-approval` with reason
+`trust-moved`, re-approved once on its card (owner A48-D6; `approve` with `--yes` is refused, `MCP_TRUST_NEEDS_CARD`, nothing written). The
+card is one field per line (each argument its own line; escapes removed, line breaks shown), a tool description one bounded line. Trust and registry
 writes run in the config write lock (`withConfigWriteLock`). Every change (trust, decline, reset, revoke, reconnect) is a sealed `mcp-trust`
 audit event written first. The turn asks first-use cards on the C12 approval path as an `agent-tool-call` subject with the reserved tool
 `mcp_trust` (no approval schema change). `/mcp` lists servers and trust state and does approve (reset), reconnect (record counter; the
@@ -374,7 +381,7 @@ Deckent publishes compiles with it (contract test).
 **Send authority (MCP-REVOKE, Astra 2174–2176, 2026-09-29).** A one-shot approval of a tool call never stands in for the server's trust.
 `McpToolTarget` (the one dispatch owner) requires an `admit` authority that `pool.call` asks last — after the approval wait and every local
 pre-send check, right before the request is handed to the SDK. `mcpSendAuthority` re-reads both registry files and the scope's trust record
-(user trust in the global root, project/local in the data root) under that record's config write lock (the lock `reset`/`remove`/`approve`
+(user trust in the global root, project/local in its project directory there) under that record's config write lock (the lock `reset`/`remove`/`approve`
 take) and admits only while the server is still `trusted` as exactly the scope and definition digest the turn offered it under (`binding`,
 carried by the registry view's launch settings, not part of the launch key) and the tool's pin is that digest. Otherwise nothing is sent:
 `trust-revoked` | `definition-changed` | `pin-revoked` | `trust-unavailable` (fail closed), ledger `refused` (`EFFECT_REJECTED`). The lock is

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, modelTextPrefix } from '#domain/index.js';
 import { AuditApplication, awaitAgentToolApproval, boundApprovalPreview, requestAgentToolApproval, type AgentToolApprovalFacts, type AgentToolApprovalOutcome } from '#engine/index.js';
-import { ErrorRegistry, prepareProductFile, t, type Locale, type ProductLayout, type TrustedClock } from '#platform/index.js';
+import { ErrorRegistry, prepareProductFile, t, type KnownSecretSnapshot, type Locale, type ProductLayout, type TrustedClock } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
@@ -9,7 +9,7 @@ import { displayMcpDiagnosis } from './diagnose.js';
 import { MCP_HTTP_POSTURE, McpClientPool, mcpRealmPosture, type McpLaunchContext, type McpPoolView } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, mcpToolWireName, type McpClientServerSettings } from './pin.js';
 import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, type McpScope, type McpServerEntry } from './registry.js';
-import { readMcpTrust, updateMcpTrust, type McpTrustRecord } from './trust.js';
+import { mcpCardLine, MCP_PROJECT_VARIABLES, readMcpTrust, updateMcpTrust, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
 
 /** One trust change as the audit port records it (subject `mcp-trust`): never the command's values, only the definition and tool digests. */
 export interface McpTrustChange { readonly action: 'trust' | 'decline' | 'reset' | 'revoke' | 'reconnect'; readonly scope: McpScope; readonly name: string;
@@ -48,6 +48,8 @@ export interface McpTrustServer { readonly name: string; readonly scope: McpScop
 export interface McpTrustContext {
   readonly environment: Readonly<Record<string, string | undefined>>;
   readonly secret: (name: string) => Promise<string | undefined>;
+  /** F30: the installation's known secrets an allowlisted project value may not carry (absent: credential patterns only). */
+  readonly knownSecrets?: KnownSecretSnapshot;
   readonly cwd: string;
   readonly sandboxes: McpLaunchContext['sandboxes'];
   readonly principal: { readonly issuer: string; readonly subject: string };
@@ -66,6 +68,10 @@ export interface McpTrustContext {
 const toolsDigest = (tools: readonly { readonly name: string; readonly digest: string }[]) =>
   createHash('sha256').update(`mcp-tools:1\0${JSON.stringify(tools.map(tool => [tool.name, tool.digest]))}`).digest('hex');
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)/gu;
+/** The card's note (canonical English on the card; `describeMcpTrustCard` renders it in the reader's locale): what a project file may read
+ * (F30), and (D6) that a trust record left in the project's data folder no longer decides anything. */
+export const mcpTrustNote = (scope: McpScope, moved: boolean, locale: Locale) => [...scope === 'project' ? [t('security.mcp.note.project', {
+  names: [...MCP_PROJECT_VARIABLES].join(', ') }, locale)] : [], ...moved ? [t('security.mcp.note.moved', {}, locale)] : []].join('; ') || null;
 
 /** Writes one decision: the audit event first (no event, no change), then the record under the file's write lock (recomputed on what is there).
  * A decline, reset or revoke then removes the approver's tool grant of the server (K1: no grant outlives its trust); its outcome is returned. */
@@ -91,10 +97,10 @@ export async function recordMcpTrust(server: Pick<McpTrustServer, 'name' | 'scop
  * for a refused realm or an entry that cannot be expanded.
  */
 export async function decideMcpTrust(server: McpTrustServer, context: McpTrustContext, ask: McpTrustAsk,
-  options: { readonly pool?: McpPoolView; readonly alwaysAsk?: readonly string[] } = {}): Promise<{ readonly decision: 'trusted' | 'declined' | 'unanswered'; readonly pinned: number;
+  options: { readonly pool?: McpPoolView; readonly alwaysAsk?: readonly string[]; readonly moved?: boolean } = {}): Promise<{ readonly decision: 'trusted' | 'declined' | 'unanswered'; readonly pinned: number;
     readonly grant?: McpToolGrantResult }> {
   const fail = (code: string, reason: string) => ErrorRegistry.createError(code, { params: { name: server.name, reason } });
-  const expanded = await expandMcpEntry(server.entry, server.scope, context.environment, context.secret);
+  const expanded = await expandMcpEntry(server.entry, server.scope, context.environment, context.secret, context.knownSecrets);
   if (!expanded.ok) throw fail('MCP_SERVER_ENTRY_INVALID', expanded.reason);
   const shown = mcpEntryDisplay(server.entry), realm = isMcpHttpEntry(server.entry) ? null : server.entry.realm ?? MCP_DEFAULT_REALM;
   const template = isMcpHttpEntry(server.entry) ? [server.entry.url, ...Object.values(server.entry.headers ?? {})]
@@ -103,9 +109,10 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     transport: shown.transport, command: shown.command, args: shown.args, envNames: shown.envNames, headerNames: shown.headerNames, realm: realm ?? 'none',
     // C5: the launch card already says what the realm means for the server's writes (the tools card then names the actual view).
     posture: realm ? mcpRealmPosture(realm) : MCP_HTTP_POSTURE,
+    // A project file reads only allowlisted variables (F30): any other one is shown unset, because it reads as its default or empty.
     variables: [...new Set(template.flatMap(text => [...text.matchAll(VARIABLE)].map(match => match[1]!)))].map(name => ({ name,
-      set: context.environment[name] !== undefined && context.environment[name] !== '' })),
-    note: server.scope === 'project' ? 'project file: credential-shaped variables read as empty; secret references are refused' : null };
+      set: context.environment[name] !== undefined && context.environment[name] !== '' && (server.scope !== 'project' || MCP_PROJECT_VARIABLES.has(name)) })),
+    note: mcpTrustNote(server.scope, options.moved === true, 'en') };
   const keep = (current: McpTrustRecord | null) => current?.reconnect ?? 0;
   const record = (decision: 'trusted' | 'declined', tools: McpTrustRecord['tools']) => (current: McpTrustRecord | null): McpTrustRecord => ({ scope: server.scope,
     name: server.name, definitionDigest: server.definitionDigest, tools, decision, reconnect: keep(current), approvedAtMs: (context.now ?? Date.now)(),
@@ -134,7 +141,8 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     // `alwaysAsk` not given (a terminal or in-turn re-approval) keeps the owner's existing locks for the tools that still exist; only an explicit list replaces them.
     for (const name of options.alwaysAsk ?? []) if (!live.some(tool => tool.name === name)) throw fail('MCP_TOOL_UNKNOWN', name);
     const locked = new Set(options.alwaysAsk ?? (server.trust?.tools ?? []).filter(pin => pin.alwaysAsk).map(pin => pin.name));
-    const tools = live.map(tool => ({ name: tool.name, digest: tool.digest!, description: tool.description ?? null, annotations: tool.annotations ?? null,
+    // F28: a server's tool description is one bounded line on every card renderer (the terminal window shows this field as given).
+    const tools = live.map(tool => ({ name: tool.name, digest: tool.digest!, description: tool.description ? modelTextPrefix(mcpCardLine(tool.description), 160) : null, annotations: tool.annotations ?? null,
       alwaysAsk: locked.has(tool.name) }));
     const pinned = await ask({ ...launchCard, phase: 'tools', posture: state.posture, era: state.era, protocolVersion: state.protocolVersion, tools });
     if (pinned === null) return { decision: 'unanswered', pinned: 0 };
@@ -162,25 +170,28 @@ export function mcpTrustAuditWriter(input: { readonly layout: ProductLayout; rea
   };
 }
 
-/** The card as text (approval preview and CLI): what runs, where, with which variables (set or not) and, in the tools phase, what gets pinned. */
+/** The card as text (approval preview and CLI): what runs, where, with which variables (set or not) and, in the tools phase, what gets pinned.
+ * F28: one field per line, each through `mcpCardLine` (no escape, no line break of its own); every argument on its own line. */
 export function describeMcpTrustCard(card: McpTrustCard, locale?: Locale): string {
   // Existing callers retain English output regardless of the host's language.
   locale ??= 'en';
-  const none = t('mcp.trustCard.none', {}, locale);
+  const none = t('mcp.trustCard.none', {}, locale), line = mcpCardLine;
+  const note = card.note !== null && [true, false].some(moved => mcpTrustNote(card.scope, moved, 'en') === card.note)
+    ? mcpTrustNote(card.scope, mcpTrustNote(card.scope, true, 'en') === card.note, locale) : card.note;
   const prompt = card.phase === 'launch' ? t('mcp.trustCard.launchPrompt', {}, locale) : t('mcp.trustCard.toolsPrompt', {}, locale);
-  const lines = [t('mcp.trustCard.heading', { name: card.name, scope: card.scope, file: card.file, prompt }, locale),
-    card.transport === 'http' ? t('mcp.trustCard.url', { url: card.command }, locale)
-      : t('mcp.trustCard.command', { command: [card.command, ...card.args].join(' ') }, locale),
+  const lines = [t('mcp.trustCard.heading', { name: card.name, scope: card.scope, file: line(card.file), prompt }, locale),
+    card.transport === 'http' ? t('mcp.trustCard.url', { url: line(card.command) }, locale) : t('mcp.trustCard.command', { command: line(card.command) }, locale),
+    ...card.transport === 'http' ? [] : card.args.map((value, index) => `  ${t('security.mcp.trustCard.argument', { index: index + 1, value: line(value) }, locale)}`),
     t('mcp.trustCard.variables', { variables: card.variables.map(variable => `${variable.name}${
       variable.set ? '' : ` ${t('mcp.trustCard.unset', {}, locale)}`}`).join(', ') || none }, locale),
     card.transport === 'http' ? t('mcp.trustCard.headers', { headers: card.headerNames.join(', ') || none }, locale)
       : t('mcp.trustCard.env', { env: card.envNames.join(', ') || none }, locale),
     t('mcp.trustCard.realm', { realm: `${card.realm}${card.posture ? ` — ${card.posture}` : ''}` }, locale),
     t('mcp.trustCard.definition', { digest: card.definitionDigest }, locale),
-    ...(card.note ? [t('mcp.trustCard.note', { note: card.note }, locale)] : []),
+    ...(note ? [t('mcp.trustCard.note', { note: line(note) }, locale)] : []),
     ...(card.tools ? [t('mcp.trustCard.tools', { count: card.tools.length, era: card.era ?? '', protocolVersion: card.protocolVersion ?? '' }, locale),
-      ...card.tools.map(tool => `  ${tool.name} ${tool.digest.slice(0, 12)}${tool.alwaysAsk ? ` ${t('mcp.trustCard.alwaysAsk', {}, locale)}` : ''}${
-        tool.description ? ` — ${modelTextPrefix(tool.description, 160)}` : ''}`)] : [])];
+      ...card.tools.map(tool => `  ${line(tool.name)} ${tool.digest.slice(0, 12)}${tool.alwaysAsk ? ` ${t('mcp.trustCard.alwaysAsk', {}, locale)}` : ''}${
+        tool.description ? ` — ${modelTextPrefix(line(tool.description), 160)}` : ''}`)] : [])];
   return lines.join('\n');
 }
 

@@ -257,6 +257,21 @@ it (kinds: anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api, openai-
 without a verified published tariff is refused and shown locked with the reason. `terminal.defaultModel` (user layer) is
 the terminal's default; the session pin from `/model` wins, then a project-authored reference.
 
+For a person (C-MODELS, owner CLI review 2026-10-19): bare `deckent models` is one table of the scope's worker catalog (model,
+channel, state, effort; a retired model with its day; a switched-on model retiring within `models.retirementWarningDays`,
+default 15, is warned about); `--declared` lists what the connected providers declare (the chat catalog) and is also the JSON
+form of that list (`models --declared --json`); `models --json` is the catalog inspection. On a terminal, `models activate|deactivate`,
+`models catalog activate|deactivate` and `models connect` without their long flags ask the scope, provider or channel and the exact
+model id (never an alias), read the binding digest and revisions themselves and confirm on a scoped card; the long flag forms are
+unchanged for AI tools. `models spending` without `--input` shows the scope's API budget (limit, used, held, left).
+
+MCP and identity: `deckent mcp` / `mcp list` is a table (waiting servers first with their next step) and starts nothing; `--check`
+starts trusted servers only. Every trust decision (`mcp approve`, `mcp add` to a local or user scope) is a card on a person's terminal;
+off a terminal it is refused (`MCP_APPROVAL_NEEDS_TERMINAL`) and `--yes` no longer skips the card (owner A48-D5/D6). Bare
+`deckent identity` (catalog delta pending: until then `identity profiles`) states the selected profile — or how to select one with
+`deckent config set identity.profile` —, the people and the role bindings; `identity preview` without a selected profile reports
+`IDENTITY_PROFILE_NOT_SELECTED`; `identity distribute --scope <id> [--apply]` on a terminal is chosen with arrow-key cards and a preview card.
+
 Spending: paid calls reserve the dearest applicable published tier and settle from the provider's returned usage times
 the pinned tariff (`measured-tariff`). The scope's first budget is created with `deckent models create-budget --scope <id>
 --usd <n>` (or the budget window, the first row of `/provider`), changed with `revise-budget [--unfreeze]`; a held call that never received

@@ -1,4 +1,8 @@
-import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { randomUUID } from 'node:crypto';
+import { ErrorRegistry, EXIT_CODES, MESSAGE_REGISTRY, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { askModelsCard, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
 import { modelConnectCommandSchema, type ModelConnectCommand, type ModelConnectResult } from '#domain/index.js';
 import type { ModelCommandContext } from './context.js';
 
@@ -42,8 +46,10 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale): 
 }
 
 /** `deckent models connect` (T4-B D2): the same `models.connect` application as SDK `connectModel`, MCP `connect_model` and the terminal. */
-export async function modelConnectCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
-  const parsed = parse(argv), env = context.env ?? process.env, locale = resolveLocale(parsed.values.get('--lang'), env); context.onLocale?.(locale);
+export async function modelConnectCommand(argv: readonly string[], context: ModelCommandContext): Promise<void | ExitCode> {
+  const choosing = connectPickOnly(argv);
+  if (choosing && modelsInteractive(context)) return connectByChoice(choosing, context);
+  const parsed = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.values.get('--lang'));
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (parsed.help) { emit(t('cli.help.modelsConnect', {}, locale), sinks); return; }
   if (!context.connectModel) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
@@ -54,4 +60,55 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
       : { nativeId: value('--model') } });
   if (!command.success) throw ErrorRegistry.createError('MODEL_CONNECT_INVALID');
   emit(await context.connectModel(context.root ?? process.cwd(), command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale) });
+}
+
+/** The connection kinds and their seeded models the host binds for the terminal's `/provider` window (registry data, exact ids). */
+type ConnectKinds = Readonly<{ kinds: readonly Readonly<{ id: string; labelKey: string; available: boolean; seeded?: boolean; connectFamily?: string | null }>[];
+  seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string }>[]> }>;
+function connectPickOnly(argv: readonly string[]): { scope?: string; language?: string } | null {
+  const picked: { scope?: string; language?: string } = {};
+  for (let index = 2; index < argv.length; index += 2) {
+    const flag = argv[index], value = argv[index + 1], key = flag === '--scope' ? 'scope' : flag === '--lang' ? 'language' : null;
+    if (!key || !value || value.startsWith('-') || picked[key] !== undefined) return null;
+    picked[key] = value;
+  }
+  return picked;
+}
+
+/**
+ * A person connects a model (owner CLI review 2026-10-19): the scope, the connection from the provider-connect registry (seeded kinds; an address
+ * or a key is entered in the terminal's `/provider` window, never here), the exact model id from its packaged catalog seed (never an alias), then
+ * a scoped card. The command is the same typed `models.connect`; a missing key is reported by name with the command that stores it.
+ */
+async function connectByChoice(picked: { scope?: string; language?: string }, context: ModelCommandContext): Promise<void | ExitCode> {
+  const locale = commandLocale(context, picked.language), root = context.root ?? process.cwd(), options: ConfigLoadOptions = { env: context.env ?? process.env };
+  const host = (context as { providerConnect?: ConnectKinds }).providerConnect;
+  if (!context.connectModel || !host?.seedModels) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const cancelled = () => { reportModelsCancelled(context, locale); return EXIT_CODES.error; };
+  const configured = await loadConfig(root, { ...options, heal: false }).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const scope = await resolveCommandScope({ command: 'deckent models connect', locale, explicit: picked.scope, configured: typeof configured === 'string' ? configured : undefined,
+    mutating: true, interactive: true, listScopes: () => scopeLister(context as never, root, options)().catch(() => []), pick: request => askModelsCard(context, locale, request) });
+  if (!scope) return cancelled();
+  const catalog = MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
+  const kinds = host.kinds.filter(kind => kind.available && kind.seeded && kind.connectFamily);
+  if (!kinds.length) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const kindId = await askModelsCard(context, locale, { title: t('climodels.models.pick.connection', {}, locale), body: [t('climodels.models.pick.connectionBody', {}, locale)],
+    options: kinds.map(kind => ({ id: kind.id, label: catalog[kind.labelKey] ?? kind.id })) });
+  const kind = kinds.find(entry => entry.id === kindId);
+  if (!kind) return cancelled();
+  const models = await host.seedModels(kind.id);
+  if (!models.length) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const nativeId = await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: catalog[kind.labelKey] ?? kind.id }, locale),
+    options: models.map(model => ({ id: model.nativeId, label: model.displayName && model.displayName !== model.nativeId
+      ? `${terminalSafeText(model.nativeId)} · ${terminalSafeText(model.displayName)}` : terminalSafeText(model.nativeId) })) });
+  if (nativeId === null || !models.some(model => model.nativeId === nativeId)) return cancelled();
+  const answer = await askModelsCard(context, locale, { title: t('climodels.models.card.connect', { model: terminalSafeText(nativeId) }, locale),
+    body: [t('climodels.models.card.where', { scope: terminalSafeText(scope.scopeId), provider: catalog[kind.labelKey] ?? kind.id }, locale), t('climodels.models.card.connectWhat', {}, locale)],
+    options: modelsConfirmOptions(locale) });
+  if (answer !== 'apply') return cancelled();
+  const command = modelConnectCommandSchema.parse({ schemaVersion: 1, commandId: `connect-${randomUUID()}`, scopeId: scope.scopeId, connection: kind.id, endpoint: null, model: { nativeId } });
+  emit(scopeNotice(scope, locale), modelsSinks(context));
+  const result = await context.connectModel(root, command, options);
+  emit(result, { ...modelsSinks(context), render: item => [renderModelConnect(item, locale),
+    ...(item.credentialRef && item.keyStored === false ? [t('climodels.models.connect.storeKey', { name: terminalSafeText(item.credentialRef) }, locale)] : [])].join('\n') });
 }

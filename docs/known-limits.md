@@ -139,6 +139,23 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   `deckent models catalog register --file`.
 - **Deckent cannot see provider-side settings.** For OpenRouter it cannot see the "Prevent overrides" plugin setting or your
   OpenRouter credit limit. *Workaround:* check both yourself before the first paid call.
+- **MCP trust from before alpha.48 is asked again once.** Trust for project and local MCP servers moved out of the project
+  folder into the Deckent global root, so a repository can no longer ship it. A server trusted before alpha.48 waits for its
+  card (`mcp list` reason `trust-moved`); `deckent mcp approve <name> --yes` refuses it with `MCP_TRUST_NEEDS_CARD`. The old
+  `integrations/mcp-trust.json` in the data folder is left in place and never read as trust. *Workaround:* answer the card on
+  first use in the terminal, or run `deckent mcp approve <name>` in a terminal; then delete the old file if you like.
+- **A project MCP file reads only a few environment variables.** `${VAR}` in a project `.deckent/mcp.json` reads only `HOME`,
+  `USER`, `LOGNAME`, `LANG`, `LC_ALL`, `TZ` and `TMPDIR`; any other name reads as its written default or empty, and a value
+  that carries a credential refuses the server. Known installation secrets are not yet compared (credential patterns only).
+  *Workaround:* put a server that needs other variables in your local or user scope (`deckent mcp add`).
+- **Project MCP trust needs a global root outside the project.** When `DECKENT_GLOBAL_HOME` (or, without it, `DECKENT_HOME`)
+  points inside the project, project and local servers show `trust-store-unavailable` and never start. *Workaround:* point
+  `DECKENT_GLOBAL_HOME` outside the project.
+- **Trusting an MCP server needs a person at a terminal.** `deckent mcp approve` and `deckent mcp add` to a local or user scope
+  show their card only on a real terminal; from a pipe, CI or an AI tool they are refused (`MCP_APPROVAL_NEEDS_TERMINAL`), and
+  `--yes` no longer skips the card. *Workaround:* add the server with `--no-approve` from a script; it asks on first use.
+- **`deckent mcp import` takes every server of the chosen client.** On a terminal you pick the client; picking single servers is
+  not offered yet. Imported servers stay untrusted. *Workaround:* `deckent mcp remove <name>` after the import.
 - **MCP servers over OAuth are not supported.** Streamable HTTP servers work without OAuth. *Workaround:* use a local stdio server or an
   HTTP server that does not need OAuth.
 

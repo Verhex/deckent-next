@@ -75,7 +75,8 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: OS-user identi
   for (const language of ['en', 'tr']) {
     let output = '';
     expect(await main(['identity', 'profiles', '--lang', language], { ...f, listIdentityProfiles, stdout: { write: text => { output += text; } } })).toBe(0);
-    expect(output).toContain('core:solo'); expect(output).toContain(language === 'en' ? 'Team' : 'Ekip');
+    // C-MODELS: one line per profile with its meaning; ids and digests are behind --verbose (owner CLI review 2026-10-19).
+    expect(output).toContain(language === 'en' ? 'Solo' : 'Bireysel'); expect(output).toContain(language === 'en' ? 'Team' : 'Ekip');
     expect(await main(['identity', 'preview', '--help', '--lang', language], { ...f, initialize: () => { throw new Error('help initialized'); }, stdout: { write() {} } })).toBe(0);
   }
   expect(await tree(f.root)).toEqual(before);

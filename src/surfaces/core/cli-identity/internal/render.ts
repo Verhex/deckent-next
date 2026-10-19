@@ -2,10 +2,23 @@ import type { IdentityProfileListing, IdentityProfilePreview } from '#engine/ind
 import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
 // Catalog data chooses labels; extension labels are package data, never commands or authority.
 const safe = (value: string) => value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
-export function renderIdentityProfiles(value: IdentityProfileListing, locale: Locale) {
-  return [t('identity.list', { version: value.registryVersion, digest: value.registryDigest }, locale),
-    ...value.profiles.map(entry => t('identity.profileLine', { id: entry.definition.id, version: entry.definition.version,
-      label: safe(entry.labels?.[locale] ?? MESSAGE_REGISTRY.catalogs[locale][entry.definition.labelKey] ?? entry.definition.labelKey), digest: entry.digest }, locale))].join('\n');
+type ProfileEntry = IdentityProfileListing['profiles'][number];
+const catalog = (locale: Locale) => MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
+/** A profile's name in the person's language (package labels first, then the catalog label, else its key). */
+export const profileLabel = (entry: ProfileEntry, locale: Locale): string =>
+  safe(entry.labels?.[locale] ?? catalog(locale)[entry.definition.labelKey] ?? entry.definition.labelKey);
+/** What a profile means, one line: the catalog's description of its label (`<labelKey>.description`), else its role templates (package data). */
+export function profileMeaning(entry: ProfileEntry, locale: Locale): string {
+  const described = catalog(locale)[`${entry.definition.labelKey}.description`];
+  if (described) return described;
+  const roles = entry.definition.roleTemplates.map(role => safe(role.id));
+  return roles.length ? t('climodels.identity.rolesOnly', { roles: roles.join(', ') }, locale) : t('climodels.identity.noRoles', {}, locale);
+}
+/** `identity profiles` (owner CLI review 2026-10-19): one line per profile with its meaning; registry and profile digests only with `--verbose`. */
+export function renderIdentityProfiles(value: IdentityProfileListing, locale: Locale, verbose = false) {
+  if (verbose) return [t('identity.list', { version: value.registryVersion, digest: value.registryDigest }, locale),
+    ...value.profiles.map(entry => t('identity.profileLine', { id: entry.definition.id, version: entry.definition.version, label: profileLabel(entry, locale), digest: entry.digest }, locale))].join('\n');
+  return [t('climodels.identity.profilesHeading', {}, locale), ...value.profiles.map(entry => `  ${profileLabel(entry, locale)} · ${profileMeaning(entry, locale)}`)].join('\n');
 }
 export function renderIdentityPreview(value: IdentityProfilePreview, locale: Locale) {
   const draft = value.draft;

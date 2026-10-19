@@ -7,4 +7,6 @@ export const securityErrors: ErrorDefinitions = Object.freeze({
   SECRET_REFERENCE_LEAVES_HOST: { category: 'config', render: (p, l) => ({ message: t('error.SECRET_REFERENCE_LEAVES_HOST', p, l) }) },
   // SEC-1 (A48-D5, F32): an authority write without the service-held terminal witness, or from the MCP actor; nothing was written.
   AUTHORITY_WITNESS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHORITY_WITNESS_REQUIRED', p, l) }) },
+  // SEC-2 (F29, owner A48-D6): a trust record from before the move is re-approved on its card only; nothing is asked, audited or written.
+  MCP_TRUST_NEEDS_CARD: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TRUST_NEEDS_CARD', p, l) }) },
 });

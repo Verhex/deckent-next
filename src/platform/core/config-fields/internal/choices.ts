@@ -268,6 +268,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'terminal.scratch.sessionMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'terminal.scratch.installationMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'terminal.scratch.retentionDays': { kind: 'numeric', unit: 'days', step: 1, presets: [1, 3, 7, 14, 30, 90, 365] },
+  'models.retirementWarningDays': { kind: 'numeric', unit: 'days', step: 1, presets: [7, 15, 30, 60, 90] },
   'terminal.scratch.sweepIntervalMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'terminal.fetch.schemaVersion': { kind: 'schema' },
   'terminal.fetch.egress': { kind: 'schema' },

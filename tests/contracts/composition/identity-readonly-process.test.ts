@@ -42,7 +42,7 @@ async function snapshot(...paths: string[]) {
 
 it('compiled read-only CLI paths leave fresh project/HOME byte-identical and report identity unavailable', async () => {
   const f = await fixture(), before = await snapshot(f.project, f.home);
-  for (const args of [['models', '--json'], ['models', 'binding', '--provider', 'absent', '--provider-version', '1', '--model', 'absent', '--model-version', '1', '--json'],
+  for (const args of [['models', '--declared', '--json'], ['models', 'binding', '--provider', 'absent', '--provider-version', '1', '--model', 'absent', '--model-version', '1', '--json'],
     ['terminal', 'status', '--json']]) {
     const result = await f.run(args); expect(result.code, result.stderr).toBe(0);
     const data = JSON.parse(result.stdout);
