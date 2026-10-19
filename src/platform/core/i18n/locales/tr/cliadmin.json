@@ -247,5 +247,6 @@
   "cli.backup.card.pickVerify": "Hangi kurtarma seti doğrulansın?",
   "cli.backup.card.pickRestore": "Hangi kurtarma seti geri yüklensin?",
   "cli.runtime.status.build": "derleme {commit}",
-  "error.SECRET_SET_TERMINAL_REQUIRED": "Anahtar yalnız kişinin terminalinden, gizli istemde kaydedilir: boru, script ya da ajan çağrısı anahtar okunmadan reddedilir ve hiçbir şey kaydedilmedi. Terminalinizde çalıştırın: deckent secret set <AD>."
+  "error.SECRET_SET_TERMINAL_REQUIRED": "Anahtar yalnız kişinin terminalinden, gizli istemde kaydedilir: boru, script ya da ajan çağrısı anahtar okunmadan reddedilir ve hiçbir şey kaydedilmedi. Terminalinizde çalıştırın: deckent secret set <AD>.",
+  "cli.backup.list.passphraseUnknown": "Yedek parolasının bu kurulumun içinde saklanıp saklanmadığı: bilinmiyor (gizli depo şu an sizin için okunamadı)."
 }

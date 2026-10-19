@@ -1,4 +1,5 @@
-import { restoreLeftovers, listBackupSets, lastBackupVerifications, openLocalIntegrityAuthority, openConfiguredSecretStore, type BackupSetEntry } from '#adapters/index.js';
+import { restoreLeftovers, listBackupSets, lastBackupVerifications, openLocalIntegrityAuthority, type BackupSetEntry } from '#adapters/index.js';
+import { listConfiguredSecretNames } from '#composition/core/secrets/index.js';
 import { lstat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { productResourcePath, restoreHoldPath, type ConfigLoadOptions } from '#platform/index.js';
@@ -16,13 +17,13 @@ export async function inspectConfiguredRecoveryFiles(projectRoot: string, option
     installationDirectory: info?.isDirectory() ? { path, mode: (info.mode & 0o777).toString(8).padStart(4, '0') } : null };
 }
 /** C-ADMIN `deckent backup`: the default recovery folder's sets (no passphrase, nothing decrypted), the schedule, and whether the scheduled
- * backup passphrase is kept in this installation's own store (lost with the machine). Last verification comes only from sealed records. */
+ * backup passphrase is kept in this installation's own store (lost with the machine; read through the assurance-gated name reader, unknown when refused). Last verification comes only from sealed records. */
 export async function inspectConfiguredBackupSets(projectRoot: string, options: ConfigLoadOptions = {}) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning() {} });
   const layout = config.productLayout, limits = config.installation.packageMeasurement, directory = join(productResourcePath(layout, 'ledgerBackups'), 'recovery');
   const authority = await openLocalIntegrityAuthority(layout, config.approvals.keyFile).catch(() => null);
   const verified = authority ? await lastBackupVerifications(join(productResourcePath(layout, 'audit'), 'backup-operations'), limits, authority) : new Map<string, number>();
-  const names = await openConfiguredSecretStore(config, options.env ?? process.env, options.platform).listNames().catch(() => null);
+  const names = await listConfiguredSecretNames(projectRoot, options).then(view => view.names, () => null); // assurance-gated; refused or failed: unknown
   return { schemaVersion: 1 as const, directory, schedule: config.backup.schedule, retention: config.backup.retention,
     passphraseStored: names ? names.includes(BACKUP_SCHEDULE_SECRET) : null, sets: await listBackupSets(directory, limits, verified) as readonly BackupSetEntry[] };
 }

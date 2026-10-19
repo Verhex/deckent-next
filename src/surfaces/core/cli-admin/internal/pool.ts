@@ -20,7 +20,7 @@ function renderStatus(view: PoolHoldView, capacity: PoolCapacityView | undefined
   const lines = [held ? t('cli.pool.view.held', { pool }, locale) : t('cli.pool.view.open', { pool }, locale)];
   if (held && view.hold) {
     lines.push(t('cli.pool.view.heldBy', { by: actorText(view.hold.changedBy), ago: formatAgo(view.hold.changedAtMs, nowMs, locale) }, locale));
-    if (view.hold.reason) lines.push(t('cli.pool.view.reason', { reason: terminalSafeText(view.hold.reason) }, locale));
+    if (view.hold.reason) lines.push(t('cli.pool.view.reason', { reason: poolReasonText(view.hold.reason, locale) }, locale));
   }
   // Occupancy: `execution` = reserved or running; `inFlight` also counts the tasks being evaluated.
   lines.push(t('cli.pool.view.now', { running: view.occupancy.execution, evaluating: Math.max(0, view.occupancy.inFlight - view.occupancy.execution) }, locale));
@@ -41,9 +41,16 @@ const FLAGS: Readonly<Record<string, readonly string[]>> = {
   'quota-release': ['--scope', '--pool', '--lang', '--command-id', '--channel'], 'set-capacity': ['--scope', '--pool', '--lang', '--command-id', '--execution-slots', '--in-flight-slots'],
   status: ['--scope', '--pool', '--lang'], hold: ['--scope', '--pool', '--lang', '--command-id', '--reason'], resume: ['--scope', '--pool', '--lang', '--command-id', '--reason'],
 };
-/** The reasons a person picks on a terminal (values only by selection, owner 2026-10-08); the recorded reason is the chosen sentence. */
-const reasons = (locale: Locale) => ({ maintenance: t('cli.pool.reason.maintenance', {}, locale), problem: t('cli.pool.reason.problem', {}, locale),
+/** The reasons a person picks on a terminal (values only by selection, owner 2026-10-08). The hold record stores the fixed, language-neutral id
+ * (`pool-hold:<preset>`, lead 2026-10-19); every reader renders it in its own language. A caller's own `--reason` text stays verbatim. */
+const REASON_PREFIX = 'pool-hold:';
+const reasons = (locale: Locale): Readonly<Record<string, string>> => ({ maintenance: t('cli.pool.reason.maintenance', {}, locale), problem: t('cli.pool.reason.problem', {}, locale),
   cost: t('cli.pool.reason.cost', {}, locale) });
+/** A stored reason in the reader's language: a preset id is translated, anything else is the caller's own text, terminal-safe. */
+export function poolReasonText(reason: string, locale: Locale): string {
+  const preset = reason.startsWith(REASON_PREFIX) ? reason.slice(REASON_PREFIX.length) : null, labels = reasons(locale);
+  return preset !== null && Object.hasOwn(labels, preset) ? labels[preset]! : terminalSafeText(reason);
+}
 
 /**
  * `deckent pool status|hold|resume|set-capacity|quota-release [--scope <id>] [--pool <id>] …` (K5 typed pool hold): the same application as SDK
@@ -128,11 +135,11 @@ export async function poolCommand(argv: readonly string[], context: AdminCommand
     const picked = await askAdminCard(context, locale, { title: t('cli.pool.card.reasonTitle', { pool: poolLabel }, locale),
       options: [...Object.entries(presets).map(([id, label]) => ({ id, label })), { id: 'none', label: t('cli.pool.reason.none', {}, locale) }] });
     if (picked === null) return cancelled();
-    reason = Object.hasOwn(presets, picked) ? presets[picked] : undefined;
+    reason = Object.hasOwn(presets, picked) ? `${REASON_PREFIX}${picked}` : undefined;
   }
   if (!await confirmed(action === 'hold' ? t('cli.pool.card.hold', {}, locale) : t('cli.pool.card.resume', {}, locale),
     [action === 'hold' ? t('cli.pool.card.holdWhat', {}, locale) : t('cli.pool.card.resumeWhat', {}, locale),
-      reason ? t('cli.pool.view.reason', { reason: terminalSafeText(reason) }, locale) : t('cli.pool.card.noReason', {}, locale)])) return cancelled();
+      reason ? t('cli.pool.view.reason', { reason: poolReasonText(reason, locale) }, locale) : t('cli.pool.card.noReason', {}, locale)])) return cancelled();
   const receipt = await context.applyPoolHold(root, { schemaVersion: 1, scopeId, commandId, action, ...(pool ? { poolId: pool } : {}), ...(reason ? { reason } : {}) }, options);
   notice();
   emit(receipt, { ...sinks, render: receipt => renderReceipt(receipt, locale) });

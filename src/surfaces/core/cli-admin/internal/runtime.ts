@@ -108,11 +108,12 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     let descriptor: RuntimeServiceDescriptor;
     try { descriptor = await context.describeRuntimeService(root, options); }
     catch (error) {
-      // A person asking for the status of a stopped service gets the status, not an error dump (`--json` keeps the typed refusal).
+      // A stopped service is a successful status read for a person (exit 0). `--json` keeps the typed LOCAL_RUNTIME_UNAVAILABLE document and
+      // its exit 1: release tooling reads a failing `describe --json` as "service absent", so that contract is unchanged.
       if (json || (error as { code?: unknown } | null)?.code !== 'LOCAL_RUNTIME_UNAVAILABLE') throw error;
       const paths = context.inspectAdminPaths ? await context.inspectAdminPaths(root, options).catch(() => null) : null;
       emit([t('cli.runtime.status.stopped', {}, locale), ...(paths?.runtimeSocket ? [t('cli.runtime.status.socketAbsent', { path: terminalSafeText(paths.runtimeSocket) }, locale)] : [])].join('\n'), adminSinks(context));
-      return EXIT_CODES.error;
+      return;
     }
     const text = json ? '' : await renderDescriptor(descriptor, context, root, options, locale);
     output(descriptor, () => text);

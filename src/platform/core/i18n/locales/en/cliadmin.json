@@ -247,5 +247,6 @@
   "cli.backup.card.pickVerify": "Which recovery set to verify?",
   "cli.backup.card.pickRestore": "Which recovery set to restore?",
   "cli.runtime.status.build": "build {commit}",
-  "error.SECRET_SET_TERMINAL_REQUIRED": "A key is stored only from a person's terminal, at the hidden prompt: a piped, scripted or agent call is refused before the key is read, and nothing was stored. Run it on your terminal: deckent secret set <NAME>."
+  "error.SECRET_SET_TERMINAL_REQUIRED": "A key is stored only from a person's terminal, at the hidden prompt: a piped, scripted or agent call is refused before the key is read, and nothing was stored. Run it on your terminal: deckent secret set <NAME>.",
+  "cli.backup.list.passphraseUnknown": "Whether the backup passphrase is stored inside this installation: unknown (the secret store could not be read for you now)."
 }

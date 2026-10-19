@@ -95,11 +95,31 @@ it('pool hold on a terminal: scope picker, then the reason by selection, then wh
   expect(card.asked[2]!.body).toEqual(['Scope live · pool the installation\'s admission pool', 'No new work starts in this pool; work already running finishes.', 'Reason: Maintenance']);
   card.answers = ['live', 'maintenance', 'apply'];
   expect(await main(['pool', 'hold'], io(f, poolHandlers(calls)).context)).toBe(0);
-  expect(calls).toEqual([expect.objectContaining({ scopeId: 'live', action: 'hold', reason: 'Maintenance' })]);
+  expect(calls).toEqual([expect.objectContaining({ scopeId: 'live', action: 'hold', reason: 'pool-hold:maintenance' })]); // the fixed id, not the sentence
   card.answers = ['live', '2', 'apply']; calls.length = 0;
   expect(await main(['pool', 'set-capacity'], io(f, poolHandlers(calls)).context)).toBe(0);
   expect(calls).toEqual([expect.objectContaining({ capacity: { executionSlots: 2, inFlightSlots: 4 } })]);
   expect(card.asked.at(-2)!.options.map(option => option.id)).toContain('4');
+});
+
+it('lead 2026-10-19: a TR and an EN session record the same language-neutral reason id; every reader renders it in its own language', async () => {
+  const recorded: unknown[] = [];
+  for (const language of ['tr', 'en']) {
+    const f = await project(undefined, language), calls: unknown[] = [];
+    card.interactive = true; card.answers = ['live', 'problem', 'apply'];
+    expect(await main(['pool', 'hold'], io(f, poolHandlers(calls)).context)).toBe(0);
+    recorded.push((calls[0] as { reason?: string }).reason);
+  }
+  expect(recorded).toEqual(['pool-hold:problem', 'pool-hold:problem']);
+  card.interactive = false;
+  const held = (reason: string) => ({ ...poolHandlers([]), inspectPoolHold: async () => ({ ...poolView('held'), hold: { ...poolView('held').hold!, reason } }) });
+  for (const [language, text] of [['en', 'Reason: Investigating a problem'], ['tr', 'Neden: Bir sorun inceleniyor']] as const) {
+    const f = await project(undefined, language), view = io(f, held('pool-hold:problem'));
+    expect(await main(['pool'], view.context)).toBe(0); expect(view.out.text()).toContain(text); expect(view.out.text()).not.toContain('pool-hold:');
+  }
+  // A caller's own --reason text is shown verbatim and terminal-safe; an unknown id is never translated.
+  const f = await project(), own = io(f, held('deploy \u001b[31mwindow'));
+  expect(await main(['pool'], own.context)).toBe(0); expect(own.out.text()).toContain('Reason: deploy'); expect(own.out.text()).not.toContain('\u001b');
 });
 
 // ---- backup -----------------------------------------------------------------------------------------------------------------------------
@@ -116,6 +136,10 @@ it('bare backup lists the sets: schedule and retention first, the passphrase war
   expect(text).toContain('The backup passphrase is stored inside this installation; keep a copy off this machine as well.');
   expect(text).toMatch(/Date\s+Size\s+Kind\s+Last verified\s+Name/u); expect(text).toMatch(/12(\.0)? MB\s+automatic\s+2 d ago/u); expect(text).toMatch(/by hand\s+not on record\s+manual-set/u);
   expect(text.indexOf('recovery-2026-10-15')).toBeLessThan(text.indexOf('manual-set'));
+  // The assurance-gated passphrase read refused or failed: the line says unknown and the list still renders (fail-closed, no error).
+  const unknown = io(f, { inspectBackupSets: async () => ({ ...sets('/srv/r'), passphraseStored: null }) });
+  await backupCommand(['backup'], unknown.context);
+  expect(unknown.out.text()).toContain('backup passphrase is stored inside this installation: unknown'); expect(unknown.out.text()).toContain('manual-set');
   expect(text).not.toContain('{');
   const json = io(f, { inspectBackupSets: async () => sets('/srv/backups/recovery') });
   await backupCommand(['backup', '--json'], json.context);
@@ -288,7 +312,7 @@ it('bare runtime: build, configuration, running work and socket from what v29 ca
   expect(await main(['runtime', 'describe', '--json'], json.context)).toBe(0);
   expect(JSON.parse(json.out.text())).toEqual(descriptor);
   const stopped = io(f, { ...runtimeHandlers(calls), describeRuntimeService: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); } });
-  expect(await main(['runtime'], stopped.context)).toBe(1);
+  expect(await main(['runtime'], stopped.context)).toBe(0); // a stopped service is a successful status read (lead 2026-10-19)
   expect(stopped.out.text()).toContain('Runtime service: not running.'); expect(stopped.out.text()).toContain('Socket (not present now): /tmp/dk-1000-x/s');
   const stoppedJson = io(f, { ...runtimeHandlers(calls), describeRuntimeService: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); } });
   expect(await main(['runtime', 'describe', '--json'], stoppedJson.context)).not.toBe(0);

@@ -2905,7 +2905,8 @@
         "src/composition/core/policy",
         "src/adapters/core/sqlite-ledger",
         "src/adapters/core/contract",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/secrets"
       ],
       "plan": "INSTALLATION"
     },

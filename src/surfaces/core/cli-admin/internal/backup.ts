@@ -23,6 +23,7 @@ export function renderBackupSets(view: BackupSetsView, locale: Locale, style: Cl
     : t('cli.backup.schedule.off', {}, locale);
   const lines = [t('cli.backup.list.title', { directory: terminalSafeText(view.directory) }, locale), t('cli.backup.list.schedule', { schedule, retention: view.retention }, locale)];
   if (view.passphraseStored) lines.push(t('cli.backup.list.passphraseHere', {}, locale));
+  else if (view.passphraseStored === null) lines.push(t('cli.backup.list.passphraseUnknown', {}, locale));
   if (!view.sets.length) return [...lines, t('cli.backup.list.empty', {}, locale)].join('\n');
   const columns = [t('cli.backup.list.column.date', {}, locale), t('cli.backup.list.column.size', {}, locale), t('cli.backup.list.column.kind', {}, locale),
     t('cli.backup.list.column.verified', {}, locale), t('cli.backup.list.column.name', {}, locale)].map((header, index) => ({ header, ...(index === 1 ? { align: 'right' as const } : {}) }));
