@@ -21,8 +21,10 @@ export function assertInputFields(command: string, schema: InputSchema, input: u
   const result = schema.safeParse(input);
   if (result.success) return;
   const issue = firstIssue(result.error?.issues ?? []);
-  const unknown = issue?.code === 'unrecognized_keys', missing = issue?.code === 'invalid_type' && issue.received === 'undefined';
-  const path = [...(issue?.path ?? []), ...(unknown ? issue?.keys?.slice(0, 1) ?? [] : [])].map(String).join('.');
+  // Missing = the named field is absent from the input (whatever check failed first: type, literal, union).
+  const unknown = issue?.code === 'unrecognized_keys', at = issue?.path ?? [];
+  const missing = !unknown && at.length > 0 && at.reduce<unknown>((value, key) => value !== null && typeof value === 'object' ? (value as Record<string | number, unknown>)[key] : undefined, input) === undefined;
+  const path = [...at, ...(unknown ? issue?.keys?.slice(0, 1) ?? [] : [])].map(String).join('.');
   throw ErrorRegistry.createError('CLI_INPUT_FIELD_INVALID', { params: { command: terminalSafeText(command), field: terminalSafeText(path || '-'),
     problem: unknown ? 'unknown' : missing ? 'missing' : 'invalid', example } });
 }

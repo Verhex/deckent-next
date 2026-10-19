@@ -125,6 +125,7 @@ it('decide: `{}` names the missing field (no "model call" text), --schema prints
   const root = await project(), queries: unknown[] = [];
   const empty = await run(['decide', 'inspect', '--input', '-', '--lang', 'en'], { inspectDecision: async () => { throw new Error('sent'); } }, root, {}, Readable.from(['{}']));
   expect(empty.code).toBe(2); expect(empty.err).toContain('CLI_INPUT_FIELD_INVALID'); expect(empty.err).toContain('schemaVersion'); expect(empty.err).not.toMatch(/model call/iu);
+  expect(empty.err).toContain('is missing');
   const schema = await run(['decide', 'record', '--schema'], {}, root);
   expect(schema.code).toBe(0); expect(schema.text).toContain('selectedOption');
   const item = (id: string, claimedAtMs: number, selected?: string) => ({ schemaVersion: 1, status: 'advised', decisionId: id, caseDigest: digest, adviceDigest: digest, invocationId: 'i',
@@ -163,7 +164,9 @@ it('policy: summary (labelled admin, counts, hashes only with --verbose), own gr
   reads.length = 0;
   const all = await run(['policy', 'grants', '--all'], handlers, root);
   expect(all.code).toBe(2); expect(all.err).toContain('CLI_POLICY_GRANTS_ALL_UNAVAILABLE'); expect(reads).toEqual([]);
-  const vocabulary = await run(['policy', 'vocabulary', '--lang', 'tr'], {}, root);
+  // No --lang: the installation's configured language (tr here), not the English of the environment.
+  const trRoot = await project({ terminal: { scopeId: 'live' }, language: 'tr' });
+  const vocabulary = await run(['policy', 'vocabulary'], {}, trRoot, { LANG: 'C' });
   expect(vocabulary.code).toBe(0); expect(vocabulary.text).not.toContain('{'); expect(vocabulary.text).toContain('Kaynak'); expect(vocabulary.text).toContain('yetki vermez');
   const delegations = await run(['policy', 'delegations', '--lang', 'en'], handlers, root);
   expect(delegations.code).toBe(0); expect(delegations.text).toContain('live'); expect(delegations.text).toContain(' on'); expect(delegations.text).toContain(' off');
