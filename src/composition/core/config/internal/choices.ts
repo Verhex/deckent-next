@@ -49,7 +49,12 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     }
     if (source === 'serving-profiles') { const serving = config['inference_serving'] as { profiles?: readonly { id: string }[] } | undefined; return values(serving?.profiles?.map(profile => profile.id) ?? []); }
     if (source === 'scopes') {
-      const document = policySchema.parse(await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load());
+      // J2c: a folder with no installation (no product directory or no policy file) has no scope to offer; the caller names the setup step.
+      // Only a missing file is "none": an unsafe, changed or invalid authority file still refuses with its own error.
+      const loaded = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load()
+        .catch((error: unknown) => { if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return null; throw error; });
+      if (loaded === null) return [];
+      const document = policySchema.parse(loaded);
       const candidates = installationOwnScopes(document, [scopeId, config.service.identity?.scopeId, ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])].filter((value): value is string => !!value));
       const identity = readLocalOsIdentity(), admitted: string[] = [];
       for (const scope of candidates) { try { admitted.push(...await resolveConfiguredScopeMembership(config, document, identity, [scope], 'read')); } catch { /* Foreign/unregistered scopes are not displayed. */ } }

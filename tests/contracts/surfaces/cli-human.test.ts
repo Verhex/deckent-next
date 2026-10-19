@@ -244,6 +244,16 @@ describe('scope rule', () => {
     expect(await run('not-offered')).toBeNull();
     expect(applied).toBe(1);
   });
+  it('NEGATIVE (J2c): a person on a terminal with no scope to pick gets the setup step, not an empty card; off a terminal the scope stays required', async () => {
+    let asked = 0;
+    const none = async (interactive: boolean) => resolveCommandScope({ command: 'deckent task', locale: 'en', mutating: false, interactive, listScopes: async () => [],
+      pick: async () => { asked++; return null; } });
+    const terminal = await caught(() => none(true));
+    expect(terminal).toMatchObject({ code: 'TERMINAL_SCOPE_REQUIRED', exit: 2 });
+    expect(terminal.message).toContain('deckent init policy --scope <id> --apply');
+    expect(await caught(() => none(false))).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', exit: 2 });
+    expect(asked).toBe(0);
+  });
   it('the scope list is the /config scope query', async () => {
     const calls: unknown[] = [];
     const lister = scopeLister({ configChoiceSources: () => ({ async list(source, keyPath) { calls.push([source, keyPath]); return [{ value: 'live' }, { value: 7 }]; } }) }, '/p', {});

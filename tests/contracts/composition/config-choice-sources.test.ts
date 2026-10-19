@@ -1,7 +1,7 @@
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -30,6 +30,12 @@ describe('CS-1 production choice discovery', () => {
     const names = await source.list('environment', 'terminal.shell.environment'); expect(names.map(choice => choice.value)).toContain('CS1_TEST_ENV');
     expect(JSON.stringify(names)).not.toContain('never-show-this-value'); expect(JSON.stringify(await source.list('key-files', 'approvals.keyFile'))).not.toContain('secret key content');
     expect((await source.list('paths', 'layout.root')).some(choice => choice.value === root)).toBe(true);
+  });
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: policy file guards need POSIX ownership] J2c: a folder with no installation offers no scope (no raw file error) and writes nothing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cs1-empty-')), home = await mkdtemp(join(tmpdir(), 'cs1-empty-home-')); roots.push(root, home);
+    const source = configuredConfigChoiceSources(root, { env: { ...process.env, DECKENT_GLOBAL_HOME: join(home, 'global') } });
+    expect(await source.list('scopes', 'terminal.scopeId')).toEqual([]);
+    expect(await readdir(root)).toEqual([]);
   });
   it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] discovers executables and local branches and reads bounded pool records without a ledger writer', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cs1-git-')); roots.push(root);
