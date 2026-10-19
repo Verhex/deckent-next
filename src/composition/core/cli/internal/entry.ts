@@ -15,7 +15,7 @@ import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecis
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
-import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
+import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { interactiveDeliveryHandlers, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -169,7 +169,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     installConfiguredExecutionPool: (projectRoot, scopeId, apply) => installConfiguredExecutionPool(projectRoot, scopeId, apply).catch(error => { throw queryFailure(error); }),
     inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options),
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
-    listStandingGrants: listConfiguredStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
+    listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
     inspectPolicyAdministration: inspectConfiguredPolicyAdministration,
     upgradePolicyTemplate: (root, scopeId, input, options) => configuredPolicyTemplateUpgrade(root, scopeId, options, input).catch(error => { throw queryFailure(error); }),
     delegations: { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation },
