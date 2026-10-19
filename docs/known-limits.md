@@ -265,6 +265,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the generic effect path records its result in the ledger.
 - **Enterprise SSO, fleet management and the central policy service are not available.** The policy module's remaining
   parts (founder-admin recovery with a card, two-person handover, role editing, signed packages) are not built.
+- **`deckent policy grants --all` shows a start time only for governed standing approvals.** The "since" column comes from the
+  sealed audit change that created the rule; a rule written by hand or before the audit existed shows "—", and only the
+  first 10 000 policy changes of a scope are searched (the page then says the times are partial). People are shown as
+  issuer/subject: Core keeps no display names.
 
 ## Recovery and upgrades
 

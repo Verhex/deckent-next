@@ -267,6 +267,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   genel etki yolu sonucunu ledger'a yazar.
 - **Enterprise SSO, filo yönetimi ve merkezi policy hizmeti yok.** Policy modülünün kalan parçaları (kartlı kurucu admin
   kurtarma, iki kişiyle devir, rol düzenleme, imzalı paketler) yapılmadı.
+- **`deckent policy grants --all` başlangıç zamanını yalnız yönetilen kalıcı onaylar için gösterir.** "Başlangıç" sütunu kuralı
+  oluşturan mühürlü denetim değişikliğinden gelir; elle yazılmış ya da denetimden eski bir kural "—" gösterir ve bir kapsamın
+  yalnız ilk 10 000 politika değişikliği aranır (sayfa o zaman zamanların eksik olduğunu söyler). Kişiler issuer/subject olarak
+  görünür: Core görünen ad tutmaz.
 
 ## Kurtarma ve yükseltme
 
