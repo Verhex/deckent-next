@@ -17,10 +17,10 @@ export function legendLines(locale: Locale, ascii: boolean, tabs: readonly (Moni
     keyLabel: t('monitor.legend.colour.accent', {}, locale), windowBorder: t('monitor.legend.colour.muted', {}, locale) })[role];
   const rows: readonly (readonly [string, string, MonitorRole, string])[] = [
     ['▶', '>', 'info', t('monitor.legend.progressing', {}, locale)], ['~', '~', 'warning', t('monitor.legend.waiting', {}, locale)],
-    ['!', '!', 'error', t('monitor.legend.blocked', {}, locale)], ['✓', '+', 'success', t('monitor.legend.accepted', {}, locale)],
+    // One row per mark (PB-MON-UX): the mark alone must say what it means without colour.
+    ['!', '!', 'warning', t('monitor.legend.attention', {}, locale)], ['✓', '+', 'success', t('monitor.legend.ok', {}, locale)],
     ['✗', 'x', 'error', t('monitor.legend.failed', {}, locale)], ['■', '-', 'muted', t('monitor.legend.cancelled', {}, locale)],
     ['●', '*', 'success', t('monitor.legend.installOn', {}, locale)], ['○', 'o', 'error', t('monitor.legend.installOff', {}, locale)],
-    ['✓', '+', 'success', t('monitor.legend.ok', {}, locale)], ['!', '!', 'warning', t('monitor.legend.warning', {}, locale)],
     ['→', '->', 'info', t('monitor.legend.next', {}, locale)], ['›', '>', 'accent', t('monitor.legend.selected', {}, locale)],
     ['≈', '~=', 'muted', t('monitor.legend.approx', {}, locale)],
     [CHANGE_GLYPHS.added, CHANGE_GLYPHS.added, 'accent', t('monitor.legend.added', {}, locale)],

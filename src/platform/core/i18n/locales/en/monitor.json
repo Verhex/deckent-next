@@ -250,5 +250,7 @@
   "monitor.config.hint": "Tab/←→ tabs · ↑↓ select · Enter details · a all/changed · / search · ? help · q quit",
   "monitor.config.help": "{index}                Settings: changed settings by section; a shows all, / searches, Enter explains one",
   "monitor.legend.next": "next step: a command that answers the problem above it",
-  "monitor.legend.ok": "check passed: service running, ledger read, image current"
+  "monitor.legend.ok": "fine: Run accepted, or a check passed (service running, ledger read, image current, model invocable)",
+  "monitor.legend.attention": "needs attention: a blocked Run, a warning, a stale heartbeat, a read problem, a held pool or an old snapshot",
+  "monitor.legend.installOff": "off or not reachable: an unreachable or refused install, a stopped service, an unused profile"
 }

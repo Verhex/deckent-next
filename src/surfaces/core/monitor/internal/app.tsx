@@ -125,10 +125,10 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
   const detailRow = detail === null ? null : flat.find(line => line.row?.key === detail)?.row ?? null;
 
-  // Header: title + snapshot age (neutral when fresh, ⚠ after 2 intervals, ✗ after 5) + the active filter; then one line per install.
+  // Header: title + snapshot age (neutral when fresh, ! after 2 intervals, ✗ after 5) + the active filter; then one line per install.
   const age = received ? Math.max(0, clock - received.at) : 0, sep = ` ${ascii ? '|' : '·'} `;
   const ageSpans = !received || age <= 2 * intervalMs ? [] : [span(sep),
-    span(`${age > 5 * intervalMs ? (ascii ? 'x' : '✗') : (ascii ? '!' : '⚠')} ${t('monitor.live.stale', { age: durationText(age, locale) }, locale)}`, age > 5 * intervalMs ? 'error' : 'warning')];
+    span(`${age > 5 * intervalMs ? (ascii ? 'x' : '✗') : '!'} ${t('monitor.live.stale', { age: durationText(age, locale) }, locale)}`, age > 5 * intervalMs ? 'error' : 'warning')];
   const filterSpans = controls.filter ? [span(sep), span(t('monitor.filter.active', { filter: controls.filter }, locale), 'accent')] : [];
   const header: MonitorLine[] = view ? view.header.map((line, index) => clipLine(index ? line : [...line, ...ageSpans, ...filterSpans], width, ellipsis))
     : [[span(t('monitor.title', {}, locale), 'strong')]];
@@ -136,7 +136,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const lastRead = received ? clockText(received.at).slice(11) : '—';
   const sortWord = (key: 'age' | 'state' | 'name') => key === 'age' ? t('monitor.sort.age', {}, locale) : key === 'state' ? t('monitor.sort.state', {}, locale) : t('monitor.sort.name', {}, locale);
   const status: MonitorLine = editing ? [span(`/${controls.filter}${ascii ? '_' : '▏'}`, 'accent'), span(`  ${t('monitor.filter.hint', {}, locale)}`, 'muted')]
-    : failure ? [span(`${ascii ? '!' : '⚠'} ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
+    : failure ? [span(`! ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
       : paused ? [span(t('monitor.live.paused', {}, locale), 'warning')]
         : [span(t('monitor.live.every', { every: durationText(intervalMs, locale), time: snapshot ? clockText(snapshot.observedAt) : '—' }, locale), 'muted'),
           ...(controls.sort ? [span(`  ${t('monitor.sort.active', { key: sortWord(controls.sort.key) }, locale)}`, 'muted')] : []),

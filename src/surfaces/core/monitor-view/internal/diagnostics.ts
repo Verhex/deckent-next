@@ -2,7 +2,7 @@ import { t, type Locale } from '#platform/index.js';
 
 /**
  * Install diagnostics in words (MONITOR v1.1). A data-lane code is `name[:detail]` (split on the first `:` only — `scope-unavailable:<scope>:<CODE>`
- * keeps its second part in the detail). An `info:` prefix makes it a neutral note (never a ⚠ warning, never counted as a problem). An unknown
+ * keeps its second part in the detail). An `info:` prefix makes it a neutral note (never a ! warning, never counted as a problem). An unknown
  * code stays visible as itself, so a new code from the data lane is never hidden.
  */
 export interface MonitorDiagnostic { readonly code: string; readonly note: boolean; readonly text: string;

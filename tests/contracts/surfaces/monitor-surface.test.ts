@@ -445,13 +445,13 @@ describe('fullscreen controls: filter, sort, group, change marks, snapshot age',
       await until(() => calls >= 3 && !/^[+*] │ run-/m.test(view.stdout.frame), 'marks gone after one refresh');
     } finally { view.instance.unmount(); }
   });
-  it('shows the snapshot age: neutral when fresh, ⚠ after two intervals, ✗ after five; a failed read names the last read time', async () => {
+  it('shows the snapshot age: neutral when fresh, ! after two intervals, ✗ after five; a failed read names the last read time', async () => {
     let clock = OBSERVED_AT, calls = 0;
     const view = mount({ intervalMs: 40, now: () => clock, load: async () => { if (++calls > 1) throw Object.assign(new Error('x'), { code: 'INVENTORY_UNAVAILABLE' }); return fullSnapshot; } });
     try {
       await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
       expect(view.stdout.frame).not.toMatch(/snapshot \S+ s old/);
-      clock += 100; await until(() => view.stdout.frame.includes('⚠ snapshot 0 s old'), 'yellow age');
+      clock += 100; await until(() => view.stdout.frame.includes('! snapshot 0 s old'), 'yellow age');
       await until(() => view.stdout.frame.includes('refresh failed,'), 'failed read');
       expect(view.stdout.frame).toContain('Stale snapshot (last read 09:30:00Z)');
       clock += 200; await until(() => view.stdout.frame.includes('✗ snapshot 0 s old'), 'red age');

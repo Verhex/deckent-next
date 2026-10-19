@@ -250,5 +250,7 @@
   "monitor.config.hint": "Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · a tümü/değişenler · / ara · ? yardım · q çık",
   "monitor.config.help": "{index}                Ayarlar: bölümlere göre değişen ayarlar; a tümünü gösterir, / arar, Enter birini açıklar",
   "monitor.legend.next": "yapılacak: üstündeki sorunu çözen komut",
-  "monitor.legend.ok": "kontrol geçti: servis açık, defter okundu, imaj güncel"
+  "monitor.legend.ok": "yolunda: iş kabul edildi ya da kontrol geçti (servis açık, defter okundu, imaj güncel, model çağrılabilir)",
+  "monitor.legend.attention": "bakılması gerek: takılı iş, uyarı, eski heartbeat, okuma sorunu, bekletilen havuz ya da eski görüntü",
+  "monitor.legend.installOff": "kapalı ya da ulaşılamıyor: erişilemeyen ya da reddedilen kurulum, durmuş servis, kullanılmayan profil"
 }
