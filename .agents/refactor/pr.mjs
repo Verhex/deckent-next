@@ -160,6 +160,11 @@ function writeReceipt(file, receipt) {
 function names(cwd, args, repo) {
   return git(repo, args, { cwd, raw: true }).split('\0').filter(Boolean);
 }
+/** Every path a change touches (Astra 2661 R1). Rename detection is off, never left to the host's `diff.renames`: a rename lists its
+ * removed source and its added destination, so a protected or out-of-scope file moved into the scope still meets both guards. */
+function changedPaths(cwd, range, repo) {
+  return names(cwd, ['diff', '--no-renames', '--name-only', '-z', ...range], repo);
+}
 function mapApply(error) {
   const blob = `${error.stderr || ''}\n${error.message || ''}`;
   if (/No valid patches|empty patch/i.test(blob)) throw fail('PR_EMPTY_PATCH', 'diff produced no changes');
@@ -211,12 +216,12 @@ function prepare(opts) {
   const previous = readReceipt(file);
   const current = existingCommit(repo, branch);
   if (previous && current === previous.commit && previous.patchSha256 === loaded.patchSha256 && previous.diffSha256 === loaded.diffSha256 && (previous.reportSha256 ?? null) === loaded.reportSha256) {
-    requireScope(names(repo, ['diff', '--name-only', '-z', previous.base, previous.commit], repo), opts);
+    requireScope(changedPaths(repo, [previous.base, previous.commit], repo), opts);
     return previous;
   }
   return withWorktree(repo, loaded.base, tmp => {
     applyDiff(tmp, loaded.diffFile);
-    const files = names(tmp, ['diff', '--cached', '--name-only', '-z'], repo);
+    const files = changedPaths(tmp, ['--cached'], repo);
     if (!files.length) throw fail('PR_EMPTY_PATCH', 'diff produced no changes');
     requireScope(files, opts);
     const tree = git(tmp, ['write-tree']).trim();
@@ -280,7 +285,7 @@ function publish(repo, receipt, loaded, opts) {
   if (!Array.isArray(prs)) throw fail('PR_GH_FAILED', 'pr list was not a JSON array');
   const found = prs.find(item => asString(item.headRefOid).toLowerCase() === receipt.commit && Number.isSafeInteger(item.number) && typeof item.url === 'string');
   if (found) return writeReceipt(file, { ...receipt, phase: 'opened', at: new Date().toISOString(), pr: { number: found.number, url: found.url } });
-  const files = names(repo, ['diff', '--name-only', '-z', receipt.base, receipt.commit], repo);
+  const files = changedPaths(repo, [receipt.base, receipt.commit], repo);
   const body = renderBody({ ...receipt, files, checks: loaded.report?.checks ?? [], risks: loaded.report?.risks ?? [], summary: loaded.report?.summary ?? null, report: Boolean(loaded.reportFile) });
   const bodyFile = path.join(os.tmpdir(), `deckent-pr-body-${crypto.randomUUID()}.md`);
   fs.writeFileSync(bodyFile, body);
