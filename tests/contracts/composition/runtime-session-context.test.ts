@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AGENT_TURN_SYSTEM_PROMPT_VERSION } from '#engine/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 
 // NATIVE-BAGLAM (owner 2026-10-14: "hangi moddayız" was answered by reading .deckent/config.json): on the real runtime service, the system
 // prompt the model endpoint received states the session's mode, thinking, model facts and each tool's effect; `session_state` returns the same
@@ -36,7 +37,8 @@ describe.skipIf(process.platform !== 'linux')('the session context reaches the m
 
     // The person switches the mode (Shift+Tab → the service's setPermissionMode); the very next turn's prompt and tool say full-auto.
     const shown = await f.client.inspectPermissionMode({ schemaVersion: 1, scopeId: 'scope' });
-    await f.client.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: shown.revision });
+    // SEC-1 (owner A48-D5): the mode change is an authority write, so it comes from a real PTY peer (the terminal), as Shift+Tab does.
+    await createTerminalRuntimeClient(f.project, { env: f.env }).setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: shown.revision });
     const second = await f.call('session_state', {});
     expect(modeLine(lastPrompt(f))).toContain('- Permission mode: full-auto — ');
     expect((JSON.parse(second.text) as { mode: { name: string } }).mode.name).toBe('full-auto');

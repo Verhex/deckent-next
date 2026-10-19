@@ -9,9 +9,10 @@ import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapter
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { cliChildEnv } from '../support/child-env.js';
+import { lastJson, runInTerminal } from '../support/terminal-cli.js';
 
-// SECRET-WRITE on the shipped processes: compiled `runtime serve` + compiled `deckent secret set|delete|list`. The value is piped on stdin
-// (never argv); the change is decided by the fresh install's template v2 grant, audited in the ledger and stored in the file backend. A
+// SECRET-WRITE on the shipped processes: compiled `runtime serve` + compiled `deckent secret set|delete|list`. The value is typed at the
+// hidden prompt of a real PTY (never argv; SEC-1, owner A48-D5: a change needs the service-held terminal witness, a piped one is refused); the change is decided by the fresh install's template v2 grant, audited in the ledger and stored in the file backend. A
 // synthetic canary is searched in every byte the processes printed, in the ledger files and in the installation's state directory.
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']>; stdin: NonNullable<ChildProcess['stdin']> };
 const CANARY = 'synthetic-canary-0b4d9f-not-a-real-key';
@@ -67,9 +68,13 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   await ready(service);
 
   const printed: string[] = [];
-  const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
-  expect(set.code, set.stderr).toBe(0);
-  expect(JSON.parse(set.stdout)).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend, removed: null });
+  // SEC-1: the same set from a pipe (a script, an agent's shell) is refused by the service before any decision; nothing stored or audited.
+  const piped = await run(['secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, `${CANARY}\n`); printed.push(piped.stdout, piped.stderr);
+  expect(piped.code).not.toBe(0); expect(piped.stdout + piped.stderr).toContain('AUTHORITY_WITNESS_REQUIRED');
+  const set = await runInTerminal([process.execPath, cli, 'secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]);
+  printed.push(set.output);
+  expect(set.code, set.output).toBe(0);
+  expect(lastJson(set.output)).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend, removed: null });
   if (sealed) {
     // SECRET-AT-REST: the service wrote a sealed store that opens with the installation key; no file of the root holds the value or the name.
     expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).get('PROVIDER_TOKEN')).toBe(CANARY);
@@ -88,8 +93,10 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   // A value on argv is a usage refusal before anything is sent.
   const argv = await run(['secret', 'set', 'OTHER', CANARY, '--json'], project, env); printed.push(argv.stdout, argv.stderr);
   expect(argv.code).toBe(2);
-  const removed = await run(['secret', 'delete', 'PROVIDER_TOKEN', '--json'], project, env); printed.push(removed.stdout, removed.stderr);
-  expect(JSON.parse(removed.stdout)).toMatchObject({ action: 'delete', removed: true });
+  const pipedDelete = await run(['secret', 'delete', 'PROVIDER_TOKEN', '--json'], project, env); printed.push(pipedDelete.stdout, pipedDelete.stderr);
+  expect(pipedDelete.code).not.toBe(0); expect(pipedDelete.stdout + pipedDelete.stderr).toContain('AUTHORITY_WITNESS_REQUIRED');
+  const removed = await runInTerminal([process.execPath, cli, 'secret', 'delete', 'PROVIDER_TOKEN', '--json'], project, env); printed.push(removed.output);
+  expect(lastJson(removed.output)).toMatchObject({ action: 'delete', removed: true });
   if (sealed) expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).listNames()).toEqual([]);
   else expect(JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8'))).toEqual({ schemaVersion: 1, secrets: {} });
 

@@ -408,8 +408,8 @@ Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and move
 
 ### API keys
 
-You store a provider key once, in the masked field of `/provider` or with `deckent secret set NAME` (hidden prompt or
-piped stdin, never an argument); a model profile refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell
+You store a provider key once, in the masked field of `/provider` or with `deckent secret set NAME` (a hidden prompt in an
+interactive terminal; never an argument, and a piped key is refused); a model profile refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell
 profile or a `.env` file: other tools read those.
 
 | Store (`secrets.store`) | On disk | Who can read the key |

@@ -87,6 +87,18 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
   detected. *Workaround:* keep secrets in a secret store, never in source.
 
+- **Authority changes need a person at a terminal.** Changing the permission mode, setting or deleting a secret, or switching
+  the secret store is refused with `AUTHORITY_WITNESS_REQUIRED` unless the requesting process has its input and output on an
+  interactive terminal; the MCP actor is always refused, and nothing is decided, audited or written. *Impact:*
+  `echo KEY | deckent secret set NAME`, scripts, the SDK called from a script and AI tools can no longer make these changes,
+  and there is no approval-request path for them yet. *Workaround:* run `deckent secret set NAME` (hidden prompt),
+  `deckent secret store` or the terminal's `/provider` and mode switch in an interactive terminal.
+- **The runtime socket refuses sandboxed processes, not other processes of your account.** The runtime service refuses a
+  peer outside its own PID, mount and user namespaces, the full-access bubblewrap view hides the runtime socket directories,
+  and the Landlock realm cannot open a unix socket at all. A process your account runs outside a sandbox (a host-realm call
+  approved in a full-access turn, an MCP server run on the host, another agent) still reaches the socket and acts as you for
+  everything except the authority changes above. *Workaround:* run untrusted servers and agents in a sandbox or under a
+  separate account.
 - **An AI agent running on your own operating-system account is not contained by Deckent's approvals.** Approval and
   audit records are sealed with a key stored in your account, the interactive-terminal check proves a terminal rather than
   a person, and your account can write the policy file. Where your account can use Docker or sudo, such an agent can in

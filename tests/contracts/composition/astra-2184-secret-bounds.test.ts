@@ -8,7 +8,8 @@ import { clearConfigCache, productResourcePath, resolveGlobalConfigPaths, resolv
 import { createFileSecretStore, encodeServiceFrame, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 
 // SECRET-WRITE (owner 2026-09-29, SECRET-K1 §5 option A + S3 = service socket): a secret change goes through the runtime service; the socket
 // peer is the principal; the `secret`/`set|delete` policy cell decides it; every decision is a sealed `secret-change` audit event in the
@@ -47,7 +48,8 @@ async function fixture(input: { readonly backend?: 'file' | 'env' } = {}) {
   const service = await startConfiguredRuntimeService(project, { async onPage(...args: unknown[]) { output.push(JSON.stringify(args)); },
     async onError(...args: unknown[]) { output.push(JSON.stringify(args)); } }, { env });
   services.push(service);
-  const client = createConfiguredRuntimeClient(project, { env });
+  // SEC-1 (owner A48-D5): secret changes need the service-held terminal witness; the owner's client is a real PTY peer.
+  const client = createTerminalRuntimeClient(project, { env });
   const file = createFileSecretStore({ root: globalRoot, platform: 'linux' });
   const audit = () => {
     const db = new DatabaseSync(ledger, { readOnly: true });
