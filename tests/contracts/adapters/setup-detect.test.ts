@@ -9,7 +9,7 @@ import { HOST_EXECUTION_PORTS, detectExecutionFacts, executionSetupFamily, parse
   type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
 import { codingSetupFamily, detectCodingFacts, type CodingFacts } from '#adapters/core/setup-detect-coding/index.js';
 import { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
-import { observeSetup } from '#surfaces/core/setup/index.js';
+import { observeSetup, setupMessage } from '#surfaces/core/setup/index.js';
 
 // I-S2: init detection. Execution-environment facts (Docker present, version, service reachable, user permission, kind), coding/git facts,
 // locale facts; all read-only. Fakes stand for absent, stopped and no-permission Docker; the real host run is in the HANDOFF transcript.
@@ -45,7 +45,9 @@ const docker = (facts: ExecutionFacts) => facts.runtimes[0]!;
 const decide = (facts: unknown, family = executionSetupFamily(), answer?: unknown) =>
   family.stages[0]!.evaluate({ facts, answer, scopeId: 's', states: new Map() });
 
-describe('I-S2 execution-environment detection', () => {
+// POSIX fakes (`#!/bin/sh`, file modes): not run on native Windows, like the sibling POSIX-mode adapter tests.
+const posix = process.platform === 'win32';
+describe.skipIf(posix)('I-S2 execution-environment detection', () => {
   it('the registry is data: Docker is the supported entry, Podman is reported only; a malformed registry is refused', () => {
     const [first, second] = parseExecutionRuntimes({ schemaVersion: 1, runtimes: [{ id: 'x', label: 'X', support: 'unsupported', executable: 'x' }] });
     expect(first).toMatchObject({ id: 'x' }); expect(second).toBeUndefined();
@@ -78,7 +80,7 @@ describe('I-S2 execution-environment detection', () => {
     expect(await (await import('node:fs/promises')).readFile(host.log, 'utf8')).not.toMatch(/^(start|run|pull|create|system|context use)/mu);
   });
 
-  it('no permission: the socket exists but this user may not open it; the group answer tells re-login from not a member', async () => {
+  it.skipIf(process.getuid?.() === 0)('no permission: the socket exists but this user may not open it; the group answer tells re-login from not a member', async () => {
     const dir = await temp('sock'), socket = join(dir, 'docker.sock');
     await writeFile(socket, ''); await chmod(socket, 0o000);
     const gid = (await stat(socket)).gid;
@@ -112,6 +114,8 @@ describe('I-S2 execution-environment detection', () => {
     expect(decide(facts, family, true)).toMatchObject({ state: 'ready', operation: { id: 'execution-env.install' } });
     expect(decide(facts, family, false)).toMatchObject({ state: 'skipped', reason: { code: 'setup.execution.declined' } });
     expect(decide(undefined)).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.unavailable' } });
+    const desktop = { ...facts, runtimes: [{ ...facts.runtimes[0]!, cli: 'found' as const, daemon: 'unreachable' as const, kind: 'desktop' as const }] };
+    expect(decide(desktop, family)).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.desktopStopped' } });
   });
 });
 
@@ -120,7 +124,7 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user
 const hostPath = process.env['PATH'] ?? '';
 const coding = (facts: unknown, stage: number) => codingSetupFamily().stages[stage]!.evaluate({ facts, answer: undefined, scopeId: 's', states: new Map() });
 
-describe('I-S2 coding/git detection', () => {
+describe.skipIf(posix)('I-S2 coding/git detection', () => {
   it('not a repository, no commits, commits with a separate clone, and no Git are each reported honestly', async () => {
     const plain = await temp('plain');
     const none = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } });
@@ -140,6 +144,8 @@ describe('I-S2 coding/git detection', () => {
     const noGit = await detectCodingFacts({ root: plain, env: { PATH: await fakeBin({}), HOME: plain } });
     expect(noGit).toMatchObject({ git: 'absent', repository: 'not-run', productSource: false });
     expect(coding(noGit, 0)).toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.gitMissing' } });
+    expect(coding({ ...full, repository: 'unknown' }, 0)).toMatchObject({ state: 'blocked', reason: { code: 'setup.coding.repositoryUnknown' } });
+    expect(coding({ ...full, hosts: [{ id: 'codex', cli: 'found', login: 'absent' }] }, 1)).toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.hostsInstalled', params: { hosts: 'codex' } } });
   });
 
   it('coding-CLI sign-ins: presence by lstat only — an unreadable sign-in file is still "found", its content never leaves', async () => {
@@ -191,6 +197,8 @@ describe('I-S2 families in the setup plan', () => {
       'core:sandbox', 'execution:runtime', 'core:model', 'coding:hosts', 'core:final-check']);
     expect(['coding:repository', 'execution:runtime', 'coding:hosts'].map(id => at(plan.stages, id).state)).toEqual(['done', 'done', 'done']);
     expect(plan.stages.filter(stage => stage.namespace !== 'core').every(stage => !stage.autoEligible && stage.operation === null)).toBe(true);
+    for (const stage of plan.stages.filter(item => item.namespace !== 'core')) for (const locale of ['en', 'tr'] as const) {
+      expect(setupMessage(stage.title, {}, locale)).not.toBe(stage.title); expect(setupMessage(stage.reason.code, stage.reason.params, locale)).not.toBe(stage.reason.code); }
   });
   it('an ERP server without Docker or Git: honest labels, nothing to apply, the plan stays valid', () => {
     const bare: ExecutionFacts = { schemaVersion: 1, runtimes: ready.runtimes.map(row => ({ ...row, cli: 'absent', path: null, version: null, daemon: 'not-run', serverVersion: null,
