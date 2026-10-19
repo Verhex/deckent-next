@@ -411,6 +411,15 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs t
   const records=await audit(f);expect(records.filter(record=>record.event.subject.kind==='backup-operation'&&record.event.subject.code==='BACKUP_SET_NOT_FOUND').length).toBeGreaterThanOrEqual(3);
   expect(JSON.stringify(records)).not.toContain(phrase);
 });
+/** C-PRIO J1 (lead): the recovery audit lives next to the set, so a set that does not exist is refused before that audit is written. */
+it.skipIf(process.platform === 'win32'||process.getuid?.()===0)('[unsupported on Windows: backup needs the OS-user identity; root writes any mode] a restore of a missing set is BACKUP_SET_NOT_FOUND even under a read-only folder, and leaves no audit folder',async()=>{
+  const f=await fixture(),locked=join(f.base,'locked');await mkdir(locked,{mode:0o500});
+  // Before J1 this answered BACKUP_AUDIT_UNAVAILABLE: the intent record was written next to the set before the set was located.
+  try{await expect(call(f,'restore',phrase,{set:join(locked,'no-such-set')})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});}finally{await chmod(locked,0o700);}
+  expect(await readdir(locked)).toEqual([]);
+  await expect(call(f,'restore','',{set:join(f.base,'typo-set')})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});
+  expect(await readdir(f.base)).not.toContain('.deckent-backup-audit');
+});
 it.skipIf(process.platform === 'win32'||process.getuid?.()===0)('[unsupported on Windows: backup needs the OS-user identity; root reads any mode] an unreadable set or member is BACKUP_SET_UNREADABLE; a removed member is a modified set',async()=>{
   const f=await fixture();await call(f,'create');
   await chmod(f.set,0o000);

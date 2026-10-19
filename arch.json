@@ -3092,6 +3092,7 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
         "src/surfaces/core/effect-confirmation"
       ],
       "plan": "SURFACES"

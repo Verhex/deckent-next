@@ -13,6 +13,9 @@ export type QueueReattemptView = z.infer<typeof queueReattemptViewSchema>;
 export const targetQueueViewSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema, identity: attemptIdentitySchema,
   operation: z.enum(['delivery', 'rollback']), target: effectTargetRefSchema, display: targetDisplaySchema, state: targetQueueStateSchema, outcome: targetQueueOutcomeSchema.nullable(), revision: z.number().int().nonnegative().safe(),
   observedAt: z.number().int().nonnegative().safe(), freshness: z.literal('last-known'), position: z.number().int().positive().safe().nullable(),
+  /** C-PRIO (owner CLI review 2026-10-19): when this ticket was submitted, so a list can show the newest first. Added within the protocol
+   * version like `reattempt`/`delegation`: optional, absent from a view produced before alpha.48. */
+  submittedAt: z.number().int().nonnegative().safe().optional(),
   nextAction: z.enum(['wait-service', 'confirm-batch', 'watch-reconciliation', 'new-attempt', 'select-target', 'prepare-current', 'inspect-receipt', 'approve-run']),
   responsibility: z.enum(['human', 'reconciler', 'service']), basis: z.object({ observed: z.string(), effective: z.string(), candidate: z.string() }).strict().nullable(),
   verification: z.object({ phase: z.enum(['accepted', 'failed', 'pending', 'cancelled', 'unknown']), receipt: digest }).strict().nullable(), evidenceRefs: z.array(digest),
@@ -46,7 +49,7 @@ export function projectTargetQueue(input: TargetQueueRecord, descriptor: TargetD
   else if (record.state === 'settled') nextAction = 'inspect-receipt';
   return Object.freeze({ schemaVersion: 1 as const, commandId: record.request.commandId, identity: record.request.identity,
     operation: record.request.operation ?? 'delivery', target: record.request.target.target, display, state: record.state, outcome: record.outcome, revision: record.revision,
-    observedAt, freshness: 'last-known' as const, position, nextAction,
+    observedAt, freshness: 'last-known' as const, position, submittedAt: record.request.submittedAt, nextAction,
     responsibility: record.state === 'awaiting-confirmation' || (reattempt && !serviceOwned) || requeue === 'exhausted' ? 'human' as const : record.state === 'reconciling' ? 'reconciler' as const : 'service' as const,
     basis: record.candidate ? { observed: record.candidate.observedVersion, effective: record.candidate.effectiveVersion,
       candidate: record.candidate.candidateVersion } : null,

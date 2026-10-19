@@ -8,13 +8,15 @@ import { renderQueueList } from './list-table.js';
 export interface QueueCommandContext extends CliBaseContext { deliveryQueue?: QueueSubmitClient; confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution> }
 /** Queue admission is non-interactive; the exact publish and adoption batch each need the verified TTY. */
 export async function queueCommand(argv: readonly string[], context: QueueCommandContext) {
-  const action = argv[1], values = new Map<string, string>(); let json = false;
+  const action = argv[1], values = new Map<string, string>(); let json = false, verbose = false;
   // Each action accepts only its own flags: --source-command-id names the rollback's source ticket, nothing else.
   const allowed = action === 'integration-queue-enqueue' ? ['--input', '--lang'] : action === 'integration-queue-list' ? ['--scope', '--after', '--limit', '--lang']
     : ['--scope', '--command-id', '--lang', ...(action === 'integration-queue-rollback' ? ['--source-command-id'] : [])];
   for (let index = 2; index < argv.length; index++) {
     const flag = argv[index]!;
     if (flag === '--json' && !json) { json = true; continue; }
+    // C-PRIO J1: the human list shows short ticket ids; --verbose (list only, once) prints the full ids.
+    if (flag === '--verbose' && action === 'integration-queue-list' && !verbose) { verbose = true; continue; }
     if (!allowed.includes(flag) || values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
     const value = argv[++index]; if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE'); values.set(flag, value);
   }
@@ -43,6 +45,6 @@ export async function queueCommand(argv: readonly string[], context: QueueComman
     else throw ErrorRegistry.createError('CLI_USAGE');
   }
   // The human list is a table (owner CLI review 2026-10-19); `--json` still prints the client's page unchanged.
-  emit(result, { ...sinks, json, render: data => list ? renderQueueList(data as Awaited<ReturnType<QueueSubmitClient['listTargetQueue']>>, list.scopeId, list.limit, locale)
+  emit(result, { ...sinks, json, render: data => list ? renderQueueList(data as Awaited<ReturnType<QueueSubmitClient['listTargetQueue']>>, list.scopeId, list.limit, locale, { verbose })
     : t('queue.cli.result', { result: JSON.stringify(data) }, locale) });
 }
