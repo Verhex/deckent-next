@@ -1,30 +1,126 @@
 Usage: deckent <command> [options]
+
+Surfaces (one installation, one set of typed operations):
+  deckent             the interactive terminal on a real terminal; this help
+                      when piped
+  deckent <command>   this CLI: one call, one result; text for people, --json
+                      for scripts and AI agents
+  deckent-mcp         MCP server: Deckent operations as tools for AI clients;
+                      policy grants decide which ones they may use
+
+Commands (deckent <command> --help shows each action and its options):
+
 Getting started:
   terminal    Open the interactive terminal
+      workline | session | status | chat-plan | snapshot
+      [--scope <id>] [--full-access]
   init        Set up an installation
+      preview | inspect | apply | resume | identity | policy | pool | registry
+      [--preview] [--profile <file>]
+
 Observe:
   report      Inspect cost and acceptance evidence for a Run
+      --scope <id> --run <id>
   monitor     Watch installations and work
-  workers     List or watch workers
+      [--once|--json] [--scope <id>]
+  workers     List or watch workers (without an action: list)
+      list | watch
+      --scope <id> [--limit <n>]
+
 Execute work:
   do          Plan an intent through Brain and existing approval gates
+      --request <text> [--scope <id>]
   run         Create and manage Runs
+      create | propose | inspect-proposal | reserve | inspect | cancel | close |
+      hold | resume
+      --scope <id> --id <id> [--command-id <id>]
   task        Execute, evaluate and deliver Tasks
-  pool        Inspect, hold or resume a pool
+      inspect | execute | evaluate | accept | reject | patch-prepare |
+      patch-preview | integration-check | integration-prepare |
+      integration-inspect | integration-queue-enqueue | integration-queue-list |
+      integration-queue-inspect | integration-queue-confirm |
+      integration-queue-rollback | integration-deliver | integration-adopt |
+      integration-rollback | transcript
+      --scope <id> --run <id> --task <id>
+  pool        Inspect, hold or resume a pool (without an action: status)
+      status | set-capacity | hold | resume | quota-release
+      [--scope <id>] [--pool <id>]
   decide      Prepare, ask and record advisory decisions
+      prepare | ask | record | outcome | inspect
+      --input <file|->
+
 Models:
   models      Inspect and manage models
+      binding | activation | activate | deactivate | invoke | invocation |
+      purge-content | cancel | spending | reconcile-spending | create-budget |
+      revise-budget | audit-spending | connect |
+      catalog list|register|activate|deactivate
+      [--scope <id>] [--input <file|->]
+
 Approvals:
   approval    Inspect and decide approval requests
-  policy      Inspect policy and standing grants
+      list | inspect | decide | renew
+      --input <file|->
+  policy      Inspect policy and standing grants (without an action: status)
+      vocabulary | status | delegations | delegate | undelegate | grants |
+      revoke | upgrade | mcp list|grant|revoke
+      [--scope <id>]
+
 Setup / Maintenance:
+  audit       Verify audit history and checkpoint evidence
+              (without an action: verify)
+      verify | rebaseline
+      [--scope <id>]
   backup      Create, verify and restore recovery sets
+      create | verify | restore
+      --scope <id> --set <path>
   identity    Identity profiles, draft previews and governed distribution
+              (without an action: profiles)
+      profiles | preview | choices | distribute
+      [--scope <id>] [--profile <id>]
   config      Inspect and change configuration
-  mcp         Manage MCP servers
-  secret      Manage stored secrets
+      get | explain | validate | set | unset
+      [<key> [<value>]] [--global]
+  mcp         Manage MCP servers (without an action: list)
+      add | add-json | import | list | get | remove | approve | revoke
+      [<name>] [--scope local|project|user]
+  secret      Manage stored secrets (without an action: list)
+      list | set | delete | store
+      [<name>] [--scope <id>]
   toolchains  Check or update worker toolchains
+      update
+      [--apply]
   doctor      Check installation health
-Options: --json --lang en|tr --no-color. Try: deckent doctor; deckent config get
-Details: deckent <command> --help; developer commands: deckent --help --all
-No arguments on a terminal opens the interactive session. --version: version.
+      [--toolchains] [--json]
+
+Developer:
+  inventory   Inspect recorded attempts
+      --scope <id> [--after <id>] [--limit <n>]
+  paths       Inspect installation paths
+      [--global]
+  runtime     Manage the local runtime service (without an action: describe)
+      serve | describe | shutdown | restart
+  coding      Prepare native coding profiles
+      prepare | template
+      --input <file|-> | --provider <id> --kind <id>
+  inference   Inspect local inference capacity
+      plan | budget | metrics
+      [--profile <id>]
+  operation   Execute or inspect typed operations
+      execute | compensate | inspect
+      --input <file|-> [--wait <ms>]
+
+Options:
+  -h, --help          help; deckent <command> [<action>] --help for one command
+  -v, --version       version and build
+  --json              one machine-readable result on stdout; errors on stderr
+  --lang en|tr        output language
+  --no-color          plain text without colours
+  --scope <id>        the scope a command works in (see each command)
+  --full-access       open the terminal in full-access mode
+
+Without an action a command runs the read named above, acts on its own
+(terminal, init, monitor, models, config, doctor, paths), or lists its actions
+and names the missing argument (exit 2).
+Exit codes: 0 OK, 1 error, 2 usage, 78 configuration.
+Examples: deckent doctor --json · deckent pool · deckent run --help
