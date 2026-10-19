@@ -337,6 +337,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
   shows no pool-wait reason. Before first-run template v13 the MCP actor's rules include no `pool inspect`, so `inspect_monitor` over
   MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
+- **The setup offer is made only for bare `deckent`.** In a folder with no installation, `deckent --full-access` and `deckent terminal`
+  keep `TERMINAL_SCOPE_REQUIRED`. *Workaround:* run bare `deckent` or `deckent init`.
 - **The monitor names a scope it could not read only to a viewer holding `monitor inspect-scope-diagnostics`.** That viewer (v13:
   the founding administrator, fresh or after `deckent init policy --upgrade`) sees each refused or failed scope by id and reason (in the text and the window the first five, then one "…and K more" line
   pointing to `deckent monitor --verbose`; `--verbose` and `--json` list every one); everyone else, the MCP actor included, sees counts ("access to N scope(s) was refused", "N scope(s) could not be read (<code>)").

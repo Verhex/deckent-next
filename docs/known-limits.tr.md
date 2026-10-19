@@ -339,6 +339,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yoktur, MCP üzerinden `inspect_monitor` yalnız bu sayıyı gösterir; v13 (yeni kurulumda ya da `deckent init policy --upgrade`
   sonrası) ona kurulu kapsamda `pool inspect` verir. *Yol:* bir yöneticiden o havuz için `pool inspect` isteyin;
   `deckent pool status` aynı kararı kullanır.
+- **Kurulum teklifi yalnız çıplak `deckent` içindir.** Kurulumsuz bir klasörde `deckent --full-access` ve `deckent terminal`
+  `TERMINAL_SCOPE_REQUIRED` vermeye devam eder. *Yol:* çıplak `deckent` ya da `deckent init` çalıştırın.
 - **Monitor okuyamadığı kapsamın adını yalnız `monitor inspect-scope-diagnostics` iznine sahip izleyiciye gösterir.** Bu izleyici
   (v13: kurucu yönetici; yeni kurulumda ya da `deckent init policy --upgrade` sonrası) reddedilen ya da okunamayan her kapsamı adı ve
   nedeniyle görür (metinde ve pencerede ilk beşi, sonra `deckent monitor --verbose` komutunu gösteren tek bir "…ve K kapsam daha"
