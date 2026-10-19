@@ -8,7 +8,8 @@ import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 // J3 (TERMINAL-SABIT-DUZEN, owner 2026-10-18): the built `deckent config` window in a pseudo-terminal. While the person moves within one level
 // (the sections, then one section's keys), its bottom row (the frame's closing border) and the key-hint row above it stay on the same screen rows,
-// and no row is wider than the terminal. PATH holds only Node: no Docker or Git discovery runs, so the first frame does not wait on host tools.
+// and no row is wider than the terminal. The window's PATH holds only Node (python3 is found on the driver's own PATH): no Docker or Git
+// discovery runs, so the first frame does not wait on host tools (that wait is measured in the J3 handoff).
 // Known open defect (J3 HANDOFF, terminal-panels owner): the window's height still changes between levels and while a filter row is shown, and
 // the title and key hints are drawn twice (the window's and the embedded list's); this test pins only what holds today.
 const execute = promisify(execFile);
@@ -23,7 +24,8 @@ import fcntl, json, os, pty, select, struct, sys, termios, time
 argv, steps, rows, cols = json.loads(sys.argv[1]), json.loads(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 pid, fd = pty.fork()
 if pid == 0:
-    os.execvp(argv[0], argv)
+    env = dict(os.environ); env['PATH'] = os.environ['CHILD_PATH']
+    os.execvpe(argv[0], argv, env)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
 out = b''
 marks = []
@@ -68,7 +70,7 @@ it('the built config window keeps its bottom border and key-hint rows fixed whil
   const steps: [string, string, 'sections' | 'keys' | null][] = [['Configuration ·', '\u001b[B', 'sections'], ['layout', '\u001b[B', 'sections'], ['storage', '\u001b[A', 'sections'],
     ['layout', '\r', 'sections'], ['›', '\u001b[B', 'keys'], ['›', '\u001b[A', 'keys'], ['›', '\u001b', 'keys'], ['general', '\u001b', null]];
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'config']), JSON.stringify(steps.map(([wait, send]) => [wait, send])), String(rows), String(columns)],
-    { cwd: project, env: { ...env, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` }, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
+    { cwd: project, env: { ...env, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, CHILD_PATH: env.PATH }, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   const result = JSON.parse(stdout) as { marks?: number[]; timeout?: string; output: string };
   if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-4000)}`);
   const bottoms = { sections: new Set<number>(), keys: new Set<number>() };
