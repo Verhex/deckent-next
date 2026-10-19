@@ -3344,7 +3344,19 @@
       "native",
       "desktop",
       "misc",
-      "config"
+      "config",
+      "help",
+      "clirun",
+      "clitask",
+      "cliapproval",
+      "clisetup",
+      "cliadmin",
+      "climodels",
+      "clidoctor",
+      "monitor",
+      "setup",
+      "security",
+      "terminal"
     ]
   },
   "literals": {

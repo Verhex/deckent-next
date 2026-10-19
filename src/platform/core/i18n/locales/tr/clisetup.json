@@ -1,0 +1,13 @@
+{
+  "cli.operation.pending": "Onay bekliyor: {operation}@{version} — {kind}/{id} için {approvalId} onayı karar bekliyor (son: {expiresAt}). Hiçbir şey gönderilmedi; izin verildikten sonra aynı komutu yeniden gönderin.",
+  "cli.operation.settled": "Sonuçlandı: {operation}@{version}, {kind}/{id} üzerinde (sıra {sequence}, kayıt sürümü {recordVersion}).",
+  "cli.operation.inspect": "Operasyon {command}: {state} (sıra {sequence}).",
+  "cli.operation.absent": "Bu kapsamda {command} adlı kayıtlı operasyon yok.",
+  "inference.plan.header": "Profil {profile} · backend {backend}",
+  "inference.plan.capacity": "Replika {replicas} · token bütçesi {tokenBudget} · max-num-seqs {maxSeqs} · KV havuzu {kvPoolGb} GiB (tahmin)",
+  "inference.plan.launcher": "Başlatıcı {kind}: {argv}",
+  "inference.plan.endpoint": "OpenAI uyumlu uç {url}",
+  "cli.coding.template.preview": "Kodlama şablonu önizlemesi; config değiştirilmedi.",
+  "cli.coding.template.applied": "Kodlama şablonu admission registry’ye eklendi.",
+  "cli.coding.template.unchanged": "Görev türü zaten bu kodlama şablonunu kullanıyor; config değiştirilmedi."
+}

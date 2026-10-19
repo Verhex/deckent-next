@@ -1,0 +1,13 @@
+{
+  "cli.operation.pending": "Approval pending: {operation}@{version} on {kind}/{id} needs a decision on approval {approvalId} (expires {expiresAt}). Nothing was sent; resubmit the same command after an allow.",
+  "cli.operation.settled": "Settled: {operation}@{version} on {kind}/{id} (sequence {sequence}, record version {recordVersion}).",
+  "cli.operation.inspect": "Operation {command}: {state} (sequence {sequence}).",
+  "cli.operation.absent": "No recorded operation {command} in this scope.",
+  "inference.plan.header": "Profile {profile} · backend {backend}",
+  "inference.plan.capacity": "Replicas {replicas} · token budget {tokenBudget} · max-num-seqs {maxSeqs} · KV pool {kvPoolGb} GiB (estimate)",
+  "inference.plan.launcher": "Launcher {kind}: {argv}",
+  "inference.plan.endpoint": "OpenAI-compatible endpoint {url}",
+  "cli.coding.template.preview": "Coding template preview; configuration was not changed.",
+  "cli.coding.template.applied": "Coding template added to the admission registry.",
+  "cli.coding.template.unchanged": "The kind already uses this coding template; configuration was not changed."
+}
