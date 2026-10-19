@@ -82,9 +82,9 @@ describe('I-S2 execution-environment detection', () => {
     const dir = await temp('sock'), socket = join(dir, 'docker.sock');
     await writeFile(socket, ''); await chmod(socket, 0o000);
     const gid = (await stat(socket)).gid;
-    for (const [listed, group, code] of [[`1 ${gid}`, 'relogin', 'relogin'], ['1 2', 'not-member', 'noPermission']] as const) {
+    for (const [listed, group, code, session] of [[`1 ${gid}`, 'relogin', 'relogin', []], ['1 2', 'not-member', 'noPermission', []], ['', 'member', 'socketMode', [gid]]] as const) {
       const host = await dockerHost('down', socket, { id: '#!/bin/sh\necho "$FAKE_GROUPS"\n' });
-      const ports: ExecutionDetectPorts = { ...HOST_EXECUTION_PORTS, groups: () => [], user: () => 'someone' };
+      const ports: ExecutionDetectPorts = { ...HOST_EXECUTION_PORTS, groups: () => session, user: () => 'someone' };
       const facts = await detectExecutionFacts({ env: { ...host.env, FAKE_GROUPS: listed }, ports });
       expect(docker(facts)).toMatchObject({ daemon: 'no-permission', group });
       expect(decide(facts)).toMatchObject({ state: 'blocked', reason: { code: `setup.execution.${code}` } });

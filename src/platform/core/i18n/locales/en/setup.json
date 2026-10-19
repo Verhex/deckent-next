@@ -100,6 +100,7 @@
   "setup.execution.stopped": "{runtime} is installed, but its service is not running: no Run, /do or delivery until it runs. Start the service, then run deckent init again.",
   "setup.execution.desktopStopped": "{runtime} Desktop is installed but not running: start it in Windows with WSL integration on, then run deckent init again.",
   "setup.execution.noPermission": "{runtime} is installed, but your user may not open its service: no Run, /do or delivery yet. Its group is root-equivalent; the machine's administrator decides whether to add you.",
+  "setup.execution.socketMode": "{runtime} is installed and your user is in its group, but its service socket does not let you in (its permissions were changed): no Run, /do or delivery yet. Check them with the machine's administrator.",
   "setup.execution.relogin": "Your user is in the {runtime} group, but this session started before that: log out and in again (or run newgrp), then run deckent init again.",
   "setup.execution.unknown": "{runtime} did not answer in time; its state is unknown. Run deckent init again.",
   "setup.execution.none": "No execution environment is installed: no Run, /do or delivery. Chat, MCP and governed tools work.",

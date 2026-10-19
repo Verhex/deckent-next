@@ -100,6 +100,7 @@
   "setup.execution.stopped": "{runtime} kurulu ama hizmeti çalışmıyor: çalışana kadar Run, /do ve teslim yok. Hizmeti başlatın, sonra deckent init komutunu yeniden çalıştırın.",
   "setup.execution.desktopStopped": "{runtime} Desktop kurulu ama çalışmıyor: Windows'ta WSL entegrasyonu açık olarak başlatın, sonra deckent init komutunu yeniden çalıştırın.",
   "setup.execution.noPermission": "{runtime} kurulu ama kullanıcınız hizmetine erişemiyor: şimdilik Run, /do ve teslim yok. Grubu root yetkisine eşdeğerdir; sizi eklemeye makinenin yöneticisi karar verir.",
+  "setup.execution.socketMode": "{runtime} kurulu ve kullanıcınız grubunda, ama hizmet soketi sizi içeri almıyor (izinleri değiştirilmiş): şimdilik Run, /do ve teslim yok. Makinenin yöneticisiyle kontrol edin.",
   "setup.execution.relogin": "Kullanıcınız {runtime} grubunda ama bu oturum ondan önce açıldı: çıkış yapıp yeniden girin (veya newgrp çalıştırın), sonra deckent init komutunu yeniden çalıştırın.",
   "setup.execution.unknown": "{runtime} zamanında yanıt vermedi; durumu bilinmiyor. deckent init komutunu yeniden çalıştırın.",
   "setup.execution.none": "Kurulu çalıştırma ortamı yok: Run, /do ve teslim yok. Sohbet, MCP ve yönetilen araçlar çalışır.",

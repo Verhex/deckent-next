@@ -31,7 +31,7 @@ function evaluate(context: SetupStageContext, options: ExecutionFamilyOptions): 
   const installed = supported.find(row => row.cli === 'found') ?? supported.find(row => row.cli === 'unknown');
   if (installed) {
     const runtime = installed.label;
-    if (installed.daemon === 'no-permission') return blocked(installed.group === 'relogin' ? 'relogin' : 'noPermission', { runtime });
+    if (installed.daemon === 'no-permission') return blocked(installed.group === 'relogin' ? 'relogin' : installed.group === 'member' ? 'socketMode' : 'noPermission', { runtime });
     return blocked(installed.daemon !== 'unreachable' ? 'unknown' : installed.kind === 'desktop' ? 'desktopStopped' : 'stopped', { runtime });
   }
   // D3: an honest capability label: no Run, /do or delivery without an execution environment; chat, MCP and governed tools work.
