@@ -69,9 +69,10 @@ export class MonitorApplication {
         if (scope.truncated) scopeNotes.push('info:workers-truncated:' + scopeId);
       } catch (error) { scopeNotes.push(`scope-unavailable:${scopeId}:${code(error)}`); }
     }
-    // M-VIS: a pool is shown only on the viewer's own `pool inspect` allow; a failed decision hides it. No per-pool diagnostic (it would name the pool).
-    const visible = new Set<string>();
-    for (const poolId of index.poolIds) if (await this.ports.observePool(target, poolId, [...admitted]).catch(() => false) === true) visible.add(poolId);
+    // M-VIS: a pool is shown only on the viewer's own `pool inspect` allow; a failed decision hides it too, reported once without any pool id.
+    const visible = new Set<string>(), undecided = new Set<string>();
+    for (const poolId of index.poolIds) if (await this.ports.observePool(target, poolId, [...admitted]).catch(error => { undecided.add(code(error)); return false; }) === true) visible.add(poolId);
+    for (const failure of undecided) scopeNotes.push('pool-decisions-unavailable:' + failure);
     try { reading = await this.ports.readLedger(target, Object.freeze({ scopeIds: Object.freeze([...admitted]), poolIds: Object.freeze([...visible]) })); }
     catch (error) { diagnostics.push(...scopeNotes); return unavailable(error); }
     diagnostics.push(...reading.diagnostics, ...scopeNotes);

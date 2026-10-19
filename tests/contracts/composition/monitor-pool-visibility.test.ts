@@ -91,7 +91,7 @@ describe('monitor pool visibility (M-VIS)', () => {
     const f = await install(), viewer = await f.viewer([SEEN]);
     // The pools tab and the plain-text monitor show the count in both languages, never a hidden pool's name.
     const surface = await loadMonitorSurface(), snapshot = { schemaVersion: 1 as const, observedAt: 40_000, control: 'observe-only' as const, sourcesRead: ['current'], installs: [viewer] };
-    for (const [locale, words] of [['en', 'Other work: 1 pool(s) not shown'], ['tr', 'Diğer işler: 1 havuz gösterilmiyor']] as const) {
+    for (const [locale, words] of [['en', 'Other work: 1 pool(s) not shown to you'], ['tr', 'Diğer işler: 1 havuz size gösterilmiyor']] as const) {
       const text = surface.renderMonitorText(snapshot, { locale, width: 400, ascii: true });
       expect(text).toContain(words); expect(text).toContain(SEEN); expect(text).not.toContain(SECRET);
     }

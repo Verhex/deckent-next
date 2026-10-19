@@ -258,7 +258,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Masaüstü uygulaması, web paneli ve uzak HTTP API yok.** Terminali, `deckent` komutunu, MCP'yi ya da SDK'yı kullanın.
   `deckent monitor` salt okunur canlı bir görünümdür. Masaüstü beta sonrası için planlı.
 - **Monitor yalnız inceleme izniniz olan havuzları gösterir** (`pool inspect`); diğer havuzlar tek bir sayı olarak görünür
-  ("Diğer işler: N havuz gösterilmiyor"), adı, kapasitesi ve tutanı gösterilmez. *Etki:* görebildiğiniz bir Run, inceleyemediğiniz
+  ("Diğer işler: N havuz size gösterilmiyor"), adı, kapasitesi ve tutanı gösterilmez. *Etki:* görebildiğiniz bir Run, inceleyemediğiniz
   bir havuzda bekliyorsa havuz bekleme nedeni görünmez. MCP aktörünün ilk kurulum kurallarında `pool inspect` yoktur; MCP
   üzerinden `inspect_monitor` yalnız bu sayıyı gösterir. *Yol:* bir yöneticiden o havuz için `pool inspect` isteyin;
   `deckent pool status` aynı kararı kullanır.

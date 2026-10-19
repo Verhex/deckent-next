@@ -28,6 +28,7 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'approval-corrupt': () => t('monitor.diagnostic.approvalCorrupt', { detail }, locale),
     'pool-occupancy-corrupt': () => t('monitor.diagnostic.poolOccupancyCorrupt', { detail }, locale),
     'pool-corrupt': () => t('monitor.diagnostic.poolCorrupt', { detail }, locale),
+    'pool-decisions-unavailable': () => t('monitor.diagnostic.poolDecisionsUnavailable', { detail }, locale),
     'ledger-only': () => t('monitor.diagnostic.ledgerOnly', { detail }, locale),
     'ledger-version-unsupported': () => t('monitor.diagnostic.ledgerVersionUnsupported', { detail }, locale),
     'approvals-denied': () => t('monitor.diagnostic.approvalsDenied', { detail }, locale),

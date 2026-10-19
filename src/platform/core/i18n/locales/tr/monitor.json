@@ -140,5 +140,6 @@
   "acceptance.ceiling.unsettled-effect": "çözülmemiş etki",
   "acceptance.ceiling.missing-approval": "eksik onay",
   "monitor.detail.workspaceStartedFromPatch": "{source} görevinin kabul edilmiş patch’inden başlatıldı (deneme {attempt}, patch özeti {digest})",
-  "monitor.pool.hidden": "Diğer işler: {count} havuz gösterilmiyor (havuz inceleme izni yok)."
+  "monitor.pool.hidden": "Diğer işler: {count} havuz size gösterilmiyor.",
+  "monitor.diagnostic.poolDecisionsUnavailable": "Havuz görünürlüğü belirlenemedi ({detail}); bu havuzlar gizlendi."
 }

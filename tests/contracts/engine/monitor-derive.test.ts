@@ -234,6 +234,18 @@ describe('monitor application over ports', () => {
     // A ledger with no scope yet (fresh install) shows its pools when the viewer's own pool decision allows them.
     expect(empty).toMatchObject({ status: 'available', scopeIds: [], runs: [], pools: [{ poolId: 'p', held: true }] });
   });
+  it('M-VIS: a failed pool decision hides the pool and is reported once, without naming any pool', async () => {
+    const ledger = { ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], runs: [],
+      pools: [pool({ execution: 0, inFlight: 0, hold: null }), { ...pool({ execution: 0, inFlight: 0, hold: null }), poolId: 'q' }] };
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); },
+      indexLedger: async () => indexOf(ledger), readLedger: async () => ledger,
+      observeScope: async () => ({ access: 'admitted', workers: [], workerStatus: 'available', truncated: false }),
+      observePool: async () => { throw failure('POLICY_UNAVAILABLE'); } });
+    const [install] = (await app.inspect([{ id: 'current', path: '/c' }])).installs;
+    expect(install).toMatchObject({ pools: [], hiddenPools: 2 });
+    expect(install!.diagnostics).toEqual(['pool-decisions-unavailable:POLICY_UNAVAILABLE']);
+    expect(JSON.stringify(install)).not.toMatch(/"p"|"q"/);
+  });
   it('keeps every open worker and only the most recent finished ones (by sealed log, else launch grant)', async () => {
     const ids = Array.from({ length: 26 }, (_, i) => 't' + String(i).padStart(2, '0'));
     const run = snapshot(ids.map(id => ({ id, phase: 'active' as const })));

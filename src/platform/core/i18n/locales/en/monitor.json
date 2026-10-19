@@ -140,5 +140,6 @@
   "acceptance.ceiling.unsettled-effect": "unsettled effect",
   "acceptance.ceiling.missing-approval": "missing approval",
   "monitor.detail.workspaceStartedFromPatch": "started from accepted patch of {source} (attempt {attempt}, patch digest {digest})",
-  "monitor.pool.hidden": "Other work: {count} pool(s) not shown (no pool inspect permission)."
+  "monitor.pool.hidden": "Other work: {count} pool(s) not shown to you.",
+  "monitor.diagnostic.poolDecisionsUnavailable": "Pool visibility could not be decided ({detail}); those pools are hidden."
 }
