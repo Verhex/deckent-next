@@ -109,6 +109,7 @@ describe('deckent doctor (command)', () => {
   // J2e join (delta C-MODELS-for-C-DOCTOR): the retirement row follows the same rule as `deckent models`: a switched-on model whose retirement
   // day is within models.retirementWarningDays (config field) is warned about, even while its catalog lifecycle still reads `active`.
   it('the retirement row uses models.retirementWarningDays: 30 days warns about a model 20 days away, 10 days does not', async () => {
+    registerProviderConfig();
     const day = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
     const catalog = { schemaVersion: 1, scopeId: 'live', channels: [{ channelId: 'api-b', access: 'allowed', revision: 1, providerVersion: 1, catalogRevision: 'r1',
       channel: { kind: 'http-api', cli: null, aliases: [] }, activation: { state: 'active', revision: 1 },
@@ -118,7 +119,7 @@ describe('deckent doctor (command)', () => {
       clearConfigCache();
       const root = await project({ terminal: { scopeId: 'live' }, models: { retirementWarningDays: days } }), out: string[] = [];
       await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, inspectModelCatalog: async () => catalog,
-        stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } } as never).catch(() => undefined);
+        stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } } as never).catch((error: unknown) => out.push(`[${(error as { code?: string }).code}: ${(error as Error).message}]`));
       const text = out.join('');
       if (warned) expect(text).toContain(`model-later (api-b)`); else expect(text).not.toContain('model-later');
       expect(text).toContain(warned ? 'warning' : 'No active model is being retired');
