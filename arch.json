@@ -1350,6 +1350,7 @@
     "src/composition/core/installation": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/engine/core/runtime",
         "src/adapters/core/secret-store",
         "src/engine/core/secret-store",
         "src/domain/core/audit",
