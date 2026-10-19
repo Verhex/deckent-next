@@ -7,3 +7,4 @@ export type { ConfigValueModel } from './internal/choices.js';
 
 export { configRecordPort, configRecordSupported, CONFIG_RECORD_KEYS, CONFIG_IMPORT_KEYS } from './internal/records.js';
 export type { ConfigRecordPort, ConfigRecordView, ConfigRecordDraft, ConfigRecordPreview, ConfigRecordField, ConfigFileChoice } from './internal/records.js';
+export { narrowConfigPanel, type ConfigPanelOpener, type ConfigPanelPortView } from './internal/cli-view.js';

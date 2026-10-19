@@ -2575,7 +2575,8 @@
         "src/surfaces/core/cli-models",
         "src/platform/core/host",
         "src/platform/core/common",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/surfaces/core/cli-human"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3185,7 +3186,9 @@
         "src/platform/core/utils",
         "src/platform/core/host",
         "src/engine/core/run-progression",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/surfaces/core/cli-human",
+        "src/engine/core/config"
       ],
       "plan": "SURFACES"
     },
