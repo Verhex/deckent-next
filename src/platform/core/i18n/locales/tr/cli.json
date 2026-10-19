@@ -487,5 +487,6 @@
   "error.CLI_ID_UNKNOWN": "'{prefix}' ile başlayan kimlik yok.",
   "error.CLI_ID_TOO_SHORT": "'{prefix}' çok kısa: kimliğin en az {min} karakterini ya da tamamını yazın.",
   "cli.human.scope.pickBodyRead": "Okunacak scope'u seçin. Hiçbir şey değişmez.",
-  "error.CLI_ARGUMENT_MISSING": "Eksik komut: {command}.\n{usage}"
+  "error.CLI_ARGUMENT_MISSING": "Eksik komut: {command}.\n{usage}",
+  "error.CLI_INSTALLATION_MISSING": "Bu klasörde Deckent kurulumu yok. Kurmak için `deckent init` çalıştırın."
 }

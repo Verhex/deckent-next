@@ -254,6 +254,19 @@ describe('scope rule', () => {
     expect(await caught(() => none(false))).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', exit: 2 });
     expect(asked).toBe(0);
   });
+  it('NEGATIVE (J2d): no installation in the folder names only `deckent init` on a terminal; off a terminal the scope stays required', async () => {
+    let asked = 0;
+    const missing = async (interactive: boolean, locale: Locale = 'en') => resolveCommandScope({ command: 'deckent task', locale, mutating: false, interactive,
+      listScopes: async () => { throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING'); }, pick: async () => { asked++; return null; } });
+    const terminal = await caught(() => missing(true));
+    expect(terminal).toMatchObject({ code: 'CLI_INSTALLATION_MISSING', exit: 2 });
+    expect(terminal.message).toBe('No Deckent installation in this folder. Run `deckent init` to set it up.');
+    expect(ErrorRegistry.createError('CLI_INSTALLATION_MISSING', { locale: 'tr' }).message).toBe('Bu klasörde Deckent kurulumu yok. Kurmak için `deckent init` çalıştırın.');
+    expect(terminal.message).not.toContain('init policy');
+    // Off a terminal (pipe, agent, CI, `deckent init --yes`) the answer is unchanged: the command needs `--scope`.
+    expect(await caught(() => missing(false))).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', exit: 2 });
+    expect(asked).toBe(0);
+  });
   it('the scope list is the /config scope query', async () => {
     const calls: unknown[] = [];
     const lister = scopeLister({ configChoiceSources: () => ({ async list(source, keyPath) { calls.push([source, keyPath]); return [{ value: 'live' }, { value: 7 }]; } }) }, '/p', {});

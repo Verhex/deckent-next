@@ -487,5 +487,6 @@
   "error.CLI_ID_UNKNOWN": "No identifier starts with '{prefix}'.",
   "error.CLI_ID_TOO_SHORT": "'{prefix}' is too short: type at least {min} characters of the identifier, or all of it.",
   "cli.human.scope.pickBodyRead": "Choose the scope to read. Nothing is changed.",
-  "error.CLI_ARGUMENT_MISSING": "Incomplete command: {command}.\n{usage}"
+  "error.CLI_ARGUMENT_MISSING": "Incomplete command: {command}.\n{usage}",
+  "error.CLI_INSTALLATION_MISSING": "No Deckent installation in this folder. Run `deckent init` to set it up."
 }

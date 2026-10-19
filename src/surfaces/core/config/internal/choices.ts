@@ -42,7 +42,10 @@ export async function configValueModel(field: ConfigFieldView, root: string, loc
     let discovered: readonly ConfigValueChoice[] = [];
     try { discovered = declaration.source === 'project-names' ? [...new Set([basename(root), basename(root).replace(/[._-]+/gu, ' ')])].map((value, index) => ({ id: `p${index}`, value, label: value }))
       : await sources?.list(declaration.source, field.key) ?? [];
-    } catch { sourceState = t('config.select.unavailable', {}, locale); }
+    } catch (error) {
+      // J2d: no installation in this folder is "nothing to offer" (as before J2d), not an unavailable source.
+      if ((error as { code?: unknown } | null)?.code !== 'CLI_INSTALLATION_MISSING') sourceState = t('config.select.unavailable', {}, locale);
+    }
     if (!discovered.length) sourceState ??= t('config.select.empty', {}, locale);
     values = [...values, ...discovered];
     if (declaration.multiple) values = arrayChoices(values, field.value, locale);

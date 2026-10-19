@@ -31,10 +31,13 @@ describe('CS-1 production choice discovery', () => {
     expect(JSON.stringify(names)).not.toContain('never-show-this-value'); expect(JSON.stringify(await source.list('key-files', 'approvals.keyFile'))).not.toContain('secret key content');
     expect((await source.list('paths', 'layout.root')).some(choice => choice.value === root)).toBe(true);
   });
-  it.skipIf(process.platform === 'win32')('[unsupported on Windows: policy file guards need POSIX ownership] J2c: a folder with no installation offers no scope (no raw file error) and writes nothing', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: policy file guards need POSIX ownership] J2c/J2d: a folder with no installation refuses the scope list with the typed setup answer (`deckent init`, no raw file error) and writes nothing', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cs1-empty-')), home = await mkdtemp(join(tmpdir(), 'cs1-empty-home-')); roots.push(root, home);
     const source = configuredConfigChoiceSources(root, { env: { ...process.env, DECKENT_GLOBAL_HOME: join(home, 'global') } });
-    expect(await source.list('scopes', 'terminal.scopeId')).toEqual([]);
+    const refusal = await source.list('scopes', 'terminal.scopeId').then(() => null, (error: unknown) => error as { code?: string; message?: string });
+    expect(refusal).toMatchObject({ code: 'CLI_INSTALLATION_MISSING' });
+    expect(refusal?.message).toContain('`deckent init`');
+    expect(refusal?.message).not.toMatch(/init policy|ENOENT/u);
     expect(await readdir(root)).toEqual([]);
   });
   it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] discovers executables and local branches and reads bounded pool records without a ledger writer', async () => {

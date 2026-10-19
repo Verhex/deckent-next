@@ -49,11 +49,12 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     }
     if (source === 'serving-profiles') { const serving = config['inference_serving'] as { profiles?: readonly { id: string }[] } | undefined; return values(serving?.profiles?.map(profile => profile.id) ?? []); }
     if (source === 'scopes') {
-      // J2c: a folder with no installation (no product directory or no policy file) has no scope to offer; the caller names the setup step.
-      // Only a missing file is "none": an unsafe, changed or invalid authority file still refuses with its own error.
+      // J2c/J2d: a folder with no installation (no product directory or no policy file) refuses with the typed setup answer
+      // (`CLI_INSTALLATION_MISSING`: run `deckent init`). Only a missing file means "no installation": an unsafe, changed or invalid
+      // authority file still refuses with its own error. An installation with no scope this person may read stays an empty list.
       const loaded = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load()
         .catch((error: unknown) => { if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return null; throw error; });
-      if (loaded === null) return [];
+      if (loaded === null) throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING');
       const document = policySchema.parse(loaded);
       const candidates = installationOwnScopes(document, [scopeId, config.service.identity?.scopeId, ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])].filter((value): value is string => !!value));
       const identity = readLocalOsIdentity(), admitted: string[] = [];

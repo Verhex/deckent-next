@@ -10,15 +10,22 @@ export type ScopePick = (request: CliCardRequest) => Promise<string | null>;
  * The scope rule (CLI review "Scope"): a read uses `--scope` or the configured default and says which; a change never takes a silent
  * default. Without one, a person on a terminal picks from the valid scopes (configured default preselected, Enter confirms) and anyone
  * else (pipe, agent, CI) gets `CLI_SCOPE_REQUIRED` (exit 2) naming the valid scopes, before anything is written. A cancelled pick is null:
- * the caller applies nothing. A person on a terminal with no scope to pick gets `TERMINAL_SCOPE_REQUIRED` (exit 2, the setup step). The
- * application still authorizes the scope it receives.
+ * the caller applies nothing. A person on a terminal in a folder with no installation gets the list's `CLI_INSTALLATION_MISSING` (exit 2,
+ * names only `deckent init`); with an installation but no scope to pick, `TERMINAL_SCOPE_REQUIRED` (exit 2). The application still
+ * authorizes the scope it receives.
  */
 export async function resolveCommandScope(input: Readonly<{ command: string; locale: Locale; explicit?: string | undefined; configured?: string | undefined;
   mutating: boolean; interactive: boolean; listScopes: () => Promise<readonly string[]>; pick?: ScopePick }>): Promise<ScopeResolution | null> {
   if (input.explicit) return { scopeId: input.explicit, source: 'flag' };
   if (!input.mutating && input.configured) return { scopeId: input.configured, source: 'default' };
-  const scopes = [...new Set(await input.listScopes())];
-  // J2c: nothing to pick (no installation here, or no scope this person may read): the same typed setup step as bare `deckent`.
+  const person = input.interactive && input.pick !== undefined;
+  // J2d: the scope list says "no installation here" once (CLI_INSTALLATION_MISSING); a person on a terminal gets it as is, anyone else
+  // keeps the unchanged CLI_SCOPE_REQUIRED (`--scope`), so `deckent init --yes` and agents see no change.
+  const scopes = [...new Set(await input.listScopes().catch((error: unknown) => {
+    if (!person && (error as { code?: unknown } | null)?.code === 'CLI_INSTALLATION_MISSING') return [];
+    throw error;
+  }))];
+  // J2c: an installation with no scope this person may read: the same typed setup step as bare `deckent`.
   if (input.interactive && input.pick && scopes.length === 0) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   if (!input.interactive || !input.pick || scopes.length === 0) {
     throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED', { params: { command: terminalSafeText(input.command),

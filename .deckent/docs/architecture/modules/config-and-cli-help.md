@@ -69,7 +69,10 @@ output, never initializes). Details and registered children are exposed by `deck
 Bare behaviour is catalog metadata (`bare`): a reviewed read action runs once its required flags are present
 (`audit`→`verify`, `pool`/`policy`→`status`, `identity`→`profiles`, `mcp`/`secret`→`list`, `runtime`→`describe`,
 `workers --scope <id>`→`list`); `handler` families act on their own; any other family lists its actions and names
-the missing argument as the typed `CLI_ARGUMENT_MISSING` (exit 2). A default never mutates. Handler action words and catalog
+the missing argument as the typed `CLI_ARGUMENT_MISSING` (exit 2). A default never mutates.
+A scope picker on a terminal in a folder with no installation (no product directory or policy file, detected once by the
+`scopes` choice source) answers the typed `CLI_INSTALLATION_MISSING` (exit 2) naming only `deckent init`; with an installation
+but no scope to pick it stays `TERMINAL_SCOPE_REQUIRED`, and off a terminal `CLI_SCOPE_REQUIRED` is unchanged. Handler action words and catalog
 actions are kept equal by a source test in both directions; the usage echo (`cliUsage`) and the composition signal list
 (`SIGNAL_COMMANDS`) read or are pinned to the same catalog; `planned` entries (`run list`, `policy scopes`) are reserved names,
 neither registered nor shown, until their slice implements them.
