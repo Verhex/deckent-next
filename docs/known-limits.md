@@ -339,6 +339,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
   shows no pool-wait reason. Before first-run template v13 the MCP actor's rules include no `pool inspect`, so `inspect_monitor` over
   MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
+- **The config window loads choices before its first frame.** With Docker on the path it waits for the local image list (about 0.7 s for
+  43 images here, 2.2 s first frame in total); choices are not loaded when a key is opened yet. When the list runs out of time the
+  images proven so far are offered without a "partial" notice, and a busy daemon at the second identity read offers none.
+  *Workaround:* type the image id; `deckent config explain execution` shows the schema.
 - **The setup offer is made only for bare `deckent`.** In a folder with no installation, `deckent --full-access` and `deckent terminal`
   keep `TERMINAL_SCOPE_REQUIRED`. *Workaround:* run bare `deckent` or `deckent init`.
 - **The monitor names a scope it could not read only to a viewer holding `monitor inspect-scope-diagnostics`.** That viewer (v13:
