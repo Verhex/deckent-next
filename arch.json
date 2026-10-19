@@ -3231,7 +3231,8 @@
         "src/engine/core/model-activation",
         "src/domain/core/model-activation",
         "src/surfaces/core/cli-human",
-        "src/engine/core/inference-serving"
+        "src/engine/core/inference-serving",
+        "src/surfaces/core/cli-models"
       ],
       "plan": "SURFACES"
     },

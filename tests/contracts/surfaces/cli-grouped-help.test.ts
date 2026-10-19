@@ -262,7 +262,8 @@ it('runs only the reviewed read action when a family is called without one', asy
 
 it.each(['en', 'tr'] as const)('names the missing argument for every family without a runnable default (%s, exit 2, never the bare usage)', async language => {
   // C-RUN: bare `report` and `inventory` are handler-owned reads (default scope; off a terminal without one: CLI_SCOPE_REQUIRED, below).
-  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
+  // C-DOCTOR: bare `workers` reads the default scope (no `--scope` required by the catalog).
+  const runnable = new Set([...Object.keys(READ_DEFAULTS), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
     'coding', 'inference', 'operation', 'report', 'inventory']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {

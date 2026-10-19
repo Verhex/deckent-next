@@ -25,7 +25,7 @@ Başlarken:
       [--once|--json] [--scope <id>]
   workers     İşçileri listele veya izle (eylemsiz: list)
       list | watch
-      --scope <id> [--limit <n>]
+      [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
 
 İş yürütme:
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
@@ -89,7 +89,7 @@ Kurulum/Bakım:
       update
       [--apply]
   doctor      Kurulum sağlığını kontrol et
-      [--toolchains] [--json]
+      [--verbose] [--toolchains] [--json]
 
 Geliştirici:
   inventory   Kayıtlı denemeleri incele

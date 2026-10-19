@@ -65,8 +65,8 @@ export const CLI_CATALOG = [
     action('registry', 'start', 'cli.help.action.init.registry', 'cli.init.registry.help'),
   ] },
   { name: 'monitor', group: 'observe', summary: 'cli.help.summary.monitor', detail: 'cli.monitor.help', args: '[--once|--json] [--scope <id>]' },
-  { name: 'workers', group: 'observe', summary: 'cli.help.summary.workers', detail: 'cli.workers.help', args: '--scope <id> [--limit <n>]',
-    bare: { read: 'list', requires: ['--scope <id>'] }, children: [
+  { name: 'workers', group: 'observe', summary: 'cli.help.summary.workers', detail: 'cli.workers.help', args: '[--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]',
+    bare: { read: 'list' }, children: [
     action('list', 'observe', 'cli.help.action.workers.list', 'cli.workers.help'),
     action('watch', 'observe', 'cli.help.action.watch', 'cli.workers.help'),
   ] },
@@ -194,7 +194,7 @@ export const CLI_CATALOG = [
   { name: 'toolchains', group: 'setup', summary: 'cli.help.summary.toolchains', detail: 'cli.help.toolchains', args: '[--apply]', children: [
     action('update', 'setup', 'cli.help.action.update', 'cli.help.toolchains'),
   ] },
-  { name: 'doctor', group: 'setup', summary: 'cli.help.summary.doctor', detail: 'cli.help.doctor', args: '[--toolchains] [--json]' },
+  { name: 'doctor', group: 'setup', summary: 'cli.help.summary.doctor', detail: 'cli.help.doctor', args: '[--verbose] [--toolchains] [--json]' },
   { name: 'inventory', group: 'developer', summary: 'cli.help.summary.inventory', detail: 'cli.help.inventory', args: '[--scope <id>] [--after <id>] [--limit <n>]',
     bare: 'handler' },
   { name: 'paths', group: 'developer', summary: 'cli.help.summary.paths', detail: 'cli.help.paths', args: '[--global]' },

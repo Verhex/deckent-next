@@ -6,6 +6,7 @@ import {
 import { configServiceState } from '#engine/index.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
+import { modelRetirementWarnings } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
 import type { KernelCall } from './kernel.js';
 import { offerDoctorFixes } from './doctor-fix.js';
@@ -23,11 +24,21 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
-    retiringModels: catalog === null ? null : catalog.channels.flatMap(channel => channel.access === 'denied' ? [] : channel.models
-      .filter(entry => entry.activation?.state === 'active' && DOCTOR_RETIREMENT_STATES.includes(entry.model.lifecycle.state))
-      .map(entry => ({ modelId: entry.modelId, channelId: channel.channelId, state: entry.model.lifecycle.state,
-        date: entry.model.lifecycle.retiredOn ?? entry.model.lifecycle.retireNotBefore ?? null }))),
+    retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays),
   };
+}
+
+/** Active models past `active` in the catalog lifecycle, joined (J2e, delta C-MODELS-for-C-DOCTOR) with the `models` table's own warning rule: a
+ * switched-on model whose retirement day is within `models.retirementWarningDays` (config field, law 6), so doctor and `deckent models` agree. */
+function retiringModels(catalog: NonNullable<Awaited<ReturnType<NonNullable<KernelCommandContext['inspectModelCatalog']>>>>, days: number) {
+  const byState = catalog.channels.flatMap(channel => channel.access === 'denied' ? [] : channel.models
+    .filter(entry => entry.activation?.state === 'active' && DOCTOR_RETIREMENT_STATES.includes(entry.model.lifecycle.state))
+    .map(entry => ({ modelId: entry.modelId, channelId: channel.channelId, state: entry.model.lifecycle.state,
+      date: entry.model.lifecycle.retiredOn ?? entry.model.lifecycle.retireNotBefore ?? null })));
+  const seen = new Set(byState.map(item => `${item.channelId}/${item.modelId}`));
+  const byDay = modelRetirementWarnings(catalog, Date.now(), days).filter(warning => !seen.has(`${warning.channelId}/${warning.modelId}`))
+    .map(warning => ({ modelId: warning.modelId, channelId: warning.channelId, state: warning.daysLeft <= 0 ? 'retired' : 'deprecated', date: warning.day }));
+  return [...byState, ...byDay];
 }
 
 /** One measurement: the collected report (the `--json` contract, unchanged) and the grouped rows the person reads. */

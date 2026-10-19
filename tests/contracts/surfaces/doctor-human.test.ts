@@ -48,7 +48,7 @@ describe('doctor rows (pure)', () => {
     expect(text).toContain('sonraki adım: deckent init');
     expect(text).toContain('uyarı      Kurulum klasörü başka kullanıcılara açık (mod 0755)');
     expect(text).toContain('sonraki adım: chmod 700 /home/me/.deckent');
-    expect(text).toContain('Yedek parolası bu kurulumda duruyor');
+    expect(text).toContain('Yedek parolası bu kurulumun içinde saklanıyor'); // J2e: owner wording, joined with C-ADMIN's backup line
     expect(text).toContain('Etkin model model-x (codex-cli) emekliye ayrılıyor (tarih 2026-12-01)');
     expect(text).toContain('sınanmadı  Docker bu sürümde doctor tarafından sınanmıyor');
     expect(text).toContain('sonraki adım: deckent doctor --toolchains');
@@ -105,6 +105,24 @@ describe('deckent doctor (command)', () => {
     expect(json.schemaVersion).toBe(2);
     expect(Object.keys(json)).not.toContain('checks');
     for (const key of ['platform', 'host', 'node', 'status', 'poolReadiness', 'secretStore', 'shellRealm', 'imageRefresh', 'recoveryFiles']) expect(Object.keys(json)).toContain(key);
+  });
+  // J2e join (delta C-MODELS-for-C-DOCTOR): the retirement row follows the same rule as `deckent models`: a switched-on model whose retirement
+  // day is within models.retirementWarningDays (config field) is warned about, even while its catalog lifecycle still reads `active`.
+  it('the retirement row uses models.retirementWarningDays: 30 days warns about a model 20 days away, 10 days does not', async () => {
+    const day = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
+    const catalog = { schemaVersion: 1, scopeId: 'live', channels: [{ channelId: 'api-b', access: 'allowed', revision: 1, providerVersion: 1, catalogRevision: 'r1',
+      channel: { kind: 'http-api', cli: null, aliases: [] }, activation: { state: 'active', revision: 1 },
+      models: [{ modelId: 'model-later', revision: 1, activation: { state: 'active', revision: 1 }, model: { id: 'model-later', version: 1, nativeId: 'model-later', protocols: [],
+        lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: day, retiredOn: null, source: null }, minCliVersion: null, efforts: [], aliases: [] } }] }] };
+    for (const [days, warned] of [[30, true], [10, false]] as const) {
+      clearConfigCache();
+      const root = await project({ terminal: { scopeId: 'live' }, models: { retirementWarningDays: days } }), out: string[] = [];
+      await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, inspectModelCatalog: async () => catalog,
+        stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } } as never).catch(() => undefined);
+      const text = out.join('');
+      if (warned) expect(text).toContain(`model-later (api-b)`); else expect(text).not.toContain('model-later');
+      expect(text).toContain(warned ? 'warning' : 'No active model is being retired');
+    }
   });
   it('negative: doctor never heals (rewrites) a corrupt project config; it fails typed and the bytes stay', async () => {
     const root = await project('{broken');
