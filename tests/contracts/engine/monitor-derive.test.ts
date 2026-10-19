@@ -230,7 +230,8 @@ describe('monitor application over ports', () => {
     expect(broken).toMatchObject({ status: 'unavailable', runs: [], ledgerVersion: null, service: { state: 'unknown' } });
     expect(broken!.diagnostics).toEqual(['service-unavailable:RUNTIME_SERVICE_TRANSPORT', 'ledger-unavailable:MANAGED_FILE_MISSING']);
     expect(flaky).toMatchObject({ status: 'denied', runs: [], pools: [], approvals: [] });
-    expect(flaky!.diagnostics).toContain('scope-unavailable:s:POLICY_UNAVAILABLE');
+    // MON-SCOPE-NAMES (J2): a scope whose access check failed is a count with its reason, never its name.
+    expect(flaky!.diagnostics).toContain('scopes-unavailable:1:POLICY_UNAVAILABLE');
     // Without the approval list decision the approval stays visible (it blocks a Run) but its summary text is withheld.
     expect(quiet!.approvals).toMatchObject([{ approvalId: 'ap-a', summary: '' }]); expect(quiet!.diagnostics).toContain('approvals-denied:s');
     // A ledger with no scope yet (fresh install) shows its pools when the viewer's own pool decision allows them.
@@ -247,6 +248,21 @@ describe('monitor application over ports', () => {
     expect(install).toMatchObject({ pools: [], hiddenPools: 2 });
     expect(install!.diagnostics).toEqual(['pool-decisions-unavailable:POLICY_UNAVAILABLE']);
     expect(JSON.stringify(install)).not.toMatch(/"p"|"q"/);
+  });
+  it('negative (MON-SCOPE-NAMES, J2): a scope whose access check failed or is unavailable is counted per reason, never named', async () => {
+    const ledger = { ledgerVersion: 44, scopeIds: ['s', 'scope-locked-alpha', 'scope-locked-beta', 'scope-quiet-gamma', 'scope-refused-delta'], diagnostics: [], approvals: [], runs: [], pools: [] };
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); }, ...allPools,
+      indexLedger: async () => indexOf(ledger), readLedger: async () => ledger,
+      async observeScope(_target, scopeId) {
+        if (scopeId.startsWith('scope-locked')) throw failure('LEDGER_LOCKED');
+        if (scopeId === 'scope-quiet-gamma') return { access: 'unavailable', workers: [], workerStatus: 'unavailable', truncated: false };
+        if (scopeId === 'scope-refused-delta') return { access: 'denied', workers: [], workerStatus: 'denied', truncated: false };
+        return { access: 'admitted', workers: [], workerStatus: 'available', truncated: false };
+      } });
+    const [install] = (await app.inspect([{ id: 'current', path: '/c' }])).installs;
+    expect(install).toMatchObject({ status: 'available', scopeIds: ['s'] });
+    expect(install!.diagnostics).toEqual(['scopes-denied:1', 'scopes-unavailable:2:LEDGER_LOCKED', 'scopes-unavailable:1']);
+    expect(JSON.stringify(install)).not.toMatch(/scope-(locked|quiet|refused)/);
   });
   it('keeps every open worker and only the most recent finished ones (by sealed log, else launch grant)', async () => {
     const ids = Array.from({ length: 26 }, (_, i) => 't' + String(i).padStart(2, '0'));

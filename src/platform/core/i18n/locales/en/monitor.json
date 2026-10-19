@@ -144,6 +144,7 @@
   "monitor.diagnostic.imageCurrent": "Worker image is current ({detail})",
   "monitor.diagnostic.imageCurrentUnversioned": "Worker image is current",
   "monitor.diagnostic.scopesDenied": "access to {count} scope(s) was refused (their names are not shown)",
+  "monitor.diagnostic.scopesUnavailable": "{count} scope(s) could not be read{code}; their names are not shown",
   "monitor.installState.running": "RUNNING",
   "monitor.installState.stopped": "SERVICE STOPPED",
   "monitor.installState.unknown": "SERVICE UNKNOWN",

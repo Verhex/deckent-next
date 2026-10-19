@@ -66,6 +66,16 @@ describe('Installs: status and next step first, developer details last', () => {
     expect(en).toContain('access to 2 scope(s) was refused (their names are not shown)');
     expect(surface.renderMonitorText(one(viewer), { locale: 'tr', width: 140, ascii: false })).toContain('2 kapsama erişim reddedildi');
   });
+  it('a scope whose access check failed is a count with its reason, never a name — also from an older reader\'s named code (MON-SCOPE-NAMES, J2)', () => {
+    const failed: MonitorInstall = { ...n1Like, diagnostics: ['scopes-unavailable:2:LEDGER_LOCKED', 'scopes-unavailable:1', 'scope-unavailable:scope-legacy-name:POLICY_UNAVAILABLE'] };
+    for (const [locale, words] of [['en', ['2 scope(s) could not be read (LEDGER_LOCKED); their names are not shown', '1 scope(s) could not be read; their names are not shown',
+      '1 scope(s) could not be read (POLICY_UNAVAILABLE); their names are not shown']], ['tr', ['2 kapsam okunamadı (LEDGER_LOCKED); adları gösterilmez',
+      '1 kapsam okunamadı; adları gösterilmez', '1 kapsam okunamadı (POLICY_UNAVAILABLE); adları gösterilmez']]] as const) {
+      const text = surface.renderMonitorText(one(failed), { locale, width: 160, ascii: false });
+      for (const line of words) expect(text).toContain(line);
+      expect(text).not.toContain('scope-legacy-name');
+    }
+  });
 });
 
 describe('Map: tables, collapsed old profile versions, grouped permissions', () => {

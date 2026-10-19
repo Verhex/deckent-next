@@ -60,18 +60,20 @@ export class MonitorApplication {
     let index: MonitorLedgerIndex, reading: MonitorLedgerReading;
     try { index = await this.ports.indexLedger(target); } catch (error) { return unavailable(error); }
     const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = []; let refused = 0;
-    const scopeNotes: string[] = [];
+    const scopeNotes: string[] = [], failed = new Map<string, number>(); const fail = (reason: string) => failed.set(reason, (failed.get(reason) ?? 0) + 1);
     for (const scopeId of index.scopeIds) {
       try {
         const scope = await this.ports.observeScope(target, scopeId);
-        // MON-SCOPE-NAMES: a refused scope is counted, never named (its id is the viewer's only clue that it exists).
+        // MON-SCOPE-NAMES: a refused scope or one whose access check failed is counted, never named (its id is the viewer's only clue that it exists).
         if (scope.access === 'denied') { refused += 1; continue; }
-        if (scope.access !== 'admitted') { scopeNotes.push(`scope-${scope.access}:${scopeId}`); continue; }
+        if (scope.access !== 'admitted') { fail(''); continue; }
         admitted.add(scopeId); workers.push(...scope.workers); if (scope.approvals === true) summaries.add(scopeId);
         if (scope.workerStatus !== 'available') scopeNotes.push(`workers-${scope.workerStatus}:${scopeId}`);
         if (scope.truncated) scopeNotes.push('info:workers-truncated:' + scopeId);
-      } catch (error) { scopeNotes.push(`scope-unavailable:${scopeId}:${code(error)}`); }
+      } catch (error) { fail(code(error)); }
     }
+    // One count per reason code (a code is never a scope name): `scopes-unavailable:<n>[:<CODE>]`.
+    for (const [reason, count] of failed) scopeNotes.push(`scopes-unavailable:${count}${reason ? ':' + reason : ''}`);
     // M-VIS: a pool is shown only on the viewer's own `pool inspect` allow; a failed decision hides it too, reported once without any pool id.
     const visible = new Set<string>(), undecided = new Set<string>();
     for (const poolId of index.poolIds) if (await this.ports.observePool(target, poolId, [...admitted]).catch(error => { undecided.add(code(error)); return false; }) === true) visible.add(poolId);

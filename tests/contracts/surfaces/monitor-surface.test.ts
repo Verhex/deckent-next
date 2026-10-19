@@ -60,7 +60,7 @@ describe('monitor text snapshot', () => {
     expect(text).toContain('x build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000');
     expect(text).toContain('x build: first failing line not recorded');
     expect(text).toContain('! remote-lab is unavailable: the ledger could not be read (LEDGER_LOCKED); service state could not be read (LOCAL_RUNTIME_DENIED)');
-    expect(text).toContain('! current has problems: scope scope-x could not be read (LEDGER_LOCKED)');
+    expect(text).toContain('! current has problems: 1 scope(s) could not be read (LEDGER_LOCKED); their names are not shown');
     expect(text).toContain('! dogfood has problems: the ledger is version 43, older than this build: newer fields may be empty; future-code:abc');
     // An `info:` diagnostic is a neutral note: no warning mark, not counted in the header.
     expect(text).toContain('dogfood note: only the most recent finished workers are shown; 5 older ones are hidden');
@@ -286,15 +286,17 @@ describe('fullscreen monitor', () => {
 
 describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () => {
   it('words every data-lane diagnostic, keeps unknown codes visible and treats info: as a note', () => {
-    const codes = ['service-unavailable:LOCAL_RUNTIME_DENIED', 'ledger-unavailable:LEDGER_LOCKED', 'ledger-version-older:43', 'scopes-denied:2', 'scope-unavailable:s1',
+    const codes = ['service-unavailable:LOCAL_RUNTIME_DENIED', 'ledger-unavailable:LEDGER_LOCKED', 'ledger-version-older:43', 'scopes-denied:2', 'scopes-unavailable:1', 'scopes-unavailable:2:LEDGER_LOCKED', 'scope-unavailable:s1',
       'scope-unavailable:s1:LEDGER_LOCKED', 'workers-unavailable:s1', 'workers-denied:s1', 'workers-not-sampled:s1', 'workers-truncated:s1', 'workers-finished-capped:5',
       'runs-truncated:900', 'run-corrupt:s1/r1', 'approvals-truncated', 'approval-corrupt:s1/a1', 'pool-occupancy-corrupt:p1', 'pool-corrupt:p1', 'ledger-only'];
     for (const locale of ['en', 'tr'] as const) for (const code of codes) {
       const described = surface.describeDiagnostic(code, locale);
       expect(described.note, code).toBe(false); expect(described.text, code).not.toBe(code); expect(described.text, code).not.toContain('{');
     }
-    expect(surface.describeDiagnostic('scope-unavailable:s1:LEDGER_LOCKED', 'tr').text).toBe('s1 kapsamı okunamadı (LEDGER_LOCKED)');
-    expect(surface.describeDiagnostic('scope-unavailable:s1', 'en').text).toBe('scope s1 could not be read');
+    // MON-SCOPE-NAMES (J2): a failed scope check is a count with its reason; an older reader's named code loses the name.
+    expect(surface.describeDiagnostic('scopes-unavailable:2:LEDGER_LOCKED', 'tr').text).toBe('2 kapsam okunamadı (LEDGER_LOCKED); adları gösterilmez');
+    expect(surface.describeDiagnostic('scope-unavailable:s1:LEDGER_LOCKED', 'tr').text).toBe('1 kapsam okunamadı (LEDGER_LOCKED); adları gösterilmez');
+    expect(surface.describeDiagnostic('scope-unavailable:s1', 'en').text).toBe('1 scope(s) could not be read; their names are not shown');
     expect(surface.describeDiagnostic('info:workers-finished-capped:5', 'tr')).toEqual({ code: 'workers-finished-capped', note: true,
       text: "biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli" });
     expect(surface.describeDiagnostic('brand-new-code:x', 'en')).toEqual({ code: 'brand-new-code', note: false, text: 'brand-new-code:x' });
@@ -467,7 +469,7 @@ describe('untrusted text never reaches the terminal with control sequences (Fabl
   const BAD = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u;
   // Every untrusted field at once: first failure, events, activity, approval summary, diagnostics detail, another install's path, workspace.
   const hostile: typeof fullSnapshot = { ...fullSnapshot, installs: fullSnapshot.installs.map(install => install.id === 'dogfood'
-    ? { ...install, path: `/srv/${NASTY}`, diagnostics: [...install.diagnostics, `scope-unavailable:${NASTY}:CODE`] }
+    ? { ...install, path: `/srv/${NASTY}`, diagnostics: [...install.diagnostics, `scope-unavailable:${NASTY}:CODE`, `scopes-unavailable:1:${NASTY}`] }
     : install.id !== 'current' ? install : { ...install,
       runs: install.runs.map(run => run.runId !== 'run-broken' ? run : { ...run, tasks: run.tasks.map(task => !task.lastAttempt ? task : { ...task,
         lastAttempt: { ...task.lastAttempt, firstFailure: `✗ ${NASTY}`, recentEvents: [{ atMs: OBSERVED_AT - 1000, kind: 'message', summary: NASTY }] } }) }),

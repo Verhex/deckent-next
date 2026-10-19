@@ -101,7 +101,7 @@ export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBS
         identity: { scopeId: 'scope-a', runId: 'run-broken', taskId: 'build', attemptId: attemptIdFor('run-broken', 'build'), layoutRevision: 'layout-1', generation: 1 } }),
       worker('pack', { custody: 'released', process: 'missing' }, { ageMs: null, freshness: 'unknown' }, null)],
     approvals: [approval('appr-0001', 3 * HOUR + 12 * MIN, 45 * MIN), approval('appr-0002', 4 * MIN, -2 * MIN, { subjectKind: 'effect', summary: 'Delete stale preview environment', requiredAssurance: null })],
-    pools: [pool('default', 4, 4), pool('gpu', 1, 0, 'owner@local'), pool('ci', null, 2)], diagnostics: ['scope-unavailable:scope-x:LEDGER_LOCKED'], map: MAP },
+    pools: [pool('default', 4, 4), pool('gpu', 1, 0, 'owner@local'), pool('ci', null, 2)], diagnostics: ['scopes-unavailable:1:LEDGER_LOCKED'], map: MAP },
   { id: 'dogfood', path: '/srv/owner/deckent-dogfood', status: 'available', scopeIds: ['scope-dog'], service: { ...SERVICE, instanceId: 'svc-02', processId: 2001,
     build: { ...SERVICE.build, sourceCommit: '76582f9f00000000000000000000000000000000', builtAt: '2026-10-01T22:15:00.000Z' } }, ledgerVersion: 43,
     runs: [run('run-dog-1', 'progressing', 'worker-running', ago(90_000), { scopeId: 'scope-dog' })], workers: [],

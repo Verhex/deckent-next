@@ -499,7 +499,6 @@
   "monitor.diagnostic.serviceUnavailable": "servis durumu okunamadı ({detail})",
   "monitor.diagnostic.ledgerUnavailable": "ledger okunamadı ({detail})",
   "monitor.diagnostic.ledgerVersionOlder": "ledger sürüm {detail}, bu derlemeden eski: yeni alanlar boş görünebilir",
-  "monitor.diagnostic.scopeUnavailable": "{detail} kapsamı okunamadı{code}",
   "monitor.diagnostic.workersUnavailable": "{detail} kapsamının işçileri okunamadı",
   "monitor.diagnostic.workersDenied": "{detail} kapsamının işçilerine erişim reddedildi",
   "monitor.diagnostic.workersNotSampled": "{detail} kapsamının işçileri örneklenmedi",

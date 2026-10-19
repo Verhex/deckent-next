@@ -272,9 +272,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
   shows no pool-wait reason. The MCP actor's first-run rules include no `pool inspect`, so `inspect_monitor` over MCP shows only
   that count. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
-- **The monitor names no scope you may not read, but it still names a scope whose access check failed.** A refused scope is one
-  count ("access to N scope(s) was refused"); a scope whose check could not run (for example a locked ledger) is shown by its id with
-  the reason. *Workaround:* none needed for refused scopes; for a failed check, `deckent doctor` and the named code.
+- **The monitor does not say which scope it could not read.** A refused scope and a scope whose access check could not run (for
+  example a locked ledger) are both shown only as counts ("access to N scope(s) was refused", "N scope(s) could not be read
+  (<code>)"), never by name. *Workaround:* none needed for refused scopes; for a failed check, `deckent doctor` and the named code.
 - **The monitor shows no build time and no release number for a service.** The service reports only its commit and source tree, so
   Installs shows `build <commit> · source tree <hash>`. *Workaround:* `deckent --version` on the machine that runs the service.
 - **An idle interactive `deckent monitor` keeps using CPU** because it re-reads everything on every refresh

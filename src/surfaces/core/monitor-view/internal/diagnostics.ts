@@ -1,13 +1,16 @@
 import { t, type Locale } from '#platform/index.js';
 
 /**
- * Install diagnostics in words (MONITOR v1.1). A data-lane code is `name[:detail]` (split on the first `:` only — `scope-unavailable:<scope>:<CODE>`
+ * Install diagnostics in words (MONITOR v1.1). A data-lane code is `name[:detail]` (split on the first `:` only — `scopes-unavailable:<n>:<CODE>`
  * keeps its second part in the detail). An `info:` prefix makes it a neutral note (never a ! warning, never counted as a problem). An unknown
  * code stays visible as itself, so a new code from the data lane is never hidden.
  */
 export interface MonitorDiagnostic { readonly code: string; readonly note: boolean; readonly text: string;
   /** The next step a person can take, only where one real command answers it (PB-MON-UX "→ Yapılacak"); absent otherwise, never invented. */
   readonly action?: string }
+
+const scopesUnavailable = (count: string, reason: string, locale: Locale) =>
+  t('monitor.diagnostic.scopesUnavailable', { count, code: reason ? ` (${reason})` : '' }, locale);
 
 export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnostic {
   const note = raw.startsWith('info:'), body = note ? raw.slice(5) : raw, at = body.indexOf(':');
@@ -18,8 +21,10 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'ledger-version-older': () => t('monitor.diagnostic.ledgerVersionOlder', { detail }, locale),
     // MON-SCOPE-NAMES: refused scopes arrive as a count only (`scopes-denied:<n>`), never by name.
     'scopes-denied': () => t('monitor.diagnostic.scopesDenied', { count: detail }, locale),
-    // `scope-unavailable:<scope>:<CODE>`: the scope, then why.
-    'scope-unavailable': () => t('monitor.diagnostic.scopeUnavailable', { detail: detail.split(':')[0]!, code: detail.includes(':') ? ` (${detail.split(':').slice(1).join(':')})` : '' }, locale),
+    // `scopes-unavailable:<n>[:<CODE>]`: a scope whose access check failed is a count with its reason, never named (MON-SCOPE-NAMES).
+    'scopes-unavailable': () => scopesUnavailable(detail.split(':')[0]!, detail.split(':').slice(1).join(':'), locale),
+    // An older reader's `scope-unavailable:<scope>[:<CODE>]`: one scope, its id dropped (an unknown code would show it raw).
+    'scope-unavailable': () => scopesUnavailable('1', detail.split(':').slice(1).join(':'), locale),
     'workers-unavailable': () => t('monitor.diagnostic.workersUnavailable', { detail }, locale),
     'workers-denied': () => t('monitor.diagnostic.workersDenied', { detail }, locale),
     'workers-not-sampled': () => t('monitor.diagnostic.workersNotSampled', { detail }, locale),

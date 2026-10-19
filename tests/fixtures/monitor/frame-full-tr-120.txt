@@ -4,7 +4,7 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ○ remote-lab · ERİŞİLEMİYOR · ! 2 uyarı · /mnt/lab/deckent
 [1 Özet]  2 İşler   3 İşçiler   4 Onaylar   5 Havuzlar   6 Kurulumlar   7 Harita
 İş: 3 sırada · 2 çalışıyor · 2 kontrolde · 8 beklemede · 1 tamam · 3 durdu
-! current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
+! current sorunları: 1 kapsam okunamadı (LEDGER_LOCKED); adları gösterilmez
 ! dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir; future-code:abc; scope-dog kaps…
 ! remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
 dogfood notu: biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli

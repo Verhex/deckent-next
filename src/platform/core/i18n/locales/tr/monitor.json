@@ -144,6 +144,7 @@
   "monitor.diagnostic.imageCurrent": "İşçi imajı güncel ({detail})",
   "monitor.diagnostic.imageCurrentUnversioned": "İşçi imajı güncel",
   "monitor.diagnostic.scopesDenied": "{count} kapsama erişim reddedildi (adları gösterilmez)",
+  "monitor.diagnostic.scopesUnavailable": "{count} kapsam okunamadı{code}; adları gösterilmez",
   "monitor.installState.running": "ÇALIŞIYOR",
   "monitor.installState.stopped": "SERVİS DURDU",
   "monitor.installState.unknown": "SERVİS BİLİNMİYOR",

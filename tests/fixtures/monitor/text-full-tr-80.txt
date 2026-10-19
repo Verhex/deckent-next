@@ -5,7 +5,7 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 
 ── Özet ────────────────────────────────────────────────────────────────────────
 İş: 3 sırada · 2 çalışıyor · 2 kontrolde · 8 beklemede · 1 tamam · 3 durdu
-! current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
+! current sorunları: 1 kapsam okunamadı (LEDGER_LOCKED); adları gösterilmez
 ! dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş
 görünebilir; future-code:abc; scope-dog kapsamının onayları gizli: görme izniniz
 yok
@@ -192,7 +192,7 @@ Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
   ● deckent-next (current)   ÇALIŞIYOR   ! 1 uyarı
   ┌─────────┬──────────────────────────────────────────────────────────────────┐
   │ Durum   │ ✓ Servis açık · ✓ Defter v44                                     │
-  │ ! Uyarı │ scope-x kapsamı okunamadı (LEDGER_LOCKED)                        │
+  │ ! Uyarı │ 1 kapsam okunamadı (LEDGER_LOCKED); adları gösterilmez           │
   ├─────────┼──────────────────────────────────────────────────────────────────┤
   │ İş yükü │ 18 iş · 4 işçi · 2 onay bekliyor · 3 havuz                       │
   │ Kapsam  │ scope-a                                                          │

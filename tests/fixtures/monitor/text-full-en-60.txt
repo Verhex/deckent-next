@@ -6,8 +6,8 @@ Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
 ── Summary ─────────────────────────────────────────────────
 Runs: 3 queued · 2 running · 2 checking · 8 on hold · 1 done
 · 3 stopped
-! current has problems: scope scope-x could not be read
-(LEDGER_LOCKED)
+! current has problems: 1 scope(s) could not be read
+(LEDGER_LOCKED); their names are not shown
 ! dogfood has problems: the ledger is version 43, older than
 this build: newer fields may be empty; future-code:abc;
 approvals of scope scope-dog are hidden: you may not see
@@ -208,8 +208,8 @@ Expired approvals: 1 (history; no decision available).
   ● deckent-next (current)   RUNNING   ! 1 warning(s)
   ┌───────────┬────────────────────────────────────────────┐
   │ Status    │ ✓ Service running · ✓ Ledger v44           │
-  │ ! Warning │ scope scope-x could not be read            │
-  │           │ (LEDGER_LOCKED)                            │
+  │ ! Warning │ 1 scope(s) could not be read               │
+  │           │ (LEDGER_LOCKED); their names are not shown │
   ├───────────┼────────────────────────────────────────────┤
   │ Workload  │ 18 run(s) · 4 worker(s) · 2 approval(s)    │
   │           │ waiting · 3 pool(s)                        │

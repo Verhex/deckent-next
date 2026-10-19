@@ -499,7 +499,6 @@
   "monitor.diagnostic.serviceUnavailable": "service state could not be read ({detail})",
   "monitor.diagnostic.ledgerUnavailable": "the ledger could not be read ({detail})",
   "monitor.diagnostic.ledgerVersionOlder": "the ledger is version {detail}, older than this build: newer fields may be empty",
-  "monitor.diagnostic.scopeUnavailable": "scope {detail} could not be read{code}",
   "monitor.diagnostic.workersUnavailable": "the workers of scope {detail} could not be read",
   "monitor.diagnostic.workersDenied": "access to the workers of scope {detail} was refused",
   "monitor.diagnostic.workersNotSampled": "the workers of scope {detail} were not sampled",
