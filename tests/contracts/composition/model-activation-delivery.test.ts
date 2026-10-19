@@ -73,8 +73,8 @@ it.each(['en', 'tr'] as const)('shows delivery findings in doctor and activation
     'service.responseMaxBytes', 'limits.responseMaxBytes']) expect(message).toContain(value);
   const lines: string[] = [], stdout = { write(text: string) { lines.push(text); return true; } };
   const context = { root: f.project, env: f.env, stdout, assessModelInvocationDelivery: assessConfiguredModelInvocationDelivery };
-  await runKernelCommand(['doctor', '--lang', locale], context);
-  const rendered = lines.join('').split('\n').filter(line => line.includes('local-qwen'));
+  await runKernelCommand(['doctor', '--verbose', '--lang', locale], context); // C-DOCTOR: the detailed line is behind --verbose
+  const rendered = lines.join('').split('\n').filter(line => line.includes('local-qwen') && line.includes('limits.responseMaxBytes'));
   expect(rendered).toHaveLength(findings.length);
   findings.forEach((finding, index) => {
     for (const value of ['local-llama@1/qwen38@1', 'scope-a', finding.surface, String(finding.requiredBytes), String(finding.availableBytes),

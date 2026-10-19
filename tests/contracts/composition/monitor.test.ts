@@ -401,7 +401,7 @@ describe('MONITOR-H1-R usage evidence', () => {
   }
   async function workers(current: Awaited<ReturnType<typeof project>>, command: 'list' | 'watch', locale: 'en' | 'tr') {
     const out: string[] = [];
-    const code = await main(['workers', command, '--scope', 's', '--lang', locale, ...(command === 'watch' ? ['--samples', '1'] : [])], {
+    const code = await main(['workers', command, '--scope', 's', '--verbose', '--lang', locale, ...(command === 'watch' ? ['--samples', '1'] : [])], {
       root: current.dir, env: current.options.env, initialize() {}, stdout: { write(value: string) { out.push(value); } }, stderr: { write() {} },
       inspectWorkers: inspectConfiguredWorkers,
     });

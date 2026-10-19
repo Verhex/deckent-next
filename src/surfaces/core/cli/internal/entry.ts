@@ -2,7 +2,7 @@ import { identityCommand } from '#surfaces/core/cli-identity/index.js';
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
 import { approvalsCommand, policyGrantsCommand } from '#surfaces/core/cli-approval/index.js';
 import { monitorCommand } from '#surfaces/core/monitor/index.js';
-import { workersCommand } from '#surfaces/core/cli-observe/index.js';
+import { terminalInfoCommand, workersCommand } from '#surfaces/core/cli-observe/index.js';
 import { runCommand, doCommand, reportCommand, inventoryCommand } from '#surfaces/core/cli-run/index.js';
 import { taskCommand } from '#surfaces/core/cli-task/index.js';
 import { initCommand } from '#surfaces/core/cli-installation/index.js';
@@ -17,7 +17,8 @@ export type { ExitCode } from '#platform/index.js';
 /** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   audit: auditCommand, backup: backupCommand, identity: identityCommand,
-  terminal: async (argv, context) => (await import('./terminal.js')).terminalCommand(argv, context),
+  // C-DOCTOR: `terminal status|chat-plan|snapshot` get their human text and single errors first; the terminal itself is unchanged (K1–K8).
+  terminal: (argv, context) => terminalInfoCommand(argv, context, async () => (await import('./terminal.js')).terminalCommand(argv, context)),
   init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
   do: doCommand,
   report: reportCommand,

@@ -421,7 +421,7 @@ profile or a `.env` file: other tools read those.
 Provider calls resolve keys inside the runtime; keys are not placed in prompts or the shell environment.
 Supported sandbox views hide the store; a host realm or fallback has no filesystem confinement.
 A provider answer that echoes a stored key is refused.
-`deckent doctor` shows which store is active and who can read it. When a provider refuses a key (401/403) or a limit is
+`deckent doctor` shows which store is active; `deckent doctor --verbose` also says who can read it. When a provider refuses a key (401/403) or a limit is
 reached, the terminal says so in plain words; spend limits stay in your provider account.
 
 **Strict install**, for keys no other program on the machine should read:
@@ -546,7 +546,7 @@ Use a fresh `--out` directory for another build. The build ends with `bubblewrap
 On Linux a build that cannot stage the locked bubblewrap stops with `BUBBLEWRAP_BUILD_REQUIRED` instead of finishing;
 start Docker and run it again. Only off Linux does it print `bubblewrap=absent (not Linux)`, which means there is no
 bubblewrap sandbox; inspect the sandbox posture with `deckent doctor`. The very first `doctor`, before any service has
-run, can report Landlock instead of bubblewrap: `doctor` only measures, and the runtime service places the bundled
+run, can report Landlock instead of bubblewrap (`doctor --verbose` names the reason): `doctor` only measures, and the runtime service places the bundled
 bubblewrap under `.deckent/bin` when it measures the host. Start the service (`deckent`) and run `doctor` again. See the
 [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart) for prerequisites and one test without a provider key.
 

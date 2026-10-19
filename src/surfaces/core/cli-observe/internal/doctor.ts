@@ -1,18 +1,40 @@
 import {
   ErrorRegistry, loadConfig, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation,
-  detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE,
+  detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t,
+  type ConfigLoadOptions,
 } from '#platform/index.js';
 import { configServiceState } from '#engine/index.js';
-import { renderDoctorReport } from '#surfaces/core/doctor/index.js';
+import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import type { KernelCommandContext } from './context.js';
 import type { KernelCall } from './kernel.js';
+import { offerDoctorFixes } from './doctor-fix.js';
 
-/** `deckent doctor`: the read-only installation report; it never updates, rebuilds or activates anything. */
-export async function doctorCommand(call: KernelCall, context: KernelCommandContext): Promise<void> {
-  const { args, root, env, options, output } = call;
-  const [command] = args.positionals;
-  if (command !== 'doctor' || args.positionals.length !== 1 || args.global || args.dryRun) throw ErrorRegistry.createError('CLI_USAGE');
+type DoctorConfig = Awaited<ReturnType<typeof loadConfig>>;
+
+/** Facts only the grouped view needs: each is read-soft (a failed read is "not tested"), secret names only, never a value. */
+async function checkFacts(root: string, config: DoctorConfig, context: KernelCommandContext, options: ConfigLoadOptions, toolchainsRequested: boolean,
+  poolStatus: DoctorCheckFacts['poolStatus']): Promise<DoctorCheckFacts> {
+  const scopeId = (config.terminal as { scopeId?: string } | undefined)?.scopeId ?? null;
+  const identity = (config as Record<string, unknown>)['identity'] as { profile?: { id?: unknown } } | undefined;
+  const names = context.listSecretNames ? await context.listSecretNames(root, options).then(view => view.names, () => null) : null;
+  const catalog = context.inspectModelCatalog && scopeId ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
+  return {
+    scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
+    identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
+    backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
+    retiringModels: catalog === null ? null : catalog.channels.flatMap(channel => channel.access === 'denied' ? [] : channel.models
+      .filter(entry => entry.activation?.state === 'active' && DOCTOR_RETIREMENT_STATES.includes(entry.model.lifecycle.state))
+      .map(entry => ({ modelId: entry.modelId, channelId: channel.channelId, state: entry.model.lifecycle.state,
+        date: entry.model.lifecycle.retiredOn ?? entry.model.lifecycle.retireNotBefore ?? null }))),
+  };
+}
+
+/** One measurement: the collected report (the `--json` contract, unchanged) and the grouped rows the person reads. */
+async function measure(call: KernelCall, context: KernelCommandContext) {
+  const { args, root, env } = call;
+  // C-DOCTOR: doctor only reads. A corrupt project config is reported (CONFIG_FILE_INVALID), never "healed" (rewritten) by a health check.
+  const options: ConfigLoadOptions = { ...call.options, heal: false };
   const config = await loadConfig(root, options);
   call.locale = resolveLocale(args.language, env, config.language); call.mode = config.output_mode;
   const locale = call.locale;
@@ -49,6 +71,29 @@ export async function doctorCommand(call: KernelCall, context: KernelCommandCont
     paths: resolveGlobalScopePaths(platform, env), principal,
     company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
-  output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
-  if (startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');
+  const checks = doctorChecks(data, await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status), locale);
+  return { data, checks, config, options };
+}
+
+/**
+ * `deckent doctor`: the read-only installation report, grouped (Kurulum / Güvenlik / Çalışma / Araçlar) with one next step per warning;
+ * internals behind `--verbose`, the collected report (unchanged contract) with `--json`. On a person's terminal a fixable row is offered as
+ * a card and applied only through an existing product operation after the person confirms; pipe, agent and `--json` callers are never asked.
+ */
+export async function doctorCommand(call: KernelCall, context: KernelCommandContext): Promise<void> {
+  const { args, output } = call;
+  const [command] = args.positionals;
+  if (command !== 'doctor' || args.positionals.length !== 1 || args.global || args.dryRun) throw ErrorRegistry.createError('CLI_USAGE');
+  const show = (measured: Awaited<ReturnType<typeof measure>>) => output(measured.data, result => {
+    const grouped = renderDoctorChecks(measured.checks, call.locale);
+    return args.verbose ? [grouped, '', t('doctor.details', {}, call.locale),
+      renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale)].join('\n') : grouped;
+  });
+  let measured = await measure(call, context);
+  show(measured);
+  if (measured.data.startability?.status === 'blocked') throw ErrorRegistry.createError('INSTALLATION_NOT_STARTABLE');
+  if (args.json || call.mode === 'json') return;
+  // Each applied fix is followed by a fresh measurement; each registry fix is offered at most once per call (bounded).
+  await offerDoctorFixes({ checks: () => measured.checks, locale: call.locale, root: call.root, options: measured.options, config: measured.config, context,
+    remeasure: async () => { measured = await measure(call, context); show(measured); } });
 }

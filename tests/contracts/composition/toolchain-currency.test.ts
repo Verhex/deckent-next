@@ -71,7 +71,7 @@ it('doctor --toolchains is an explicit opt-in that embeds the report; default do
   expect(data.toolchains.providers.find((entry: { provider: string }) => entry.provider === 'codex')).toMatchObject({ status: 'stale' });
   expect(data.toolchains.providers.find((entry: { provider: string }) => entry.provider === 'claude')).toMatchObject({ status: 'ahead' });
   lines.length = 0;
-  await runKernelCommand(['doctor', '--toolchains', '--lang', 'tr'], context);
+  await runKernelCommand(['doctor', '--toolchains', '--verbose', '--lang', 'tr'], context);
   expect(lines.join('')).toMatch(/Toolchain güncelliği/); expect(lines.join('')).toMatch(/codex: stale/);
   await expect(runKernelCommand(['paths', '--toolchains'], context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   await expect(runKernelCommand(['doctor', '--toolchains', '--json'], { ...context, inspectToolchainCurrency: undefined })).rejects.toMatchObject({ code: 'CLI_USAGE' });

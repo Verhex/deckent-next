@@ -24,7 +24,7 @@ it('doctor says installation binding is not supported and relocation detection i
   const f = await fixture();
   for (const [language, text] of [['en', 'Installation binding: not supported on this host'], ['tr', 'Kurulum bağı: bu ortamda desteklenmiyor']] as const) {
     const out = capture();
-    await runKernelCommand(['doctor', '--lang', language], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: async () => ({ capability: 'unsupported' }) });
+    await runKernelCommand(['doctor', '--verbose', '--lang', language], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: async () => ({ capability: 'unsupported' }) });
     expect(out.lines.join('')).toContain(text);
     expect(out.lines.join('')).toMatch(language === 'en' ? /relocation and copy detection is off/u : /taşınma ve kopya tespiti kapalı/u);
   }
@@ -44,7 +44,7 @@ it.each([
   const f = await fixture();
   for (const [language, text] of [['en', en], ['tr', tr]] as const) {
     const out = capture();
-    await runKernelCommand(['doctor', '--lang', language], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: async () => report });
+    await runKernelCommand(['doctor', '--verbose', '--lang', language], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: async () => report });
     expect(out.lines.join('')).toContain(text);
     expect(out.lines.join('')).not.toMatch(/requireMachineBinding (is on|açık)/u); // required is satisfied or off in these rows
   }
@@ -55,7 +55,7 @@ it('doctor states that required machine binding refuses writes when only a weak 
   for (const [language, text] of [['en', 'installation.requireMachineBinding is on and no machine identity is available: installation-bound writes are refused'],
     ['tr', 'installation.requireMachineBinding açık ve makine kimliği yok: kuruluma bağlı yazmalar reddedilir']] as const) {
     const out = capture();
-    await runKernelCommand(['doctor', '--lang', language], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: async () => report });
+    await runKernelCommand(['doctor', '--verbose', '--lang', language], { root: f.project, env: f.env, stdout: out.sink, inspectInstallationBinding: async () => report });
     expect(out.lines.join('')).toContain(text);
   }
 });

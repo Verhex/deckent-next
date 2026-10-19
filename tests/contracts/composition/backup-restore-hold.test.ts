@@ -161,7 +161,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   await writeFile(keyTemp, key, { mode: 0o600 }); await writeFile(pendingHold, '{}', { mode: 0o600 });
   await mkdir(join(area, '.backup-restore-not-a-uuid'), { mode: 0o700 });
   const doctor = async (args: string[]) => { let text = ''; clearConfigCache();
-    await runKernelCommand(['doctor', ...args], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
+    await runKernelCommand(['doctor', '--verbose', ...args], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
     return text; };
   expect(JSON.parse(await doctor(['--json'])).recoveryFiles.leftovers.sort()).toEqual([...planted, keyTemp, pendingHold].sort());
   expect(await doctor(['--lang', 'en'])).toContain('Interrupted backup restore files remain');
@@ -180,7 +180,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   await expect(loadConfig(f.root, { env: f.env })).resolves.toMatchObject({ projectRoot: resolve(f.root) });
   let text = ''; await runKernelCommand(['doctor', '--json'], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
   expect(JSON.parse(text).recoveryFiles.installationDirectory).toEqual({ path: area, mode: '0755' });
-  text = ''; await runKernelCommand(['doctor', '--lang', 'en'], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
+  text = ''; await runKernelCommand(['doctor', '--verbose', '--lang', 'en'], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
   expect(text).toContain(`The installation directory ${area} has mode 0755`); expect(text).toContain(`chmod 700 ${area}`);
   await chmod(area, 0o775); gate.mkdirs = [];
   const refused = await restore(f).then(() => null, (error: { code?: string; params?: Record<string, string>; message?: string }) => error);
