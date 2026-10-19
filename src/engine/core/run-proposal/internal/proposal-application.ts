@@ -1,10 +1,10 @@
-import { encodeCommandProjection, isAiPrincipal, type ModelInvocationBillingAxis, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
+import { encodeCommandProjection, isAiPrincipal, type ModelInvocationBillingAxis, type ProposalPermission, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { DeckentError, ErrorRegistry, type TrustedClock } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 import { RunAdmissionApplication, RunCreationAuthority, systemOrderedGraph, type BoundRunAdmission, type RunAuthorization, type RunView } from '#engine/core/runs/index.js';
 import { parseRunProposal, runProposalDigest, runProposalQuerySchema, type RunProposalQuery, type RunProposalRecord, type RunProposalStore } from './proposal-contract.js';
-import { stableRunProposalBasis, validateRunProposal } from './proposal-validation.js';
+import { stableRunProposalBasis, unrecognisedRunProposalPermissions, validateRunProposal } from './proposal-validation.js';
 export interface RunProposalContext {
   readonly registry?: WorkClassRegistry | undefined;
   readonly clock: TrustedClock;
@@ -18,10 +18,16 @@ export interface RunProposalResult { readonly schemaVersion: 1; readonly proposa
   readonly budgetSemantics: 'admission-check-only' | 'not-metered'; readonly runtimeTotalSpendEnforced: false;
   /** A budget refusal's money left (and declared ceiling), on the response that recorded it only: the amount moves with every charge, so it
    * is never stored and a replay renders the refusal without it. Every other refusal replays byte-identically. */
-  readonly reasonParams?: Readonly<Record<string, string | number>> }
-const result = (proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => Object.freeze({ schemaVersion: 1,
-  proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false,
-  ...(error instanceof DeckentError && proposal.reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED' && error.code === proposal.reason && error.params ? { reasonParams: error.params } : {}) });
+  readonly reasonParams?: Readonly<Record<string, string | number>>;
+  /** Advisory entries this installation's vocabulary and registry do not recognise, each once (accept_mark, owner 2026-10-18). Response-only and
+   * derived from the current registry: never stored, never evaluated, never a grant; absent when every entry is recognised. */
+  readonly unrecognisedPermissions?: readonly ProposalPermission[] }
+const result = (registry: WorkClassRegistry | undefined, proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => {
+  const unrecognised = unrecognisedRunProposalPermissions(proposal.proposal, registry);
+  return Object.freeze({ schemaVersion: 1, proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false,
+    ...(error instanceof DeckentError && proposal.reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED' && error.code === proposal.reason && error.params ? { reasonParams: error.params } : {}),
+    ...(unrecognised.length ? { unrecognisedPermissions: unrecognised } : {}) });
+};
 /** The graph a proposal's Run is admitted with: the author's graph plus the system order edges (one definition for admission and store). */
 export const proposalRunGraph = (graph: RunProposal['graph']) => {
   try { return systemOrderedGraph(graph); }
@@ -52,7 +58,7 @@ export class RunProposalApplication {
     const evaluation = await this.authority.evaluate(command, principal);
     let record = await this.store.loadProposal(proposal.scopeId, proposal.commandId);
     if (record && record.digest !== digest) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
-    if (record && ['rejected', 'parked'].includes(record.status)) return result(record);
+    if (record && ['rejected', 'parked'].includes(record.status)) return result(this.context.registry, record);
     if (!record) {
       record = { schemaVersion: 1, proposal, digest, revision: 0, recordedAt: this.context.clock.sample().wallMs,
         status: 'recorded', binding: command.proposal!, reason: null, approval: null, authority: null };
@@ -63,7 +69,7 @@ export class RunProposalApplication {
       } catch (error) {
         const code = codeOf(error); if (!code || !ErrorRegistry.has(code)) throw error;
         this.authority.recordUnapplied(command, principal, evaluation);
-        return result(await this.store.recordProposal({ ...record, status: 'rejected', reason: code }), null, error);
+        return result(this.context.registry, await this.store.recordProposal({ ...record, status: 'rejected', reason: code }), null, error);
       }
       // A failed receipt write stops before sealing/approval/Run admission.
       record = await this.store.recordProposal(record);
@@ -84,7 +90,7 @@ export class RunProposalApplication {
       const completed = await this.store.loadProposal(proposal.scopeId, proposal.commandId);
       if (!completed || completed.status !== 'accepted' || completed.digest !== digest
         || encodeCommandProjection('authority', completed.authority) !== encodeCommandProjection('authority', admitted.run.authority)) throw ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN');
-      return result(completed, admitted.run);
+      return result(this.context.registry, completed, admitted.run);
     } catch (error) {
       const code = codeOf(error);
       const pending = error instanceof DeckentError && code === 'RUN_APPROVAL_REQUIRED' ? error.params : undefined;
@@ -94,13 +100,14 @@ export class RunProposalApplication {
       const status = pending ? 'pending' : ['APPROVAL_EXPIRED', 'APPROVAL_STALE', 'APPROVAL_CONFLICT', 'RUN_PROPOSAL_BASIS_STALE'].includes(code) ? 'parked' : 'rejected';
       const next: RunProposalRecord = { ...record, revision: record.revision + 1, status, reason: code, authority: null,
         approval: pending ? { approvalId: String(pending.approvalId), expiresAt: Number(pending.expiresAt), decisionRecordId: String(pending.decisionRecordId) } : null };
-      return result(await this.store.transitionProposal(record, next), null, pending ? undefined : error);
+      return result(this.context.registry, await this.store.transitionProposal(record, next), null, pending ? undefined : error);
     }
   }
 }
 
 export class RunProposalInspectionApplication {
-  constructor(private readonly store: Pick<RunProposalStore, 'loadProposal'>, private readonly verifier: PrincipalVerifier, private readonly inspection: RunAuthorization) {}
+  constructor(private readonly store: Pick<RunProposalStore, 'loadProposal'>, private readonly verifier: PrincipalVerifier, private readonly inspection: RunAuthorization,
+    private readonly registry?: WorkClassRegistry) {}
   async inspect(input: RunProposalQuery, credential?: unknown): Promise<RunProposalResult | null> {
     const query = runProposalQuerySchema.parse(input), principal = await authenticate(this.verifier, credential, query.scopeId);
     // authorize the scope before the command lookup, then the exact Run resource before disclosing its plan.
@@ -108,6 +115,6 @@ export class RunProposalInspectionApplication {
     const record = await this.store.loadProposal(query.scopeId, query.commandId);
     if (!record) return null;
     if (record.proposal.runId !== query.runId) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
-    return result(record);
+    return result(this.registry, record);
   }
 }

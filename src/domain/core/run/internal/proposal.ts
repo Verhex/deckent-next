@@ -32,11 +32,16 @@ export type ProposalPermission = z.infer<typeof proposalPermissionSchema>;
 export function deriveProposalPermissions(graph: RunProposal['graph']): readonly ProposalPermission[] {
   return Object.freeze(graph.tasks.map(task => Object.freeze({ kind: 'task', action: 'execute', resourceId: task.id })));
 }
-/** The proposer's entries outside the derived set: shown as advisory on the card, never evaluated as a requirement and never a grant. */
+const permissionKey = (row: ProposalPermission) => JSON.stringify([row.kind, row.action, row.resourceId]);
+/** The proposer's entries outside the derived set, each shown once: advisory on the card, never evaluated as a requirement and never a grant. */
 export function advisoryProposalPermissions(declared: readonly ProposalPermission[], graph: RunProposal['graph']): readonly ProposalPermission[] {
-  const derived = new Set(deriveProposalPermissions(graph).map(row => JSON.stringify([row.kind, row.action, row.resourceId])));
-  return Object.freeze(declared.filter(row => !derived.has(JSON.stringify([row.kind, row.action, row.resourceId]))));
+  const seen = new Set(deriveProposalPermissions(graph).map(permissionKey));
+  return Object.freeze(declared.filter(row => { const key = permissionKey(row); if (seen.has(key)) return false; seen.add(key); return true; }));
 }
+/** Kind/action rows a proposal entry may name: the policy vocabulary plus the registry's declared proposal permissions. */
+export type ProposalPermissionCatalog = readonly Readonly<{ kind: string; actions: readonly string[] }>[];
+export const isRecognisedProposalPermission = (row: ProposalPermission, catalog: ProposalPermissionCatalog): boolean =>
+  catalog.some(entry => entry.kind === row.kind && entry.actions.includes(row.action));
 /** Trusted deterministic admission basis, retained by the Run and its sealed decision. Never accepted by run create ingress. */
 export const runProposalBindingSchema = z.object({ schemaVersion: z.literal(1), proposalId: identitySchema, digest,
   budgetCeiling: runProposalSchema.unwrap().shape.budgetCeiling,

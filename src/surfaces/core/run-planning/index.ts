@@ -3,7 +3,9 @@ import { advisoryProposalPermissions, deriveProposalPermissions } from '#domain/
 import { currencyAmountText, terminalSafeText, redactForRecord, t, ErrorRegistry, type Locale } from '#platform/index.js';
 const permissionText = (rows: ReturnType<typeof deriveProposalPermissions>) => terminalSafeText(rows.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ')) || '-';
 export function brainProposalLines(result: RunProposalResult, locale: Locale): readonly string[] {
-  const record = result.proposal, proposal = record.proposal, advisory = advisoryProposalPermissions(proposal.requiredPermissions, proposal.graph);
+  const record = result.proposal, proposal = record.proposal, unrecognised = result.unrecognisedPermissions ?? [];
+  // Unrecognised entries get their own advisory line (accept_mark, owner 2026-10-18); every entry appears once.
+  const marked = new Set(unrecognised.map(row => JSON.stringify(row))), advisory = advisoryProposalPermissions(proposal.requiredPermissions, proposal.graph).filter(row => !marked.has(JSON.stringify(row)));
   const statuses = { recorded: t('proposal.status.recorded', {}, locale), pending: t('proposal.status.pending', {}, locale),
     accepted: t('proposal.status.accepted', {}, locale), rejected: t('proposal.status.rejected', {}, locale), parked: t('proposal.status.parked', {}, locale) };
   return [...(result.run ? [t('brain.next', { run: result.run.runId }, locale)] : []),
@@ -20,6 +22,7 @@ export function brainProposalLines(result: RunProposalResult, locale: Locale): r
     t('brain.permissions', { permissions: permissionText(deriveProposalPermissions(proposal.graph)) }, locale),
     ...(!advisory.length ? [] : proposal.source.kind === 'model' ? [t('brain.permissions.advisory.model', { permissions: permissionText(advisory) }, locale)]
       : [t('brain.permissions.advisory.human', { permissions: permissionText(advisory) }, locale)]),
+    ...(unrecognised.length ? [t('proposal.permissions.unrecognised', { permissions: permissionText(unrecognised) }, locale)] : []),
     ...(record.reason && record.reason !== 'RUN_APPROVAL_REQUIRED' ? [ErrorRegistry.createError(record.reason, { locale, ...(result.reasonParams ? { params: result.reasonParams } : {}) }).message] : []),
     ...(record.approval ? [t('brain.waiting', { id: record.approval.approvalId, expires: new Date(record.approval.expiresAt).toISOString() }, locale), t('brain.revise', {}, locale)] : []),
     ...(proposal.source.kind === 'model' ? [t('brain.contribution', { model: proposal.source.receipt.reference.modelId, invocation: proposal.source.receipt.invocationId, template: proposal.source.contribution?.template.version ?? '-' }, locale)] : []),
