@@ -88,7 +88,7 @@ export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common
 
 export { isRecord, assertSafeKeys, digestText, pathsShareTree } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
-export { assertConfigSecretPolicies } from '#platform/core/config/index.js';
+export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '#platform/core/config/index.js';
 
 export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, configEntryAllowed, configStepper, stepConfigNumber, configNumberText } from '#platform/core/config-fields/index.js';
 export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit, ConfigStepper } from '#platform/core/config-fields/index.js';

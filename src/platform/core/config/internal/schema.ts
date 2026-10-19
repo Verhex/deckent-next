@@ -9,7 +9,8 @@ export type DeckentConfig = CoreConfig & Record<string, unknown>;
 export interface ConfigSectionOptions {
   /** Called on the authored global/project layers before they are merged. */
   readonly optional?: boolean;
-  /** Opaque public data sections can forbid secret interpolation before any resolver reads. */
+  /** Opaque public data sections can forbid secret interpolation before any resolver reads. 'allow' = installation (global) layer only;
+   * the project layer never resolves references (SEC-3). */
   readonly secretReferences?: 'allow' | 'forbid';
   /** Pure section semantics, also enforced by config writers before any publication. */
   readonly validateValue?: (value: unknown) => void;

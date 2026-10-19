@@ -81,7 +81,7 @@
   "cap.screenshot.preview": "{display} ekranı yakala",
   "cap.screenshot.title": "Ekran görüntüsü",
   "cap.screenshot.unsupported": "Bu platformda ekran görüntüsü desteklenmiyor.",
-  "connect.auth_state.hint": "{envKey} ortam değişkenini ayarlayın (örn. `{cmd}`), ya da .deck dosyanıza {deckKey} ekleyip config içinde $DECK:{deckKey} olarak referans verin.",
+  "connect.auth_state.hint": "{envKey} ortam değişkenini ayarlayın (örn. `{cmd}`), ya da .deck dosyanıza {deckKey} ekleyip kurulum ayarında $DECK:{deckKey} olarak referans verin.",
   "connect.step.attach_mcp": "Deckent'i MCP üzerinden {host}'a bağlayın.",
   "connect.step.ide_cursor_setup": "Cursor IDE entegrasyonunu kurun.",
   "connect.step.ide_terminal_guidance": "Düz bir terminalde çalışıyorsunuz — IDE entegrasyonu gerekmiyor.",

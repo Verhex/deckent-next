@@ -81,7 +81,7 @@
   "cap.screenshot.preview": "capture {display} display",
   "cap.screenshot.title": "Screenshot",
   "cap.screenshot.unsupported": "Screenshot is not supported on this platform.",
-  "connect.auth_state.hint": "Set {envKey} (e.g. `{cmd}`), or add {deckKey} to your .deck file and reference it as $DECK:{deckKey} in config.",
+  "connect.auth_state.hint": "Set {envKey} (e.g. `{cmd}`), or add {deckKey} to your .deck file and reference it as $DECK:{deckKey} in the installation config.",
   "connect.step.attach_mcp": "Attach deckent to {host} via MCP.",
   "connect.step.ide_cursor_setup": "Set up the Cursor IDE integration.",
   "connect.step.ide_terminal_guidance": "Running in a plain terminal — no IDE integration needed.",
