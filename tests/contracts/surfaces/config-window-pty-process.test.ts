@@ -63,7 +63,8 @@ function screenAt(output: string, upto: number, columns: number, rows: number) {
     hints: lines.filter(line => line.includes('↑↓')).length, text: lines.join('\n') };
 }
 
-it('the built config window keeps one title, one key-hint row and its bottom border fixed across levels, the filter and the Loading frame (PTY)', async () => {
+// 30×100, and 24×60 where the list's and the filter's key hints wrap to two rows and the Loading frame's to one (the body gives way to them).
+it.each([[30, 100], [24, 60]])('%i×%i: the built config window keeps one title, one key-hint row and its bottom border fixed across levels, the filter and the Loading frame (PTY)', async (rows, columns) => {
   await access(cli).catch(() => { throw new Error(`BUILD_REQUIRED: ${cli}`); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-config-pty-')); roots.push(root);
   const project = join(root, 'project'), home = join(root, 'home');
@@ -71,7 +72,6 @@ it('the built config window keeps one title, one key-hint row and its bottom bor
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, inspection: { workers: { sources: [] } } }), { mode: 0o600 });
   const env = { PATH: dirname(process.execPath), HOME: home, LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
   await execute(process.execPath, [cli, 'init', 'policy', '--scope', 'pty', '--apply'], { cwd: project, env, timeout: 60_000 });
-  const rows = 30, columns = 100;
   // Each step waits for its screen's text (counted from the previous mark), records the settled screen, then presses its keys:
   // sections: `e` (filter) · Backspace · ↓ · ↑ · Enter (the `general` section's keys) · ↓ · Enter (`output_mode`'s values) · Esc · Esc · Esc (close).
   const steps: [string, string, string][] = [['Configuration ·', 'e', 'sections'], ['filter: e', '\u007f', 'sections, filter "e"'], ['general', '\u001b[B', 'sections'],
@@ -88,12 +88,14 @@ it('the built config window keeps one title, one key-hint row and its bottom bor
   const screens = result.marks!.map((mark, index) => ({ label: steps[index]![2], ...screenAt(result.output, mark, columns, rows) }));
   const table = [`Loading…: border row ${loading.bottom}, title rows ${loading.titles}, hint rows ${loading.hints}`,
     ...screens.map(screen => `${screen.label}: border row ${screen.bottom}, title rows ${screen.titles}, hint rows ${screen.hints}`)];
-  if (process.env['DECKENT_TERM_PANEL_ROWS']) await writeFile(process.env['DECKENT_TERM_PANEL_ROWS'], [...table, '', `===== Loading…\n${loading.text}`, ...screens.map(screen => `===== ${screen.label}\n${screen.text}`)].join('\n'));
+  if (process.env['DECKENT_TERM_PANEL_ROWS']) await writeFile(`${process.env['DECKENT_TERM_PANEL_ROWS']}-${rows}x${columns}.txt`, [...table, '', `===== Loading…\n${loading.text}`, ...screens.map(screen => `===== ${screen.label}\n${screen.text}`)].join('\n'));
   expect(loading.bottom, loading.text).toBeGreaterThan(0);
   for (const screen of screens) {
     const where = `${screen.label}\n${screen.text}`;
     expect(screen.bottom, where).toBeGreaterThan(0);
-    expect(screen.lines[screen.bottom - 1], where).toMatch(/Esc /u);
+    // The key hints sit right above the closing border (wrapped to two rows on a narrow terminal).
+    const hint = screen.lines.findLastIndex(line => line.includes('↑↓'));
+    expect(screen.bottom - hint, where).toBeLessThanOrEqual(2); expect(screen.lines.slice(hint, screen.bottom).join(' '), where).toMatch(/Esc /u);
     expect(screen.titles, `the title once: ${where}`).toBe(1);
     expect(screen.hints, `one key-hint row: ${where}`).toBe(1);
     for (const line of screen.lines) expect(line.length, line).toBeLessThanOrEqual(columns);
