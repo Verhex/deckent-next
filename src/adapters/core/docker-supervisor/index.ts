@@ -5,8 +5,8 @@ export { runNodeDockerCommand, DockerCommandFailure, dockerCommandEnvironment } 
 export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from './internal/command.js';
 export { validateDockerSupervisorProfile, dockerProfileObservesWorker } from './internal/profile.js';
 export { validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, DockerTaskProfileError } from './internal/task-profile.js';
-export { probeDockerImageAvailability, DockerImageProbeError } from './internal/image.js';
-export type { DockerImageAvailabilityProbeInput, DockerImageAvailability, DockerImageProbeErrorCode } from './internal/image.js';
+export { probeDockerImageAvailability, probeDockerImageSetAvailability, DockerImageProbeError } from './internal/image.js';
+export type { DockerImageAvailabilityProbeInput, DockerImageSetProbeInput, DockerImageAvailability, DockerImageProbeErrorCode } from './internal/image.js';
 export { collectDockerOutputFiles, dockerOutputFilesSchema } from './internal/output-files.js';
 export { resolveDockerReadOnlyMounts, dockerReadOnlyMountsSchema } from './internal/mounts.js';
 export type { DockerReadOnlyMount } from './internal/mounts.js';
