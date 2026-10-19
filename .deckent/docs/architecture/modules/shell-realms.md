@@ -122,7 +122,10 @@ project (`host-shell/internal/landlock.ts`) and runs bash through the native hel
 (`host-shell/native/shell_sandbox.c`), which applies it and execs bash in the same process. Landlock only adds access and a directory
 rule reaches everything beneath it, so a directory holding a protected path or a `.git` is carved: listing only, each entry its own
 rule — clean files and trees read-write, protected paths (the turn's deny list), multiply linked files, special files and unreadable
-directories no rule; symbolic links none; ignored directories read-write as a whole and not scanned. Git metadata is read-only under
+directories no rule; symbolic links none; only the generated/vendored baseline (`BASELINE_IGNORED_DIRS`: `node_modules`, `dist`, …)
+read-write as a whole and not scanned — a directory named only by the project's `.gitignore` (`secrets/`, `certs/`) is scanned and
+deny-matched like any other, the bubblewrap realm's floor (SEC-4, Claude Security F34: before it Landlock granted such a tree whole, so
+`secrets/.env` was readable; cross-realm test `shell-realm-deny-parity`; its entries count against the scan bound). Git metadata is read-only under
 the same inode floor **before any grant (Astra 2156)**: a multi-linked `.git` file takes no rule; a `.git` directory and a worktree's
 common repository (root `.git` file in the verified shape only) are not one read grant but carved read rules from the shared
 `scanGitDirectory` (verdicts re-read every call, only object hashes cached under ctime and expected identity — Astra 2158): a directory
@@ -144,8 +147,8 @@ refused), so a command cannot forge one. Posture: ABI ≥ 6 → marker `sandbox:
 degraded` and a notice naming what is open (signals ABI < 6, TCP by the socket filter ABI < 4) on the card, the
 live stream, the result and the finished line. Network is closed at every supported ABI; ABI <3 is refused to preserve truncation protection. A system read grant overlapping an absolute installation root also refuses the call; closed bubblewrap hides external installation roots over system binds. Open limits: the project root and every directory
 holding a protected path or `.git` cannot gain, lose or rename entries inside the sandbox (`touch new-at-root`, `sed -i` of a root
-file, a first `mkdir dist`); tools installed under HOME do not run (unlike bubblewrap); glob-protected files inside ignored directories
-are not carved; no PID namespace — a `setsid` descendant escapes the process group (it stays in the Landlock domain); ≈ 310 ms rule-set
+file, a first `mkdir dist`); tools installed under HOME do not run (unlike bubblewrap); glob-protected files inside baseline
+directories are not carved; a `.gitignore`d tree of more than 20 000 entries (bubblewrap: 50 000) refuses the set; no PID namespace — a `setsid` descendant escapes the process group (it stays in the Landlock domain); ≈ 310 ms rule-set
 build on this repository after Astra 2158 (≈ 125 ms with the withdrawn directory cache, ≈ 90 ms before 2156; per-entry object rules for
 a carved `objects/` tree can approach the 8 192-rule bound in a large hard-linked clone whose objects do not verify); the product's own
 state inside the project is closed in every layout, an ignored ancestor included (Astra 2162: an ignored directory holding a protected
