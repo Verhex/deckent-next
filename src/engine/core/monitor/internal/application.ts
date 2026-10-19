@@ -2,7 +2,7 @@ import { projectTaskBrief, projectResultBrief } from '#engine/core/runs/index.js
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, MonitorSnapshot, MonitorWorker } from './contract.js';
 import { monitorQuerySchema, type MonitorQuery } from './contract.js';
-import type { MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
+import type { MonitorLedgerIndex, MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
 import { projectMonitorRun } from './derive.js';
 
@@ -23,9 +23,10 @@ async function service(ports: MonitorPorts, target: MonitorTarget, diagnostics: 
   }
 }
 /**
- * MONITOR (owner 2026-10-02): builds the one observe-only `MonitorSnapshot`. Per target it reads the ledger (read-only), asks the target's
- * own scope policy for every scope the ledger names, and keeps only admitted scopes' Runs, approvals and workers; pools are
- * installation-wide and shown unless every scope the ledger names was refused. Every failure becomes a typed diagnostic; nothing here writes or decides.
+ * MONITOR (owner 2026-10-02): builds the one observe-only `MonitorSnapshot`. Per target it indexes the ledger (ids only), asks the target's
+ * own scope policy for every scope the ledger names and the `pool inspect` decision for every pool (M-VIS, owner 2026-10-19 PB-POOL-VIS),
+ * then reads only admitted scopes' Runs/approvals and visible pools' rows and occupancy. Other pools are counted, never named.
+ * Every failure becomes a typed diagnostic; nothing here writes or decides.
  */
 export class MonitorApplication {
   constructor(private readonly ports: MonitorPorts) {}
@@ -52,24 +53,29 @@ export class MonitorApplication {
   private async install(target: MonitorTarget, observedAt: number): Promise<MonitorInstall> {
     const diagnostics: string[] = []; const serviceState = await service(this.ports, target, diagnostics);
     await this.imageRefresh(target, diagnostics);
-    let reading: MonitorLedgerReading;
-    try { reading = await this.ports.readLedger(target); } catch (error) {
-      diagnostics.push('ledger-unavailable:' + code(error));
-      return Object.freeze({ id: target.id, path: target.path, status: 'unavailable', scopeIds: [], service: serviceState, ledgerVersion: null, runs: [], workers: [],
-        approvals: [], pools: [], diagnostics: Object.freeze(diagnostics) });
-    }
-    diagnostics.push(...reading.diagnostics);
+    const unavailable = (error: unknown) => { diagnostics.push('ledger-unavailable:' + code(error));
+      return Object.freeze({ id: target.id, path: target.path, status: 'unavailable' as const, scopeIds: [], service: serviceState, ledgerVersion: null, runs: [], workers: [],
+        approvals: [], pools: [], diagnostics: Object.freeze(diagnostics) }); };
+    let index: MonitorLedgerIndex, reading: MonitorLedgerReading;
+    try { index = await this.ports.indexLedger(target); } catch (error) { return unavailable(error); }
     const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = []; let denied = false;
-    for (const scopeId of reading.scopeIds) {
+    const scopeNotes: string[] = [];
+    for (const scopeId of index.scopeIds) {
       try {
         const scope = await this.ports.observeScope(target, scopeId);
-        if (scope.access !== 'admitted') { denied ||= scope.access === 'denied'; diagnostics.push(`scope-${scope.access}:${scopeId}`); continue; }
+        if (scope.access !== 'admitted') { denied ||= scope.access === 'denied'; scopeNotes.push(`scope-${scope.access}:${scopeId}`); continue; }
         admitted.add(scopeId); workers.push(...scope.workers); if (scope.approvals === true) summaries.add(scopeId);
-        else if (reading.approvals.some(value => value.scopeId === scopeId)) diagnostics.push('approvals-denied:' + scopeId);
-        if (scope.workerStatus !== 'available') diagnostics.push(`workers-${scope.workerStatus}:${scopeId}`);
-        if (scope.truncated) diagnostics.push('info:workers-truncated:' + scopeId);
-      } catch (error) { diagnostics.push(`scope-unavailable:${scopeId}:${code(error)}`); }
+        if (scope.workerStatus !== 'available') scopeNotes.push(`workers-${scope.workerStatus}:${scopeId}`);
+        if (scope.truncated) scopeNotes.push('info:workers-truncated:' + scopeId);
+      } catch (error) { scopeNotes.push(`scope-unavailable:${scopeId}:${code(error)}`); }
     }
+    // M-VIS: a pool is shown only on the viewer's own `pool inspect` allow; a failed decision hides it. No per-pool diagnostic (it would name the pool).
+    const visible = new Set<string>();
+    for (const poolId of index.poolIds) if (await this.ports.observePool(target, poolId, [...admitted]).catch(() => false) === true) visible.add(poolId);
+    try { reading = await this.ports.readLedger(target, Object.freeze({ scopeIds: Object.freeze([...admitted]), poolIds: Object.freeze([...visible]) })); }
+    catch (error) { diagnostics.push(...scopeNotes); return unavailable(error); }
+    diagnostics.push(...reading.diagnostics, ...scopeNotes);
+    for (const scopeId of admitted) if (!summaries.has(scopeId) && reading.approvals.some(value => value.scopeId === scopeId)) diagnostics.push('approvals-denied:' + scopeId);
     const recency = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`,
       Math.max(value.sealedAtMs ?? value.observedEndAtMs ?? -1, value.dispatch?.grantedAtMs ?? -1)] as const)));
     const rank = (value: WorkerObservation) => recency.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`) ?? -1;
@@ -85,7 +91,8 @@ export class MonitorApplication {
     const ledger = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`, value] as const)));
 
     const byAttempt = new Map(workers.filter(value => value.identity).map(value => [`${value.identity!.scopeId}/${value.identity!.attemptId}`, value]));
-    const pools = new Map(reading.pools.map(pool => [pool.poolId, pool]));
+    // The application filters again: an adapter that answered more than it was asked never widens the view.
+    const shownPools = reading.pools.filter(pool => visible.has(pool.poolId)), pools = new Map(shownPools.map(pool => [pool.poolId, pool]));
     const runs = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).map(run => {
       const scopeId = run.snapshot.identity.scopeId;
       const own = new Map(run.attempts.flatMap(attempt => { const worker = byAttempt.get(`${scopeId}/${attempt.attemptId}`); return worker ? [[attempt.attemptId, worker] as const] : []; }));
@@ -120,11 +127,13 @@ export class MonitorApplication {
     };
     const approvals: MonitorApproval[] = reading.approvals.filter(value => admitted.has(value.scopeId)).map(value => Object.freeze({ scopeId: value.scopeId,
       status: value.status === 'decided' ? 'decided' : value.status === 'expired' || value.expiresAtMs <= observedAt ? 'expired' : 'pending', approvalId: value.approvalId, subjectKind: value.subjectKind, summary: summaries.has(value.scopeId) ? value.summary : '', requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
-    const poolViews: MonitorPool[] = !reading.scopeIds.length || admitted.size ? reading.pools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
-      held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution })) : [];
-    const status = !reading.scopeIds.length || admitted.size ? 'available' : denied ? 'denied' : 'unavailable';
+    const poolViews: MonitorPool[] = shownPools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
+      held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution }));
+    const hiddenPools = index.poolIds.length - visible.size, open = !index.scopeIds.length || admitted.size > 0;
+    const status = open ? 'available' : denied ? 'denied' : 'unavailable';
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,
       runs: Object.freeze(runs),
-      workers: Object.freeze(shown.map(enrich)), map: !reading.scopeIds.length || admitted.size ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews), diagnostics: Object.freeze(diagnostics) });
+      workers: Object.freeze(shown.map(enrich)), map: open ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews),
+      ...(hiddenPools > 0 ? { hiddenPools } : {}), diagnostics: Object.freeze(diagnostics) });
   }
 }

@@ -2,7 +2,7 @@ export { monitorQuerySchema } from './internal/contract.js';
 export type { MonitorQuery, MonitorSnapshot, MonitorInstall, MonitorInstallStatus, MonitorDeliveryState, MonitorRun, MonitorRunState, MonitorTask, MonitorAttempt, MonitorCloseReason, MonitorDeliveryOutlook, MonitorBlocker, MonitorBlockerCode,
   MonitorApproval, MonitorPool, MonitorService, MonitorBuild, MonitorMap, MonitorWorkerHuman, MonitorWorker, MonitorWorkerContent } from './internal/contract.js';
 export type { MonitorLedgerReading, MonitorLedgerRun, MonitorLedgerAttempt, MonitorLedgerDispatch, MonitorLedgerApproval, MonitorLedgerPool, MonitorTarget,
-  MonitorScopeObservation, MonitorPorts, MonitorEvent } from './internal/evidence.js';
+  MonitorLedgerIndex, MonitorReadScope, MonitorScopeObservation, MonitorPorts, MonitorEvent } from './internal/evidence.js';
 export { deriveRunBlocker, deriveRunState, projectMonitorRun, MONITOR_BLOCKER_PRECEDENCE } from './internal/derive.js';
 export type { MonitorRunEvidence } from './internal/derive.js';
 export { MonitorApplication, MONITOR_FINISHED_WORKERS } from './internal/application.js';

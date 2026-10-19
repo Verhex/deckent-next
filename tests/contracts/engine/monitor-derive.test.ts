@@ -172,6 +172,9 @@ describe('monitor run blocker and state derivation (pure)', () => {
   });
 });
 
+// M-VIS ports for fakes whose readLedger ignores the read scope: the index is the reading's ids; the application still filters in memory.
+const indexOf = async (value: { ledgerVersion: number; scopeIds: readonly string[]; pools: readonly { poolId: string }[] }) => ({ ledgerVersion: value.ledgerVersion, scopeIds: value.scopeIds, poolIds: value.pools.map(pool => pool.poolId) });
+const allPools = { observePool: async () => true };
 describe('monitor application over ports', () => {
   it('selects collection before every per-target port, including service and image reads', async () => {
     const ledger = { ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [] };
@@ -180,11 +183,12 @@ describe('monitor application over ports', () => {
     const readConfigFreshness = vi.fn(async () => 'current' as const);
     const readImageRefresh = vi.fn(async () => ({ status: 'unknown' as const, reason: null, imageVersion: null }));
     const observeScope = vi.fn(async () => ({ access: 'admitted' as const, workers: [], workerStatus: 'available', truncated: false }));
-    const app = new MonitorApplication({ now: () => NOW, readLedger, readShown, describeService, readConfigFreshness, readImageRefresh, observeScope });
+    const indexLedger = vi.fn(async () => indexOf(ledger)), observePool = vi.fn(async () => true);
+    const app = new MonitorApplication({ now: () => NOW, indexLedger, readLedger, readShown, describeService, readConfigFreshness, readImageRefresh, observeScope, observePool });
     const selected = { id: 'current', path: '/fixture/current' }, poison = { id: 'poison', path: '/fixture/poison' };
     const value = await app.inspect([selected, poison], { schemaVersion: 1, install: 'current' });
     expect(value.sourcesRead).toEqual(['current']); expect(Object.isFrozen(value.sourcesRead)).toBe(true);
-    for (const port of [readLedger, readShown, describeService, readConfigFreshness, readImageRefresh, observeScope]) {
+    for (const port of [indexLedger, readLedger, readShown, describeService, readConfigFreshness, readImageRefresh, observeScope]) {
       expect(port).toHaveBeenCalledTimes(1);
       expect(port.mock.calls.map(call => (call as readonly unknown[])[0])).toEqual([selected]);
     }
@@ -200,6 +204,9 @@ describe('monitor application over ports', () => {
         if (target.id === 'current') return { schemaVersion: 1, instanceId: 'i-1', shutdownAvailable: false, identity: null, processId: 42, build: { sourceTreeSha256: 'c'.repeat(64), sourceCommit: 'd'.repeat(40) } };
         throw failure(target.id === 'stopped' ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'RUNTIME_SERVICE_TRANSPORT');
       },
+      async indexLedger(target) { return indexOf(await this.readLedger(target, { scopeIds: [], poolIds: [] })); },
+      // The composition asks the install's own configured scope too; this fake allows a pool on any admitted scope, or on the fresh install.
+      async observePool(target, _poolId, scopeIds) { return scopeIds.length > 0 || target.id === 'empty'; },
       async readLedger(target) { if (target.id === 'broken') throw failure('MANAGED_FILE_MISSING'); return target.id === 'empty' ? { ...reading([]), runs: [], approvals: [] } : reading(['hidden', 's']); },
       async observeScope(target, scopeId) {
         if (scopeId === 'hidden') return { access: 'denied', workers: [], workerStatus: 'denied', truncated: false };
@@ -224,7 +231,7 @@ describe('monitor application over ports', () => {
     expect(flaky!.diagnostics).toContain('scope-unavailable:s:POLICY_UNAVAILABLE');
     // Without the approval list decision the approval stays visible (it blocks a Run) but its summary text is withheld.
     expect(quiet!.approvals).toMatchObject([{ approvalId: 'ap-a', summary: '' }]); expect(quiet!.diagnostics).toContain('approvals-denied:s');
-    // A ledger with no scope yet (fresh install) still shows its installation-wide pools.
+    // A ledger with no scope yet (fresh install) shows its pools when the viewer's own pool decision allows them.
     expect(empty).toMatchObject({ status: 'available', scopeIds: [], runs: [], pools: [{ poolId: 'p', held: true }] });
   });
   it('keeps every open worker and only the most recent finished ones (by sealed log, else launch grant)', async () => {
@@ -235,7 +242,8 @@ describe('monitor application over ports', () => {
       terminal: i === 25 ? null : { exitCode: 0, signal: null, interrupted: false } } }));
     const observed = ids.map((id, i) => ({ ...worker(id, 'fresh'), terminal: i === 25 ? null : { handle: 'h', exitCode: 0, interrupted: false } }));
     const stranger = { ...worker('zz', 'stale'), terminal: { handle: 'h', exitCode: 1, interrupted: false } };
-    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); },
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); }, ...allPools,
+      indexLedger: async function () { return indexOf(await this.readLedger({ id: '', path: '' }, { scopeIds: [], poolIds: [] })); },
       readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [{ snapshot: run, poolId: null, admitted: true, createdAtMs: 1, attempts }] }),
       observeScope: async () => ({ access: 'admitted', workers: [stranger, ...observed], workerStatus: 'available', truncated: false }) });
     const install = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!;
@@ -283,7 +291,8 @@ describe('monitor v1.1 projection and ordering', () => {
     const ledgerOnly = { ...worker('a', 'fresh'), identity: { ...identity('a'), runId: 'old', attemptId: 'a-old' }, provider: 'unknown', process: 'unknown' as const, files: null,
       terminal: { handle: 'h', exitCode: 0, interrupted: false }, diagnostics: ['info:ledger-only'] };
     const live = { ...worker('a', 'fresh'), identity: { ...identity('a'), runId: 'new', attemptId: 'a-new' } };
-    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); },
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); }, ...allPools,
+      indexLedger: async function () { return indexOf(await this.readLedger({ id: '', path: '' }, { scopeIds: [], poolIds: [] })); },
       readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [
         { snapshot: bind(older, 'a-old'), poolId: null, admitted: true, createdAtMs: 1, attempts: [oldAttempt] },
         { snapshot: bind(newer, 'a-new'), poolId: null, admitted: true, createdAtMs: 2, attempts: [newAttempt] }] }),
@@ -345,7 +354,8 @@ it('H1 binds title/usage/result to the full attempt identity; another generation
     patch: { state: 'recorded' as const, files: ['note.txt'], fileCount: 1, truncated: false, baseCommit: 'a'.repeat(40) }, finalReport: null };
   for (const changed of [{}, { generation: 2 }, { taskId: 'other' }, { runId: 'other' }, { layoutRevision: 'other' }, { scopeId: 'other' }]) {
     const value = { ...worker('a', 'fresh'), identity: { ...identity('a'), ...changed } };
-    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw Object.assign(new Error(), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); },
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw Object.assign(new Error(), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); }, ...allPools,
+      indexLedger: async function () { return indexOf(await this.readLedger({ id: '', path: '' }, { scopeIds: [], poolIds: [] })); },
       readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [evidence(run, [exited('a', { content, evaluationObserved: true })]).run] }),
       observeScope: async () => ({ access: 'admitted', workers: [value], workerStatus: 'available', truncated: false }) });
     const human = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!.workers[0]!.human!;
@@ -363,7 +373,8 @@ it.each(['decided', 'expired'] as const)('recorded %s approval never becomes wai
   expect(blocker(evidence(snapshot([{ id: 'a' }]), [], { approvals: [{ ...approval('a'), status }] }))?.code).toBe('none');
 });
 it('monitor JSON retains expired approval evidence with a status field derived at observation time', async () => {
-  const app = new MonitorApplication({ now: () => NOW, readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], runs: [], pools: [], diagnostics: [],
+  const app = new MonitorApplication({ now: () => NOW, ...allPools, indexLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], poolIds: [] }),
+    readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], runs: [], pools: [], diagnostics: [],
     approvals: [{ ...approval('a'), expiresAtMs: NOW }, approval('b'), { ...approval('c'), status: 'decided' as const }] }),
     describeService: async () => { throw Object.assign(new Error('offline'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); },
     observeScope: async () => ({ access: 'admitted', workers: [], workerStatus: 'available', truncated: false, approvals: true }) });

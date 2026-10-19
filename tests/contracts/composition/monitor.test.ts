@@ -47,6 +47,8 @@ async function project(root: string, name: string, scopes: readonly string[], gr
     ...(extra.includes('runs') ? [{ id: 'runs', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'run', ids: 'all' } }] : []),
     ...(extra.includes('output') ? [{ id: 'output', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['read-output'], resource: { kind: 'attempt', ids: 'all' } }] : []),
     ...(extra.includes('approvals') ? [{ id: 'approvals', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'approval', ids: [...granted] } }] : []),
+    // M-VIS: the monitor shows a pool only on the viewer's `pool inspect` allow (the first-run owner holds it); negatives in monitor-pool-visibility.test.ts.
+    { id: 'pools', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'pool', ids: 'all' } },
   ] }), { mode: 0o600 });
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {

@@ -54,6 +54,7 @@ async function parallelProducer(workers: readonly MonitorWorker[], unrelatedDeci
   const attempts: MonitorLedgerAttempt[] = ['first', 'second'].map(taskId => ({ attemptId: identity(taskId).attemptId, generation: 1, observedKind: null, observedRevision: null,
     evaluationObserved: false, reservedAtMs: 100, sealedAtMs: null, dispatch: { launch: 'granted', grantedAtMs: 100, terminal: null, outputRecorded: false } }));
   const app = new MonitorApplication({ now: () => 300, describeService: async () => { throw Object.assign(new Error(), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); },
+    indexLedger: async () => ({ ledgerVersion: 44, scopeIds: ['scope-parallel'], poolIds: [] }), observePool: async () => true,
     readLedger: async () => ({ ledgerVersion: 44, diagnostics: [], scopeIds: ['scope-parallel'], approvals: [], pools: [], runs: [{ snapshot, admitted: true, poolId: null, createdAtMs: 0, attempts }] }),
     observeScope: async () => ({ access: 'admitted', workers, workerStatus: 'available', truncated: false }) });
   return app.inspect([{ id: 'current', path: '/fixture' }]);

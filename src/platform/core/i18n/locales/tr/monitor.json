@@ -139,5 +139,6 @@
   "acceptance.ceiling.missing-evidence": "eksik kanıt",
   "acceptance.ceiling.unsettled-effect": "çözülmemiş etki",
   "acceptance.ceiling.missing-approval": "eksik onay",
-  "monitor.detail.workspaceStartedFromPatch": "{source} görevinin kabul edilmiş patch’inden başlatıldı (deneme {attempt}, patch özeti {digest})"
+  "monitor.detail.workspaceStartedFromPatch": "{source} görevinin kabul edilmiş patch’inden başlatıldı (deneme {attempt}, patch özeti {digest})",
+  "monitor.pool.hidden": "Diğer işler: {count} havuz gösterilmiyor (havuz inceleme izni yok)."
 }

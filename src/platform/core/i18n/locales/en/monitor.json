@@ -139,5 +139,6 @@
   "acceptance.ceiling.missing-evidence": "missing evidence",
   "acceptance.ceiling.unsettled-effect": "unsettled effect",
   "acceptance.ceiling.missing-approval": "missing approval",
-  "monitor.detail.workspaceStartedFromPatch": "started from accepted patch of {source} (attempt {attempt}, patch digest {digest})"
+  "monitor.detail.workspaceStartedFromPatch": "started from accepted patch of {source} (attempt {attempt}, patch digest {digest})",
+  "monitor.pool.hidden": "Other work: {count} pool(s) not shown (no pool inspect permission)."
 }

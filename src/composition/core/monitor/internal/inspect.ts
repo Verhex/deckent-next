@@ -1,8 +1,8 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { listSurfaceRunIds, prepareMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
-import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
+import { indexMonitorInstall, listSurfaceRunIds, prepareMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
+import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, PoolControlPolicyAuthorization, assertPoolControlAllowed, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -22,6 +22,7 @@ export async function* followLedgerSurface(root: string, scopeId: string, option
   if (signal.aborted) return; const authorize = () => authorizeSurfaceRead(root, scopeId, options), initial = await authorize();
   if (!initial) { yield { access: 'denied' as const, scopeId, kinds: ['approval', 'run', 'worker'] as const, stopped: true }; return; } if ('access' in initial) { yield initial; return; }
   yield* readLedgerSurface(initial, async () => { const current = await authorize(); return current && !('access' in current) ? current : null; }, signal, onReady); }
+type ResolvedInstall = { readonly config: Awaited<ReturnType<typeof loadComposedConfig>>; readonly home: readonly string[] };
 export async function inspectMonitor(root: string, options: ConfigLoadOptions = {}, query: MonitorQuery = { schemaVersion: 1 }): Promise<MonitorSnapshot> {
   const selection = monitorQuerySchema.parse(query);
   const config = await loadComposedConfig(root, { ...options, heal: false }).catch(error => { throw queryFailure(error); });
@@ -29,16 +30,25 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
     .map(source => ({ id: source.id, path: resolve(source.path) }))];
   const contexts = new Map<string, ReturnType<typeof loadConfiguredScopeContext>>(), scope = (path: string, scopeId: string) => contexts.get(`${path}\0${scopeId}`)
     ?? contexts.set(`${path}\0${scopeId}`, loadConfiguredScopeContext(path, scopeId, options, 'read')).get(`${path}\0${scopeId}`)!;
-  const captures = new Map<string, Awaited<ReturnType<typeof prepareMonitorInstall>>>(); return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
+  const captures = new Map<string, Awaited<ReturnType<typeof prepareMonitorInstall>>>(), installs = new Map<string, Promise<ResolvedInstall>>();
+  // One config load per target and inspection; its own configured scopes (service, terminal) are where `pool status` asks too.
+  const installed = (path: string) => installs.get(path) ?? installs.set(path, loadComposedConfig(path, { ...options, heal: false }).then(value => ({ config: value, home: [
+    ...(value.service.identity?.scopeId ? [value.service.identity.scopeId] : []), ...((value['terminal'] as { scopeId?: string } | undefined)?.scopeId ? [(value['terminal'] as { scopeId: string }).scopeId] : [])] }))).get(path)!;
+  return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadComposedConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
     readImageRefresh: target => inspectToolchainRefresh(target.path, options),
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
-    readLedger: async target => { const installed = await loadComposedConfig(target.path, { ...options, heal: false });
-      const captured = await prepareMonitorInstall(installed, options.env, identity => granted(async () => {
-        const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c, c.document).authorizeIdentity('read-output', identity, c.principal); }));
-      const reading = captured.reading; const ceiling = installed.max_workers === 'auto' ? Infinity : installed.max_workers;
-      const modelScopes = [...new Set([...reading.scopeIds, ...(installed.service.identity?.scopeId ? [installed.service.identity.scopeId] : []),
-        ...((installed['terminal'] as { scopeId?: string } | undefined)?.scopeId ? [(installed['terminal'] as { scopeId: string }).scopeId] : [])])];
+    indexLedger: async target => indexMonitorInstall((await installed(target.path)).config),
+    // M-VIS: allowed when the viewer's `pool inspect` decision allows in any admitted or own configured scope (same decision as `pool status`).
+    observePool: async (target, poolId, scopeIds) => { const { home } = await installed(target.path);
+      for (const scopeId of new Set([...scopeIds, ...home])) if (await granted(async () => { const c = await scope(target.path, scopeId);
+        assertPoolControlAllowed(await new PoolControlPolicyAuthorization({ async load() { return c.document; } }).decide('inspect', poolId, scopeId, c.principal)); })) return true;
+      return false; },
+    readLedger: async (target, readScope) => { const { config: installedConfig, home } = await installed(target.path);
+      const captured = await prepareMonitorInstall(installedConfig, options.env, identity => granted(async () => {
+        const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c, c.document).authorizeIdentity('read-output', identity, c.principal); }), undefined, readScope);
+      const reading = captured.reading, ceiling = installedConfig.max_workers === 'auto' ? Infinity : installedConfig.max_workers;
+      const modelScopes = [...new Set([...readScope.scopeIds, ...home])];
       const models: import('#engine/index.js').MonitorMap['models'][number][] = [];
       const modelDiagnostics: string[] = [];
       for (const scopeId of modelScopes) {
@@ -49,7 +59,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
             scopeId, active: model.availability.invocable, availability: model.availability });
         } catch (error) { modelDiagnostics.push(`model-state-unavailable:${queryFailure(error).code}`); }
       }
-      const effective = { ...reading, runs: reading.runs.map(run => ({ ...run, costComparison: { registry: installed.admission?.registry, policy: installed.resourceObservation.recommendation } })), pools: reading.pools.map(pool => ({ ...pool,
+      const effective = { ...reading, runs: reading.runs.map(run => ({ ...run, costComparison: { registry: installedConfig.admission?.registry, policy: installedConfig.resourceObservation.recommendation } })), pools: reading.pools.map(pool => ({ ...pool,
         capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })),
         ...(reading.map ? { map: { ...reading.map, models } } : {}), diagnostics: [...reading.diagnostics, ...modelDiagnostics] };
       captures.set(target.path, { ...captured, reading: effective }); return effective; },

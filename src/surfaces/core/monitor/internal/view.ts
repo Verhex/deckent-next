@@ -345,6 +345,12 @@ function poolsBlock(w: Words, entries: readonly Entry<MonitorPool>[]): MonitorBl
   detail: () => [[span(t('monitor.detail.pool', { pool: pool.poolId, install: install.id }, locale), 'strong')], [span(usage(pool))], [held(pool)]] })) };
 }
 
+/** M-VIS: pools the viewer may not `pool inspect` are one bare count (no name, capacity or holder). */
+const hiddenPools = (installs: readonly MonitorInstall[], locale: Locale): MonitorBlock[] => {
+  const count = installs.reduce((sum, install) => sum + (install.hiddenPools ?? 0), 0);
+  return count ? [{ kind: 'line', line: [span(t('monitor.pool.hidden', { count }, locale), 'muted')] }] : [];
+};
+
 function installsBlocks(w: Words, installs: readonly MonitorInstall[]): MonitorBlock[] {
   const { locale, marks, sep } = w;
   const detail = (install: MonitorInstall) => (): readonly MonitorLine[] => [
@@ -449,7 +455,7 @@ export function buildMonitorView(snapshot: MonitorSnapshot, locale: Locale, asci
     summary: [...summaryBlocks(w, installs, runs, stuck, approvals, workers), ...history], runs: [runsBlock(w, runs),
       ...runs.flatMap(({ value: run }) => globalStateLines(projectHumanState({ kind: 'run', value: run }), locale).map(line => ({ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} `), ...line] })))],
     workers: [workersBlock(w, workers, t('monitor.empty.workers', {}, locale))], approvals: [approvalsBlock(w, approvals, false), ...history],
-    pools: [poolsBlock(w, each(installs, install => install.pools))], installs: installsBlocks(w, installs), map: mapBlocks(installs, locale, { active: w.marks.states.accepted, off: w.marks.off, sep: w.marks.sep }),
+    pools: [poolsBlock(w, each(installs, install => install.pools)), ...hiddenPools(installs, locale)], installs: installsBlocks(w, installs), map: mapBlocks(installs, locale, { active: w.marks.states.accepted, off: w.marks.off, sep: w.marks.sep }),
   };
   return { header: headerLines(w, installs), tabs: Object.fromEntries(MONITOR_TABS.map(tab => [tab, tabs[tab]])) as Record<MonitorTab, readonly MonitorBlock[]> };
 }

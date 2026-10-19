@@ -23,7 +23,7 @@ it('WORKER-AUTO-REFRESH monitor: updating and current are notes, a failed refres
 it('the monitor snapshot carries the refresh as typed diagnostics, nothing for unknown, and a failing reader never fails the snapshot', async () => {
   const target = { id: 'current', path: '/fixture/project' };
   const snapshot = async (readImageRefresh?: () => Promise<{ status: 'updating' | 'current' | 'failed' | 'unknown'; reason: string | null; imageVersion: string | null }>) => {
-    const app = new MonitorApplication({ now: () => 1, readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); },
+    const app = new MonitorApplication({ now: () => 1, indexLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); },
       describeService: async () => { throw Object.assign(new Error('x'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); }, observeScope: async () => { throw new Error('unused'); },
       ...(readImageRefresh ? { readImageRefresh } : {}) } as never);
     return (await app.inspect([target])).installs[0]!.diagnostics;
@@ -71,7 +71,7 @@ it('monitor and doctor say "restart required" only for a measured stale service;
   expect(describeDiagnostic('config-restart-required', 'tr')).toMatchObject({ note: false, text: expect.stringContaining('yeniden başlatın') });
   const running = { schemaVersion: 1 as const, instanceId: 'i', shutdownAvailable: false as const, identity: null, configDigest: '0'.repeat(64) };
   const snapshot = async (readConfigFreshness: () => Promise<'current' | 'stale' | 'unknown'>) => (await new MonitorApplication({ now: () => 1,
-    readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, describeService: async () => running, observeScope: async () => { throw new Error('unused'); },
+    indexLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, describeService: async () => running, observeScope: async () => { throw new Error('unused'); },
     readConfigFreshness } as never).inspect([{ id: 'current', path: '/fixture/project' }])).installs[0]!.diagnostics;
   expect(await snapshot(async () => 'stale')).toContain('config-restart-required');
   for (const state of ['current', 'unknown'] as const) expect(await snapshot(async () => state)).not.toContain('config-restart-required');

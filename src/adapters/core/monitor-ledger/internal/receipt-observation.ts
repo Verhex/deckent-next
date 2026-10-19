@@ -6,7 +6,9 @@ type Receipt = NonNullable<MonitorLedgerRun['deliveryReceipts']>[number];
 // First ledger versions of integration, delivery and adoption evidence (schema.ts history).
 const INTEGRATION_VERSION = 30, DELIVERY_VERSION = 32, ADOPTION_VERSION = 33;
 /** Retain the command's full producer identity alongside every receipt, including historical Attempts. */
-export function readDeliveryReceipts(db: DatabaseSync, version: number) {
+export function readDeliveryReceipts(db: DatabaseSync, version: number, scopeIds?: readonly string[]) {
+  // M-VIS: receipts of other scopes are not read when the monitor read is scoped (same `IN (json_each)` form as the reader).
+  const within = scopeIds ? { sql: ' scope_id IN (SELECT value FROM json_each(?))', args: [JSON.stringify(scopeIds)] } : { sql: '', args: [] as string[] };
   const histories = new Map<string, Receipt[]>();
   const put = (row: Record<string, unknown>, state: MonitorDeliveryState, commit: unknown, targetRef: unknown) => {
     let identity;
@@ -19,11 +21,11 @@ export function readDeliveryReceipts(db: DatabaseSync, version: number) {
     histories.set(key, receipts);
   };
   const fields = "scope_id,command_id,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.command.identity.runId') END AS run_id,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.command.identity') END AS identity";
-  if (version >= INTEGRATION_VERSION) for (const row of db.prepare(`SELECT ${fields},manifest FROM workspace_integrations`).all())
+  if (version >= INTEGRATION_VERSION) for (const row of db.prepare(`SELECT ${fields},manifest FROM workspace_integrations${within.sql ? ' WHERE' + within.sql : ''}`).all(...within.args))
     put(row, row.manifest === null ? 'integrating' : 'integrated', null, null);
-  if (version >= DELIVERY_VERSION) for (const row of db.prepare(`SELECT ${fields},delivered,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.ref') END AS target_ref,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.commit') END AS commit_id FROM workspace_deliveries`).all())
+  if (version >= DELIVERY_VERSION) for (const row of db.prepare(`SELECT ${fields},delivered,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.ref') END AS target_ref,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.commit') END AS commit_id FROM workspace_deliveries${within.sql ? ' WHERE' + within.sql : ''}`).all(...within.args))
     put(row, row.delivered === 1 ? 'delivered' : 'delivering', row.commit_id, row.target_ref);
-  if (version >= ADOPTION_VERSION) for (const row of db.prepare(`SELECT ${fields},CASE WHEN json_valid(intent) THEN json_extract(intent,'$.targetRef') END AS target_ref,kind,settled,sequence,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.toCommit') END AS commit_id FROM workspace_adoptions WHERE settled<2 ORDER BY sequence`).all())
+  if (version >= ADOPTION_VERSION) for (const row of db.prepare(`SELECT ${fields},CASE WHEN json_valid(intent) THEN json_extract(intent,'$.targetRef') END AS target_ref,kind,settled,sequence,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.toCommit') END AS commit_id FROM workspace_adoptions WHERE settled<2${within.sql ? ' AND' + within.sql : ''} ORDER BY sequence`).all(...within.args))
     put(row, row.kind === 'rollback' ? (row.settled === 1 ? 'rolled-back' : 'rolling-back') : (row.settled === 1 ? 'adopted' : 'adopting'), row.commit_id, row.target_ref);
   return histories;
 }
