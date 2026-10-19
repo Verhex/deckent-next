@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=258 floor=184 policy=1548 steps=48 uyumlu=1596 İHLAL=0
+ai-floor: routes=262 floor=184 policy=1572 steps=48 uyumlu=1620 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -1245,6 +1245,18 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | decision / fixture-target / record | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | decision / fixture-target / record | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | decision / fixture-target / record | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| execution-environment / fixture-target / install | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| execution-environment / fixture-target / install | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| execution-environment / fixture-target / install | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| execution-environment / fixture-target / install | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| execution-environment / fixture-target / install | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| execution-environment / fixture-target / install | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| installation / fixture-target / repair | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| installation / fixture-target / repair | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| installation / fixture-target / repair | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| installation / fixture-target / repair | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| installation / fixture-target / repair | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| installation / fixture-target / repair | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | mcp-server / fixture-target / invoke | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | mcp-server / fixture-target / invoke | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | mcp-server / fixture-target / invoke | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1299,6 +1311,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | model-invocation / fixture-target / purge-content | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | model-invocation / fixture-target / purge-content | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | model-invocation / fixture-target / purge-content | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| monitor / fixture-target / inspect-scope-diagnostics | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| monitor / fixture-target / inspect-scope-diagnostics | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| monitor / fixture-target / inspect-scope-diagnostics | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| monitor / fixture-target / inspect-scope-diagnostics | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| monitor / fixture-target / inspect-scope-diagnostics | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| monitor / fixture-target / inspect-scope-diagnostics | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | operation / fixture-target / compensate | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | operation / fixture-target / compensate | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | operation / fixture-target / compensate | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1353,6 +1371,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | permission-mode / standart / set | mode | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | permission-mode / standart / set | mode | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | permission-mode / standart / set | mode | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| policy / fixture-target / inspect-standing-grants | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| policy / fixture-target / inspect-standing-grants | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| policy / fixture-target / inspect-standing-grants | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| policy / fixture-target / inspect-standing-grants | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| policy / fixture-target / inspect-standing-grants | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| policy / fixture-target / inspect-standing-grants | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | pool / fixture-target / hold | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | pool / fixture-target / hold | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | pool / fixture-target / hold | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1629,14 +1653,14 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `75be554942eb2071ad95900a4a828418c5cc04e681be4aa7c40fc3fc820a8d7d`
-- `src/domain/core/policy/internal/first-run-template.ts`: `60d7ea9b997092e4acc7bfaee8365844502e9be6e88ac6dd68bebebebf868051`
+- `src/domain/core/policy/internal/first-run-template.ts`: `b188825c5768c80c986caf9e7e5680711e655928a101a1d3fb061c6b75e2415a`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `ea7d39a53c386e5d8a16c64f52cfad9466355450d63786b7412d08954f498827`
 - `src/domain/core/policy/internal/schema.ts`: `7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c`
 - `src/domain/core/policy/internal/scope.ts`: `7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
-- `src/domain/core/policy/internal/vocabulary.ts`: `4e4624e0cbf60a0373b4d7a3f63d70cd296f61db68cf932de95913bb37d477d8`
+- `src/domain/core/policy/internal/vocabulary.ts`: `188637ad5d40fcbcc7eccbc4b13bb7e31a08355751b1c563cea0258b5bff61b2`
 - `src/domain/core/primitives/index.ts`: `6563d5ec8a552726681800698c8ac01024eebfafa4a6212ccc6d7cf638e30ce3`
 - `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
 - `src/domain/core/primitives/internal/installation-identity.ts`: `28612d8f2f00382172bb96cdfa8e5d35d4d2175620ab49dd702c3e4184db8ab7`

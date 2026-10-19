@@ -5,8 +5,8 @@ import { effectWireKey } from '#engine/core/effect/index.js';
 import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
-/** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`). */
-const FIRST_RUN_DELTA_VERSION = 11;
+/** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`; owner A48-D3, D3c). */
+const FIRST_RUN_DELTA_VERSION = 13;
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
@@ -33,7 +33,9 @@ export class PolicyTemplateUpgrade {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve'> & { readonly policy: PersistentStandingDependencies['policy'] & Partial<AuthorityHistorySource> },
     private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string;
       /** v12: the installation's configured runtime service id of the scope (Astra 2596: never a guessed default when one is configured). */
-      readonly serviceId?: string }) {}
+      readonly serviceId?: string;
+      /** v13: the execution-environment registry ids the template's install rule names (the installer's pinned list). */
+      readonly executionEnvironmentIds: readonly string[] }) {}
   private async snapshot() { return policySchema.parse(await this.deps.policy.load()); }
   private missing(policy: ReturnType<typeof policySchema.parse>, principal: VerifiedPrincipal, scopeId: string, touched: Parameters<typeof delegationWithin>[2]): TemplateUpgradeMissing[] {
     const out: TemplateUpgradeMissing[] = [];
@@ -43,8 +45,8 @@ export class PolicyTemplateUpgrade {
     return out;
   }
   private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
-    // The installer's upgrade key names the template version it ran under. The rolled-back delta is v11's, so a v11 delta the installer added under
-    // v11 or any later version is this upgrade's (POLICY-V12: the v12 bump must not orphan v11 upgrades already on disk).
+    // The installer's upgrade key names the template version it ran under. The rolled-back delta is v13's, so a v13 delta the installer added under
+    // v13 or any later version is this upgrade's (POLICY-V12: a later bump must not orphan delta upgrades already on disk).
     const installer = /^policy-template-upgrade-v(\d+)-([a-f0-9]{64})$/.exec(entry.key ?? '');
     if (installer && Number(installer[1]) >= FIRST_RUN_DELTA_VERSION && Number(installer[1]) <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
     if (entry.before.schemaVersion !== 2) return false;
@@ -77,7 +79,7 @@ export class PolicyTemplateUpgrade {
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId);
+      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, this.names);
       const history = await this.deps.policy.authorityHistory?.();
       if (!history || history.length === 0) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
       // Follow exact effective revisions back from the snapshot, never infer provenance from an id or current template alone.

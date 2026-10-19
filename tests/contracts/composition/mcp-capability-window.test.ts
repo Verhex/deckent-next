@@ -22,7 +22,8 @@ async function fixture(shape: 'template' | 'hand-built' | 'live-shape' | 'n1-sha
   await trace(`fixture ${shape}: before runtime`);
   const f = await runtime(), template = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
     scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',
-    shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
+    shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer',
+    executionEnvironmentIds: ['docker'] });
   await trace(`fixture ${shape}: runtime created`);
   const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
   delete config.provider_spending; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
@@ -142,7 +143,7 @@ describe.skipIf(process.platform !== 'linux')('selection-only MCP capability adm
   it('the existing governed template rollback preserves named MCP capability rules and those rules remain revocable', async () => {
     const { f, body, read, preview, apply, audits } = await fixture();
     // Version-delta rollback (alpha.35 P0) removes only rules an archived template upgrade added, never rules inferred from ids alone:
-    // start from the v10 shape and take the v11 delta through the same governed upgrade, so the archive holds real provenance.
+    // start from the pre-delta shape and take the current (v13) delta through the same governed upgrade, so the archive holds real provenance.
     const ids = new Set<string>(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS), older = body.grants.filter(grant => !ids.has(grant.id));
     expect(older).toHaveLength(body.grants.length - ids.size);
     await writeFile(join(f.data, 'policy.json'), JSON.stringify({ ...body, revision: 'first-run-template-v10', grants: older }), { mode: 0o600 });
