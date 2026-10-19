@@ -171,5 +171,14 @@
   "cli.workers.validScopes": "{scope} scope'u burada okuyabildiğiniz bir scope değil. Geçerli scope'lar: {scopes}",
   "doctor.check.audit.noCheckpoint": "Audit zinciri: henüz kontrol noktası yok, karşılaştırılacak bir şey yok",
   "doctor.check.toolchains.notAdmitted": "{provider}: bu kurulumda kabul edilmiş sürüm yok, karşılaştırılacak bir şey yok",
-  "doctor.check.toolchains.disabled": "{provider}: sürüm kontrolü burada kapalı ya da karşılaştırılacak bir şey yok"
+  "doctor.check.toolchains.disabled": "{provider}: sürüm kontrolü burada kapalı ya da karşılaştırılacak bir şey yok",
+  "doctor.firstJob.header": "İlk işten (/do) önce, bu sırayla yapılacaklar:",
+  "doctor.firstJob.ready": "Worker imajı, kayıt ve havuz kurulu: ilk iş için hazır.",
+  "doctor.firstJob.workerImage": "Deckent kaynak kodunda bir worker imajı oluşturun (Docker gerekir; imaj kimliğini yazar)",
+  "doctor.firstJob.execution": "İşin nerede çalışacağını söyleyin: o imaj kimliği ile docker ve git yolları (command -v docker, command -v git)",
+  "doctor.firstJob.registry": "İlk iş türünü ve worker havuzunu tanımlayın: önce önizleme, sonra aynı komut --apply ile",
+  "doctor.firstJob.pool": "Worker havuzunu kurun: önce önizleme, sonra aynı komut --apply ile",
+  "doctor.firstJob.next": "{step}; komut: {command}",
+  "doctor.check.pool.missing": "Worker havuzu yapılandırılmış ama henüz kurulmamış: Run'lar worker başlatamaz",
+  "doctor.poolReadiness.status.missing": "yapılandırılmış, henüz kurulmamış"
 }

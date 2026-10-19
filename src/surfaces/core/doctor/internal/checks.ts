@@ -2,6 +2,7 @@ import { t, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
 import registry from './doctor.json' with { type: 'json' };
+import { firstJobCommand, firstJobSteps, firstJobTitle } from './first-job.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
 export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools';
@@ -21,7 +22,10 @@ export interface DoctorCheckFacts {
   readonly backupPassphraseStored: boolean | null;
   /** Active models whose catalog lifecycle is past `active` (registry `retirementStates`); null when the catalog could not be read. */
   readonly retiringModels: readonly Readonly<{ modelId: string; channelId: string; state: string; date: string | null }>[] | null;
-  readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured';
+  /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
+  readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured' | 'missing';
+  /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
+  readonly firstJob?: Readonly<{ execution: boolean; registry: boolean }> | null;
   readonly toolchainUpdateEnabled: boolean;
 }
 
@@ -95,8 +99,11 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
+  // Not set up yet (no registry, or no ledger row): a warning naming the first missing first-job step, the same ordered list `deckent init` shows.
+  const first = firstJobSteps({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId)[0];
   rows.push(f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
-    : f.poolStatus === 'unconfigured' ? row('work', 'work.pool', 'warning', t('doctor.check.pool.unconfigured', {}, l), scoped('deckent init pool', f))
+    : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
+      f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), t('doctor.firstJob.next', { step: firstJobTitle(first, l), command: firstJobCommand(first) }, l))
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'

@@ -47,7 +47,8 @@ describe('doctor rows (pure)', () => {
     expect(text).toContain('uyarı      Kimlik profili seçilmemiş');
     // Lead J3 (I-S3 Q2): the next step is the command that writes the fact, never a bare `deckent init` that cannot (no loop).
     expect(checks.find(row => row.id === 'setup.identity')?.next).toBe('deckent config set identity.profile --global');
-    expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toBe('deckent init pool --scope live');
+    // I-S7: no registry yet → the first missing first-job step (the registry, which also names the pool), never `init pool` without --preview|--apply (CLI_USAGE).
+    expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toMatch(/^İlk iş türünü ve worker havuzunu tanımlayın: .*; komut: deckent init registry --scope live --provider /u);
     expect(text).toContain('uyarı      Kurulum klasörü başka kullanıcılara açık (mod 0755)');
     expect(text).toContain('sonraki adım: chmod 700 /home/me/.deckent');
     expect(text).toContain('Yedek parolası bu kurulumun içinde saklanıyor'); // J2e: owner wording, joined with C-ADMIN's backup line

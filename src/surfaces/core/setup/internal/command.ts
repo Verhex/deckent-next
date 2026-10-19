@@ -71,7 +71,7 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
       stdin.pause();
     } while (await controller.runPending());
     const outcome = controller.outcome();
-    emit(renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }), sinks);
+    emit(renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }, outcome.firstJob), sinks);
     return;
   }
   let plan = planFor(observed, unattendedAnswers(observed.observation, flags, false));
@@ -87,8 +87,8 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
     plan = planFor(observed, unattendedAnswers(observed.observation, flags, false));
   }
   const outcome = { requested: flags.yes, results };
-  if (format === 'json') emit(setupDocument(plan, outcome), { ...sinks, json: true });
-  else emit(renderSetupLines(plan, locale, outcome), sinks);
+  if (format === 'json') emit(setupDocument(plan, outcome, observed.firstJob), { ...sinks, json: true });
+  else emit(renderSetupLines(plan, locale, outcome, observed.firstJob), sinks);
   if (results.some(result => result.status === 'not-wired')) throw ErrorRegistry.createError('SETUP_APPLY_UNAVAILABLE');
   // A refused stage (no terminal, no witness, no grant): typed, naming the stage; nothing after it was attempted.
   const refused = results.find(result => result.status === 'refused');

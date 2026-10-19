@@ -22,6 +22,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const catalog = context.inspectModelCatalog && scopeId ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   return {
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
+    firstJob: { execution: !!config.execution?.docker, registry: !!config.admission?.registry }, // I-S7: the first-job steps doctor names
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays),

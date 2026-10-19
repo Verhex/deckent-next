@@ -171,5 +171,14 @@
   "cli.workers.validScopes": "Scope {scope} is not one you can read here. Valid scopes: {scopes}",
   "doctor.check.audit.noCheckpoint": "Audit chain: no checkpoint yet, so there is nothing to verify against",
   "doctor.check.toolchains.notAdmitted": "{provider}: no version is admitted in this installation, nothing to compare",
-  "doctor.check.toolchains.disabled": "{provider}: version check is off here or has nothing to compare"
+  "doctor.check.toolchains.disabled": "{provider}: version check is off here or has nothing to compare",
+  "doctor.firstJob.header": "Before the first job (/do), still to do, in this order:",
+  "doctor.firstJob.ready": "Worker image, registry and pool are set up: ready for the first job.",
+  "doctor.firstJob.workerImage": "Build a worker image in the Deckent source checkout (needs Docker; it prints the image id)",
+  "doctor.firstJob.execution": "Tell Deckent where work runs: that image id and the docker and git paths (command -v docker, command -v git)",
+  "doctor.firstJob.registry": "Declare the first work kind and its worker pool: preview, then the same command with --apply",
+  "doctor.firstJob.pool": "Set up the worker pool: preview, then the same command with --apply",
+  "doctor.firstJob.next": "{step}: {command}",
+  "doctor.check.pool.missing": "The worker pool is configured but not set up yet: Runs cannot start workers",
+  "doctor.poolReadiness.status.missing": "configured, not set up yet"
 }

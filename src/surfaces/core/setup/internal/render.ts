@@ -1,16 +1,19 @@
 import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
+import { firstJobLines, firstJobSteps, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import type { SetupApplyResult } from './contract.js';
 
 /** The versioned `deckent init --json` document (I-S4): locale-free (message keys and their parameters), so an AI or script reads the same
  * contract in every language. `cli` is the exact long command for a stage; `apply` lists what `--yes` tried and how each attempt ended. */
 export const SETUP_DOCUMENT_SCHEMA_VERSION = 1 as const;
 export type SetupDocument = ReturnType<typeof setupDocument>;
-export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>) {
+export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>, firstJob?: FirstJobFacts) {
   return { schemaVersion: SETUP_DOCUMENT_SCHEMA_VERSION, planSchemaVersion: plan.schemaVersion, planDigest: plan.planDigest, registryDigest: plan.registryDigest,
     stages: plan.stages.map(stage => ({ id: stage.id, namespace: stage.namespace, state: stage.state, title: stage.title, reason: stage.reason, question: stage.question,
       default: stage.default, cli: stage.cli, operation: stage.operation, autoEligible: stage.autoEligible })),
-    apply: { requested: apply.requested, results: apply.results } };
+    apply: { requested: apply.requested, results: apply.results },
+    // I-S7 (additive): the steps the first job still needs, in order, with their exact argv ([] = ready); absent when no first-job facts were observed.
+    ...(firstJob ? { firstJob: firstJobSteps(firstJob, setupScope(plan)).map(step => ({ id: step.id, title: step.title, cli: step.argv })) } : {}) };
 }
 
 /** A message the plan names by key (stage titles, reasons, questions are message keys of the setup contract): read from the shared
@@ -34,11 +37,13 @@ export function stageText(plan: SetupPlan, key: string, params: Readonly<Record<
   }));
   return setupMessage(key, shown, locale);
 }
+/** The installation's scope as the folder stage reports it (configured or answered), else none. */
+export const setupScope = (plan: SetupPlan) => { const value = plan.stages.find(stage => stage.id === 'core:folder')?.reason.params['scope']; return typeof value === 'string' && value ? value : null; };
 export const stageTitle = (stage: SetupStage, locale: Locale) => setupMessage(stage.title, {}, locale);
 export const stageCommand = (stage: SetupStage) => stage.cli ? stage.cli.map(part => terminalSafeText(part)).join(' ') : null;
 
 /** Plain lines for a pipe or a dumb terminal (and the summary after the window closes): no colour, no cursor movement, one stage per block. */
-export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>): string {
+export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>, firstJob?: FirstJobFacts): string {
   const lines = [t('setup.render.header', { digest: plan.planDigest.slice(0, 12) }, locale)];
   plan.stages.forEach((stage, index) => {
     lines.push(`${index + 1}. ${stageTitle(stage, locale)} · ${stateLabel(stage.state, locale)} · ${stageText(plan, stage.reason.code, stage.reason.params, locale)}`);
@@ -50,5 +55,6 @@ export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonl
     : result.status === 'applied' ? t('setup.apply.applied', { stage: terminalSafeText(result.stage) }, locale)
     : t('setup.apply.refused', { stage: terminalSafeText(result.stage), code: terminalSafeText(result.code ?? '-') }, locale));
   if (!apply.results.some(result => result.status === 'applied')) lines.push(apply.requested ? t('setup.render.nothingAppliedYes', {}, locale) : t('setup.render.nothingApplied', {}, locale));
+  if (firstJob) lines.push('', ...firstJobLines(firstJobSteps(firstJob, setupScope(plan)), locale));
   return lines.join('\n');
 }

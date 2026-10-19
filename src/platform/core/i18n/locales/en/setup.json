@@ -175,5 +175,6 @@
   "setup.foreground.upgradeBody": "These first-run rules are added in scope {scope}; every existing rule is kept and the previous documents are archived:",
   "setup.foreground.upgradeApply": "Add these rules",
   "setup.foreground.notApplied": "Nothing was changed.",
-  "error.SETUP_STAGE_REFUSED": "Setup stopped at the stage {stage} ({code}); nothing after it was applied. A stage that needs a person (a terminal, a card or sudo) runs only in deckent init on a terminal."
+  "error.SETUP_STAGE_REFUSED": "Setup stopped at the stage {stage} ({code}); nothing after it was applied. A stage that needs a person (a terminal, a card or sudo) runs only in deckent init on a terminal.",
+  "setup.firstJob.window": "Before the first job: {step}"
 }
