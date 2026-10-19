@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision } from '#composition/index.js';
+import { listConfiguredDecisions } from '#composition/core/decision/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity, decisionHttpAdapter } from '#adapters/index.js';
 import { modelInvocationTargetId } from '#engine/index.js';
@@ -163,4 +164,14 @@ it('real below-threshold advice renders choice probability versus threshold sepa
   expect(stdout).not.toContain(language==='en'?'no automatic paid retry':'otomatik ücretli');
  }
  expect(f.requests()).toBe(1);
+});
+// C-APPROVE: the real sealed store lists a scope's decisions newest first, read-only, under the decision port's `inspect` grant.
+it('lists recent decisions from the sealed store newest first and needs the inspect grant',async()=>{
+ const f=await fixture(undefined,true),options={env:f.env};
+ await askConfiguredDecision(f.project,f.command,options);await askConfiguredDecision(f.project,{...f.command,commandId:'ask-2'},options);
+ const list=await listConfiguredDecisions(f.project,{schemaVersion:1,scopeId:'scope',limit:10},options);
+ expect(list.items.map(item=>item.decisionId)).toEqual(['ask-2','ask']);expect(list.items[0]).toMatchObject({status:'advised',case:{objective:'Choose safe action'}});
+ expect((await listConfiguredDecisions(f.project,{schemaVersion:1,scopeId:'scope',limit:1},options)).items.map(item=>item.decisionId)).toEqual(['ask-2']);
+ await f.setPolicy(true,['prepare','ask','record','outcome']);clearConfigCache();
+ await expect(listConfiguredDecisions(f.project,{schemaVersion:1,scopeId:'scope',limit:10},options)).rejects.toMatchObject({code:'POLICY_DENIED'});
 });

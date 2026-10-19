@@ -1,0 +1,69 @@
+{
+  "list": {
+    "limit": 20
+  },
+  "examples": {
+    "prepare": {
+      "schemaVersion": 1,
+      "case": {
+        "schemaVersion": 1,
+        "objective": "<what to decide>",
+        "scope": "live",
+        "revision": "<case revision>",
+        "constraints": [],
+        "unknowns": [],
+        "evidence": [],
+        "options": [
+          {
+            "id": "option-a",
+            "action": "<what option A does>",
+            "tradeoffs": [],
+            "evidenceIds": []
+          }
+        ],
+        "checks": [],
+        "process": {
+          "stage": "<stage>",
+          "currentState": "<state>",
+          "acceptedDecisions": [],
+          "nextStep": "<next step>",
+          "reopenReason": null
+        }
+      }
+    },
+    "ask": {
+      "schemaVersion": 1,
+      "commandId": "<new unique id>",
+      "scopeId": "live",
+      "case": "<the prepared case>",
+      "invocation": {
+        "reference": "<model reference>",
+        "catalogRevision": "<catalog revision>",
+        "expectedBinding": "<binding>"
+      }
+    },
+    "record": {
+      "schemaVersion": 1,
+      "scopeId": "live",
+      "decisionId": "<decision id>",
+      "commandId": "<new unique id>",
+      "selectedOption": "option-a",
+      "rationale": "<why>"
+    },
+    "outcome": {
+      "schemaVersion": 1,
+      "scopeId": "live",
+      "decisionId": "<decision id>",
+      "commandId": "<new unique id>",
+      "outcome": {
+        "observedAt": "2026-10-19T12:00:00Z",
+        "observation": "<what happened>"
+      }
+    },
+    "inspect": {
+      "schemaVersion": 1,
+      "scopeId": "live",
+      "decisionId": "<decision id>"
+    }
+  }
+}

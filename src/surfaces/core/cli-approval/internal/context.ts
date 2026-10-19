@@ -5,7 +5,7 @@ import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js
 import type { PolicyUpgradeHandler, StandingGrantsHandler, StandingRevokeHandler } from './policy-grants.js';
 
 /** The host operations the `approval` and `policy` commands use; the CLI's full command context satisfies it. */
-export interface ApprovalCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'decideApproval' | 'listApprovals' | 'mcpCapabilities' | 'delegations'> {
+export interface ApprovalCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'decideApproval' | 'listApprovals' | 'mcpCapabilities' | 'delegations' | 'configChoiceSources'> {
   renewApproval?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.

@@ -23,6 +23,9 @@ class SqliteDecisionStore implements DecisionStore {
  private read(scopeId:string,decisionId:string){const row=this.db.prepare('SELECT snapshot FROM decision_cases WHERE scope_id=? AND decision_id=?').get(scopeId,decisionId);
   if(!row)return null;const value=validateDecisionSnapshot(this.decode(row.snapshot));if(value.scopeId!==scopeId||value.decisionId!==decisionId)throw new DecisionApplicationError('DECISION_CORRUPT');return value;}
  async load(scopeId:string,decisionId:string){return this.read(scopeId,decisionId);}
+ // Newest stored rows first (insertion order; the engine orders by claim time); each row is decoded and verified like `load`.
+ async list(scopeId:string,limit:number){return this.db.prepare('SELECT decision_id FROM decision_cases WHERE scope_id=? ORDER BY rowid DESC LIMIT ?').all(scopeId,limit)
+  .map(row=>this.read(scopeId,String(row.decision_id))).filter((value):value is DecisionSnapshot=>value!==null);}
  async claim(input:DecisionSnapshot,event:AuditEvent){const snapshot=validateDecisionSnapshot(input);return this.transaction(()=>{
   const prior=this.read(snapshot.scopeId,snapshot.decisionId);if(prior)return {replayed:true,snapshot:prior};
   if(this.readReceipt(snapshot.scopeId,snapshot.decisionId))throw new DecisionApplicationError('DECISION_COMMAND_CONFLICT');

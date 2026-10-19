@@ -23,7 +23,8 @@ it('EN/TR listing has all steps, managed and effective state; JSON stays data-on
     f.text.out = '';
     expect(await main(['policy', 'delegations', '--scope', 's', '--lang', locale], f.context)).toBe(0);
     for (const step of getDecisionSteps()) expect(f.text.out).toContain(step.id);
-    expect(f.text.out).toContain(locale === 'tr' ? 'Yönetilen izin yok' : 'No managed grant');
+    // C-APPROVE: plain on/off words (owner "kapalı / açık"), the scope named.
+    expect(f.text.out).toContain(locale === 'tr' ? 'kapalı' : 'off'); expect(f.text.out).toContain('s');
     f.text.out = '';
     expect(await main(['policy', 'delegations', '--scope', 's', '--json', '--lang', locale], f.context)).toBe(0);
     expect(JSON.parse(f.text.out).revision).toBe('p+b');

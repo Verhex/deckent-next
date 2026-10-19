@@ -46,3 +46,19 @@ it('inspection reports stored status without claiming a command receipt replay',
  expect((await h.app.ask(command)).replayed).toBe(true);
  expect(h.invoke).toHaveBeenCalledTimes(1);
 });
+// C-APPROVE `deckent decide`: recent decisions are a read with the same `inspect` authorization (resource = the scope), newest first, bounded.
+it('lists a scope\'s recent decisions newest first through the inspect authorization; a denied read opens no store',async()=>{
+ const h=harness();await h.app.ask(command);await h.app.ask({...command,commandId:'ask2'});
+ const older=h.rows.get('scope/ask1')!;h.rows.set('scope/ask1',{...older,claimedAtMs:now-60_000});
+ const listing:DecisionStore['list']=async(scopeId,limit)=>[...h.rows.values()].filter(row=>row.scopeId===scopeId).slice(0,limit);
+ const opened:string[]=[];
+ const app=new DecisionApplication({verifier:{verify:async()=>principal},authorize:h.authorize,policy:async()=>policy,
+  openStore:async(access)=>{opened.push(access);return {load:async()=>null,claim:async()=>{throw Error('no');},settle:async()=>{throw Error('no');},receipt:async()=>null,
+   mutate:async()=>{throw Error('no');},list:listing,close(){}};},invoke:h.invoke,now:()=>now,eventId:()=>'e'});
+ const list=await app.list({schemaVersion:1,scopeId:'scope',limit:5});
+ expect(list.items.map(item=>item.decisionId)).toEqual(['ask2','ask1']);expect(list.items[0]).toMatchObject({status:'advised',case:{objective:'Choose a bounded path'}});
+ expect(h.authorize).toHaveBeenLastCalledWith('inspect','scope','scope',principal);expect(opened).toEqual(['read']);
+ await expect(app.list({schemaVersion:1,scopeId:'scope',limit:101})).rejects.toThrow();
+ h.authorize.mockRejectedValueOnce(Object.assign(new Error('POLICY_DENIED'),{code:'POLICY_DENIED'}));
+ await expect(app.list({schemaVersion:1,scopeId:'scope',limit:5})).rejects.toThrow('POLICY_DENIED');expect(opened).toEqual(['read']);
+});
