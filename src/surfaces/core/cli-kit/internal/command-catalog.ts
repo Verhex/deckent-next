@@ -82,7 +82,7 @@ export const CLI_CATALOG = [
     action('hold', 'work', 'cli.help.action.run.hold', 'cli.help.run'),
     action('resume', 'work', 'cli.help.action.run.resume', 'cli.help.run'),
   ] },
-  { name: 'task', group: 'work', summary: 'cli.help.summary.task', detail: 'cli.help.task', args: '--scope <id> --run <id> --task <id>', children: [
+  { name: 'task', group: 'work', summary: 'cli.help.summary.task', detail: 'cli.help.task', args: '--scope <id> --run <id> --task <id>', bare: 'handler', children: [
     action('inspect', 'observe', 'cli.help.action.task.inspect', 'cli.help.task'),
     action('execute', 'work', 'cli.help.action.task.execute', 'cli.help.task'),
     action('evaluate', 'work', 'cli.help.action.evaluate', 'cli.help.task'),
