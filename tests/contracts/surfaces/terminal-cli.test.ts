@@ -66,7 +66,8 @@ describe('deckent terminal CLI', () => {
     const piped = sink();
     expect(await main([], { root: f.project, env: { ...f.env, DECKENT_LANGUAGE: 'en' }, stdout: piped.output, stderr: piped.output, initialize() {},
       stdin: Object.assign(Readable.from([]), { isTTY: false }) })).toBe(0);
-    expect(piped.text()).toContain('opens the interactive session');
+    // L-HELP (J1b): the main help's Surfaces section states the same rule (the retired cli.help.default line said it before).
+    expect(piped.text()).toContain('the interactive terminal on a real terminal; this help');
     const dumb = sink();
     expect(await main([], { ...tty('dumb'), stdout: Object.assign(dumb.output, { isTTY: true }), stderr: dumb.output })).toBe(0);
     expect(dumb.text()).toContain('Usage:');
