@@ -31,8 +31,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
   kontrolü, her birini kendi mevcut komutuyla uygular. *Etki:* worker kaydı, havuz, worker imajı ve teslim klonu henüz
   kurulum aşaması değil: ilk `/do`'dan önce README'deki gibi `deckent init registry` ve `deckent init pool` çalıştırın.
-  Profil seçimi hatırlanmaz: tek kullanıcı hiçbir şey yazmaz (doctor yine kimlik profili ister), ekip ya da kurum yalnız
-  seçimi kaydeder (dağıtım `deckent identity distribute` olarak kalır) ve sonraki `deckent init` yeniden sorar. Son kontrol
+  Kurulum kaydedilmiş profili geri okumaz: tek kullanıcı hiçbir şey yazmaz (doctor yine kimlik profili ister), ekip ya da
+  kurum seçimi kullanıcınızın genel yapılandırmasına kaydeder (dağıtım `deckent identity distribute` olarak kalır) ve
+  sonraki `deckent init` yeniden sorar. Son kontrol
   doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur; bu yüzden
   yeni kurulumda "uygulanmaya hazır" kalır (doctor kimlik profili ve worker havuzu için uyarır ve ikisi için de `deckent init`
   der). Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.

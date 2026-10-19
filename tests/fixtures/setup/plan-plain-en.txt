@@ -5,7 +5,7 @@ Deckent setup plan ab43de3c5809
 3. Folder and scope · done · The scope "my-erp" was chosen.
 4. Who uses this installation · done · Solo use: the first-run permissions are used as they are; nothing more is written.
 5. Permissions · needs your answer · No permissions are installed yet.
-   ? Install the first-run permissions? (you administer; edits and shell commands ask first)
+   ? Install the first-run permissions? (you administer; in standard mode edits and shell commands ask first)
    $ deckent init policy --scope my-erp --apply
 6. Command sandbox · done · The command sandbox works (bubblewrap).
 7. Model connection · blocked · Waits for the Permissions stage to finish first.

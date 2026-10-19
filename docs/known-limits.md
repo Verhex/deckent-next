@@ -32,9 +32,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   permissions, the language, the sandbox check, the Docker install (person only), the model connection (`models connect`),
   the project instructions and the final check, each through its existing command. *Impact:* the worker registry, the pool,
   the worker image and a delivery clone are not setup stages yet: before the first `/do`, run `deckent init registry` and
-  `deckent init pool` as the README shows. The profile choice is not remembered: solo writes nothing (doctor then still
-  asks for an identity profile), team or enterprise only saves the selection (distribution stays `deckent identity
-  distribute`), and the next `deckent init` asks again. The final check is doctor's own rows: it reads done only with no
+  `deckent init pool` as the README shows. Setup does not read a saved profile back: solo writes nothing (doctor then
+  still asks for an identity profile), team or enterprise saves the selection in your user's global configuration
+  (distribution stays `deckent identity distribute`), and the next `deckent init` asks again. The final check is doctor's own rows: it reads done only with no
   warning and every other stage done or skipped, so on a fresh install it stays "ready to apply" (doctor still warns about
   the identity profile and the worker pool, and names `deckent init` for both). Unattended
   `deckent init --yes --scope <id>` applies only the fresh permissions, the language and the final check.

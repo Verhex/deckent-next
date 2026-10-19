@@ -45,7 +45,7 @@
   "setup.question.language": "{language} ile devam edilsin mi?",
   "setup.question.folder": "Deckent bu klasöre \"{scope}\" kapsamıyla kurulsun mu?",
   "setup.question.profile": "Bu kurulumu yalnız siz mi kullanacaksınız?",
-  "setup.question.policy": "İlk kurulum izinleri kurulsun mu? (yönetici sizsiniz; düzenleme ve kabuk komutları önce sorulur)",
+  "setup.question.policy": "İlk kurulum izinleri kurulsun mu? (yönetici sizsiniz; standart modda düzenleme ve kabuk komutları önce sorulur)",
   "setup.question.policyUpgrade": "Güncel ilk kurulum kurallarına yükseltilsin mi? (eklenen her kural önce kartta gösterilir)",
   "setup.question.model": "Şimdi bir model bağlansın mı?",
   "setup.reason.waitsFor": "Önce {stage} aşamasının bitmesini bekliyor.",

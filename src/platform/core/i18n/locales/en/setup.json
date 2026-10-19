@@ -45,7 +45,7 @@
   "setup.question.language": "Continue in {language}?",
   "setup.question.folder": "Install Deckent in this folder with the scope \"{scope}\"?",
   "setup.question.profile": "Will only you use this installation?",
-  "setup.question.policy": "Install the first-run permissions? (you administer; edits and shell commands ask first)",
+  "setup.question.policy": "Install the first-run permissions? (you administer; in standard mode edits and shell commands ask first)",
   "setup.question.policyUpgrade": "Upgrade to the current first-run rules? (each added rule is shown on a card first)",
   "setup.question.model": "Connect a model now?",
   "setup.reason.waitsFor": "Waits for the {stage} stage to finish first.",

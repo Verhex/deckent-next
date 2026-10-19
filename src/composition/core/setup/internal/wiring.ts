@@ -36,7 +36,7 @@ export function configuredSetup(host: object) {
   const applySetupStage = async (root: string, stage: SetupStage, options: Options) => {
     const op = stage.operation?.id ?? '-', input = stage.operation?.input ?? {}, scopeId = String(input['scopeId'] ?? options.scopeId ?? '');
     const result = (status: Status, code?: string) => ({ stage: stage.id, operation: op, status, ...(code ? { code } : {}) });
-    const config = async (keyPath: string, value: unknown) => createConfiguredConfigApplication(root, options).set({ keyPath, value, layer: 'project',
+    const config = async (keyPath: string, value: unknown, layer: 'project' | 'global') => createConfiguredConfigApplication(root, options).set({ keyPath, value, layer,
       principal: await resolveConfiguredConfigPrincipal(root, scopeId, options), scopeId, commandId: randomUUID() });
     try {
       if (op === 'installation.policy-template') {
@@ -45,9 +45,10 @@ export function configuredSetup(host: object) {
         const { status } = await applyPolicyTemplateInstallationWithSecretDefault(root, scopeId, options);
         return status === 'installed' || status === 'replayed' ? result('applied') : result('refused', status);
       }
-      if (op === 'config.set') { await config(String(input['keyPath']), input['value']); return result('applied'); }
-      // The team or enterprise selection (template data, never authority); distribution stays `deckent identity distribute` with its card.
-      if (op === 'identity-profile.preview') { await config('identity.profile', input['profile']); return result('applied'); }
+      if (op === 'config.set') { await config(String(input['keyPath']), input['value'], input['layer'] === 'global' ? 'global' : 'project'); return result('applied'); }
+      // The team or enterprise selection (template data, never authority; the `identity` section is global-layer only, as `config set
+      // identity.profile --global`); distribution stays `deckent identity distribute` with its card.
+      if (op === 'identity-profile.preview') { await config('identity.profile', input['profile'], 'global'); return result('applied'); }
       if (op === 'shell-realm.inspect') { await inspectConfiguredShellRealm(root, options); return result('applied'); }
       if (op === 'doctor.inspect') { await verdict(options.env ?? process.env, root); return result('applied'); }
       return result('refused', 'TERMINAL_TTY_REQUIRED');

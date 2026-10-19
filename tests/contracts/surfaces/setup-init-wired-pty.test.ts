@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS } from '#domain/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 /**
@@ -152,6 +153,37 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent', 'core:folder': 'done:setup.reason.scopeConfigured' });
     expect(await readFile(join(f.root, '.deckent', 'installation', 'journal.json'), 'utf8').catch(() => '')).not.toContain('"pending"');
+  }, 240_000);
+
+  it('a team profile is saved as the installation-wide selection (global layer, as `config set identity.profile --global`); doctor reads it', async () => {
+    await access(cli);
+    const f = await fixture();
+    const run = await f.pty('team-profile', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '4\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['Who uses this installation: applied', '\u001b']]);
+    expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+    expect(screen(run.output)).toContain('core:profile: applied');
+    expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:team', version: 1 } } });
+    expect((await f.deckent(['doctor'])).stdout).toMatch(/ok\s+Identity profile: core:team/u);
+  }, 240_000);
+
+  it('an older first-run policy: the window closes for the upgrade card (each added rule), the witnessed apply upgrades, the window reopens', async () => {
+    await access(cli);
+    const f = await fixture('erp');
+    expect((await f.deckent(['init', '--yes', '--scope', 'erp'])).code).toBe(0);
+    // The installation as v12 left it: the same first-run policy without the v13 rules.
+    const path = join(f.root, '.deckent', 'policy.json'), current = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
+    const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+    await writeFile(path, JSON.stringify({ ...current, revision: 'first-run-template-v12', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
+    expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
+    const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'], ['Apply now', '1\r'],
+      ['Add these rules', 'y'], ['Permissions: applied', '\u001b']]);
+    expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+    const card = run.output.indexOf('Upgrade the permissions'), reopened = run.output.indexOf('Permissions: applied', card);
+    expect(card).toBeGreaterThan(0); expect(reopened).toBeGreaterThan(card);
+    for (const id of delta) expect(run.output.slice(card, reopened)).toContain(id);
+    expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent' });
+    const upgraded = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
+    expect(delta.every(id => upgraded.grants.some(rule => rule.id === id))).toBe(true);
   }, 240_000);
 
   it('Docker install stage: the window closes, sudo asks on the plain terminal (fake sudo), detection runs again, the window reopens', async () => {
