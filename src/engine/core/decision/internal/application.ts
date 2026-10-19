@@ -4,7 +4,7 @@ import { decisionRecordSchema, encodeCommandProjection, prepareDecisionCase, enc
 import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { parseModelInvocationResultForCommand } from '#engine/core/model-invocation/index.js';
-import { decisionPrepareInputSchema, decisionAskCommandSchema, decisionQuerySchema, decisionRecordCommandSchema, decisionOutcomeCommandSchema,
+import { decisionPrepareInputSchema, decisionAskCommandSchema, decisionQuerySchema, decisionListQuerySchema, type DecisionList, decisionRecordCommandSchema, decisionOutcomeCommandSchema,
  DecisionApplicationError, type DecisionDependencies, type DecisionPrepareResult, type DecisionAskResult, type DecisionInspection,
  type DecisionSnapshot, type DecisionRecordResult, type DecisionAction, type DecisionMutationReceipt } from './contract.js';
 import { validateDecisionSnapshot } from './snapshot.js';
@@ -73,6 +73,14 @@ export class DecisionApplication {
    if(!row)return {schemaVersion:1,status:'not-found',decisionId:query.decisionId};
    const value=validateDecisionSnapshot(row);if(value.scopeId!==query.scopeId||value.decisionId!==query.decisionId)throw new DecisionApplicationError('DECISION_CORRUPT');
    return {...publicResult(value,false),case:value.command.case};
+  }finally{store.close();}
+ }
+ /** Recent decisions of a scope, newest first: the same `inspect` authorization as one decision (resource = the scope); a read never writes. */
+ async list(input:unknown,credential?:unknown):Promise<DecisionList>{
+  const query=decisionListQuerySchema.parse(input);await this.admission('inspect',query.scopeId,credential);
+  const store=await this.deps.openStore('read');try{const rows=await store.list?.(query.scopeId,query.limit)??[];
+   const values=rows.slice(0,query.limit).map(row=>validateDecisionSnapshot(row));if(values.some(value=>value.scopeId!==query.scopeId))throw new DecisionApplicationError('DECISION_CORRUPT');
+   return {schemaVersion:1,scopeId:query.scopeId,items:[...values].sort((a,b)=>b.claimedAtMs-a.claimedAtMs).map(value=>({...publicResult(value,false),case:value.command.case,claimedAtMs:value.claimedAtMs}))};
   }finally{store.close();}
  }
  async decide(input:unknown,credential?:unknown):Promise<DecisionRecordResult>{return this.mutate('record',input,credential);}

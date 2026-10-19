@@ -1,15 +1,18 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
 import { decisionPrepareInputSchema, decisionAskCommandSchema, decisionQuerySchema, decisionRecordCommandSchema, decisionOutcomeCommandSchema,
   type DecisionAskResult, type DecisionInspection } from '#engine/index.js';
-import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
+import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
+import { assertInputFields, inputSchemaText } from '#surfaces/core/cli-approval/index.js';
+import { recentDecisions } from './decision-list.js';
+import registry from './decision.json' with { type: 'json' };
 import type { DecisionCommandContext } from './context.js';
 
 type Action = 'prepare' | 'ask' | 'record' | 'outcome' | 'inspect';
-interface Parsed { action?: Action; input?: string; language?: string; json: boolean; help: boolean }
+interface Parsed { action?: Action; input?: string; language?: string; scope?: string; json: boolean; help: boolean; schema: boolean }
 function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'decide') throw ErrorRegistry.createError('CLI_USAGE');
-  const result: Parsed = { json: false, help: false };
+  const result: Parsed = { json: false, help: false, schema: false };
   let start = 1;
   if (argv[1] && !argv[1].startsWith('-')) {
     const action = argv[1];
@@ -22,13 +25,17 @@ function parse(argv: readonly string[]): Parsed {
     if (seen.has(key)) throw ErrorRegistry.createError('CLI_USAGE'); seen.add(key);
     if (key === '--help') result.help = true;
     else if (key === '--json') result.json = true;
+    else if (key === '--schema') result.schema = true;
     else if (key === '--no-color') continue;
-    else if (key === '--input' || key === '--lang') {
+    else if (key === '--input' || key === '--lang' || key === '--scope') {
       const value = argv[++i]; if (!value || (value.startsWith('-') && value !== '-')) throw ErrorRegistry.createError('CLI_USAGE');
-      if (key === '--input') result.input = value; else result.language = value;
+      if (key === '--input') result.input = value; else if (key === '--lang') result.language = value; else result.scope = value;
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
-  if ((result.help && (result.input || result.json)) || (!result.help && (!result.action || !result.input))) throw ErrorRegistry.createError('CLI_USAGE');
+  // No action: the recent-decisions read (C-APPROVE; `--scope`, `--json`). An action takes `--input` (or `--schema` alone); `--scope` is the read's.
+  if (result.help && (result.input || result.json || result.schema || result.scope)) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!result.help && result.action && (result.scope || (result.schema ? result.input || result.json : !result.input))) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!result.help && !result.action && (result.input || result.schema)) throw ErrorRegistry.createError('CLI_USAGE');
   return result;
 }
 function renderAdvice(result: DecisionAskResult | DecisionInspection, locale: Locale): string {
@@ -48,18 +55,18 @@ function renderAdvice(result: DecisionAskResult | DecisionInspection, locale: Lo
 }
 /** JSON input contains the versioned application command; selection only records data. */
 export async function decisionCommand(argv: readonly string[], context: DecisionCommandContext = {}): Promise<void> {
-  const args = parse(argv), env = context.env ?? process.env;
-  let locale = resolveLocale(args.language, env); context.onLocale?.(locale);
+  const args = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, args.language);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (args.help) { emit(t('cli.help.decide', {}, locale), sinks); return; }
-  const root = context.root ?? process.cwd(), options = { env }, config = await loadConfig(root, options);
-  locale = resolveLocale(args.language, env, config.language); context.onLocale?.(locale);
-  const input = await readJsonInput(args.input === '-' ? '-' : resolve(root, args.input!), config.cli.invocationInputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+  if (!args.action) return recentDecisions(context, { locale, json: args.json, ...(args.scope ? { scope: args.scope } : {}) });
   const schema = args.action === 'prepare' ? decisionPrepareInputSchema : args.action === 'ask' ? decisionAskCommandSchema
     : args.action === 'record' ? decisionRecordCommandSchema : args.action === 'outcome' ? decisionOutcomeCommandSchema : decisionQuerySchema;
-  const validation = schema.safeParse(input);
-  if (!validation.success) throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID');
+  if (args.schema) { emit(inputSchemaText(schema), sinks); return; }
+  const root = context.root ?? process.cwd(), options = { env }, config = await loadConfig(root, options);
+  const input = await readJsonInput(args.input === '-' ? '-' : resolve(root, args.input!), config.cli.invocationInputMaxBytes,
+    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+  // The refusal names the first wrong field and shows a small example (CLI review §decide), before anything is sent.
+  assertInputFields(`deckent decide ${args.action}`, schema, input, JSON.stringify(registry.examples[args.action]));
   if (args.action === 'prepare') {
     if (!context.prepareDecision) throw ErrorRegistry.createError('DECISION_UNAVAILABLE');
     const result = await context.prepareDecision(root, decisionPrepareInputSchema.parse(input), options);

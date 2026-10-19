@@ -2729,7 +2729,10 @@
         "src/platform/core/errors",
         "src/platform/core/i18n",
         "src/platform/core/output",
-        "src/surfaces/core/cli-kit"
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/cli-approval",
+        "src/surfaces/core/cli-terminal"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -3179,7 +3182,12 @@
         "src/surfaces/core/cli-kit",
         "src/engine/core/policy",
         "src/surfaces/core/cli-terminal",
-        "src/surfaces/core/work-labels"
+        "src/surfaces/core/work-labels",
+        "src/surfaces/core/cli-human",
+        "src/engine/core/approval",
+        "src/engine/core/config",
+        "src/domain/core/approval",
+        "src/domain/core/policy"
       ],
       "plan": "SURFACES"
     },

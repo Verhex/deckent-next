@@ -1,0 +1,38 @@
+{
+  "command": "deckent approval",
+  "list": {
+    "maxPages": 10,
+    "rowsShown": 20,
+    "menuRounds": 20
+  },
+  "examples": {
+    "list": {
+      "schemaVersion": 1,
+      "scopeId": "live",
+      "afterId": null,
+      "limit": 20
+    },
+    "inspect": {
+      "schemaVersion": 1,
+      "scopeId": "live",
+      "approvalId": "<approval id>"
+    },
+    "decide": {
+      "schemaVersion": 1,
+      "scopeId": "live",
+      "approvalId": "<approval id>",
+      "commandId": "<new unique id>",
+      "expectedRevision": 0,
+      "decision": "allow",
+      "reason": "Checked the change"
+    },
+    "renew": {
+      "schemaVersion": 1,
+      "scopeId": "live",
+      "approvalId": "<approval id>",
+      "commandId": "<new unique id>",
+      "expectedRevision": 0,
+      "reason": "Still needed"
+    }
+  }
+}

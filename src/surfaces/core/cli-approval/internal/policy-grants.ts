@@ -1,8 +1,10 @@
 import { createInterface } from 'node:readline/promises';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ApprovalCommandContext } from './context.js';
 import { policyMcpCommand } from './policy-mcp.js';
 import { policyDelegationsCommand } from './policy-delegations.js';
+import { policyStatusCommand } from './policy-summary.js';
 
 /** A persisted standing approval as the CLI shows it (the engine's view; the surface owns no rule of its own). */
 export interface StandingGrantRow { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
@@ -25,12 +27,13 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
   if (argv[1] === 'status') return policyStatusCommand(argv, context);
   if (argv[1] === 'mcp') return policyMcpCommand(argv, context);
   if (argv[1] === 'upgrade') return policyUpgradeCommand(argv, context);
-  const action = argv[1]; let json = false, mine = false, yes = false, scope: string | undefined, language: string | undefined, id: string | undefined;
+  const action = argv[1]; let json = false, mine = false, all = false, yes = false, scope: string | undefined, language: string | undefined, id: string | undefined;
   if (action !== 'grants' && action !== 'revoke') throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i]!;
     if (flag === '--json' && !json) json = true;
-    else if (flag === '--mine' && !mine && action === 'grants') mine = true;
+    else if (flag === '--mine' && !mine && !all && action === 'grants') mine = true;
+    else if (flag === '--all' && !all && !mine && action === 'grants') all = true;
     else if (flag === '--yes' && !yes && action === 'revoke') yes = true;
     else if ((flag === '--scope' || flag === '--lang') && (flag === '--scope' ? scope : language) === undefined) {
       const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -38,10 +41,13 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
     } else if (!flag.startsWith('-') && action === 'revoke' && id === undefined) id = flag;
     else throw ErrorRegistry.createError('CLI_USAGE');
   }
-  if ((action === 'grants' && !mine) || (action === 'revoke' && !id)) throw ErrorRegistry.createError('CLI_USAGE');
+  // C-APPROVE: `grants` lists the caller's own grants by default (`--mine` kept). Everyone's grants (`--all`) need a grantable read action the
+  // v13 template adds (I-POL, delta/policy-actions.md); until then the refusal names that, never a hard-coded admin check.
+  if (action === 'revoke' && !id) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env };
   const config = await loadConfig(root, options);
-  const locale = resolveLocale(language, env, config.language); context.onLocale?.(locale);
+  const locale = commandLocale(context, language);
+  if (all) throw ErrorRegistry.createError('CLI_POLICY_GRANTS_ALL_UNAVAILABLE');
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = scope ?? (typeof configured === 'string' ? configured : undefined);
@@ -85,7 +91,7 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
   }
   if ((template !== 'current' && template !== 'v5') || (expect !== undefined && mode !== 'apply') || !context.upgradePolicyTemplate) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, config = await loadConfig(root, { env });
-  const locale = resolveLocale(language, env, config.language); context.onLocale?.(locale);
+  const locale = commandLocale(context, language);
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = scope ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
@@ -100,34 +106,14 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
       : view.status === 'upgraded' ? t('cli.policy.upgrade.upgraded', { scope: scopeId }, locale) : view.status === 'current' ? t('cli.policy.upgrade.current', {}, locale)
       : view.status === 'refused' ? t('cli.policy.upgrade.refused', {}, locale) : view.status === 'conflict' ? t('cli.policy.upgrade.conflict', { revision: view.revision }, locale)
       : view.status === 'rolled-back' ? t('cli.policy.upgrade.rolledBack', { ids: view.reason ?? '-' }, locale) : view.status === 'nothing-to-roll-back' ? t('cli.policy.upgrade.nothing', {}, locale)
-      : t('cli.policy.upgrade.unavailable', { reason: view.reason ?? '-' }, locale);
+      : t('cli.policy.upgrade.unavailable', { reason: upgradeReason(view.reason, locale) }, locale);
     // A preview that would be refused says so before anything is tried.
     const lacking = missing(view), lack = view.status === 'preview' && lacking.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking] : view.status === 'refused' ? lacking : [];
     return [head, ...(view.conflicts?.length ? [t('cli.policy.upgrade.conflicts', { ids: view.conflicts.join(', ') }, locale)] : []), ...(view.summary ? [view.summary] : []), ...lack].join('\n');
   } });
 }
 
-async function policyStatusCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
-  let scope: string | undefined, language: string | undefined, json = false;
-  for (let i = 2; i < argv.length; i++) {
-    const flag = argv[i];
-    if (flag === '--json' && !json) json = true;
-    else if ((flag === '--scope' && scope === undefined) || (flag === '--lang' && language === undefined)) {
-      const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
-      if (flag === '--scope') scope = value; else language = value;
-    } else throw ErrorRegistry.createError('CLI_USAGE');
-  }
-  const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env }, config = await loadConfig(root, options);
-  const locale = resolveLocale(language, env, config.language); context.onLocale?.(locale);
-  const scopeId = scope ?? (config.terminal as { scopeId?: string } | undefined)?.scopeId;
-  if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
-  if (!context.inspectPolicyAdministration) throw ErrorRegistry.createError('CLI_USAGE');
-  const result = await context.inspectPolicyAdministration(root, { schemaVersion: 1, scopeId }, options);
-  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render: view => [
-    t('cli.policy.status', { scope: view.scopeId, count: view.usableAdminCount, revision: view.revision,
-      template: view.template.kind === 'first-run' ? t('cli.policy.status.first-run', { version: view.template.version ?? '-' }, locale) : view.template.kind === 'drift' ? t('cli.policy.status.drift', {}, locale) : t('cli.policy.status.hand-built', {}, locale) }, locale),
-    ...view.admins.map(person => `${person.issuer}/${person.subject}`),
-    view.bootstrapRequired ? t('cli.policy.status.bootstrap', {}, locale) : view.recoveryRequired ? t('cli.policy.status.recovery', {}, locale) : t('cli.policy.status.ready', {}, locale),
-    t('cli.policy.status.unverified', {}, locale),
-  ].join('\n') });
-}
+/** The engine's reason id for an unavailable first-run upgrade, in words (`not-first-run` → "elle kurulmuş politika"); an unknown id stays visible. */
+const upgradeReason = (reason: string | null, locale: Locale) => reason === 'not-first-run' ? t('cli.policy.upgrade.reason.notFirstRun', {}, locale)
+  : reason === 'not-this-person' ? t('cli.policy.upgrade.reason.notThisPerson', {}, locale) : reason === 'invalid' ? t('cli.policy.upgrade.reason.invalid', {}, locale)
+  : reason === 'history-unavailable' ? t('cli.policy.upgrade.reason.historyUnavailable', {}, locale) : reason ?? '-';

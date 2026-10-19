@@ -18,7 +18,7 @@ async function fixture() {
 const grant = { id: 'standing-abc', key: 'v1:run_shell:command:npm test', tool: 'run_shell', kind: 'command' as const, text: 'npm test' };
 const sink = () => { const out = { text: '' }; return { out, stdout: { write(value: string) { out.text += value; } } }; };
 
-it('lists only the caller\'s standing approvals (needs --mine), as text and as JSON, and says so when there are none', async () => {
+it('lists only the caller\'s standing approvals (own by default, --mine kept), as text and as JSON, and says so when there are none', async () => {
   const f = await fixture(), seen: unknown[] = [];
   const listStandingGrants = async (_root: string, scopeId: string) => { seen.push(scopeId); return [grant]; };
   const text = sink();
@@ -33,8 +33,12 @@ it('lists only the caller\'s standing approvals (needs --mine), as text and as J
   const none = sink();
   expect(await main(['policy', 'grants', '--mine', '--scope', 'scope-a', '--lang', 'tr'], { ...f, stdout: none.stdout, listStandingGrants: async () => [] })).toBe(0);
   expect(none.out.text).toContain('kalıcı onayınız yok');
-  // Without --mine (or an unknown flag) it is a usage error and nothing is read.
-  for (const argv of [['policy', 'grants', '--scope', 'scope-a'], ['policy', 'grants', '--mine', '--all'], ['policy', 'grants', '--mine', '--yes']]) {
+  // C-APPROVE (owner 2026-10-19): `grants` lists the caller's own grants without --mine too.
+  seen.length = 0;
+  expect(await main(['policy', 'grants', '--scope', 'scope-a'], { ...f, stdout: sink().stdout, listStandingGrants })).toBe(0);
+  expect(seen).toEqual(['scope-a']);
+  // --mine with --all (or an unknown flag) is a usage error and nothing is read.
+  for (const argv of [['policy', 'grants', '--mine', '--all'], ['policy', 'grants', '--mine', '--yes']]) {
     seen.length = 0;
     expect(await main(argv, { ...f, stdout: sink().stdout, stderr: sink().stdout, listStandingGrants })).not.toBe(0);
     expect(seen).toEqual([]);
