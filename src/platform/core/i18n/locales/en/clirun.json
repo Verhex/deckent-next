@@ -101,5 +101,6 @@
   "cli.run.inventory.col.cancel": "Cancellation",
   "cli.run.inventory.col.output": "Output",
   "cli.run.inventory.see": "Runs and their state: deckent run list · live workers (this installation and other configured sources): deckent workers list",
-  "cli.run.inventory.limitHint": "At most {max} per page; use --limit {max}."
+  "cli.run.inventory.limitHint": "At most {max} per page; use --limit {max}.",
+  "cli.run.control.holdDetail": "While it is held no new task starts; work already running continues and is not stopped. deckent run resume lifts the hold."
 }

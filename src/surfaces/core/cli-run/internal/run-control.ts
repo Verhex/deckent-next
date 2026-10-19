@@ -22,12 +22,12 @@ export function runControls(run: RunView): readonly RunControl[] {
   return ['cancel', ...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' ? ['resume' as const] : []), 'close'];
 }
 
-/** The card of one control in the terminal's own words (`terminal.runControl.*`, `terminal.cancel.*`): what it does, the scope, the Run's state at its revision, its identity. */
+/** The card of one control in the terminal's own words (`terminal.runControl.*`, `terminal.cancel.*`; the hold consequence names the CLI resume, not the window's `r` key): what it does, the scope, the Run's state at its revision, its identity. */
 function controlCard(action: RunControl, run: RunView, scopeId: string, locale: Locale, extra: readonly string[]) {
   const params = { run: shownId(run.runId), title: runTitle(run, locale) };
   const title = action === 'cancel' ? t('terminal.cancel.title', params, locale) : action === 'hold' ? t('terminal.runControl.holdTitle', params, locale)
     : action === 'resume' ? t('terminal.runControl.resumeTitle', params, locale) : t('terminal.runControl.closeTitle', params, locale);
-  const detail = action === 'cancel' ? t('cli.run.control.cancelDetail', {}, locale) : action === 'hold' ? t('terminal.runControl.holdDetail', {}, locale)
+  const detail = action === 'cancel' ? t('cli.run.control.cancelDetail', {}, locale) : action === 'hold' ? t('cli.run.control.holdDetail', {}, locale)
     : action === 'resume' ? t('terminal.runControl.resumeDetail', {}, locale) : t('terminal.runControl.closeDetail', {}, locale);
   return { title, body: [detail, t('cli.run.control.scope', { scope: scopeId }, locale), t('terminal.runControl.state', { state: runStateWord(run, locale), revision: run.revision }, locale),
     ...(action === 'cancel' && run.cancellationRequested ? [t('terminal.cancel.alreadyRequested', {}, locale)] : []), ...extra,
