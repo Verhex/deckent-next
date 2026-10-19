@@ -10,10 +10,15 @@ import { createFileSecretStore, encodeServiceFrame, registerProviderConfig } fro
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { withMcpPrincipal } from '#adapters/index.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
+import { terminalRawFrame } from '../support/terminal-raw-frame.js';
 
 // SECRET-WRITE (owner 2026-09-29, SECRET-K1 §5 option A + S3 = service socket): a secret change goes through the runtime service; the socket
 // peer is the principal; the `secret`/`set|delete` policy cell decides it; every decision is a sealed `secret-change` audit event in the
 // installation's ledger before any write; the value never reaches the ledger, an error or the service's output. Synthetic canaries only.
+// SEC-1 (owner A48-D5): a secret change also needs the service-held terminal witness, so the owner's client here is a real PTY peer
+// (`createTerminalRuntimeClient`); the same calls from a plain SDK process or the MCP actor are refused before anything is touched.
 registerProviderConfig(); // as every composed entry does before configuration is loaded (the `secrets` section is registered there)
 const CANARY = 'synthetic-canary-5c7a1e-not-a-real-key';
 const me = { issuer: hostname(), subject: String(userInfo().uid) };
@@ -54,7 +59,7 @@ async function fixture(input: { readonly backend?: 'file' | 'env' } = {}) {
   const service = await startConfiguredRuntimeService(project, { async onPage(...args: unknown[]) { output.push(JSON.stringify(args)); },
     async onError(...args: unknown[]) { output.push(JSON.stringify(args)); } }, { env });
   services.push(service);
-  const client = createConfiguredRuntimeClient(project, { env });
+  const client = createTerminalRuntimeClient(project, { env }), sdk = createConfiguredRuntimeClient(project, { env });
   const file = createFileSecretStore({ root: globalRoot, platform: 'linux' });
   const audit = () => {
     const db = new DatabaseSync(ledger, { readOnly: true });
@@ -82,7 +87,7 @@ async function fixture(input: { readonly backend?: 'file' | 'env' } = {}) {
     if (output.join('\n').includes(CANARY)) hits.push('service-output');
     return hits;
   };
-  return { project, home, env, globalRoot, client, file, audit, replacePolicy, scanForCanary, output, endpoint: service.endpoint };
+  return { project, home, env, globalRoot, client, sdk, file, audit, replacePolicy, scanForCanary, output, endpoint: service.endpoint };
 }
 const changes = (events: readonly { subject: Record<string, unknown> }[]) => events.filter(event => event.subject['kind'] === 'secret-change').map(event => event.subject);
 
@@ -104,6 +109,23 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     // The same change at v18 (the current client) is admitted.
     expect(await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY })).toMatchObject({ action: 'set' });
   });
+
+  it('SEC-1: the same set and delete from a plain SDK process or the MCP actor are refused without the terminal witness; nothing decided, audited or stored', async () => {
+    const f = await fixture();
+    await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'KEEP_ME', value: CANARY });
+    const before = changes(f.audit());
+    for (const call of [() => f.sdk.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PLANTED', value: CANARY }),
+      () => f.sdk.deleteSecret({ schemaVersion: 1, scopeId: 'installation', name: 'KEEP_ME' }),
+      () => withMcpPrincipal(() => f.sdk.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PLANTED', value: CANARY })),
+      () => withMcpPrincipal(() => f.sdk.deleteSecret({ schemaVersion: 1, scopeId: 'installation', name: 'KEEP_ME' }))]) {
+      const refused = await call().then(() => null, (error: unknown) => error);
+      expect(refused).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+      expect(JSON.stringify(refused)).not.toContain(CANARY);
+    }
+    expect(await f.file.listNames()).toEqual(['KEEP_ME']);
+    expect(changes(f.audit())).toEqual(before);
+    expect(await f.scanForCanary()).toEqual([]);
+  }, 60_000);
 
   it('fresh install (template v3): the owner sets and deletes a secret over the socket; audited before each write; the value is only in the store', async () => {
     const f = await fixture();
@@ -181,15 +203,11 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
 
   // SECRET-BOUNDS (Astra 2185 R6): the answer of a change is known before the change (scope, name, action, backend; `removed` is null for a
   // set and at most `false` for a delete), so a delivery budget it cannot fit is refused before any decision, audit or write.
+  // The exact frame from a real PTY peer (SEC-1: the witness comes first; these cases test the budget after it).
   const raw = async (endpoint: string, operation: 'setSecret' | 'deleteSecret', maxResultBytes: number, input: Record<string, unknown>) => {
-    const socket = createConnection(endpoint); socket.on('error', () => undefined);
-    await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject); });
-    const chunks: Buffer[] = []; socket.on('data', chunk => { chunks.push(chunk as Buffer); });
-    const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
-    socket.end(encodeServiceFrame({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
-      input: { schemaVersion: 1, scopeId: 'installation', ...input } }, 262144));
-    await closed;
-    return JSON.parse(Buffer.concat(chunks).subarray(4).toString('utf8')) as { ok: boolean; result?: unknown; error?: { code: string } };
+    const answer = await terminalRawFrame(endpoint, encodeServiceFrame({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: `budget-${maxResultBytes}`, operation,
+      delivery: { maxResultBytes }, input: { schemaVersion: 1, scopeId: 'installation', ...input } }, 262144));
+    return JSON.parse(answer!.subarray(4).toString('utf8')) as { ok: boolean; result?: unknown; error?: { code: string } };
   };
   const answerBytes = (name: string, action: 'set' | 'delete', removed: boolean | null) => Buffer.byteLength(JSON.stringify({ schemaVersion: 1,
     scopeId: 'installation', name, action, backend: 'core.secret-store.file@1', removed }), 'utf8');

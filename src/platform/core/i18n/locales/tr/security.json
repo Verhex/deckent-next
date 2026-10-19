@@ -1,4 +1,5 @@
 {
   "error.SECRET_REFERENCE_PROJECT_LAYER": "Proje ayarı (.deckent/config.json) secret referansı kullanamaz; kurulum secret'ını yalnız kurulum ayarı adlandırabilir. Referansı kurulum ayarına taşıyın ya da kaldırın.",
-  "error.SECRET_REFERENCE_LEAVES_HOST": "Bu değer makineden dışarı çıkar (örneğin teslim commit'inin yazarı); bu yüzden hiçbir ayarda secret referansından gelemez. Düz değeri yazın."
+  "error.SECRET_REFERENCE_LEAVES_HOST": "Bu değer makineden dışarı çıkar (örneğin teslim commit'inin yazarı); bu yüzden hiçbir ayarda secret referansından gelemez. Düz değeri yazın.",
+  "error.AUTHORITY_WITNESS_REQUIRED": "Yetki değişikliği (izin modu, bir secret, secret deposu veya MCP sunucu güveni) etkileşimli bir terminaldeki bir kişiyi gerektirir: komutu bu makinede, giriş ve çıkışı aynı terminalde olan gerçek bir terminalde çalıştırın. AI araçları, MCP, SDK betikleri ve yönlendirilmiş (pipe) komutlar bu değişikliği --yes ile bile yapamaz. Hiçbir şey değiştirilmedi."
 }

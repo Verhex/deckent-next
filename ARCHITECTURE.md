@@ -3,7 +3,7 @@
 **W3-AUTHORITY (owner 2026-10-09; released in alpha.22):** `deckent-mcp` uses the same verified OS UID with a distinct actor
 (`issuer = <host>/mcp`, actor id suffixed `/mcp`). All handlers, including direct model-connect/activation writes, enter that code-only context;
 service-bound calls carry `channel: mcp` (current local protocol v29, lifecycle window `[29,28]`), current-only mutations. This metadata delegates no
-other OS identity; same-account direct socket access remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
+other OS identity and only narrows the actor. **SEC-1 (owner A48-D5, 2026-10-19):** the socket admits a same-UID peer only in the service's own PID, mount and user namespaces (a sandboxed peer is refused at accept, before any frame); the full-access bubblewrap view hides every bound runtime socket directory; `setPermissionMode`, `setSecret`, `deleteSecret` and `switchSecretStore` need the service-attested terminal witness of the peer on every surface (an engine `AuthorityWitness` port; the MCP actor is always refused; `AUTHORITY_WITNESS_REQUIRED`, nothing decided, audited or written); protocol v29 bytes are unchanged. A same-account process outside a sandbox remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
 MCP authority; an explicit rule or role binding must name the MCP actor. Denies/restrictions still apply. Template v9 and add-only upgrades add
 named observation rules only. Budget creation/revision/unfreeze/reconciliation, activation and invocation require an explicit MCP-specific grant;
 these paths have no new approval broker, and `require-approval` keeps its typed unsupported refusal. MCP still exposes no decision tool.

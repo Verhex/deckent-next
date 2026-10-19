@@ -87,6 +87,18 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Sır kapısının ayar kuralı yalnız ayar türü dosyalara bakar.** Sıradan kaynak koduna yazılmış bir parola yakalanmaz.
   *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 
+- **Yetki değişikliği terminaldeki bir kişiyi gerektirir.** İzin modunu değiştirmek, bir secret'ı yazmak ya da silmek veya
+  secret deposunu değiştirmek, isteği yapan sürecin girişi ve çıkışı etkileşimli bir terminalde değilse
+  `AUTHORITY_WITNESS_REQUIRED` ile reddedilir; MCP aktörü her zaman reddedilir ve hiçbir şey karara bağlanmaz, denetime
+  yazılmaz ya da değişmez. *Etki:* `echo ANAHTAR | deckent secret set AD`, betikler, bir betikten çağrılan SDK ve yapay zekâ
+  araçları bu değişiklikleri artık yapamaz; bunlar için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD`
+  (gizli istem), `deckent secret store` ya da terminalin `/provider` ve mod değiştirmesini etkileşimli bir terminalde kullanın.
+- **Runtime soketi sandbox'taki süreçleri reddeder, hesabınızın diğer süreçlerini değil.** Runtime servisi kendi PID, mount ve
+  user namespace'i dışındaki bir eşi reddeder, tam erişimli bubblewrap görünümü runtime soket dizinlerini gizler ve Landlock
+  realm'i hiç unix soketi açamaz. Hesabınızın sandbox dışında çalıştırdığı bir süreç (tam erişimli bir turda onaylanan host
+  realm çağrısı, host'ta çalışan bir MCP sunucusu, başka bir ajan) sokete yine ulaşır ve yukarıdaki yetki değişiklikleri
+  dışında her şeyi sizin adınıza yapar. *Geçici çözüm:* güvenilmeyen sunucuları ve ajanları bir sandbox'ta ya da ayrı bir
+  hesapta çalıştırın.
 - **Kendi işletim sistemi hesabınızla çalışan bir yapay zekâ ajanı Deckent onaylarıyla sınırlanmaz.** Onay ve denetim
   kayıtları hesabınızda duran bir anahtarla mühürlenir, etkileşimli terminal denetimi bir insanı değil bir terminali
   kanıtlar ve policy dosyasını hesabınız yazabilir. Hesabınız Docker ya da sudo kullanabiliyorsa böyle bir ajan pratikte

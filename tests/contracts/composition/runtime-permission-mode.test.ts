@@ -3,7 +3,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { withConfigWriteLock } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
+import { withMcpPrincipal } from '#adapters/index.js';
 import { closeModeRuntimes, me, modeRuntime, rule } from '../support/agent-turn-modes.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 
 // T-L4 slice 4c (MODES-3: v17 names, bindings v3) on the real runtime service: a person reads and sets their own permission mode. The service
 // replaces bindings.json atomically (temp + rename, conditional on the revision the caller read), only the caller's own entries change,
@@ -26,7 +28,10 @@ async function authority(f: Runtime, grants: Record<string, unknown>[], version:
     : { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [...kept, ...grants] }), { mode: 0o600 });
   await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [roleBinding], modes: [theirs, lookalike] }), { mode: 0o600 });
 }
-const client = (f: Runtime) => createConfiguredRuntimeClient(f.project, { env: { HOME: join(f.project, '..', 'home'), PATH: process.env.PATH ?? '/usr/bin:/bin' } });
+const clientEnv = (f: Runtime) => ({ env: { HOME: join(f.project, '..', 'home'), PATH: process.env.PATH ?? '/usr/bin:/bin' } });
+// SEC-1 (owner A48-D5): a mode change needs the service-held terminal witness, so the person's client is a real PTY peer; `sdk` is a plain process.
+const client = (f: Runtime) => createTerminalRuntimeClient(f.project, clientEnv(f));
+const sdk = (f: Runtime) => createConfiguredRuntimeClient(f.project, clientEnv(f));
 const bindings = async (f: Runtime) => JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { schemaVersion: number; revision: string; bindings: unknown[]; modes: unknown[] };
 const changes = (f: Runtime) => f.audit().map(record => record.event.subject).filter(subject => subject['kind'] === 'permission-mode-change');
 
@@ -70,6 +75,23 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
     expect(session).toMatchObject({ mode: 'standart', fullAccess: true, changed: false, revision: cleared.revision });
     expect(JSON.stringify(await bindings(f))).toBe(stored);
     expect(f.audit().at(-1)!.event.subject).toMatchObject({ kind: 'permission-mode-session', requested: 'full-access', stored: 'standart', sessionId: 'conversation-1' });
+  }, 90_000);
+
+  it('SEC-1: a plain SDK process or the MCP actor cannot change the mode (typed refusal before any decision; nothing written or audited); reading stays open', async () => {
+    const f = await modeRuntime({ grants: [], mode: null });
+    await authority(f, [...editEligible, setGrant()]);
+    const plain = sdk(f), text = await readFile(join(f.data, 'bindings.json'), 'utf8');
+    expect(await plain.inspectPermissionMode({ schemaVersion: 1, scopeId: 'scope' })).toMatchObject({ mode: 'standart', revision: 'p1+b1' });
+    for (const mode of ['full-auto', 'full-access'] as const) {
+      await expect(plain.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode, expectedRevision: 'p1+b1' })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+      await expect(withMcpPrincipal(() => plain.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode, expectedRevision: 'p1+b1' })))
+        .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    }
+    // The FA-SESSION switch is a mode write too: refused the same way.
+    await expect(plain.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-access', expectedRevision: 'p1+b1', session: { sessionId: 'conversation-1' } }))
+      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(text);
+    expect(f.audit()).toEqual([]);
   }, 90_000);
 
   it('answers a held authority write lock with its own typed refusal (PERMISSION_MODE_LOCKED) that names the lock; nothing is written or audited', async () => {

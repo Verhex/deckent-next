@@ -411,8 +411,8 @@ Tam otomatik, `find -delete`, dosya kısaltma (`>`, `>|`) ve taşıma (`mv`) iç
 
 ### API anahtarları
 
-Sağlayıcı anahtarını bir kez, `/provider`'ın gizlenen alanına ya da `deckent secret set AD` ile kaydedersiniz (gizli
-istem ya da stdin; asla komut argümanı değil); model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell
+Sağlayıcı anahtarını bir kez, `/provider`'ın gizlenen alanına ya da `deckent secret set AD` ile kaydedersiniz (etkileşimli
+terminalde gizli istem; asla komut argümanı değil, stdin'den verilen anahtar reddedilir); model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell
 profili ya da `.env` dosyasına koymayın: başka araçlar oraları okur.
 
 | Depo (`secrets.store`) | Diskte | Anahtarı kim okuyabilir |
