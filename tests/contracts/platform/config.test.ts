@@ -103,7 +103,8 @@ describe('config public contract', () => {
   it('interpolates only exact $DECK references after layering and leaves missing references visible', async () => {
     const f = await fixture();
     registerConfigSection('custom_secrets', z.object({ token: z.string(), other: z.string() }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true });
-    await writeFile(f.projectPath, '{"custom_secrets":{"token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}}');
+    // SEC-3: only the installation (global) layer may hold a $DECK reference.
+    await writeFile(f.globalPath, '{"custom_secrets":{"token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}}');
     f.env = { ...f.env, TOKEN: 'private-value' } as typeof f.env;
     const config = await loadConfig(f.project, { env: f.env });
     expect(config['custom_secrets']).toEqual({ token: 'private-value', other: 'prefix $DECK:TOKEN' });
@@ -218,7 +219,7 @@ describe('new config contract and write authority', () => {
   });
   it('does not resolve secrets from the old sibling file and resolves fresh values from the injected backend', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, JSON.stringify({ schema_version: 3, projectName: '$DECK:TOKEN' }));
+    await writeFile(f.globalPath, JSON.stringify({ schema_version: 3, projectName: '$DECK:TOKEN' }));
     await writeFile(join(f.project, '.deck'), 'TOKEN="outside-value"\n');
     const first = await loadConfig(f.project, { env: f.env });
     expect(first.projectName).toBe('$DECK:TOKEN');
@@ -228,7 +229,7 @@ describe('new config contract and write authority', () => {
 
   it('observes secret rotation and revocation without caching resolved values', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, JSON.stringify({ projectName: '$DECK:TOKEN' }));
+    await writeFile(f.globalPath, JSON.stringify({ projectName: '$DECK:TOKEN' })); await writeFile(f.projectPath, '{}');
     let secret: string | undefined = 'first';
     const options = { env: f.env, secretResolver: async () => secret };
     expect((await loadConfig(f.project, options)).projectName).toBe('first');

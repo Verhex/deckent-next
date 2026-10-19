@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, type TestContext } from 'vitest';
 import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/index.js';
 import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
-import { loadConfig, configDisplayView, getConfigKnownSecrets, registerConfigSection, redactForDecision, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
+import { loadConfig, configDisplayView, getConfigKnownSecrets, registerConfigSection, redactForDecision, resolveGlobalConfigPaths, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { z } from 'zod';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
@@ -45,8 +45,11 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
   let config: object = { storage: { sqlite }, approvals: { keyFile: 'authority.key' } };
   if (options.knownSecret) {
     await mkdir(join(root, '.deckent'), { recursive: true });
-    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:B7_TEST', ...(options.secondaryKnownSecret ? { b7_fixture: { secondary: '$DECK:B7_SECOND' } } : {}) }));
-    config = await loadConfig(root, { env: { HOME: root, USERPROFILE: root, APPDATA: root, LOCALAPPDATA: root, XDG_CONFIG_HOME: root },
+    // SEC-3: only the installation (global) layer may hold a $DECK reference.
+    const env = { HOME: root, USERPROFILE: root, APPDATA: root, LOCALAPPDATA: root, XDG_CONFIG_HOME: root }, installationPath = resolveGlobalConfigPaths(env).platformPath;
+    await mkdir(dirname(installationPath), { recursive: true }); await writeFile(join(root, '.deckent/config.json'), '{}');
+    await writeFile(installationPath, JSON.stringify({ projectName: '$DECK:B7_TEST', ...(options.secondaryKnownSecret ? { b7_fixture: { secondary: '$DECK:B7_SECOND' } } : {}) }));
+    config = await loadConfig(root, { env,
       secretResolver: async name => name === 'B7_TEST' ? options.knownSecret : name === 'B7_SECOND' ? options.secondaryKnownSecret : undefined });
     expect(configDisplayView(config as never).projectName).toBe('[REDACTED]');
     if (options.secondaryKnownSecret) expect(configDisplayView(config as never)['b7_fixture']).toEqual({ secondary: '[REDACTED]' });

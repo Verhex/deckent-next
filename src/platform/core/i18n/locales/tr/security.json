@@ -1,1 +1,4 @@
-{}
+{
+  "error.SECRET_REFERENCE_PROJECT_LAYER": "Proje ayarı (.deckent/config.json) secret referansı kullanamaz; kurulum secret'ını yalnız kurulum ayarı adlandırabilir. Referansı kurulum ayarına taşıyın ya da kaldırın.",
+  "error.SECRET_REFERENCE_LEAVES_HOST": "Bu değer makineden dışarı çıkar (örneğin teslim commit'inin yazarı); bu yüzden hiçbir ayarda secret referansından gelemez. Düz değeri yazın."
+}

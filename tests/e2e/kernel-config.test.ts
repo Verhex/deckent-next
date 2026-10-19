@@ -162,8 +162,10 @@ describe('K1 blocking review reproductions', () => {
     const f = await fixture('project-override'), secret = 'supersecret-value-42';
     Object.assign(f.env, { API_TOKEN: secret });
     // Config schema 4 retired `providers` (CONFIG-SURFACE); a kernel leaf and the free-form `admission.registry` subtree carry the references now.
-    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:API_TOKEN', admission: { registry: { brain: '$DECK:API_TOKEN',
+    // SEC-3: only the installation (global) layer may hold a $DECK reference; the project layer keeps a clean override.
+    await writeFile(resolveGlobalConfigPaths(f.env).platformPath, JSON.stringify({ projectName: '$DECK:API_TOKEN', language: 'tr', admission: { registry: { brain: '$DECK:API_TOKEN',
       overrides: { sample: '$DECK:API_TOKEN' } }, poolId: 'pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } }));
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ language: 'en' }));
     const results = await settledReads([[], ['--json']].map(format => f.run(['config', 'get', ...(key ? [key] : []), ...format])));
     for (const [index, result] of results.entries()) {
         expect(result.stdout + result.stderr).not.toContain(secret);

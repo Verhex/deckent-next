@@ -70,8 +70,9 @@ describe('declared provider catalog configuration through the SDK', () => {
 
   it('rejects an exact catalog secret reference before resolving an earlier allowed config secret', async () => {
     const f = await fixture(); let resolverCalls = 0;
+    // SEC-3: the allowed reference lives in the installation (global) layer, the only layer that may hold one.
+    await writeFile(f.globalPath, JSON.stringify({ projectName: '$DECK:ALLOWED_EARLIER' }));
     await writeFile(f.projectPath, JSON.stringify({
-      projectName: '$DECK:ALLOWED_EARLIER',
       provider_catalog: catalog('secret-catalog', [provider('test-provider-secret', '$DECK:SYNTHETIC_CATALOG')]),
     }));
     const error = await expectCatalogError(inspectDeclaredModels(f.project, { env: f.env, secretResolver: async () => { resolverCalls++; return 'not-used'; } }, ), 'SECRET_REFERENCE_FORBIDDEN');

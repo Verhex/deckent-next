@@ -44,6 +44,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Kimlik bilgisi ve ev dizini gizleme sınırlıdır.** Ortak kayıt gh, Docker, kube, Codex, Git kimlik bilgileri ve yaygın
   bulut CLI'larını kapsar; gizleme 3 derinlikte ve 20.000 girdide durur. *Etki:* özel konumlar ve olağandışı dosya adları
   maskelenmez. *Yol:* böyle dosyaları sandbox'ın gördüğü ev dizininin dışında tutun ya da ayrıca yalıtın.
+- **Sırrı yalnız kurulum ayarı adlandırabilir.** Proje ayarındaki (`.deckent/config.json`) bir `$DECK:NAME` referansı ayarın
+  yüklenmesini `SECRET_REFERENCE_PROJECT_LAYER` ile durdurur; teslim commit'inin yazarı hiçbir ayarda referans olamaz
+  (`SECRET_REFERENCE_LEAVES_HOST`). *Etki:* alpha.48'den önce `$DECK:` kullanan bir proje dosyası değiştirilene kadar yüklenmez.
+  *Yol:* referansı kurulum ayarına taşıyın ya da düz değeri yazın.
 - **Sır kapısı Git geçmişini taramaz.** İş gönderilmeden önce işçinin aldığı her şeyi (çalışma kopyası, `.git` üst verisi,
   bağlamalar, görev girdileri, istem bağlamı) tarar ve bulursa reddeder; nesne deposundaki eski commit'ler taranmaz. Hariç
   tutmalar yalnız ayarda yazılı yollar ya da bildirilmiş bir bağımlılık ağacıdır, denetime yazılır ve Run kartında görünür.

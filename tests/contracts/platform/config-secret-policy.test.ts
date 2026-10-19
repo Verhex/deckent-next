@@ -64,7 +64,8 @@ describe('registered config secret-reference policy', () => {
 
   it('keeps default-allow interpolation behavior, including an unresolved reference', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, JSON.stringify({ secret_policy_allowed_probe: { token: '$DECK:ALLOWED_TOKEN' } }));
+    // SEC-3: an allowing section resolves references from the installation (global) layer only.
+    await writeFile(f.globalPath, JSON.stringify({ secret_policy_allowed_probe: { token: '$DECK:ALLOWED_TOKEN' } }));
     const resolved = await loadConfig(f.project, { env: f.env, heal: false, secretResolver: async name => name === 'ALLOWED_TOKEN' ? 'resolved-value' : undefined });
     expect(resolved['secret_policy_allowed_probe']).toEqual({ token: 'resolved-value' });
     const missing = await loadConfig(f.project, { env: f.env, force: true, heal: false, secretResolver: async () => undefined });

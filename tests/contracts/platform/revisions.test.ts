@@ -1,13 +1,13 @@
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, utimes } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { loadConfig, configDisplayView, withConfigWriteLock, clearConfigCache, registerConfigSection,
-  resolveProductPaths, productResourcePath, ConfigValidationError, type ConfigWarning } from '../../../src/platform/index.js';
+  resolveProductPaths, productResourcePath, ConfigValidationError, resolveGlobalConfigPaths, type ConfigWarning } from '../../../src/platform/index.js';
 import { registerProviderConfig } from '../../../src/adapters/index.js';
 
 registerProviderConfig();
@@ -30,7 +30,10 @@ describe('K1 review regression contracts', () => {
     const f = await fixture(), secret = 'private value with spaces " quotes';
     f.env = { ...f.env, API_TOKEN: secret } as typeof f.env;
     registerConfigSection('redaction_probe', z.object({ extra: z.array(z.object({ value: z.string() }).strict()), escaped: z.record(z.string()), credentials: z.object({ api_key: z.string() }).strict(), note: z.string() }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true });
-    await writeFile(f.path, JSON.stringify({ projectName: '$DECK:API_TOKEN',
+    // SEC-3: only the installation (global) layer may hold a $DECK reference.
+    await writeFile(f.path, '{}');
+    await mkdir(dirname(resolveGlobalConfigPaths(f.env).platformPath), { recursive: true });
+    await writeFile(resolveGlobalConfigPaths(f.env).platformPath, JSON.stringify({ projectName: '$DECK:API_TOKEN',
       redaction_probe: { escaped: { 'a/b~c': '$DECK:API_TOKEN' }, extra: [{ value: '$DECK:API_TOKEN' }], credentials: { api_key: 'another plaintext value' }, note: 'Bearer token-example' } }));
     const config = await loadConfig(f.root, { env: f.env });
     expect(config.projectName).toBe(secret);
