@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -362,10 +362,10 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
   const drop = { name: 'drop', description: 'Drop things', inputSchema: { type: 'object', properties: {} } };
 
   it('full-auto lowers a company-eligible MCP call after a sealed audit event; the floor (alwaysAsk) and the ask mode still ask', async () => {
-    const m = mcpFixture('dual', [echo, drop]), env = { HOME: mkdtempSync(join(tmpdir(), 'deckent-mcp-home-')), PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
-    roots.push(env.HOME);
+    // SEC-2 (F29): project trust lives in the service environment's global root, so each approval uses that runtime's own environment.
+    const m = mcpFixture('dual', [echo, drop]);
     const auto = await modeRuntime({ grants: both('require-approval', true), mode: 'full-auto' });
-    registry(auto.project, { fx: m.entry() }); await approve(auto.project, env, 'fx', ['drop']);
+    registry(auto.project, { fx: m.entry() }); await approve(auto.project, auto.env, 'fx', ['drop']);
     const lowered = await auto.call('mcp__fx__echo', { text: 'auto' });
     expect(lowered).toMatchObject({ card: false, status: 'ok' });
     const [record] = auto.audit().filter(entry => entry.event.subject['kind'] === 'permission-mode');
@@ -375,11 +375,11 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
     expect(floored).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     // G3: a re-approval that gives no alwaysAsk list (the terminal's) keeps the owner's lock: the floor cell still asks.
-    await runConfiguredMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env }, async () => true);
+    await runConfiguredMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env: auto.env }, async () => true);
     expect(await auto.call('mcp__fx__drop', {})).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     const ask = await modeRuntime({ grants: both('require-approval', true), mode: 'ask' });
-    registry(ask.project, { fx: m.entry() }); await approve(ask.project, env);
+    registry(ask.project, { fx: m.entry() }); await approve(ask.project, ask.env);
     expect(await ask.call('mcp__fx__echo', { text: 'ask' })).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
   }, 90_000);
@@ -433,7 +433,11 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     mkdirSync(join(f.project, 'tools')); writeFileSync(join(f.project, 'tools', 'inside.mjs'), RAW_SERVER);
     symlinkSync(join(f.project, 'tools', 'inside.mjs'), join(f.project, 'tools', 'server.mjs'));
     await f.start();
-    registry(f.project, { fx: { command: process.execPath, args: ['${MCP_TOOLS_DIR}/server.mjs'] } }); await approve(f.project, f.env);
+    // SEC-2 (F30): a project file reads only allowlisted variables, so this `${VAR}` entry is a local (personal) one, where it still expands.
+    mkdirSync(join(f.env.HOME, '.deckent'), { recursive: true, mode: 0o700 });
+    writeFileSync(join(f.env.HOME, '.deckent', 'mcp.json'), JSON.stringify({ projects: { [realpathSync(f.project)]: { mcpServers: {
+      fx: { command: process.execPath, args: ['${MCP_TOOLS_DIR}/server.mjs'] } } } } }), { mode: 0o600 });
+    await approve(f.project, f.env);
     rmSync(join(f.project, 'tools', 'server.mjs')); symlinkSync(join(dir, 'server.mjs'), join(f.project, 'tools', 'server.mjs'));
     for (const turnId of ['turn-trusted-1', 'turn-trusted-2']) {
       f.state.script = [{ content: 'No tools.' }];
