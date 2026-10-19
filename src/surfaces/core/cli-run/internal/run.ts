@@ -1,7 +1,7 @@
 import { runProposalCommand } from './run-proposal.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import { cliUsage, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunView, type RunReservationCommand } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
@@ -132,7 +132,8 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     };
     const run = data.run;
     if (!run) return '';
-    return [...(run.costReport ? [renderCostSummary(run.costReport, locale)] : []), ...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []), t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
+    // SEC-5S F35: the needs-input question, model names, notes and reasons are worker-written; the human view reaches the terminal only safe.
+    return terminalSafeText([...(run.costReport ? [renderCostSummary(run.costReport, locale)] : []), ...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []), t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
       ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
       t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
       ...(run.channelWaits ?? []).map(wait => `${wait.taskId}: ${quotaWaitText(wait.deadline, wait.resetsAtMs !== null, locale)}`),
@@ -161,7 +162,7 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
         ...(task.configExclusions ? [t('cli.run.inspect.configExcluded', { count: task.configExclusions.count }, locale), ...task.configExclusions.entries.map(entry => t('cli.run.inspect.configExcludedEntry', { path: entry.path, rule: entry.rule, by: entry.by }, locale))] : []),
         ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : [])]),
       ...run.criteria.map(criterion => t('cli.run.inspect.criterion', { criterion: criterion.id, description: criterion.description, evaluator: criterion.evaluator.id, version: criterion.evaluator.version }, locale)),
-    ].join('\n');
+    ].join('\n'));
   } });
 }
 import { renderCostSummary } from '#surfaces/core/monitor/index.js';

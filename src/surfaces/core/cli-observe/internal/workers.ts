@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { renderWorkerModelLine, seconds, renderResourceDetail, type MonitorCommandContext } from '#surfaces/core/monitor/index.js';
 function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
@@ -60,8 +60,9 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
   do {
     if (context.signal?.aborted) return;
     const result = await context.inspectWorkers(root, query, options);
-    emit(result, { ...sinks, json, render: report => [t('cli.workers.heading', { time: new Date(report.observedAt).toISOString() }, locale),
-      ...report.sources.flatMap(source => renderWorkerSource(source, locale)), t('cli.workers.notice', {}, locale)].join('\n') });
+    // SEC-5S F37: model names, provider and paths are worker-reported; the human view reaches the terminal only safe.
+    emit(result, { ...sinks, json, render: report => terminalSafeText([t('cli.workers.heading', { time: new Date(report.observedAt).toISOString() }, locale),
+      ...report.sources.flatMap(source => renderWorkerSource(source, locale)), t('cli.workers.notice', {}, locale)].join('\n')) });
     if (argv[1] !== 'watch' || (samples !== undefined && ++count >= samples)) return;
     try { await wait(config.inspection.workers.heartbeatMs, undefined, { signal: context.signal }); } catch { if (context.signal?.aborted) return; throw ErrorRegistry.createError('WORKER_OBSERVATION_UNAVAILABLE'); }
   } while (!context.signal?.aborted);
