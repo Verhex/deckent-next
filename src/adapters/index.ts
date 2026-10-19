@@ -106,4 +106,5 @@ export { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 export { GIT_QUEUE_DISPLAY, GitQueueTarget, gitQueueCandidateSource } from '#adapters/core/git-patch/index.js';
 export { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 export { detectExecutionFacts, executionSetupFamily, type ExecutionDetectPorts } from '#adapters/core/setup-detect-execution/index.js';
+export { detectCodingFacts, codingSetupFamily } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';

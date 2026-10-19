@@ -86,6 +86,15 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   return { data, checks, config, options };
 }
 
+/** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:
+ * any error row → errors, else any warning row → warnings, else ok ("not tested" rows count as neither, as in the doctor summary). */
+export async function doctorVerdict(root: string, context: KernelCommandContext, options: ConfigLoadOptions): Promise<'ok' | 'warnings' | 'errors'> {
+  const env = options.env ?? process.env, call: KernelCall = { args: { positionals: ['doctor'], json: true, global: false, dryRun: false, toolchains: false, verbose: false },
+    root, env, options: { env }, locale: 'en', mode: 'json', output: () => undefined };
+  const { checks } = await measure(call, context);
+  return checks.some(check => check.state === 'error') ? 'errors' : checks.some(check => check.state === 'warning') ? 'warnings' : 'ok';
+}
+
 /**
  * `deckent doctor`: the read-only installation report, grouped (Kurulum / Güvenlik / Çalışma / Araçlar) with one next step per warning;
  * internals behind `--verbose`, the collected report (unchanged contract) with `--json`. On a person's terminal a fixable row is offered as

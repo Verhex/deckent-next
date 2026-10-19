@@ -33,6 +33,7 @@ import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNa
 import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { verifyConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
+import { configuredSetup } from '#composition/core/setup/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
 /**
  * L-KIT: the call's locale, resolved once here and handed to every command (`context.locale`): `--lang`, DECKENT_LANGUAGE/DECKENT_LANG,
@@ -62,7 +63,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal: controller.signal }));
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
-  try { return await runCli(argv, { initialize: composeCore, root, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+  const host: Parameters<typeof runCli>[1] & object = { initialize: composeCore, root, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
     verifyAudit: verifyConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions,
@@ -182,7 +183,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     proposeRun: (_root, input) => runtime.proposeRun(input), inspectRunProposal: (_root, input) => runtime.inspectRunProposal(input),
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
-  }); } finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
+  };
+  try { return await runCli(argv, { ...host, ...configuredSetup(host) }); } finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } } // I-S3: bare `deckent init`
 }
 if (isMainModule(import.meta)) {
   void main().then(code => { if (process.argv[2] === 'runtime' && process.argv[3] === 'serve' && code !== 0) process.exit(code); else process.exitCode = code; });

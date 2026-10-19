@@ -1,0 +1,49 @@
+import { emit, t, terminalSafeText, type Locale } from '#platform/index.js';
+import type { SetupStage } from '#engine/index.js';
+import { askCliCard, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+import { modelsCommand, type ModelCommandContext } from '#surfaces/core/cli-models/index.js';
+import { runKernelCommand, type KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
+import type { SetupApplyResult, SetupCommandContext } from './contract.js';
+import registry from './modes.json' with { type: 'json' };
+
+/** Stages whose owner takes the person's terminal itself (a card, a picker, a second window or sudo's own password prompt): the setup
+ * window closes first, the owner runs on the plain terminal, then the window reopens on a fresh observation (registry data). */
+export const isForegroundStage = (stage: SetupStage | null) => !!stage?.operation && registry.foreground.includes(stage.operation.id);
+const code = (error: unknown) => { const value = (error as { code?: unknown } | null)?.code; return typeof value === 'string' ? value : 'SETUP_STAGE_FAILED'; };
+
+/**
+ * One foreground stage through its existing human owner, on the process terminal and only after the window has unmounted (never while Ink
+ * holds stdin in raw mode): Docker install (I-D2 card, `sudo -k`, foreground sudo), the project-instruction bridge window, `models connect`
+ * (its connection and model picker), the first-run policy upgrade (rules on a card, then the witnessed apply with the preview's `--expect`)
+ * and the human doctor (with its own fix cards). The result never decides the next state; the caller observes again.
+ */
+export async function runForegroundStage(context: SetupCommandContext, root: string, stage: SetupStage, scopeId: string | null, locale: Locale): Promise<SetupApplyResult> {
+  const op = stage.operation!.id, env = context.env ?? process.env, io: CliCardIo = { locale, env, stdin: process.stdin, stdout: process.stdout };
+  const result = (status: SetupApplyResult['status'], failure?: string): SetupApplyResult => ({ stage: stage.id, operation: op, status, ...(failure ? { code: failure } : {}) });
+  const human = { ...context, env, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr, locale };
+  try {
+    if (op === 'doctor.inspect') { await runKernelCommand(['doctor'], human as unknown as KernelCommandContext); return result('applied'); }
+    if (op === 'project-instructions.initialize') { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['init'], human); return result('applied'); }
+    if (!scopeId) return result('refused', 'CLI_SCOPE_REQUIRED');
+    if (op === 'model.connect') { await modelsCommand(['models', 'connect', '--scope', scopeId], human as unknown as ModelCommandContext); return result('applied'); }
+    if (op === 'execution-environment.install' && context.installExecutionEnvironment) {
+      const status = await context.installExecutionEnvironment(root, scopeId, io);
+      return result(status === 'succeeded' || status === 'present' ? 'applied' : 'refused', status === 'succeeded' || status === 'present' ? undefined : `SETUP_INSTALL_${status.toUpperCase()}`);
+    }
+    if (op === 'installation.policy-upgrade' && context.upgradePolicyTemplateInstallation) {
+      const preview = await context.upgradePolicyTemplateInstallation(root, scopeId, false);
+      if (preview.status !== 'preview' || !preview.expect) return result('refused', `POLICY_UPGRADE_${preview.status.toUpperCase()}`);
+      const rules = (preview.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string } }; return `+ ${terminalSafeText(grant.id ?? '-')}: ${terminalSafeText(grant.resource?.kind ?? '-')}`; });
+      const answer = await askCliCard({ title: t('setup.foreground.upgradeTitle', {}, locale), body: [t('setup.foreground.upgradeBody', { scope: terminalSafeText(scopeId) }, locale), ...rules],
+        options: [{ id: 'apply', label: t('setup.foreground.upgradeApply', {}, locale), key: 'y' }, { id: 'no', label: t('setup.window.no', {}, locale), key: 'n' }] }, io);
+      if (answer !== 'apply') { emit(t('setup.foreground.notApplied', {}, locale), { stdout: process.stdout }); return result('refused', 'SETUP_STAGE_DECLINED'); }
+      const applied = await context.upgradePolicyTemplateInstallation(root, scopeId, true, preview.expect);
+      return result(applied.status === 'upgraded' ? 'applied' : 'refused', applied.status === 'upgraded' ? undefined : `POLICY_UPGRADE_${applied.status.toUpperCase()}`);
+    }
+    return result('not-wired');
+  } catch (error) {
+    // The owner's own typed refusal (no terminal, no witness, no grant, a declined card) is shown as it is; nothing is retried here.
+    emit(t('setup.apply.refused', { stage: terminalSafeText(stage.id), code: code(error) }, locale), { stdout: process.stdout });
+    return result('refused', code(error));
+  }
+}

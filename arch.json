@@ -307,7 +307,8 @@
         "src/surfaces/core/config-window",
         "src/adapters/core/secret-store",
         "src/adapters/core/mcp-client",
-        "src/adapters/core/local-runtime-socket"
+        "src/adapters/core/local-runtime-socket",
+        "src/composition/core/setup"
       ],
       "plan": "SURFACES"
     },
@@ -3344,7 +3345,15 @@
         "src/platform/core/i18n",
         "src/surfaces/core/cli-human",
         "src/composition/core/policy",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/adapters/core/setup-detect-coding",
+        "src/adapters/core/native-connection",
+        "src/platform/core/config",
+        "src/surfaces",
+        "src/surfaces/core/cli-observe",
+        "src/composition/core/installation",
+        "src/composition/core/config",
+        "src/composition/core/agent-turn"
       ],
       "plan": "INSTALLATION"
     },
@@ -3362,7 +3371,11 @@
         "src/engine/core/project-instructions",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/cli-kit",
-        "src/surfaces/core/project-instructions"
+        "src/surfaces/core/project-instructions",
+        "src/domain/core/model-activation",
+        "src/engine/core/model-activation",
+        "src/surfaces/core/cli-models",
+        "src/surfaces/core/cli-observe"
       ],
       "plan": "INSTALLATION"
     },

@@ -45,8 +45,8 @@
   "setup.question.language": "{language} ile devam edilsin mi?",
   "setup.question.folder": "Deckent bu klasöre \"{scope}\" kapsamıyla kurulsun mu?",
   "setup.question.profile": "Bu kurulumu yalnız siz mi kullanacaksınız?",
-  "setup.question.policy": "Yukarıda gösterilen ilk kurulum izinleriyle kurulsun mu?",
-  "setup.question.policyUpgrade": "İzinler yukarıda gösterilen güncel ilk kurulum kurallarına yükseltilsin mi?",
+  "setup.question.policy": "İlk kurulum izinleri kurulsun mu? (yönetici sizsiniz; standart modda düzenleme ve kabuk komutları önce sorulur)",
+  "setup.question.policyUpgrade": "Güncel ilk kurulum kurallarına yükseltilsin mi? (eklenen her kural önce kartta gösterilir)",
   "setup.question.model": "Şimdi bir model bağlansın mı?",
   "setup.reason.waitsFor": "Önce {stage} aşamasının bitmesini bekliyor.",
   "setup.reason.platformUnsupported": "Bu platform ({platform}) desteklenmiyor; Linux veya Windows üzerinde WSL2 kullanın.",
@@ -67,7 +67,7 @@
   "setup.reason.policyHandBuilt": "İzinler elle yazılmış; kurulum onlara dokunmaz.",
   "setup.reason.policyConflict": "Mevcut izin dosyaları ilk kurulum kurallarından farklı; hiçbir şey yazılmaz. deckent doctor ile kontrol edin.",
   "setup.reason.policyFresh": "Henüz izin kurulmamış.",
-  "setup.reason.policyPending": "Önceki bir kurulum yarıda kalmış; tamamlanabilir.",
+  "setup.reason.policyPending": "Önceki bir kurulum yarıda kalmış; tamamlanana kadar neyi yazdığı bilinmiyor (günlüğü kaldığı yerden sürdürür).",
   "setup.reason.policyUpgrade": "Daha yeni ilk kurulum kuralları var.",
   "setup.reason.declined": "İsteğiniz üzerine atlandı.",
   "setup.reason.sandboxReady": "Komut korumalı alanı çalışıyor ({realm}).",
@@ -169,5 +169,11 @@
   "setup.window.finished": "Burada cevaplanacak başka bir şey yok; özeti görmek için pencereyi kapatın.",
   "error.SETUP_APPLY_UNAVAILABLE": "Kurulum aşamaları bu sürümde henüz uygulanamıyor; hiçbir şey yazılmadı. Her aşama için gösterilen komutu çalıştırın.",
   "error.SETUP_INSTALL_DENIED": "Politika bu kurulumda {environment} kurmanıza izin vermiyor (eylem execution-environment install, tüm kapsamlar için); hiçbir şey çalışmadı. Bir yönetici bu izni verebilir.",
-  "error.SETUP_INSTALL_STATE_UNKNOWN": "{runtime} kurulu mu kontrol edilemedi; bilinmeyen bir durumda hiçbir şey kurulmaz. deckent init'i yeniden çalıştırın."
+  "error.SETUP_INSTALL_STATE_UNKNOWN": "{runtime} kurulu mu kontrol edilemedi; bilinmeyen bir durumda hiçbir şey kurulmaz. deckent init'i yeniden çalıştırın.",
+  "setup.window.connect": "Şimdi bağla",
+  "setup.foreground.upgradeTitle": "İzinleri yükselt",
+  "setup.foreground.upgradeBody": "Bu ilk kurulum kuralları {scope} kapsamına eklenir; mevcut her kural korunur ve önceki belgeler arşivlenir:",
+  "setup.foreground.upgradeApply": "Bu kuralları ekle",
+  "setup.foreground.notApplied": "Hiçbir şey değiştirilmedi.",
+  "error.SETUP_STAGE_REFUSED": "Kurulum {stage} aşamasında durdu ({code}); ondan sonrası uygulanmadı. Bir kişi isteyen aşama (terminal, kart ya da sudo) yalnız terminalde deckent init içinde çalışır."
 }

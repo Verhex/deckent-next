@@ -2,6 +2,7 @@
 // today's init window in project-instructions and loads only after the mode decision picked a person on a real terminal.
 export { setupInitCommand, setupFormat, parseSetupFlags, unattendedAnswers, type SetupFlags, type SetupFormat } from './internal/command.js';
 export { activeStage, createSetupController, stageChoices } from './internal/controller.js';
-export { observeSetup, suggestScope } from './internal/observe.js';
+export { observeCoreSetup, observeSetup, suggestScope } from './internal/observe.js';
 export { renderSetupLines, setupDocument, setupMessage, SETUP_DOCUMENT_SCHEMA_VERSION, type SetupDocument } from './internal/render.js';
-export { notWiredApply, type SetupApplyHandler, type SetupApplyResult, type SetupCommandContext, type SetupObserveHandler } from './internal/contract.js';
+export { isForegroundStage, runForegroundStage } from './internal/foreground.js';
+export { notWiredApply, type SetupApplyHandler, type SetupApplyOptions, type SetupObserveOptions, type SetupApplyResult, type SetupCommandContext, type SetupObserveHandler } from './internal/contract.js';

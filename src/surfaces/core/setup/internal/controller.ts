@@ -4,6 +4,7 @@ import type { SetupWindowModel } from '#surfaces/core/project-instructions/index
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { planFor, unattendedAnswers, type SetupFlags } from './command.js';
 import { observeSetup } from './observe.js';
+import { isForegroundStage, runForegroundStage } from './foreground.js';
 import { languageName, stageCommand, stageText, stageTitle, stateLabel } from './render.js';
 import registry from './modes.json' with { type: 'json' };
 
@@ -19,6 +20,8 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
   const later: Choice = { id: 'later', label: t('setup.window.later', {}, locale), action: 'later' };
   if (!stage) return [{ id: 'close', label: t('setup.window.close', {}, locale), action: 'close' }];
   if (stage.state === 'ready') return [{ id: 'apply', label: t('setup.window.apply', {}, locale), action: 'apply' }, later];
+  // A model is connected by `models connect` itself (its own connection and model picker), so the window offers to start it.
+  if (stage.id === 'core:model') return [{ id: 'connect', label: t('setup.window.connect', {}, locale), action: 'apply' }, later];
   if (stage.id === 'core:language') return [...['en', 'tr'].map((code): Choice => ({ id: code, label: languageName(code, locale), answer: code, action: 'answer' })), later];
   // The default (solo, INIT-D4) comes first; the other registered profiles follow in registry order.
   if (stage.id === 'core:profile') return [...[...observation.profile.available].sort((a, b) => Number(b.id === 'core:solo') - Number(a.id === 'core:solo'))
@@ -30,14 +33,23 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
   return [later];
 }
 
+/** The stage an apply runs: its own operation, or for the model stage the `models connect` flow in the installation's scope. */
+const applied = (stage: SetupStage, scopeId: string | null): SetupStage | null => stage.operation ? stage
+  : stage.id === 'core:model' && scopeId ? { ...stage, operation: { id: 'model.connect', version: 1, input: { scopeId } } } : null;
+const errorCode = (error: unknown) => { const value = (error as { code?: unknown } | null)?.code; return typeof value === 'string' ? value : 'SETUP_STAGE_FAILED'; };
+
 /**
- * The guided window's loop without Ink (I-S4): answer → re-plan (pure); apply → the apply port (I-S3; `not-wired` until then) → a fresh
- * observation. "Not now" puts a stage off for this window only. Every model has the same number of rows, so the window never changes height.
+ * The guided window's loop without Ink (I-S4): answer → re-plan (pure); apply → the apply port (I-S3) → a fresh observation. A stage whose
+ * owner takes the terminal itself (Docker's sudo prompt, the bridge window, `models connect`, the upgrade card, the human doctor) is never
+ * run inside the window: `step` closes the window with that stage pending, the command runs `runPending` on the plain terminal, then reopens
+ * the window. "Not now", a refusal, or an apply after which the stage is still open put the stage off for this window (never re-offered in a
+ * loop). Every model has the same number of rows, so the window never changes height.
  */
 export function createSetupController(input: Readonly<{ context: SetupCommandContext; root: string; locale: Locale; observed: Observed; flags: SetupFlags }>) {
   const { context, root, locale, flags } = input, later = new Set<string>(), results: SetupApplyResult[] = [];
-  let observed = input.observed, values = unattendedAnswers(observed.observation, flags, true), note = '';
+  let observed = input.observed, values = unattendedAnswers(observed.observation, flags, true), note = '', pending: SetupStage | null = null;
   const plan = () => planFor(observed, values);
+  const scopeId = () => typeof values['core:folder'] === 'string' ? values['core:folder'] : observed.observation.folder.configuredScope ?? null;
   const model = (): SetupWindowModel => {
     const current = plan(), stage = activeStage(current, later), at = stage ? current.stages.indexOf(stage) : -1;
     const rows = [...current.stages.map((item, index) => `${index === at ? '>' : ' '} ${index + 1}. ${stageTitle(item, locale)} · ${stateLabel(item.state, locale)}`), '',
@@ -47,6 +59,15 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     return { title: t('setup.window.title', {}, locale), rows, options: stageChoices(stage, observed.observation, locale).map(({ id, label }) => ({ id, label })),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
+  /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */
+  const settle = async (stage: SetupStage, result: SetupApplyResult) => {
+    results.push(result);
+    const title = stageTitle(stage, locale);
+    note = result.status === 'applied' ? t('setup.apply.applied', { stage: title }, locale) : result.status === 'not-wired'
+      ? t('setup.apply.notWired', { stage: title }, locale) : t('setup.apply.refused', { stage: title, code: result.code ?? '-' }, locale);
+    if (result.status === 'applied') observed = await observeSetup(context, root, flags.lang, true);
+    if (result.status !== 'applied' || activeStage(plan(), later)?.id === stage.id) later.add(stage.id);
+  };
   const step = async (id: string): Promise<SetupWindowModel | null> => {
     const stage = activeStage(plan(), later), picked = stageChoices(stage, observed.observation, locale).find(choice => choice.id === id);
     if (!picked || picked.action === 'close' || !stage) return null;
@@ -54,15 +75,23 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     if (picked.action === 'later') later.add(stage.id);
     else if (picked.action === 'answer') values = { ...values, [stage.id]: picked.answer };
     else {
-      // The next state comes only from a fresh observation, never from the apply result.
-      const result = await (context.applySetupStage ?? notWiredApply)(root, stage, { env: context.env ?? process.env });
-      results.push(result);
-      const title = stageTitle(stage, locale);
-      note = result.status === 'applied' ? t('setup.apply.applied', { stage: title }, locale) : result.status === 'not-wired'
-        ? t('setup.apply.notWired', { stage: title }, locale) : t('setup.apply.refused', { stage: title, code: result.code ?? '-' }, locale);
-      if (result.status === 'applied') observed = await observeSetup(context, root, flags.lang); else later.add(stage.id);
+      const target = applied(stage, scopeId());
+      if (!target) { later.add(stage.id); return model(); }
+      // The owner needs the plain terminal: close the window; the command runs it and reopens the window.
+      if (isForegroundStage(target)) { pending = target; return null; }
+      const options = { env: context.env ?? process.env, ...(scopeId() ? { scopeId: scopeId()! } : {}) };
+      await settle(stage, await (context.applySetupStage ?? notWiredApply)(root, target, options)
+        .catch((error: unknown): SetupApplyResult => ({ stage: stage.id, operation: target.operation!.id, status: 'refused', code: errorCode(error) })));
     }
     return model();
   };
-  return { model, step, outcome: () => ({ plan: plan(), results: [...results] }) };
+  /** Runs the stage `step` closed the window for, on the plain terminal; false when nothing is pending (the person closed the window). */
+  const runPending = async (): Promise<boolean> => {
+    const stage = pending;
+    pending = null;
+    if (!stage) return false;
+    await settle(stage, await runForegroundStage(context, root, stage, scopeId(), locale));
+    return true;
+  };
+  return { model, step, runPending, outcome: () => ({ plan: plan(), results: [...results] }) };
 }

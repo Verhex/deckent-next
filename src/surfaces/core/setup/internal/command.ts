@@ -46,8 +46,9 @@ export const planFor = (observed: Readonly<{ observation: SetupObservation; regi
 
 /**
  * Bare `deckent init` (I-S4): detect → plan → render. Without a person nothing is applied; `--yes` applies only stages the planner marks
- * `autoEligible` (fresh policy, language, final check), one at a time, each followed by a fresh observation. The apply port answers
- * `not-wired` until I-S3 wires each operation to its existing owner; then this command says so and exits with SETUP_APPLY_UNAVAILABLE.
+ * `autoEligible` (fresh policy, language, final check), one at a time, each followed by a fresh observation. The apply port (I-S3,
+ * composition/core/setup) calls each stage's existing owner; a refused stage stops the call with SETUP_STAGE_REFUSED naming it, and a build
+ * without that port says so with SETUP_APPLY_UNAVAILABLE. A person on a real terminal gets the window instead.
  */
 export async function setupInitCommand(argv: readonly string[], context: SetupCommandContext): Promise<void> {
   const flags = parseSetupFlags(argv), locale: Locale = commandLocale(context, flags.lang);
@@ -56,13 +57,19 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
   // INIT-D5: `--yes` names its scope; it is refused before anything is observed, with the valid scopes listed.
   if (flags.yes) await resolveCommandScope({ command: 'deckent init --yes', locale, explicit: flags.scope, mutating: true, interactive: false,
     listScopes: () => scopeLister(context, root, { env })().catch(() => []) });
-  let observed = await observeSetup(context, root, flags.lang);
-  if (format === 'interactive' && !flags.yes) {
+  const person = format === 'interactive' && !flags.yes;
+  let observed = await observeSetup(context, root, flags.lang, person);
+  if (person) {
     const stdin = (context.stdin ?? process.stdin) as NodeJS.ReadStream, stdout = (context.stdout ?? process.stdout) as NodeJS.WriteStream;
     if (typeof stdin.setRawMode !== 'function') throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
     const [{ createSetupController }, { mountSetupWindow }] = await Promise.all([import('./controller.js'), import('#surfaces/core/project-instructions/index.js')]);
     const controller = createSetupController({ context, root, locale, observed, flags });
-    await mountSetupWindow(controller.model(), controller.step, { stdin, stdout, env });
+    // The window ↔ terminal handoff: a stage whose owner takes the terminal (sudo's prompt, a card, a picker) runs only after the window
+    // unmounted and stdin stopped reading; then the window reopens on a fresh observation. Bounded: each such stage runs at most once.
+    do {
+      await mountSetupWindow(controller.model(), controller.step, { stdin, stdout, env });
+      stdin.pause();
+    } while (await controller.runPending());
     const outcome = controller.outcome();
     emit(renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }), sinks);
     return;
@@ -73,7 +80,7 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
   for (let round = 0; flags.yes && round < plan.stages.length; round++) {
     const next = plan.stages.find(stage => stage.autoEligible && stage.state === 'ready' && stage.operation && !results.some(result => result.stage === stage.id));
     if (!next) break;
-    const result = await apply(root, next, { env });
+    const result = await apply(root, next, { env, ...(flags.scope === undefined ? {} : { scopeId: flags.scope }) });
     results.push(result);
     if (result.status !== 'applied') break;
     observed = await observeSetup(context, root, flags.lang);
@@ -83,4 +90,7 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
   if (format === 'json') emit(setupDocument(plan, outcome), { ...sinks, json: true });
   else emit(renderSetupLines(plan, locale, outcome), sinks);
   if (results.some(result => result.status === 'not-wired')) throw ErrorRegistry.createError('SETUP_APPLY_UNAVAILABLE');
+  // A refused stage (no terminal, no witness, no grant): typed, naming the stage; nothing after it was attempted.
+  const refused = results.find(result => result.status === 'refused');
+  if (refused) throw ErrorRegistry.createError('SETUP_STAGE_REFUSED', { params: { stage: refused.stage, code: refused.code ?? '-' } });
 }
