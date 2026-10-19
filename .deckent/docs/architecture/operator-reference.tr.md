@@ -143,6 +143,24 @@ index/worktree dosyalarıyla karşılaştırır. `task patch-preview` ile aynı 
 `prepare-integration` policy izni gerekir. Her iki komut `--json` destekler ve runtime servisi
 olmadan yerel depolama kullanır.
 
+İnsan için `deckent task` (alpha.48 C-TASK). Her `task` görünümü çağrının dilini kullanır (`--lang`, sonra
+`DECKENT_LANGUAGE`, sonra config `language`, sonra sistem dili); `transcript` ve `patch-preview` biçimini korur.
+`--run` kısa kimlik alır: tam kimlik ya da terminaldeki `/runs` listesindeki bir Run'ın tek eşleşen öneki çözülür;
+birden çok aday `CLI_ID_AMBIGUOUS` (çıkış 2) olur; başka her değer olduğu gibi iletilir. `task inspect`, `run inspect`
+sırasıyla okunur (görev ve durum, istek, sonuç, kabul edilmiş sonucun neye dayandığı, teslim); beş yoldan uzun gizli
+bilgi kapısı listesi red listesi istisnalarını adlandıran tek satırdır, `--verbose` her yolu ve kabul üst veri satırını
+ekler. `patch-preview` farkında kontrol karakterleri etkisizleştirilen satırın ardından
+`\ üstteki satırdaki kontrol karakterleri etkisizleştirildi` üst satırı gelir (`--stat` ve `--json` değişmez). Gerçek
+terminalde `--run`/`--task` verilmeyen `task inspect|transcript|patch-preview` kapsam, Run ve görev seçtirir; argümansız
+`deckent task` (katalog aileyi argümansız-işleyici olarak işaretleyince) görevin yalnız geçerli eylemlerinin menüsünü
+açar: deneme varsa inceleme, transkript ve fark; karar açıkken kabul/ret; teslim bekleyen kabul edilmiş yama için teslim.
+Kabul/ret revizyonu kartından hemen önce okur ve komut kimliğini üretir; bu arada değişen Run reddedilir
+(`RUN_STORE_CONFLICT`), yeniden okunur ve yeniden sorulur. Teslim `/deliver` ile aynı portu ve uygulamaları kullanır;
+her yazma (aday + teslim, dala alma, kuyruk partisi) kendi birebir kartını bekler; yalnız Enter, Esc ya da sessizlik
+(oturum onay süresi) hayır demektir. Pipe, AI ajanı, CI ya da `--json` çağıranına soru sorulmaz: argümansız
+`deckent task` eksik argümanı adlandırır ve eylemleri dört grupta listeler (İncele, Yürüt ve değerlendir, Teslim,
+Kuyruk), çıkış 2. AI yolu tüm uzun adları ve bayrakları korur.
+
 Hazırlama, yapılandırılmış workspaces kaynağının `integrations` dizininde ayrı Git adayı oluşturur.
 Aday kayıtlı base ve patch'i içerir; kaynak dosya, HEAD ve index değişmez. Hazırlanmış aday Task kabulü
 veya canlı teslim değildir. Tamamlanmış komut tekrarlandığında aday doğrulanır; kesilmiş komut

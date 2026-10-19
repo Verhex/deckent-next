@@ -5,7 +5,7 @@ import type { TaskEvaluationHandler, TaskExecutionHandler, TaskIntegrationAdoptH
 
 /** The host operations the `task` command uses; the CLI's full command context satisfies it. */
 export interface TaskCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'applyRunLifecycle' | 'inspectInventory' | 'inspectRun' | 'inspectWorkerTranscript'
-  | 'deliveryQueue' | 'confirmDeliveryQueue'> {
+  | 'deliveryQueue' | 'confirmDeliveryQueue' | 'inspectSurfaceRunIds' | 'interactiveDelivery' | 'configChoiceSources'> {
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   adoptWorkspaceIntegration?: TaskIntegrationAdoptHandler;
   rollbackWorkspaceIntegration?: TaskIntegrationRollbackHandler;

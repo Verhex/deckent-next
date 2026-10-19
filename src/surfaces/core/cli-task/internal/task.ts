@@ -1,7 +1,9 @@
 import { queueCommand } from '#surfaces/core/delivery-queue/index.js';
-import { inspectTask } from './task-inspect.js';
-import { cliUsage, hasCliAction } from '#surfaces/core/cli-kit/index.js';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { inspectTask, phaseWord } from './task-inspect.js';
+import { groupedTaskActions, pickTaskTarget, taskMenu, type TaskMenuIo } from './task-menu.js';
+import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
+import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix } from '#surfaces/core/cli-human/index.js';
+import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runLifecycleCommandSchema, taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
 import type { WorkspaceAdoptionApplication, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch, PatchScope } from '#engine/index.js';
@@ -14,7 +16,7 @@ export type TaskIntegrationCheckHandler = (root: string, identity: AttemptIdenti
 export type TaskIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
 export type TaskPatchHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; receipt: ArtifactReceipt; patch: WorkspacePatch; scope: PatchScope; application: 'not-applied' }>>;
 /** K6: one human line for the derived scope classification (prepare, preview, integration check); JSON carries the typed object. */
-function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) {
+function scopeLine(scope: PatchScope, locale: Locale) {
   const line = scope.status === 'unscoped' ? t('cli.task.patch.scope.unscoped', { mode: scope.mode }, locale)
     : scope.status === 'in-scope' ? t('cli.task.patch.scope.inScope', { mode: scope.mode }, locale)
       : t('cli.task.patch.scope.outOfScope', { mode: scope.mode, count: scope.outOfScope.length, paths: scope.outOfScope.join(', ') }, locale);
@@ -24,15 +26,21 @@ function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) 
     ? [t('cli.task.patch.scope.enforced', {}, locale)] : [])].join('\n');
 }
 import type { TaskCommandContext } from './context.js';
-import { patchStat, resolveLatestAttempt } from '#surfaces/core/cli-terminal/index.js';
+import { patchStat, resolveLatestAttempt, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
 import { notAcceptedLabel, renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
 /**
  * SEC-5S F1: a worker-written file body reaches the owner's terminal only through `terminalSafeText`, line by line. A carriage return
  * inside a line, which would have overwritten it, becomes a visible continuation that keeps the diff marker (' ', '-', '+') of the
  * line it is part of. One CR at the end of a line is its CRLF ending (the next byte is the line break), not an overwrite: it is dropped.
+ * J1b D1: a line whose control characters were neutralised is followed by one `\ ` meta line (unified diff's own form, as in
+ * "\ No newline at end of file"), so the reviewer knows the file holds them; a continuation keeps its diff marker, so no content line
+ * can pose as the marker.
  */
-const safeDiff = (body: string) => body.split('\n').map(line => terminalSafeText(line.endsWith('\r') ? line.slice(0, -1) : line).split('\n')
-  .join(`\n${[' ', '+', '-'].includes(line[0] ?? '') ? line[0] : ''}`)).join('\n');
+const safeDiff = (body: string, marker: string) => body.split('\n').flatMap(line => {
+  const raw = line.endsWith('\r') ? line.slice(0, -1) : line, safe = terminalSafeText(raw);
+  const shown = safe.split('\n').join(`\n${[' ', '+', '-'].includes(line[0] ?? '') ? line[0] : ''}`);
+  return safe === raw ? [shown] : [shown, `\\ ${marker}`];
+}).join('\n');
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
@@ -48,7 +56,7 @@ async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<strin
   if (!scopeId || !runId || !taskId || !commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage('--expected-revision');
   if (values.has('--attempt') || values.has('--layout-revision') || values.has('--generation')) throw usage('--attempt');
   if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const locale = resolveLocale(values.get('--lang'), context.env);
+  const locale = commandLocale(context, values.get('--lang'));
   const result = await context.applyRunLifecycle(context.root ?? process.cwd(), runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, taskId,
     action, expectedRevision: Number(revision) }), { env: context.env ?? process.env });
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
@@ -58,7 +66,7 @@ async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<strin
 }
 
 async function evaluateTask(values: ReadonlyMap<string, string>, context: TaskCommandContext, identity: AttemptIdentity, json: boolean, usage: (flag?: string) => Error) {
-  const taskId = identity.taskId, locale = resolveLocale(values.get('--lang'), context.env);
+  const taskId = identity.taskId, locale = commandLocale(context, values.get('--lang'));
   const options = { env: context.env ?? process.env };
   const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
   if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
@@ -67,46 +75,100 @@ async function evaluateTask(values: ReadonlyMap<string, string>, context: TaskCo
   const result = await context.evaluateTask(context.root ?? process.cwd(), command, options);
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
     const task = data.evaluation.run.tasks.find(value => value.id === taskId); if (!task) throw ErrorRegistry.createError('RUN_STORE_CORRUPT');
-    const phases = { pending: t('cli.run.inspect.states.pending', {}, locale), active: t('cli.run.inspect.states.active', {}, locale),
-      evaluating: t('cli.run.inspect.states.evaluating', {}, locale), accepted: t('cli.run.inspect.states.accepted', {}, locale),
-      failed: t('cli.run.inspect.states.failed', {}, locale), cancelled: t('cli.run.inspect.states.cancelled', {}, locale),
-      reconciling: t('cli.run.inspect.states.reconciling', {}, locale), skipped: t('cli.run.inspect.states.skipped', {}, locale),
-      'awaiting-decision': t('cli.run.inspect.states.awaitingDecision', {}, locale) };
-    return [t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phases[task.phase], revision: data.evaluation.run.revision }, locale),
+    return [t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phaseWord(task.phase, locale), revision: data.evaluation.run.revision }, locale),
       ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale)] : [])].join('\n');
   } });
+}
+
+/**
+ * Short run ids (CLI review "Kimlik", git-like): an exact id or the unique prefix of a Run the terminal's `/runs` lists resolves to that Run;
+ * several candidates refuse (CLI_ID_AMBIGUOUS, exit 2). Anything else goes on as typed, so the AI path's full ids and an older Run outside
+ * the listed page reach the application unchanged (RUN_NOT_FOUND keeps its meaning). A list that cannot be read resolves nothing.
+ */
+async function resolveRun(context: TaskCommandContext, scopeId: string, typed: string): Promise<string> {
+  let ids: readonly string[];
+  try { ids = await listRunIds(context, context.root ?? process.cwd(), scopeId, { env: context.env ?? process.env }); } catch { return typed; }
+  const match = matchIdPrefix(typed, ids);
+  if (match.kind === 'ambiguous') requireIdPrefix(typed, ids);
+  return match.kind === 'unique' ? match.id : typed;
+}
+/** The menu's I/O on the person's terminal: CLI cards bounded by the session approval time (silence answers nothing) and this family's own read views. */
+async function menuIo(context: TaskCommandContext, locale: Locale): Promise<TaskMenuIo> {
+  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, out = context.stdout ?? process.stdout;
+  const ttlMs = (await loadConfig(root, options)).approvals.sessionTtlMs;
+  return { locale, root, options, print: text => out.write(`${text}\n`),
+    ask: request => askCliCard(request, { locale, env: options.env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
+      ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) }),
+    show: async (view, target) => taskCommand(['task', view, '--scope', target.scopeId, '--run', target.runId, '--task', target.taskId, '--lang', locale], context),
+    deliveryPort: terminalDeliveryPort(root, context, options) };
+}
+/**
+ * `deckent task` without an action (owner 2026-10-19 "boş komut yok"; reached once the catalog marks the family `bare: 'handler'`): a person on
+ * a terminal gets the task menu (`--scope`/`--run`/`--task` preselect); a pipe, agent, CI or `--json` caller is never asked and gets the actions in
+ * their four groups with the missing argument named (CLI_ARGUMENT_MISSING, exit 2).
+ */
+async function bareTask(argv: readonly string[], context: TaskCommandContext, locale: Locale): Promise<void> {
+  const values = new Map<string, string>(); let json = false;
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === '--json' && !json) { json = true; continue; }
+    if (arg === '--no-color') continue;
+    const value = argv[i + 1];
+    if (!['--scope', '--run', '--task', '--lang'].includes(arg) || values.has(arg) || !value || value.startsWith('--')) throw cliUsage('task', undefined, locale, arg);
+    values.set(arg, value); i++;
+  }
+  if (cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('CLI_ARGUMENT_MISSING', { params: { command: ['deckent', argv[0]].join(' '), usage: [
+    t('cli.help.bare.missing', { argument: `<${t('cli.help.placeholder.action', {}, locale)}>` }, locale), groupedTaskActions(locale), t('cli.help.bare.details', { command: 'task' }, locale)].join('\n') } });
+  const scopeId = values.get('--scope'), typed = values.get('--run');
+  await taskMenu(context, await menuIo(context, locale), { scopeId, runId: scopeId && typed ? await resolveRun(context, scopeId, typed) : typed, taskId: values.get('--task') });
+}
+
+/**
+ * CLI review "TTY'de id yoksa seçici": a person on a terminal reading a task without naming it picks it (scope → Run → task) and the picked ids
+ * fill the flags; everyone else keeps the usage error. False only when the person cancelled the pick (nothing is read).
+ */
+async function pickMissing(values: Map<string, string>, context: TaskCommandContext, json: boolean, locale: Locale): Promise<boolean> {
+  if ((values.has('--scope') && values.has('--run') && values.has('--task')) || cliMode(context, json).mode !== 'interactive') return true;
+  const picked = await pickTaskTarget(context, await menuIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--run'), taskId: values.get('--task') });
+  if (picked) values.set('--scope', picked.scopeId).set('--run', picked.runId).set('--task', picked.taskId);
+  return picked !== null;
 }
 
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: TaskCommandContext): Promise<void> {
   const action = argv[1];
   if (action?.startsWith('integration-queue-')) { await queueCommand(argv, context); return; }
-  const languageAt = argv.indexOf('--lang');
-  const requestedLanguage = languageAt >= 0 ? argv[languageAt + 1] : undefined;
-  const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
-  context.onLocale?.(earlyLocale);
+  const languageAt = argv.indexOf('--lang'), earlyLocale = commandLocale(context, languageAt >= 0 ? argv[languageAt + 1] : undefined);
+  if (action === undefined || action.startsWith('-')) { await bareTask(argv, context, earlyLocale); return; }
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
   if (!hasCliAction('task', action)) throw usage();
-  const flags = action === 'patch-preview' ? ['--stat', '--diff'] : [];
+  const flags = action === 'patch-preview' ? ['--stat', '--diff'] : action === 'inspect' ? ['--verbose'] : [];
   const allowed = ['evaluate', 'accept', 'reject'].includes(action ?? '') ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target', '--verification-run'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
-  const values = new Map<string, string>(); let json = false, stat = false, diff = false;
+  const values = new Map<string, string>(), switches = new Set<string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--json') { if (json) throw usage(); json = true; continue; }
     if (arg === '--no-color') continue;
-    if (flags.includes(arg)) { if (arg === '--stat' ? stat : diff) throw usage(arg); if (arg === '--stat') stat = true; else diff = true; continue; }
+    if (flags.includes(arg)) { if (switches.has(arg)) throw usage(arg); switches.add(arg); continue; }
     if (!allowed.includes(arg)) throw usage();
     if (values.has(arg)) throw usage(arg);
     const value = argv[++i]; if (!value || value.startsWith('--')) throw usage(arg); values.set(arg, value);
   }
+  const stat = switches.has('--stat'), diff = switches.has('--diff');
   if ((stat && diff) || (json && (stat || diff))) throw usage(stat ? '--stat' : '--diff');
-  const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task'), attemptId = values.get('--attempt');
-  const layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
+  const attemptId = values.get('--attempt'), layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
+  // A typed short id resolves first, so a TTY pick that keeps it reads the full id (a picked id is already full).
+  if (values.has('--scope') && values.has('--run')) values.set('--run', await resolveRun(context, values.get('--scope')!, values.get('--run')!));
+  if (['inspect', 'transcript', 'patch-preview'].includes(action) && !attemptId && !layoutRevision && !generation && !await pickMissing(values, context, json, earlyLocale)) return;
+  const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
   if (action === 'accept' || action === 'reject') { await decideTask(action, values, context, json, usage); return; }
-  const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action ?? '') && !attemptId && !layoutRevision && !generation;
+  const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action) && !attemptId && !layoutRevision && !generation;
   let identity: AttemptIdentity;
   let resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
-  if (action === 'inspect') { await inspectTask(values, context, json, earlyLocale, usage); return; }
+  if (action === 'inspect') {
+    if (!scopeId || !runId || !taskId || attemptId || layoutRevision || generation) throw usage('--task');
+    await inspectTask({ scopeId, runId, taskId }, context, json, earlyLocale, switches.has('--verbose')); return;
+  }
   if (resolveLatest) {
     if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
     if (!context.inspectInventory) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
@@ -117,7 +179,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
       || !Number.isSafeInteger(Number(generation))) throw usage(!scopeId ? '--scope' : !runId ? '--run' : !taskId ? '--task' : !attemptId ? '--attempt' : !layoutRevision ? '--layout-revision' : '--generation');
     identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
   }
-  const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
+  const locale = commandLocale(context, values.get('--lang'));
   const options = { env: context.env ?? process.env };
   if (resolvedNotice) (json ? context.stderr ?? process.stderr : context.stdout ?? process.stdout).write(`${t('cli.task.resolvedAttempt', resolvedNotice, locale)}\n`);
   if (action === 'integration-deliver') {
@@ -213,7 +275,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
         const mode = modeChanged ? `mode ${change.before!.mode} -> ${change.after!.mode} ${change.path}` : '';
         return { body, mode };
       });
-      return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [safeDiff(section.body), section.mode].filter(Boolean)), notice].join('\n');
+      return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [safeDiff(section.body, t('cli.task.patch.neutralised', {}, locale)), section.mode].filter(Boolean)), notice].join('\n');
     })()) }); return;
   }
   if (action === 'execute') {
