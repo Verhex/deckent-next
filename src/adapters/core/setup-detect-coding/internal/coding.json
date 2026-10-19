@@ -1,0 +1,14 @@
+{
+  "$comment": "Coding/git family detection registry (alpha.48 I-S2). Git argv is read-only (no hooks, no fsmonitor, no optional locks, no prompt, no transport, no user/system config; LC_ALL=C keeps answers stable), as the git-patch and host-shell adapters run Git. Coding-CLI ids and executables come from the native CLI registry; sign-in files from the native connection catalog (stat only).",
+  "schemaVersion": 1,
+  "git": {
+    "executable": "git",
+    "prefix": ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"],
+    "versionArgs": ["--version"],
+    "topLevelArgs": ["rev-parse", "--show-toplevel"],
+    "headArgs": ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
+    "notRepository": "not a git repository",
+    "env": { "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "", "GIT_NO_LAZY_FETCH": "1", "GIT_OPTIONAL_LOCKS": "0", "LC_ALL": "C" }
+  },
+  "limits": { "totalTimeoutMs": 8000, "commandTimeoutMs": 4000, "outputBytes": 65536, "pathDirectories": 256, "workTargets": 16, "hosts": 16 }
+}

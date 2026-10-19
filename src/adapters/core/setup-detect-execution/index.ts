@@ -1,1 +1,4 @@
-export {}; // Reserved for alpha.48 slice I-S2; empty until that slice lands.
+// I-S2: setup detection for the execution-environment family (registry-driven; Docker today) and the shared read-only process boundary.
+export { detectExecutionFacts, parseExecutionRuntimes, EXECUTION_RUNTIMES, HOST_EXECUTION_PORTS, type ExecutionDetectPorts, type ExecutionRuntimeEntry } from './internal/detect.js';
+export { executionSetupFamily, executionFactsSchema, EXECUTION_STAGE_ID, type ExecutionFacts, type RuntimeFacts, type ExecutionInstallOffer, type ExecutionFamilyOptions } from './internal/family.js';
+export { findExecutable, runDetectCommand, type DetectEnvironment, type DetectProcessResult, type DetectRunner } from './internal/process.js';
