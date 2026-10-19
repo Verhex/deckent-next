@@ -1,4 +1,5 @@
 import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -81,4 +82,28 @@ it('bounds visited empty directories as well as returned files', async () => {
 it.skipIf(process.platform === 'win32')('requires POSIX executable modes: measures a 0500 executable accurately', async () => {
   const root = await fixture(), result = await measureInstalledPackage(root, limits);
   expect(result.files.find(file => file.path === 'native/addon.node')).toMatchObject({ mode: 0o500, executable: true });
+});
+
+it('keeps path order and per-file hashes when more files than the read bound are measured', async () => {
+  const root = await fixture(['dist']), wide = { ...limits, maxFiles: 200, maxTotalBytes: 1 << 20 }, expected = ['package.json', 'dist/index.js', 'dist/internal/value.js'];
+  for (let index = 0; index < 40; index++) {
+    const path = `dist/part-${index % 3}/file-${String(index).padStart(2, '0')}.js`; await mkdir(join(root, path, '..'), { recursive: true });
+    await writeFile(join(root, path), `export const value = ${'x'.repeat(index * 37)};\n`); expected.push(path);
+  }
+  const first = await measureInstalledPackage(root, wide), again = await measureInstalledPackage(root, wide);
+  expect(first.files.map(file => file.path)).toEqual(expected.sort());
+  for (const file of first.files) expect(file.sha256).toBe(createHash('sha256').update(await readFile(join(root, file.path))).digest('hex'));
+  expect(again.measurementDigest).toBe(first.measurementDigest);
+});
+
+it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('requires POSIX permissions: reports the earliest failing file of concurrent reads, as a serial read would', async () => {
+  const root = await fixture(['dist']);
+  for (const name of ['a', 'b', 'c', 'd', 'e']) { await mkdir(join(root, 'dist/part'), { recursive: true }); await writeFile(join(root, `dist/part/${name}.js`), `export const ${name} = 1;\n`); }
+  const used = (await measureInstalledPackage(root, limits)).files.reduce((sum, file) => sum + file.size, 0);
+  // The first file cannot be opened and the byte budget runs out at the last one; both reads are in flight together and the later
+  // refusal settles first, but the reported refusal is the earlier file's.
+  await chmod(join(root, 'dist/index.js'), 0o000);
+  await expect(measureInstalledPackage(root, { ...limits, maxTotalBytes: used - 1 })).rejects.toMatchObject({ code: 'INSTALLATION_ARTIFACT_UNAVAILABLE' });
+  await chmod(join(root, 'dist/index.js'), 0o600);
+  await expect(measureInstalledPackage(root, { ...limits, maxTotalBytes: used - 1 })).rejects.toMatchObject({ code: 'INSTALLATION_ARTIFACT_LIMIT' });
 });

@@ -131,6 +131,9 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
     } finally { inFlight--; ends.push(performance.now()); }
   });
   async function* followEvents(signal: AbortSignal) {
+    // A loaded host opens the subscription that /watch-stop restarts late (hosted CI run 39207907013): its baseline read lands well
+    // after the window has closed.
+    if (slow) await settle(200);
     for await (const event of f.follow(signal)) { if ('kind' in event && event.kind === 'run') runPublished = true; yield event; }
   }
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read, followEvents } }); mounted.push(view.instance);
@@ -149,7 +152,11 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
     await until(() => starts.length > drained, 'next heartbeat read');
     expect(starts[drained]! - ends[drained - 1]!).toBeGreaterThanOrEqual(50);
     // FIRST-TEST-FIXES (760c906e): the watch frame takes no focus; /watch-stop closes it and stops the watch.
-    await type(view.stdin, '/watch-stop\r'); await until(() => view.stdout.text.includes('Workers window closed'), '/watch-stop closes the window and stops the watch'); await settle(150);
+    // Closing the watch restarts the push subscription, which reads one full baseline (approvals stay observed); its timing depends on
+    // the host. Once it has settled, no read follows for more than three heartbeat intervals: the heartbeat stopped with the watch.
+    const atStop = read.mock.calls.length;
+    await type(view.stdin, '/watch-stop\r'); await until(() => view.stdout.text.includes('Workers window closed'), '/watch-stop closes the window and stops the watch');
+    await until(() => read.mock.calls.slice(atStop).some(call => call[0].length === 3) && inFlight === 0, 'restarted subscription baseline settles');
     const stopped = read.mock.calls.length;
     await settle(350); expect(read).toHaveBeenCalledTimes(stopped);
   } finally { release(); }
