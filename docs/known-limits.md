@@ -338,8 +338,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   shows no pool-wait reason. Before first-run template v13 the MCP actor's rules include no `pool inspect`, so `inspect_monitor` over
   MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
 - **The monitor names a scope it could not read only to a viewer holding `monitor inspect-scope-diagnostics`.** That viewer (v13:
-  the founding administrator, fresh or after `deckent init policy --upgrade`) sees each refused or failed scope by id and reason;
-  everyone else, the MCP actor included, sees counts ("access to N scope(s) was refused", "N scope(s) could not be read (<code>)").
+  the founding administrator, fresh or after `deckent init policy --upgrade`) sees each refused or failed scope by id and reason (in the text and the window the first five, then one "…and K more" line
+  pointing to `deckent monitor --verbose`; `--verbose` and `--json` list every one); everyone else, the MCP actor included, sees counts ("access to N scope(s) was refused", "N scope(s) could not be read (<code>)").
   If the permission check itself fails, everyone sees counts and one "scope names could not be checked" line. *Workaround:* the rule
   (`first-run-monitor-scope-diagnostics`) is ordinary policy data; an administrator grants or revokes it through a governed policy
   change. For a failed check, `deckent doctor` and the code.

@@ -341,7 +341,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `deckent pool status` aynı kararı kullanır.
 - **Monitor okuyamadığı kapsamın adını yalnız `monitor inspect-scope-diagnostics` iznine sahip izleyiciye gösterir.** Bu izleyici
   (v13: kurucu yönetici; yeni kurulumda ya da `deckent init policy --upgrade` sonrası) reddedilen ya da okunamayan her kapsamı adı ve
-  nedeniyle görür; MCP aktörü dahil herkes yalnız sayı görür ("N kapsama erişim reddedildi", "N kapsam okunamadı (<kod>)"). İzin
+  nedeniyle görür (metinde ve pencerede ilk beşi, sonra `deckent monitor --verbose` komutunu gösteren tek bir "…ve K kapsam daha"
+  satırı; `--verbose` ve `--json` hepsini listeler); MCP aktörü dahil diğer herkes yalnız sayı görür ("N kapsama erişim reddedildi", "N kapsam okunamadı (<kod>)"). İzin
   denetiminin kendisi başarısız olursa herkes sayıları ve tek bir "kapsam adlarını görme izni denetlenemedi" satırını görür. *Yol:*
   kural (`first-run-monitor-scope-diagnostics`) sıradan politika verisidir; yönetici onu yönetilen bir politika değişikliğiyle verir
   ya da geri alır. Başarısız kontrol için `deckent doctor` ve kod.
