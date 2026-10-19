@@ -1,6 +1,6 @@
 // Source-only projection: never import dist or execute application initialization during lint.
 import ts from 'typescript';
-import { lintConfigBindings } from './config-bindings.mjs';
+import { lintConfigBindings, FIELD_FRAGMENTS } from './config-bindings.mjs';
 export { lintConfigBindings } from './config-bindings.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ export function projectVocabulary(root) {
   const config = ts.readConfigFile(join(root, 'tsconfig.json'), ts.sys.readFile);
   if (config.error) throw new Error('CONFIG_TYPESCRIPT_CONFIG_MISSING');
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  const program = ts.createProgram([join(root, registryPath)], parsed.options);
+  const program = ts.createProgram([join(root, registryPath), ...FIELD_FRAGMENTS.map(path => join(root, path))], parsed.options);
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(join(root, registryPath));
   if (!source) throw new Error('CONFIG_REGISTRY_MISSING');
@@ -54,6 +54,13 @@ export function projectVocabulary(root) {
     ts.forEachChild(node, visit);
   }
   visit(source);
+  // alpha.48 A2: the registered field fragments are part of the registry; a missing one is a broken registry, not an empty fragment.
+  for (const path of FIELD_FRAGMENTS) {
+    const fragment = program.getSourceFile(join(root, path));
+    if (!fragment) throw new Error(`CONFIG_REGISTRY_FRAGMENT_MISSING:${path}`);
+    dependencies.set(path, fragment.text);
+    visit(fragment);
+  }
   if (!Object.keys(fields).length) throw new Error('CONFIG_REGISTRY_EMPTY');
   return { schemaVersion: 1, sources: Object.fromEntries([...dependencies].sort().map(([path, text]) => [path, createHash('sha256').update(text.replace(/\r\n/gu, '\n')).digest('hex')])), fields };
 }
