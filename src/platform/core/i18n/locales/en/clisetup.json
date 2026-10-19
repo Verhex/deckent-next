@@ -57,5 +57,6 @@
   "clisetup.inference.localModel": "A model on this machine is connected as a provider: {model} ({provider}; see deckent models).",
   "clisetup.inference.why": "A serving profile is something else: it produces the vLLM launch arguments and the capacity estimate for a server you run.",
   "clisetup.inference.define": "To define one: deckent config → inference_serving",
-  "clisetup.config.approvalApply": "Decide it with deckent approval (or /approvals in the terminal). After an allow, apply exactly this change: deckent config {action} {key}{value}{layer} --scope {scope} --command-id {commandId} --expect {expect}"
+  "clisetup.config.approvalApply": "Decide it with deckent approval (or /approvals in the terminal). After an allow, apply exactly this change: deckent config {action} {key}{value}{layer} --scope {scope} --command-id {commandId} --expect {expect}",
+  "clisetup.config.valueHidden": "The value you chose is not shown (it is redacted like in every config view); give the same value in its place, or choose it again with deckent config set <key> on a terminal."
 }

@@ -4,7 +4,8 @@ import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ModelCommandContext } from './context.js';
 
 interface Parsed {
-  action: 'status' | 'plan' | 'budget' | 'metrics';
+  /** null: the bare call (status read). */
+  action: 'plan' | 'budget' | 'metrics' | null;
   json: boolean;
   help: boolean;
   language?: string;
@@ -18,8 +19,8 @@ function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'inference') throw ErrorRegistry.createError('CLI_USAGE');
   // C-SETUP (review §inference): bare `deckent inference` (flags only) is the status read, never a usage error.
   const bare = argv[1] === undefined || argv[1].startsWith('-');
-  const action = bare ? 'status' : argv[1];
-  if (action !== 'status' && action !== 'plan' && action !== 'budget' && action !== 'metrics') throw ErrorRegistry.createError('CLI_USAGE');
+  const action = bare ? null : argv[1];
+  if (action !== null && action !== 'plan' && action !== 'budget' && action !== 'metrics') throw ErrorRegistry.createError('CLI_USAGE');
   const parsed: Parsed = { action, json: false, help: false };
   const seen = new Set<string>();
   for (let index = bare ? 1 : 2; index < argv.length; index++) {
@@ -116,7 +117,7 @@ export async function inferenceCommand(argv: readonly string[], context: ModelCo
   const config = await loadConfig(root, { ...options, heal: false });
   if (!parsed.language && !context.locale) { locale = resolveLocale(undefined, env, config.language); context.onLocale?.(locale); }
   const profile = selectProfile(config as Record<string, unknown>, parsed.profileId, locale);
-  if (parsed.action === 'status') {
+  if (parsed.action === null) {
     const local = localModels(config as Record<string, unknown>), plan = profile ? buildInferenceServingPlan(profile) : null;
     emit({ schemaVersion: 1 as const, profileId: plan?.profileId ?? null, plan, localModels: local }, { ...sinks, json: parsed.json,
       render: value => value.plan ? [renderPlan(value.plan, locale), t('clisetup.inference.next', {}, locale)].join('\n') : renderAbsent(value.localModels, locale) });

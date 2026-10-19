@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ErrorRegistry } from '#platform/index.js';
 import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
-import { MESSAGE_REGISTRY, resolveLocale, t, type Locale } from '#platform/index.js';
+import { isSensitiveConfigKey, MESSAGE_REGISTRY, redactSensitive, resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { configServiceState, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type ConfigFieldView, type DescribeService } from '#engine/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
@@ -120,6 +120,22 @@ async function declared(context: ConfigCommandContext, root: string, options: Co
   try { return (await context.configApplication(root, options).explain({ keyPath })).key === keyPath; } catch { return false; }
 }
 const describe = (field: ConfigFieldView, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description;
+/**
+ * Whether a chosen value may be printed back: never when the config views redact it — the key's field view is redacted (secret provenance),
+ * a path segment names a credential, or the value is a `$DECK:`/`$ENV:` reference or carries a credential pattern (the engine's field-view rule).
+ */
+async function chosenValueShown(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, keyPath: string, value: unknown): Promise<boolean> {
+  if (keyPath.split('.').some(isSensitiveConfigKey)) return false;
+  try { if ((await context.configApplication!(root, options).explain({ keyPath })).redacted) return false; } catch { return false; }
+  const strings: string[] = [], visit = (item: unknown, key = ''): void => {
+    if (key && isSensitiveConfigKey(key)) strings.push('\u0000');
+    if (typeof item === 'string') strings.push(item);
+    else if (Array.isArray(item)) item.forEach(child => visit(child));
+    else if (item && typeof item === 'object') for (const [name, child] of Object.entries(item)) visit(child, name);
+  };
+  visit(value);
+  return strings.every(text => text !== '\u0000' && !/^\$DECK:|^\$ENV:/u.test(text) && redactSensitive(text) === text);
+}
 /** `config set <key>` without a value off a terminal: exit 2, naming the missing value and what this key takes (its choices or schema). */
 async function valueMissing(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, keyPath: string) {
   const field = await context.configApplication!(root, options).explain({ keyPath });
@@ -187,9 +203,12 @@ export async function terminalConfigWrite(root: string, request: Omit<ConfigWrit
     pendingWrites.delete(key); pendingWrites.set(key, { commandId: outcome.commandId, expect: outcome.expect });
     while (pendingWrites.size > PENDING_WRITES_KEPT) pendingWrites.delete(pendingWrites.keys().next().value!);
     // `deckent config` (C-SETUP) is one process: the window's pending memory ends with it, so the line names the exact command that applies it.
+    // A value the config views redact is never echoed (security review of be23372e): the command shows `<value>` and says why.
+    const shown = request.action === 'set' && surface === 'cli' && await chosenValueShown(context, root, options, request.keyPath, request.value);
     const lines = surface === 'terminal' ? renderConfigPending(outcome, locale, 'terminal') : [renderConfigPending(outcome, locale, 'cli')[0]!,
       t('clisetup.config.approvalApply', { action: request.action, key: request.keyPath, scope: scopeId, commandId: outcome.commandId, expect: outcome.expect ?? 'absent',
-        value: request.action === 'set' ? ` '${JSON.stringify(request.value ?? null).replace(/'/gu, `'\\''`)}'` : '', layer: layer === 'global' ? ' --global' : '' }, locale)];
+        value: request.action !== 'set' ? '' : shown ? ` '${JSON.stringify(request.value ?? null).replace(/'/gu, `'\\''`)}'` : ' <value>',
+        layer: layer === 'global' ? ' --global' : '' }, locale), ...(request.action === 'set' && !shown ? [t('clisetup.config.valueHidden', {}, locale)] : [])];
     return { status: outcome.status, lines, approvalId: outcome.approval.approvalId };
   }
   pendingWrites.delete(key);

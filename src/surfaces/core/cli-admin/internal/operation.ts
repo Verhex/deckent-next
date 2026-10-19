@@ -68,7 +68,8 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
   const command = effectCommandSchema.safeParse(input);
   if (!command.success) {
     const issue = command.error.issues[0]!;
-    throw ErrorRegistry.createError('CLI_OPERATION_INPUT_INVALID', { params: { field: issue.path.length ? issue.path.join('.') : '(document)', problem: issue.message }, locale });
+    // The issue's code, not its message: the message is English and may quote the received value.
+    throw ErrorRegistry.createError('CLI_OPERATION_INPUT_INVALID', { params: { field: issue.path.length ? issue.path.join('.') : '(document)', problem: issue.code }, locale });
   }
   const result = await handler(root, input as EffectCommand, options, timeoutMs === undefined ? undefined : { awaitApproval: { timeoutMs } });
   emit(result, { ...sinks, json, render: data => data.status === 'approval-pending'

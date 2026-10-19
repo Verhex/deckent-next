@@ -5,7 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { main } from '#surfaces/index.js';
 import { codingCommand, operationCommand } from '#surfaces/core/cli-admin/index.js';
 import { inferenceCommand } from '#surfaces/core/cli-models/index.js';
-import { terminalConfigWrite } from '#surfaces/core/config/index.js';
+import { configCommand, terminalConfigWrite, type ConfigPanelOpener } from '#surfaces/core/config/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { compileNativeCodingDockerProfile } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths } from '#platform/index.js';
@@ -129,13 +129,43 @@ describe.skipIf(process.platform === 'win32')('C-SETUP: the /config window\'s CL
   it('an approval-pending write from deckent config prints the exact command with its command id and expected digest; the terminal keeps its wording', async () => {
     const f = await project({ terminal: { scopeId: 's' } });
     const outcome = { status: 'approval-pending' as const, commandId: 'cmd-1', expect: 'digest-1', approval: { approvalId: 'appr-1', summary: 'Setting will change' } };
-    const submit = vi.fn(async () => outcome), explain = vi.fn();
+    const submit = vi.fn(async () => outcome), explain = vi.fn(async () => ({ redacted: false }));
     const context = { root: f.projectRoot, env: f.env, configApplication: () => ({ submit, explain }) as never,
       resolveConfigPrincipal: async () => ({ id: 'p', issuer: 'local', subject: 'p', assurance: 'os-user', scopeIds: ['s'] }) as never };
     const cli = await terminalConfigWrite(f.projectRoot, { action: 'set', keyPath: 'terminal.theme', value: "it's" }, context, { env: f.env }, 'en', 'cli');
     expect(cli.status).toBe('approval-pending');
     expect(cli.lines.join('\n')).toContain("deckent config set terminal.theme '\"it'\\''s\"' --scope s --command-id cmd-1 --expect digest-1");
     const terminal = await terminalConfigWrite(f.projectRoot, { action: 'set', keyPath: 'terminal.theme', value: 'dark' }, context, { env: f.env }, 'en');
-    expect(terminal.lines.join('\n')).not.toContain('--command-id'); expect(explain).not.toHaveBeenCalled();
+    expect(terminal.lines.join('\n')).not.toContain('--command-id'); expect(explain).toHaveBeenCalledOnce();
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('C-SETUP security review (be23372e): a redacted value is never echoed by the CLI window', () => {
+  const secret = 'sk-CANARY-SECRET-0123456789abcdef';
+  const pending = { status: 'approval-pending' as const, commandId: 'cmd-2', expect: 'digest-2', keyPath: 'terminal.chat.apiKey', layer: 'project' as const,
+    approval: { approvalId: 'appr-2', summary: 'Setting will change: terminal.chat.apiKey [REDACTED] → [REDACTED] (project)' } };
+  const context = (f: { projectRoot: string; env: Record<string, string> }, redacted: boolean, extra: Record<string, unknown> = {}) => ({ root: f.projectRoot, env: f.env,
+    configApplication: () => ({ submit: vi.fn(async () => pending), explain: vi.fn(async ({ keyPath }: { keyPath: string }) => ({ key: keyPath, redacted, value: redacted ? '[REDACTED]' : 'x',
+      apply: 'live' })) }) as never,
+    resolveConfigPrincipal: async () => ({ id: 'p', issuer: 'local', subject: 'p', assurance: 'os-user', scopeIds: ['s'] }) as never, ...extra });
+  it('NEGATIVE: a pending write of a redacted key names the command with a placeholder; the value bytes appear nowhere', async () => {
+    const f = await project({ terminal: { scopeId: 's' } });
+    for (const [key, redacted] of [['terminal.chat.apiKey', true], ['terminal.theme', true], ['service.authToken', false]] as const) {
+      const result = await terminalConfigWrite(f.projectRoot, { action: 'set', keyPath: key, value: secret }, context(f, redacted), { env: f.env }, 'en', 'cli');
+      expect(result.status).toBe('approval-pending'); expect(result.lines.join('\n')).not.toContain(secret); expect(result.lines.join('\n')).toContain('<value>');
+    }
+    // A value shaped like a credential is hidden even on a key that is not redacted by name.
+    const shaped = await terminalConfigWrite(f.projectRoot, { action: 'set', keyPath: 'terminal.theme', value: '$DECK:API_TOKEN' }, context(f, false), { env: f.env }, 'en', 'cli');
+    expect(shaped.lines.join('\n')).not.toContain('$DECK:API_TOKEN');
+  });
+  it('NEGATIVE: through deckent config on a terminal (window path) and with --json, the chosen secret is not printed', async () => {
+    const f = await project({ terminal: { scopeId: 's' } }), output: string[] = [];
+    const opener: ConfigPanelOpener = async port => { await port.write({ action: 'set', keyPath: 'terminal.chat.apiKey', value: secret, layer: 'project' }); return []; };
+    const sink = { isTTY: true, columns: 100, write: (value: string) => { output.push(value); } };
+    await configCommand(['config'], context(f, true, { openConfigPanel: opener, stdin: { isTTY: true, setRawMode: () => undefined }, stdout: sink }) as never);
+    expect(output.join('')).toContain('appr-2'); expect(output.join('')).not.toContain(secret);
+    output.length = 0;
+    await configCommand(['config', 'set', 'terminal.chat.apiKey', JSON.stringify(secret), '--scope', 's', '--json'], context(f, true, { stdout: sink }) as never);
+    expect(output.join('')).not.toContain(secret); expect(JSON.parse(output.join('')).status).toBe('approval-pending');
   });
 });

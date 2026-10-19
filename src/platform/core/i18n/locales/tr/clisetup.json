@@ -57,5 +57,6 @@
   "clisetup.inference.localModel": "Bu makinedeki bir model sağlayıcı olarak bağlı: {model} ({provider}; bkz. deckent models).",
   "clisetup.inference.why": "Çıkarım profili başka bir şeydir: kendi çalıştırdığınız sunucu için vLLM başlatma argümanlarını ve kapasite tahminini üretir.",
   "clisetup.inference.define": "Tanımlamak için: deckent config → inference_serving",
-  "clisetup.config.approvalApply": "deckent approval ile (ya da terminalde /approvals) karar verin. İzin verildikten sonra tam olarak bu değişikliği uygulayın: deckent config {action} {key}{value}{layer} --scope {scope} --command-id {commandId} --expect {expect}"
+  "clisetup.config.approvalApply": "deckent approval ile (ya da terminalde /approvals) karar verin. İzin verildikten sonra tam olarak bu değişikliği uygulayın: deckent config {action} {key}{value}{layer} --scope {scope} --command-id {commandId} --expect {expect}",
+  "clisetup.config.valueHidden": "Seçtiğiniz değer gösterilmiyor (her config görünümündeki gibi gizlenir); yerine aynı değeri verin ya da terminalde deckent config set <anahtar> ile yeniden seçin."
 }
