@@ -1,4 +1,5 @@
 {
   "error.SECRET_REFERENCE_PROJECT_LAYER": "The project config (.deckent/config.json) may not use a secret reference; only the installation config may name an installation secret. Move the reference to the installation config or remove it.",
-  "error.SECRET_REFERENCE_LEAVES_HOST": "This value leaves the machine (for example the delivery commit author), so it may not come from a secret reference in any config. Write the plain value."
+  "error.SECRET_REFERENCE_LEAVES_HOST": "This value leaves the machine (for example the delivery commit author), so it may not come from a secret reference in any config. Write the plain value.",
+  "error.AUTHORITY_WITNESS_REQUIRED": "Changing authority (the permission mode, an installation secret or the secret store) needs a person at an interactive terminal: run the command in a real terminal on this host, with input and output on the same terminal. AI tools, MCP, SDK scripts and piped commands cannot make this change. Nothing was changed."
 }
