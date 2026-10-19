@@ -6,7 +6,7 @@ import { acquireLedgerLock, runtimeSocketLocation } from '#adapters/core/local-r
 import { ConfigValidationError, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
-import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
+import { createBackupSet, locateBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
 import { BACKUP_RESOURCES, directoryResources, splitArchivedConfig, type BackupConfigLayers, type BackupLimits } from './archive.js';
 import { inside, ownerOnlyWritable, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
 const FIXED = ['config', 'projectIdentity', 'installationJournal'];
@@ -39,6 +39,7 @@ export interface BackupSource { readonly layout: ProductLayout; readonly project
   readonly globalConfigPath?: string }
 export class FileBackupStorage implements BackupStoragePort {
   constructor(private readonly source: BackupSource, private readonly limits: BackupLimits) {}
+  locate(set: string): Promise<void> { return locateBackupSet(set); }
   async execute(command: BackupCommand, passphrase: string): Promise<BackupResult> {
     if (command.action === 'create') return createBackupSet(this.source.layout, this.source.projectRoot, this.source.installationId,
       this.source.keyFile, command.set, passphrase, this.limits, await this.source.configDocument?.());

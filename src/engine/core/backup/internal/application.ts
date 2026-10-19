@@ -24,7 +24,10 @@ export class BackupApplication {
     await this.audit(event('intent', null), this.authority.integrity);
     let applied = false;
     try {
-      if (!passphrase || Buffer.byteLength(passphrase) > 65536) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_INVALID');
+      // Owner CLI review 2026-10-19: where the set is comes first; no passphrase is its own cause, never "wrong passphrase".
+      if (command.action !== 'create') await this.storage.locate?.(command.set);
+      if (!passphrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED');
+      if (Buffer.byteLength(passphrase) > 65536) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_INVALID');
       const result = await this.storage.execute(command, passphrase);
       applied = true;
       await this.audit(event('succeeded', null, result.ledgerDigest), this.authority.integrity);

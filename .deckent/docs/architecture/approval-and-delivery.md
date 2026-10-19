@@ -1034,7 +1034,9 @@ criteria/profile and receipt are checked again before effects. Legacy delivery-p
 
 `deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`
 and an optional `deliveryIntent:"service-reattempt"` (below).
-Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
+Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The human list is a
+table (task, target, state or outcome, next step, ticket; tickets in flight first, then the rest in page order, a typed reason such as
+a parked ticket's on its own line); `--json` prints the unchanged page. The verified terminal's
 `integration-queue-confirm` obtains separate publish and adoption cards (the adoption card asks "Move <branch> to the verified commit?";
 each action refuses flags it does not take; output follows `--lang`, then config `language`, then LANG); the second card is derived from the first frozen prefix,
 so a later arrival never enters its consent. Capability values are service-issued and never printed as product output. MCP exposes

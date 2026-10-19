@@ -24,6 +24,8 @@ export interface BackupDecision { readonly policyRevision: string; readonly effe
 export interface BackupAuthority { readonly principal: VerifiedPrincipal; readonly installationId: string; readonly integrity: IntegrityAuthority }
 export interface BackupStoragePort {
   execute(command: BackupCommand, passphrase: string): Promise<BackupResult>;
+  /** Without the passphrase: refuses a set that is missing, unreadable or no set with its own typed code before any decryption. */
+  locate?(set: string): Promise<void>;
 }
 export type BackupAuthorization = (command: BackupCommand, authority: BackupAuthority) => Promise<BackupDecision>;
 /** No persisted intent, no storage effect. Outcome errors are typed and leave an intent that must be reconciled. */

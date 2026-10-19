@@ -33,5 +33,9 @@
   "cli.audit.service.ready": "ready",
   "cli.audit.service.degraded": "degraded",
   "cli.audit.service.degradedReason": "Service audit integrity: {status} ({reason})",
-  "cli.audit.reason.not-verified": "not verified yet"
+  "cli.audit.reason.not-verified": "not verified yet",
+  "error.BACKUP_SET_NOT_FOUND": "No recovery set at {path}: the path does not exist or holds no recovery set (a set is one folder with MANIFEST.sha256 in it). Nothing was read or changed. Check the path; scheduled sets are kept under the installation's state/backups/recovery folder by default.",
+  "error.BACKUP_SET_UNREADABLE": "This user cannot read the recovery set {path} (permission denied); nothing was changed. As the owner of the set, allow reading (chmod 700 on the folder, chmod 600 on its files), then rerun the same command.",
+  "error.BACKUP_PASSPHRASE_REQUIRED": "No passphrase was given, so the set was not opened. Type it at the hidden prompt in a terminal or pipe it on standard input (never as an argument), then rerun the same command.",
+  "error.BACKUP_MANIFEST_INVALID": "The recovery set was modified: its files no longer match its manifest, so it is not used. Nothing was restored or changed; use another set."
 }

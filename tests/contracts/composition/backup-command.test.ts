@@ -393,3 +393,41 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   expect(await snapshot()).toEqual(before);expect((await readdir(join(f.root,'.deckent'))).sort()).toEqual(entries);expect((await readdir(f.layout.root)).sort()).toEqual(data);
   await expect(stat(restoreHoldPath(f.root))).rejects.toMatchObject({code:'ENOENT'});
 });
+/** Owner CLI review 2026-10-19 (C-PRIO): `backup verify` names why a set cannot be used; only the AEAD failure says "wrong passphrase". */
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a missing set is BACKUP_SET_NOT_FOUND, never a passphrase failure, with or without a passphrase and through the CLI',async()=>{
+  const f=await fixture(),missing=join(f.base,'no-such-set');
+  for(const passphrase of [phrase,''])await expect(call(f,'verify',passphrase,{set:missing})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND',params:{path:missing}});
+  await expect(call(f,'restore','',{set:missing})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});
+  // The owner's measurement: a pipe with no passphrase and a path that does not exist.
+  let output='',errors='';
+  expect(await main(['backup','verify','--scope','scope','--set',missing,'--json'],{root:f.root,env:f.env,initialize:composeCore,executeBackup,
+    stdin:Readable.from([]),stdout:{write:text=>{output+=text;}},stderr:{write:text=>{errors+=text;}}})).toBe(78);
+  expect(output).toBe('');expect(JSON.parse(errors)).toMatchObject({code:'BACKUP_SET_NOT_FOUND'});expect(errors).not.toContain('BACKUP_PASSPHRASE_INVALID');
+  // A folder that holds sets (or anything else) but no manifest is not a set either; a set that lost its manifest was modified.
+  const folder=join(f.base,'recovery');await mkdir(folder,{mode:0o700});await mkdir(join(folder,'set-a'),{mode:0o700});
+  await expect(call(f,'verify',phrase,{set:folder})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});
+  await call(f,'create');await rm(join(f.set,'MANIFEST.sha256'));
+  await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_MANIFEST_INVALID'});
+  const records=await audit(f);expect(records.filter(record=>record.event.subject.kind==='backup-operation'&&record.event.subject.code==='BACKUP_SET_NOT_FOUND').length).toBeGreaterThanOrEqual(3);
+  expect(JSON.stringify(records)).not.toContain(phrase);
+});
+it.skipIf(process.platform === 'win32'||process.getuid?.()===0)('[unsupported on Windows: backup needs the OS-user identity; root reads any mode] an unreadable set or member is BACKUP_SET_UNREADABLE; a removed member is a modified set',async()=>{
+  const f=await fixture();await call(f,'create');
+  await chmod(f.set,0o000);
+  try{await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_SET_UNREADABLE',params:{path:f.set}});}finally{await chmod(f.set,0o700);}
+  const member=join(f.set,'authority.key.enc');await chmod(member,0o000);
+  try{await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_SET_UNREADABLE'});}finally{await chmod(member,0o600);}
+  await call(f,'verify');
+  await rm(join(f.set,'ledger.db'));
+  await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_MANIFEST_INVALID'});
+});
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] an empty passphrase is BACKUP_PASSPHRASE_REQUIRED; a wrong one on a real set stays BACKUP_PASSPHRASE_INVALID',async()=>{
+  const f=await fixture();await call(f,'create');
+  await expect(call(f,'verify','')).rejects.toMatchObject({code:'BACKUP_PASSPHRASE_REQUIRED'});
+  const wrong=await call(f,'verify','CANARY-wrong-passphrase').then(()=>null,(error:{code?:string;message?:string})=>error);
+  expect(wrong?.code).toBe('BACKUP_PASSPHRASE_INVALID');expect(wrong?.message).not.toContain('CANARY-wrong-passphrase');
+  let errors='';
+  expect(await main(['backup','verify','--scope','scope','--set',f.set,'--json'],{root:f.root,env:f.env,initialize:composeCore,executeBackup,
+    stdin:Readable.from(['CANARY-wrong-passphrase\n']),stdout:{write:()=>{}},stderr:{write:text=>{errors+=text;}}})).toBe(78);
+  expect(JSON.parse(errors)).toMatchObject({code:'BACKUP_PASSPHRASE_INVALID'});expect(errors).not.toContain('CANARY-wrong-passphrase');
+});

@@ -33,5 +33,9 @@
   "cli.audit.service.ready": "hazır",
   "cli.audit.service.degraded": "bozulmuş",
   "cli.audit.service.degradedReason": "Servis audit bütünlüğü: {status} ({reason})",
-  "cli.audit.reason.not-verified": "henüz doğrulanmadı"
+  "cli.audit.reason.not-verified": "henüz doğrulanmadı",
+  "error.BACKUP_SET_NOT_FOUND": "{path} konumunda kurtarma seti yok: yol mevcut değil ya da bir kurtarma seti içermiyor (set, içinde MANIFEST.sha256 bulunan tek bir klasördür). Hiçbir şey okunmadı ya da değiştirilmedi. Yolu kontrol edin; zamanlanmış setler varsayılan olarak kurulumun state/backups/recovery klasöründe tutulur.",
+  "error.BACKUP_SET_UNREADABLE": "Bu kullanıcı {path} kurtarma setini okuyamıyor (izin reddedildi); hiçbir şey değiştirilmedi. Setin sahibi olarak okumaya izin verin (klasöre chmod 700, dosyalarına chmod 600), sonra aynı komutu yeniden çalıştırın.",
+  "error.BACKUP_PASSPHRASE_REQUIRED": "Parola verilmedi, bu yüzden set açılmadı. Parolayı bir terminalde gizli isteme yazın ya da standart girdiden verin (asla argüman olarak değil), sonra aynı komutu yeniden çalıştırın.",
+  "error.BACKUP_MANIFEST_INVALID": "Kurtarma seti değiştirilmiş: dosyaları artık manifestiyle eşleşmiyor, bu yüzden kullanılmıyor. Hiçbir şey geri yüklenmedi ya da değiştirilmedi; başka bir set kullanın."
 }
