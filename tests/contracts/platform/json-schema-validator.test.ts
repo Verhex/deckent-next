@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { compilePattern, DeckentJsonSchemaValidator, JSON_SCHEMA_LIMITS, JsonSchemaRefusal, PatternRefusal, type JsonSchemaRefusalReason } from '#platform/core/validate/index.js';
+import { compilePattern, DeckentJsonSchemaValidator, JSON_SCHEMA_LIMITS, JsonSchemaRefusal, PatternRefusal, type JsonSchemaRefusalReason, type LinearPattern } from '#platform/core/validate/index.js';
 
 // MCP-SCHEMA-VALIDATOR (owner 2026-09-29: problematic dependencies are not accepted; build our own when needed). Deckent's own JSON Schema
 // validator replaces @cfworker/json-schema and the SDK's bundled ajv/fast-uri for MCP tool schemas: a server's outputSchema is untrusted.
@@ -182,6 +182,24 @@ describe('JSON Schema validator: ReDoS (a remote server controls both the patter
     expect(value).toMatchObject({ valid: false, errorMessage: expect.stringContaining('not validated, validation step budget exceeded (fail closed)') });
     expect(ms).toBeLessThan(budgetMs);
   });
+  // SEC-6 F2: an exact repetition of a body that emits no state never reached the states limit, so `X{1000}` nested five deep cost 10^15
+  // generator visits (the service event loop hung on the first tool call). Steps are the primary assertion: every generator visit is
+  // charged, and a compiled program costs at most a fixed multiple of its own states.
+  it.each(['(?:(?:(?:(?:(?:){1000}){1000}){1000}){1000}){1000}', '(?:(?:(?:a{0}){1000}){1000}){1000}', '(?:(?:(?:(?:)*){1000}){1000}){1000}',
+    '(?:(?:(?:(?:){1}){1}){1000}){1000}x', '(?:(?:(?:(?:a{0}){1000})+){1000}){1000}|(?:)', '(?:(?:(?:(?:(?:a){1}){1}){1}){1}){1}'])(
+    'empty-body repetition %s compiles in work bounded by its states (F2)', pattern => {
+      const matcher = compilePattern(pattern, { sourceMax: 4_096, statesMax: 2_000, repeatMax: 1_000 }), reference = new RegExp(pattern, 'u');
+      expect(matcher.compileSteps).toBeGreaterThan(0);
+      expect(matcher.compileSteps).toBeLessThanOrEqual(8 * matcher.states);
+      for (const input of ['', 'x', 'ax', 'b']) expect(matcher.test(input, { remaining: 1_000 }), input).toBe(reference.test(input));
+    });
+  // Calibrated helper only (the steps above are the assertion): before the fix this pattern alone took 10^9 generator visits (≈ 3 s).
+  it('a nested empty-body repetition in an outputSchema compiles within the calibrated 100ms guard (F2)', () => {
+    const budgetMs = timingBudget(100);
+    const { value, ms } = timed(() => validator.getValidator({ type: 'string', pattern: '(?:(?:(?:){1000}){1000}){1000}' }));
+    expect(value('anything').valid).toBe(true);
+    expect(ms).toBeLessThan(budgetMs);
+  });
   it.each([['(a)\\1', 'unsupported-pattern'], ['(?<n>a)\\k<n>', 'unsupported-pattern'], ['(?=a)a', 'unsupported-pattern'], ['(?!a)b', 'unsupported-pattern'],
     ['(?<=a)b', 'unsupported-pattern'], ['(?<!a)b', 'unsupported-pattern'], ['(?i:a)', 'unsupported-pattern'], ['a{1001}', 'limit'], ['(a{1000}){3}', 'limit'],
     ['['.repeat(1) + 'a', 'invalid-schema'], ['\\-', 'invalid-schema'], ['a'.repeat(4_097), 'limit'], ['('.repeat(65) + ')'.repeat(65), 'limit']] as const)(
@@ -199,10 +217,10 @@ describe('JSON Schema validator: the linear engine agrees with V8 on the pattern
   const random = (n: number) => { seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff; return seed % n; };
   const pick = <T>(items: readonly T[]) => items[random(items.length)]!;
   const ATOMS = ['a', 'b', 'c', '.', '[ab]', '[^a]', '[a-c]', '\\d', '\\w', '\\s', '\\W', '\\u0061', '\\x62', '[\\s\\d]', '😀', '\\p{L}', '[^]', '[]', '\\n', 'ğ'];
-  const pattern = (depth: number): string => {
+  const pattern = (depth: number, atoms: readonly string[] = ATOMS): string => {
     const items: string[] = [];
     for (let k = 1 + random(3); k > 0; k--) {
-      let item = depth > 0 && random(4) === 0 ? `(${random(2) ? '?:' : ''}${pattern(depth - 1)}${random(3) === 0 ? `|${pattern(depth - 1)}` : ''})` : pick(ATOMS);
+      let item = depth > 0 && random(4) === 0 ? `(${random(2) ? '?:' : ''}${pattern(depth - 1, atoms)}${random(3) === 0 ? `|${pattern(depth - 1, atoms)}` : ''})` : pick(atoms);
       const q = random(9);
       item += q === 0 ? '*' : q === 1 ? '+' : q === 2 ? '?' : q === 3 ? `{${random(3)}}` : q === 4 ? `{${random(2)},${2 + random(2)}}` : q === 5 ? `{1,}` : '';
       if (q < 6 && random(4) === 0) item += '?';
@@ -216,12 +234,34 @@ describe('JSON Schema validator: the linear engine agrees with V8 on the pattern
     for (let n = 0; n < 2_000; n++) {
       const source = pattern(2);
       const ours = compilePattern(source, { sourceMax: 4_096, statesMax: 2_000, repeatMax: 1_000 }), reference = new RegExp(source, 'u');
+      if (ours.compileSteps > 8 * ours.states) disagreements.push(`${JSON.stringify(source)} compiled in ${ours.compileSteps} steps for ${ours.states} states`);
       for (let k = 0; k < 8; k++) {
         const input = Array.from({ length: random(7) }, () => pick(TEXT)).join('');
         const budget = { remaining: 1_000_000 };
         if (ours.test(input, budget) !== reference.test(input)) disagreements.push(`${JSON.stringify(source)} on ${JSON.stringify(input)}`);
       }
     }
+    expect(disagreements).toEqual([]);
+  });
+  // SEC-6 F2: the same oracle with bodies that emit no state (`(?:)`, `a{0}`, `(?:|)`), which the compiler folds to nothing.
+  it('2 000 random patterns with empty bodies × 8 inputs match like RegExp and compile in work bounded by their states', () => {
+    const atoms = [...ATOMS, '(?:)', '(?:a{0})', '(?:(?:a{0}){3})', '(?:|)', '(?:^)', '(?:(?:){2})', '(?:(?:b){1})'], disagreements: string[] = [];
+    let compiled = 0, worst = 0;
+    for (let n = 0; n < 2_000; n++) {
+      const source = pattern(3, atoms);
+      let ours: LinearPattern;
+      try { ours = compilePattern(source, { sourceMax: 4_096, statesMax: 2_000, repeatMax: 1_000 }); }
+      catch (error) { if (error instanceof PatternRefusal && error.reason === 'limit') continue; throw error; }
+      const reference = new RegExp(source, 'u');
+      compiled++; worst = Math.max(worst, ours.compileSteps / ours.states);
+      if (ours.compileSteps > 8 * ours.states) disagreements.push(`${JSON.stringify(source)} compiled in ${ours.compileSteps} steps for ${ours.states} states`);
+      for (let k = 0; k < 8; k++) {
+        const input = Array.from({ length: random(7) }, () => pick(TEXT)).join('');
+        if (ours.test(input, { remaining: 1_000_000 }) !== reference.test(input)) disagreements.push(`${JSON.stringify(source)} on ${JSON.stringify(input)}`);
+      }
+    }
+    console.info('SEC6_F2_EMPTY_BODY_ORACLE', JSON.stringify({ compiled, worstStepsPerState: worst }));
+    expect(compiled).toBeGreaterThan(1_500);
     expect(disagreements).toEqual([]);
   });
   it('a pattern is never anchored implicitly and lazy quantifiers match like greedy ones', () => {

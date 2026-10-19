@@ -101,7 +101,8 @@ every shell command). Paths go through a port: `adapters/core/shell-paths` check
 read tools and edits (lexically inside, not denied, existing, real path inside and not denied; a path or glob prefix with a `..`
 component is checked as the kernel opens it — native realpath of the unnormalized text, so `link/..` is the parent of the link's
 target — and must exist inside and not denied (Astra 2111); a `..` after a glob segment is GLOB_UNSUPPORTED; sh globs expanded against the real
-directory, bounded at 10,000 matches, each match checked; git pathspecs lexical). The shared deny list gained the legacy credential
+directory, bounded at 10,000 matches, each match checked — segments are matched by the platform's linear-time pattern engine under the
+validation step budget, never a backtracking RegExp, and an exhausted budget is GLOB_UNSUPPORTED (SEC-6 F31); git pathspecs lexical). The shared deny list gained the legacy credential
 carriers (`*.pfx`, `*.keystore`, `*.jks`, `.pypirc`, `credentials`, `credentials.json`, `secrets.json`, `.brain/memory.db*`) and the
 `.git` directory itself, so read tools refuse them too; legacy `.deckent/private/` is dropped (Next keeps private state under the
 already denied `.deckent/host`, `audit-key`, `approvals`). Not covered: intermediate symlink hops that leave the root and return (the

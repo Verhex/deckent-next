@@ -1,6 +1,6 @@
 import { globSegmentRegExp } from '#engine/index.js';
-import { readdirSync } from 'node:fs';
-import { realpath } from 'node:fs/promises';
+import { readdir, realpath } from 'node:fs/promises';
+import { compilePattern, JSON_SCHEMA_LIMITS, PatternRefusal, StepBudgetExceeded, type StepBudget } from '#platform/index.js';
 import { posix } from 'node:path';
 import type { ShellPathContext, ShellPathVerdict, ShellReasonCode, ShellWord, ShellWritePathContext } from '#engine/index.js';
 import type { WorkspacePathError, WorkspaceScope } from '#adapters/core/workspace-read/index.js';
@@ -12,21 +12,35 @@ const GLOB_CHARS = /[*?[]/u;
 /** A `..` path component: the kernel resolves it against the real path before it (after any symlink), never lexically. */
 const PARENT_SEGMENT = /(?:^|\/)\.\.(?:\/|$)/u;
 
+/** SEC-6 F31: a segment is the engine's exact sh regex (brackets, POSIX classes) run by the platform's linear engine under a step
+ *  budget, never a backtracking RegExp; the engine's leading-dot lookahead (`NO_DOT`) is checked here. `null`: unsupported (fail closed). */
+const NO_DOT = '^(?!\\.)', LIMITS = { sourceMax: JSON_SCHEMA_LIMITS.patternSource, statesMax: JSON_SCHEMA_LIMITS.patternStates, repeatMax: JSON_SCHEMA_LIMITS.patternRepeat };
+function segmentMatcher(segment: string): ((name: string, budget: StepBudget) => boolean) | null {
+  const source = globSegmentRegExp(segment)?.source, dot = source?.startsWith(NO_DOT) === true;
+  try {
+    const compiled = source === undefined ? null : compilePattern(dot ? `^${source.slice(NO_DOT.length)}` : source, LIMITS);
+    return compiled && ((name, budget) => !(dot && name.startsWith('.')) && compiled.test(name, budget));
+  } catch (error) { if (error instanceof PatternRefusal) return null; throw error; }
+}
+
 /** sh-style expansion of one glob argument (no brace expansion; `**` is `*`), bounded; `null` over the bound. A `..` after a glob
- *  segment is unsupported: joining it lexically would name the match's lexical parent, not the one the kernel opens (Astra 2111). */
-function expandGlob(base: string, pattern: string, bound: number): string[] | null | 'unsupported' {
+ *  segment is unsupported: joining it lexically would name the match's lexical parent, not the one the kernel opens (Astra 2111).
+ *  Every name test of the whole expansion is charged to one step budget; exhausting it is unsupported (fail closed, SEC-6 F31). */
+async function expandGlob(base: string, pattern: string, bound: number, steps: number): Promise<string[] | null | 'unsupported'> {
   if (PARENT_SEGMENT.test(pattern)) return 'unsupported';
+  const budget: StepBudget = { remaining: steps };
   let frontier = [base];
   for (const segment of pattern.split('/').filter(part => part.length > 0)) {
     const next: string[] = [];
     if (!GLOB_CHARS.test(segment)) { for (const dir of frontier) next.push(posix.join(dir, segment)); }
     else {
-      const matcher = globSegmentRegExp(segment.replace(/\*{2,}/gu, '*'));
+      const matcher = segmentMatcher(segment.replace(/\*{2,}/gu, '*'));
       if (matcher === null) return 'unsupported';
       for (const dir of frontier) {
         let names: string[];
-        try { names = readdirSync(dir); } catch { continue; }
-        for (const name of names.sort()) if (matcher.test(name)) next.push(posix.join(dir, name));
+        try { names = await readdir(dir); } catch { continue; }
+        try { for (const name of names.sort()) if (matcher(name, budget)) next.push(posix.join(dir, name)); }
+        catch (error) { if (error instanceof StepBudgetExceeded) return 'unsupported'; throw error; }
         if (next.length > bound) return null;
       }
     }
@@ -47,14 +61,14 @@ const fromScope = (error: WorkspacePathError): ShellReasonCode =>
  * order, so `link/..` is the parent of the link's target, never the lexical parent; that object must exist, be inside and not
  * denied. A glob is expanded with sh rules against the real directory (dotfiles only for a leading dot, bounded), and every match
  * passes the same check; no match (sh would pass the literal) or too many is GLOB_EXPANSION, a `..` after a glob segment is
- * GLOB_UNSUPPORTED. Git pathspecs are checked lexically only (git normalizes them itself). Not covered: intermediate symlink hops
- * that leave the root and return (the final real path is what the shell reads); the verdict is taken before the command runs, so a
+ * GLOB_UNSUPPORTED, as is one exhausting `globSteps` (SEC-6 F31). Git pathspecs are checked lexically only (git normalizes them
+ * itself). Not covered: intermediate symlink hops that leave the root and return (the final real path is what the shell reads); the verdict is taken before the command runs, so a
  * later swap is not excluded.
  */
 export function createShellPathContext(project: WorkspaceScope, maxGlobMatches = SHELL_GLOB_MAX_MATCHES,
-  roots: readonly WorkspaceScope[] = []): ShellPathContext & { readonly examined: readonly string[] } {
+  roots: readonly WorkspaceScope[] = [], globSteps = JSON_SCHEMA_LIMITS.validationSteps): ShellPathContext & { readonly examined: readonly string[] } {
   const examined: string[] = [];
-  const contexts = [project, ...roots].map(scope => shellPathCheck(scope, maxGlobMatches, examined));
+  const contexts = [project, ...roots].map(scope => shellPathCheck(scope, maxGlobMatches, globSteps, examined));
   return {
     examined,
     // An absolute path inside a second root (SCR-A: the conversation's scratch area) is checked against that root's own scope.
@@ -67,7 +81,7 @@ export function secondRoot(roots: readonly WorkspaceScope[], path: string): numb
   return path.startsWith('/') ? roots.findIndex(root => path === root.root || path.startsWith(`${root.root}/`)) : -1;
 }
 
-function shellPathCheck(scope: WorkspaceScope, maxGlobMatches: number, examined: string[]): ShellPathContext['check'] {
+function shellPathCheck(scope: WorkspaceScope, maxGlobMatches: number, globSteps: number, examined: string[]): ShellPathContext['check'] {
   const fail = (reasonCode: ShellReasonCode, word: ShellWord): Refused => ({ ok: false, reasonCode, detail: word.text });
   const resolved = async (rel: string, word: ShellWord): Promise<ShellPathVerdict> => {
     const found = await scope.resolve(rel === '' ? '.' : rel, true);
@@ -108,7 +122,7 @@ function shellPathCheck(scope: WorkspaceScope, maxGlobMatches: number, examined:
     if (!dir.ok) return dir;
     const base = await resolved(dir.rel, word);
     if (!base.ok) return base;
-    const matches = expandGlob(dir.abs, raw.slice(prefix.length), maxGlobMatches);
+    const matches = await expandGlob(dir.abs, raw.slice(prefix.length), maxGlobMatches, globSteps);
     if (matches === 'unsupported') return fail('GLOB_UNSUPPORTED', word);
     if (matches === null || matches.length === 0) return fail('GLOB_EXPANSION', word);
     for (const match of matches) {

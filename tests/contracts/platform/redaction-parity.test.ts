@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { redactForRecord, redactForDecision, snapshotKnownSecrets, hasSecret } from '#platform/index.js';
+import { redactForRecord, redactForDecision, snapshotKnownSecrets, hasSecret, REDACTION_PATTERNS } from '#platform/index.js';
 import { workerRedactForRecord as workerRecord, workerRedactForDecision as workerDecision, workerSnapshotKnownSecrets as workerSnapshot, redactText } from '#adapters/core/native-connection/index.js';
 // @ts-expect-error Host generation tooling has no declaration file.
 import { syncWorkerRedactor, workerRedactorBlock } from '../../../scripts/sync-worker-redactor.mjs';
@@ -224,4 +224,36 @@ describe('B7 legacy bearer record compatibility', () => {
     expect(redactForDecision(text, collisionKnown)).toEqual({ text: 'Bearer ‹secret:B›', knownMatches: 1, patternMatches: [] });
     expect(hasSecret(text, collisionKnown)).toBe(true);
   });
+});
+
+// SEC-6 F39: the canonical jwt pattern backtracks over the rest of a `[\w-]` run from every `eyJ` start in it, so a dot-free `eyJ-` line
+// is O(N²) (4 MiB ≈ 10^12 steps) in record redaction of untrusted worker output. The record form only starts at the first `eyJ` of a run:
+// every later start in the same run succeeds or fails with it (same run end, same suffix), so the masked spans are identical.
+describe('SEC-6 jwt record redaction is linear and masks exactly the canonical spans', () => {
+  const jwt = REDACTION_PATTERNS.find(row => row.id === 'jwt')!;
+  it('agrees with the canonical source on 20 000 random runs of jwt-shaped fragments', () => {
+    let seed = 0x5ec6;
+    const random = (n: number) => { seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff; return seed % n; };
+    const parts = ['eyJ', 'eyJ', '-', '.', 'a', 'Z', '_', '9', ' ', 'x-', 'é', '\n', 'eyJa.b.c', '--'], disagreements: string[] = [];
+    for (let n = 0; n < 20_000; n++) {
+      let text = '';
+      for (let k = random(16); k > 0; k--) text += parts[random(parts.length)];
+      const expected = text.replace(new RegExp(jwt.source, jwt.flags), '[REDACTED]');
+      if (redactForRecord(text) !== expected || workerRecord(text) !== expected) disagreements.push(JSON.stringify(text));
+    }
+    expect(disagreements).toEqual([]);
+    expect(redactForRecord('x-eyJhbGc.eyJzdWI.c2ln-- eyJ-eyJa.b.c- eyJno.dots')).toBe('x-[REDACTED]-- [REDACTED]- eyJno.dots');
+  });
+  // Primary bound: the record pattern starts once per run, so a hostile line costs a constant number of scans per character. The time
+  // below is only a coarse helper: before the fix 128 KiB took ≈ 2 s and 4 MiB was out of reach; after it both take a few milliseconds
+  // (guards 500 ms / 1 s, so a loaded suite cannot turn them red).
+  it.each([['eyJ-', 1 << 17], ['eyJ-', 1 << 22], ['eyJa.eyJ-', 1 << 20], ['eyJa.b.-', 1 << 20], ['x-eyJ.', 1 << 20]] as const)(
+    'redacts a hostile %s line of %i characters without quadratic backtracking', (unit, length) => {
+      const line = unit.repeat(Math.ceil(length / unit.length)), started = performance.now();
+      const record = redactForRecord(line), ms = performance.now() - started;
+      console.info('SEC6_F39_JWT_GUARD', JSON.stringify({ unit, length, ms }));
+      expect(ms).toBeLessThan(length > 1 << 17 ? 1_000 : 500);
+      // The dot-free line holds no jwt (the canonical source would itself be quadratic on it); the other shapes it answers linearly.
+      expect(record).toBe(unit === 'eyJ-' ? line : line.replace(new RegExp(jwt.source, jwt.flags), '[REDACTED]'));
+    });
 });
