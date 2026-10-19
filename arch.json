@@ -2534,6 +2534,7 @@
     "src/surfaces/core/monitor": {
       "dependencies": [
         "src/engine/core/monitor",
+        "src/surfaces/core/monitor-view",
         "src/surfaces/core/cli-kit",
         "src/platform/core/errors",
         "src/platform/core/output",
@@ -2546,10 +2547,8 @@
         "src/engine/core/worker-observation",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/config",
-        "src/engine/core/config",
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
-        "src/engine/core/model-invocation",
         "src/engine/core/resource-observation",
         "src/domain/core/work-cost"
       ],
@@ -3269,7 +3268,15 @@
       "plan": "INSTALLATION"
     },
     "src/surfaces/core/monitor-view": {
-      "dependencies": [],
+      "dependencies": [
+        "src/engine/core/monitor",
+        "src/engine/core/config",
+        "src/engine/core/model-invocation",
+        "src/surfaces/core/config",
+        "src/surfaces/core/terminal-render",
+        "src/platform/core/i18n",
+        "src/platform/core/output"
+      ],
       "plan": "MONITOR"
     },
     "src/adapters/core/mcp-trust": {

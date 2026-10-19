@@ -1,10 +1,9 @@
-import { configMonitorBlocks, type ConfigMonitorInspection } from './config-view.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
 import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import type { MonitorSnapshot } from '#engine/index.js';
-import { clipLine, flattenBlocks, lineText, span, type MonitorFlatLine, type MonitorLine, type MonitorRow } from './layout.js';
+import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
 import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
 import { wrapDetail } from './text.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';

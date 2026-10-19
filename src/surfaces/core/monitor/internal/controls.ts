@@ -1,4 +1,4 @@
-import type { MonitorBlock, MonitorRow, MonitorSortKey } from './layout.js';
+import type { MonitorBlock, MonitorRow, MonitorSortKey } from '#surfaces/core/monitor-view/index.js';
 
 /**
  * The fullscreen view's own controls over the one view model (k9s/agent-view style, observe-only): `/` filter, `s`/`S` sort, `g` grouping and

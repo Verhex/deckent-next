@@ -2,15 +2,13 @@ import { renderAcceptanceLine } from './acceptance.js';
 import { t, type Locale } from '#platform/index.js';
 import { projectHumanState, resolveWorkerUsage, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
   type MonitorWorker } from '#engine/index.js';
-import { span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
+import { describeDiagnostics, mapBlocks, span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from '#surfaces/core/monitor-view/index.js';
 import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, agoText, blockerLabel, quotaWaitText, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
   taskPhaseLabel, verdictLabel, workerPhaseLabel, notAcceptedLabel, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
-import { describeDiagnostics } from './diagnostics.js';
 import { humanWorkerLines } from './human-worker.js';
 import { renderResourceLine, renderResourceDetail } from './resources.js';
 import { renderCostSummary, renderRecommendationLines } from './costs.js';
-import { mapBlocks } from './map.js';
 import { globalRunCell, globalStateCell, globalStateLabel, globalStateLines, globalSummary } from './global-state.js';
 import { renderGraphSummaryLines } from './graph-summary.js';
 

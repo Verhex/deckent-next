@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import { projectHumanState, type HumanState, type HumanStateCode, type HumanNextAction, type MonitorRun, type MonitorSnapshot } from '#engine/index.js';
 import { blockerLabel, clockText } from './labels.js';
-import { span, type MonitorLine, type MonitorRole, type MonitorSpan } from './layout.js';
+import { span, type MonitorLine, type MonitorRole, type MonitorSpan } from '#surfaces/core/monitor-view/index.js';
 
 export function globalStateLabel(state: HumanStateCode, locale: Locale): string {
   const labels: Record<HumanStateCode, string> = { queued: t('monitor.global.queued', {}, locale), running: t('monitor.global.running', {}, locale),

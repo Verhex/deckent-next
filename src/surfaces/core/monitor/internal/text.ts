@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import { cells, wrapCells } from '#surfaces/core/terminal-render/index.js';
 import type { MonitorSnapshot } from '#engine/index.js';
-import { clipLine, flattenBlocks, lineText, span, type MonitorBlock, type MonitorLine } from './layout.js';
+import { clipLine, flattenBlocks, lineText, span, type MonitorBlock, type MonitorLine } from '#surfaces/core/monitor-view/index.js';
 import { MONITOR_TABS, tabLabel } from './labels.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
 

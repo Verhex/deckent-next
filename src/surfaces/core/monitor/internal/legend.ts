@@ -1,5 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import { span, type MonitorLine, type MonitorRole } from './layout.js';
+import { span, type MonitorLine, type MonitorRole } from '#surfaces/core/monitor-view/index.js';
 import { MONITOR_TABS, type MonitorTab } from './labels.js';
 
 /** Row change marks of the fullscreen view (`+` new, `*` changed since the previous snapshot); the same in Unicode and ASCII. */
