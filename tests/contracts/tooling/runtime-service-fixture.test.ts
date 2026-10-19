@@ -25,7 +25,7 @@ it('joins the runtime completion before the fixture owner can remove state, and 
   let drained = false;
   const draining = stopTestRuntimeServices().then(() => { drained = true; });
   try {
-    await stopCalled; await Promise.resolve();
+    await stopCalled; await new Promise<void>(resolve => setImmediate(resolve));
     expect(stop).toHaveBeenCalledTimes(1);
     expect(drained).toBe(false); // stop alone does not establish that background state writes have ended.
   } finally { finished(); }

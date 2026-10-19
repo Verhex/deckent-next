@@ -31,9 +31,13 @@ The required Ubuntu Node24/26 check names stay unchanged for PR/integration veri
 then all Vitest files run in duration-balanced shards with normal fork/file isolation. `scripts/ci-test-config.json`
 owns shard/fork capacity; the prepare job exports the same configuration used by partitioning and complete-coverage validation.
 CI-STABILITY (owner 2026-10-19 author candidate): 16 shards and two forks per runner retain 32 test forks per Node version
-while leaving CPU/memory headroom for each test's real CLI/MCP/Docker children. The prior four-fork hosted run
-39269323564 measured 175.54–266.28 s per Vitest shard; those complete 1011-file timings refresh the scheduling weights.
-The test and job timeouts are unchanged; fresh hosted stability and elapsed-time measurements remain separate proof.
+while leaving CPU/memory headroom for each test's real CLI/MCP/Docker children. Initial candidate `3e4ed3d1` passed
+hosted PR 39286417261 and exact-head dispatch 39286432209: each Node collected 1012 files, 9027 passes and the same
+eight pre-existing skips. Their two-fork per-file maxima refresh all scheduling weights. Vitest shard maxima were
+183.07/175.57 s versus 266.28 s in four-fork base run 39269323564; this is observed workload evidence, not a latency guarantee.
+The matrix uses more runners (36 jobs versus 20); equal test-fork count is not equal CPU/RAM reservation or resource savings.
+Test/job timeouts are unchanged. Final-revision receipts and negative proof are external in `proof/CI-STABILITY-2026-10-19/REPORT.md`;
+author/hosted checks do not establish independent review, release or owner acceptance.
 The complete inventory comes from Vitest itself, not a changed-file filter. New files always enter the partition.
 The required collector rejects missing/duplicate shards or files, wrong SHA/Node/run/attempt, failed/cancelled/pending
 execution, collection/unhandled errors and missing native/host/smoke success. Native binaries and dist are bound to
