@@ -174,7 +174,8 @@ SHA hashes alone do not authenticate a changed set: verification also opens the 
 Before any decryption, verify and restore name the other causes with their own codes (exit 78):
 `BACKUP_SET_NOT_FOUND` (no folder with `MANIFEST.sha256` at the path), `BACKUP_SET_UNREADABLE`
 (this user cannot read the set), `BACKUP_PASSPHRASE_REQUIRED` (empty passphrase) and
-`BACKUP_MANIFEST_INVALID` (a file no longer matches the manifest: the set was modified).
+`BACKUP_MANIFEST_INVALID` (a file no longer matches the manifest: the set was modified). A restore of a set that does not exist is
+refused before its recovery audit (kept next to the set) is written, so no audit folder appears at a mistyped path.
 
 Stop the target service first. An empty target needs no replacement confirmation; for an
 existing target add `--confirm-target /exact/absolute/target`. A target bound to another

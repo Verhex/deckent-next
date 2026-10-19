@@ -181,7 +181,8 @@ değiştirilmiş set demektir.
 Şifre çözmeden önce verify ve restore diğer nedenleri kendi kodlarıyla söyler (çıkış 78):
 `BACKUP_SET_NOT_FOUND` (yolda `MANIFEST.sha256` içeren klasör yok), `BACKUP_SET_UNREADABLE`
 (bu kullanıcı seti okuyamıyor), `BACKUP_PASSPHRASE_REQUIRED` (boş parola) ve
-`BACKUP_MANIFEST_INVALID` (bir dosya manifestle eşleşmiyor: set değiştirilmiş).
+`BACKUP_MANIFEST_INVALID` (bir dosya manifestle eşleşmiyor: set değiştirilmiş). Var olmayan bir setin restore'u, setin yanında
+tutulan kurtarma denetimi yazılmadan reddedilir; yanlış yazılmış bir yolda denetim klasörü oluşmaz.
 
 Önce hedef servisi durdurun. Boş hedef doğrudan kullanılabilir; dolu hedef için
 `--confirm-target /tam/mutlak/hedef` ekleyin. Başka kurulum kimliğine bağlı hedef reddedilir.
