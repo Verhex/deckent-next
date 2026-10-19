@@ -12,13 +12,13 @@ import { openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/
 import { requestTaskApproval } from '#engine/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { cliChildEnv } from '../support/child-env.js';
-import { startTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // H34 S2 on shipped surfaces: a v2 role reached only through the bindings resource authorizes a CLI and an SDK operation, and the
 // policy's four-eyes rule refuses the requester's own approval on the SDK and on the CLI (runtime) decision path.
 const exec = promisify(execFile); const roots: string[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js'); const sdk = pathToFileURL(resolve('dist/index.js')).href;
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const actor = { issuer: hostname(), subject: String(userInfo().uid) };
 const policy = { schemaVersion: 2, revision: 'p1', grants: [], restrictions: [],
   separationOfDuties: [{ id: 'four-eyes', rule: 'requester-cannot-approve', scopes: 'all' }],

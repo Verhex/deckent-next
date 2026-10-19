@@ -13,12 +13,12 @@ import { acceptSurfaceEvent, openSurfacePush, releaseSurfacePush, type SurfacePu
 import { clearConfigCache, productResourcePath, t } from '#platform/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 import { latencySample, readLatencyClock, summarizeLatency } from '../support/latency-metrics.js';
 
 beforeEach(context => { if (process.platform === 'win32') context.skip('Local OS identity requires POSIX UID'); });
 const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };

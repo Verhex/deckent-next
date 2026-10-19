@@ -1,4 +1,4 @@
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createHash } from 'node:crypto';
@@ -20,7 +20,7 @@ import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#pla
 
 const roots: string[] = [], servers: Server[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
-afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => {
+afterEach(async () => { vi.restoreAllMocks(); await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => {
   server.closeAllConnections(); server.close(() => resolve());
 }))); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 

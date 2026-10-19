@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
 import { projectIdentitySchema } from '#domain/index.js';
-import { ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
+import { ErrorRegistry, withConfigWriteLock, writeJsonAtomic } from '#platform/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -84,7 +84,9 @@ describe.skipIf(process.platform === 'win32')('durable project identity', () => 
     await mkdir(f.directory, { recursive: true, mode: 0o700 });
     const read = new FileProjectIdentityStore(f.root, 1_000).read();
     await new Promise(resolve => setTimeout(resolve, 40));
-    await writeFile(f.path, bytes, { mode: 0o600 });
+    // The production publisher uses a complete temporary file + rename. writeFile exposes an empty/partial identity to the unlocked
+    // reader between open and write on a loaded runner; that is correctly INVALID, not the first-publication gap this test exercises.
+    await writeJsonAtomic(f.path, JSON.parse(bytes.toString()));
     await expect(read).resolves.toEqual({ status: 'available', value: JSON.parse(bytes.toString()) });
   });
   it('a directory whose record never appears within the writer-lock bound stays retained loss', async () => {

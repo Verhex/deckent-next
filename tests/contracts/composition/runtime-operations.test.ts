@@ -12,13 +12,13 @@ import { encodeServiceFrame } from '../../../src/adapters/core/local-runtime-soc
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { conditionalRecordServer } from '../support/conditional-record-server.js';
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // C12 G4 (protocol v15): catalog operations are runtime-service operations. The socket peer is the principal; scope, company membership,
 // policy, the approval broker and the effect contract are the same composition function the CLI/SDK use (withEffects), so a required
 // approval is a non-blocking `approval-pending` outcome and the same command resubmitted after an allow settles exactly once.
 const cleanup: (() => Promise<void>)[] = [];
-afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); clearConfigCache(); });
+afterEach(async () => { await stopTestRuntimeServices(); for (const close of cleanup.splice(0).reverse()) await close(); clearConfigCache(); });
 const ref = (id: string) => ({ id, version: 1 });
 const descriptor = (id: string, extra: Record<string, unknown> = {}) => ({ schemaVersion: 1, operation: ref(id), targetKind: 'records',
   effectClass: 'write', approval: 'policy', precondition: 'record-version', compensation: null, inputMaxBytes: 4096, ...extra });

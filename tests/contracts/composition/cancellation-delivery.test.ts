@@ -15,9 +15,9 @@ import { clearConfigCache, prepareProductDirectory, productResourcePath } from '
 import { DockerSupervisor, FileArtifactStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { DispatchApplication } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
-import { startTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 const exec = promisify(execFile); const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
-afterEach(async () => { for (const store of stores.splice(0)) store.close(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); for (const store of stores.splice(0)) store.close(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
   logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };

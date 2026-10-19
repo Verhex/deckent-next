@@ -16,13 +16,13 @@ import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 const exec = promisify(execFile); const roots: string[] = [];
 const dockerEnabled = process.platform === 'linux' && !!process.env.DECKENT_TEST_DOCKER_IMAGE;
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE!;
 
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 async function fixture(execute = true, twoTasks = false, withInputs = false, readOutput = true, fileMode?: 'valid' | 'unsafe') {
   const root = await mkdtemp(join(tmpdir(), 'deckent-selected-task-')); roots.push(root);
