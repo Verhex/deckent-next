@@ -11,10 +11,10 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { custodyProfiles, custodyPrincipal, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
-import { startTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 const exec = promisify(execFile); const roots: string[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js'); const sdk = pathToFileURL(resolve('dist/index.js')).href;
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const project = await mkdtemp(join(tmpdir(), 'deckent-inventory-surface-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });

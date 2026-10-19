@@ -41,9 +41,10 @@ export async function stopTestRuntimeService(service: TestRuntimeService | undef
   await service.done;
 }
 
-afterEach(async () => {
-  for (const service of active.splice(0)) {
-    await service.stop();
-    await service.done;
-  }
-});
+/** Fixture owners call this before closing stores or deleting roots. Imported afterEach hooks run after their local hooks (stack order),
+ * so the fallback alone cannot stop background ledger/state writes before a caller removes its fixture. */
+export async function stopTestRuntimeServices(): Promise<void> {
+  for (const service of [...active]) await stopTestRuntimeService(service);
+}
+
+afterEach(stopTestRuntimeServices);

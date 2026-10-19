@@ -13,12 +13,12 @@ import {
 } from '../../../src/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { cliChildEnv } from '../support/child-env.js';
-import { startTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // Astra 2126 R1 (inverted read-pin repro): a read-only query never writes a scope pin; only a write admission pins.
 const exec = promisify(execFile); const roots: string[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js');
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const actor = [{ issuer: hostname(), subject: String(userInfo().uid) }];
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const attempt = (scopeId: string) => ({ runId: 'r', taskId: 't', attemptId: 'a', scopeId, generation: 1, layoutRevision: 'layout' });

@@ -12,10 +12,10 @@ import { approvalRecordSchema, approvalRequestSchema } from '#domain/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION, approvalSubjectsHiddenFromProtocol, requestTaskApproval, sealApproval } from '#engine/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
-import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 const roots: string[] = [];
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'wal' as const, durability: 'full' as const };
 
