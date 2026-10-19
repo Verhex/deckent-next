@@ -313,6 +313,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **An idle interactive `deckent monitor` keeps using CPU** because it re-reads everything on every refresh
   (`inspection.workers.heartbeatMs`, default 2 s). It grows with the number of Runs and scopes. *Workaround:* press `p` to
   pause it, raise `inspection.workers.heartbeatMs`, or use `deckent monitor --once`.
+- **`deckent run list`, `report` and the Run pickers show only the Runs the `/runs` query returns** (newest first, at most
+  `inspection.workers.maxEntries`) and read each of them once, as `/runs` does; a short id resolves only among those Runs, so an
+  older Run needs its full id. Not measured on a large scope. *Workaround:* `deckent run inspect --id <full id>`; `deckent
+  inventory` pages every stored record.
 - **The SDK still exports raw writers** next to the managed ones; a later versioned SDK contract is meant to keep only the
   managed ones.
 

@@ -3139,7 +3139,10 @@
         "src/engine/core/runs",
         "src/domain/core/task-graph",
         "src/domain/core/primitives",
-        "src/domain/core/attempt"
+        "src/domain/core/attempt",
+        "src/surfaces/core/cli-human",
+        "src/domain/core/work-cost",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },

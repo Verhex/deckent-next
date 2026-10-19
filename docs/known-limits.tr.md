@@ -314,6 +314,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Boşta duran etkileşimli `deckent monitor` CPU kullanmaya devam eder,** çünkü her yenilemede her şeyi yeniden okur
   (`inspection.workers.heartbeatMs`, varsayılan 2 sn). Run ve kapsam sayısıyla artar. *Yol:* `p` ile duraklatın,
   `inspection.workers.heartbeatMs` değerini büyütün ya da `deckent monitor --once` kullanın.
+- **`deckent run list`, `report` ve Run seçicileri yalnız `/runs` sorgusunun döndürdüğü Run'ları gösterir** (en yeni önce, en çok
+  `inspection.workers.maxEntries`) ve her birini `/runs` gibi bir kez okur; kısa kimlik yalnız bu Run'lar arasında çözülür, daha eski
+  bir Run tam kimliğini ister. Büyük bir kapsamda ölçülmedi. *Geçici çözüm:* `deckent run inspect --id <tam kimlik>`; `deckent
+  inventory` saklanan tüm kayıtları sayfalar.
 - **SDK hâlâ ham yazıcıları da dışa aktarır,** yönetilenlerin yanında; sonraki sürümlü bir SDK sözleşmesinin yalnız
   yönetilenleri bırakması hedeflenir.
 
