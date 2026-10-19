@@ -104,7 +104,7 @@ async function menuIo(context: TaskCommandContext, locale: Locale): Promise<Task
 }
 /**
  * `deckent task` without an action (owner 2026-10-19 "boş komut yok"; reached once the catalog marks the family `bare: 'handler'`): a person on
- * a terminal gets the task menu (`--scope`/`--run` preselect); a pipe, agent, CI or `--json` caller is never asked and gets the actions in
+ * a terminal gets the task menu (`--scope`/`--run`/`--task` preselect); a pipe, agent, CI or `--json` caller is never asked and gets the actions in
  * their four groups with the missing argument named (CLI_ARGUMENT_MISSING, exit 2).
  */
 async function bareTask(argv: readonly string[], context: TaskCommandContext, locale: Locale): Promise<void> {
@@ -114,13 +114,13 @@ async function bareTask(argv: readonly string[], context: TaskCommandContext, lo
     if (arg === '--json' && !json) { json = true; continue; }
     if (arg === '--no-color') continue;
     const value = argv[i + 1];
-    if (!['--scope', '--run', '--lang'].includes(arg) || values.has(arg) || !value || value.startsWith('--')) throw cliUsage('task', undefined, locale, arg);
+    if (!['--scope', '--run', '--task', '--lang'].includes(arg) || values.has(arg) || !value || value.startsWith('--')) throw cliUsage('task', undefined, locale, arg);
     values.set(arg, value); i++;
   }
   if (cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('CLI_ARGUMENT_MISSING', { params: { command: ['deckent', argv[0]].join(' '), usage: [
     t('cli.help.bare.missing', { argument: `<${t('cli.help.placeholder.action', {}, locale)}>` }, locale), groupedTaskActions(locale), t('cli.help.bare.details', { command: 'task' }, locale)].join('\n') } });
   const scopeId = values.get('--scope'), typed = values.get('--run');
-  await taskMenu(context, await menuIo(context, locale), { scopeId, runId: scopeId && typed ? await resolveRun(context, scopeId, typed) : typed });
+  await taskMenu(context, await menuIo(context, locale), { scopeId, runId: scopeId && typed ? await resolveRun(context, scopeId, typed) : typed, taskId: values.get('--task') });
 }
 
 /**
@@ -157,8 +157,9 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   const stat = switches.has('--stat'), diff = switches.has('--diff');
   if ((stat && diff) || (json && (stat || diff))) throw usage(stat ? '--stat' : '--diff');
   const attemptId = values.get('--attempt'), layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
-  if (['inspect', 'transcript', 'patch-preview'].includes(action) && !attemptId && !layoutRevision && !generation && !await pickMissing(values, context, json, earlyLocale)) return;
+  // A typed short id resolves first, so a TTY pick that keeps it reads the full id (a picked id is already full).
   if (values.has('--scope') && values.has('--run')) values.set('--run', await resolveRun(context, values.get('--scope')!, values.get('--run')!));
+  if (['inspect', 'transcript', 'patch-preview'].includes(action) && !attemptId && !layoutRevision && !generation && !await pickMissing(values, context, json, earlyLocale)) return;
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
   if (action === 'accept' || action === 'reject') { await decideTask(action, values, context, json, usage); return; }
   const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action) && !attemptId && !layoutRevision && !generation;

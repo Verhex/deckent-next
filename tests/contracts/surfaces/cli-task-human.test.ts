@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { unifiedDiff } from '../../../src/adapters/core/workspace-write/index.js';
+import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { CLI_CATALOG } from '#surfaces/core/cli-kit/index.js';
-import { TASK_ACTION_GROUPS, taskActions, taskCommand, taskMenu } from '#surfaces/core/cli-task/index.js';
+import { TASK_ACTION_GROUPS, pickTaskTarget, taskActions, taskCommand, taskMenu } from '#surfaces/core/cli-task/index.js';
 
 /**
  * C-TASK (alpha.48, CLI review §task): the `task` family for a person — config language, the control-character marker (J1b D1),
@@ -72,6 +73,10 @@ it('transcript and patch-preview follow the host-resolved language (config langu
   expect(tr.text).toContain('Kapsam:');
   expect(tr.text).not.toContain('Scope:');
   expect((await run([...patchArgs, '--stat', '--lang', 'en'], handlers, root)).text).toContain('Scope:');
+  const transcript = { locale: 'tr', async inspectWorkerTranscript() { return { schemaVersion: 1, sealed: false, summary: null }; } };
+  const args = ['task', 'transcript', '--scope', 's', '--run', 'r', '--task', 't', '--attempt', 'a', '--generation', '1', '--layout-revision', 'l'];
+  expect((await run(args, transcript, root)).text).toContain('Bu deneme için mühürlenmiş worker olayı yok.');
+  expect((await run([...args, '--lang', 'en'], transcript, root)).text).toContain('No sealed worker events for this attempt.');
 });
 
 const LONG = 'a'.repeat(64), OTHER = 'b'.repeat(64);
@@ -125,6 +130,31 @@ it('short run ids: a unique prefix resolves (git-like), an ambiguous one refuses
   expect((await run(['task', 'inspect', '--scope', 's', '--run', LONG, '--task', 't'], handlers, root)).code).toBe(0);
   expect((await run(['task', 'inspect', '--scope', 's', '--run', older, '--task', 't'], handlers, root)).code).toBe(0);
   expect(seen).toEqual([OTHER, LONG, older]);
+  // On a person's terminal, a typed prefix without --task resolves before the pick: the pick and the view read the full id.
+  seen.length = 0;
+  const tty = { stdin: { isTTY: true, setRawMode() {} }, stdout: { isTTY: true, write() {} } };
+  expect((await run(['task', 'inspect', '--scope', 's', '--run', 'bbbb'], { ...handlers, ...tty }, root)).code).toBe(0);
+  expect(seen).toEqual([OTHER, OTHER]);
+});
+
+it('the TTY pick: read scope rule (configured default named), Run card from the /runs ids with short ids, single task taken, cancel reads nothing more', async () => {
+  registerProviderConfig(); // the host registers the `terminal` section at ingress (composeCore) before any config read
+  const root = await project({ terminal: { scopeId: 's' } });
+  const reads: string[] = [], printed: string[] = [];
+  const context = { async inspectSurfaceRunIds(_r: string, scopeId: string) { reads.push(`ids:${scopeId}`); return [LONG, OTHER]; },
+    async inspectRun(_r: string, query: { runId: string }) { reads.push(`run:${query.runId.slice(0, 4)}`); return { schemaVersion: 1, layout: {}, run: view([{ taskBrief: { schemaVersion: 1,
+      task: `Do ${query.runId.slice(0, 1)}`, scopePaths: null, acceptance: null, criteria: [], profile: null, model: null, effort: null, contextRefs: [] } }], { runId: query.runId }) }; } };
+  const picked = scripted([OTHER]);
+  expect(await pickTaskTarget(context as never, ioFor(picked.ask, printed, { root, options: { env: { HOME: join(root, 'h') } } }) as never, {}))
+    .toEqual({ scopeId: 's', runId: OTHER, taskId: 't' });
+  expect(printed.join('\n')).toMatch(/s.*default/i);
+  expect(picked.cards).toHaveLength(1);
+  expect(picked.cards[0]!.options.map(option => option.label)).toEqual(['aaaaaaaa · 1/1 tasks accepted · Do a', 'bbbbbbbb · 1/1 tasks accepted · Do b']);
+  expect(reads).toEqual(['ids:s', 'run:aaaa', 'run:bbbb']);
+  reads.length = 0;
+  const cancelled = scripted([null]);
+  expect(await pickTaskTarget(context as never, ioFor(cancelled.ask, printed, { root, options: { env: { HOME: join(root, 'h') } } }) as never, {})).toBeNull();
+  expect(reads).toEqual(['ids:s', 'run:aaaa', 'run:bbbb']);
 });
 
 it('bare `deckent task` off a person terminal (pipe, agent, --json) is never asked: the four groups and the missing argument, exit-2 code', async () => {
