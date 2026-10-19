@@ -1975,7 +1975,8 @@
       "dependencies": [
         "src/adapters/core/workspace-read",
         "src/engine/core/shell-classification",
-        "src/adapters/core/workspace-write"
+        "src/adapters/core/workspace-write",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },

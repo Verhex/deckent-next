@@ -340,7 +340,9 @@ remote or relative `$ref`, unknown and cross-dialect keywords, 2019-09 and other
 patterns, size limits) — the pool then refuses the call before sending (`invalid-output-schema`; Astra 2180 R2: a `$dynamicRef` schema that
 cf-worker ignored and answered fail-open is now refused, `astra-2180-dynamic-ref.test.ts`; recursion through a plain `$ref` validates).
 `pattern`/`patternProperties` run on a linear-time Thompson-NFA engine (single-code-point atoms keep V8's u-mode meaning), so a server
-controlling both pattern and instance cannot block the service (27-char `^(a+)+$`: 0.4 ms vs 1.46 s on cf-worker). Validation is bounded by
+controlling both pattern and instance cannot block the service (27-char `^(a+)+$`: 0.4 ms vs 1.46 s on cf-worker). Compilation is bounded
+too (SEC-6 F2): a body that emits no state (`(?:)`, `a{0}`) folds to nothing before generation, and every generator visit is charged against a
+fixed multiple of the states limit, so a nested empty-body repetition cannot hang the service. Validation is bounded by
 a weighted step budget (5 000 000; historical ≈ 50 ms on the calibration machine, not a portable wall-time guarantee) and instance/evaluation depth; an exhausted bound is `valid: false`
 (fail closed; CI-FIX-R3 tests retain the 50/500ms timing floors, scale only the test guards using
 an independent 5-million-iteration CPU control against its measured 6ms lane reference, log calibration and

@@ -93,7 +93,7 @@ export const REDACTION_CONFIG_SECRET = Object.freeze(REDACTION_TABLE.configSecre
 /** S6 gate-only rows of the same table (credential families the record redactor does not mask yet; redaction ignores them). */
 export const REDACTION_GATE_PATTERNS = Object.freeze(REDACTION_TABLE.gatePatterns.map(row => Object.freeze({ ...row })));
 const patterns = (text: string) => Object.freeze(REDACTION_PATTERNS.map(row => ({ kind: row.id, count: [...text.matchAll(new RegExp(row.source, row.flags))].length })).filter(row => row.count > 0).map(row => Object.freeze(row)));
-/** Derived record text only: recordSource preserves legacy record coverage; counters/standing use source.
+/** Derived record text only: recordSource keeps legacy record coverage or the same spans in linear form (jwt, SEC-6 F39); counters/standing use source.
  * Merge original-text coverage before replacing. This snapshot's generated labels retain attribution without
  * exempting any pattern coverage or raw known value, including literal marker lookalikes. */
 export function redactForRecord(text: string, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): string {
