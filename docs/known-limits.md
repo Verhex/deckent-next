@@ -322,9 +322,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
   shows no pool-wait reason. Before first-run template v13 the MCP actor's rules include no `pool inspect`, so `inspect_monitor` over
   MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
-- **The monitor does not say which scope it could not read.** A refused scope and a scope whose access check could not run (for
-  example a locked ledger) are both shown only as counts ("access to N scope(s) was refused", "N scope(s) could not be read
-  (<code>)"), never by name. *Workaround:* none needed for refused scopes; for a failed check, `deckent doctor` and the named code.
+- **The monitor names a scope it could not read only to a viewer holding `monitor inspect-scope-diagnostics`.** That viewer (v13:
+  the founding administrator, fresh or after `deckent init policy --upgrade`) sees each refused or failed scope by id and reason;
+  everyone else, the MCP actor included, sees counts ("access to N scope(s) was refused", "N scope(s) could not be read (<code>)").
+  If the permission check itself fails, everyone sees counts and one "scope names could not be checked" line. *Workaround:* the rule
+  (`first-run-monitor-scope-diagnostics`) is ordinary policy data; an administrator grants or revokes it through a governed policy
+  change. For a failed check, `deckent doctor` and the code.
 - **The monitor shows no build time and no release number for a service.** The service reports only its commit and source tree, so
   Installs shows `build <commit> · source tree <hash>`. *Workaround:* `deckent --version` on the machine that runs the service.
 - **The interactive `deckent monitor` still uses some CPU while idle, and as much as before while work changes the ledger.** It

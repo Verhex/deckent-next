@@ -289,7 +289,8 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
   it('words every data-lane diagnostic, keeps unknown codes visible and treats info: as a note', () => {
     const codes = ['service-unavailable:LOCAL_RUNTIME_DENIED', 'ledger-unavailable:LEDGER_LOCKED', 'ledger-version-older:43', 'scopes-denied:2', 'scopes-unavailable:1', 'scopes-unavailable:2:LEDGER_LOCKED', 'scope-unavailable:s1',
       'scope-unavailable:s1:LEDGER_LOCKED', 'workers-unavailable:s1', 'workers-denied:s1', 'workers-not-sampled:s1', 'workers-truncated:s1', 'workers-finished-capped:5',
-      'runs-truncated:900', 'run-corrupt:s1/r1', 'approvals-truncated', 'approval-corrupt:s1/a1', 'pool-occupancy-corrupt:p1', 'pool-corrupt:p1', 'ledger-only'];
+      'runs-truncated:900', 'run-corrupt:s1/r1', 'approvals-truncated', 'approval-corrupt:s1/a1', 'pool-occupancy-corrupt:p1', 'pool-corrupt:p1', 'ledger-only',
+      'scope-refused:POLICY_DENIED:s1', 'scope-failed:LEDGER_LOCKED:s1', 'scope-failed::s1', 'scope-diagnostics-unavailable:POLICY_UNAVAILABLE'];
     for (const locale of ['en', 'tr'] as const) for (const code of codes) {
       const described = surface.describeDiagnostic(code, locale);
       expect(described.note, code).toBe(false); expect(described.text, code).not.toBe(code); expect(described.text, code).not.toContain('{');
@@ -470,7 +471,8 @@ describe('untrusted text never reaches the terminal with control sequences (Fabl
   const BAD = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u;
   // Every untrusted field at once: first failure, events, activity, approval summary, diagnostics detail, another install's path, workspace.
   const hostile: typeof fullSnapshot = { ...fullSnapshot, installs: fullSnapshot.installs.map(install => install.id === 'dogfood'
-    ? { ...install, path: `/srv/${NASTY}`, diagnostics: [...install.diagnostics, `scope-unavailable:${NASTY}:CODE`, `scopes-unavailable:1:${NASTY}`] }
+    ? { ...install, path: `/srv/${NASTY}`, diagnostics: [...install.diagnostics, `scope-unavailable:${NASTY}:CODE`, `scopes-unavailable:1:${NASTY}`,
+      `scope-refused:CODE:${NASTY}`, `scope-failed:${NASTY}:${NASTY}`] }
     : install.id !== 'current' ? install : { ...install,
       runs: install.runs.map(run => run.runId !== 'run-broken' ? run : { ...run, tasks: run.tasks.map(task => !task.lastAttempt ? task : { ...task,
         lastAttempt: { ...task.lastAttempt, firstFailure: `✗ ${NASTY}`, recentEvents: [{ atMs: OBSERVED_AT - 1000, kind: 'message', summary: NASTY }] } }) }),

@@ -11,6 +11,12 @@ export interface MonitorDiagnostic { readonly code: string; readonly note: boole
 
 const scopesUnavailable = (count: string, reason: string, locale: Locale) =>
   t('monitor.diagnostic.scopesUnavailable', { count, code: reason ? ` (${reason})` : '' }, locale);
+/** MON-NAMES `scope-refused|scope-failed:<CODE>:<scope>`: the reader names a scope only to a viewer holding the scope-diagnostics grant; the
+ * code (possibly empty) never holds `:`, the scope id may. */
+const namedScope = (refused: boolean, detail: string, locale: Locale) => {
+  const at = detail.indexOf(':'), reason = at < 0 ? '' : detail.slice(0, at), params = { scope: at < 0 ? detail : detail.slice(at + 1), code: reason ? ` (${reason})` : '' };
+  return refused ? t('monitor.diagnostic.scopeRefused', params, locale) : t('monitor.diagnostic.scopeFailed', params, locale);
+};
 
 export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnostic {
   const note = raw.startsWith('info:'), body = note ? raw.slice(5) : raw, at = body.indexOf(':');
@@ -25,6 +31,10 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'scopes-unavailable': () => scopesUnavailable(detail.split(':')[0]!, detail.split(':').slice(1).join(':'), locale),
     // An older reader's `scope-unavailable:<scope>[:<CODE>]`: one scope, its id dropped (an unknown code would show it raw).
     'scope-unavailable': () => scopesUnavailable('1', detail.split(':').slice(1).join(':'), locale),
+    'scope-refused': () => namedScope(true, detail, locale),
+    'scope-failed': () => namedScope(false, detail, locale),
+    // The grant decision itself failed: counts only, reported once and without any scope id (fail-closed).
+    'scope-diagnostics-unavailable': () => t('monitor.diagnostic.scopeDiagnosticsUnavailable', { detail }, locale),
     'workers-unavailable': () => t('monitor.diagnostic.workersUnavailable', { detail }, locale),
     'workers-denied': () => t('monitor.diagnostic.workersDenied', { detail }, locale),
     'workers-not-sampled': () => t('monitor.diagnostic.workersNotSampled', { detail }, locale),
