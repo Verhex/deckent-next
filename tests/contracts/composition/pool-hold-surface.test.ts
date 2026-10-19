@@ -60,7 +60,7 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     const held = await f.cli('hold', '--command-id', 'cli-hold', '--reason', 'dev-release switch', '--json');
     expect(held.code).toBe(0);
     expect(JSON.parse(held.stdout)).toMatchObject({ changed: true, state: 'held', poolId: 'p', scopeId: 's', hold: { reason: 'dev-release switch', revision: 1 } });
-    expect((await f.cli('hold', '--lang', 'en')).stdout).toContain('already held');
+    expect((await f.cli('hold', '--lang', 'en')).stdout).toContain('was already on hold'); // C-ADMIN human words
     // The composition reservation path (CLI `run reserve`, MCP `reserve_run_tasks`, runtime service) refuses with the typed code, writing nothing.
     await expect(reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve-1', expectedRevision: 0 }, f.options))
       .rejects.toMatchObject({ code: 'RUN_POOL_HELD' });
@@ -71,7 +71,7 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     const status = JSON.parse((await f.cli('status', '--json')).stdout);
     expect(status).toMatchObject({ poolId: 'p', state: 'held', occupancy: { execution: 0, inFlight: 0 }, drained: true });
     expect(status).toEqual(await inspectPoolHold(f.project, { schemaVersion: 1, scopeId: 's' }, f.options));
-    expect((await f.cli('status', '--lang', 'tr')).stdout).toContain('boşaldı: true');
+    expect((await f.cli('status', '--lang', 'tr')).stdout).toContain('Boşaldı: bu havuzda çalışan iş kalmadı.');
     expect(f.rows("SELECT kind,scope_id FROM audit_events ORDER BY sequence")).toEqual([{ kind: 'authority-decision', scope_id: 's' }, { kind: 'pool-hold', scope_id: 's' }, { kind: 'pool-hold', scope_id: 's' }]);
     expect(JSON.parse((await f.cli('resume', '--command-id', 'cli-resume', '--json')).stdout)).toMatchObject({ changed: true, state: 'open' });
     const reserved = await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve-2', expectedRevision: 0 }, f.options);

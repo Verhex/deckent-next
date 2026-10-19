@@ -202,7 +202,7 @@ it('secret set/delete off a terminal need --scope before any value is read; on a
   expect(await main(['secret', 'set'], set.context)).toBe(0);
   expect(card.asked[0]!.options.map(option => option.id)).toEqual(['MISSING_KEY']);
   expect(calls).toEqual([{ schemaVersion: 1, scopeId: 'live', name: 'MISSING_KEY', value: CANARY }]);
-  expect(set.out.text()).toContain('MISSING_KEY stored in the encrypted file.'); expect(set.out.text() + set.err.text()).not.toContain(CANARY);
+  expect(set.out.text()).toContain('MISSING_KEY saved in store: encrypted file.'); expect(set.out.text() + set.err.text()).not.toContain(CANARY);
   card.answers = ['live', 'cancel']; card.asked = [];
   expect(await main(['secret', 'delete', 'DECKENT_OPENAI_KEY'], io(f, secretHandlers(calls)).context)).toBe(1);
   expect(card.asked[1]!.body).toEqual(['Still used by: config probe.token. They stop working until it is set again.']);

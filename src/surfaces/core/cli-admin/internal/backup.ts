@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
-import { emit, ErrorRegistry, EXIT_CODES, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { emit, ErrorRegistry, EXIT_CODES, loadConfig, loadConfigLanguage, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { backupCommandSchema, type BackupCommand, type BackupResult } from '#engine/index.js';
-import { commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { commandLocale, resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliTableStyle, formatAgo, formatBytes, formatClock, renderCliTable, resolveCommandScope, scopeLister, scopeNotice, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
@@ -62,7 +62,10 @@ export async function backupCommand(argv: readonly string[], context: AdminComma
     else if (flag !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (!context.executeBackup) throw ErrorRegistry.createError('CLI_USAGE');
-  const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env }, locale = commandLocale(context, language);
+  const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env };
+  // S1 O5: without a host-resolved locale, the installation's saved language (read without config admission, so a restore hold is reported in it).
+  const saved = context.locale ? undefined : await loadConfigLanguage(root, { env }).catch(() => undefined);
+  const locale = commandLocale(saved ? { ...context, locale: resolveCliLocale({ env, configLanguage: saved }) } : context, language);
   const interactive = adminInteractive(context, json), cancelled = () => { reportCancelled(context, locale); return EXIT_CODES.error; };
   const configured = await loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
   const scope = await resolveCommandScope({ command: `deckent backup ${action}`, locale, explicit: scopeId, configured: typeof configured === 'string' ? configured : undefined,

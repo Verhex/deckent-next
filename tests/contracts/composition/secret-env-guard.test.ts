@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { clearConfigCache, loadConfig, registerConfigSection, resolveGlobalConfigPaths } from '#platform/index.js';
 import { openRegisteredSecretStore, registerProviderConfig } from '#adapters/index.js';
@@ -10,6 +10,14 @@ import { inspectConfiguredSecretStore, listConfiguredSecretStores, missingEnviro
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 
 registerProviderConfig();
+// C-ADMIN: a person's yes/no is the terminal's CLI card (Ink, PTY-proven); here the answer is injected at the card launcher and the mode
+// decision reports a person at a terminal. Every other caller keeps the real decision (never asked).
+const person = vi.hoisted(() => ({ answer: undefined as string | null | undefined }));
+vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
+  const real = await importOriginal<typeof import('#surfaces/core/cli-human/index.js')>();
+  return { ...real, cliMode: (...args: Parameters<typeof real.cliMode>) => person.answer !== undefined && !args[1] ? { mode: 'interactive' as const, reason: 'tty' as const } : real.cliMode(...args),
+    askCliCard: async (...args: Parameters<typeof real.askCliCard>) => person.answer !== undefined ? person.answer : real.askCliCard(...args) };
+});
 registerConfigSection('w2_guard_probe', z.object({ refs: z.array(z.string()) }).strict(), { optional: true, metadata: {
   descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', apply: 'live', binding: { state: 'bound', consumers: ['src/platform/core/config'] } } });
 const roots: string[] = [], CANARY = 'W2_CANARY_ENV_SECRET_VALUE', FILE = 'core.secret-store.file@1', SEALED = 'core.secret-store.encrypted-file@1';
@@ -51,16 +59,16 @@ it.skipIf(process.platform === 'win32')('CLI blocks non-TTY without its explicit
   const f = await fixture();
   for (const answer of [undefined, 'no', 'yes', 'flag', 'eof']) {
     const stdin = new PassThrough() as PassThrough & { isTTY: boolean }; stdin.isTTY = answer === 'yes' || answer === 'no' || answer === 'eof';
+    person.answer = answer === 'yes' ? 'apply' : answer === 'no' ? 'cancel' : answer === 'eof' ? null : undefined; // eof: the card is dismissed
     const out = capture(), err = capture(), calls: unknown[] = [];
-    const stderr = { write(text: string) { err.sink.write(text); if (text.includes('[yes/no]')) setImmediate(() => answer === 'eof' ? stdin.end() : stdin.write(`${answer}\n`)); return true; } };
-    const status = await main(['secret', 'store', '--to', FILE, '--scope', 's', '--json', ...(answer === 'flag' ? ['--confirm-env-missing'] : [])], {
-      root: f.project, env: f.env, stdin, stdout: out.sink, stderr, listSecretStores: listConfiguredSecretStores,
+    const status = await main(['secret', 'store', '--to', FILE, '--scope', 's', ...(person.answer === undefined ? ['--json'] : []), ...(answer === 'flag' ? ['--confirm-env-missing'] : [])], {
+      root: f.project, env: f.env, stdin, stdout: out.sink, stderr: err.sink, listSecretStores: listConfiguredSecretStores,
       switchSecretStore: async (_root, command) => { calls.push(command); return { schemaVersion: 1, scopeId: 's', status: 'switched',
         from: 'core.secret-store.env@1', to: FILE, entries: 0, downgrade: false, cleaned: true }; } });
     const accepted = answer === 'yes' || answer === 'flag';
     expect(calls).toHaveLength(accepted ? 1 : 0); expect(status).toBe(accepted ? 0 : 1);
     if (accepted) expect(calls[0]).toMatchObject({ confirmEnvMissing: true });
-    expect(out.text() + err.text()).not.toContain(CANARY); stdin.destroy();
+    expect(out.text() + err.text()).not.toContain(CANARY); stdin.destroy(); person.answer = undefined;
   }
 });
 
