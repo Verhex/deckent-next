@@ -3217,7 +3217,6 @@
         "src/domain/core/primitives",
         "src/platform/core/integrity",
         "src/domain/core/task-graph",
-        "src/domain/core/policy",
         "src/platform/core/redaction",
         "src/capabilities/core/run-planner"
       ],

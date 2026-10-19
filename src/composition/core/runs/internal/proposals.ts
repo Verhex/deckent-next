@@ -1,9 +1,9 @@
 import { withPlanningSpending } from './planning-spending.js';
 import { userInfo } from 'node:os';
-import { executionRegistrySchema, type RunProposal } from '#domain/index.js';
+import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteRunProposalStore, openSqliteRunProposalReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
-import { assertRunProposalSource, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
+import { assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
   runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { readConfiguredRunBudget, classifyConfiguredRunSpending } from './budget.js';
@@ -18,7 +18,7 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
       const store = await openSqliteRunProposalStore(await context.path(), context.config.storage.sqlite);
       try {
         return await new RunProposalApplication(store, { verify: async () => context.principal }, authority, runs, {
-          registry: context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry).workClasses : undefined, clock: new SystemTrustedClock(),
+          registry: configuredProposalRegistry(context.config.admission), clock: new SystemTrustedClock(),
           loadBudget: scopeId => readConfiguredRunBudget(projectRoot, scopeId, options),
           classifySpending: value => classifyConfiguredRunSpending(projectRoot, value, options),
           async verifySource(value) {
@@ -46,7 +46,7 @@ export async function inspectConfiguredRunProposal(projectRoot: string, input: R
       const reader = await openSqliteRunProposalReader(await context.path(), context.config.storage.sqlite);
       try { return await reader.loadProposal(scopeId, commandId); } finally { reader.close(); }
     } }, { verify: async () => context.principal },
-    new RunPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes))).inspect(query);
+    new RunPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, context.config.inspection.policyMaxBytes)), configuredProposalRegistry(context.config.admission)).inspect(query);
     return result ? await withPlanningSpending(projectRoot, result, options) : null;
   } catch (error) { throw queryFailure(error); }
 }

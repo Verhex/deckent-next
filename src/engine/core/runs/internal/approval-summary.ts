@@ -1,4 +1,5 @@
-import { advisoryProposalPermissions, dependencyTaskId, isConflictEdge, type PolicyDecision } from '#domain/index.js';
+import { advisoryProposalPermissions, dependencyTaskId, getPolicyVocabulary, isConflictEdge, isRecognisedProposalPermission, resolveTaskWorkClass,
+  type PolicyDecision, type ProposalPermissionCatalog, type WorkClassRegistry } from '#domain/index.js';
 import { currencyAmountText, redactForRecord, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import type { RunCreate } from './store.js';
@@ -11,9 +12,15 @@ const field = (raw: string, max: number, known?: KnownSecretSnapshot): string =>
   return clean.length > max ? clean.slice(0, max - 1) + '…' : clean;
 };
 
-/** One producer renderer for all approval observers; derived only from the input and basis the authority decision seals. */
+/** One catalog for the person's refusal and the model's 'unrecognised (advisory)' marker, so the two paths cannot diverge (accept_mark). */
+export function runProposalPermissionCatalog(registry: WorkClassRegistry | undefined): ProposalPermissionCatalog {
+  return [...getPolicyVocabulary().resources, ...(resolveTaskWorkClass('', undefined, registry).policy.proposalPermissions ?? [])];
+}
+
+/** One producer renderer for all approval observers; derived only from the input and basis the authority decision seals.
+ * `askedAtExecution`: tasks whose task restriction requires approval; TaskApprovalAdmission asks each once, when it runs (g4-cift-onay). */
 export function renderRunCreateApprovalSummary(command: BoundRunAdmission, create: RunCreate, verdict: PolicyDecision,
-  locale: Locale = 'en', known?: KnownSecretSnapshot): string {
+  locale: Locale = 'en', known?: KnownSecretSnapshot, registry?: WorkClassRegistry, askedAtExecution: readonly string[] = []): string {
   // A proposal's checked set is system-derived from the graph; its own list is advisory only (live 2026-10-18) and shown as such.
   const tasks = create.graph.tasks, permissions = command.proposal ? advisoryProposalPermissions(command.proposal.requiredPermissions, command.graph) : undefined;
   const unknown = t('approval.plan.undeclared', {}, locale);
@@ -22,14 +29,20 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     kind: field(task.kind, limits.taskKindChars, known), workClass: field(create.execution.tasks.find(row => row.taskId === task.id)?.acceptance?.workClass
       ?? task.workClass ?? task.workInput?.workClass ?? unknown, limits.workClassChars, known),
   }, locale));
-  const permissionRows = (permissions ?? []).slice(0, limits.permissionRows).map(permission => t('approval.plan.permission', {
-    kind: field(permission.kind, limits.permissionKindChars, known), action: field(permission.action, limits.permissionActionChars, known), resource: field(permission.resourceId, limits.permissionResourceChars, known),
-  }, locale));
+  const catalog = runProposalPermissionCatalog(registry); // accept_mark (owner 2026-10-18): an unrecognised model entry is marked, never refused.
+  const permissionRows = (permissions ?? []).slice(0, limits.permissionRows).map(permission => {
+    const params = { kind: field(permission.kind, limits.permissionKindChars, known), action: field(permission.action, limits.permissionActionChars, known), resource: field(permission.resourceId, limits.permissionResourceChars, known) };
+    return isRecognisedProposalPermission(permission, catalog) ? t('approval.plan.permission', params, locale) : t('approval.plan.permission.unrecognised', params, locale);
+  });
   // D7a: the system's order edges are part of what the human approves (sealed in the admission input digest); always counted, rows bounded.
   const edges = tasks.flatMap(task => task.dependencies.filter(isConflictEdge).map(edge => ({ task: task.id, after: dependencyTaskId(edge) })));
   const edgeRows = edges.slice(0, limits.edgeRows).map(edge => t('approval.plan.conflictEdge', { task: field(edge.task, limits.titleChars, known), after: field(edge.after, limits.titleChars, known) }, locale));
   const ceiling = command.proposal?.budgetCeiling;
-  const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale)] : [];
+  const title = (id: string) => { const task = tasks.find(row => row.id === id); return field(task?.workInput?.title ?? task?.workInput?.task ?? id, limits.titleChars, known); };
+  // g4-cift-onay (owner-approved card text 2026-10-18): a task approval is asked once, when that task runs; the plan card says so instead of asking it here.
+  const asked = askedAtExecution.length ? [t('approval.plan.askedAtExecution', { tasks: askedAtExecution.slice(0, limits.taskRows).map(title).join(', ')
+    + (askedAtExecution.length > limits.taskRows ? ' ' + t('approval.plan.moreTasks', { count: askedAtExecution.length - limits.taskRows }, locale) : '') }, locale)] : [];
+  const checked = command.proposal ? [t('approval.plan.checked', { count: command.graph.tasks.length }, locale), ...asked] : [];
   const footer = [t('approval.plan.permissions', { count: permissions?.length ?? unknown }, locale), t('approval.plan.authorityNotice', {}, locale),
     t('approval.plan.budget', { ceiling: ceiling ? currencyAmountText(ceiling.limitMinorUnits, ceiling.currency, locale) : unknown }, locale),
     command.proposal?.admission?.budgetSemantics === 'not-metered' ? t('proposal.budget.notMetered', {}, locale) : t('approval.plan.budgetNotice', {}, locale),
