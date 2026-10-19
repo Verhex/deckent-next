@@ -257,6 +257,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/surfaces/core/cli-kit",
         "src/adapters/core/provider-connect",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/terminal-history",
@@ -1148,6 +1149,7 @@
     },
     "src/surfaces/core/cli-kit": {
       "dependencies": [
+        "src/platform/core/host",
         "src/platform/core/i18n",
         "src/platform/core/output",
         "src/platform/core/errors"
@@ -3216,7 +3218,14 @@
       "plan": "CONTRACT"
     },
     "src/surfaces/core/cli-human": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/platform/core/host",
+        "src/platform/core/config"
+      ],
       "plan": "SURFACES"
     },
     "src/engine/core/setup": {
