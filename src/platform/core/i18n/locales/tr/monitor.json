@@ -231,6 +231,7 @@
   "monitor.config.name.targetQueue": "Teslim kuyruğu",
   "monitor.config.name.runRuntime": "İşlerin otomatik ilerlemesi",
   "monitor.config.name.toolchains": "İşçi imajı ve araç zinciri",
+  "monitor.config.name.models": "Model emeklilik uyarıları",
   "monitor.config.name.resourceObservation": "İşçi kaynak ölçümü",
   "monitor.config.name.artifacts": "Saklanan çıktılar",
   "monitor.config.name.service": "Çalışma servisi",

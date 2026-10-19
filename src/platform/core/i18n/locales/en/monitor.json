@@ -231,6 +231,7 @@
   "monitor.config.name.targetQueue": "Delivery queue",
   "monitor.config.name.runRuntime": "Automatic run progress",
   "monitor.config.name.toolchains": "Worker image and toolchains",
+  "monitor.config.name.models": "Model retirement warnings",
   "monitor.config.name.resourceObservation": "Worker resource measurement",
   "monitor.config.name.artifacts": "Stored artifacts",
   "monitor.config.name.service": "Runtime service",

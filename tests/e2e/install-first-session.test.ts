@@ -61,7 +61,7 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
       const set = await runInTerminal([process.execPath, binary, 'secret', 'set', 'INSTALL_FLOW_TEST', '--scope', 'my-project'], project, personEnv(env), [{ when: 'INSTALL_FLOW_TEST: ', send: 'offline-fixture-key\r' }]);
       expect(set.code, set.output).toBe(0); expect(set.output).not.toContain('offline-fixture-key');
       const listed = await run(['secret', 'list']); expect(listed.stdout + listed.stderr).toContain('INSTALL_FLOW_TEST');
-      const doctor = await run(['doctor']); expect(doctor.stdout + doctor.stderr).toContain('Runtime startability: ready');
+      const doctor = await run(['doctor', '--verbose']); expect(doctor.stdout + doctor.stderr).toContain('Runtime startability: ready'); // C-DOCTOR: details behind --verbose
     } finally {
       service.kill('SIGTERM');
       const timer = setTimeout(() => service.kill('SIGKILL'), 10_000);

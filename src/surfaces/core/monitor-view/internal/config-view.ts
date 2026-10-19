@@ -17,6 +17,7 @@ function fieldWords(locale: Locale): Readonly<Record<string, readonly [Section, 
     max_workers: ['work', t('monitor.config.name.max_workers', {}, locale)], admission: ['work', t('monitor.config.name.admission', {}, locale)],
     execution: ['work', t('monitor.config.name.execution', {}, locale)], targetQueue: ['work', t('monitor.config.name.targetQueue', {}, locale)],
     runRuntime: ['work', t('monitor.config.name.runRuntime', {}, locale)], toolchains: ['work', t('monitor.config.name.toolchains', {}, locale)],
+    models: ['work', t('monitor.config.name.models', {}, locale)], // C-MODELS: models.retirementWarningDays
     resourceObservation: ['work', t('monitor.config.name.resourceObservation', {}, locale)], artifacts: ['work', t('monitor.config.name.artifacts', {}, locale)],
     service: ['service', t('monitor.config.name.service', {}, locale)], cancellation: ['service', t('monitor.config.name.cancellation', {}, locale)],
     cancellationRuntime: ['service', t('monitor.config.name.cancellationRuntime', {}, locale)],
