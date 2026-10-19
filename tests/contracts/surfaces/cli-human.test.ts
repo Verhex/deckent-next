@@ -66,6 +66,8 @@ describe('host locale (composition, resolved once per call)', () => {
     expect(await hostLocale(['report', '--lang', 'en'], f.dir, f.env)).toBe('en');
     expect(await hostLocale(['report'], f.dir, { ...f.env, DECKENT_LANGUAGE: 'en' })).toBe('en');
     expect(await hostLocale(['report', '--lang', 'de'], f.dir, f.env)).toBe('tr');
+    // An unsupported DECKENT_LANGUAGE is passed over like any other value: config still decides.
+    expect(await hostLocale(['report'], f.dir, { ...f.env, DECKENT_LANGUAGE: 'de', LANG: 'en_US.UTF-8' })).toBe('tr');
   });
   it('an unreadable config never blocks a command: the environment chain decides', async () => {
     const f = await fixture('{broken');

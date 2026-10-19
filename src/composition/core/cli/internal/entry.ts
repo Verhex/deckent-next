@@ -39,9 +39,10 @@ import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfigured
  */
 export async function hostLocale(argv: readonly string[], root: string, env: NodeJS.ProcessEnv = process.env): Promise<Locale> {
   const at = argv.indexOf('--lang'), flag = at >= 0 && !argv[at + 1]?.startsWith('-') ? argv[at + 1] : undefined;
-  const chosen = resolveCliLocale({ flag, env });
-  // A supported flag or DECKENT_LANGUAGE/DECKENT_LANG outranks config: no config read is needed for them.
-  if ((flag && chosen === flag.slice(0, 2).toLowerCase()) || envValue(env, 'DECKENT_LANGUAGE') || envValue(env, 'DECKENT_LANG')) return chosen;
+  // A supported flag or DECKENT_LANGUAGE/DECKENT_LANG outranks config: no config read is needed then (an unsupported value is passed over).
+  const decisive = [flag, envValue(env, 'DECKENT_LANGUAGE'), envValue(env, 'DECKENT_LANG')]
+    .some(value => !!value && resolveCliLocale({ flag: value, env: {} }) === value.slice(0, 2).toLowerCase());
+  if (decisive) return resolveCliLocale({ flag, env });
   let configLanguage: string | undefined;
   try { configLanguage = await loadConfigLanguage(root, { env }); } catch { /* unreadable or invalid config: the environment chain decides */ }
   return resolveCliLocale({ flag, env, configLanguage });
