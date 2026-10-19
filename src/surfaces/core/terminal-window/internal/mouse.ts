@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 
 /**
  * Mouse wheel for the full-window conversation (owner 2026-10-18; the Claude Code fullscreen renderer captures the mouse and scrolls the
@@ -36,9 +37,12 @@ export type WheelSource = Readonly<{ subscribe: (listener: WheelListener) => () 
 /** The stdin Ink reads in the full window: the real TTY's bytes without mouse reports; raw mode and ref/unref go to the real stream. */
 export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: NodeJS.ReadStream; wheel: WheelSource; close: () => void }> {
   const listeners = new Set<WheelListener>(), out = new PassThrough();
+  // Ink sets the encoding on this stream, not on the real TTY, which emits Buffers: one decoder for the whole stream keeps a multi-byte
+  // character cut at a read boundary (a large paste) whole instead of two U+FFFD.
+  const decoder = new StringDecoder('utf8');
   let carry = '';
   const onData = (chunk: Buffer | string) => {
-    const read = takeMouseReports(typeof chunk === 'string' ? chunk : chunk.toString('utf8'), carry);
+    const read = takeMouseReports(typeof chunk === 'string' ? chunk : decoder.write(chunk), carry);
     carry = read.carry;
     if (read.text) out.write(read.text);
     for (const step of read.wheel) for (const listener of listeners) listener(step);

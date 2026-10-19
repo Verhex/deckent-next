@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Writable, PassThrough } from 'node:stream';
 import { cells } from '#surfaces/core/terminal-render/index.js';
-import { fullscreenFrameRows, fullscreenInfoRows, promptJump, scrollViewport, searchViewport, takeMouseReports, viewportLines, viewportStart, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
+import { fullscreenFrameRows, fullscreenInfoRows, mouseFilteredInput, promptJump, scrollViewport, searchViewport, takeMouseReports, viewportLines, viewportStart, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
@@ -202,5 +202,17 @@ describe('mouse reports', () => {
     const cut = takeMouseReports('x\u001b[<65;1');
     expect(cut).toEqual({ text: 'x', wheel: [], carry: '\u001b[<65;1' });
     expect(takeMouseReports(';1M\r', cut.carry)).toEqual({ text: '\r', wheel: [1], carry: '' });
+  });
+  it('keeps a multi-byte character cut at a read boundary whole (a large paste of Turkish text; the TTY emits Buffers)', async () => {
+    const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;
+    const mouse = mouseFilteredInput(real), wheel: number[] = [];
+    mouse.wheel.subscribe(step => wheel.push(step));
+    // Ink sets the encoding on the stream it reads, as here; 'ş' is C5 9F, split across two reads, with a wheel notch in the second read.
+    mouse.input.setEncoding('utf8'); let text = ''; mouse.input.on('data', (chunk: string) => { text += chunk; });
+    real.emit('data', Buffer.from([0x61, 0x6b, 0x61, 0xc5]));
+    real.emit('data', Buffer.concat([Buffer.from([0x9f]), Buffer.from('\u001b[<65;1;1Mi ğüİ', 'utf8')]));
+    await settle(10);
+    expect(text).toBe('akaşi ğüİ'); expect(text).not.toContain('\ufffd'); expect(wheel).toEqual([1]);
+    mouse.close();
   });
 });

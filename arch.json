@@ -385,7 +385,8 @@
         "src/domain/core/audit",
         "src/platform/core/clock",
         "src/composition/core/run-planner",
-        "src/composition/core/audit"
+        "src/composition/core/audit",
+        "src/platform/core/crash-reporting"
       ],
       "plan": "SURFACES"
     },

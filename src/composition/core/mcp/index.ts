@@ -1,2 +1,2 @@
-export { main, mcpApplications, run } from './internal/entry.js';
+export { main, mcpApplications, mcpStartFailureText, run } from './internal/entry.js';
 export { describeMcpInference } from './internal/inference-query.js';

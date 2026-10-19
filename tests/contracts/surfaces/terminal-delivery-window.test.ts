@@ -82,7 +82,7 @@ function recordingPort(options: PortOptions = {}) {
 }
 
 /** A real Workline whose /do admits one Run (no approval); the Run then reaches acceptance with a patch awaiting delivery. */
-function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[] } = {}) {
+function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[]; fullscreen?: boolean; rows?: number } = {}) {
   let current: RunView = run(RUNNING, 'active');
   const recorded = recordingPort(options), pending = pendingBrainFixture();
   const ledger = { scopeId: 's', workerHeartbeatMs: 60_000, listRunIds: async () => (options.scopeRuns ?? [current]).map(item => item.runId),
@@ -91,7 +91,8 @@ function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly R
   const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, work: EN, delivery: WORDS }, ledger, pollMs: 25, maxTrackedRuns: 4,
     ...(options.port === false ? {} : { delivery: { port: recorded.port, confirmTimeoutMs: 60_000 } }),
     doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST', lines: () => ['PLAN-RESULT'],
-      plan: async () => ({ ...pending, run: current, proposal: { ...pending.proposal, status: 'accepted', approval: null } }) } }, 160, { rows: 48 });
+      plan: async () => ({ ...pending, run: current, proposal: { ...pending.proposal, status: 'accepted', approval: null } }) },
+    ...(options.fullscreen ? { fullscreen: true } : {}) }, 160, { rows: options.rows ?? 48 });
   mounted.push(view.instance);
   return { view, ...recorded, set: (next: RunView) => { current = next; } };
 }
@@ -639,8 +640,15 @@ describe('read-only diff view in the delivery window', () => {
     { path: 'big.bin', lines: [], hidden: 0, unavailable: 'binary' },
     { path: 'long.txt', lines: Array.from({ length: 40 }, (_, index) => `+row-${index}`), hidden: 7, unavailable: null },
   ];
-  async function ready(options: PortOptions = {}) {
-    const h = harness({ diffs, viewFiles: (options.diffs ?? diffs).map(diff => diff.path), ...options }); await admit(h); h.set(awaiting());
+  async function ready(options: PortOptions & { fullscreen?: boolean; rows?: number } = {}) {
+    const h = harness({ diffs, viewFiles: (options.diffs ?? diffs).map(diff => diff.path), ...options, ...(options.fullscreen ? { scopeRuns: [awaiting()] } : {}) });
+    if (options.fullscreen) {
+      // The full window opens the waiting task through /deliver (in the foreground); the inline path below admits it through /do.
+      await settle(80); await press(h, '/deliver\r', 150); if (frame(h).includes(WORDS.pickerTitle)) await press(h, '\r', 150);
+      await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'window keys');
+      return h;
+    }
+    await admit(h); h.set(awaiting());
     // Behind the composer the window shows the "Ctrl+O to decide" line, not its keys; they show once it holds the keyboard and is armed.
     await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready'); await press(h, CTRL_O);
     await until(() => frame(h).includes(WORDS.hints), 'window keys');
@@ -657,6 +665,20 @@ describe('read-only diff view in the delivery window', () => {
     await press(h, 'j'); await press(h, 'j'); expect(frame(h)).not.toContain('+row-0\n'); expect(frame(h)).toContain('diff lines 3-20 of 40');
     expect(frame(h)).toContain('+7 more diff lines'); await press(h, ESC);
     expect(h.calls).toEqual(['preview:r']);
+  });
+  it('a 24-row full window: PgUp/PgDn page the window to the diff page\'s last rows; j/k still scroll the diff, y still never delivers', async () => {
+    const PGUP = '\u001b[5~', PGDN = '\u001b[6~';
+    const h = await ready({ fullscreen: true, rows: 24 }); await press(h, DOWN); await press(h, DOWN); await press(h, '\r');
+    await until(() => frame(h).includes('long.txt (3/3)'), 'diff of long.txt');
+    // The page does not fit: its position row and the hidden-lines row are below the window's view.
+    expect(frame(h)).not.toContain('diff lines 1-18 of 40'); expect(frame(h)).not.toContain('+7 more diff lines');
+    await press(h, PGDN); await press(h, PGDN); await press(h, PGDN);
+    await until(() => frame(h).includes('diff lines 1-18 of 40') && frame(h).includes('+7 more diff lines'), 'window paged to the end of the diff page');
+    expect(frame(h)).toContain('+row-17');
+    await press(h, 'j'); await until(() => frame(h).includes('diff lines 2-19 of 40'), 'j scrolls the diff'); expect(frame(h)).toContain('+row-18');
+    await press(h, PGUP); await press(h, PGUP); await press(h, PGUP); expect(frame(h)).toContain('long.txt (3/3)');
+    await press(h, 'y', 120); expect(h.calls).toEqual(['preview:r']); expect(h.views).toEqual([]);
+    await press(h, ESC); expect(frame(h)).toContain('› long.txt'); expect(h.calls).toEqual(['preview:r']);
   });
   it('a binary or too-large file says it cannot be shown instead of an empty or partial diff', async () => {
     const h = await ready(); await press(h, 'j'); await press(h, '\r');
