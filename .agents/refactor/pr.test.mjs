@@ -137,7 +137,7 @@ function prepareArgs(fx, patch, extra = []) {
   return ['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--scope', 'README.md', '--json', ...extra];
 }
 function openArgs(fx, patch, extra = []) {
-  return ['open', patch, '--card', CARD, '--repo', fx.repo, '--push', '--json', ...extra];
+  return ['open', patch, '--card', CARD, '--repo', fx.repo, '--push', '--scope', 'docs/**', '--scope', 'README.md', '--json', ...extra];
 }
 function lines(file) {
   return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
@@ -242,7 +242,7 @@ execTest('a worker report supplies checks and cannot set independent review to P
   assert.equal(/^- Status: PASS$/m.test(body), false);
   assert.equal(body.includes('unknown — worker report missing'), false);
   const md = writePatch(path.join(fx.dir, 'md'), { base: fx.base, runId: 'md1', report: { name: 'report.md', body: '| Exact command | Result / evidence |\n|---|---|\n| npm test | exit 0 |\n' } });
-  const second = await runPr(['open', md, '--card', CARD, '--repo', fx.repo, '--push', '--json'], fx.env, fx.repo);
+  const second = await runPr(['open', md, '--card', CARD, '--repo', fx.repo, '--push', '--scope', 'README.md', '--json'], fx.env, fx.repo);
   assert.equal(second.code, 0, second.stderr);
   const mdBody = lines(fx.ghLog).filter(entry => entry.args[1] === 'create').at(-1).body;
   assert.match(mdBody, /npm test/);
@@ -280,6 +280,46 @@ execTest('missing patch files, bad JSON, stale base, empty diff, conflict and sc
   assertFrozen(fx.repo, afterSide);
   assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
   assert.equal(lines(fx.gitLog).some(args => args[0] === 'push'), false);
+});
+
+const WORKFLOW = `diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1 @@
++on: push
+`;
+execTest('SEC F40: a patch without --scope is refused, and a .github/** change is refused even inside the scope, before any branch or push', async t => {
+  const fx = fixture(t); const before = capture(fx.repo);
+  const plain = writePatch(path.join(fx.dir, 'plain'), { base: fx.base });
+  for (const command of [['prepare'], ['open', '--push']]) {
+    expectCode(await runPr([command[0], plain, '--card', CARD, '--repo', fx.repo, ...command.slice(1), '--json'], fx.env, fx.repo), 'PR_SCOPE_REQUIRED');
+  }
+  const workflow = writePatch(path.join(fx.dir, 'workflow'), { base: fx.base, runId: 'wf1', diff: WORKFLOW });
+  for (const scope of [['--scope', '**'], ['--scope', '.github/**']]) {
+    for (const command of [['prepare'], ['open', '--push']]) {
+      const refused = expectCode(await runPr([command[0], workflow, '--card', CARD, '--repo', fx.repo, ...command.slice(1), ...scope, '--json'], fx.env, fx.repo), 'PR_PROTECTED_PATH');
+      assert.deepEqual(refused.paths, ['.github/workflows/ci.yml']);
+    }
+  }
+  assertFrozen(fx.repo, before);
+  assert.equal(fs.existsSync(path.join(fx.repo, '.deckent/host/pr-receipts')), false);
+  assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
+  assert.equal(lines(fx.gitLog).some(args => args[0] === 'push'), false);
+});
+
+execTest('SEC F40: only the explicit --allow-protected-paths flag admits a scoped .github change, and a later open without it is refused', async t => {
+  const fx = fixture(t);
+  const workflow = writePatch(path.join(fx.dir, 'workflow'), { base: fx.base, runId: 'wf1', diff: WORKFLOW });
+  const admitted = await runPr(['prepare', workflow, '--card', CARD, '--repo', fx.repo, '--scope', '.github/**', '--allow-protected-paths', '--json'], fx.env, fx.repo);
+  assert.equal(admitted.code, 0, `${admitted.stderr}\n${admitted.stdout}`);
+  // The flag never widens the scope: the protected path must still be named by --scope.
+  expectCode(await runPr(['prepare', workflow, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--allow-protected-paths', '--json'], fx.env, fx.repo), 'PR_SCOPE_VIOLATION');
+  // Reusing the prepared receipt without the flag is refused before ls-remote or push.
+  const reused = expectCode(await runPr(['open', workflow, '--card', CARD, '--repo', fx.repo, '--push', '--scope', '.github/**', '--json'], fx.env, fx.repo), 'PR_PROTECTED_PATH');
+  assert.deepEqual(reused.paths, ['.github/workflows/ci.yml']);
+  assert.equal(lines(fx.gitLog).some(args => args[0] === 'push' || args[0] === 'ls-remote'), false);
+  assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
 });
 
 test('invalid card and run ids, including branch injection, are refused', async t => {
