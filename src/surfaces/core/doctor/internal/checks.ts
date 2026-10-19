@@ -121,6 +121,8 @@ function toolChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     if (entry.status === 'fresh' || entry.status === 'ahead') return row('tools', 'tools.toolchains', 'ok', t('doctor.check.toolchains.fresh', params, l));
     if (entry.status === 'stale') return row('tools', 'tools.toolchains', 'warning', t('doctor.check.toolchains.stale', params, l), 'deckent toolchains update', fix);
     if (entry.status === 'unparsed' || entry.status === 'unsupported') return row('tools', 'tools.toolchains', 'warning', t('doctor.check.toolchains.unreadable', params, l), 'deckent doctor --toolchains --verbose');
+    if (entry.status === 'not-admitted') return row('tools', 'tools.toolchains', 'untested', t('doctor.check.toolchains.notAdmitted', params, l));
+    if (entry.status === 'disabled') return row('tools', 'tools.toolchains', 'untested', t('doctor.check.toolchains.disabled', params, l));
     return row('tools', 'tools.toolchains', 'untested', t('doctor.check.toolchains.unknown', params, l));
   });
 }

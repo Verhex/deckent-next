@@ -113,7 +113,7 @@
   "doctor.check.toolchains.fresh": "{provider}: güncel ({latest})",
   "doctor.check.toolchains.stale": "{provider}: daha yeni sürüm var ({latest})",
   "doctor.check.toolchains.unreadable": "{provider}: kurulu sürüm okunamadı ({reason})",
-  "doctor.check.toolchains.unknown": "{provider}: sınanmadı ({reason})",
+  "doctor.check.toolchains.unknown": "{provider}: şu an kontrol edilemedi ({reason})",
   "doctor.fix.apply": "Şimdi uygula",
   "doctor.fix.skip": "Şimdi değil",
   "doctor.fix.declined": "Uygulanmadı: hiçbir şey değişmedi.",
@@ -169,5 +169,7 @@
   "cli.terminalInfo.context.noProfile": "Bağlam penceresi: ilk yanıt ölçülene kadar bilinmiyor; inference_serving profili olmadığından pencere boyutu yalnız sağlayıcı bildirirse bilinir (o zamana kadar durum çubuğu \"bağlam ?\" gösterir)",
   "cli.terminalInfo.context.profile": "Bağlam penceresi: ilk yanıttan ölçülür (o zamana kadar durum çubuğu \"bağlam ?\" gösterir)",
   "cli.workers.validScopes": "{scope} scope'u burada okuyabildiğiniz bir scope değil. Geçerli scope'lar: {scopes}",
-  "doctor.check.audit.noCheckpoint": "Audit zinciri: henüz kontrol noktası yok, karşılaştırılacak bir şey yok"
+  "doctor.check.audit.noCheckpoint": "Audit zinciri: henüz kontrol noktası yok, karşılaştırılacak bir şey yok",
+  "doctor.check.toolchains.notAdmitted": "{provider}: bu kurulumda kabul edilmiş sürüm yok, karşılaştırılacak bir şey yok",
+  "doctor.check.toolchains.disabled": "{provider}: sürüm kontrolü burada kapalı ya da karşılaştırılacak bir şey yok"
 }

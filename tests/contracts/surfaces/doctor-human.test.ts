@@ -68,6 +68,16 @@ describe('doctor rows (pure)', () => {
       .filter(row => row.state !== 'untested');
     expect(renderDoctorChecks(clean, 'en').split('\n')[0]).toBe('Status: ready · no warnings');
   });
+  it('tool rows: stale offers the update fix, not-admitted and offline are "not tested" in words (no raw status code)', () => {
+    const toolchains = { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', providers: [
+      { provider: 'claude', status: 'stale', admitted: [], latest: { version: '2.9.0' } }, { provider: 'codex', status: 'not-admitted', admitted: [], latest: null },
+      { provider: 'cursor', status: 'unknown-offline', reason: 'CURRENCY_UNKNOWN_OFFLINE', admitted: [], latest: null }] };
+    const rows = doctorChecks({ ...report, toolchains } as never, facts({ toolchainsRequested: true }), 'tr').filter(row => row.group === 'tools');
+    expect(rows.map(row => [row.state, row.fix ?? null])).toEqual([['warning', 'toolchain-update'], ['untested', null], ['untested', null]]);
+    expect(rows[1]!.text).toBe('codex: bu kurulumda kabul edilmiş sürüm yok, karşılaştırılacak bir şey yok');
+    expect(rows.map(row => row.text).join('\n')).not.toContain('not-admitted');
+    expect(doctorChecks({ ...report, toolchains } as never, facts({ toolchainsRequested: true, toolchainUpdateEnabled: false }), 'en').find(row => row.id === 'tools.toolchains')?.fix).toBeUndefined();
+  });
   it('fixes come from the registry: the hard-floor item is listed and never offered, chmod waits for its policy action', async () => {
     expect(DOCTOR_FIXES.find(fix => fix.id === 'audit-rebaseline')?.hardFloor).toBe(true);
     expect(DOCTOR_FIXES.find(fix => fix.id === 'installation-directory-private')?.policyAction).toBe('installation/repair');
