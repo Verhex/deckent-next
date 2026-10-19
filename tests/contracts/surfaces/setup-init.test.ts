@@ -122,13 +122,17 @@ describe('I-S4 bare deckent init', () => {
     expect(run.applied.some(stage => NEVER_UNATTENDED.includes(stage.operation!.id))).toBe(false);
   });
 
-  it('--yes never upgrades, resumes, connects, writes bridges or applies anything on an unsupported platform', async () => {
+  it('--yes never upgrades, resumes, runs a non-eligible ready stage, connects, writes bridges or applies anything on an unsupported platform', async () => {
     for (const observation of [{ ...base, policy: { state: 'upgradable' as const }, folder: { ...base.folder, configuredScope: 'my-erp' } },
-      { ...base, policy: { state: 'pending' as const } }, { ...base, environment: { platform: 'windows' as const, node: 'supported' as const } }]) {
+      { ...base, policy: { state: 'pending' as const } }, { ...base, environment: { platform: 'windows' as const, node: 'supported' as const } },
+      // A stage that is ready but not eligible (an untested sandbox): `--yes` leaves it to a person.
+      { ...base, sandbox: { realm: 'bubblewrap' as const, selfTest: 'not-run' as const, usernsRestricted: false } }]) {
       const run = harness({ apply: () => 'applied', observation: () => observation });
       await failure(setupInitCommand(['init', '--yes', '--scope', 'my-erp', '--json'], run.context));
-      // Only the language write and the read-only final check may run; never the upgrade, a resume or anything else.
-      expect(run.applied.map(stage => stage.operation!.id).filter(id => id !== 'config.set' && id !== 'doctor.inspect'), observation.policy.state).toEqual([]);
+      // Only a fresh policy, the language write and the read-only final check may run; never the upgrade, a resume or anything else.
+      const eligible = ['installation.policy-template', 'config.set', 'doctor.inspect'];
+      expect(run.applied.map(stage => stage.operation!.id).filter(id => !eligible.includes(id)), observation.policy.state).toEqual([]);
+      if (observation.policy.state !== 'absent') expect(run.applied.map(stage => stage.operation!.id)).not.toContain('installation.policy-template');
       if (observation.environment.platform === 'windows') {
         expect(run.applied).toEqual([]);
         expect((JSON.parse(run.out()) as { stages: { state: string }[] }).stages.slice(1).every(stage => stage.state === 'unsupported')).toBe(true);
