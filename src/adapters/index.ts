@@ -3,7 +3,7 @@ export { readIdentityProfileConfig, registerProviderConfig, providerSpendingSche
   openRegisteredSecretStore, registeredSecretStores } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
-export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, indexMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
+export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, indexMonitorInstall, stampMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
 export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,

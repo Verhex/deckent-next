@@ -1,4 +1,5 @@
 import { userInfo } from 'node:os';
+import { lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
@@ -66,6 +67,15 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
 /** M-VIS: the ledger's scope and pool ids (no Run, occupancy or holder), read before the monitor decides admission. */
 export async function indexMonitorInstall(config: ResolvedConfig): Promise<MonitorLedgerIndex> {
   return indexMonitorLedger(await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
+}
+/** MON-CPU-FIX: the viewer and the stat identity of the install's ledger (database and WAL), policy and bindings — nothing is opened or read.
+ * `changedAtMs` is the newest change; a caller trusts the stamp only once that change is older than the file timestamp granularity. */
+export async function stampMonitorInstall(config: ResolvedConfig) {
+  const layout = config.productLayout, ledger = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
+  const stats = await Promise.all([ledger, `${ledger}-wal`, productResourcePath(layout, 'policy'), productResourcePath(layout, 'bindings')]
+    .map(path => lstat(path, { bigint: true }).catch((error: { code?: unknown }) => { if (error?.code === 'ENOENT') return null; throw error; })));
+  return Object.freeze({ stamp: JSON.stringify([readLocalOsIdentity(), ...stats.map(stat => stat && `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`)]),
+    changedAtMs: Math.max(...stats.map(stat => stat ? Number(stat.ctimeNs / 1_000_000n) : 0)) });
 }
 /** Metadata only. Artifact reads are explicitly deferred until the application selects its visible worker set. */
 export async function readMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>) {
