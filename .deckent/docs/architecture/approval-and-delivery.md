@@ -104,7 +104,7 @@ issuer + subject); a role is never a call parameter; a binding grants membership
 v1 parsing is unchanged (bindings are not read); an older reader refuses v2. Four-eyes is enforced in `ApprovalApplication.decide`
 on `allow` only (the requester's own allow → `APPROVAL_DENIED`). Roles may target `task` rules (2026-09-27): Run reservation wires
 the task-admission filter whenever any explicit or role-derived task rule exists in the effective document (`policyGatesTaskAdmission`);
-the per-principal decision stays exact, the wiring check is document-wide (unrelated principals may see the approval journal opened). Adding the `bindings` resource changes every installation's layout revision:
+the per-principal decision stays exact, the wiring check is document-wide (unrelated principals may see the approval journal opened). A Run proposal no longer asks a task-level require-approval at plan time (g4-cift-onay, owner-approved 2026-10-18): the plan card names the task, and this reservation filter is the single place that asks it, once, on the then-current policy. An MCP/AI principal still cannot decide it (MCP-NO-DECIDE unchanged). Adding the `bindings` resource changes every installation's layout revision:
 admitted but unexecuted Runs from before the update get `RUN_STORE_CONFLICT` at execution (same as earlier resource additions).
 Scope access mode is stated at every call (Astra 2126 R1): queries pass `read` and never pin a scope; only write admissions pin.
 The sealed adapter registry holds immutable snapshots of factories and manifests (Astra 2126 R2).

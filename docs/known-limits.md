@@ -259,6 +259,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   or its idle stop) before `runtime restart` works: a service reads its identity only when it starts.
 - **The service identity and the clock.** A rare window remains at first publication of the installation identity; a slow
   clock drift inside the tolerance is not detected; one overlay case where a stopped run reports `cancelled` is not reproduced.
+- **A /do plan that is still waiting for approval from before this release, and that was waiting only because of a task-level
+  approval rule, does not continue after the upgrade:** resubmitting it parks it (`APPROVAL_CONFLICT`). *Workaround:* start a new
+  /do; the task approval is then asked once, just before the task runs. Installations without a `task` rule in their policy are not
+  affected.
 
 ## Desktop and other surfaces
 

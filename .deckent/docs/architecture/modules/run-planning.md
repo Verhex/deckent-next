@@ -36,16 +36,26 @@ The system, not the proposer, decides which permissions admission evaluates
 (live 2026-10-18: a model's invented `scope/inspect` and `model-invocation`
 entries refused its plan). `evaluatePermissions` derives one `task/execute` per
 graph task and reads it as execution-time `TaskApprovalAdmission` does: an
-explicit deny refuses, require-approval asks, and `NO_GRANT` means the optional
-task restriction is absent. Run create stays the create decision itself; reserve,
-attempt execute, pool and work-target use keep their own allow-only gates at the
-real action (attempt ids do not exist at plan time). The proposal's
-`requiredPermissions` stays stored exactly as authored, so digests, source
-verification and v1/v2 replay are unchanged, but it is advisory only: entries
-outside the derived set are shown on the `/do` card and the approval summary as
-"also mentioned (advisory, not evaluated, grants nothing)" and are never
-evaluated or granted. A plain Run create without a proposal is unchanged. An
-unregistered kind/action in the list is still refused by proposal validation.
+explicit deny refuses the plan early and `NO_GRANT` means the optional task
+restriction is absent. A task-level require-approval is not a plan decision
+(g4-cift-onay, owner-approved 2026-10-18): it never raises the Run-create
+verdict; `TaskApprovalAdmission` asks it once, at reservation, on the policy
+current then, and the plan card names those tasks ("Asked once, just before it
+runs (task approval on the policy current then): {tasks}"). Run create stays the
+create decision itself; reserve, attempt execute, pool and work-target use keep
+their own gates at the real action (attempt ids do not exist at plan time). The
+proposal's `requiredPermissions` stays stored exactly as authored, so digests,
+source verification and v1/v2 replay are unchanged, but it is advisory only:
+entries outside the derived set are shown once each on the `/do` card and the
+approval summary as "also mentioned (advisory, not evaluated, grants nothing)"
+and are never evaluated or granted. accept_mark (owner 2026-10-18, Jev
+2f191a60): a model's unregistered kind/action or repeated entry is marked "not
+recognised by this installation" (response-only `unrecognisedPermissions`,
+derived from the current registry, never stored) instead of refusing the plan;
+a person's own list is still refused (`RUN_PROPOSAL_PERMISSION_UNKNOWN`). One
+catalog (`runProposalPermissionCatalog`: policy vocabulary + registry proposal
+permissions) serves both paths. A plain Run create without a proposal is
+unchanged.
 
 A successful repeated command/input reads its recorded proposal and sends no
 second model request. Failed or interrupted invocation claims also forbid a
