@@ -78,7 +78,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
     // `deckent --full-access` (MODES-3) opens it in full access; without a terminal it is refused by the terminal itself (never silent).
     if (interactive) {
-      await (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+      const launch = async () => (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+      // I-S5 (owner D8): bare `deckent` with no scope in a folder with no installation offers the guided setup to a person on a terminal.
+      await launch().catch(async (error: unknown) => {
+        if (argv.length !== 0 || (error as { code?: unknown } | null)?.code !== 'TERMINAL_SCOPE_REQUIRED') throw error;
+        await (await import('./setup-offer.js')).offerSetup(error, context, locale, launch);
+      });
       return 0;
     }
     // Installation on a Node.js below the supported floor is allowed to proceed, but never silently (a known heap overrun in older 24.x).
