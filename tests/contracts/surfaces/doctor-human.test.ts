@@ -45,7 +45,9 @@ describe('doctor rows (pure)', () => {
     expect(lines.indexOf('Çalışma')).toBeLessThan(lines.indexOf('Araçlar'));
     expect(text).toContain('tamam      Node.js v26.10.0 (en az 24.22.0)');
     expect(text).toContain('uyarı      Kimlik profili seçilmemiş');
-    expect(text).toContain('sonraki adım: deckent init');
+    // Lead J3 (I-S3 Q2): the next step is the command that writes the fact, never a bare `deckent init` that cannot (no loop).
+    expect(checks.find(row => row.id === 'setup.identity')?.next).toBe('deckent config set identity.profile --global');
+    expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toBe('deckent init pool --scope live');
     expect(text).toContain('uyarı      Kurulum klasörü başka kullanıcılara açık (mod 0755)');
     expect(text).toContain('sonraki adım: chmod 700 /home/me/.deckent');
     expect(text).toContain('Yedek parolası bu kurulumun içinde saklanıyor'); // J2e: owner wording, joined with C-ADMIN's backup line

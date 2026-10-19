@@ -50,7 +50,7 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
   else if (r.serviceConfig === 'stopped') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.stopped', {}, l)));
   else if (r.serviceConfig === 'unknown') rows.push(row('setup', 'setup.service', 'untested', t('doctor.check.service.unknown', {}, l)));
   if (f.identityProfile) rows.push(f.identityProfile.state === 'selected' ? row('setup', 'setup.identity', 'ok', t('doctor.check.identity.ok', { profile: f.identityProfile.id }, l))
-    : row('setup', 'setup.identity', 'warning', t('doctor.check.identity.missing', {}, l), 'deckent init'));
+    : row('setup', 'setup.identity', 'warning', t('doctor.check.identity.missing', {}, l), 'deckent config set identity.profile --global'));
   const admin = r.policyAdministration;
   if (admin) rows.push(admin.recoveryRequired ? row('setup', 'setup.policy', 'error', t('doctor.check.policy.recovery', {}, l), scoped('deckent policy status', f))
     : admin.bootstrapRequired ? row('setup', 'setup.policy', 'warning', t('doctor.check.policy.bootstrap', {}, l), 'deckent init')
@@ -96,7 +96,7 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
   rows.push(f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
-    : f.poolStatus === 'unconfigured' ? row('work', 'work.pool', 'warning', t('doctor.check.pool.unconfigured', {}, l), 'deckent init')
+    : f.poolStatus === 'unconfigured' ? row('work', 'work.pool', 'warning', t('doctor.check.pool.unconfigured', {}, l), scoped('deckent init pool', f))
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
