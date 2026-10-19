@@ -131,6 +131,7 @@
   "setup.docker.result.succeeded": "Docker {version} kuruldu.",
   "setup.docker.result.failed": "{steps} adımın {step}. adımı {code} çıkış koduyla durdu: sonrasındaki hiçbir adım çalışmadı; öncekiler uygulanmış olarak kalır.",
   "setup.docker.result.uncertain": "{steps} adımın {step}. adımı yarıda kesildi: etkisi bilinmiyor. Deckent yeniden denemez; şu an kurulu olan:",
+  "setup.docker.result.mismatch": "Kurulan anahtar ya da kaynak dosyası Deckent ile gelen değil (kart gösterildikten sonra değişti): apt-get update ona güvenmeden durduruldu. {keyring} ve {sources} dosyalarını silin (sudo rm), sonra deckent init'i yeniden çalıştırın.",
   "setup.coding.repositoryTitle": "Git deposu",
   "setup.coding.hostsTitle": "Kodlama CLI oturumları",
   "setup.coding.unavailable": "Kodlama araçları burada denetlenemedi.",

@@ -40,6 +40,7 @@ const RESULT: Readonly<Record<DockerInstallResult['status'], (params: Readonly<R
 /** After the effect: what ran, then the re-detected state in the setup family's own words (its reason key; relogin, stopped, ready …). */
 export function dockerResultLines(result: DockerInstallResult, steps: number, next: Readonly<{ code: string; params?: Readonly<Record<string, string | number>> | undefined }>, locale: Locale): readonly string[] {
   const text = (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[next.code] ?? next.code, params = next.params ?? {};
-  return [RESULT[result.status]({ step: result.step ?? 0, steps, code: result.exitCode ?? '-', version: result.version ?? '-' }, locale),
+  return [result.mismatch ? t('setup.docker.result.mismatch', { keyring: DOCKER_APT.keyring, sources: DOCKER_APT.sourcesFile }, locale)
+    : RESULT[result.status]({ step: result.step ?? 0, steps, code: result.exitCode ?? '-', version: result.version ?? '-' }, locale),
     text.replace(/\{(\w+)\}/gu, (whole, name: string) => Object.hasOwn(params, name) ? terminalSafeText(String(params[name])) : whole)];
 }

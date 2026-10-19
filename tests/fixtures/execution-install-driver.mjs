@@ -1,6 +1,7 @@
 // I-D2 PTY driver: the production install flow (dist) on a real pseudo-terminal, with the real SEC-1 terminal witness, a real throwaway
 // installation (fresh v13 policy) and the real foreground spawn, but a FAKE sudo (argv[3], a script that only records) and fake detection
-// and host probes (a supported Ubuntu without Docker). Docker is never installed and the real sudo is never run.
+// and host probes (a supported Ubuntu without Docker). Docker is never installed and the real sudo is never run. The fake writes nothing
+// under /etc, so the installed-source check is a passing fake here (it has its own adapter tests).
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { applyPolicyTemplateInstallation } from '../../dist/composition/core/installation/index.js';
@@ -18,7 +19,7 @@ const host = { find: async name => `/usr/bin/${name}`, user: () => 'fake', platf
   run: async file => ({ code: 0, stderr: '', stdout: file.endsWith('dpkg') ? 'amd64\n' : '' }) };
 try {
   const status = await installExecutionEnvironment(root, 'installation', { locale, stdin: process.stdin, stdout: process.stdout, env: process.env },
-    { detect, host, install: { sudo, version: async () => await installed() ? '5:29.0.0-1~ubuntu.24.04~noble' : null } });
+    { detect, host, install: { sudo, verify: async () => true, version: async () => await installed() ? '5:29.0.0-1~ubuntu.24.04~noble' : null } });
   process.stdout.write(`\nDRIVER-STATUS=${status}\n`);
 } catch (error) {
   process.stdout.write(`\nDRIVER-ERROR=${error?.code ?? error?.message}\n`);

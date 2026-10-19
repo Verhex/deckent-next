@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DOCKER_APT, dockerCardBody, dockerCommandLines, dockerInstallOffer, dockerPrintLines, dockerSourcesFile, observeDockerHost, planDockerInstall, runDockerInstall, stageDockerFiles,
-  sudoEnvironment, type DockerHostFacts, type DockerHostPorts, type DockerInstallPlan, type DockerStepRun } from '#adapters/core/execution-env-docker/index.js';
+import { DOCKER_APT, dockerCardBody, dockerCommandLines, dockerInstallOffer, dockerPrintLines, dockerResultLines, dockerSourcesFile, observeDockerHost, planDockerInstall, runDockerInstall,
+  stageDockerFiles, sudoEnvironment, verifyInstalledSource, type DockerHostFacts, type DockerHostPorts, type DockerInstallPlan, type DockerStepRun } from '#adapters/core/execution-env-docker/index.js';
 import { EXECUTION_RUNTIMES, executionSetupFamily, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
 import { FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, SetupStageRegistry, planSetup } from '#engine/index.js';
 
@@ -159,6 +161,24 @@ describe('foreground executor (cond. 2, 4)', () => {
     const wrongPassword = fake([{ code: 0, signal: null }, { code: 1, signal: null }]);
     expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: wrongPassword.spawn, version: async () => null })).toMatchObject({ status: 'failed', step: 1, exitCode: 1 });
     expect(wrongPassword.calls).toHaveLength(2);
+  });
+  it('a key or source file that is not the shipped one stops the run before apt-get update trusts it (cond. 3 at install time)', async () => {
+    const swapped = fake();
+    const result = await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: swapped.spawn, version: async () => null, verify: async () => false });
+    expect(result).toEqual({ status: 'failed', step: 3, exitCode: null, version: null, mismatch: true });
+    expect(swapped.calls.map(call => call.args.at(-1))).toEqual(['-k', '/etc/apt/keyrings', '/etc/apt/keyrings/docker.asc', '/etc/apt/sources.list.d/docker.sources']);
+    expect(dockerResultLines(result, plan.steps.length, { code: 'setup.execution.none' }, 'en')[0]).toContain('not the one Deckent shipped');
+    const dir = await mkdtemp(join(tmpdir(), 'deckent-i-d2-verify-')), data = { ...DOCKER_APT, keyring: join(dir, 'docker.asc'), sourcesFile: join(dir, 'docker.sources') };
+    try {
+      const check = verifyInstalledSource(plan, data);
+      expect(await check()).toBe(false);
+      await writeFile(data.keyring, `${DOCKER_APT.key.armored.join('\n')}\n`); await writeFile(data.sourcesFile, dockerSourcesFile(plan.source, data));
+      expect(await check()).toBe(true);
+      await writeFile(data.keyring, `${DOCKER_APT.key.armored.join('\n')}\n# planted\n`);
+      expect(await check()).toBe(false);
+      await writeFile(data.keyring, `${DOCKER_APT.key.armored.join('\n')}\n`); await writeFile(data.sourcesFile, dockerSourcesFile({ ...plan.source, url: 'https://mirror.example/linux/ubuntu' }, data));
+      expect(await check()).toBe(false);
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
   it('Ctrl+C during a step makes its effect unknown even when the step then exits', async () => {
     // The terminal's Ctrl+C reaches the foreground child and Deckent alike: call the executor's own handler (never a real signal in a test worker).

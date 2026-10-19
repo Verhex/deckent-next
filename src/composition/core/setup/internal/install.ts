@@ -39,7 +39,7 @@ export async function installExecutionEnvironment(root: string, scopeId: string,
     source: { distribution: plan.source.distribution, codename: plan.source.codename, fingerprint: DOCKER_APT.key.fingerprint } }, {
     confirm: async () => await askCliCard({ title: t('setup.docker.card.title', {}, locale), body: dockerCardBody(plan, locale),
       options: [{ id: 'install', label: t('setup.docker.card.install', {}, locale), key: 'y' }, { id: 'no', label: t('setup.docker.card.no', {}, locale), key: 'n' }] }, io) === 'install',
-    apply: () => runDockerInstall(plan, env, { sudo, spawn: deps.install?.spawn ?? spawnForeground, version: deps.install?.version ?? installedDockerVersion(env) }) });
+    apply: () => runDockerInstall(plan, env, { spawn: spawnForeground, version: installedDockerVersion(env), ...deps.install, sudo }) });
   if (outcome === 'declined') { out([t('setup.docker.declined', {}, locale)]); return 'declined'; }
   const next = executionSetupFamily().stages[0]!.evaluate({ facts: await detect(), answer: undefined, scopeId, states: new Map() });
   out(dockerResultLines(outcome, plan.steps.length, next.reason, locale));

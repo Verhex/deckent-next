@@ -61,6 +61,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 async function fixture() {
+  await access(resolve('dist/composition/core/setup/index.js'));
   const base = await mkdtemp(join(tmpdir(), 'deckent-i-d2-pty-')); roots.push(base);
   const root = join(base, 'project'), work = join(base, 'work'), home = join(base, 'home'), sudo = join(work, 'fake-sudo');
   for (const dir of [root, work, home]) await mkdir(dir, { recursive: true });
@@ -105,7 +106,6 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
 
 describe.skipIf(process.platform !== 'linux')('I-D2: the Docker install card on a real PTY (fake sudo)', () => {
   it('drives the card to the confirm step and stops (TR): every command shown, nothing privileged ran, nothing audited as started', async () => {
-    await access(resolve('dist/composition/core/setup/index.js'));
     const f = await fixture();
     const run = await f.run('confirm-stop', [['apt-get install -y docker-ce', 'n']], 'tr');
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();

@@ -131,6 +131,7 @@
   "setup.docker.result.succeeded": "Docker {version} is installed.",
   "setup.docker.result.failed": "Step {step} of {steps} stopped with exit code {code}: nothing after it ran; the steps before it stay applied.",
   "setup.docker.result.uncertain": "Step {step} of {steps} was interrupted: its effect is unknown. Deckent does not retry it; what is installed now:",
+  "setup.docker.result.mismatch": "The installed key or source file is not the one Deckent shipped (it changed after the card was shown): stopped before apt-get update trusted it. Remove {keyring} and {sources} (sudo rm), then run deckent init again.",
   "setup.coding.repositoryTitle": "Git repository",
   "setup.coding.hostsTitle": "Coding CLI sign-ins",
   "setup.coding.unavailable": "Coding tools could not be checked here.",
