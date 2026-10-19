@@ -463,6 +463,10 @@
     "connect.auth_state.hint": {
       "before": "Set {envKey} (e.g. `{cmd}`), or add {deckKey} to your .deck file and reference it as $DECK:{deckKey} in config.",
       "after": "Set {envKey} (e.g. `{cmd}`), or add {deckKey} to your .deck file and reference it as $DECK:{deckKey} in the installation config."
+    },
+    "mcp.approvals.detail": {
+      "before": "Serves the canonical ApprovalBroker read model — the SAME source as the CLI — and returns each pending request id, summary and expiry. READ-ONLY: this surface never decides, allows or denies. Deciding stays CLI-only behind an interactive live-authenticated TTY, so there is no self-approval path over MCP.",
+      "after": "Serves the canonical ApprovalBroker read model — the SAME source as the CLI — and returns each pending request id, summary and expiry. READ-ONLY: this surface never decides, allows or denies, and MCP has no decide tool. A person decides on an interactive terminal; an AI actor decides an ordinary approval only where policy explicitly grants approval-decide, and authority, MCP-floor and edit-floor cards are never delegable."
     }
   },
   "tr": {
@@ -1045,6 +1049,10 @@
     "connect.auth_state.hint": {
       "before": "{envKey} ortam değişkenini ayarlayın (örn. `{cmd}`), ya da .deck dosyanıza {deckKey} ekleyip config içinde $DECK:{deckKey} olarak referans verin.",
       "after": "{envKey} ortam değişkenini ayarlayın (örn. `{cmd}`), ya da .deck dosyanıza {deckKey} ekleyip kurulum ayarında $DECK:{deckKey} olarak referans verin."
+    },
+    "mcp.approvals.detail": {
+      "before": "Canonical ApprovalBroker read model'ini sunar — CLI ile AYNI kaynak — ve bekleyen her isteğin id'sini, özetini ve son geçerlilik zamanını döndürür. SALT OKUNUR: bu yüzey asla karar vermez, izin vermez veya reddetmez. Karar vermek yalnız CLI'da, etkileşimli canlı kimlik doğrulamalı TTY arkasında kalır; MCP üzerinden self-approval yolu yoktur.",
+      "after": "Canonical ApprovalBroker read model'ini sunar — CLI ile AYNI kaynak — ve bekleyen her isteğin id'sini, özetini ve son geçerlilik zamanını döndürür. SALT OKUNUR: bu yüzey asla karar vermez, izin vermez veya reddetmez; MCP'de karar aracı yoktur. Kişi etkileşimli bir terminalde karar verir; bir yapay zekâ aktörü sıradan bir onaya yalnız politika açıkça approval-decide izni verdiğinde karar verir; yetki, MCP tabanı ve düzenleme tabanı kartları hiçbir zaman devredilemez."
     }
   }
 }
