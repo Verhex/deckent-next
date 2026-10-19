@@ -64,7 +64,8 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   if (argv.includes('--config')) {
     const flags = argv.filter((arg, i) => i > 0 && arg !== '--config' && arg !== '--once');
     if (flags.some(flag => !['--json', '--lang', 'en', 'tr', '--no-color', '--help', '-h'].includes(flag))) throw ErrorRegistry.createError('CLI_USAGE');
-    await configCommand(['config', ...flags], context); return;
+    // C-SETUP §4 (lead, J2e): the monitor stays observe-only; on a person's terminal `--config` prints, it never opens the writable /config window.
+    const observeOnly = { ...context }; delete observeOnly.openConfigPanel; await configCommand(['config', ...flags], observeOnly); return;
   }
   const parsed = parse(argv, 1), env = context.env ?? process.env;
   let locale = resolveLocale(parsed.language, env); context.onLocale?.(locale);

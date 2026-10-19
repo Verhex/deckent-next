@@ -18,6 +18,13 @@ it('monitor --config uses shared application without creating monitor runtime or
   expect(inspect).toHaveBeenCalled(); expect(inspectMonitor).not.toHaveBeenCalled(); expect(JSON.parse(output.join(''))).toEqual(view);
 });
 
+// C-SETUP §4 (lead, J2e): `deckent config` on a person's terminal opens the writable /config window; `deckent monitor --config` stays observe-only.
+it('monitor --config on a person\'s terminal never opens the writable /config window; it prints the read', async () => {
+  const output: string[] = [], inspect = vi.fn(async () => view), openConfigPanel = vi.fn(async () => []);
+  await monitorCommand(['monitor', '--config'], { root: '/tmp/config-view', env: {}, stdin: { isTTY: true, setRawMode() {} }, stdout: { isTTY: true, columns: 120, write: (s: string) => { output.push(s); } },
+    configApplication: () => ({ inspect }) as never, openConfigPanel } as never);
+  expect(openConfigPanel).not.toHaveBeenCalled(); expect(inspect).toHaveBeenCalled(); expect(output.join('')).not.toBe('');
+});
 it('terminal /config renders shared inspect as notices and never becomes a chat request or write', async () => {
   const inspect = vi.fn(async () => view), set = vi.fn(), chat = vi.fn();
   const ctx = { configApplication: () => ({ inspect, set }) as never };
