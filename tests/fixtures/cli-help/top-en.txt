@@ -16,7 +16,7 @@ Getting started:
       [--scope <id>] [--full-access]
   init        Set up an installation
       preview | inspect | apply | resume | identity | policy | pool | registry
-      [--preview] [--profile <file>]
+      [--json] [--yes --scope <id>] [--preview] [--profile <file>]
 
 Observe:
   report      Inspect cost and acceptance evidence for a Run

@@ -16,7 +16,7 @@ Başlarken:
       [--scope <id>] [--full-access]
   init        Kurulumu hazırla
       preview | inspect | apply | resume | identity | policy | pool | registry
-      [--preview] [--profile <dosya>]
+      [--json] [--yes --scope <id>] [--preview] [--profile <dosya>]
 
 İzleme:
   report      Run maliyet ve kabul kanıtını incele

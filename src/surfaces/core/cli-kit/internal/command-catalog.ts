@@ -54,7 +54,7 @@ export const CLI_CATALOG = [
     action('chat-plan', 'start', 'cli.help.action.chat-plan', 'cli.help.terminal'),
     action('snapshot', 'start', 'cli.help.action.snapshot', 'cli.help.terminal'),
   ] },
-  { name: 'init', group: 'start', summary: 'cli.help.summary.init', detail: 'cli.help.initPreview', installation: 'owned', args: '[--preview] [--profile <file>]', bare: 'handler', children: [
+  { name: 'init', group: 'start', summary: 'cli.help.summary.init', detail: 'cli.help.initPreview', installation: 'owned', args: '[--json] [--yes --scope <id>] [--preview] [--profile <file>]', bare: 'handler', children: [
     action('preview', 'start', 'cli.help.action.preview', 'cli.help.initPreview'),
     action('inspect', 'start', 'cli.help.action.init.inspect', 'cli.help.initPreview'),
     action('apply', 'start', 'cli.help.action.apply', 'cli.help.initPreview'),
