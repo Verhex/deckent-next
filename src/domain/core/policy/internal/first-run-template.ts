@@ -384,7 +384,7 @@ function v13Rules(person: Person, scopes: readonly string[], executionEnvironmen
 }
 
 /** Latest add-only delta (v13) by content: a same-id customization is preserved and reported, never deleted as a template rule. */
-export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined, names: Pick<AdditionNames, 'executionEnvironmentIds'>): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] } {
+export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined, names: Pick<AdditionNames, 'executionEnvironmentIds'>): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[]; readonly missing?: readonly string[] } {
   const policy = policyFileSchema.parse(current);
   if (policy.schemaVersion !== 2) return { rules: [], conflicts: [] };
   const read = policy.grants.find(rule => rule.id === 'first-run-read-tools');
@@ -392,10 +392,13 @@ export function firstRunTemplateRollback(current: unknown, person: Person, scope
   const scopes = read && read.scopes !== 'all' && namesPerson(read, person) ? read.scopes : scopeId ? [identitySchema.parse(scopeId)] : null;
   if (!scopes) return { rules: [], conflicts: [] };
   const expected = v13Rules({ issuer: person.issuer, subject: person.subject }, scopes, names.executionEnvironmentIds), rules: PolicyGrant[] = [], conflicts: string[] = [];
+  const missing: string[] = [];
   for (const want of expected) {
     const held = policy.grants.find(rule => rule.id === want.id);
     if (held && canonicalJson(held) === canonicalJson(want)) rules.push(held);
     else if (held) conflicts.push(held.id);
+    else missing.push(want.id);
   }
-  return { rules: Object.freeze(rules), conflicts: Object.freeze(conflicts) };
+  // `missing`: expected delta rules not held (review 2672: a fresh install is the whole expected set, nothing removed).
+  return { rules: Object.freeze(rules), conflicts: Object.freeze(conflicts), missing: Object.freeze(missing) };
 }

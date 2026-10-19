@@ -182,6 +182,12 @@ it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, det
   await writeFile(bindingsPath, JSON.stringify({ ...bindings, revision: 'first-run-template-v12-bindings' }), { mode: 0o600 });
   expect(await fresh.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
   expect(await fresh.bytes()).toBe(initial); expect(fresh.cards).toBe(0);
+  // NEGATIVE (Astra 2672 N1): the template's revision and bindings but one expected v13 rule deleted by hand, no archive: not provably fresh.
+  const edited = await fixture(undefined, false), policyPath = join(dirname(edited.archive), 'policy.json'), held = JSON.parse(await readFile(policyPath, 'utf8'));
+  await writeFile(policyPath, JSON.stringify({ ...held, grants: held.grants.filter((rule: { id: string }) => rule.id !== deltaIds[1]) }), { mode: 0o600 });
+  const editedBytes = await edited.bytes();
+  expect(await edited.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
+  expect(await edited.bytes()).toBe(editedBytes); expect(edited.cards).toBe(0);
   const restored = await fixture(), before = JSON.parse(await restored.bytes());
   await restored.source.updateAuthority(() => ({ write: { policy: { ...before, revision: 'a-edited', grants: before.grants.map((rule: { id: string }) =>
     rule.id === 'first-run-decision-inspect' ? { ...rule, actions: ['prepare'] } : rule) }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-edited');

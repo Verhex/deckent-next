@@ -123,6 +123,7 @@
   "setup.docker.card.no": "Kurma",
   "setup.docker.print.platform": "Deckent Docker Engine'i yalnız Linux ve WSL'de kurar. Bu sistemde Docker Desktop'ı kendiniz kurun: {docs}",
   "setup.docker.print.desktop": "Windows'ta Docker Desktop kurulu. Buraya ikinci bir motor kurmak yerine bu dağıtım için WSL entegrasyonunu açın (Settings > Resources > WSL Integration); ikisi birlikte çakışabilir. Yine de buraya Docker Engine kurmak isterseniz bu komutları kendiniz çalıştırın:",
+  "setup.docker.print.probe": "Deckent bu makineyi tam olarak denetleyemedi ({detail}), bu yüzden Docker Engine kurmuyor: cevapsız bir denetim temiz makine demek değildir. Paketleri ve dosyaları kendiniz denetleyin ({docs}), ardından deckent init'i yeniden çalıştırın.",
   "setup.docker.print.distribution": "Bu sürüm Docker'ın apt deposunun desteklediklerinden değil (desteklenen: {supported}; türev dağıtımlar değil). {docs} adresindeki adımları izleyin.",
   "setup.docker.print.conflicts": "Kurulu şu paketler Docker Engine ile çakışır: {detail}. Önce bunları kendiniz kaldırın ({docs}), sonra deckent init'i yeniden çalıştırın.",
   "setup.docker.print.repository": "Eski bir Docker apt kaynağı var ({detail}); apt bunu yenisiyle birlikte kabul etmez. Kendiniz kontrol edin ya da kaldırın, sonra deckent init'i yeniden çalıştırın veya şu komutları çalıştırın:",

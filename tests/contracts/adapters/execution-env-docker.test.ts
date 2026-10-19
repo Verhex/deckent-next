@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DOCKER_APT, dockerCardBody, dockerCommandLines, dockerInstallOffer, dockerPrintLines, dockerResultLines, dockerSourcesFile, observeDockerHost, planDockerInstall, runDockerInstall,
+import { DOCKER_APT, HOST_DOCKER_PORTS, dockerCardBody, dockerCommandLines, dockerInstallOffer, dockerPrintLines, dockerResultLines, dockerSourcesFile, observeDockerHost, planDockerInstall, runDockerInstall,
   stageDockerFiles, sudoEnvironment, verifyInstalledSource, type DockerHostFacts, type DockerHostPorts, type DockerInstallPlan, type DockerStepRun } from '#adapters/core/execution-env-docker/index.js';
 import { EXECUTION_RUNTIMES, executionSetupFamily, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
 import { FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, SetupStageRegistry, planSetup } from '#engine/index.js';
@@ -23,7 +23,7 @@ function fingerprint(armored: readonly string[]): string {
 }
 const ubuntu = { ID: 'ubuntu', ID_LIKE: 'debian', VERSION_CODENAME: 'noble', UBUNTU_CODENAME: 'noble' };
 const facts = (patch: Partial<DockerHostFacts> = {}): DockerHostFacts => ({ platform: 'linux', osRelease: ubuntu, architecture: 'amd64', desktop: false, conflicts: [],
-  existingSource: null, network: true, user: 'alice', ...patch });
+  existingSource: null, network: true, user: 'alice', unknown: [], ...patch });
 const install = (plan: DockerInstallPlan) => { if (plan.kind !== 'install') throw new Error(`expected install, got ${plan.reason}`); return plan; };
 const executionFacts = (cli: 'found' | 'absent' | 'unknown'): ExecutionFacts => ({ schemaVersion: 1, runtimes: [{ id: 'docker', label: 'Docker', support: 'supported', cli,
   path: null, version: null, daemon: 'not-run', serverVersion: null, kind: null, endpoint: null, group: null }] });
@@ -61,7 +61,9 @@ describe('planner (cond. 3, 6)', () => {
       [{ platform: 'other' }, 'platform', false], [{ platform: 'wsl', desktop: true }, 'desktop', true],
       [{ osRelease: { ID: 'linuxmint', ID_LIKE: 'ubuntu', UBUNTU_CODENAME: 'noble' } }, 'distribution', false], [{ osRelease: { ...ubuntu, UBUNTU_CODENAME: 'focal', VERSION_CODENAME: 'focal' } }, 'distribution', false],
       [{ architecture: 'i386' }, 'distribution', false], [{ osRelease: null }, 'distribution', false], [{ conflicts: ['docker.io', 'runc'] }, 'conflicts', true],
-      [{ existingSource: '/etc/apt/sources.list.d/docker.list' }, 'repository', true], [{ network: false }, 'network', true]];
+      [{ existingSource: '/etc/apt/sources.list.d/docker.list' }, 'repository', true], [{ network: false }, 'network', true],
+      // Astra 2672 R1: an unanswered host check refuses before conflicts/source/network are trusted.
+      [{ unknown: ['dpkg-query'] }, 'probe', true], [{ unknown: ['/etc/apt/sources.list.d/docker.list'], network: true }, 'probe', true]];
     for (const [patch, reason, steps] of cases) {
       const plan = planDockerInstall(facts(patch), '/tmp/s');
       expect(plan, reason).toMatchObject({ kind: 'print', reason });
@@ -104,6 +106,41 @@ describe('read-only host probes', () => {
     expect(heads).toEqual(['https://download.docker.com/linux/ubuntu/dists/noble/InRelease']);
     expect(runs.map(argv => argv[0])).toEqual(['/usr/bin/dpkg', '/usr/bin/dpkg-query']);
     expect(runs.flat().join(' ')).not.toMatch(/sudo|apt-get|install|usermod/u);
+  });
+  it('negative (Astra 2672 R1): a host check without a clean answer is never read as a clean host — print, zero privileged spawns', async () => {
+    const files = { '/etc/os-release': 'ID=ubuntu\nVERSION_CODENAME=noble\n' };
+    const planOf = async (patch: Partial<DockerHostPorts>) => { const observed = await observeDockerHost({ PATH: '/usr/bin' }, false, ports({ files, ...patch }).port);
+      return { observed, plan: planDockerInstall(observed, '/tmp/s') }; };
+    const answer = (result: { code: number | null; stdout: string }) => ports({ files, run: async file => file.endsWith('dpkg') ? { code: 0, stdout: 'amd64\n', stderr: '' }
+      : { ...result, stderr: '' } }).port.run;
+    const unanswered: Array<[string, Partial<DockerHostPorts>]> = [
+      ['missing dpkg-query', { find: async name => name === 'dpkg-query' ? null : `/usr/bin/${name}` }],
+      ['timeout/abort with partial stdout', { run: answer({ code: null, stdout: 'runc ii \n' }) }],
+      ['dpkg-query exit 2', { run: answer({ code: 2, stdout: '' }) }],
+      ['source file EACCES/EIO', { exists: async path => path.startsWith('/etc/apt/') ? null : false }]];
+    for (const [label, patch] of unanswered) {
+      const { observed, plan } = await planOf(patch);
+      expect(observed.unknown.length, label).toBeGreaterThan(0);
+      // An unanswered dpkg-query never contributes conflicts from its partial stdout (the default fake lists docker.io as installed).
+      if (label !== 'source file EACCES/EIO') expect(observed.conflicts, label).toEqual([]);
+      expect(plan, label).toMatchObject({ kind: 'print', reason: 'probe' });
+    }
+    expect(dockerPrintLines((await planOf({ run: answer({ code: 2, stdout: '' }) })).plan as Extract<DockerInstallPlan, { kind: 'print' }>, 'en')[0]).toContain('dpkg-query');
+    // Held-installed and half-installed packages conflict; removed ones (rc) and never-installed ones (un) do not.
+    expect((await planOf({ run: answer({ code: 0, stdout: 'containerd hi \nrunc iU \ndocker.io rc \npodman-docker un \n' }) })).observed.conflicts).toEqual(['containerd', 'runc']);
+    // Controls: the normal "no package found" exit 1 is a clean answer (install offered); a real conflict prints conflicts.
+    expect((await planOf({ run: answer({ code: 1, stdout: '' }) })).plan).toMatchObject({ kind: 'install' });
+    expect((await planOf({ run: answer({ code: 0, stdout: 'docker.io ii \n' }) })).plan).toMatchObject({ kind: 'print', reason: 'conflicts' });
+  });
+  it('the host exists probe: present → true, ENOENT → false, anything else (EACCES) → null', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'docker-exists-')), locked = join(root, 'locked');
+    try {
+      await writeFile(join(root, 'file'), ''); await mkdir(locked, { mode: 0o700 }); await writeFile(join(locked, 'inside'), ''); await chmod(locked, 0o000);
+      const exists = HOST_DOCKER_PORTS({}).exists;
+      expect(await exists(join(root, 'file'))).toBe(true);
+      expect(await exists(join(root, 'missing'))).toBe(false);
+      if (process.getuid?.() !== 0) expect(await exists(join(locked, 'inside'))).toBeNull();
+    } finally { await chmod(locked, 0o700).catch(() => undefined); await rm(root, { recursive: true, force: true }); }
   });
   it('Docker Desktop is looked for only on WSL; an unsupported release makes no network call; an older source file is reported', async () => {
     const marker = DOCKER_APT.desktopMarkers[0]!, files = { '/etc/os-release': 'ID=ubuntu\nVERSION_CODENAME=noble\n', [marker]: '' };

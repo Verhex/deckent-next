@@ -27,7 +27,7 @@ export function dockerCardBody(plan: Extract<DockerInstallPlan, { kind: 'install
 }
 type PrintParams = Readonly<Record<string, string>>;
 const PRINT: Readonly<Record<DockerPrintReason, (params: PrintParams, locale: Locale) => string>> = Object.freeze({
-  platform: (p, l) => t('setup.docker.print.platform', p, l), desktop: (p, l) => t('setup.docker.print.desktop', p, l), distribution: (p, l) => t('setup.docker.print.distribution', p, l),
+  platform: (p, l) => t('setup.docker.print.platform', p, l), desktop: (p, l) => t('setup.docker.print.desktop', p, l), probe: (p, l) => t('setup.docker.print.probe', p, l), distribution: (p, l) => t('setup.docker.print.distribution', p, l),
   conflicts: (p, l) => t('setup.docker.print.conflicts', p, l), repository: (p, l) => t('setup.docker.print.repository', p, l), network: (p, l) => t('setup.docker.print.network', p, l) });
 /** A print-only answer: why, and the commands when they are known (the staged key and source files stay for them). */
 export function dockerPrintLines(plan: Extract<DockerInstallPlan, { kind: 'print' }>, locale: Locale, data: DockerAptData = DOCKER_APT): readonly string[] {

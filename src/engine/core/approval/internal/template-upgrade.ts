@@ -86,11 +86,12 @@ export class PolicyTemplateUpgrade {
       // provable to undo (a fresh install) → `nothing-to-roll-back`
       // `no-upgrade-recorded`, nothing written. Any other policy without archived history stays `history-unavailable` (fail closed).
       const template = policy.revision.split('+').some(part => part.startsWith('a-') || part.startsWith('m-')) ? null : matchFirstRunPolicyTemplate(policy.policyRevision);
-      // Held delta rules, none differing from the template's (a hand edit that kept the revision is not "the template's own version").
+      // The whole expected delta held, none differing from the template's and none removed (a hand edit that kept the revision is not "the
+      // template's own version"; review 2672).
       // The installer writes the bindings at `<policy revision>-bindings`; an exact installer upgrade keeps the older bindings revision, so a
       // lost archive after an upgrade stays a refusal rather than "nothing to roll back".
       const installed = template !== null && template.version >= FIRST_RUN_DELTA_VERSION && policy.bindings.revision === `${policy.policyRevision}-bindings`
-        && delta.rules.length > 0 && delta.conflicts.length === 0;
+        && delta.rules.length > 0 && delta.conflicts.length === 0 && (delta.missing ?? []).length === 0;
       if (!history || history.length === 0 && !installed) return result('unavailable', { reason: 'history-unavailable', conflicts: delta.conflicts });
       // Follow exact effective revisions back from the snapshot, never infer provenance from an id or current template alone.
       const chain = []; let revision = policy.revision;

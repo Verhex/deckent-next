@@ -2,9 +2,11 @@ import { DOCKER_APT, type DockerAptData } from './registry.js';
 
 /** What the host showed before anything is offered (read-only probes; `desktop` is Docker Desktop seen from WSL or reported by detection). */
 export type DockerHostFacts = Readonly<{ platform: 'linux' | 'wsl' | 'other'; osRelease: Readonly<Record<string, string>> | null; architecture: string | null;
-  desktop: boolean; conflicts: readonly string[]; existingSource: string | null; network: boolean; user: string }>;
+  desktop: boolean; conflicts: readonly string[]; existingSource: string | null; network: boolean; user: string;
+  /** Astra 2672 R1: a read-only probe that did not give a clean answer (missing tool, no exit, timeout, abort, unreadable file); never read as "absent". */
+  unknown: readonly string[] }>;
 export type DockerInstallStep = Readonly<{ id: 'directory' | 'key' | 'sources' | 'update' | 'install' | 'group'; argv: readonly string[]; timeoutMs: number }>;
-export type DockerPrintReason = 'platform' | 'desktop' | 'distribution' | 'conflicts' | 'repository' | 'network';
+export type DockerPrintReason = 'platform' | 'desktop' | 'probe' | 'distribution' | 'conflicts' | 'repository' | 'network';
 export type DockerSource = Readonly<{ distribution: string; codename: string; architecture: string; url: string }>;
 /** `install`: the exact sudo steps the card shows and the executor runs; `print`: why Deckent only prints, with the steps when they are known. */
 export type DockerInstallPlan = Readonly<{ kind: 'install'; source: DockerSource; steps: readonly DockerInstallStep[]; staging: string }>
@@ -33,14 +35,18 @@ export const dockerCommandLines = (steps: readonly DockerInstallStep[]) => steps
 /**
  * Pure planner (INIT-D2 cond. 3/6): install only from Docker's official apt repository on a supported release; every other case prints the
  * honest next step: native Windows/macOS, Docker Desktop on WSL (its WSL integration, not a second engine), an unsupported or derivative
- * release, conflicting packages, an older Docker source file, or no network (the commands only, with the staged key and source files).
+ * release, a host check that gave no clean answer, conflicting packages, an older Docker source file, or no network (the commands only, with
+ * the staged key and source files).
  */
 export function planDockerInstall(facts: DockerHostFacts, staging: string | null, data: DockerAptData = DOCKER_APT): DockerInstallPlan {
   const source = facts.platform === 'other' ? null : dockerSource(facts.osRelease, facts.architecture, data);
   const steps = source && staging ? dockerSteps(staging, facts.user, data) : null, print = (reason: DockerPrintReason) => ({ kind: 'print' as const, reason,
-    detail: reason === 'conflicts' ? facts.conflicts.join(' ') : reason === 'repository' ? facts.existingSource ?? '-' : '-', source, steps, staging });
+    detail: reason === 'conflicts' ? facts.conflicts.join(' ') : reason === 'repository' ? facts.existingSource ?? '-' : reason === 'probe' ? facts.unknown.join(', ') : '-',
+    source, steps, staging });
   if (facts.platform === 'other') return print('platform');
   if (facts.desktop) return print('desktop');
+  // An incomplete host check is not a clean host: print and refuse, zero privileged spawns (Astra 2672 R1).
+  if (facts.unknown.length) return print('probe');
   if (!source) return print('distribution');
   if (facts.conflicts.length) return print('conflicts');
   if (facts.existingSource) return print('repository');

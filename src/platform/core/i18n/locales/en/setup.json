@@ -123,6 +123,7 @@
   "setup.docker.card.no": "Do not install",
   "setup.docker.print.platform": "Deckent installs Docker Engine only on Linux and WSL. On this system install Docker Desktop yourself: {docs}",
   "setup.docker.print.desktop": "Docker Desktop is installed in Windows. Turn on its WSL integration for this distribution (Settings > Resources > WSL Integration) instead of installing a second engine here; running both can conflict. To install Docker Engine here anyway, run these commands yourself:",
+  "setup.docker.print.probe": "Deckent could not check this machine completely ({detail}), so it does not install Docker Engine: an unanswered check is not a clean machine. Check the packages and files yourself ({docs}), then run deckent init again.",
   "setup.docker.print.distribution": "This release is not one Docker's apt repository supports (supported: {supported}; derivatives are not). Follow {docs}.",
   "setup.docker.print.conflicts": "These installed packages conflict with Docker Engine: {detail}. Remove them yourself first ({docs}), then run deckent init again.",
   "setup.docker.print.repository": "An older Docker apt source exists ({detail}); apt refuses it next to the new one. Check or remove it yourself, then run deckent init again, or run these commands:",
