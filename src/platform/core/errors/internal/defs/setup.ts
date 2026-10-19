@@ -9,4 +9,8 @@ export const setupErrors: ErrorDefinitions = Object.freeze({
   SETUP_ANSWER_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_ANSWER_INVALID', p, l) }) },
   // I-S4: `--yes` reached an eligible stage this build cannot apply (no apply owner wired yet); nothing was written.
   SETUP_APPLY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.SETUP_APPLY_UNAVAILABLE', p, l) }) },
+  // I-D2: the policy has no installation-wide grant for this person to install the execution environment; nothing ran (audited as refused).
+  SETUP_INSTALL_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.SETUP_INSTALL_DENIED', p, l) }) },
+  // I-D2: detection could not tell whether the runtime is installed; an install is never offered or run on an unknown state.
+  SETUP_INSTALL_STATE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SETUP_INSTALL_STATE_UNKNOWN', p, l) }) },
 });

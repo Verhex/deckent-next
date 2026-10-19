@@ -12,3 +12,4 @@ export { modelInvocabilityText } from '#surfaces/core/model-invocability/index.j
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
 export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 export { openConfigWindow } from '#surfaces/core/config-window/index.js';
+export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';

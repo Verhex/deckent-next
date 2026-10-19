@@ -3295,7 +3295,9 @@
         "src/domain/core/primitives",
         "src/platform/core/i18n",
         "src/platform/core/errors",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/audit",
+        "src/domain/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -3316,11 +3318,32 @@
       "plan": "INSTALLATION"
     },
     "src/adapters/core/execution-env-docker": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/host",
+        "src/adapters/core/setup-detect-execution"
+      ],
       "plan": "INSTALLATION"
     },
     "src/composition/core/setup": {
-      "dependencies": [],
+      "dependencies": [
+        "src/engine/core/audit",
+        "src/engine/core/setup",
+        "src/engine/core/runtime",
+        "src/adapters/core/execution-env-docker",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/setup-detect-execution",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/audit-store",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/managed-files",
+        "src/platform/core/i18n",
+        "src/surfaces/core/cli-human",
+        "src/composition/core/policy",
+        "src/composition/core/root"
+      ],
       "plan": "INSTALLATION"
     },
     "src/surfaces/core/setup": {
