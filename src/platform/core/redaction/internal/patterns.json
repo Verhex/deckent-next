@@ -41,8 +41,7 @@
     {
       "id": "jwt",
       "gate": true,
-      "source": "\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b",
-      "recordSource": "((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b",
+      "source": "((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+\\b",
       "flags": "g",
       "replacement": "$1[REDACTED]",
       "streamPreviewSource": "((?<![\\w-])(?:(?!\\beyJ)[\\w-])*)\\beyJ[\\w-]*(?:\\.[\\w-]*){0,2}$"

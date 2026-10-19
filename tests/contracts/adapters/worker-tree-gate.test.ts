@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { agentWorkspaceDeny, createGlobMatcher, workerTreeViews, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, scanWorkerTree, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/index.js';
 import { REDACTION_CONFIG_SECRET, REDACTION_PATTERNS, resolveProductLayout, snapshotKnownSecrets } from '#platform/index.js';
@@ -284,14 +285,30 @@ describe('credential families, regex semantics and name matching (security revie
       // PKCS12 is binary ASN.1 without a reliable content signature: it is refused by name (deny list), documented as name-only.
       'b/cert.p12': 'deny-path:**/*.p12' });
   });
-  it('regex semantics: one JS flavour, fixed flags, case-insensitive keys; a backtracking input ends the scan as incomplete, never as a pass', async () => {
+  it('regex semantics: one JS flavour, fixed flags, case-insensitive keys; a pattern run past the deadline ends the scan as incomplete, never as a pass', async () => {
     for (const row of WORKER_TREE_PATTERN_RULES) expect(row.flags, row.id).toMatch(/^i?$/u);
     expect(REDACTION_CONFIG_SECRET.flags).toBe('gi');
     expect(await hits({ 'a.yml': 'Password: Tr0ub4dor-3xQz9\n', 'b.env.json': '{"DB_PASSWORD":"Tr0ub4dor-3xQz9"}' })).toEqual({ 'a.yml': 'pattern:config-secret', 'b.env.json': 'pattern:config-secret' });
-    // `eyJ-` repeated has no dots: every start backtracks over the rest of the run (quadratic) — the worker is terminated at the deadline.
-    const started = Date.now();
-    await expect(scanWorkerTree(await tree({ 'big.txt': 'eyJ-'.repeat(250_000) }), { ...options, maxFileBytes: 1 << 21, timeoutMs: 500 }))
-      .resolves.toMatchObject({ status: 'incomplete', limit: 'time', bound: 500 });
+    // SEC-6b (F39): `eyJ-` repeated has no dots. The legacy jwt expression backtracked over the rest of the run from every start (quadratic)
+    // and was this test's deadline trigger; the canonical source is now linear, so the same 1 MB file is scanned clean well inside the bound.
+    const big = await tree({ 'big.txt': 'eyJ-'.repeat(250_000) });
+    let started = Date.now();
+    await expect(scanWorkerTree(big, { ...options, maxFileBytes: 1 << 21, timeoutMs: 10_000 })).resolves.toEqual({ status: 'clean' });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    // The deadline itself: a 1 ms bound and a frozen scan clock. The frozen clock disables every synchronous bound check (`now() >= deadline`
+    // never holds, `observed` stays 0), so only the terminable regex worker bound to the real-time deadline signal can end this scan — and
+    // it must end it as `incomplete` (time), never as the `clean` answer the same file gets above.
+    started = Date.now();
+    await expect(scanWorkerTree(big, { ...options, maxFileBytes: 1 << 21, timeoutMs: 1 }, undefined, () => 0))
+      .resolves.toEqual({ status: 'incomplete', limit: 'time', observed: 0, bound: 1 });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    // A match still running at the deadline (what a backtracking expression did): the regex worker never answers, so only the deadline
+    // terminating the in-flight match can end the scan. The 1 s bound leaves the tiny file's I/O far behind, so the match is already pending.
+    const postMessage = vi.spyOn(Worker.prototype, 'postMessage').mockImplementation(() => undefined);
+    started = Date.now();
+    await expect(scanWorkerTree(await tree({ 'small.txt': 'x' }), { ...options, timeoutMs: 1_000 }, undefined, () => 0))
+      .resolves.toEqual({ status: 'incomplete', limit: 'time', observed: 0, bound: 1_000 });
+    expect(postMessage).toHaveBeenCalledTimes(1); postMessage.mockRestore();
     expect(Date.now() - started).toBeLessThan(10_000);
     // The config expressions are linear by construction: a hostile XML/YAML shape finishes well inside the bound.
     await expect(scanWorkerTree(await tree({ 'x.xml': '<password '.repeat(200_000), 'y.yml': 'password: ${A}\n'.repeat(200_000) }), { ...options, maxFileBytes: 1 << 22, timeoutMs: 20_000 }))
