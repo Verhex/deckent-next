@@ -13,4 +13,3 @@ Deckent kurulum planı ab43de3c5809
 9. Son kontrol · uygulanmaya hazır · Son kontrole hazır.
    $ deckent doctor --json
 Hiçbir şey uygulanmadı. Terminalde deckent init aşama aşama sorar; gözetimsiz: deckent init --yes --scope <kimlik> (yalnız yeni izinler, dil ve son kontrol).
-

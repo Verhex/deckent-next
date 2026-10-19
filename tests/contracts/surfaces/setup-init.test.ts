@@ -61,7 +61,8 @@ describe('I-S4 bare deckent init', () => {
     for (const key of ['setup.stage.policy', 'setup.instructions.title', 'setup.stage.finalCheck', 'setup.render.nothingApplied']) expect(text).toContain(catalog[key]!.split('{')[0]!.trim().slice(0, 20));
     expect(text).toContain('$ deckent init policy --scope my-erp --apply');
     expect(run.applied).toEqual([]); expect(run.rawMode()).toBe(0);
-    await expect(`${text}\n`).toMatchFileSnapshot(`../../fixtures/setup/plan-plain-${locale}.txt`);
+    expect(text.endsWith('\n') && !text.endsWith('\n\n')).toBe(true); // the command prints one final newline (Astra 2664 item 4)
+    await expect(text).toMatchFileSnapshot(`../../fixtures/setup/plan-plain-${locale}.txt`);
   });
 
   it('EN/TR parity: both locales render the same stages and line structure, in different words', async () => {

@@ -13,4 +13,3 @@ Deckent setup plan ab43de3c5809
 9. Final check · ready to apply · Ready for the final check.
    $ deckent doctor --json
 Nothing was applied. On a terminal, deckent init asks stage by stage; unattended: deckent init --yes --scope <id> (fresh permissions, language and final check only).
-
