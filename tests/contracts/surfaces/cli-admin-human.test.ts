@@ -141,9 +141,9 @@ it('bare backup lists the sets: schedule and retention first, the passphrase war
   await backupCommand(['backup'], unknown.context);
   expect(unknown.out.text()).toContain('backup passphrase is stored inside this installation: unknown'); expect(unknown.out.text()).toContain('manual-set');
   expect(text).not.toContain('{');
-  const json = io(f, { inspectBackupSets: async () => sets('/srv/backups/recovery') });
+  const view = sets('/srv/backups/recovery'), json = io(f, { inspectBackupSets: async () => view }); // one view: its times come from Date.now()
   await backupCommand(['backup', '--json'], json.context);
-  expect(JSON.parse(json.out.text())).toEqual(sets('/srv/backups/recovery'));
+  expect(JSON.parse(json.out.text())).toEqual(view);
 });
 
 it('backup verify/restore without --set off a terminal: BACKUP_SET_REQUIRED (exit 2) naming the listed sets; nothing runs, no passphrase is read', async () => {
