@@ -17,6 +17,10 @@ export class InstallationArtifactError extends Error {
 }
 
 interface Entry { readonly path: string; readonly absolute: string; readonly stat: BigIntStats }
+type Lookup = { readonly stat: BigIntStats | null } | { readonly error: unknown };
+// Serial lstat/open/read round trips left one measurement of the ~3000-file package at ~2.3 s; the gain saturates near the default
+// 4-thread libuv pool. In-flight work stays bounded by IO_PARALLEL operations, and read buffers by maxFileBytes as in a serial read.
+const IO_PARALLEL = 8;
 const digest = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 function limits(input: PackageMeasurementLimits) {
   if (!input || ![input.maxFiles, input.maxFileBytes, input.maxTotalBytes, input.maxDepth]
@@ -55,9 +59,10 @@ async function tree(root: string, declarations: readonly string[], cap: PackageM
     if (entries.has(path)) return;
     entries.set(path, { path, absolute, stat });
   };
-  const walk = async (absolute: string, path: string, depth: number, known?: BigIntStats): Promise<void> => {
+  const walk = async (absolute: string, path: string, depth: number, known?: Lookup): Promise<void> => {
     if (depth > cap.maxDepth) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_LIMIT');
-    const stat = known ?? await statOrMissing(absolute);
+    if (known && 'error' in known) throw known.error;
+    const stat = known ? known.stat : await statOrMissing(absolute);
     if (!stat) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_CHANGED');
     if (stat.isSymbolicLink()) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_UNSAFE');
     observe(path, stat);
@@ -69,10 +74,15 @@ async function tree(root: string, declarations: readonly string[], cap: PackageM
     } } finally { await directory.close().catch(() => undefined); } }
     catch (error) { if (error instanceof InstallationArtifactError) throw error; throw new InstallationArtifactError('INSTALLATION_ARTIFACT_UNAVAILABLE'); }
     names.sort();
-    for (const name of names) {
-      if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\')
-        || [...name].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_UNSAFE');
-      await walk(resolve(absolute, name), `${path}/${name}`, depth + 1);
+    // Sibling lstats are looked up IO_PARALLEL at a time but consumed in name order, so the first refusal is the serial walk's.
+    for (let start = 0; start < names.length; start += IO_PARALLEL) {
+      const chunk = names.slice(start, start + IO_PARALLEL);
+      const lookups = await Promise.all(chunk.map(name => statOrMissing(resolve(absolute, name)).then(stat => ({ stat }), (error: unknown) => ({ error }))));
+      for (const [index, name] of chunk.entries()) {
+        if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\')
+          || [...name].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_UNSAFE');
+        await walk(resolve(absolute, name), `${path}/${name}`, depth + 1, lookups[index]);
+      }
     }
   };
   const rootStat = await statOrMissing(root);
@@ -93,7 +103,7 @@ async function tree(root: string, declarations: readonly string[], cap: PackageM
     const within = relative(root, absolute);
     if (!within || within === '..' || within.startsWith(`..${sep}`)) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_UNSAFE');
     if (missingPath || !stat) { missing.push(declaration); continue; }
-    await walk(absolute, declaration, 1, stat);
+    await walk(absolute, declaration, 1, { stat });
   }
   return { entries: [...entries.values()].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0), missing: [...new Set(missing)].sort(),
     observed: [...observed].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0) };
@@ -122,6 +132,32 @@ async function stableRead(entry: Entry, cap: PackageMeasurementLimits, remaining
   } finally { await handle?.close(); }
 }
 
+// Reads run up to IO_PARALLEL files wide while their buffers together stay within maxFileBytes, the serial read's own peak; a file that
+// does not fit waits for the others. Order, byte budgets and the reported failure (the lowest-index failing file) stay those of the
+// serial read: a file's budget comes from the walked sizes of the files before it.
+async function readEntries(entries: readonly Entry[], packageStat: BigIntStats, packageFile: MeasuredPackageFile, cap: PackageMeasurementLimits) {
+  const files: MeasuredPackageFile[] = new Array<MeasuredPackageFile>(entries.length), failures = new Map<number, unknown>(), running = new Set<Promise<void>>();
+  let total = packageFile.size, next = 0, inFlightBytes = 0;
+  const budgets = entries.map(entry => { if (entry.path === 'package.json') return 0; const budget = cap.maxTotalBytes - total; total += Number(entry.stat.size); return budget; });
+  while (next < entries.length && failures.size === 0) {
+    const index = next, entry = entries[index]!, size = Number(entry.stat.size);
+    if (running.size >= IO_PARALLEL || (inFlightBytes > 0 && inFlightBytes + size > cap.maxFileBytes)) { await Promise.race(running); continue; }
+    next++;
+    if (entry.path === 'package.json') {
+      if (generation(entry.stat) !== generation(packageStat)) failures.set(index, new InstallationArtifactError('INSTALLATION_ARTIFACT_CHANGED'));
+      else files[index] = packageFile;
+      continue;
+    }
+    inFlightBytes += size;
+    const task: Promise<void> = stableRead(entry, cap, budgets[index]!).then(read => { files[index] = read.measurement; }, (error: unknown) => { failures.set(index, error); })
+      .finally(() => { inFlightBytes -= size; running.delete(task); });
+    running.add(task);
+  }
+  await Promise.all(running);
+  if (failures.size) throw failures.get(Math.min(...failures.keys()));
+  return files;
+}
+
 export async function measureInstalledPackage(rootInput: string, inputLimits: PackageMeasurementLimits): Promise<InstalledPackageMeasurement> {
   if (typeof rootInput !== 'string' || !rootInput) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
   const root = resolve(rootInput), cap = limits(inputLimits);
@@ -139,13 +175,8 @@ export async function measureInstalledPackage(rootInput: string, inputLimits: Pa
     || !Array.isArray(record['files']) || !record['files'].length) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
   const declarations = record['files'].map(safeDeclaration);
   if (new Set(declarations).size !== declarations.length) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
-  const before = await tree(root, declarations, cap); const files: MeasuredPackageFile[] = [];
-  let total = initialPackage.measurement.size;
-  for (const entry of before.entries) {
-    if (entry.path === 'package.json') { if (generation(entry.stat) !== generation(packageStat)) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_CHANGED');
-      files.push(initialPackage.measurement); continue; }
-    const measured = (await stableRead(entry, cap, cap.maxTotalBytes - total)).measurement; total += measured.size; files.push(measured);
-  }
+  const before = await tree(root, declarations, cap);
+  const files = await readEntries(before.entries, packageStat, initialPackage.measurement, cap);
   const after = await tree(root, declarations, cap);
   if (JSON.stringify(before.observed) !== JSON.stringify(after.observed) || JSON.stringify(before.missing) !== JSON.stringify(after.missing)
     || files.find(file => file.path === 'package.json')?.sha256 !== initialPackage.measurement.sha256) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_CHANGED');
