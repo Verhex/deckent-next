@@ -140,7 +140,7 @@ describe('foreground executor (cond. 2, 4)', () => {
   const env = { PATH: '/home/alice/bin:/usr/bin', TERM: 'xterm-256color', LANG: 'tr_TR.UTF-8', DECKENT_SECRET_PASSPHRASE: 'pass', ANTHROPIC_API_KEY: 'sk-x', SUDO_ASKPASS: '/tmp/a' };
   it('sudo -k first, then each step with `--` in order, a fixed clean environment and the registry timeouts; the version is recorded', async () => {
     const { calls, spawn } = fake();
-    const result = await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn, version: async () => '5:29.0.0-1~ubuntu.24.04~noble' });
+    const result = await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn, version: async () => '5:29.0.0-1~ubuntu.24.04~noble', verify: async () => true });
     expect(result).toEqual({ status: 'succeeded', step: null, exitCode: 0, version: '5:29.0.0-1~ubuntu.24.04~noble' });
     expect(calls.map(call => [call.file, ...call.args])).toEqual([['/usr/bin/sudo', '-k'], ...plan.steps.map(step => ['/usr/bin/sudo', '--', ...step.argv])]);
     expect(calls.slice(1).map(call => call.timeoutMs)).toEqual(plan.steps.map(step => step.timeoutMs));
@@ -153,13 +153,13 @@ describe('foreground executor (cond. 2, 4)', () => {
   });
   it('a non-zero step stops the run (failed, nothing after it ran); no exit (timeout, signal) is uncertain; nothing is retried', async () => {
     const failed = fake([{ code: 0, signal: null }, { code: 0, signal: null }, { code: 0, signal: null }, { code: 0, signal: null }, { code: 100, signal: null }]);
-    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: failed.spawn, version: async () => null })).toEqual({ status: 'failed', step: 4, exitCode: 100, version: null });
+    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: failed.spawn, version: async () => null, verify: async () => true })).toEqual({ status: 'failed', step: 4, exitCode: 100, version: null });
     expect(failed.calls).toHaveLength(5);
     const lost = fake([{ code: 0, signal: null }, { code: 0, signal: null }, { code: 0, signal: null }, { code: 0, signal: null }, { code: 0, signal: null }, { code: null, signal: 'SIGTERM' }]);
-    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: lost.spawn, version: async () => null })).toMatchObject({ status: 'uncertain', step: 5 });
+    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: lost.spawn, version: async () => null, verify: async () => true })).toMatchObject({ status: 'uncertain', step: 5 });
     expect(lost.calls).toHaveLength(6);
     const wrongPassword = fake([{ code: 0, signal: null }, { code: 1, signal: null }]);
-    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: wrongPassword.spawn, version: async () => null })).toMatchObject({ status: 'failed', step: 1, exitCode: 1 });
+    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: wrongPassword.spawn, version: async () => null, verify: async () => true })).toMatchObject({ status: 'failed', step: 1, exitCode: 1 });
     expect(wrongPassword.calls).toHaveLength(2);
   });
   it('a key or source file that is not the shipped one stops the run before apt-get update trusts it (cond. 3 at install time)', async () => {
@@ -184,7 +184,7 @@ describe('foreground executor (cond. 2, 4)', () => {
     // The terminal's Ctrl+C reaches the foreground child and Deckent alike: call the executor's own handler (never a real signal in a test worker).
     const before = process.listeners('SIGINT');
     const interrupted = fake([{ code: 0, signal: null }, () => { (process.listeners('SIGINT').find(listener => !before.includes(listener)) as () => void)(); return { code: 130, signal: null }; }]);
-    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: interrupted.spawn, version: async () => null })).toMatchObject({ status: 'uncertain', step: 1 });
+    expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: interrupted.spawn, version: async () => null, verify: async () => true })).toMatchObject({ status: 'uncertain', step: 1 });
     expect(process.listeners('SIGINT')).toEqual(before);
   });
 });
