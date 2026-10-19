@@ -48,10 +48,11 @@ const lines = (text: string) => text.split('\n');
 
 it('AI path: a wrong approval input names the field (not INVENTORY_QUERY_INVALID) and sends nothing; --schema prints the contract', async () => {
   const root = await project(), seen: unknown[] = [];
-  const handlers = { listApprovals: async (input: unknown) => { seen.push(input); return []; }, decideApproval: async (input: unknown) => { seen.push(input); return null; } };
+  const handlers = { listApprovals: async (input: unknown) => { seen.push(input); return []; }, decideApproval: async (input: unknown) => { seen.push(input); return null; },
+    inspectApproval: async (input: unknown) => { seen.push(input); return null; } };
   const listed = await run(['approval', 'list', '--input', '-', '--lang', 'en'], handlers, root, {}, Readable.from([JSON.stringify({ schemaVersion: 1, scopeId: 'live' })]));
   expect(listed.code).toBe(2); expect(listed.err).toContain('CLI_INPUT_FIELD_INVALID'); expect(listed.err).toContain('afterId'); expect(listed.err).toContain('is missing');
-  expect(listed.err).not.toContain('INVENTORY_QUERY_INVALID'); expect(listed.err).toContain('"limit":20');
+  expect(listed.err).not.toContain('INVENTORY_QUERY_INVALID'); expect(listed.err).toMatch(/\\?"limit\\?":20/u);
   // An AI (or any JSON) decision without a reason is refused before anything is sent.
   const noReason = await run(['approval', 'decide', '--input', '-', '--lang', 'tr'], handlers, root, {}, Readable.from([JSON.stringify({ schemaVersion: 1, scopeId: 'live',
     approvalId: 'a1', commandId: 'c1', expectedRevision: 0, decision: 'allow' })]));
@@ -60,7 +61,8 @@ it('AI path: a wrong approval input names the field (not INVENTORY_QUERY_INVALID
   expect(extra.code).toBe(2); expect(extra.err).toContain('limit');
   expect(seen).toEqual([]);
   const schema = await run(['approval', 'decide', '--schema'], handlers, root);
-  expect(schema.code).toBe(0); expect(JSON.parse(schema.text)).toMatchObject({ type: 'object' }); expect(schema.text).toContain('expectedRevision');
+  expect(schema.code).toBe(0); // The decision schema is a union (once, or "this session" for a tool call): the projection lists both shapes, each with its required fields.
+  expect(JSON.parse(schema.text).anyOf[0].required).toEqual(['schemaVersion', 'scopeId', 'approvalId', 'commandId', 'expectedRevision', 'decision', 'reason']);
 });
 
 it('AI path: --input --json returns the service result unchanged; without --json a person reads a table, waiting first', async () => {
@@ -90,8 +92,10 @@ it('decide without --input: off a terminal (pipe, AI agent) nothing is asked or 
   const root = await project(), seen: unknown[] = [];
   const handlers = { listApprovals: async () => [approval('wait-3')], decideApproval: async (input: unknown) => { seen.push(input); return null; } };
   const tty = Object.assign(Readable.from([]), { isTTY: true, setRawMode() { return this; } });
-  for (const env of [{}, { CLAUDECODE: '1' }, { AI_AGENT: 'x' }]) {
-    const result = await run(['approval', 'decide', '--lang', 'en'], { ...handlers, stdout: { write() {}, isTTY: true } }, root, env, tty);
+  // A pipe, and an AI agent on a real-looking terminal: never a card.
+  for (const [env, terminal] of [[{}, false], [{ CLAUDECODE: '1' }, true], [{ AI_AGENT: 'x' }, true]] as const) {
+    const result = await run(['approval', 'decide', '--lang', 'en'], { ...handlers, ...(terminal ? { stdout: { write() {}, isTTY: true } } : {}) }, root, env,
+      terminal ? tty : Object.assign(Readable.from([]), { isTTY: false }));
     expect(result.code).toBe(2); expect(result.err).toContain('CLI_ARGUMENT_MISSING'); expect(result.err).toContain('--input');
   }
   expect(seen).toEqual([]);
