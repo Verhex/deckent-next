@@ -237,6 +237,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **The relative path of a backup set is refused with a misleading message.** Use an absolute path.
 - **You cannot go back to an older Deckent after a ledger upgrade** without restoring the backup taken before the upgrade
   (newer ledger versions cannot be opened by older builds).
+- **The daily backup schedule takes no backup right before a ledger upgrade.** `backup.schedule` holds one value (off, daily or
+  before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
+  day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
+  before-upgrade instead of daily.
 - **A lost worker can keep its slot.** A granted attempt can stay active and hold an execution slot until custody is resolved.
   *Workaround:* watch it with `deckent monitor`; the slot is freed only by a typed manual decision or by evidence that the worker ended.
 - **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,

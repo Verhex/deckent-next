@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { completeTerminalChatTurn, describeTerminalChat, streamTerminalChatTurn, assertTerminalChatReady, type TerminalChatInvocationPorts } from '#composition/core/terminal-chat/index.js';
+import { completeTerminalChatTurn, describeTerminalChat, assertTerminalChatReady, type TerminalChatInvocationPorts } from '#composition/core/terminal-chat/index.js';
 import { extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/index.js';
@@ -60,7 +60,7 @@ describe('terminal chat configuration through the real config loader', () => {
 });
 
 describe('terminal chat turn is one governed model invocation', () => {
-  it('carries the selected effective cap from config into plain/stream commands and agent preflight', async () => {
+  it('carries the selected effective cap from config into the chat command and agent preflight', async () => {
     const base = await project({ provider_catalog: catalog, terminal: { scopeId: 'team-a', chat: { schemaVersion: 1, reference } } });
     const binding = await inspectModelBinding(base.projectRoot, reference, base.options);
     for (const selected of [undefined, 32768]) {
@@ -71,12 +71,7 @@ describe('terminal chat turn is one governed model invocation', () => {
       await writeFile(join(base.projectRoot, '.deckent/config.json'), JSON.stringify(config)); clearConfigCache();
       const input = { projectRoot: base.projectRoot, scopeId: 'team-a', messages: [{ role: 'user' as const, content: 'hi' }], options: base.options };
       const plain = ports(async () => reply('ok')); await completeTerminalChatTurn(input, plain.value);
-      let streamed: ModelInvocationCommand | undefined;
-      const events = [];
-      for await (const event of streamTerminalChatTurn(input, { invokeStream: async (_root, command) => { streamed = command; return { ...reply('ok'), receipt: { outcome: { state: 'responded' } } as never }; }, cancel: plain.value.cancel })) events.push(event);
-      expect(events.at(-1)).toMatchObject({ kind: 'done', finish: 'stop' });
       expect(plain.invoked[0]!.nativeRequest['max_completion_tokens']).toBe(selected ?? 4096);
-      expect(streamed!.nativeRequest['max_completion_tokens']).toBe(selected ?? 4096);
       expect(await assertTerminalChatReady(base.projectRoot, base.options, reference, 'team-a')).toMatchObject({ completionLimitTokens: selected ?? 4096, outputReserveTokens: selected ?? 4096 });
     }
   });

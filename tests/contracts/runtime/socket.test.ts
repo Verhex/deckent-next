@@ -6,12 +6,13 @@ import { createHash } from 'node:crypto';
 import { createServer, Socket } from 'node:net';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LocalRuntimeSocketError, createLocalPeerSession, requestLocalRuntime, startLocalRuntimeSocketServer,
+import { LocalRuntimeSocketError, acquireLocalRuntimeSocketGuard, createLocalPeerSession, prepareRuntimeSocket, requestLocalRuntime, startLocalRuntimeSocketServer,
   type LocalRuntimeSocketOptions } from '../../../src/adapters/core/local-runtime-socket/index.js';
+import { resolveProductLayout } from '#platform/index.js';
 import { encodeServiceFrame, ServiceFrameError } from '../../../src/adapters/core/local-runtime-socket/index.js';
 
 const owned: string[] = [];
@@ -215,6 +216,25 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket peer identit
     await rm(options.endpoint);
     const next = await startLocalRuntimeSocketServer(options, handler);
     await next.dispose();
+  });
+
+  it('a clean stop or a released guard removes its own empty /tmp/dk-* directory; content and foreign parents stay (g4-temizlik)', async () => {
+    const { root, options } = await fixture(), layout = resolveProductLayout({ projectRoot: root });
+    const handler = async (request: { requestId: string }) => ({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION,
+      requestId: request.requestId, ok: true as const, result: null });
+    const endpoint = await prepareRuntimeSocket(layout), parent = dirname(endpoint); owned.push(parent);
+    expect(parent).toMatch(/^\/tmp\/dk-\d+-[0-9a-f]{64}$/u);
+    await (await startLocalRuntimeSocketServer({ ...options, endpoint }, handler)).dispose();
+    await expect(lstat(parent)).rejects.toMatchObject({ code: 'ENOENT' });
+    // A reader (client, doctor) sees a stopped service, not an unsafe endpoint.
+    await expect(prepareRuntimeSocket(layout, false)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_UNAVAILABLE' });
+    await prepareRuntimeSocket(layout); await (await acquireLocalRuntimeSocketGuard({ ...options, endpoint })).release();
+    await expect(lstat(parent)).rejects.toMatchObject({ code: 'ENOENT' });
+    await prepareRuntimeSocket(layout); await writeFile(join(parent, 'keep'), 'kept', { mode: 0o600 });
+    await (await startLocalRuntimeSocketServer({ ...options, endpoint }, handler)).dispose();
+    expect(await readFile(join(parent, 'keep'), 'utf8')).toBe('kept');
+    await (await startLocalRuntimeSocketServer(options, handler)).dispose();
+    expect((await lstat(dirname(options.endpoint))).isDirectory()).toBe(true);
   });
 
   it('holds exclusive ownership and releases it on ordered close', async () => {

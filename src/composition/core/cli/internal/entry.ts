@@ -148,7 +148,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)
       .catch(error => { throw queryFailure(error); }),
     installConfiguredExecutionPool: (projectRoot, scopeId, apply) => installConfiguredExecutionPool(projectRoot, scopeId, apply).catch(error => { throw queryFailure(error); }),
-    inspectPolicyTemplate: projectRoot => inspectPolicyTemplate(projectRoot),
+    inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options),
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
     inspectPolicyAdministration: inspectConfiguredPolicyAdministration,

@@ -461,7 +461,6 @@
     },
     "src/composition/core/terminal-chat": {
       "dependencies": [
-        "src/surfaces/core/terminal-kit",
         "src/adapters/core/contract",
         "src/composition/core/provider-catalog",
         "src/domain/core/model-invocation",

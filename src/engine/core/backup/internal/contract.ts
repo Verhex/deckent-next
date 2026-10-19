@@ -29,5 +29,6 @@ export type BackupAuthorization = (command: BackupCommand, authority: BackupAuth
 /** No persisted intent, no storage effect. Outcome errors are typed and leave an intent that must be reconciled. */
 export type BackupAudit = (event: AuditEvent, authority: IntegrityAuthority) => Promise<void>;
 
-export interface BackupScheduleEvent { readonly trigger: 'daily' | 'before-upgrade'; readonly status: 'created' | 'failed'; readonly code: string | null }
+/** `skipped`: an older scheduled set did not verify (`code`, `set` = its name); it is kept and the new set is still made. */
+export interface BackupScheduleEvent { readonly trigger: 'daily' | 'before-upgrade'; readonly status: 'created' | 'failed' | 'skipped'; readonly code: string | null; readonly set?: string }
 export interface BackupScheduleObserver { onBackup?(event: BackupScheduleEvent): void | Promise<void> }

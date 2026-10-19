@@ -1,7 +1,7 @@
 import { mkdtemp, rm, readFile, writeFile, chmod, mkdir, readdir, symlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { applyPolicyTemplateInstallation, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectInstallationStartability } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { prepareRuntimeSocket, runtimeSocketLocation } from '#adapters/index.js';
@@ -62,4 +62,24 @@ it.skipIf(process.platform !== 'linux')('init keeps a pre-existing project confi
   await expect(applyPolicyTemplateInstallation(root, 's')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CONFLICT' });
   expect(await readFile(join(root, '.deckent/config.json'), 'utf8')).toBe(config);
   expect(await readdir(join(root, '.deckent'))).not.toContain('state');
+});
+
+// g2-deckent-home (analysis 2026-10-18): with the data root moved (DECKENT_HOME binds layout.root), init policy wrote policy/bindings/ledger under
+// <project>/.deckent while doctor, pool and the service read the moved root, and doctor sent the user back to the same init command (a loop).
+it.skipIf(process.platform !== 'linux')('with DECKENT_HOME set, init policy writes under the moved data root and doctor then finds its ledger, policy and template', async () => {
+  const root = await fresh(), data = join(root, 'data'), options = { env: { HOME: join(root, 'home'), DECKENT_HOME: data, DECKENT_LANGUAGE: 'en' } };
+  const preview = await previewPolicyTemplateInstallation(root, 's', options);
+  expect(JSON.stringify(preview)).toContain(join(data, 'policy.json')); expect(JSON.stringify(preview)).not.toContain(join(root, '.deckent/policy.json'));
+  await applyPolicyTemplateInstallation(root, 's', options);
+  expect(await readdir(data)).toEqual(expect.arrayContaining(['policy.json', 'bindings.json', 'state']));
+  expect(await readdir(join(root, '.deckent'))).not.toEqual(expect.arrayContaining(['policy.json']));
+  expect(await readFile(join(root, '.deckent/config.json'), 'utf8')).toBeTruthy(); // the bootstrap config stays in the project
+  // Doctor reads the same moved root: ledger, policy and the recognized template are found; no check sends the user back to init.
+  const output: string[] = [];
+  await main(['doctor', '--json'], { root, env: options.env, stdout: { write: (line: string) => { output.push(line); } }, stderr: { write: () => undefined },
+    inspectInstallationStartability, inspectPolicyTemplate });
+  const doctor = JSON.parse(output.join(''));
+  expect(doctor.paths).toMatchObject({ source: 'env-override', dataDir: data }); expect(doctor.policyTemplate).toMatchObject({ id: 'first-run-template' });
+  // Only a checkout without a staged bubblewrap (no build here) may remain; on a built checkout doctor is ready.
+  expect(doctor.startability.checks.map((check: { code: string }) => check.code).filter((code: string) => code !== 'DOCTOR_BUBBLEWRAP_NOT_STAGED')).toEqual([]);
 });

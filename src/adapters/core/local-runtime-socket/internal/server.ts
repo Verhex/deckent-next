@@ -6,7 +6,7 @@ import { createServerStreamChannel, type RuntimeServiceStreamChannel } from './s
 import { createServerTurnChannel, type RuntimeServiceTurnChannel } from './event-channel.js';
 import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './framing.js';
-import { assertSocketPublicationBudget, LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
+import { assertSocketPublicationBudget, LocalRuntimeSocketError, releaseRuntimeSocketDirectory, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 import { acquireLedgerLock, type LedgerLock } from './ledger-lock.js';
 
@@ -166,7 +166,7 @@ export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocket
     async release() {
       if (state !== 'held') return;
       state = 'released';
-      try { await close(guard).catch(() => undefined); } finally { ledger?.release(); }
+      try { await releaseRuntimeSocketDirectory(resolved.endpoint); await close(guard).catch(() => undefined); } finally { ledger?.release(); }
     },
   });
 }
@@ -210,7 +210,7 @@ async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, gua
     disposed = (async () => {
       await stopped;
       // The ledger custody is released with the endpoint guard, after admitted work settled, never before.
-      try { endpoint.removeEndpoint(); }
+      try { endpoint.removeEndpoint(); await releaseRuntimeSocketDirectory(resolved.endpoint); }
       finally { try { await close(guard); } finally { ledger?.release(); } }
     })();
     return await disposed;

@@ -1,10 +1,10 @@
 import { firstSessionTargets, firstSessionPublication } from '#adapters/index.js';
 import { lstat, readFile, stat } from 'node:fs/promises';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, inspectInstallationFile, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
-import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto';
+import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions } from '#platform/index.js';
+import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
@@ -14,10 +14,12 @@ const identityPort = (projectRoot: string, scopeId: string, options: ConfigLoadO
   write: async (identity, expect) => createConfiguredConfigApplication(projectRoot, options).set({ keyPath: 'service.identity', value: { ...identity }, layer: 'project', expect,
     principal: await resolveConfiguredConfigPrincipal(projectRoot, scopeId, options), scopeId, commandId: randomUUID() }), hold: work => withConfigLayersLocked(projectRoot, options, work) }); // v12: one config write contract and lock
 /** Fresh policy installation also initializes first-session config and ledger, without Docker or a pool. */
-async function prepare(projectRoot: string, scopeId: string) {
+async function prepare(projectRoot: string, scopeId: string, options: ConfigLoadOptions, sampled?: ProductLayout) {
   composeCore(); // v12: the shutdown rule and the first config name this scope's configured service, else the default (an unreadable config: the default).
-  const configured = await loadComposedConfig(projectRoot, { heal: false, force: true }).then(config => config.service.identity, () => null), service = firstRunServiceIdentity(scopeId, configured);
-  const layout = resolveProductLayout({ projectRoot }), identity = readLocalOsIdentity(); const installation = getConfigFieldDefault('installation'), inspection = getConfigFieldDefault('inspection');
+  const loaded = await loadComposedConfig(projectRoot, { ...options, heal: false, force: true }).catch(() => null), configured = loaded === null ? null : loaded.service.identity;
+  // g2-deckent-home: the configured data root (DECKENT_HOME, layout.root) as upgrade, doctor and the service read it; an unreadable config keeps the default.
+  const service = firstRunServiceIdentity(scopeId, configured), layout = sampled ?? loaded?.productLayout ?? resolveProductLayout({ projectRoot }), identity = readLocalOsIdentity();
+  const installation = getConfigFieldDefault('installation'), inspection = getConfigFieldDefault('inspection');
   const maxBytes = Math.min(installation.profileMaxBytes, inspection.policyMaxBytes);
   const observed = await observeBootstrapState(projectRoot);
   const held = observed.record?.recovery as { firstSessionTargets?: unknown } | undefined;
@@ -26,16 +28,17 @@ async function prepare(projectRoot: string, scopeId: string) {
     paths: { policy: productResourcePath(layout, 'policy'), bindings: productResourcePath(layout, 'bindings') }, toolNames: FIRST_RUN_TOOL_NAMES, serviceId: service.serviceId, firstSessionTargets: targets });
   return { prepared, service, configured, layout, maxBytes: Math.min(installation.profileMaxBytes, inspection.policyMaxBytes), timeoutMs: installation.writeLockTimeoutMs };
 }
-export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string) { const { prepared, service } = await prepare(projectRoot, scopeId); return Object.freeze({ ...prepared.preview, serviceIdentity: await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId), service, false) }); }
-export async function applyPolicyTemplateInstallation(projectRoot: string, scopeId: string) {
-  await assertConfiguredInstallationIdentity(projectRoot); const { prepared, service, configured, layout, maxBytes, timeoutMs } = await prepare(projectRoot, scopeId), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), never raw Date.now
+export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) { const { prepared, service } = await prepare(projectRoot, scopeId, options); return Object.freeze({ ...prepared.preview, serviceIdentity: await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, false) }); }
+export async function applyPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) {
+  await assertConfiguredInstallationIdentity(projectRoot); const { prepared, service, configured, layout, maxBytes, timeoutMs } = await prepare(projectRoot, scopeId, options), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), never raw Date.now
   const installationIdentity = new FileInstallationIdentityStore(layout, timeoutMs, undefined, await configuredInstallationBinding(projectRoot)), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
   // Identity write admission (relocation, configured source, required machine binding) before the journal or any target is written.
   await installationIdentity.admitWrite(); await projectIdentity.read();
-  const file = (target: PolicyTemplatePublishTarget) => ({ root: layout.root, path: target.path, maxBytes });
+  // The first-session config is the project's bootstrap file: its own directory is its root, also when the data root moved.
+  const file = (target: PolicyTemplatePublishTarget) => ({ root: target.resource === 'config' ? dirname(target.path) : layout.root, path: target.path, maxBytes });
   const firstSession = firstSessionPublication(layout, maxBytes);
   const result = await withInstallationJournal(projectRoot, { timeoutMs }, async journal => {
-    const current = await prepare(projectRoot, scopeId);
+    const current = await prepare(projectRoot, scopeId, options, layout);
     if (current.prepared.preview.planDigest !== prepared.preview.planDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     return new PolicyTemplateInstallationApplication({
     journal,
@@ -52,7 +55,7 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
   }).apply(prepared); });
   await installationIdentity.loadOrCreate(); await projectIdentity.loadOrCreate();
   const journaled = result.status === 'installed' && prepared.targets.some(target => target.resource === 'config' && (JSON.parse(target.content) as { service?: unknown }).service);
-  return Object.freeze({ ...result, serviceIdentity: journaled ? Object.freeze({ status: 'written' as const, identity: service }) : await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId), service, true, configured) });
+  return Object.freeze({ ...result, serviceIdentity: journaled ? Object.freeze({ status: 'written' as const, identity: service }) : await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, true, configured) });
 }
 /** `deckent init policy --upgrade [--apply] [--person <issuer>/<subject>]` (owner 2026-10-07): the first-run v4 → v5 migration of this installation's
  * policy, as the local person the template names (or, for a hand-built policy, the person its file owner names: lead 2026-10-08), through the
@@ -74,9 +77,9 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
     try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)); return { record: event => { audit.record(event); }, close: () => store.close() }; } catch (error) { store.close(); throw error; } } });
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */
-export async function inspectPolicyTemplate(projectRoot: string) {
+export async function inspectPolicyTemplate(projectRoot: string, options: ConfigLoadOptions = {}) {
   try {
-    const path = productResourcePath(resolveProductLayout({ projectRoot }), 'policy');
+    const path = productResourcePath((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout, 'policy');
     if ((await stat(path)).size > getConfigFieldDefault('inspection').policyMaxBytes) return null;
     return await inspectFirstRunPolicyTemplate({ load: async () => JSON.parse(await readFile(path, 'utf8')) as unknown });
   } catch { return null; }

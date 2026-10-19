@@ -19,6 +19,8 @@ import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous
 import { composeCore } from '#composition/core/root/index.js';
 import { openConfiguredArtifactStore } from '#composition/core/artifacts/index.js';
 import { restoreHoldPath } from '#platform/index.js';
+import { startBackupSchedule } from '#composition/core/backup/index.js';
+import type { BackupScheduleEvent } from '#engine/index.js';
 const roots: string[] = [], workers: Worker[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const phrase = 'CANARY-backup-operator-secret-🐦';
 afterEach(async () => {
@@ -156,6 +158,12 @@ it.skipIf(process.platform !== 'linux')('before-upgrade creates a complete set b
   const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:{...f.env,BACKUP_PASSPHRASE:phrase}});services.push(service);
   const directory=join(f.layout.root,'state/backups/recovery'),sets=await readdir(directory);expect(sets).toHaveLength(1);
   const snapshot=new DatabaseSync(join(directory,sets[0]!,'ledger.db'),{readOnly:true});expect(snapshot.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);snapshot.close();
+  // Owner 2026-10-18: unlike the daily schedule, an older set that no longer verifies (a changed passphrase) still stops the migration.
+  await service.stop();await service.done;services.splice(services.indexOf(service),1);
+  const again=new DatabaseSync(f.ledger);again.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);again.close();
+  await expect(startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:{...f.env,BACKUP_PASSPHRASE:'CANARY-changed-passphrase'}})).rejects.toMatchObject({code:'BACKUP_PASSPHRASE_INVALID'});
+  const kept=new DatabaseSync(f.ledger,{readOnly:true});expect(kept.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);kept.close();
+  expect(await readdir(directory)).toEqual(sets);
 });
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and link targets are refused',async()=>{
   const f=await fixture();await call(f,'create');const {createHash}=await import('node:crypto');
@@ -264,6 +272,26 @@ it.skipIf(process.platform !== 'linux')('scheduled retention keeps the three new
   expect(await readFile(join(directory,'operator-note'),'utf8')).toBe('keep');
 });
 
+// g2-yedek-dakika (analysis 2026-10-18): with the daily schedule on, every minute fully re-verified every set (scrypt + ledger scan) before the
+// one-day check, and one set that no longer verified (a changed passphrase) failed every minute and blocked every new backup.
+it.skipIf(process.platform !== 'linux')('daily schedule: the minute check reads set names only; an old set that no longer verifies is reported and kept, and the new set is made',async()=>{
+  const f=await fixture(),path=join(f.root,'.deckent/config.json'),config=JSON.parse(await readFile(path,'utf8'));
+  config.backup={schedule:'daily',retention:3};await writeFile(path,JSON.stringify(config));clearConfigCache();
+  const directory=join(f.layout.root,'state/backups/recovery'),changed='CANARY-changed-passphrase';
+  const run=async(passphrase:string)=>{const events:BackupScheduleEvent[]=[],controller=new AbortController();
+    const done=startBackupSchedule(f.root,{env:{...f.env,BACKUP_PASSPHRASE:passphrase}},controller.signal,{onBackup(event){events.push(event);if(event.status!=='skipped')controller.abort();}});
+    const timer=setTimeout(()=>controller.abort(),3000);try{await done;}finally{clearTimeout(timer);}return events;};
+  expect(await run(phrase)).toEqual([{trigger:'daily',status:'created',code:null}]);
+  const [first]=await readdir(directory);
+  // Within the day the minute check decides from the name: a changed passphrase is not even tried (before: BACKUP_PASSPHRASE_INVALID every minute).
+  expect(await run(changed)).toEqual([]);
+  // A day later the full check runs: the old set does not verify with the new passphrase, is reported and kept, and the new set is still made.
+  const old=`recovery-${new Date(Date.now()-2*86400000).toISOString().replaceAll(':','-').replace(/\.\d{3}/,'')}-${first!.slice(-36)}`;
+  await rename(join(directory,first!),join(directory,old));
+  const events=await run(changed);
+  expect(events).toEqual([{trigger:'daily',status:'skipped',code:expect.stringMatching(/^BACKUP_/),set:old},{trigger:'daily',status:'created',code:null}]);
+  const sets=(await readdir(directory)).filter(name=>name.startsWith('recovery-'));expect(sets).toHaveLength(2);expect(sets).toContain(old);
+});
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] exact target confirmation does not grant authority to overwrite another installation',async()=>{
   const f=await fixture();await call(f,'create');const directory=join(f.target,'.deckent/installation-identity');
   await mkdir(directory,{recursive:true,mode:0o700});const path=join(directory,'identity.json');
