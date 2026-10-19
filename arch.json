@@ -3220,7 +3220,12 @@
       "plan": "SURFACES"
     },
     "src/engine/core/setup": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/platform/core/integrity"
+      ],
       "plan": "INSTALLATION"
     },
     "src/adapters/core/setup-detect-execution": {
