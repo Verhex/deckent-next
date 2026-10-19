@@ -1,0 +1,4 @@
+{
+  "formats": { "json": "json", "agent": "json", "ci": "json", "dumb": "plain", "pipe": "plain", "tty": "interactive" },
+  "windowOptionRows": 5
+}

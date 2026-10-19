@@ -1,0 +1,16 @@
+Deckent kurulum planı ab43de3c5809
+1. Ortam · tamam · Ortam destekleniyor (linux).
+2. Dil · cevabınızı bekliyor · Algılanan dil: Türkçe.
+   ? Türkçe ile devam edilsin mi?
+3. Klasör ve kapsam · tamam · "my-erp" kapsamı seçildi.
+4. Kurulumu kim kullanacak · tamam · Tek kullanıcı: ilk kurulum izinleri olduğu gibi kullanılır; başka bir şey yazılmaz.
+5. İzinler · cevabınızı bekliyor · Henüz izin kurulmamış.
+   ? Yukarıda gösterilen ilk kurulum izinleriyle kurulsun mu?
+   $ deckent init policy --scope my-erp --apply
+6. Komut korumalı alanı · tamam · Komut korumalı alanı çalışıyor (bubblewrap).
+7. Model bağlantısı · engelli · Önce İzinler aşamasının bitmesini bekliyor.
+8. Proje yönergeleri · engelli · İzinleri bekliyor: proje dosyaları izinler üzerinden yazılır.
+9. Son kontrol · uygulanmaya hazır · Son kontrole hazır.
+   $ deckent doctor --json
+Hiçbir şey uygulanmadı. Terminalde deckent init aşama aşama sorar; gözetimsiz: deckent init --yes --scope <kimlik> (yalnız yeni izinler, dil ve son kontrol).
+
