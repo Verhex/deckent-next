@@ -10,3 +10,4 @@ export { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn }
 export type { ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';
 export { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
+export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
