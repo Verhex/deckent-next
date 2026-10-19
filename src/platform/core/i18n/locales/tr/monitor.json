@@ -141,5 +141,8 @@
   "acceptance.ceiling.missing-approval": "eksik onay",
   "monitor.detail.workspaceStartedFromPatch": "{source} görevinin kabul edilmiş patch’inden başlatıldı (deneme {attempt}, patch özeti {digest})",
   "monitor.pool.hidden": "Diğer işler: {count} havuz size gösterilmiyor.",
-  "monitor.diagnostic.poolDecisionsUnavailable": "Havuz görünürlüğü belirlenemedi ({detail}); bu havuzlar gizlendi."
+  "monitor.diagnostic.poolDecisionsUnavailable": "Havuz görünürlüğü belirlenemedi ({detail}); bu havuzlar gizlendi.",
+  "monitor.diagnostic.imageCurrent": "İşçi imajı güncel ({detail})",
+  "monitor.diagnostic.imageCurrentUnversioned": "İşçi imajı güncel",
+  "monitor.diagnostic.scopesDenied": "{count} kapsama erişim reddedildi (adları gösterilmez)"
 }

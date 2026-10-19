@@ -284,7 +284,7 @@ describe('fullscreen monitor', () => {
 
 describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () => {
   it('words every data-lane diagnostic, keeps unknown codes visible and treats info: as a note', () => {
-    const codes = ['service-unavailable:LOCAL_RUNTIME_DENIED', 'ledger-unavailable:LEDGER_LOCKED', 'ledger-version-older:43', 'scope-denied:s1', 'scope-unavailable:s1',
+    const codes = ['service-unavailable:LOCAL_RUNTIME_DENIED', 'ledger-unavailable:LEDGER_LOCKED', 'ledger-version-older:43', 'scopes-denied:2', 'scope-unavailable:s1',
       'scope-unavailable:s1:LEDGER_LOCKED', 'workers-unavailable:s1', 'workers-denied:s1', 'workers-not-sampled:s1', 'workers-truncated:s1', 'workers-finished-capped:5',
       'runs-truncated:900', 'run-corrupt:s1/r1', 'approvals-truncated', 'approval-corrupt:s1/a1', 'pool-occupancy-corrupt:p1', 'pool-corrupt:p1', 'ledger-only'];
     for (const locale of ['en', 'tr'] as const) for (const code of codes) {

@@ -101,7 +101,7 @@ describe('inspectMonitor composition', () => {
     expect(snapshot).toMatchObject({ schemaVersion: 1, control: 'observe-only' }); expect(snapshot.installs.map(install => install.id)).toEqual(['current', 'dogfood', 'gone']);
     const [mine, dogfood, missing] = snapshot.installs;
     expect(mine).toMatchObject({ path: current.dir, status: 'available', scopeIds: ['s', 's2'], ledgerVersion: CURRENT_LEDGER_VERSION, service: { state: process.platform === 'linux' ? 'stopped' : 'unknown', build: null } });
-    expect(mine!.diagnostics).toContain('scope-denied:hidden');
+    expect(mine!.diagnostics).toContain('scopes-denied:1'); expect(JSON.stringify(mine)).not.toMatch(/hidden(?!Pools)/);
     if (process.platform !== 'linux') expect(mine!.diagnostics).toContain('service-unavailable:LOCAL_RUNTIME_UNSUPPORTED');
     const runs = Object.fromEntries(mine!.runs.map(run => [run.runId, run]));
     expect(Object.keys(runs).sort()).toEqual(['current-s', 'current-s2']);
@@ -122,7 +122,7 @@ describe('inspectMonitor composition', () => {
     const snapshot = await inspectMonitor(current.dir, current.options, { schemaVersion: 1, install: 'current' });
     expect(snapshot.sourcesRead).toEqual(['current']);
     expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], approvals: [], pools: [], scopeIds: [] });
-    expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
+    expect(snapshot.installs[0]!.diagnostics).toContain('scopes-denied:1');
   });
   it('selected MCP monitor keeps its distinct actor and cannot use a terminal-owner scope grant', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-mcp-')); roots.push(root);
@@ -131,7 +131,7 @@ describe('inspectMonitor composition', () => {
     const snapshot = await applications.inspectMonitor();
     expect(snapshot.sourcesRead).toEqual(['current']);
     expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], workers: [], approvals: [], pools: [], scopeIds: [] });
-    expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
+    expect(snapshot.installs[0]!.diagnostics).toContain('scopes-denied:1');
   });
   it('opt-in open filter keeps terminal process facts in the ledger and withholds private resources under the same read-output gate', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);

@@ -220,7 +220,9 @@ describe('monitor application over ports', () => {
     expect(current).toMatchObject({ status: 'available', scopeIds: ['s'], ledgerVersion: 44, service: { state: 'running', instanceId: 'i-1', processId: 42,
       build: { sourceCommit: 'd'.repeat(40), sourceTreeSha256: 'c'.repeat(64), builtAt: null } },
       approvals: [{ scopeId: 's', approvalId: 'ap-a', summary: 'x', requiredAssurance: null, createdAtMs: 300 }], pools: [{ poolId: 'p', capacity: 2, inFlight: 1, held: true, heldBy: 'ops', executing: 1 }] });
-    expect(current!.diagnostics).toEqual(['info:ledger-version-older:43', 'scope-denied:hidden', 'info:workers-truncated:s']);
+    // MON-SCOPE-NAMES: the refused scope is a count, never its name.
+    expect(current!.diagnostics).toEqual(['info:ledger-version-older:43', 'scopes-denied:1', 'info:workers-truncated:s']);
+    expect(JSON.stringify(current)).not.toMatch(/hidden(?!Pools)/);
     expect(current!.runs.map(run => run.scopeId)).toEqual(['s']);
     // The worker joins its own scope's attempt only (an equal attempt id in another scope never leaks in).
     expect(current!.runs[0]!.blocker).toMatchObject({ code: 'worker-running', detail: 'editing' });

@@ -141,5 +141,8 @@
   "acceptance.ceiling.missing-approval": "missing approval",
   "monitor.detail.workspaceStartedFromPatch": "started from accepted patch of {source} (attempt {attempt}, patch digest {digest})",
   "monitor.pool.hidden": "Other work: {count} pool(s) not shown to you.",
-  "monitor.diagnostic.poolDecisionsUnavailable": "Pool visibility could not be decided ({detail}); those pools are hidden."
+  "monitor.diagnostic.poolDecisionsUnavailable": "Pool visibility could not be decided ({detail}); those pools are hidden.",
+  "monitor.diagnostic.imageCurrent": "Worker image is current ({detail})",
+  "monitor.diagnostic.imageCurrentUnversioned": "Worker image is current",
+  "monitor.diagnostic.scopesDenied": "access to {count} scope(s) was refused (their names are not shown)"
 }

@@ -14,7 +14,8 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'service-unavailable': () => t('monitor.diagnostic.serviceUnavailable', { detail }, locale),
     'ledger-unavailable': () => t('monitor.diagnostic.ledgerUnavailable', { detail }, locale),
     'ledger-version-older': () => t('monitor.diagnostic.ledgerVersionOlder', { detail }, locale),
-    'scope-denied': () => t('monitor.diagnostic.scopeDenied', { detail }, locale),
+    // MON-SCOPE-NAMES: refused scopes arrive as a count only (`scopes-denied:<n>`), never by name.
+    'scopes-denied': () => t('monitor.diagnostic.scopesDenied', { count: detail }, locale),
     // `scope-unavailable:<scope>:<CODE>`: the scope, then why.
     'scope-unavailable': () => t('monitor.diagnostic.scopeUnavailable', { detail: detail.split(':')[0]!, code: detail.includes(':') ? ` (${detail.split(':').slice(1).join(':')})` : '' }, locale),
     'workers-unavailable': () => t('monitor.diagnostic.workersUnavailable', { detail }, locale),
@@ -34,7 +35,7 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'approvals-denied': () => t('monitor.diagnostic.approvalsDenied', { detail }, locale),
     'config-restart-required': () => t('monitor.diagnostic.configRestartRequired', {}, locale),
     'image-updating': () => t('monitor.diagnostic.imageUpdating', {}, locale),
-    'image-current': () => t('monitor.diagnostic.imageCurrent', { detail }, locale),
+    'image-current': () => detail ? t('monitor.diagnostic.imageCurrent', { detail }, locale) : t('monitor.diagnostic.imageCurrentUnversioned', {}, locale),
     'image-refresh-failed': () => t('monitor.diagnostic.imageRefreshFailed', { detail }, locale),
     'image-refresh-unreadable': () => t('monitor.diagnostic.imageRefreshUnreadable', { detail }, locale),
     'map-config-global-unavailable': () => t('monitor.diagnostic.mapConfigGlobalUnavailable', {}, locale),

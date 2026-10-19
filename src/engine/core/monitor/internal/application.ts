@@ -40,13 +40,14 @@ export class MonitorApplication {
     return Object.freeze({ schemaVersion: 1, observedAt, installs: Object.freeze(installs), control: 'observe-only',
       sourcesRead: Object.freeze(selected.map(target => target.id)) });
   }
-  /** Typed diagnostics, never an exception: `info:image-updating`, `info:image-current:<version>`, or the problem `image-refresh-failed:<reason>`. */
+  /** Typed diagnostics, never an exception: `info:image-updating`, `info:image-current[:<version>]`, or the problem `image-refresh-failed:<reason>`. */
   private async imageRefresh(target: MonitorTarget, diagnostics: string[]) {
     if (!this.ports.readImageRefresh) return;
     try {
       const refresh = await this.ports.readImageRefresh(target);
       if (refresh.status === 'updating') diagnostics.push('info:image-updating');
-      else if (refresh.status === 'current') diagnostics.push(`info:image-current:${refresh.imageVersion ?? ''}`);
+      // No recorded version: the bare code (an empty detail would print as empty parentheses).
+      else if (refresh.status === 'current') diagnostics.push(refresh.imageVersion ? `info:image-current:${refresh.imageVersion}` : 'info:image-current');
       else if (refresh.status === 'failed') diagnostics.push(`image-refresh-failed:${refresh.reason ?? 'UNKNOWN'}`);
     } catch (error) { diagnostics.push('image-refresh-unreadable:' + code(error)); }
   }
@@ -58,12 +59,14 @@ export class MonitorApplication {
         approvals: [], pools: [], diagnostics: Object.freeze(diagnostics) }); };
     let index: MonitorLedgerIndex, reading: MonitorLedgerReading;
     try { index = await this.ports.indexLedger(target); } catch (error) { return unavailable(error); }
-    const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = []; let denied = false;
+    const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = []; let refused = 0;
     const scopeNotes: string[] = [];
     for (const scopeId of index.scopeIds) {
       try {
         const scope = await this.ports.observeScope(target, scopeId);
-        if (scope.access !== 'admitted') { denied ||= scope.access === 'denied'; scopeNotes.push(`scope-${scope.access}:${scopeId}`); continue; }
+        // MON-SCOPE-NAMES: a refused scope is counted, never named (its id is the viewer's only clue that it exists).
+        if (scope.access === 'denied') { refused += 1; continue; }
+        if (scope.access !== 'admitted') { scopeNotes.push(`scope-${scope.access}:${scopeId}`); continue; }
         admitted.add(scopeId); workers.push(...scope.workers); if (scope.approvals === true) summaries.add(scopeId);
         if (scope.workerStatus !== 'available') scopeNotes.push(`workers-${scope.workerStatus}:${scopeId}`);
         if (scope.truncated) scopeNotes.push('info:workers-truncated:' + scopeId);
@@ -73,6 +76,7 @@ export class MonitorApplication {
     const visible = new Set<string>(), undecided = new Set<string>();
     for (const poolId of index.poolIds) if (await this.ports.observePool(target, poolId, [...admitted]).catch(error => { undecided.add(code(error)); return false; }) === true) visible.add(poolId);
     for (const failure of undecided) scopeNotes.push('pool-decisions-unavailable:' + failure);
+    if (refused) scopeNotes.unshift(`scopes-denied:${refused}`);
     try { reading = await this.ports.readLedger(target, Object.freeze({ scopeIds: Object.freeze([...admitted]), poolIds: Object.freeze([...visible]) })); }
     catch (error) { diagnostics.push(...scopeNotes); return unavailable(error); }
     diagnostics.push(...reading.diagnostics, ...scopeNotes);
@@ -131,7 +135,7 @@ export class MonitorApplication {
     const poolViews: MonitorPool[] = shownPools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
       held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution }));
     const hiddenPools = index.poolIds.length - visible.size, open = !index.scopeIds.length || admitted.size > 0;
-    const status = open ? 'available' : denied ? 'denied' : 'unavailable';
+    const status = open ? 'available' : refused ? 'denied' : 'unavailable';
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,
       runs: Object.freeze(runs),
       workers: Object.freeze(shown.map(enrich)), map: open ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews),
