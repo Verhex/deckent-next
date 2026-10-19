@@ -7,7 +7,7 @@ import { DockerCommandFailure, type DockerCommand } from '#adapters/core/docker-
 // `image inspect a b` prints the ids it found and exits 1 when one is missing.
 const id = (n: number) => `sha256:${n.toString(16).padStart(64, '0')}`;
 const endpoint = 'unix:///var/run/docker.sock';
-function fakeDocker(ids: readonly string[], options: { delayMs: number; missing?: readonly string[]; hang?: string; daemons?: readonly string[] }) {
+function fakeDocker(ids: readonly string[], options: { delayMs: number; infoDelayMs?: number; missing?: readonly string[]; hang?: string; daemons?: readonly string[] }) {
   const calls: string[][] = [];
   let infos = 0;
   const runner = (command: DockerCommand, signal?: AbortSignal) => new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
@@ -21,7 +21,7 @@ function fakeDocker(ids: readonly string[], options: { delayMs: number; missing?
       if (found.length === inspected.length) return resolve({ stdout: found.map(value => `${value}\n`).join(''), stderr: '' });
       reject(new DockerCommandFailure(found.map(value => `${value}\n`).join(''), 'Error response from daemon: No such image', 1, false));
     };
-    const timer = options.hang && inspected.includes(options.hang) ? undefined : setTimeout(answer, options.delayMs);
+    const timer = options.hang && inspected.includes(options.hang) ? undefined : setTimeout(answer, args[2] === 'info' ? options.infoDelayMs ?? options.delayMs : options.delayMs);
     signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DockerCommandFailure('', '', null, true, 'signal', signal.reason)); }, { once: true });
   });
   return { runner, calls };
@@ -48,12 +48,13 @@ it('excludes an id the inspect does not return, refuses the list when the daemon
 });
 
 it('keeps the images proven before the deadline and still runs the daemon id check after them', async () => {
-  const ids = Array.from({ length: 12 }, (_, n) => id(n + 1)), docker = fakeDocker(ids, { delayMs: 20, hang: id(12) });
+  // The daemon id read is the slowest call here: the after-check's reserve (2 × the measured before read) keeps ~60 ms of timer headroom.
+  const slow = { delayMs: 15, infoDelayMs: 60, hang: id(12) }, ids = Array.from({ length: 12 }, (_, n) => id(n + 1)), docker = fakeDocker(ids, slow);
   const images = await discoverConfigImages('/usr/bin/docker', { ...limits, timeoutMs: 400 }, docker.runner);
   expect(images.length).toBeGreaterThan(0);
   expect(images).not.toContain(id(12));
   expect(images).toEqual(ids.filter(value => images.includes(value)));
   expect(docker.calls.filter(args => args[2] === 'info')).toHaveLength(2);
   // A daemon swap is still refused when the list is partial.
-  await expect(discoverConfigImages('/usr/bin/docker', { ...limits, timeoutMs: 400 }, fakeDocker(ids, { delayMs: 20, hang: id(12), daemons: ['daemon-a', 'daemon-b'] }).runner)).resolves.toEqual([]);
+  await expect(discoverConfigImages('/usr/bin/docker', { ...limits, timeoutMs: 400 }, fakeDocker(ids, { ...slow, daemons: ['daemon-a', 'daemon-b'] }).runner)).resolves.toEqual([]);
 });
