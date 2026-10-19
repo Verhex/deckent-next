@@ -24,8 +24,11 @@ async function fixture() {
   const globalPath = resolveGlobalConfigPaths(env).platformPath, globalRoot = dirname(globalPath);
   await mkdir(globalRoot, { recursive: true, mode: 0o700 }); await chmod(globalRoot, 0o700);
   const projectPath = join(project, '.deckent', 'config.json');
-  await writeFile(projectPath, JSON.stringify({ k1_secret_probe: { token: '$DECK:PROVIDER_TOKEN' } }), { mode: 0o600 });
-  const selectFile = () => writeFile(globalPath, JSON.stringify({ secrets: { store: 'core.secret-store.file@1' } }), { mode: 0o600 });
+  // SEC-3: only the installation (global) layer may hold a $DECK reference.
+  const probe = { k1_secret_probe: { token: '$DECK:PROVIDER_TOKEN' } };
+  await writeFile(projectPath, '{}', { mode: 0o600 });
+  await writeFile(globalPath, JSON.stringify(probe), { mode: 0o600 });
+  const selectFile = () => writeFile(globalPath, JSON.stringify({ ...probe, secrets: { store: 'core.secret-store.file@1' } }), { mode: 0o600 });
   return { root, home, project, env, globalPath, globalRoot, projectPath, selectFile, file: createFileSecretStore({ root: globalRoot, platform: 'linux' }) };
 }
 const capture = () => { const lines: string[] = []; return { lines, sink: { write: (text: string) => { lines.push(text); return true; } } }; };

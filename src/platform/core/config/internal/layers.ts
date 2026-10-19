@@ -17,7 +17,7 @@ import { resolveConfigSecrets, type SecretResolver } from './validate/interpolat
 import { configuredSecretResolver } from './secret-resolver.js';
 import { ConfigValidationError, type ConfigWarning } from './validate/issues.js';
 import { validateConfig } from './validate/sections.js';
-import { assertConfigSecretPolicies } from './validate/secret-policy.js';
+import { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from './validate/secret-policy.js';
 import { readProjectConfig } from './heal.js';
 import { inspectInstallationBootstrap, assertInstallationBootstrap, type RestoreHoldAdmission } from './bootstrap.js';
 import type { BootstrapPendingAdmission } from '#platform/core/bootstrap-state/index.js';
@@ -112,6 +112,8 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   // Check each authored layer even if a clean later layer would hide its forbidden reference.
   assertConfigSecretPolicies(global, resolveLocale(undefined, env));
   assertConfigSecretPolicies(normalizedProject, resolveLocale(undefined, env));
+  // SEC-3 (F33): only the installation layer may name an installation secret; a project file is someone else's commit.
+  assertProjectLayerSecretReferences(normalizedProject, resolveLocale(undefined, env));
   for (const [name, section] of configSections()) section.options.validateLayers?.(global[name], normalizedProject[name]);
   const layered = mergeConfigLayers(global, normalizedProject);
   const effective = applyConfigEnvironment(layered, env);

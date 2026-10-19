@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openConfiguredTerminalSessions } from '#composition/core/cli/index.js';
-import { getConfigKnownSecrets, loadConfig, prepareProductDirectory } from '#platform/index.js';
+import { getConfigKnownSecrets, loadConfig, prepareProductDirectory, resolveGlobalConfigPaths } from '#platform/index.js';
 import { bindSessionScope, type AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';
 import { terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -95,8 +95,11 @@ it.skipIf(process.platform === 'win32').each(['ordinary', 'known-control'] as co
   const other = 'bbbbbbbb-2222-4222-8222-222222222222';
   try {
     await mkdir(join(root, '.deckent'));
-    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:S06_TEST', layout: { root: join(root, 'data') }, terminal: { persistHistory: true } }));
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, terminal: { persistHistory: true } }));
     const options = { env: { HOME: root, USERPROFILE: root, XDG_CONFIG_HOME: join(root, '.config'), DECKENT_GLOBAL_HOME: join(root, 'global'), S06_TEST: canary } };
+    // SEC-3: only the installation (global) layer may hold a $DECK reference.
+    const installationPath = resolveGlobalConfigPaths(options.env).platformPath; await mkdir(dirname(installationPath), { recursive: true });
+    await writeFile(installationPath, JSON.stringify({ projectName: '$DECK:S06_TEST' }));
     const store = (await openConfiguredTerminalSessions(root, options))!;
     const config = await loadConfig(root, options);
     const known = getConfigKnownSecrets(config);

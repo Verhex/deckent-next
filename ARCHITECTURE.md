@@ -530,7 +530,7 @@ refresh, usage and dogfood closure remain open.
 - Resolve installed storage modules from schema-validated effective config and a capability registry once per
   configuration generation. JSON/YAML, if supported, are parsers into the same schema and precedence chain.
   IDENTITY.md is descriptive context, not connection, permission or infrastructure-selection authority.
-  Config contains secret references, not credentials. Active operations retain their resolved binding/revision.
+  Config contains secret references, not credentials. Active operations retain their resolved binding/revision. **SEC-3 (alpha.48, F33):** `$DECK:NAME` resolves from the installation (global) layer only: the project layer (`.deckent/config.json`, another person's commit) refuses an exact reference in any field before any resolver read (`SECRET_REFERENCE_PROJECT_LAYER`, path = top-level field, no name or value), as project MCP files already do; host-leaving values (`execution.git.deliveryIdentity`) refuse one in every layer (`SECRET_REFERENCE_LEAVES_HOST`); a section's `secretReferences: 'allow'` therefore means installation layer only.
 - **SECRET-HELPER (author candidate, 2026-10-10):** `createSecretHelperFactory` on `deckent/extensions` registers a read-only/non-enumerable
   SecretStore v1 backend before composition seals. Trusted distribution code pins non-secret absolute executable/cwd, argv and bounds;
   `secrets.store` selects only its registered id. Every lookup requires the owning application's current typed authorization decision before

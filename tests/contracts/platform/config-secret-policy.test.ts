@@ -55,8 +55,9 @@ describe('registered config secret-reference policy', () => {
 
   it('does not resolve an earlier allowed-section reference when any forbidden section fails', async () => {
     const f = await fixture(); let resolverCalls = 0;
+    // SEC-3: the allowed reference lives in the installation (global) layer, the only layer that may hold one.
+    await writeFile(f.globalPath, JSON.stringify({ secret_policy_allowed_probe: { token: '$DECK:ALLOWED_FIRST' } }));
     await writeFile(f.projectPath, JSON.stringify({
-      secret_policy_allowed_probe: { token: '$DECK:ALLOWED_FIRST' },
       secret_policy_forbid_probe: { token: '$DECK:FORBIDDEN_SECOND', nested: [] },
     }));
     await expectForbidden(loadConfig(f.project, { env: f.env, heal: false, secretResolver: async () => { resolverCalls++; return 'not-used'; } }), () => resolverCalls);
@@ -64,7 +65,8 @@ describe('registered config secret-reference policy', () => {
 
   it('keeps default-allow interpolation behavior, including an unresolved reference', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, JSON.stringify({ secret_policy_allowed_probe: { token: '$DECK:ALLOWED_TOKEN' } }));
+    // SEC-3: an allowing section resolves references from the installation (global) layer only.
+    await writeFile(f.globalPath, JSON.stringify({ secret_policy_allowed_probe: { token: '$DECK:ALLOWED_TOKEN' } }));
     const resolved = await loadConfig(f.project, { env: f.env, heal: false, secretResolver: async name => name === 'ALLOWED_TOKEN' ? 'resolved-value' : undefined });
     expect(resolved['secret_policy_allowed_probe']).toEqual({ token: 'resolved-value' });
     const missing = await loadConfig(f.project, { env: f.env, force: true, heal: false, secretResolver: async () => undefined });

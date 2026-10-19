@@ -46,6 +46,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Credential and home-folder hiding is bounded.** The shared registry covers gh, Docker, kube, Codex, Git credentials and
   common cloud CLIs; hiding stops at depth 3 and 20,000 entries. *Impact:* custom locations and unusual file names are not
   masked. *Workaround:* keep such files out of the home folder the sandbox sees, or isolate separately.
+- **Only the installation config may name a secret.** A `$DECK:NAME` reference in the project config (`.deckent/config.json`)
+  refuses the whole config load with `SECRET_REFERENCE_PROJECT_LAYER`, and the delivery commit author may not be a reference
+  in any config (`SECRET_REFERENCE_LEAVES_HOST`). *Impact:* a project file written before alpha.48 that used `$DECK:` stops
+  loading until it is changed. *Workaround:* move the reference into the installation config, or write the plain value.
 - **The secret gate does not scan Git history.** Before dispatch it scans everything the worker receives (checkout, `.git`
   metadata, binds, task inputs, prompt context) and refuses on a hit; past commits in the object store are not scanned.
   Exclusions are configured paths or a declared dependency tree only, audited and shown on the Run card. *Workaround:*

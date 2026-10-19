@@ -1,10 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
-import { clearConfigCache, loadConfig, registerConfigSection } from '#platform/index.js';
+import { clearConfigCache, loadConfig, registerConfigSection, resolveGlobalConfigPaths } from '#platform/index.js';
 import { openRegisteredSecretStore, registerProviderConfig } from '#adapters/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretStores, missingEnvironmentReferenceNames } from '#composition/core/secrets/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
@@ -20,7 +20,10 @@ async function fixture() {
   const project = join(root, 'project'), global = join(root, 'global');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }); await mkdir(global, { mode: 0o700 });
   const env = { HOME: root, DECKENT_GLOBAL_HOME: global, DECKENT_LANGUAGE: 'en', NO_COLOR: '1', A_KEY: CANARY, B_KEY: CANARY, EMPTY_KEY: '' };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ w2_guard_probe: {
+  // SEC-3: only the installation (global) layer may hold a $DECK reference.
+  const installationPath = resolveGlobalConfigPaths(env).platformPath; await mkdir(dirname(installationPath), { recursive: true, mode: 0o700 });
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({}), { mode: 0o600 });
+  await writeFile(installationPath, JSON.stringify({ w2_guard_probe: {
     refs: ['$DECK:B_KEY', '$DECK:A_KEY', '$DECK:A_KEY', '$DECK:ABSENT_KEY', '$DECK:EMPTY_KEY', 'unreferenced'] } }), { mode: 0o600 });
   await openRegisteredSecretStore(FILE, env, 'linux').set('B_KEY', CANARY);
   return { project, env };

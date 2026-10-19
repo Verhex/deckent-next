@@ -36,8 +36,9 @@ registerSecretStoreBackend(factory);
 registerProviderConfig();
 registerConfigSection('helper_probe', z.object({ token: z.string() }).strict(), { optional: true,
   metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } });
-await writeFile(join(project, '.deckent', 'config.json'), JSON.stringify({ helper_probe: { token: '$DECK:PROVIDER_TOKEN' } }), { mode: 0o600 });
-await writeFile(globalPath, JSON.stringify({ secrets: { store: ID } }), { mode: 0o600 });
+// SEC-3: only the installation (global) layer may hold a $DECK reference.
+await writeFile(join(project, '.deckent', 'config.json'), JSON.stringify({}), { mode: 0o600 });
+await writeFile(globalPath, JSON.stringify({ secrets: { store: ID }, helper_probe: { token: '$DECK:PROVIDER_TOKEN' } }), { mode: 0o600 });
 const success = () => writeFile(script, `require('node:fs').readFileSync(0); require('node:fs').writeSync(1, '${CANARY}\\n');`);
 await success();
 afterEach(async () => { currentPolicy = policy; clearConfigCache(); await success(); });

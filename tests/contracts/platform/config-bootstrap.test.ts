@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
-import { clearConfigCache, loadConfig, registerConfigSection, resolveProductLayout, productResourcePath, readJsonFile, healCorruptProjectConfig } from '#platform/index.js';
+import { clearConfigCache, loadConfig, registerConfigSection, resolveProductLayout, productResourcePath, readJsonFile, healCorruptProjectConfig, resolveGlobalConfigPaths } from '#platform/index.js';
 import { encodeBootstrapJournal, observeBootstrapState, assertBootstrapUsable, assertBootstrapUnchanged } from '#platform/core/bootstrap-state/index.js';
 
 const roots: string[] = [];
@@ -49,7 +49,10 @@ it('detects anchor creation between cache lookup and return', async () => {
 });
 it('detects anchor creation while a fresh load awaits secret resolution', async () => {
   const f = await fixture(); await mkdir(dirname(f.config), { recursive: true, mode: 0o700 });
-  await writeFile(f.config, JSON.stringify({ projectName: '$DECK:PROJECT' }), { mode: 0o600 });
+  // SEC-3: only the installation (global) layer may hold a $DECK reference.
+  const installationPath = resolveGlobalConfigPaths(f.env).platformPath; await mkdir(dirname(installationPath), { recursive: true, mode: 0o700 });
+  await writeFile(f.config, JSON.stringify({}), { mode: 0o600 });
+  await writeFile(installationPath, JSON.stringify({ projectName: '$DECK:PROJECT' }), { mode: 0o600 });
   await expect(loadConfig(f.project, { env: f.env, secretResolver: async () => { publishSync(f, 'pending'); return 'resolved-name'; } }))
     .rejects.toMatchObject({ code: 'BOOTSTRAP_INSTALLATION_INCOMPLETE' });
 });

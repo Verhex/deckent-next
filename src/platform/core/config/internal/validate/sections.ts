@@ -3,11 +3,12 @@ import { CORE_SCHEMA, configSections, type DeckentConfig } from '../schema.js';
 import { ConfigValidationError, type ConfigIssue, type ConfigWarning } from './issues.js';
 import { isRecord, assertSafeKeys } from '#platform/core/utils/index.js';
 import { type Locale } from '#platform/core/i18n/index.js';
-import { assertConfigSecretPolicies } from './secret-policy.js';
+import { assertConfigSecretPolicies, assertHostLeavingSecretReferences } from './secret-policy.js';
 
 export function validateConfig(input: unknown, locale: Locale = 'en'): { config: DeckentConfig; warnings: ConfigWarning[] } {
   if (!isRecord(input)) throw new ConfigValidationError([{ path: '$', reason: 'OBJECT_REQUIRED' }], locale);
   assertConfigSecretPolicies(input, locale);
+  assertHostLeavingSecretReferences(input, locale);
   assertSafeKeys(input);
   assertNoRetiredConfigFields(input, locale);
   const issues: ConfigIssue[] = [], warnings: ConfigWarning[] = [];
@@ -41,5 +42,6 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
     if (Object.hasOwn(config, key)) section.options.validateValue?.(config[key]);
   }
   assertConfigSecretPolicies(config, locale);
+  assertHostLeavingSecretReferences(config, locale);
   return { config: config as DeckentConfig, warnings };
 }

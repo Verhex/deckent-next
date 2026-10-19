@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
@@ -9,7 +9,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 
 const canary = 'registered-customer-fixture-canary';
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
@@ -28,10 +28,12 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
   try {
     await mkdir(join(root, '.deckent'));
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') },
-      service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } },
       cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
       cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }));
     const options = { env: { HOME: join(root, 'home') }, secretResolver: async () => canary };
+    const installationPath = resolveGlobalConfigPaths(options.env).platformPath; await mkdir(dirname(installationPath), { recursive: true });
+    // SEC-3: only the installation (global) layer may hold a $DECK reference.
+    await writeFile(installationPath, JSON.stringify({ service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } } }));
     (await openConfiguredAttemptStore(root, options)).store.close();
     service = await startConfiguredRuntimeService(root, { onPage() {}, onError() {}, onQueryFailure(event) { events.push(event); return gate; } }, options);
     const peer = { pid: process.pid, uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0, assurance: 'linux-so-peercred' as const };

@@ -110,10 +110,13 @@ it.skipIf(process.platform !== 'linux')('compiled env guard and direct runtime c
   await mkdir(project, { mode: 0o700 }); await mkdir(home, { mode: 0o700 });
   const env = cliChildEnv({ HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1', PROVIDER_TOKEN: CANARY });
   await applyPolicyTemplateInstallation(project, 'installation');
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:PROVIDER_TOKEN', terminal: { scopeId: 'installation' },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ terminal: { scopeId: 'installation' },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['installation'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   await mkdir(env['DECKENT_GLOBAL_HOME']!, { recursive: true, mode: 0o700 });
+  // SEC-3: only the installation (global) layer may hold a $DECK reference.
+  const installationPath = resolveGlobalConfigPaths(env).platformPath; await mkdir(dirname(installationPath), { recursive: true, mode: 0o700 });
+  await writeFile(installationPath, JSON.stringify({ projectName: '$DECK:PROVIDER_TOKEN' }), { mode: 0o600 });
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close(); clearConfigCache();
   const service = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] }) as Child;
   children.add(service); let printed = '';
