@@ -1,10 +1,10 @@
-import { delegationLines, delegationWords } from '#surfaces/core/work-labels/index.js';
+import { delegationWords } from '#surfaces/core/work-labels/index.js';
 import { ErrorRegistry, emit, loadConfig, t } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, cliTableStyle, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
 import { cardIo, sinksOf } from './io.js';
-import { delegationTable, toggleDelegations, toggleTitle } from './policy-toggle.js';
+import { delegationCardLines, delegationTable, toggleDelegations, toggleTitle } from './policy-toggle.js';
 import { readScope } from './policy-summary.js';
 
 /**
@@ -37,7 +37,7 @@ export async function policyDelegationsCommand(argv: readonly string[], context:
   // The card shows the view the change re-read (what is applied), never the earlier one; off a terminal nothing is asked.
   const result = await host.change(root, { ...query, step, action: verb, expectedRevision: view.revision }, async reviewed => {
     if (cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
-    return await ask({ title: toggleTitle(verb, words.step[step] ?? step, locale), body: delegationLines(reviewed, locale),
+    return await ask({ title: toggleTitle(verb, words.step[step] ?? step, locale), body: delegationCardLines(reviewed, step, verb, locale),
       options: [{ id: 'apply', label: t('cli.policy.toggle.apply', {}, locale), key: 'y' }, { id: 'no', label: t('cli.policy.toggle.no', {}, locale), key: 'n' }] }) === 'apply';
   }, options);
   emit(result, { ...sinks, render: data => [words.result[data.status], delegationTable(data.view, locale, cliTableStyle(context))].join('\n') });

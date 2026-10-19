@@ -1,6 +1,6 @@
 import { ErrorRegistry, emit, loadConfig, t, type Locale } from '#platform/index.js';
 import type { DecisionDelegationView, McpCapabilityState, McpCapabilityView } from '#domain/index.js';
-import { delegationLines, delegationWords, mcpCapabilityPreviewLines, mcpCapabilityWords } from '#surfaces/core/work-labels/index.js';
+import { delegationWords, mcpCapabilityPreviewLines, mcpCapabilityWords } from '#surfaces/core/work-labels/index.js';
 import { cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
 import { cardIo, sinksOf } from './io.js';
@@ -14,6 +14,17 @@ const onOff = (state: 'allowed' | 'denied' | 'partial', locale: Locale) => state
 export const toggleTitle = (action: 'grant' | 'revoke', what: string, locale: Locale) => action === 'grant' ? t('cli.policy.toggle.turnOn', { what }, locale) : t('cli.policy.toggle.turnOff', { what }, locale);
 const applyOptions = (locale: Locale) => [{ id: APPLY, label: t('cli.policy.toggle.apply', {}, locale), key: 'y' }, { id: NO, label: t('cli.policy.toggle.no', {}, locale), key: 'n' }];
 
+/**
+ * The delegation preview card in plain words: whose AI actor, which scope, the step and the change (off → on), then every step's state and the
+ * existing limit sentence. Hashes stay out of the card (the change itself binds the revision it re-read).
+ */
+export function delegationCardLines(view: DecisionDelegationView, step: string, action: 'grant' | 'revoke', locale: Locale): readonly string[] {
+  const words = delegationWords(locale), label = (id: string) => words.step[id] ?? id;
+  return [t('cli.policy.toggle.actor', { actor: `${view.principal.issuer}/${view.principal.subject}`, scope: view.scopeId, resource: view.resourceId ?? '*' }, locale),
+    action === 'grant' ? t('cli.policy.toggle.becomesOn', { what: label(step) }, locale) : t('cli.policy.toggle.becomesOff', { what: label(step) }, locale),
+    ...view.steps.map(row => `  ${label(row.step.id)} · ${row.managed === 'conflict' ? t('cli.policy.conflict', {}, locale) : onOff(row.effective, locale)}`),
+    t('policy.delegate.limit', {}, locale)];
+}
 /** The AI delegation steps of one scope as a table: step · what it lets the AI do · on/off (the effective decision), a conflict named. */
 export function delegationTable(view: DecisionDelegationView, locale: Locale, style: ReturnType<typeof cliTableStyle>): string {
   const words = delegationWords(locale);
@@ -53,7 +64,7 @@ export async function toggleDelegations(context: ApprovalCommandContext, locale:
   const action = row.managed === 'granted' ? 'revoke' : 'grant';
   const result = await host.change(root, { ...query, step: row.step.id, action, expectedRevision: view.revision }, async reviewed =>
     (await ask({ title: toggleTitle(action, words.step[row.step.id] ?? row.step.id, locale),
-      body: delegationLines(reviewed, locale), options: applyOptions(locale) })) === APPLY, options);
+      body: delegationCardLines(reviewed, row.step.id, action, locale), options: applyOptions(locale) })) === APPLY, options);
   print([words.result[result.status], delegationTable(result.view, locale, cliTableStyle(context))].join('\n'));
 }
 

@@ -138,5 +138,8 @@
   "error.CLI_POLICY_GRANTS_ALL_UNAVAILABLE": "Herkesin kalıcı onaylarını görmek, bir sonraki politika şablonunun eklediği bir izin ister; şimdilik yalnız kendi onaylarınız görünür: deckent policy grants",
   "cli.policy.vocabulary.resource": "Kaynak",
   "cli.policy.vocabulary.actions": "Eylemler",
-  "cli.policy.vocabulary.note": "{count} kaynak (sözlük v{version}). Sözlük eylemleri adlandırır; yetki vermez. Ham tablo: deckent policy vocabulary --json"
+  "cli.policy.vocabulary.note": "{count} kaynak (sözlük v{version}). Sözlük eylemleri adlandırır; yetki vermez. Ham tablo: deckent policy vocabulary --json",
+  "cli.policy.toggle.actor": "AI aktörü {actor} · scope {scope} · kaynak {resource}",
+  "cli.policy.toggle.becomesOn": "Değişiklik: {what}: kapalı → açık",
+  "cli.policy.toggle.becomesOff": "Değişiklik: {what}: açık → kapalı"
 }

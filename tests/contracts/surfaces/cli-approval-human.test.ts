@@ -178,13 +178,17 @@ it('TTY toggles: declined or cancelled → no governed change; yes → the exist
     steps: getDecisionSteps().map(step => ({ step, managed: 'none', effective: 'denied' })) };
   const delegations = { inspect: async () => view, change: async (_root: string, command: unknown, confirm: (reviewed: DecisionDelegationView) => Promise<boolean>) => {
     changes.push(command); const yes = await confirm(view); confirmed.push(yes); return { status: yes ? 'applied' : 'cancelled', view } as const; } };
-  const answers = (...ids: (string | null)[]): CardAsk => async () => ids.shift() ?? null;
+  const cards: CliCardRequest[] = [];
+  const answers = (...ids: (string | null)[]): CardAsk => async request => { cards.push(request); return ids.shift() ?? null; };
   const context = { root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, stdout: { write() {} }, delegations } as never;
   const step = getDecisionSteps()[0]!.id;
   await toggleDelegations(context, 'en', 'live', 1000, answers(step, 'no'));
   await toggleDelegations(context, 'en', 'live', 1000, answers(step, null));
   await toggleDelegations(context, 'en', 'live', 1000, answers('-leave'));
   expect(confirmed).toEqual([false, false]);
+  // The preview card speaks plain words (off → on), never the policy revision hash.
+  expect(cards[1]!.body!.join('\n')).toContain('off → on'); expect(cards[1]!.body!.join('\n')).not.toContain('rev-1');
+  expect(cards[0]!.options.map(option => option.label).join(' ')).toContain('· off');
   await toggleDelegations(context, 'en', 'live', 1000, answers(step, 'apply'));
   expect(confirmed).toEqual([false, false, true]);
   expect(changes.at(-1)).toMatchObject({ scopeId: 'live', step, action: 'grant', actor: 'mcp', expectedRevision: 'rev-1' });
