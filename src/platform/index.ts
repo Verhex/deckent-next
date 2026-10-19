@@ -64,7 +64,7 @@ export type { MessageFamily, MessageRegistry } from '#platform/core/i18n/index.j
 export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS } from '#platform/core/config-fields/index.js';
 export type { ResourceObservationSettings } from '#platform/core/config-fields/index.js';
 export { RESOURCE_OBSERVATION_SETTINGS } from '#platform/core/config-fields/index.js';
-export { resolveProductLayout, productResourcePath, LayoutError } from '#platform/core/host/index.js';
+export { resolveProductLayout, productResourcePath, productDataRootIgnorePath, PRODUCT_DATA_ROOT_IGNORE, LayoutError } from '#platform/core/host/index.js';
 export type { ProductLayout, ProductLayoutInput, ProductResource } from '#platform/core/host/index.js';
 export type { SecretResolver, SecretResolution } from '#platform/core/config/index.js';
 export { inspectProductLayout, type ProductPathInspection } from '#platform/core/host/index.js';

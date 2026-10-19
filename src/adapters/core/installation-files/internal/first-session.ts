@@ -1,24 +1,24 @@
-import { createHash } from 'node:crypto';
+import { createHash } from 'node:crypto'; import { lstat } from 'node:fs/promises';
 import { inspectInstallationFile, publishInstallationFile } from './publication.js';
 import { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { InstallationPublicationError, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { getConfigFieldDefault, inspectProductFile, prepareProductFile, productResourcePath, validateConfig, type ProductLayout } from '#platform/index.js';
+import { getConfigFieldDefault, inspectProductFile, prepareProductFile, productDataRootIgnorePath, productResourcePath, PRODUCT_DATA_ROOT_IGNORE as IGNORE, validateConfig, type ProductLayout } from '#platform/index.js';
 const digest = (content: string) => createHash('sha256').update(content).digest('hex');
-/** First-session material is data in the existing installer journal, never a second config writer or migration; v12: it names `service.identity`. */
+/** First-session material is data in the existing installer journal, never a second config writer or migration; v12: it names `service.identity`; G2-1: the data root's ignore rule when that name is free. */
 export async function firstSessionTargets(layout: ProductLayout, scopeId: string, maxBytes: number, retained?: unknown, service: { readonly scopeId: string; readonly serviceId: string } | null = null): Promise<readonly PolicyTemplatePublishTarget[]> {
   if (retained !== undefined) {
     if (!Array.isArray(retained)) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
     const targets = retained as PolicyTemplatePublishTarget[];
-    if (targets.some(target => !target || typeof target !== 'object' || !['config', 'ledger'].includes(target.resource) || target.path !== productResourcePath(layout, target.resource as 'config' | 'ledger')
-      || typeof target.content !== 'string' || target.digest !== digest(target.content))) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
-    for (const target of targets) {
+    if (targets.some(target => !target || typeof target !== 'object' || !['config', 'ledger', 'gitignore'].includes(target.resource) || target.path !== (target.resource === 'gitignore' ? productDataRootIgnorePath(layout)
+      : productResourcePath(layout, target.resource as 'config' | 'ledger')) || typeof target.content !== 'string' || target.digest !== digest(target.content) || (target.resource === 'gitignore' && target.content !== IGNORE))) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
+    for (const target of targets.filter(item => item.resource !== 'gitignore')) {
       const material: unknown = JSON.parse(target.content);
       if (target.resource === 'config') validateConfig(material);
       else if (JSON.stringify(material) !== JSON.stringify({ schemaVersion: 1, ledgerVersion: CURRENT_LEDGER_VERSION })) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
     }
     return targets;
   }
-  const targets: PolicyTemplatePublishTarget[] = [];
+  const ignore = productDataRootIgnorePath(layout), targets: PolicyTemplatePublishTarget[] = await lstat(ignore).then(() => [], (error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID'); return [Object.freeze({ resource: 'gitignore' as const, path: ignore, content: IGNORE, digest: digest(IGNORE) })]; }); // an existing entry is never written over
   const config = { schema_version: 4, cancellation: { maxConcurrentDeliveries: getConfigFieldDefault('service').maxConcurrentExecutions },
     cancellationRuntime: { scopeIds: [scopeId] }, terminal: { scopeId, chat: { schemaVersion: 1 } }, ...(service ? { service: { identity: { scopeId: service.scopeId, serviceId: service.serviceId } } } : {}) };
   validateConfig(config);

@@ -73,7 +73,8 @@ export async function settleFirstRunServiceIdentity(port: FirstRunServiceIdentit
 }
 export const SKIPPED_SERVICE_IDENTITY: FirstRunServiceIdentityResult = Object.freeze({ status: 'skipped', identity: null });
 
-export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger';
+/** `gitignore` (G2-1, analysis 2026-10-18): the new data root's ignore file, so `git add -A` never commits the product state; first-session material. */
+export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger' | 'gitignore';
 export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplateResource; readonly path: string; readonly content: string; readonly digest: string }
 export interface PolicyTemplatePreview {
   readonly schemaVersion: 1; readonly status: 'preview';
@@ -170,7 +171,7 @@ export class PolicyTemplateInstallationApplication {
         profileDigest: preview.planDigest, phase: 'pending', createdAtMs: now, updatedAtMs: now, blockers: ['POLICY_TEMPLATE_NOT_APPLIED'],
         resources: targets.map(target => ({ resource: target.resource, path: target.path, preimageDigest: preimages.get(target.resource)!,
           targetDigest: target.digest, state: 'pending' as const })),
-        recovery: immutableJsonObjectSchema.parse({ schemaVersion: 1, scopeId: preview.scopeId, principal: preview.principal, template: preview.template, ...(targets.length > 2 ? { firstSessionTargets: targets.filter(target => target.resource === 'config' || target.resource === 'ledger') } : {}) }) };
+        recovery: immutableJsonObjectSchema.parse({ schemaVersion: 1, scopeId: preview.scopeId, principal: preview.principal, template: preview.template, ...(targets.length > 2 ? { firstSessionTargets: targets.filter(target => target.resource !== 'policy' && target.resource !== 'bindings') } : {}) }) };
       observed = await this.ports.journal.write(observed, payload);
     }
     if (!observed.record) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');

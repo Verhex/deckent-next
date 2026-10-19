@@ -445,6 +445,7 @@
   "models.connect.key": "Key: read from the secret store as {name} (the value is never shown).",
   "models.connect.keyMissing": "Key: {name} is not in the secret store yet; store it with /provider or `deckent secret set {name}`.",
   "models.connect.keyNone": "Key: none is sent (a local server over plain http).",
+  "models.connect.keyInsecure": "Key: not sent, not checked and not stored — a key never travels over plain http, not even to this machine. Leave the key empty for a local server that takes none, or use an https address.",
   "models.connect.unmetered": "Spending: a local server is recorded at a zero tariff (self-hosted, no provider charge).",
   "models.connect.restart": "The running service started with older settings: restart it to apply them (`deckent runtime restart`).",
   "mcp.tool.connectModel": "Connect a model to a scope: declare it from the provider's packaged catalog, write its invocation profile (the key's name only) and activate it, each on its governed path. A replayed command id changes nothing already in place.",

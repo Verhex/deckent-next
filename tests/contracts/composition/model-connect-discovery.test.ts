@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { clearConfigCache } from '#platform/index.js';
 import { connectConfiguredModel, listConfiguredConnectionModels } from '#composition/core/model-connect/index.js';
+import { probeProviderConnection } from '#adapters/index.js';
+import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 const grants = [
@@ -49,6 +52,32 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     expect(again.reference).toEqual(result.reference);
     expect(again.steps).toMatchObject({ catalog: 'present', declaration: 'present', profile: 'present', activation: 'present' });
     expect(f.reads()).toBe(3);
+  }, 60_000);
+
+  // G2-7 (owner 2026-10-18, "no key over plain http"), end to end over a real loopback server: the connection check refuses a key before any
+  // request, listing and connecting go keyless even with a key at hand, the profile authenticates with none and the real call carries no key.
+  it('probe → list → connect → invoke on plain-http loopback: a key never reaches the server; the keyless path works end to end', async () => {
+    const f = await fixture([], true), KEY = 'sk-plain-http-canary-7c2e';
+    await expect(probeProviderConnection({ kind: 'local-openai', endpoint: f.endpoint, key: KEY })).rejects.toMatchObject({ code: 'PROVIDER_KEY_INSECURE' });
+    expect(f.state.authorization).toEqual([]); expect(f.reads()).toBe(0);
+    expect(await probeProviderConnection({ kind: 'local-openai', endpoint: f.endpoint, key: null })).toEqual({ outcome: 'ok', httpStatus: 200, key: 'none' });
+    const options = { env: f.env, secretResolver: () => KEY };
+    expect(await listConfiguredConnectionModels(f.project, 'scope', 'local-openai', f.endpoint, options)).toMatchObject([{ nativeId: f.command.model.nativeId }]);
+    const result = await connectConfiguredModel(f.project, f.command, options);
+    expect(result).toMatchObject({ status: 'connected', credentialRef: null, tariff: 'unmetered' });
+    const config = JSON.parse(await readFile(f.path, 'utf8')) as { provider_invocation_profiles: { profiles: { reference: unknown; adapter: { definition: { authentication: unknown } } }[] } };
+    const connected = config.provider_invocation_profiles.profiles.find(row => JSON.stringify(row.reference) === JSON.stringify(result.reference))!;
+    expect(connected.adapter.definition.authentication).toEqual({ type: 'none' });
+    // The governed in-process invocation (the runtime's own path without a service start) through the connected profile.
+    const binding = await inspectModelBinding(f.project, result.reference, options);
+    if (binding.status !== 'declared') throw new Error('FIXTURE_BINDING');
+    f.state.script = [{ content: 'No key.' }];
+    const invoked = await invokeConfiguredModel(f.project, { schemaVersion: 1, commandId: 'plain-http-call', scopeId: 'scope', reference: result.reference,
+      catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, nativeRequest: { model: f.command.model.nativeId, messages: [{ role: 'user', content: 'hi' }], max_completion_tokens: 8, stream: true, stream_options: { include_usage: true } } }, options);
+    expect(invoked.receipt.outcome, JSON.stringify(invoked.receipt.outcome)).toMatchObject({ state: 'responded' });
+    expect(f.state.requests).toHaveLength(1); expect(f.state.authorization.length).toBeGreaterThanOrEqual(4); // probe, list, connect's list, the call
+    expect(f.state.authorization.every(header => header === null)).toBe(true);
+    expect(await readFile(f.path, 'utf8')).not.toContain(KEY);
   }, 60_000);
 
   it('configured discovery uses the real governed config, catalog, activation and audit owners without a runtime start', async () => {

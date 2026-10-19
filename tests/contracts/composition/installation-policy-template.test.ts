@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -44,6 +45,48 @@ it('previews without touching disk, then a real apply journals and writes policy
   expect(await readFile(policyPath, 'utf8')).toBe(policyBytes);
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBytes);
   expect(await Promise.all(identityPaths.map(path => readFile(path, 'utf8')))).toEqual(identities);
+});
+
+// G2-1 (analysis 2026-10-18, owner-approved): init gives a new data root its own .gitignore, so `git add -A` in the project never commits the
+// approval integrity key, the ledger, the policy or the sessions; `.deckent/docs` (the project's own tracked documents) stays addable.
+const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'core.excludesFile=/dev/null', ...args], { cwd, encoding: 'utf8',
+  env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+it('writes .deckent/.gitignore on a new data root: git add -A takes the project and .deckent/docs, never the product state; replay keeps it', async () => {
+  const root = await project();
+  git(root, 'init', '-q');
+  await writeFile(join(root, 'README.md'), 'project\n');
+  await applyPolicyTemplateInstallation(root, 'installation');
+  const ignore = join(root, '.deckent/.gitignore'), bytes = await readFile(ignore, 'utf8');
+  expect(bytes).toBe('/*\n!/docs/\n'); expect((await stat(ignore)).mode & 0o777).toBe(0o600);
+  // Product state as a running installation holds it, beside a tracked document.
+  for (const [file, content] of [['approvals/authority.key', 'k'], ['state/terminal-history.jsonl', '{}'], ['live-data/state/ledger.db', 'x'], ['docs/core-memory/MEMORY.md', '# m']]) {
+    await mkdir(join(root, '.deckent', file, '..'), { recursive: true }); await writeFile(join(root, '.deckent', file), `${content}\n`);
+  }
+  git(root, 'add', '-A');
+  expect(git(root, 'ls-files').trim().split('\n').sort()).toEqual(['.deckent/docs/core-memory/MEMORY.md', 'README.md']);
+  expect(await applyPolicyTemplateInstallation(root, 'installation')).toMatchObject({ status: 'replayed' });
+  expect(await readFile(ignore, 'utf8')).toBe(bytes);
+});
+
+it('keeps the dogfood repository\'s own .deckent/docs allowlist: the data-root rule leaves what lies under docs to the root .gitignore', async () => {
+  const root = await project();
+  git(root, 'init', '-q');
+  // The Deckent repository's root rules for its tracked core-memory (repository .gitignore, unchanged).
+  await writeFile(join(root, '.gitignore'), ['.deckent/*', '!.deckent/docs/', '.deckent/docs/*', '!.deckent/docs/core-memory/', '!.deckent/docs/decisions/', ''].join('\n'));
+  await applyPolicyTemplateInstallation(root, 'installation');
+  for (const file of ['docs/core-memory/law.md', 'docs/decisions/d.md', 'docs/scratch/note.md', 'approvals/authority.key']) {
+    await mkdir(join(root, '.deckent', file, '..'), { recursive: true }); await writeFile(join(root, '.deckent', file), 'x\n');
+  }
+  git(root, 'add', '-A');
+  expect(git(root, 'ls-files').trim().split('\n').sort()).toEqual(['.deckent/docs/core-memory/law.md', '.deckent/docs/decisions/d.md', '.gitignore']);
+});
+
+it('never writes over a .gitignore already in the data root, whatever its mode or content; the install still completes', async () => {
+  const root = await project();
+  await mkdir(join(root, '.deckent'), { mode: 0o700 }); await writeFile(join(root, '.deckent/.gitignore'), 'mine\n', { mode: 0o644 });
+  expect(await applyPolicyTemplateInstallation(root, 'installation')).toMatchObject({ status: 'installed' });
+  expect(await readFile(join(root, '.deckent/.gitignore'), 'utf8')).toBe('mine\n'); expect((await stat(join(root, '.deckent/.gitignore'))).mode & 0o777).toBe(0o644);
+  expect(await applyPolicyTemplateInstallation(root, 'installation')).toMatchObject({ status: 'replayed' });
 });
 
 it('migrates exactly an untouched first-run v4 policy to v7 (v5 owner 2026-10-07): preview reads only, apply writes once through the authority writer, bindings stay', async () => {

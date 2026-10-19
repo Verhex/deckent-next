@@ -40,6 +40,9 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
     ['stat .brain/memory.db', 'PATH_PROTECTED'], ['cat .brain/*', 'PATH_PROTECTED'], ['cat .git/config', 'PATH_PROTECTED'], ['ls .git', 'PATH_PROTECTED'],
     ['cat file.pem', 'PATH_PROTECTED'], ['cat keys/prod.key', 'PATH_PROTECTED'], ['cat id_rsa', 'PATH_PROTECTED'], ['cat notes/credentials', 'PATH_PROTECTED'],
     ['head -1 .*', 'PATH_PROTECTED'], ['cat *', 'PATH_PROTECTED'], ['cat store.jks', 'PATH_PROTECTED'], ['cat secrets.json', 'PATH_PROTECTED'],
+    // G2-2: the file jq reads through --rawfile/--slurpfile is checked like any other read (it once shifted into the script slot and was skipped).
+    ['jq --rawfile raw /etc/passwd . f.json', 'PATH_OUTSIDE_ROOT'], ['jq --slurpfile all .env . f.json', 'PATH_PROTECTED'],
+    ['jq --rawfile raw ../outside/secret . f.json', 'PATH_OUTSIDE_ROOT'], ["jq -n --rawfile k keys/prod.key '$k'", 'PATH_PROTECTED'],
     // Real-filesystem cases the lexical legacy matrix could not show.
     ['cat notes.txt', 'PATH_PROTECTED'], ['cat linked/secret', 'PATH_OUTSIDE_ROOT'], ['cat missing.txt', 'PATH_UNRESOLVED'], ['cat *.nomatch', 'GLOB_EXPANSION'],
     ['wc -l < .env', 'PATH_PROTECTED'], ['grep -f .env src/a.ts', 'PATH_PROTECTED'],

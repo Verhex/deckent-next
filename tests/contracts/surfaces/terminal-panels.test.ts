@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PermissionModeView } from '#domain/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { SettingsPanel, configPanelTree, editEntry, maskEntry, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
   type McpServerDraft, type McpTrustQuestion, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -18,10 +18,17 @@ class Screen extends Writable {
   frame = '';
   readonly isTTY = true;
   constructor(readonly columns: number, readonly rows: number) { super(); }
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString('utf8'); done(); }
+  // G2-3: a decision window turns bracketed paste on and off around its frames; that mode switch is not a frame.
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString('utf8'); if (!/^(?:\u001b\[\?2004[hl])+$/u.test(text)) this.frame = text; done(); } // eslint-disable-line no-control-regex
 }
 const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms));
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
+/** G2-3: a panel question is a decision window — it counts keys once its key hints show after the quiet arming period (arming.ts). */
+async function armed(frame: () => string, hint: string) {
+  await settle(DECISION_ARM_DEFAULT + 80);
+  for (let tries = 0; tries < 50 && !frame().includes(hint); tries++) await settle(20);
+  expect(frame()).toContain(hint);
+}
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 /** One write per key: an escape sequence (arrows) stays whole, every other character is its own key. */
@@ -187,7 +194,7 @@ describe('/mcp window', () => {
     expect(log).toEqual([['revoke', 'files']]); expect(calls.notices.at(-1)).toEqual({ level: 'info', text: 'revoked files' });
     await view.press(`${DOWN}${ENTER}${DOWN}${DOWN}${DOWN}${DOWN}${ENTER}`, 60); // Remove → asks
     expect(log).toHaveLength(1);
-    await view.press('y', 80);
+    await armed(view.frame, 'y yes'); await view.press('y', 80);
     expect(log.at(-1)).toEqual(['remove', 'files']);
   });
   it('the add wizard: HTTP is locked until its transport lands; env values are masked; a taken name goes back to the name step; the trust window answers', async () => {
@@ -209,7 +216,7 @@ describe('/mcp window', () => {
     await view.press(`\u007f\u007f\u007f\u007f\u007ffiles2${ENTER}`); // name step again; the rest of the draft is kept
     for (let step = 0; step < 4; step++) await view.press(ENTER); await view.press(ENTER, 120); // command, args, env (none more), realm, scope
     expect(view.frame()).toContain('Start files2?');
-    await view.press('y', 80);
+    await armed(view.frame, 'y yes'); await view.press('y', 80);
     expect(answers).toEqual([true]);
     expect((log.at(-1) as [string, McpServerDraft])[1]).toMatchObject({ name: 'files2', target: 'npx', env: { TOKEN: 'hunter2' } });
   });

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { QuestionWindow, SettingsPanel, modelPanelTree, providerPanelTree, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -19,10 +19,17 @@ class Screen extends Writable {
   frame = ''; all = '';
   readonly isTTY = true;
   constructor(readonly columns: number, readonly rows: number) { super(); }
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString('utf8'); this.all += this.frame; done(); }
+  // G2-3: a decision window turns bracketed paste on and off around its frames; that mode switch is not a frame.
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString('utf8'); if (/^(?:\u001b\[\?2004[hl])+$/u.test(text)) { done(); return; } this.frame = text; this.all += this.frame; done(); } // eslint-disable-line no-control-regex
 }
 const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms));
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
+/** G2-3: a panel question is a decision window — it counts keys once its key hints show after the quiet arming period (arming.ts). */
+async function armed(frame: () => string, hint: string) {
+  await settle(DECISION_ARM_DEFAULT + 80);
+  for (let tries = 0; tries < 50 && !frame().includes(hint); tries++) await settle(20);
+  expect(frame()).toContain(hint);
+}
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 function splitKeys(keys: string): string[] {
@@ -234,9 +241,9 @@ describe('/provider window', () => {
     for (let index = 0; index < 20; index++) await view.press('\u007f');
     await view.press(`http://127.0.0.1:9000/v1${ENTER}`, 60);
     expect(view.frame()).toContain('Use this address?'); expect(view.frame()).toContain('GET http://127.0.0.1:9000/v1/models');
-    await view.press('n', 60);
+    await armed(view.frame, 'y use it'); await view.press('n', 60);
     expect(view.frame()).toContain('http://127.0.0.1:9000/v1'); // back in the entry with the text kept
-    await view.press(ENTER, 60); await view.press('y', 60); await view.press(ENTER, 120);
+    await view.press(ENTER, 60); await armed(view.frame, 'y use it'); await view.press('y', 60); await view.press(ENTER, 120);
     expect(requests.at(-1)).toEqual({ kind: 'local-openai', endpoint: 'http://127.0.0.1:9000', key: null });
     expect(calls.notices).toEqual([]);
   });
@@ -294,13 +301,16 @@ describe('/provider window', () => {
     await settle(80);
     await view.press(`${DOWN}${ENTER}${DOWN}${ENTER}`, 60);
     expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
-    await view.press('n', 60);
+    // G2-3: a y in the same moment the question opened is swallowed (the arming period), never a disconnect.
+    await view.press('y', 60); expect(removed).toEqual([]);
+    await armed(view.frame, 'y remove'); await view.press('n', 60);
     expect(removed).toEqual([]);
     await view.press(`${ENTER}${DOWN}${ENTER}`, 60); // back on the same kind
+    await armed(view.frame, 'y remove');
     // TERMINAL-UX: Ctrl+Y, Alt+y and a coalesced Ctrl+O y are not a typed y (nor a no): the question keeps waiting.
     for (const keys of ['\u0019', `${ESC}y`, '\u000fy']) { await view.raw(keys, 60); expect(removed).toEqual([]); }
     expect(view.frame()).toContain('Disconnect Local server and remove its stored key?');
-    await view.press('y', 100);
+    await armed(view.frame, 'y remove'); await view.press('y', 100);
     expect(removed).toEqual(['local-openai']);
     // The answer is shown in the window, not in scrollback.
     expect(view.frame()).toContain('removed local-openai'); expect(calls.notices).toEqual([]);
@@ -308,21 +318,31 @@ describe('/provider window', () => {
 });
 
 // TERMINAL-UX: every QuestionWindow caller (MCP trust on add and re-approve, MCP remove, workspace profile apply, provider disconnect and
-// address preview) shares this key rule; only a single typed y/n answers.
+// address preview) shares this key rule; only a single typed y/n answers, and only after the decision arming period (G2-3).
 describe('QuestionWindow keys', () => {
   const question = (answers: (boolean | null)[]) => mount(createElement(QuestionWindow, { title: 'Trust files and pin these tools?', lines: [], hints: 'y/n',
     position: '', onAnswer: (answer: boolean | null) => { answers.push(answer); } }), 80, 20);
   it('Ctrl+Y, Ctrl+N, Alt+y, a coalesced Ctrl+O y and pasted text answer nothing; one typed y answers yes once', async () => {
-    const answers: (boolean | null)[] = [], view = question(answers); await settle(60);
+    const answers: (boolean | null)[] = [], view = question(answers); await armed(view.frame, 'y/n');
     for (const keys of ['\u0019', '\u000e', `${ESC}y`, '\u000fy', 'yy', 'yes']) { await view.raw(keys, 40); expect(answers).toEqual([]); }
     expect(view.frame()).toContain('Trust files and pin these tools?');
-    await view.press('y', 40); await view.press('n', 40);
+    await armed(view.frame, 'y/n'); await view.press('y', 40); await view.press('n', 40);
     expect(answers).toEqual([true]);
   });
   it('a typed n says no; Enter and Ctrl+C give no answer (null)', async () => {
-    const no: (boolean | null)[] = []; await settle(10); const first = question(no); await settle(60); await first.press('n', 40); expect(no).toEqual([false]);
-    const enter: (boolean | null)[] = []; const second = question(enter); await settle(60); await second.press(ENTER, 40); expect(enter).toEqual([null]);
-    const cancel: (boolean | null)[] = []; const third = question(cancel); await settle(60); await third.raw('\u0003', 40); expect(cancel).toEqual([null]);
+    const no: (boolean | null)[] = []; await settle(10); const first = question(no); await armed(first.frame, 'y/n'); await first.press('n', 40); expect(no).toEqual([false]);
+    const enter: (boolean | null)[] = []; const second = question(enter); await armed(second.frame, 'y/n'); await second.press(ENTER, 40); expect(enter).toEqual([null]);
+    const cancel: (boolean | null)[] = []; const third = question(cancel); await armed(third.frame, 'y/n'); await third.raw('\u0003', 40); expect(cancel).toEqual([null]);
+  });
+  // G2-3 (analysis 2026-10-18): the MCP trust, provider disconnect and profile apply questions were outside the approval cards' key-race guard,
+  // so a y typed for the input just before the question appeared granted trust. Now it is swallowed, and a held key keeps the question unarmed.
+  it('a y pressed as the question appears, or held through its arming, is swallowed; a deliberate y after the quiet period answers', async () => {
+    const answers: (boolean | null)[] = [], view = question(answers);
+    await view.press('y', 20); expect(answers).toEqual([]);
+    expect(view.frame()).toContain('Trust files and pin these tools?'); expect(view.frame()).not.toContain('y/n'); // its keys are not shown until they count
+    for (let elapsed = 0; elapsed < DECISION_ARM_DEFAULT * 2; elapsed += 30) { await view.raw('y', 30); expect(answers).toEqual([]); }
+    await armed(view.frame, 'y/n'); await view.press('y', 40);
+    expect(answers).toEqual([true]);
   });
 });
 
