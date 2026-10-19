@@ -177,7 +177,9 @@ async function terminalCheck() {
   //   piped `deckent terminal`      typed refusal TERMINAL_TTY_REQUIRED, exit 2 (the workline needs a terminal on both ends)
   //   TTY `terminal session --lang tr`  line mode: Turkish banner and `deckent› ` prompt; /exit closes with the closed line, exit 0
   //   piped `terminal session`      line mode without banner or prompt: /status answers, an unknown /command is reported, exit 0
-  const catalog = locale => JSON.parse(readFileSync(join(root, 'dist/platform/core/i18n/locales', locale, 'cli.json'), 'utf8'));
+  // Every catalog family of the locale (alpha.48 A2 split cli.json into per-command families; keys are unique across families).
+  const catalog = locale => { const dir = join(root, 'dist/platform/core/i18n/locales', locale);
+    return Object.assign({}, ...readdirSync(dir).filter(name => name.endsWith('.json')).sort().map(name => JSON.parse(readFileSync(join(dir, name), 'utf8')))); };
   const en = catalog('en'), tr = catalog('tr'), words = key => key.split('{')[0].trim();
   const project = fixture('terminal-project', { terminal: { autostartService: false, scopeId: 'smoke' } });
   const cases = {}, verdict = (name, ok, detail) => { cases[name] = { ok, ...detail }; };
