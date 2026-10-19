@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { PERMISSION_MODES, type PermissionModeView } from '#domain/index.js';
 import { fillTemplate, span, type PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, pickerView, PICKER_INITIAL, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { pickerView, PICKER_INITIAL, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import type { WindowLine } from '#surfaces/core/terminal-window/index.js';
 import type { ModePanelLabels, ModePanelPort, PanelLabels } from './contract.js';
-import { usePickerRoom } from './lines.js';
+import { PickerWindow } from './picker-window.js';
 
 const STOPS: readonly PermissionModeStop[] = ['standart', 'ask-edits', 'full-auto', 'full-access'];
 /** The focused mode's sentence: the body rows the window keeps for it (a longer one scrolls). */
@@ -38,8 +38,9 @@ export function ModePanel({ port, labels, onError, onClose }: { readonly port: M
     port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     return () => { live = false; };
   }, [port]);
-  const words = labels.mode, room = usePickerRoom(MODE_BODY_ROWS);
-  if (!view) return <Window title={[span(words.title)]} body={[{ spans: [span(labels.loading)] }]} hints={words.hints} position={labels.position} onClose={onClose} />;
+  const words = labels.mode;
+  if (!view) return <PickerWindow title={[span(words.title)]} body={[{ spans: [span(labels.loading)] }]} bodyRows={MODE_BODY_ROWS} tree={null} labels={labels.picker}
+    listHints={words.hints} position={labels.position} onClose={onClose} onResult={onClose} />;
   const current = port.current(), tree = modePanelTree(view, current, words);
   const shown = pickerView(tree, state), focused = shown.rows[shown.pos];
   // A locked row's reason stands under the list; its effect sentence would only push the window past a short terminal.
@@ -47,12 +48,12 @@ export function ModePanel({ port, labels, onError, onClose }: { readonly port: M
   // The header (what `/mode show` used to print as text): the stop this session runs in, and when no company rule makes a mode matter here.
   const header: WindowLine[] = words.now && current ? [{ spans: [span(fillTemplate(words.now, { mode: words.stops[current] }), { bold: true }),
     ...(!view.eligible && current !== 'full-access' && words.inert ? [span(` · ${words.inert}`)] : [])] }] : [];
-  return <Window title={[span(words.title)]} body={[...header, ...(stop ? [{ spans: [span(words.effect[stop])] }] : [])]} hints={words.hints} position={labels.position}
-    footerRows={room.footerRows} onInput={() => true}
-    footer={focusedWindow => <ListPicker tree={tree} labels={labels.picker} active={focusedWindow} initial={state} onState={setState} maxRows={room.rows}
+  // The mode list's own hints name Shift+Tab, the same modes' other key: the panel's words replace the list's (one hint row).
+  return <PickerWindow title={[span(words.title)]} body={[...header, ...(stop ? [{ spans: [span(words.effect[stop])] }] : [])]} bodyRows={MODE_BODY_ROWS} tree={tree}
+    labels={labels.picker} listHints={words.hints} position={labels.position} initial={state} onState={setState}
       onResult={result => {
         const chosen = result.kind === 'selected' ? STOPS.find(item => item === result.id) : undefined;
         onClose();
         if (chosen && chosen !== current) void port.select(chosen);
-      }} />} />;
+      }} />;
 }

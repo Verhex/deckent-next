@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 // T3 L4 PANELS on a real pseudo-terminal: the built workline with the `/mode`, `/config` and `/mcp` windows (in-process ports, real catalog
 // words and port builders; no runtime service). One person whose company denies some settings and gives no full-access grant sees the locked
@@ -173,4 +174,64 @@ describe('settings windows on a real PTY (T3 L4)', () => {
       expect(screen(result.output)).toContain(`⏵⏵⏵ ${words.line}`); expect(screen(result.output)).not.toContain('⚠');
     });
   }
+  // TERM-PANEL (owner 2026-10-19, alpha.48): the terminal's own `/config`, `/mcp` and `/provider` windows draw their title once and one
+  // key-hint row (the embedded list draws neither), and keep their closing border on one row at every level, with the filter, a locked
+  // row's long reason, a sub-list (an address, a wizard step) and back, so the composer's frame below it (the input and status bar) does not move
+  // while the window is open.
+  it('en: /config, /mcp and /provider keep one title, one hint row and a fixed bottom border; the composer row holds while a window is open', async () => {
+    const root = await project();
+    const result = await pty([
+      ['READY', '/config\r', 'start'],
+      ['general', 'e', '+config: sections'],
+      ['filter: e', '\u007f', '+config: filter "e"'],
+      ['general', DOWN, '+config: sections'],
+      ['terminal', ENTER, '+config: sections ↓'],
+      ['theme', ENTER, '+config: terminal keys'],
+      ['light', ENTER, '+config: theme values'],
+      ['Tab/←→', DOWN, '+config: layer step'],
+      ['does not let you change this setting', `${ESC}${ESC}${ESC}${ESC}`, '+config: user layer locked (reason)'],
+      ['READY', '/mcp\r', '+closed'],
+      ['github', ENTER, '+mcp: servers'],
+      ['Streamable HTTP', ESC, '+mcp: add, transport step'],
+      ['github', ESC, '+mcp: servers again'],
+      ['READY', '/provider\r', '+closed again'],
+      ['Corporate gateway', DOWN, '+provider: kinds'],
+      ['Local server', ENTER, '+provider: kinds ↓'],
+      ['› Local server', ENTER, '+provider: Local server actions'],
+      ['This machine', ESC, '+provider: address list'],
+      ['Corporate gateway', DOWN, '+provider: kinds again'],
+      ['FIXTURE-REASON', ESC, '+provider: locked kind (long reason)'],
+      ['READY', '', '+closed at last'],
+    ], ['en', root, '0', 'none'], false);
+    await keep('pty-en-term-panel', result);
+    expect(result.timeout, result.output?.slice(-3000)).toBeUndefined();
+    const screens = result.frames.map(([label, output]) => {
+      const lines = terminalBuffers(output.replace(/\r?\n/gu, '\r\n'), 100, 40).text.split('\n');
+      const tops = lines.flatMap((line, index) => line.startsWith('╭') ? [index] : []), bottoms = lines.flatMap((line, index) => line.startsWith('╰') ? [index] : []);
+      // The composer's frame is the last box; a window is the box above it.
+      const window = tops.length >= 2 ? { top: tops.at(-2)!, bottom: bottoms.at(-2)! } : null;
+      const inside = window ? lines.slice(window.top + 1, window.bottom) : [];
+      return { label, text: lines.join('\n'), composer: bottoms.at(-1) ?? -1, window, title: inside[0] ?? '', inside,
+        hints: inside.filter(line => /Esc /u.test(line)).length };
+    });
+    const table = screens.map(screen => `${screen.label}: composer border row ${screen.composer}, window border row ${screen.window?.bottom ?? '-'}, hint rows ${screen.hints}`);
+    if (process.env['DECKENT_TERM_PANEL_ROWS']) await writeFile(process.env['DECKENT_TERM_PANEL_ROWS'], [...table, '', ...screens.map(screen => `===== ${screen.label}\n${screen.text}`)].join('\n'));
+    const titles: Record<string, RegExp> = { config: /│ \S/u, mcp: /MCP servers|Add a server/u, provider: /Providers|Local server · Address/u };
+    for (const name of ['config', 'mcp', 'provider']) {
+      const open = screens.filter(screen => screen.label.startsWith(`+${name}:`));
+      expect(open.length, name).toBeGreaterThan(1);
+      for (const screen of open) {
+        expect(screen.window, `${screen.label}\n${screen.text}`).not.toBeNull();
+        expect(screen.hints, `one key-hint row: ${screen.label}\n${screen.text}`).toBe(1);
+        expect(screen.title, `${screen.label}\n${screen.text}`).toMatch(titles[name]!);
+        // The title once: the window's first row is not repeated anywhere inside it.
+        const title = screen.title.replace(/[│\s]+$/u, '').replace(/^│\s*/u, '').split(' › ')[0]!;
+        expect(screen.inside.filter(line => line.includes(title)).length, `the title once: ${screen.label}\n${screen.text}`).toBe(1);
+      }
+      expect(new Set(open.map(screen => screen.window!.bottom)).size, `${name}\n${table.join('\n')}`).toBe(1);
+      // The composer under an open window keeps its row too (the window's height never changes while it is open).
+      expect(new Set(open.map(screen => screen.composer)).size, `${name}\n${table.join('\n')}`).toBe(1);
+    }
+    expect(screens.find(screen => screen.label.includes('long reason'))!.text).toContain('Corporate gateway');
+  });
 });

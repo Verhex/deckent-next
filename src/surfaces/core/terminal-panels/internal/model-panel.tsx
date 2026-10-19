@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window } from '#surfaces/core/terminal-window/index.js';
-import { usePickerRoom } from './lines.js';
+import { PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { PickerWindow } from './picker-window.js';
 import { BudgetWindow, budgetEntry } from './budget-panel.js';
 import { WorkspaceWindow } from './workspace-panel.js';
 import { CacheWindow, cacheEntry } from './cache-panel.js';
 import type { BudgetPanelView, CachePanelView, ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
 
 const SESSION = 'session', DEFAULT = 'default', BUDGET = ':budget', CACHE = ':cache', PROTOCOL = ':protocol', WORKSPACE = ':workspace', FRESH = 'fresh', FRESH_DEFAULT = 'fresh-default';
+/** Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed). */
+const BODY_ROWS = 2;
 const keyOf = (reference: ModelPanelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 const same = (left: ModelPanelReference | null, right: ModelPanelReference) => left !== null && keyOf(left) === keyOf(right);
 
@@ -53,8 +54,6 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const mounted = useRef(true);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
-  // Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed).
-  const room = usePickerRoom(2);
   useEffect(() => {
     mounted.current = true;
     let live = true;
@@ -65,7 +64,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     port.protocol?.inspect().then(value => { if (live) setProtocol(value); }, () => undefined);
     return () => { live = false; mounted.current = false; };
   }, [port]);
-  if (!view) return <Window title={[span(labels.loading)]} hints={words.hints} position={labels.position} onClose={onClose} />;
+  if (!view) return <PickerWindow title={[span(labels.loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
+    onClose={onClose} onResult={onClose} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
   if (cacheOpen && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   if (workspaceOpen && port.workspace && labels.workspace) return <WorkspaceWindow port={port.workspace} profiles={workspaces} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
@@ -104,8 +104,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
     }).catch(error => { if (mounted.current) { onError(error); onClose(); } }).finally(() => { preparingRef.current = false; if (mounted.current) setPreparing(false); });
   };
-  if (preparing) return <Window title={[span(labels.loading)]} hints={words.hints} position={labels.position}
-    onInput={(_input, key) => !key.escape} onClose={() => { mounted.current = false; onClose(); }} />;
+  if (preparing) return <PickerWindow title={[span(labels.loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
+    onClose={() => { mounted.current = false; onClose(); }} onResult={() => undefined} />;
   if (shadow) {
     const tree: PickerTree = { title: fillTemplate(words.shadowTitle, { model: shadow.projectModel }), items: [{ id: 'remove', label: words.shadowRemove },
       { id: 'align', label: words.shadowAlign }, { id: 'keep', label: words.shadowKeep }] };
@@ -118,14 +118,13 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
         if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
       }, error => { onError(error); onClose(); });
     };
-    return <Window title={[span(tree.title, { bold: true })]} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-      footer={focused => <ListPicker key="shadow" tree={tree} labels={labels.picker} active={focused} maxRows={room.rows} onResult={answer} />} />;
+    return <PickerWindow title={[span(tree.title, { bold: true })]} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} listHints={words.hints} position={labels.position}
+      pickerKey="shadow" onResult={answer} />;
   }
   const shown = pickerView(tree, state), focused = shown.stage === 'list' ? view.choices.find(item => keyOf(item.reference) === shown.rows[shown.pos]?.id) : undefined;
   const body = [...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     ...(tokens !== null && focused ? [{ spans: [span(fillTemplate(words.switch.title, { model: focused.label, tokens }), { role: 'warning' as const })] }] : []),
     ...(focused ? [{ spans: [span(focused.exact, { role: 'muted' as const })] }, ...(focused.command ? [{ spans: [span(focused.command, { role: 'muted' as const })] }] : [])] : [])];
-  return <Window title={[span(view.title, { bold: true })]} body={body} hints={words.hints} position={labels.position}
-    footerRows={room.footerRows} onInput={() => true}
-    footer={focused => <ListPicker tree={tree} labels={labels.picker} active={focused} initial={state} onState={setState} maxRows={room.rows} onResult={result => chosen(result)} />} />;
+  return <PickerWindow title={[span(view.title, { bold: true })]} body={body} bodyRows={BODY_ROWS} tree={tree} labels={labels.picker} position={labels.position}
+    initial={state} onState={setState} onResult={result => chosen(result)} />;
 }

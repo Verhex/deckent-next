@@ -127,9 +127,14 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (`launchTerminal`), which keeps the barrel off the Ink graph. Named `cli-*` because it calls `t()`; it also binds the panel ports
   (`configPanelPort`, `mcpPanelPort` with the localized trust question the CLI reuses) and the monitor window loader. `terminal-picker` adds
   the pure `pickerReduce` core (filter, paging, levels, scope step, blocked rows with a reason, numbered text fallback) and `ListPicker`
-  (`windowed`, `initial`, `onState`, `maxRows`). `terminal-panels` (L4): presentation-only `/mode`, `/config`, `/mcp` windows (ports and words
+  (`windowed`, `initial`, `onState`, `maxRows`, `embedded`). `terminal-panels` (L4): presentation-only `/mode`, `/config`, `/mcp` windows (ports and words
   from outside; the settings picker of the panel controller; any argument keeps the text command; no window on TERM=dumb; `/mode show` is the
-  text answer). `/mcp` adds stdio and HTTP servers (URL + masked headers; the registry validates), revokes trust with the grant, shows the
+  text answer). TERM-PANEL (owner 2026-10-19, alpha.48): every panel window with a list (`/config` and `deckent config`, `/provider`, `/mcp`,
+  `/model`, `/mode`, budget, cache, workspace, config records) is a `PickerWindow`: one title (the window's, then the levels entered,
+  `Title › section › key`), one key-hint row (the list's words for its stage — list, filter, scope — or the panel's more exact ones), and one
+  height at every level, with a filter, a locked row's reason (it borrows list rows, the rest ends in an ellipsis) and on the Loading/busy
+  frame (`pickerWindowGeometry`); the embedded `ListPicker` draws neither title nor hints and pads its page, status row (filter · position)
+  and reason row. A non-embedded `ListPicker` (the workline's own list windows) is unchanged. `/mcp` adds stdio and HTTP servers (URL + masked headers; the registry validates), revokes trust with the grant, shows the
   person's `mcp-server` grant and offers `sandbox-net` first. `terminal-work/live-windows.tsx` + `terminal/workline-live.tsx` (L5): `/monitor`
   (the monitor's `MonitorBody` through `monitorWindow`, the monitor body stays behind its host port), `/watch-workers`, `/watch-runs`, `/tasks` as
   modal live windows updated in place (Esc closes and stops the watch, one summary line stays); a card, picker, `/resume` or settings window

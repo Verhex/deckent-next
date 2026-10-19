@@ -58,6 +58,19 @@ describe('record window Ink render and keyboard boundary', () => {
       await vi.waitFor(() => expect(outcomes).toHaveLength(1)); expect(calls).toEqual(['preview', 'commit']); expect(errors).toEqual([]);
     });
   }
+  it('TERM-PANEL: the record window draws its title once and one key-hint row, and keeps one height from the members to the form and a choice', async () => {
+    const view = mount(createElement(ConfigRecordWindow, { port: port('inspection.workers.sources', []), keyPath: 'inspection.workers.sources', title: 'Selected records', layer: 'project',
+      labels: terminalPanelLabels('en'), onResult: () => undefined, onError: () => undefined, onClose: () => undefined }));
+    // ASCII frame: the window is the box between the first two `+---` rows.
+    const shape = () => { const lines = view.frame().split('\n'), top = lines.findIndex(line => line.startsWith('+-')), bottom = lines.findIndex((line, index) => index > top && line.startsWith('+-'));
+      const inside = lines.slice(top + 1, bottom);
+      return { height: bottom - top + 1, titles: inside.filter(line => line.includes('Selected records')).length, hints: inside.filter(line => /Esc /u.test(line)).length }; };
+    await vi.waitFor(() => expect(view.frame()).toContain('Add a member'));
+    const shapes = [shape()];
+    await view.press(ENTER); await vi.waitFor(() => expect(view.frame()).toContain('Select a value')); shapes.push(shape());
+    await view.press(ENTER); await vi.waitFor(() => expect(view.frame()).toContain('My company')); shapes.push(shape());
+    expect(shapes).toEqual(shapes.map(() => ({ height: shapes[0]!.height, titles: 1, hints: 1 })));
+  });
   it('Esc closes without any write; imports offer file selection and preview only', async () => {
     const calls: string[] = []; let closed = 0;
     const view = mount(createElement(ConfigRecordWindow, { port: port('operations.targets', calls), keyPath: 'operations.targets', title: 'Operation targets', layer: 'project', labels: terminalPanelLabels('tr'), onResult: () => undefined, onError: () => undefined, onClose: () => { closed++; } }));
