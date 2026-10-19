@@ -141,5 +141,6 @@
   "cli.policy.vocabulary.note": "{count} kaynak (sözlük v{version}). Sözlük eylemleri adlandırır; yetki vermez. Ham tablo: deckent policy vocabulary --json",
   "cli.policy.toggle.actor": "AI aktörü {actor} · scope {scope} · kaynak {resource}",
   "cli.policy.toggle.becomesOn": "Değişiklik: {what}: kapalı → açık",
-  "cli.policy.toggle.becomesOff": "Değişiklik: {what}: açık → kapalı"
+  "cli.policy.toggle.becomesOff": "Değişiklik: {what}: açık → kapalı",
+  "cli.approval.unreadable": "{count} kayıt bu sürümle okunamadı; deckent approval list --json gösterir"
 }

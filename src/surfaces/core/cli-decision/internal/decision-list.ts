@@ -49,7 +49,7 @@ export async function recentDecisions(context: DecisionCommandContext, input: Re
     : [t('cli.decide.none', {}, locale)])].join('\n'), sinks);
   if (!interactive || !list.items.length) return;
   const picked = await io.ask({ title: t('cli.decide.pick.title', {}, locale), options: [...list.items.map(item => ({ id: item.decisionId,
-    label: `${displayId(item.decisionId, ids)} · ${item.case.objective}` })), { id: '-leave', label: t('cli.decide.pick.leave', {}, locale), key: 'q' }] });
+    label: safeCell(`${displayId(item.decisionId, ids)} · ${item.case.objective}`) })), { id: '-leave', label: t('cli.decide.pick.leave', {}, locale), key: 'q' }] });
   const item = list.items.find(entry => entry.decisionId === picked);
   if (item) await io.ask({ title: t('cli.decide.view.title', { id: displayId(item.decisionId, ids) }, locale), body: decisionLines(item, locale),
     options: [{ id: 'close', label: t('cli.decide.view.close', {}, locale), key: 'q' }] });

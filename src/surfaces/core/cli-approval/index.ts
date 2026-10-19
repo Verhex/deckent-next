@@ -1,5 +1,6 @@
 export type { ApprovalCommandContext } from './internal/context.js';
 export { approvalsCommand, answerOnCard } from './internal/approvals.js';
+export { approvalPickLabel } from './internal/approval-view.js';
 export { toggleDelegations, toggleMcp, type CardAsk } from './internal/policy-toggle.js';
 export { policyGrantsCommand, type PolicyUpgradeHandler, type StandingGrantsHandler, type StandingRevokeHandler } from './internal/policy-grants.js';
 export { cardIo, sinksOf } from './internal/io.js';

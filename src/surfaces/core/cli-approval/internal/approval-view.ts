@@ -45,6 +45,9 @@ export function approvalState(record: ApprovalRecord, nowMs: number, locale: Loc
   return decision.decision === 'allow' ? t('cli.approval.state.allowed', { ago }, locale) : t('cli.approval.state.denied', { ago }, locale);
 }
 
+/** A picker row for one waiting approval: what and the request, redacted like a table cell (card option labels are drawn as given). */
+export const approvalPickLabel = (record: ApprovalRecord, locale: Locale) => safeCell(`${approvalWhat(record, locale)} · ${record.request.summary}`);
+
 /** The pipe/TTY table: short id · state · what · summary · requester. Waiting rows first; the caller says how many were not shown. */
 export function approvalTable(records: readonly ApprovalRecord[], nowMs: number, locale: Locale, style: CliTableStyle): string {
   const ids = records.map(record => record.request.approvalId);

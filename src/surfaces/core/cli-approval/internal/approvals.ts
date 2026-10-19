@@ -6,7 +6,7 @@ import { approvalRecordSchema, type ApprovalRecord } from '#domain/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, cliTableStyle, resolveCommandScope, scopeLister, scopeNotice, standingCardOptions, type CliTableStyle, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
-import { APPROVAL_LIST, approvalLines, approvalTable, approvalWhat, isPending, onHardFloor, readableApprovals } from './approval-view.js';
+import { APPROVAL_LIST, approvalLines, approvalPickLabel, approvalTable, approvalWhat, isPending, onHardFloor, readableApprovals } from './approval-view.js';
 import { assertInputFields, inputSchemaText, type InputSchema } from './input-check.js';
 import { cardIo, sinksOf } from './io.js';
 import registry from './approval.json' with { type: 'json' };
@@ -66,7 +66,11 @@ export async function approvalsCommand(argv: readonly string[], context: Approva
 /** A result as a person reads it: a page as the table, one record (or a decision answer's record) as lines. */
 function renderResult(value: unknown, locale: Locale, verbose: boolean, style: CliTableStyle): string {
   const now = Date.now();
-  if (Array.isArray(value)) { const records = readableApprovals(value, now); return records.length ? approvalTable(records, now, locale, style) : t('cli.approval.none', {}, locale); }
+  if (Array.isArray(value)) {
+    const records = readableApprovals(value, now), unreadable = value.length - records.length;
+    return [records.length ? approvalTable(records, now, locale, style) : t('cli.approval.none', {}, locale),
+      ...(unreadable ? [t('cli.approval.unreadable', { count: unreadable }, locale)] : [])].join('\n');
+  }
   if (value === null) return t('cli.approval.notFound', {}, locale);
   const record = approvalRecordSchema.safeParse(typeof value === 'object' && 'record' in value ? (value as { record: unknown }).record : value);
   return record.success ? approvalLines(record.data, now, locale, verbose).join('\n') : JSON.stringify(value, null, 2);
@@ -107,7 +111,7 @@ async function personApprovals(args: Parsed, context: ApprovalCommandContext, lo
     const now = Date.now(), waiting = view.records.filter(record => isPending(record, now));
     if (!waiting.length) { if (args.action === 'decide' || round > 0) print(t('cli.approval.noneWaiting', { scope: scope.scopeId }, locale)); return; }
     const picked = await io.ask({ title: t('cli.approval.pick.title', { count: waiting.length }, locale),
-      options: [...waiting.slice(0, APPROVAL_LIST.rowsShown).map(record => ({ id: record.request.approvalId, label: `${approvalWhat(record, locale)} · ${record.request.summary}` })),
+      options: [...waiting.slice(0, APPROVAL_LIST.rowsShown).map(record => ({ id: record.request.approvalId, label: approvalPickLabel(record, locale) })),
         { id: LEAVE, label: t('cli.approval.pick.leave', {}, locale), key: 'q' }] });
     const record = waiting.find(item => item.request.approvalId === picked);
     if (!record) return;
@@ -141,7 +145,9 @@ function listText(view: Scan, scope: ScopeResolution, locale: Locale, style: Cli
   return [scopeNotice(scope, locale), t('cli.approval.summary', { waiting, total: view.records.length }, locale),
     ...(shown.length ? [approvalTable(shown, now, locale, style)] : [t('cli.approval.none', {}, locale)]),
     ...(view.records.length > shown.length ? [t('cli.approval.more', { count: view.records.length - shown.length }, locale)] : []),
-    ...(view.truncated ? [t('cli.approval.truncated', { pages: APPROVAL_LIST.maxPages }, locale)] : [])].join('\n');
+    ...(view.truncated ? [t('cli.approval.truncated', { pages: APPROVAL_LIST.maxPages }, locale)] : []),
+    // A record this build cannot read (e.g. written by a newer service) is counted, never silently dropped.
+    ...(view.raw.length > view.records.length ? [t('cli.approval.unreadable', { count: view.raw.length - view.records.length }, locale)] : [])].join('\n');
 }
 
 function missingInput(action: Action, locale: Locale): Error {

@@ -8,7 +8,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { getDecisionSteps, type DecisionDelegationView, type ApprovalRecord } from '#domain/index.js';
 import { mcpCapabilityRegistry } from '#engine/index.js';
-import { answerOnCard, toggleDelegations, toggleMcp, type CardAsk } from '#surfaces/core/cli-approval/index.js';
+import { answerOnCard, approvalPickLabel, toggleDelegations, toggleMcp, type CardAsk } from '#surfaces/core/cli-approval/index.js';
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 
@@ -77,15 +77,18 @@ it('AI path: --input --json returns the service result unchanged; without --json
 
 it('person path: `approval list` reads the default scope, names it, waiting first, bounded pages; --json is the raw page', async () => {
   const root = await project(), calls: unknown[] = [];
-  const pageA = [approval('old-1', { status: 'expired', created: now - 3_600_000, ttl: 60_000 }), approval('wait-2', { created: now - 30_000 })];
+  const pageA = [approval('old-1', { status: 'expired', created: now - 3_600_000, ttl: 60_000 }), approval('wait-2', { created: now - 30_000 }),
+    { request: { schemaVersion: 9, approvalId: 'future-1' }, revision: 0, status: 'pending', decision: null }];
   const handlers = { listApprovals: async (input: { afterId: string | null }) => { calls.push(input); return input.afterId === null ? pageA : []; } };
   const listed = await run(['approval', 'list', '--lang', 'en'], handlers, root);
   expect(listed.code).toBe(0);
   expect(lines(listed.text)[0]).toContain('live'); expect(listed.text).toContain('1 waiting · 2 in total'); expect(listed.text).toContain('expired (nothing ran)');
   expect(listed.text.indexOf('wait-2')).toBeLessThan(listed.text.indexOf('old-1'));
+  // A record this build cannot read is counted, never silently dropped.
+  expect(listed.text).toContain('1 record(s) could not be read by this version');
   expect(calls).toEqual([{ schemaVersion: 1, scopeId: 'live', afterId: null, limit: 100 }]);
   const json = await run(['approval', 'list', '--json'], handlers, root);
-  expect(JSON.parse(json.text)).toHaveLength(2);
+  expect(JSON.parse(json.text)).toHaveLength(3);
 });
 
 it('decide without --input: off a terminal (pipe, AI agent) nothing is asked or decided; the missing --input is named with an example', async () => {
@@ -119,6 +122,11 @@ it('the approval card: once / no only (a hard floor never "always"), system ids,
   expect(String(sent[0]!['commandId'])).toMatch(/^cli-[0-9a-f-]{36}$/u); expect(sent[0]).not.toHaveProperty('approverNote');
   expect(sent[1]).toMatchObject({ approvalId: 'floor-1', decision: 'deny', reason: 'Not this file', approverNote: true });
   expect(sent[2]).toMatchObject({ approvalId: 'legacy-1', decision: 'allow' });
+  // Picker rows are drawn as given by the card view, so the label itself is redacted (L-KIT: no secret in any rendered field).
+  const token = 'sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const label = approvalPickLabel(approval('secret-1', { summary: `curl -H "x-api-key: ${token}" https://api.example` }), 'en');
+  expect(label).not.toContain('sk-ant-api03-AAAA'); expect(label).toContain('curl');
+  expect(requests[0]!.body!.join('\n')).not.toContain('sk-ant');
 });
 
 it('decide: `{}` names the missing field (no "model call" text), --schema prints the contract, bare decide lists recent decisions', async () => {

@@ -141,5 +141,6 @@
   "cli.policy.vocabulary.note": "{count} resources (vocabulary v{version}). The vocabulary names actions; it grants nothing. Raw matrix: deckent policy vocabulary --json",
   "cli.policy.toggle.actor": "AI actor {actor} · scope {scope} · resource {resource}",
   "cli.policy.toggle.becomesOn": "Change: {what}: off → on",
-  "cli.policy.toggle.becomesOff": "Change: {what}: on → off"
+  "cli.policy.toggle.becomesOff": "Change: {what}: on → off",
+  "cli.approval.unreadable": "{count} record(s) could not be read by this version; deckent approval list --json shows them"
 }
