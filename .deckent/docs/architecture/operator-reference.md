@@ -264,6 +264,20 @@ A failure before trusted authority exists cannot be sealed, and performs no stor
 Linux kernel custody is verified here; other hosts refuse unsupported custody. KMS, independent
 review, packaged acceptance and owner DOGFOOD admission remain separate gates.
 
+## Administration commands in human words (alpha.48, owner CLI review 2026-10-19)
+
+Without an action `deckent pool`, `audit`, `secret`, `runtime`, `backup` and `toolchains` read: the pool's state and capacity, the
+audit result with the last checkpoint, the keys (name · used by · store, never a value), the service status (build, configuration,
+running work, socket; no start time until the next protocol version), the recovery sets (`state/backups/recovery`: date · size · kind ·
+last verified · name) and the toolchain table (network use stated first). `deckent paths` groups the layout with exists/missing and
+names the socket really used (`/tmp/dk-<uid>-<sha256>/s`). Output is text in a pipe; JSON only with `--json`, in the same contracts.
+A change never takes a silent scope: off a terminal `pool hold|resume|set-capacity|quota-release`, `secret set|delete|store --to`
+and `backup create|restore` need `--scope`, and `runtime shutdown` without identities needs `--reason`. On a person's terminal the
+scope, the set, the key or the store are picked and the change is confirmed on a card first (an AI, CI or pipe is never asked):
+a weaker secret store needs a second warning card, a restore shows target, service state and where replaced files are kept,
+`toolchains update` shows the plan before it builds, `audit rebaseline` confirms on a card. `secret set` takes the key only at a
+person's terminal (hidden prompt): from a pipe, script, agent or CI it is refused before stdin is read (`SECRET_SET_TERMINAL_REQUIRED`).
+
 ## Provider keys, models and spending
 
 Keys: `deckent secret set NAME` (hidden prompt or piped stdin) writes to the store selected by `secrets.store`

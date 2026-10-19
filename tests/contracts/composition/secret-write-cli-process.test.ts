@@ -10,6 +10,8 @@ import { applyPolicyTemplateInstallation } from '#composition/core/installation/
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { cliChildEnv } from '../support/child-env.js';
 import { lastJson, runInTerminal } from '../support/terminal-cli.js';
+import { personEnv } from '../support/person-env.js';
+import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 
 // SECRET-WRITE on the shipped processes: compiled `runtime serve` + compiled `deckent secret set|delete|list`. The value is typed at the
 // hidden prompt of a real PTY (never argv; SEC-1, owner A48-D5: a change needs the service-held terminal witness, a piped one is refused); the change is decided by the fresh install's template v2 grant, audited in the ledger and stored in the file backend. A
@@ -68,10 +70,13 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   await ready(service);
 
   const printed: string[] = [];
-  // SEC-1: the same set from a pipe (a script, an agent's shell) is refused by the service before any decision; nothing stored or audited.
-  const piped = await run(['secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, `${CANARY}\n`); printed.push(piped.stdout, piped.stderr);
-  expect(piped.code).not.toBe(0); expect(piped.stdout + piped.stderr).toContain('AUTHORITY_WITNESS_REQUIRED');
-  const set = await runInTerminal([process.execPath, cli, 'secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]);
+  // SEC-1 × C-ADMIN (lead J2e): two layers, each pinned. From a pipe the CLI refuses `secret set` before stdin is read (SECRET_SET_TERMINAL_REQUIRED,
+  // not the service code); a non-TTY caller that reaches the service directly is refused there (AUTHORITY_WITNESS_REQUIRED). Nothing stored or audited.
+  const piped = await run(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env, `${CANARY}\n`); printed.push(piped.stdout, piped.stderr);
+  expect(piped.code).not.toBe(0); expect(piped.stdout + piped.stderr).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect(piped.stdout + piped.stderr).not.toContain('AUTHORITY_WITNESS_REQUIRED');
+  await expect(createConfiguredRuntimeClient(project, { env }).setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY }))
+    .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  const set = await runInTerminal([process.execPath, cli, 'secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, personEnv(env), [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]);
   printed.push(set.output);
   expect(set.code, set.output).toBe(0);
   expect(lastJson(set.output)).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend, removed: null });
@@ -93,9 +98,9 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   // A value on argv is a usage refusal before anything is sent.
   const argv = await run(['secret', 'set', 'OTHER', CANARY, '--json'], project, env); printed.push(argv.stdout, argv.stderr);
   expect(argv.code).toBe(2);
-  const pipedDelete = await run(['secret', 'delete', 'PROVIDER_TOKEN', '--json'], project, env); printed.push(pipedDelete.stdout, pipedDelete.stderr);
+  const pipedDelete = await run(['secret', 'delete', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env); printed.push(pipedDelete.stdout, pipedDelete.stderr);
   expect(pipedDelete.code).not.toBe(0); expect(pipedDelete.stdout + pipedDelete.stderr).toContain('AUTHORITY_WITNESS_REQUIRED');
-  const removed = await runInTerminal([process.execPath, cli, 'secret', 'delete', 'PROVIDER_TOKEN', '--json'], project, env); printed.push(removed.output);
+  const removed = await runInTerminal([process.execPath, cli, 'secret', 'delete', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, personEnv(env)); printed.push(removed.output);
   expect(lastJson(removed.output)).toMatchObject({ action: 'delete', removed: true });
   if (sealed) expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).listNames()).toEqual([]);
   else expect(JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8'))).toEqual({ schemaVersion: 1, secrets: {} });

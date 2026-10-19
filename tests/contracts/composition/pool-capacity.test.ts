@@ -81,7 +81,7 @@ it('shows drift and typed waits without writes, raises 2/2 to 8/8 and allows eig
   expect(await readFile(f.path)).toEqual(before); expect(f.rows('SELECT count(*) AS n FROM run_receipts')).toEqual(receipts);
   expect(await f.cli(['run', 'inspect', '--id', 'r2', '--scope', 's', '--lang', 'tr'])).toMatchObject({ code: 0, out: expect.stringContaining('doluluk 2/2') });
   const doctor = await f.cli(['doctor', '--json']); expect(doctor.code).toBe(0); expect(JSON.parse(doctor.out)).toMatchObject({ status: 'degraded', poolReadiness: { status: 'drift', drift: { code: 'POOL_ADMISSION_CAPACITY_DRIFT' } } });
-  const resized = await f.cli(['pool', 'set-capacity', '--execution-slots', '8', '--in-flight-slots', '8', '--command-id', 'resize', '--json']);
+  const resized = await f.cli(['pool', 'set-capacity', '--scope', 's', '--execution-slots', '8', '--in-flight-slots', '8', '--command-id', 'resize', '--json']);
   expect(resized.code).toBe(0); const receipt = JSON.parse(resized.out);
   expect(receipt).toMatchObject({ changed: true, previous: { executionSlots: 2, inFlightSlots: 2 }, next: { executionSlots: 8, inFlightSlots: 8 }, actor: { issuer: hostname(), subject: String(userInfo().uid) }, atMs: expect.any(Number) });
   expect(await applyPoolCapacity(f.project, { ...command('resize'), poolId: 'p' }, f.options)).toEqual(receipt);
@@ -89,7 +89,7 @@ it('shows drift and typed waits without writes, raises 2/2 to 8/8 and allows eig
   expect((await inspectRun(f.project, query, f.options)).run?.pool).toMatchObject({ drift: [], waiting: [] });
   expect(JSON.parse((await f.cli(['pool', 'status', '--json'])).out)).toMatchObject({ capacity: { receipt } });
   expect(await f.cli(['doctor', '--verbose', '--lang', 'tr'])).toMatchObject({ code: 0, out: expect.stringContaining('Havuz hazırlığı') });
-  expect(await f.cli(['pool', 'status', '--lang', 'tr'])).toMatchObject({ out: expect.stringContaining('kapasite 8/8') });
+  expect(await f.cli(['pool', 'status', '--lang', 'tr'])).toMatchObject({ out: expect.stringContaining('aynı anda en çok 8 iş') }); // C-ADMIN human words
   for (let i = 2; i < 8; i++) await f.reserve('r' + i);
   expect(await inspectPoolCapacity(f.project, { schemaVersion: 1, scopeId: 's' }, f.options)).toMatchObject({ occupancy: { execution: 8, inFlight: 8 }, receipt });
   expect(await applyPoolCapacity(f.project, command('equal'), f.options)).toMatchObject({ changed: false });
@@ -104,7 +104,7 @@ it('shows drift and typed waits without writes, raises 2/2 to 8/8 and allows eig
 it('shares SDK, MCP and CLI installation authority; refuses scoped-only authority and foreign scope; no persona grant', async context => {
   const f = await fixture(context, ['s']);
   await expect(applyPoolCapacity(f.project, command('sdk-denied'), f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-  expect(await f.cli(['pool', 'set-capacity', '--execution-slots', '8', '--in-flight-slots', '8'])).toMatchObject({ code: 1, err: expect.stringContaining('POLICY_DENIED') });
+  expect(await f.cli(['pool', 'set-capacity', '--scope', 's', '--execution-slots', '8', '--in-flight-slots', '8'])).toMatchObject({ code: 1, err: expect.stringContaining('POLICY_DENIED') });
   await expect(applyPoolCapacity(f.project, { ...command('foreign'), scopeId: 'foreign' }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   const server = createMcpServer({ async inspectRun() { return {}; }, async inspectInventory() { return {}; },
     applyPoolCapacity: value => applyPoolCapacity(f.project, value, f.options), inspectPoolCapacity: value => inspectPoolCapacity(f.project, value, f.options) } as McpApplications,

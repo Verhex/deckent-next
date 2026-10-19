@@ -304,7 +304,10 @@
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
         "src/composition/core/audit",
-        "src/surfaces/core/config-window"
+        "src/surfaces/core/config-window",
+        "src/adapters/core/secret-store",
+        "src/adapters/core/mcp-client",
+        "src/adapters/core/local-runtime-socket"
       ],
       "plan": "SURFACES"
     },
@@ -2929,7 +2932,8 @@
         "src/composition/core/policy",
         "src/adapters/core/sqlite-ledger",
         "src/adapters/core/contract",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/secrets"
       ],
       "plan": "INSTALLATION"
     },
@@ -3213,6 +3217,7 @@
         "src/engine/core/run-progression",
         "src/engine/core/secret-store",
         "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields",
         "src/engine/core/config"
       ],
       "plan": "SURFACES"

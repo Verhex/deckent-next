@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as wait } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
+import { personEnv } from '../contracts/support/person-env.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/index.js';
 import { runInTerminal } from '../contracts/support/terminal-cli.js';
 
@@ -13,7 +14,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 describe.skipIf(process.platform !== 'linux')('README first session, actual binary, no Docker or provider call', () => {
-  it.each(['short', 'long'] as const)('initializes and serves a fresh %s path; a terminal-prompt secret uses the selected default scope, a piped one is refused', async kind => {
+  it.each(['short', 'long'] as const)('initializes and serves a fresh %s path; a terminal-prompt secret names the selected scope, a piped one is refused before it is read (C-ADMIN)', async kind => {
     const root = await mkdtemp('/tmp/dk-first-'); roots.push(root);
     const project = join(root, kind === 'long' ? 'a project with spaces '.repeat(9) : 'project');
     const home = join(root, 'home'), global = join(root, 'global');
@@ -51,12 +52,13 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
       expect(Buffer.byteLength(endpoint)).toBeLessThan(108); expect(endpoint).not.toContain(project);
       expect((await lstat(dirname(endpoint))).mode & 0o777).toBe(0o700);
       expect((await lstat(endpoint)).mode & 0o777).toBe(0o600);
-      // SEC-1 (owner A48-D5): a piped key is refused by the service (no terminal witness); the README's hidden prompt on a real PTY stores it.
-      const piped = spawn(process.execPath, [binary, 'secret', 'set', 'INSTALL_FLOW_PIPED'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
+      // SEC-1 × C-ADMIN: a piped key is refused by the CLI before it is read (the service witness stays the backstop); the README's hidden prompt
+      // on a real PTY stores it.
+      const piped = spawn(process.execPath, [binary, 'secret', 'set', 'INSTALL_FLOW_PIPED', '--scope', 'my-project'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
       let pipedLog = ''; piped.stdout.on('data', chunk => { pipedLog += String(chunk); }); piped.stderr.on('data', chunk => { pipedLog += String(chunk); });
       const refused = new Promise<number | null>(resolve => piped.once('exit', resolve)); piped.stdin.end('offline-fixture-key\n');
-      expect(await refused, pipedLog).not.toBe(0); expect(pipedLog).toContain('AUTHORITY_WITNESS_REQUIRED'); expect(pipedLog).not.toContain('offline-fixture-key');
-      const set = await runInTerminal([process.execPath, binary, 'secret', 'set', 'INSTALL_FLOW_TEST'], project, env, [{ when: 'INSTALL_FLOW_TEST: ', send: 'offline-fixture-key\r' }]);
+      expect(await refused, pipedLog).not.toBe(0); expect(pipedLog).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect(pipedLog).not.toContain('offline-fixture-key');
+      const set = await runInTerminal([process.execPath, binary, 'secret', 'set', 'INSTALL_FLOW_TEST', '--scope', 'my-project'], project, personEnv(env), [{ when: 'INSTALL_FLOW_TEST: ', send: 'offline-fixture-key\r' }]);
       expect(set.code, set.output).toBe(0); expect(set.output).not.toContain('offline-fixture-key');
       const listed = await run(['secret', 'list']); expect(listed.stdout + listed.stderr).toContain('INSTALL_FLOW_TEST');
       const doctor = await run(['doctor']); expect(doctor.stdout + doctor.stderr).toContain('Runtime startability: ready');

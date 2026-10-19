@@ -16,8 +16,16 @@ import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
+// C-ADMIN: the rebaseline confirmation is the terminal's CLI card (Ink, PTY-proven); here the person's answer is injected at the card launcher.
+const cliCard = vi.hoisted(() => ({ answer: null as string | null, requests: [] as unknown[] }));
+vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
+  const real = await importOriginal<typeof import('#surfaces/core/cli-human/index.js')>();
+  return { ...real, askCliCard: async (...args: Parameters<typeof real.askCliCard>) => {
+    if (cliCard.answer === null) return real.askCliCard(...args);
+    cliCard.requests.push(args[0]); return cliCard.answer; } };
+});
 const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { cliCard.answer = null; cliCard.requests = []; vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share read-only verification/export; policy rewrite is visible on every surface', async () => {
   const f = await auditCheckpointFixture(); roots.push(f.root); const query: AuditVerifyQuery = { schemaVersion: 1, scopeId: 's' };
@@ -116,10 +124,11 @@ it.skipIf(process.platform !== 'linux')('deckent audit rebaseline: AI and unwitn
   vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
   expect(await rebaselineConfiguredAudit(f.root, command, f.options, confirm)).toBeNull();
   expect(asked).toBe(1); expect(events()).toHaveLength(before); expect((await verifyAudit(f.root, query, f.options)).status).toBe('policy-changed');
-  // The CLI card: y re-baselines (exit 0), the marker carries the person's reason and principal, and verify matches again.
-  let card = '', out = '';
+  // The CLI card: Apply re-baselines (exit 0), the marker carries the person's reason and principal, and verify matches again.
+  let out = ''; cliCard.answer = 'apply';
   expect(await main(['audit', 'rebaseline', '--scope', 's', '--reason', command.reason], { root: f.root, env: f.options.env, rebaselineAudit: rebaselineConfiguredAudit,
-    stdin: Readable.from(['y\n']) as never, stdout: { write: value => { out += value; } }, stderr: { write: value => { card += value; } } })).toBe(0);
+    stdin: Readable.from([]) as never, stdout: { write: value => { out += value; } }, stderr: { write: () => true } })).toBe(0);
+  const card = JSON.stringify(cliCard.requests); cliCard.answer = null;
   expect(card).toContain('policy changed'); expect(card).toContain(command.reason); expect(out).toContain('re-baselined');
   const marker = events().at(-1);
   expect(marker).toMatchObject({ principal: { subject: String(process.getuid!()) }, subject: { kind: 'audit-checkpoint', rebaseline: { reason: command.reason } } });

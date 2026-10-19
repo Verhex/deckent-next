@@ -273,8 +273,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A restore turns the backup schedule off,** and provider keys and the backup passphrase are not in the set. *Workaround:*
   after a restore, choose `backup.schedule` again and run `deckent secret set` for each key.
 - **A restore needs the service stopped,** and the message does not name the command. *Workaround:* `deckent runtime shutdown`
-  (the long form with `--service`, `--instance`, `--command-id` and `--reason` also works), close open terminals, then run
-  the restore again.
+  (on a terminal it asks on a card; elsewhere add `--reason <text>`; the long form with `--service`, `--instance`, `--command-id`
+  and `--reason` also works), close open terminals, then run the restore again. On a terminal `deckent backup restore` checks this
+  before asking for the passphrase.
+- **`deckent backup` lists only the default recovery folder** (`state/backups/recovery`); sets made elsewhere with `--set` are not
+  listed. "Last verified" comes only from this installation's sealed backup audit records for the same absolute set path, so a set
+  verified under another spelling of its path shows "not on record". *Workaround:* name such a set with `--set`.
 - **The relative path of a backup set is refused with a misleading message.** Use an absolute path.
 - **You cannot go back to an older Deckent after a ledger upgrade** without restoring the backup taken before the upgrade
   (newer ledger versions cannot be opened by older builds).
@@ -301,6 +305,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 - **There is no Desktop app, no Dashboard and no remote HTTP API.** Use the terminal, the `deckent` command, MCP or the SDK.
   `deckent monitor` is a read-only live view. The Desktop is planned after the beta.
+- **`deckent runtime` does not show since when the service runs.** The runtime protocol (v29) carries no start time; it waits for
+  the next protocol version. The status shows build, configuration, running work and socket only.
 - **The monitor shows only the pools you may inspect** (`pool inspect`); other pools appear as one count ("Other work: N
   pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
   shows no pool-wait reason. The MCP actor's first-run rules include no `pool inspect`, so `inspect_monitor` over MCP shows only
