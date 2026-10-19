@@ -40,8 +40,11 @@ export interface ControlLabels { readonly noMatch: string; readonly arrows: { re
 /** Applies the controls to every table of one tab; grouping only where it means something (Runs, Workers). */
 export function applyControls(blocks: readonly MonitorBlock[], controls: MonitorControls, groupable: boolean, marks: ReadonlyMap<string, string>,
   labels: ControlLabels): MonitorBlock[] {
-  return blocks.map((block): MonitorBlock => {
-    if (block.kind !== 'table') return block;
+  return blocks.flatMap((block): MonitorBlock[] => {
+    // A card (Kurulumlar) is one row: the filter keeps or drops it whole and its heading carries the change mark.
+    if (block.kind === 'card') return !block.row ? [block] : controls.filter && !rowMatches(block.row, controls.filter) ? []
+      : [marks.has(block.row.key) ? { ...block, row: { ...block.row, mark: marks.get(block.row.key)! } } : block];
+    if (block.kind !== 'table') return [block];
     let rows = controls.filter ? block.rows.filter(row => rowMatches(row, controls.filter)) : [...block.rows];
     const sort = controls.sort;
     if (sort) rows = rows.map((row, index) => ({ row, index })).sort((a, b) => (sort.reverse ? -1 : 1) * compare(a.row, b.row, sort.key) || a.index - b.index).map(entry => entry.row);
@@ -51,14 +54,16 @@ export function applyControls(blocks: readonly MonitorBlock[], controls: Monitor
     rows = rows.map(row => marks.has(row.key) ? { ...row, mark: marks.get(row.key)! } : row);
     const columns = sort ? block.columns.map(column => column.sortKey === sort.key
       ? { ...column, header: `${column.header} ${sort.reverse ? labels.arrows.up : labels.arrows.down}` } : column) : block.columns;
-    return { ...block, columns, rows, ...(controls.filter && block.rows.length && !rows.length ? { empty: labels.noMatch } : {}), ...(group ? { group: label } : {}) };
+    return [{ ...block, columns, rows, ...(controls.filter && block.rows.length && !rows.length ? { empty: labels.noMatch } : {}), ...(group ? { group: label } : {}) }];
   });
 }
 
 /** Row key → signature over every table of every tab (rows repeated on two tabs carry the same signature). */
 export function signatures(tabs: Readonly<Record<string, readonly MonitorBlock[]>>): Map<string, string> {
   const out = new Map<string, string>();
-  for (const blocks of Object.values(tabs)) for (const block of blocks) if (block.kind === 'table') for (const row of block.rows) if (row.signature !== undefined) out.set(row.key, row.signature);
+  for (const blocks of Object.values(tabs)) for (const block of blocks) {
+    for (const row of block.kind === 'table' ? block.rows : block.kind === 'card' && block.row ? [block.row] : []) if (row.signature !== undefined) out.set(row.key, row.signature);
+  }
   return out;
 }
 /** `+ ` new, `* ` changed since the previous snapshot; nothing on the first snapshot (no baseline, no noise). */

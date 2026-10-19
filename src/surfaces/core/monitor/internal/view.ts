@@ -11,6 +11,7 @@ import { renderResourceLine, renderResourceDetail } from './resources.js';
 import { renderCostSummary, renderRecommendationLines } from './costs.js';
 import { globalRunCell, globalStateCell, globalStateLabel, globalStateLines, globalSummary } from './global-state.js';
 import { renderGraphSummaryLines } from './graph-summary.js';
+import { installName, installsBlocks, installState, problemsSpan } from './installs.js';
 
 /**
  * The one view model of the MonitorSnapshot (MONITOR-SURFACE): the `--once` text, `/monitor` and the fullscreen view all project these
@@ -19,10 +20,11 @@ import { renderGraphSummaryLines } from './graph-summary.js';
  */
 export interface MonitorFilters { readonly install?: string; readonly scope?: string }
 export interface MonitorView { readonly header: readonly MonitorLine[]; readonly tabs: Readonly<Record<MonitorTab, readonly MonitorBlock[]>> }
-interface Marks { readonly states: Readonly<Record<MonitorRunState, string>>; readonly warn: string; readonly on: string; readonly off: string; readonly sep: string;
-  readonly approx: string }
-const UNICODE: Marks = { states: { parked: '⏸', incomplete: '!', progressing: '▶', waiting: '~', blocked: '!', accepted: '✓', failed: '✗', cancelled: '■' }, warn: '⚠', on: '●', off: '○', sep: '·', approx: '≈' };
-const ASCII: Marks = { states: { parked: '=', incomplete: '!', progressing: '>', waiting: '~', blocked: '!', accepted: '+', failed: 'x', cancelled: '-' }, warn: '!', on: '*', off: 'o', sep: '|', approx: '~=' };
+/** PB-MON-UX markers: ✓ fine, ! needs attention, ○ off/absent, ● the install is reachable, → the next step (ASCII `+ ! o * ->`). */
+interface Marks { readonly states: Readonly<Record<MonitorRunState, string>>; readonly warn: string; readonly ok: string; readonly on: string; readonly off: string; readonly sep: string;
+  readonly approx: string; readonly next: string }
+const UNICODE: Marks = { states: { parked: '⏸', incomplete: '!', progressing: '▶', waiting: '~', blocked: '!', accepted: '✓', failed: '✗', cancelled: '■' }, warn: '!', ok: '✓', on: '●', off: '○', sep: '·', approx: '≈', next: '→' };
+const ASCII: Marks = { states: { parked: '=', incomplete: '!', progressing: '>', waiting: '~', blocked: '!', accepted: '+', failed: 'x', cancelled: '-' }, warn: '!', ok: '+', on: '*', off: 'o', sep: '|', approx: '~=', next: '->' };
 const OPEN: readonly MonitorRunState[] = ['progressing', 'waiting', 'blocked', 'parked'];
 /** Not a stall: the Run moves (or its worker runs) on its own. */
 const MOVING = new Set(['none', 'worker-running']);
@@ -102,9 +104,11 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
     serviceText: (install: MonitorInstall) => !install.service ? t('monitor.service.none', {}, locale)
       : install.service.state === 'running' ? t('monitor.service.running', { pid: install.service.processId ?? '—' }, locale)
         : install.service.state === 'stopped' ? t('monitor.service.stopped', {}, locale) : t('monitor.service.unknown', {}, locale),
-    buildText: (install: MonitorInstall, detail = false) => install.service?.build
-      ? detail ? t('monitor.build', { commit: short(install.service.build.sourceCommit, 12), builtAt: builtAt(install.service.build.builtAt) }, locale) : t('monitor.build.summary', { builtAt: builtAt(install.service.build.builtAt) }, locale)
-      : t('monitor.build.unknown', {}, locale),
+    /** The build a service runs: commit and source tree; the build time only when the service reported one (never an empty "(— built)"). */
+    buildText: (install: MonitorInstall) => { const build = install.service?.build;
+      if (!build) return t('monitor.build.unknown', {}, locale);
+      const parts = [t('monitor.build', { commit: short(build.sourceCommit, 12) }, locale), t('monitor.detail.tree', { tree: short(build.sourceTreeSha256, 12) }, locale)];
+      return [...parts, ...(build.builtAt ? [t('monitor.build.builtAt', { builtAt: builtAt(build.builtAt) }, locale)] : [])].join(sep); },
     ledgerText: (install: MonitorInstall) => install.ledgerVersion === null ? t('monitor.ledger.unknown', {}, locale) : t('monitor.ledger', { version: install.ledgerVersion }, locale),
     warnings: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => !entry.note),
     notes: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => entry.note),
@@ -123,7 +127,7 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
   };
   return words;
 }
-type Words = ReturnType<typeof wordsFor>;
+export type Words = ReturnType<typeof wordsFor>;
 const modelOf = (w: Words, install: MonitorInstall, worker: MonitorWorker) =>
   worker.model?.requested.modelId ?? w.attemptOf(install, worker)?.attempt.model ?? worker.files?.usage?.model ?? null;
 
@@ -349,38 +353,11 @@ const hiddenPools = (installs: readonly MonitorInstall[], locale: Locale): Monit
   return count ? [{ kind: 'line', line: [span(t('monitor.pool.hidden', { count }, locale), 'muted')] }] : [];
 };
 
-function installsBlocks(w: Words, installs: readonly MonitorInstall[]): MonitorBlock[] {
-  const { locale, marks, sep } = w;
-  const detail = (install: MonitorInstall) => (): readonly MonitorLine[] => [
-    [span(t('monitor.detail.install', { install: install.id, status: installStatusLabel(install.status, locale) }, locale), 'strong')],
-    [span(t('monitor.detail.path', { path: install.path }, locale))],
-    [span(t('monitor.detail.scopes', { scopes: install.scopeIds.join(', ') || '—' }, locale))],
-    [span(`${w.serviceText(install)}${sep}${t('monitor.detail.instance', { instance: install.service?.instanceId ?? '—' }, locale)}`)],
-    [span(`${w.buildText(install, true)}${sep}${t('monitor.detail.tree', { tree: short(install.service?.build?.sourceTreeSha256, 12) }, locale)}`)],
-    [span(w.ledgerText(install))],
-    [span(t('monitor.detail.counts', { runs: install.runs.length, workers: install.workers.length, approvals: install.approvals.length, pools: install.pools.length }, locale), 'muted')],
-    ...w.warnings(install).map(entry => [span(`${marks.warn} ${entry.text}`, 'warning')]),
-    ...w.notes(install).map(entry => [span(`${t('monitor.note', {}, locale)} ${entry.text}`, 'muted')]),
-  ];
-  const table: MonitorBlock = { kind: 'table', empty: t('monitor.empty.installs', {}, locale), columns: [
-    w.col(t('monitor.col.install', {}, locale), 0, 10, 20, { sortKey: 'name' }), w.col(t('monitor.col.status', {}, locale), 1, 10, 18, { sortKey: 'state' }),
-    w.col(t('monitor.col.service', {}, locale), 2, 18, 28), w.col(t('monitor.col.build', {}, locale), 3, 20, 44), w.col(t('monitor.col.path', {}, locale), 4, 16, 60, { cut: 'start' }),
-    w.col(t('monitor.col.ledger', {}, locale), 5, 8, 22)],
-  rows: installs.map((install): MonitorRow => ({ key: install.id, detail: detail(install), facets: { state: install.status, install: install.id.toLowerCase() },
-    sort: { state: install.status === 'available' ? 1 : 0, name: install.id },
-    signature: `${install.status}|${install.service?.state ?? ''}|${install.service?.build?.sourceCommit ?? ''}|${w.warnings(install).length}`, cells: [
-    span(`${install.status === 'available' ? marks.on : marks.off} ${install.id}`, install.status === 'available' ? 'success' : 'error'),
-    span(installStatusLabel(install.status, locale), install.status === 'available' ? undefined : 'error'), span(w.serviceText(install)), span(w.buildText(install), 'muted'),
-    span(install.path, 'muted'), span(w.ledgerText(install), 'muted')] })) };
-  return installs.length === 1 && installs[0]!.id === 'current'
-    ? [table, { kind: 'line', line: [span('')] }, { kind: 'line', line: [span(t('monitor.empty.otherInstalls', {}, locale), 'muted')] }] : [table];
-}
-
 /** What needs a human first: counts, install problems, approvals, stuck Runs (oldest blocker first), failed Runs, live workers. */
 function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: readonly Entry<MonitorRun>[], stuck: readonly Entry<MonitorRun>[],
   approvals: readonly Entry<MonitorApproval>[], workers: readonly Entry<MonitorWorker>[]): MonitorBlock[] {
   const { locale, now, marks } = w;
-  const heading = (text: string): MonitorBlock => ({ kind: 'line', line: [span(text, 'accent')] });
+  const heading = (text: string): MonitorBlock => ({ kind: 'line', line: [span(text, 'sectionHeader')] });
   const blank: MonitorBlock = { kind: 'line', line: [span('')] };
   const failed = runs.filter(entry => entry.value.state === 'failed');
   const running = workers.filter(entry => entry.value.process === 'running');
@@ -423,16 +400,15 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
   ];
 }
 
+/** One line per install, status first (PB-MON-UX): reachable marker and name, status word, problem count, then the folder; build details live in Kurulumlar. */
 function headerLines(w: Words, installs: readonly MonitorInstall[]): MonitorLine[] {
   const { locale, now, marks, sep } = w;
   return [
-    [span(t('monitor.title', {}, locale), 'strong'), span(sep), span(t('monitor.observed', { time: clockText(now) }, locale)), span(sep),
+    [span(t('monitor.title', {}, locale), 'sectionHeader'), span(sep), span(t('monitor.observed', { time: clockText(now) }, locale)), span(sep),
       span(t('monitor.observeOnly', {}, locale), 'muted')],
     ...(installs.length ? installs.map((install): MonitorLine => {
       const ok = install.status === 'available';
-      return [span(`${ok ? marks.on : marks.off} ${install.id}`, ok ? 'success' : 'error'), span(sep),
-        span(ok ? w.serviceText(install) : installStatusLabel(install.status, locale), ok ? undefined : 'error'), span(sep), span(w.buildText(install)), span(sep),
-        span(w.ledgerText(install), 'muted'), ...(w.warnings(install).length ? [span(sep), span(`${marks.warn} ${t('monitor.diagnostics', { count: w.warnings(install).length }, locale)}`, 'warning')] : []),
+      return [span(`${ok ? marks.on : marks.off} ${installName(install)}`, ok ? 'success' : 'error'), span(sep), installState(w, install), span(sep), problemsSpan(w, install),
         span(sep), span(install.path, 'muted')];
     }) : [[span(t('monitor.empty.installs', {}, locale), 'muted')]]),
   ];
@@ -453,7 +429,7 @@ export function buildMonitorView(snapshot: MonitorSnapshot, locale: Locale, asci
     summary: [...summaryBlocks(w, installs, runs, stuck, approvals, workers), ...history], runs: [runsBlock(w, runs),
       ...runs.flatMap(({ value: run }) => globalStateLines(projectHumanState({ kind: 'run', value: run }), locale).map(line => ({ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} `), ...line] })))],
     workers: [workersBlock(w, workers, t('monitor.empty.workers', {}, locale))], approvals: [approvalsBlock(w, approvals, false), ...history],
-    pools: [poolsBlock(w, each(installs, install => install.pools)), ...hiddenPools(installs, locale)], installs: installsBlocks(w, installs), map: mapBlocks(installs, locale, { active: w.marks.states.accepted, off: w.marks.off, sep: w.marks.sep }),
+    pools: [poolsBlock(w, each(installs, install => install.pools)), ...hiddenPools(installs, locale)], installs: installsBlocks(w, installs), map: mapBlocks(installs, locale, { ok: w.marks.ok, off: w.marks.off, warn: w.marks.warn, next: w.marks.next, sep: w.marks.sep }),
   };
   return { header: headerLines(w, installs), tabs: Object.fromEntries(MONITOR_TABS.map(tab => [tab, tabs[tab]])) as Record<MonitorTab, readonly MonitorBlock[]> };
 }

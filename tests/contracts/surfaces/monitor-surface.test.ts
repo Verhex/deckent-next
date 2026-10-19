@@ -66,7 +66,8 @@ describe('monitor text snapshot', () => {
     expect(text).toContain('dogfood note: only the most recent finished workers are shown; 5 older ones are hidden');
     expect(text).not.toMatch(/! [^\n]*most recent finished workers/);
     expect(text).toMatch(/\* dogfood [^\n]*! 3 warning\(s\)/);
-    expect(text).toContain('build b0e66d92c0ff (built 2026-10-02 08:00:00Z)'); expect(text).toContain('build 76582f9f0000 (built 2026-10-01 22:15:00Z)');
+    // PB-MON-UX: the build lives on the Installs card (commit · source tree · build time when reported), never in empty parentheses.
+    expect(text).toContain('build b0e66d92c0ff | source tree ffffffffffff | built 2026-10-02 08:00:00Z'); expect(text).toContain('build 76582f9f0000 | source tree ffffffffffff | built 2026-10-01 22:15:00Z');
     expect(text).toContain('Expired approvals: 1 (history; no decision available).'); expect(text).not.toContain('expired 2 min 0 s ago'); expect(text).toContain('expires in 45 min');
     expect(text).toContain('! 1 min 35 s (stale)');
     expect(text).not.toContain('\u001b[');
@@ -189,9 +190,9 @@ describe('fullscreen monitor', () => {
       await view.press(KEY.tab);
       expect(view.stdout.frame).toContain('[2 Runs]');
       // Runs are newest first; the selection marker (not colour) shows the selected row under the NO_COLOR palette.
-      expect(view.stdout.frame).toMatch(/› run-broken\s/);
+      expect(view.stdout.frame).toMatch(/› │ run-broken\s/);
       await view.press(KEY.down);
-      expect(view.stdout.frame).toMatch(/› run-broken-quiet/);
+      expect(view.stdout.frame).toMatch(/› │ run-broken-quiet/);
       await view.press(KEY.up); await view.press(KEY.enter);
       // "Where did it first fail": the recorded first failing line, the attempt timeline and the last worker events.
       expect(view.stdout.frame).toContain('Run run-broken · scope scope-a · revision 7');
@@ -203,7 +204,7 @@ describe('fullscreen monitor', () => {
       await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('first failure: the first failing line is not in the record');
       await view.press(KEY.esc);
-      expect(view.stdout.frame).toMatch(/› run-broken-quiet/);
+      expect(view.stdout.frame).toMatch(/› │ run-broken-quiet/);
       await view.press('3');
       expect(view.stdout.frame).toContain('[3 Workers]');
       await view.press(KEY.enter);
@@ -226,8 +227,9 @@ describe('fullscreen monitor', () => {
       expect(view.stdout.frame).toContain('remote-lab');
       await view.press('7');
       expect(view.stdout.frame).toContain('[7 Map]');
-      expect(view.stdout.frame).toContain('task kind coding → profile coding-default@3 (docker)');
-      expect(view.stdout.frame).toContain('Memory: none yet — waits for the MEMORY card');
+      expect(view.stdout.frame).toMatch(/│ coding\s+│ coding-default@3 │ docker │/u);
+      // The Map is tables now; its last line (memory) is below this 40-row screen and is checked in the text snapshot.
+      expect(view.stdout.frame).toContain('Settings layers (a later layer overrides the earlier ones)');
       await view.press('q');
       await view.instance.waitUntilExit();
     } finally { view.instance.unmount(); }
@@ -297,27 +299,30 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
       text: "biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli" });
     expect(surface.describeDiagnostic('brand-new-code:x', 'en')).toEqual({ code: 'brand-new-code', note: false, text: 'brand-new-code:x' });
   });
-  it('shows the Map tab in sentences (layers, registry, models, policy, honest memory) and says when no map was read', () => {
+  it('shows the Map tab in tables (layers, kinds, models with next steps, grouped permissions, honest memory) and says when no map was read', () => {
     // Wide enough that the shared model words (with their next step) stay on one line for the containment checks below.
     const tr = surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 240, ascii: false });
-    expect(tr).toContain('Yapılandırma katmanları (sonraki katman öncekileri ezer):');
-    expect(tr).toContain('3. proje — /home/owner/projects/deckent-next/.deckent/config.json — belirlediği bölümler: layout, terminal, inspection');
-    expect(tr).toContain('coding görevi → coding-default@3 profili (docker)');
-    expect(tr).toContain('legacy-shell@1 (host) — hiçbir görev türü kullanmıyor');
+    expect(tr).toContain('Ayar katmanları (sonraki katman öncekileri ezer)');
+    expect(tr).toMatch(/│ 3 │ proje\s+│ \/srv\/owner\/projects\/deckent-next\/\.deckent\/config\.json │ layout, terminal, inspection\s+│/u);
+    expect(tr).toMatch(/│ coding\s+│ coding-default@3 │ docker\s+│/u);
+    expect(tr).toContain('○ legacy-shell@1 (host) — hiçbir görev türü kullanmıyor');
     const unavailable = `${t('model.invocable.unavailable', { code: 'MODEL_INVOCATION_UNAVAILABLE' }, 'tr')} ${t('model.invocable.unavailableNext', {}, 'tr')}`;
-    expect(tr).toContain(`○ subscription / model-alpha-2 (${unavailable})`);
-    expect(tr).toContain(`○ subscription / model-alpha-1 (${unavailable})`);
+    expect(tr).toMatch(/│ ! çağrılamaz\s+│ model-alpha-2\s+│ subscription\s+│/u); expect(tr).toMatch(/│ ! çağrılamaz\s+│ model-alpha-1\s+│ subscription\s+│/u);
+    // One next step for the three models that share it (not three repeats).
+    expect(tr).toContain(`→ 3 model: ${unavailable}`); expect(tr.split(unavailable).length - 1).toBe(1);
     // A subscription channel (no invocation profile, no readiness reading) says plainly that the provider offers no readiness check.
     const subscribed = { ...fullSnapshot, installs: fullSnapshot.installs.map((install, index) => index === 0 && 'map' in install && install.map
       ? { ...install, map: { ...install.map, models: [{ channelId: 'codex-cli-subscription', modelId: 'gpt-6.1-sol', active: false, vendorId: 'openai', billing: 'subscription' }] } }
       : install) } as typeof fullSnapshot;
     for (const locale of ['en', 'tr'] as const) {
       const text = surface.renderMonitorText(subscribed, { locale, width: 200, ascii: false });
-      expect(text).toContain(`○ codex-cli-subscription / gpt-6.1-sol · openai · subscription (${t('model.invocable.subscription', {}, locale)})`);
+      expect(text).toMatch(/│ ○ [^│]+│ gpt-6\.1-sol\s+│ codex-cli-subscription │ —\s+│ openai · subscription │/u);
+      expect(text).toContain(`→ ${t('monitor.map.reason', { count: 1, reason: t('model.invocable.subscription', {}, locale) }, locale)}`);
     }
-    expect(tr).toContain('Politika: 12 izin (operation 5, effect 4, secret 3) · 2 görev ayrılığı kuralı');
+    expect(tr).toContain('İzinler: 12 kural · 2 görev ayrılığı kuralı');
+    expect(tr).toMatch(/│ Çalıştırma\s+│ 5\s+│ operation 5\s+│/u); expect(tr).toMatch(/│ Yönetim\s+│ 3\s+│ secret 3\s+│/u); expect(tr).toMatch(/│ Diğer\s+│ 4\s+│ effect 4\s+│/u);
     expect(tr).toContain('İzin kipleri: owner@local: standart, ci@local: full-auto');
-    expect(tr).toContain('Bellek: yok — MEMORY kartı bekleniyor');
+    expect(tr).toContain('○ Bellek: yok — MEMORY kartı bekleniyor');
     expect(tr).toContain('Bu kurulum için harita okunmadı.');
     expect(tr).not.toMatch(/[{}]"/);
   });
@@ -328,8 +333,10 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
       { channelId: 'provider', modelId: 'stale', active: true, availability: { invocable: false as const, reason: { kind: 'stale-activation' as const, code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT' } } },
       { channelId: 'provider', modelId: 'legacy', active: true }];
     const text = surface.renderMonitorText({ ...fullSnapshot, installs: [{ ...install, map: { ...install.map!, models } }] }, { locale: 'en', width: 200, ascii: false });
-    expect(text).toContain('✓ provider@2 / ready@3 · scope (Invocable now (connection not probed).)');
-    expect(text).toContain('○ provider / stale'); expect(text).toContain('○ provider / legacy');
+    expect(text).toMatch(/│ ✓ invocable\s+│ ready@3\s+│ provider@2\s+│ scope\s+│/u);
+    // A legacy `active` flag never makes a model invocable: only the shared availability does.
+    expect(text).toMatch(/│ ! not invocable\s+│ stale\s+│/u); expect(text).toMatch(/│ ! not invocable\s+│ legacy\s+│/u);
+    expect(text).toContain(`→ 1 model(s): ${t('model.invocable.stale', {}, 'en')}`);
     expect(text).toContain(t('monitor.map.models', { count: 3, active: 1 }, 'en'));
   });
   it('lists Runs newest first with a duration column, unknown admission last; workers newest first with the attempt model', () => {
@@ -338,12 +345,12 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     const order = ['run-broken ', 'run-broken-quiet', 'run-dog-1', 'run-not-admitted', 'run-stopped', 'run-unknown'].map(name => runs.indexOf(name));
     expect(order.every(index => index > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(runs).toMatch(/run-broken\s+Stopped\s+—\s+—\s+≈ 15 min\s+0\/2 accepted\s+—\s/);
+    expect(runs).toMatch(/run-broken[\s│]+Stopped[\s│]+—[\s│]+—[\s│]+≈ 15 min[\s│]+0\/2 accepted[\s│]+—[\s│]/);
     // No proven end → unknown, never last-activity arithmetic (owner: the "1 s" for 8-minute Runs on N1).
-    expect(runs).toMatch(/run-broken-quiet\s+Stopped\s+—\s+—\s+unknown\s/);
-    expect(runs).toMatch(/run-done\s+Done\s+—\s+—\s+1 h 10 min\s+2\/2 accepted\s+adopted\s/);
-    expect(runs).toMatch(/run-stopped\s+Stopped\s+—\s+—\s+unknown\s+0\/2 accepted\s+rolled back\s/);
-    expect(runs).toMatch(/run-not-admitted\s+On hold \(system\)\s+not admitted yet\s+1 h 33 min\s+running\s/);
+    expect(runs).toMatch(/run-broken-quiet[\s│]+Stopped[\s│]+—[\s│]+—[\s│]+unknown[\s│]/);
+    expect(runs).toMatch(/run-done[\s│]+Done[\s│]+—[\s│]+—[\s│]+1 h 10 min[\s│]+2\/2 accepted[\s│]+adopted[\s│]/);
+    expect(runs).toMatch(/run-stopped[\s│]+Stopped[\s│]+—[\s│]+—[\s│]+unknown[\s│]+0\/2 accepted[\s│]+rolled back[\s│]/);
+    expect(runs).toMatch(/run-not-admitted[\s│]+On hold \(system\)[\s│]+not admitted yet[\s│]+1 h 33 min[\s│]+running[\s│]/);
     const workers = text.slice(text.indexOf('── Workers'), text.indexOf('── Approvals'));
     expect(workers).toMatch(/run-broken\/build .*exited 1 .*claude\/model-alpha-2/);
   });
@@ -369,9 +376,9 @@ describe('monitor finish/delivery/attempt diagnostics', () => {
       expect(view.stdout.frame).toContain('08:55:00Z → 09:05:00Z (≈ 10 min) · exit 1');
       await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('Run run-broken-quiet'); expect(view.stdout.frame).toContain('duration unknown');
-      expect(view.stdout.frame).toContain("⚠ the attempt's output was not read: no permission to read it");
+      expect(view.stdout.frame).toContain("! the attempt's output was not read: no permission to read it");
       await view.press(KEY.esc);
-      for (let i = 0; i < 10 && !/› run-done/.test(view.stdout.frame); i++) await view.press(KEY.down);
+      for (let i = 0; i < 10 && !/› │ run-done/.test(view.stdout.frame); i++) await view.press(KEY.down);
       await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('Delivery/adoption: adopted · commit 1a2b3c4d5e6f708192a3b4c5d6e7f80912a3b4c5');
     } finally { view.instance.unmount(); }
@@ -408,17 +415,17 @@ describe('fullscreen controls: filter, sort, group, change marks, snapshot age',
       await view.press(KEY.tab); await view.press('s');
       expect(view.stdout.frame).toContain('Duration ▼'); expect(view.stdout.frame).toContain('sorted by age (newest first)');
       await view.press('s');
-      expect(view.stdout.frame).toContain('State ▼'); expect(view.stdout.frame).toMatch(/› run-[a-z-]+\s+On hold \(system\)/);
+      expect(view.stdout.frame).toContain('State ▼'); expect(view.stdout.frame).toMatch(/› │ run-[a-z-]+[\s│]+On hold \(system\)/);
       await view.press('s');
-      expect(view.stdout.frame).toContain('Run ▼'); expect(view.stdout.frame).toMatch(/› run-blocked-approval/);
+      expect(view.stdout.frame).toContain('Run ▼'); expect(view.stdout.frame).toMatch(/› │ run-blocked-approval/);
       await view.press('S');
-      expect(view.stdout.frame).toContain('Run ▲'); expect(view.stdout.frame).toMatch(/› run-worker-stale-heartbeat/);
+      expect(view.stdout.frame).toContain('Run ▲'); expect(view.stdout.frame).toMatch(/› │ run-worker-stale-heartbeat/);
       await view.press('s');
       expect(view.stdout.frame).not.toMatch(/[▲▼]/);
       await view.press('g');
-      expect(view.stdout.frame).toContain('grouped by install'); expect(view.stdout.frame).toMatch(/\n {1}current\n/); expect(view.stdout.frame).toMatch(/\n {1}dogfood\n/);
+      expect(view.stdout.frame).toContain('grouped by install'); expect(view.stdout.frame).toMatch(/├─ current ─/u); expect(view.stdout.frame).toMatch(/├─ dogfood ─/u);
       await view.press('g');
-      expect(view.stdout.frame).toContain('grouped by state'); expect(view.stdout.frame).toMatch(/\n {1}Stopped\n/);
+      expect(view.stdout.frame).toContain('grouped by state'); expect(view.stdout.frame).toMatch(/├─ Stopped ─/u);
       await view.press('g');
       expect(view.stdout.frame).not.toContain('grouped by');
     } finally { view.instance.unmount(); }
@@ -432,10 +439,10 @@ describe('fullscreen controls: filter, sort, group, change marks, snapshot age',
     try {
       await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
       await view.press(KEY.tab);
-      expect(view.stdout.frame).not.toMatch(/^[+*] run-/m);
-      await until(() => calls >= 2 && /^\+ run-new/m.test(view.stdout.frame), 'new row mark');
-      expect(view.stdout.frame).toMatch(/^\* run-none/m);
-      await until(() => calls >= 3 && !/^[+*] run-/m.test(view.stdout.frame), 'marks gone after one refresh');
+      expect(view.stdout.frame).not.toMatch(/^[+*] │ run-/m);
+      await until(() => calls >= 2 && /^\+ │ run-new/m.test(view.stdout.frame), 'new row mark');
+      expect(view.stdout.frame).toMatch(/^\* │ run-none/m);
+      await until(() => calls >= 3 && !/^[+*] │ run-/m.test(view.stdout.frame), 'marks gone after one refresh');
     } finally { view.instance.unmount(); }
   });
   it('shows the snapshot age: neutral when fresh, ⚠ after two intervals, ✗ after five; a failed read names the last read time', async () => {
@@ -545,7 +552,8 @@ it('fullscreen Config tab reads the shared inspect, exposes source/binding/apply
   try {
     await until(() => reads > 0 && view.stdout.frame.includes('Stuck or waiting'), 'config inspected');
     await view.press('8'); expect(view.stdout.frame).toContain('[8 Config]'); expect(view.stdout.frame).toContain('max_workers');
-    expect(view.stdout.frame).toContain('global'); expect(view.stdout.frame).toContain('bound'); expect(view.stdout.frame).toContain('restart');
+    // PB-MON-UX: a human name beside the key, the source in words and when it takes effect (the binding shows only when a setting is not read).
+    expect(view.stdout.frame).toContain('Worker ceiling (max_workers)'); expect(view.stdout.frame).toContain('global (user)'); expect(view.stdout.frame).toContain('after restart');
     await view.press(KEY.enter); expect(view.stdout.frame).toContain('Key: max_workers'); expect(view.stdout.frame).toContain('Installation ceiling');
     expect(widest(view.stdout.frame)).toBeLessThanOrEqual(80);
   } finally { view.instance.unmount(); }
@@ -586,8 +594,8 @@ for (const locale of ['en', 'tr'] as const) it(`config inspection failure leaves
 for (const locale of ['en', 'tr'] as const) it(`config help derives its number from the active tabs (${locale})`, () => {
   const customTabs = ['summary', 'config', 'runs'] as const;
   const lines = surface.legendLines(locale, false, customTabs);
-  const configHint = lines.map(line => line.map(span => span.text).join('')).find(text => text.includes('Config:'));
-  expect(configHint).toMatch(/^2\s+Config:/);
+  const configHint = lines.map(line => line.map(span => span.text).join('')).find(text => text.includes(locale === 'en' ? 'Settings:' : 'Ayarlar:'));
+  expect(configHint).toMatch(locale === 'en' ? /^2\s+Settings:/ : /^2\s+Ayarlar:/);
 });
 
 function humanWorkerSnapshot() {
@@ -716,7 +724,7 @@ for (const locale of ['en', 'tr'] as const) for (const columns of [80, 40]) it(`
     const view = mount({ load: async () => snapshot, locale, columns, rows: 24 });
     const label = t('monitor.global.heldBy', { state: t('monitor.global.held', {}, locale), waitingOn: t(`monitor.global.${who}`, {}, locale) }, locale);
     const selectedOwner = () => {
-      const lines = view.stdout.frame.split('\n'), at = lines.findIndex(line => line.startsWith('› held-09/build'));
+      const lines = view.stdout.frame.split('\n'), at = lines.findIndex(line => line.startsWith('› │ held-09/build'));
       expect(at, view.stdout.frame).toBeGreaterThanOrEqual(0);
       expect(lines[at + 1]).toContain(label); // the selected row's own carrier, never a different row/group's label.
       expect(widest(view.stdout.frame)).toBeLessThanOrEqual(columns); expect(lines.length).toBeLessThanOrEqual(24);
@@ -731,7 +739,7 @@ for (const locale of ['en', 'tr'] as const) for (const columns of [80, 40]) it(`
       await view.press('g'); await view.press('g');
       // Grouping may reorder rows; explicitly navigate back to the same worker identity.
       for (let i = 0; i < 8; i++) await view.press(KEY.up);
-      for (let i = 0; i < 10 && !view.stdout.frame.split('\n').some(line => line.startsWith('› held-09/build')); i++) await view.press(KEY.down);
+      for (let i = 0; i < 10 && !view.stdout.frame.split('\n').some(line => line.startsWith('› │ held-09/build')); i++) await view.press(KEY.down);
       selectedOwner();
       await view.press(KEY.enter); await view.press(KEY.esc); selectedOwner();
       await view.press(KEY.down); await view.press(KEY.up); selectedOwner();

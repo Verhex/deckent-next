@@ -270,6 +270,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   bir havuzda bekliyorsa havuz bekleme nedeni görünmez. MCP aktörünün ilk kurulum kurallarında `pool inspect` yoktur; MCP
   üzerinden `inspect_monitor` yalnız bu sayıyı gösterir. *Yol:* bir yöneticiden o havuz için `pool inspect` isteyin;
   `deckent pool status` aynı kararı kullanır.
+- **Monitor okuyamadığınız bir kapsamın adını göstermez, ama erişim kontrolü başarısız olan bir kapsamın adını hâlâ gösterir.**
+  Reddedilen kapsamlar tek bir sayıdır ("N kapsama erişim reddedildi"); kontrolü yapılamayan bir kapsam (örneğin kilitli defter)
+  kimliği ve nedeniyle görünür. *Yol:* reddedilenler için gerekmez; başarısız kontrol için `deckent doctor` ve gösterilen kod.
+- **Monitor bir servisin derleme zamanını ve sürüm numarasını göstermez.** Servis yalnız commit'ini ve kaynak ağacını bildirir;
+  Kurulumlar `build <commit> · kaynak ağacı <özet>` gösterir. *Yol:* servisi çalıştıran makinede `deckent --version`.
 - **Boşta duran etkileşimli `deckent monitor` CPU kullanmaya devam eder,** çünkü her yenilemede her şeyi yeniden okur
   (`inspection.workers.heartbeatMs`, varsayılan 2 sn). Run ve kapsam sayısıyla artar. *Yol:* `p` ile duraklatın,
   `inspection.workers.heartbeatMs` değerini büyütün ya da `deckent monitor --once` kullanın.

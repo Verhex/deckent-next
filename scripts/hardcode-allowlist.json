@@ -411,8 +411,6 @@
   {"file":"src/surfaces/core/cli-kit/internal/usage.ts","fingerprint":"8a82d93d3b94091dc20b32d6fc00fb89cc7990a616599007f2d70a9d6fe0da05","rule":"G3","origin":"src/surfaces/core/cli/internal/usage.ts"},
   {"file":"src/surfaces/core/monitor/internal/app.tsx","fingerprint":"288b344c7cce887e6ca0646de63f7658452d9e3e374f83d90423958da290b855","rule":"G2"},
   {"file":"src/surfaces/core/monitor/internal/app.tsx","fingerprint":"66a10e9b4449b26da289f3d76887d0b1959474098a921d192d0b797818fff1e0","rule":"G2"},
-  {"file":"src/surfaces/core/monitor-view/internal/config-view.ts","fingerprint":"63bdd3cfe4584107b5aa909e28070a20ed489d1721aa24c49ab8f4810bccd157","rule":"G2","origin":"src/surfaces/core/monitor/internal/config-view.ts"},
-  {"file":"src/surfaces/core/monitor-view/internal/config-view.ts","fingerprint":"798d4e2449198709ff0f662fdd0566f8a205f0b19699b91052e352426632e667","rule":"G2","origin":"src/surfaces/core/monitor/internal/config-view.ts"},
   {"file":"src/surfaces/core/monitor/internal/view.ts","fingerprint":"2e19fff2f95a6e6aa9fff176f2907e5d0e8e652a9fbe9c4d856edfb8c7cf99f7","rule":"G2"},
   {"file":"src/surfaces/core/terminal-composer/internal/assist.ts","fingerprint":"0043ab60e764264fbfc1cc878dacbbd3b5fcd2c4111aa33461a3a7c66034d6ea","rule":"G2"},
   {"file":"src/surfaces/core/terminal-composer/internal/assist.ts","fingerprint":"79eb5a182c0af5af396ab130fe4ee79d8d4e7f76fdfe1b5b1c15dbea0563aa8a","rule":"G2"},

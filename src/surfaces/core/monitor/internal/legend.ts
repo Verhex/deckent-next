@@ -13,13 +13,15 @@ export function legendLines(locale: Locale, ascii: boolean, tabs: readonly (Moni
   const configIndex = tabs.indexOf('config');
   const colour = (role: MonitorRole) => ({ info: t('monitor.legend.colour.info', {}, locale), warning: t('monitor.legend.colour.warning', {}, locale),
     error: t('monitor.legend.colour.error', {}, locale), success: t('monitor.legend.colour.success', {}, locale), muted: t('monitor.legend.colour.muted', {}, locale),
-    accent: t('monitor.legend.colour.accent', {}, locale), strong: t('monitor.legend.colour.accent', {}, locale) })[role];
+    accent: t('monitor.legend.colour.accent', {}, locale), strong: t('monitor.legend.colour.accent', {}, locale), sectionHeader: t('monitor.legend.colour.accent', {}, locale),
+    keyLabel: t('monitor.legend.colour.accent', {}, locale), windowBorder: t('monitor.legend.colour.muted', {}, locale) })[role];
   const rows: readonly (readonly [string, string, MonitorRole, string])[] = [
     ['▶', '>', 'info', t('monitor.legend.progressing', {}, locale)], ['~', '~', 'warning', t('monitor.legend.waiting', {}, locale)],
     ['!', '!', 'error', t('monitor.legend.blocked', {}, locale)], ['✓', '+', 'success', t('monitor.legend.accepted', {}, locale)],
     ['✗', 'x', 'error', t('monitor.legend.failed', {}, locale)], ['■', '-', 'muted', t('monitor.legend.cancelled', {}, locale)],
     ['●', '*', 'success', t('monitor.legend.installOn', {}, locale)], ['○', 'o', 'error', t('monitor.legend.installOff', {}, locale)],
-    ['⚠', '!', 'warning', t('monitor.legend.warning', {}, locale)], ['›', '>', 'accent', t('monitor.legend.selected', {}, locale)],
+    ['✓', '+', 'success', t('monitor.legend.ok', {}, locale)], ['!', '!', 'warning', t('monitor.legend.warning', {}, locale)],
+    ['→', '->', 'info', t('monitor.legend.next', {}, locale)], ['›', '>', 'accent', t('monitor.legend.selected', {}, locale)],
     ['≈', '~=', 'muted', t('monitor.legend.approx', {}, locale)],
     [CHANGE_GLYPHS.added, CHANGE_GLYPHS.added, 'accent', t('monitor.legend.added', {}, locale)],
     [CHANGE_GLYPHS.changed, CHANGE_GLYPHS.changed, 'accent', t('monitor.legend.changed', {}, locale)],
@@ -27,7 +29,7 @@ export function legendLines(locale: Locale, ascii: boolean, tabs: readonly (Moni
   const width = Math.max(...rows.map(row => colour(row[2]).length));
   return [
     ...t('monitor.live.help', {}, locale).split('\n').map(text => [span(text)]),
-    ...(configIndex >= 0 ? [[span(t('config.surface.monitorHelp', { index: configIndex + 1 }, locale))]] : []),
+    ...(configIndex >= 0 ? [[span(t('monitor.config.help', { index: configIndex + 1 }, locale))]] : []),
     [span('')], [span(t('monitor.legend.title', {}, locale), 'accent')],
     ...rows.map(([unicode, plain, role, meaning]): MonitorLine => [span(`  ${ascii ? plain : unicode}  `, role), span(colour(role).padEnd(width + 2), 'muted'), span(meaning)]),
   ];

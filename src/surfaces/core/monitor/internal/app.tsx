@@ -83,7 +83,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const [detailOffset, setDetailOffset] = useState(0);
   const [help, setHelp] = useState(false);
   const [controls, setControls] = useState<MonitorControls>(NO_CONTROLS);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(false), [configAll, setConfigAll] = useState(false); // `a` on Config: view state only, the read never changes
   const [clock, setClock] = useState(() => now());
   const alive = useRef(true), inFlight = useRef(false);
 
@@ -116,11 +116,11 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
 
   const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii) : null, [ascii, filters, locale, snapshot]);
   const current = tabs[tab]!;
-  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale) : configFailure
+  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : configFailure
     ? [{ kind: 'line' as const, line: [span(t('config.surface.unavailable', {}, locale), 'warning')] }, { kind: 'line' as const, line: [span(configFailure, 'error')] }]
     : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
-    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configFailure, configView, controls, current, locale, received, view]);
-  const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis), [blocks, ellipsis, width]);
+    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configAll, configFailure, configView, controls, current, locale, received, view]);
+  const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis, ascii), [ascii, blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
   const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
   const detailRow = detail === null ? null : flat.find(line => line.row?.key === detail)?.row ?? null;
@@ -163,7 +163,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (help) return;
     if (input === '/') { setEditing(true); setDetail(null); return; }
     if (input === 'r') { void refresh(); return; }
-    if (input === 'p') { setPaused(value => !value); return; }
+    if (input === 'p' || (input === 'a' && current === 'config')) { if (input === 'p') setPaused(value => !value); else { setConfigAll(value => !value); move(-items.length); } return; }
     if (input === 's') { setControls(value => { const next = cycle(SORT_CYCLE, value.sort?.key ?? null); return { ...value, sort: next ? { key: next, reverse: false } : null }; }); return; }
     if (input === 'S') { setControls(value => ({ ...value, sort: { key: value.sort?.key ?? 'age', reverse: !(value.sort?.reverse ?? false) } })); return; }
     if (input === 'g') { setControls(value => ({ ...value, group: cycle(GROUP_CYCLE, value.group) })); return; }
@@ -214,7 +214,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     ...shown.map(line => ({ line, selected: colored && detail === null && !help && (line[0]?.text.startsWith(pointer) ?? false) })),
     { line: clipLine(status, width, ellipsis) },
     // While reads fail the key hint gives way to the typed reason (one line, the layout height never changes).
-    { line: clipLine(failure && !editing ? [span(failure.text, 'error')] : [span(t('monitor.live.hint', {}, locale), 'muted')], width, ellipsis) }];
+    { line: clipLine(failure && !editing ? [span(failure.text, 'error')] : [span(current === 'config' ? t('monitor.config.hint', {}, locale) : t('monitor.live.hint', {}, locale), 'muted')], width, ellipsis) }];
   return (
     <Box flexDirection="column" width={width}>
       {lines.map((entry, index) => (

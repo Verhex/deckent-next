@@ -1,26 +1,38 @@
 Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
-● current · service running (pid 31337) · build recorded (b…
+● deckent-next-with-a-long-name (current) · RUNNING · ✓ no …
 
 ── Summary ─────────────────────────────────────────────────
 Runs: 0 queued · 0 running · 0 checking · 1 on hold · 0 done
 · 0 stopped
 
 Waiting for you (1)
-  Subject                                 Waiting    Expires
-  operation: A very long approval summa…  1 min 0 s  unknown
+  ┌──────────────────────────────────┬───────────┬─────────┐
+  │ Subject                          │ Waiting   │ Expires │
+  ├──────────────────────────────────┼───────────┼─────────┤
+  │ operation: A very long approval… │ 1 min 0 s │ unknown │
+  └──────────────────────────────────┴───────────┴─────────┘
 
 Stuck or waiting, oldest first (1)
-  Run                      Why                     Stuck for
-  run-2026-10-02-extreme…  ! worker silent (stal…  2 d 3 h
+  ┌───────────────────────────────┬────────────────────────┐
+  │ Run                           │ Why                    │
+  ├───────────────────────────────┼────────────────────────┤
+  │ run-2026-10-02-extremely-lon… │ ! worker silent (stal… │
+  └───────────────────────────────┴────────────────────────┘
 
 Workers running now (1)
-  Run/Task                      State    Heartbeat   Process
-  run-2026-10-02-extremely-lo…  On hold  ⚠ 1 h 0 m…  running
-  On hold (system)
+  ┌───────────────────────┬─────────┬────────────┬─────────┐
+  │ Run/Task              │ State   │ Heartbeat  │ Process │
+  ├───────────────────────┼─────────┼────────────┼─────────┤
+  │ run-2026-10-02-extre… │ On hold │ ! 1 h 0 m… │ running │
+  │ On hold (system)                                       │
+  └───────────────────────┴─────────┴────────────┴─────────┘
 
 ── Runs ────────────────────────────────────────────────────
-  Run                                       State
-  run-2026-10-02-extremely-long-identifie…  On hold (system)
+  ┌─────────────────────────────────────┬──────────────────┐
+  │ Run                                 │ State            │
+  ├─────────────────────────────────────┼──────────────────┤
+  │ run-2026-10-02-extremely-long-iden… │ On hold (system) │
+  └─────────────────────────────────────┴──────────────────┘
 run-2026-10-02-extremely-long-identifier-for-a-delivery-run-
 0123456789abcdef  ·  Waiting on system · reason: worker
 silent (stale heartbeat)
@@ -29,9 +41,12 @@ silent (stale heartbeat)
 worker
 
 ── Workers ─────────────────────────────────────────────────
-  Run/Task                      State    Heartbeat   Process
-  run-2026-10-02-extremely-lo…  On hold  ⚠ 1 h 0 m…  running
-  On hold (system)
+  ┌───────────────────────┬─────────┬────────────┬─────────┐
+  │ Run/Task              │ State   │ Heartbeat  │ Process │
+  ├───────────────────────┼─────────┼────────────┼─────────┤
+  │ run-2026-10-02-extre… │ On hold │ ! 1 h 0 m… │ running │
+  │ On hold (system)                                       │
+  └───────────────────────┴─────────┴────────────┴─────────┘
 
 On hold (system)
 Waiting on system · reason: worker silent (stale heartbeat)
@@ -42,7 +57,7 @@ run-2026-10-02-extremely-long-identifier-for-a-delivery-run-
 0123456789abcdef/task-with-a-long-name-0123456789 · attempt
 att-0123456789abcdef · gen 2 · claude · install current
 Doing now: editing · src/app.ts — apply patch
-Heartbeat ⚠ 1 h 0 min (stale) · process running · pid 4242 ·
+Heartbeat ! 1 h 0 min (stale) · process running · pid 4242 ·
 handle ctr-task-with-a-long-name-0123456789
 Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
 0.4321 USD · 1 tool errors
@@ -53,33 +68,44 @@ Workspace
 /srv/deckent/workspaces/task-with-a-long-name-0123456789
 
 ── Approvals ───────────────────────────────────────────────
-  Subject                      Waiting    Expires  Assurance
-  operation: A very long app…  1 min 0 s  unknown  local-os
+  ┌──────────────────────────────────┬───────────┬─────────┐
+  │ Subject                          │ Waiting   │ Expires │
+  ├──────────────────────────────────┼───────────┼─────────┤
+  │ operation: A very long approval… │ 1 min 0 s │ unknown │
+  └──────────────────────────────────┴───────────┴─────────┘
 
 ── Pools ───────────────────────────────────────────────────
-  Pool                              Usage          Hold
-  pool-with-a-long-identifier-for…  3 in use / 16  no
+  ┌──────────────────────────────────┬──────────────┬──────┐
+  │ Pool                             │ Usage        │ Hold │
+  ├──────────────────────────────────┼──────────────┼──────┤
+  │ pool-with-a-long-identifier-for… │ 3 in use / … │ no   │
+  └──────────────────────────────────┴──────────────┴──────┘
 
 ── Installs ────────────────────────────────────────────────
-Install current · available
-Path
-/home/owner/a/very/deep/directory/structure/that/never/ends/
-projects/deckent-next-with-a-long-name
-Scopes:
-scope-with-a-really-long-name-for-enterprise-unit-alpha
-service running (pid 31337) · instance svc-01
-build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · source
-tree ffffffffffff
-ledger v44
-1 Runs · 1 workers · 1 approvals · 1 pools
+  ● deckent-next-with-a-long-name (current)   RUNNING   ✓ n…
+  ┌──────────┬─────────────────────────────────────────────┐
+  │ Status   │ ✓ Service running · ✓ Ledger v44            │
+  ├──────────┼─────────────────────────────────────────────┤
+  │ Workload │ 1 run(s) · 1 worker(s) · 1 approval(s)      │
+  │          │ waiting · 1 pool(s)                         │
+  │ Scope    │ scope-with-a-really-long-name-for-enterpris │
+  │          │ e-unit-alpha                                │
+  │ Folder   │ /srv/owner/a/very/deep/directory/structure/ │
+  │          │ that/never/ends/projects/deckent-next-with- │
+  │          │ a-long-name                                 │
+  ├──────────┼─────────────────────────────────────────────┤
+  │ Build    │ build b0e66d92c0ff · source tree            │
+  │          │ ffffffffffff · built 2026-10-02 08:00:00Z   │
+  │ Service  │ pid 31337 · instance svc-01                 │
+  └──────────┴─────────────────────────────────────────────┘
 
 No other install observed. Add one under config
 `inspection.workers.sources`.
 
 ── Map ─────────────────────────────────────────────────────
 current ·
-/home/owner/a/very/deep/directory/structure/that/never/ends/
-projects/deckent-next-with-a-long-name
+/srv/owner/a/very/deep/directory/structure/that/never/ends/p
+rojects/deckent-next-with-a-long-name
   No map was read for this install.
 
 Observe only: this view never claims, reserves, cancels or

@@ -1,77 +1,92 @@
 Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
-● current · service running (pid 31337) · build recorded (b…
-● dogfood · service running (pid 2001) · build recorded (bu…
-○ remote-lab · unavailable · build unknown · ledger version…
+● deckent-next (current) · RUNNING · ! 1 warning(s) · /srv/…
+● dogfood · RUNNING · ! 3 warning(s) · /srv/owner/deckent-d…
+○ remote-lab · UNREACHABLE · ! 2 warning(s) · /mnt/lab/deck…
 
 ── Summary ─────────────────────────────────────────────────
 Runs: 3 queued · 2 running · 2 checking · 8 on hold · 1 done
 · 3 stopped
-⚠ current has problems: scope scope-x could not be read
+! current has problems: scope scope-x could not be read
 (LEDGER_LOCKED)
-⚠ dogfood has problems: the ledger is version 43, older than
+! dogfood has problems: the ledger is version 43, older than
 this build: newer fields may be empty; future-code:abc;
 approvals of scope scope-dog are hidden: you may not see
 them
-⚠ remote-lab is unavailable: the ledger could not be read
+! remote-lab is unavailable: the ledger could not be read
 (LEDGER_LOCKED); service state could not be read
 (LOCAL_RUNTIME_DENIED)
 dogfood note: only the most recent finished workers are
 shown; 5 older ones are hidden
 
 Waiting for you (2)
-  Subject                       Waiting     Expires
-  operation: Push branch lane…  3 h 12 min  expires in 45 m…
-  operation: you may not see …  10 min      unknown
+  ┌───────────────────────────────────────────┬────────────┐
+  │ Subject                                   │ Waiting    │
+  ├───────────────────────────────────────────┼────────────┤
+  │ operation: Push branch lane/monitor to o… │ 3 h 12 min │
+  │ operation: you may not see the summary    │ 10 min     │
+  └───────────────────────────────────────────┴────────────┘
 
 Stuck or waiting, oldest first (12)
-  Run                     Why                     Stuck for
-  run-blocked-approval    ~ awaiting approval (…  3 h 12 min
-  run-not-admitted        ~ not admitted yet      1 h 33 min
-  run-cancellation-pend…  ! cancellation pending  1 h 26 min
-  run-unresolved-effect   ! effect outcome unce…  1 h 19 min
-  run-evaluation-unknown  ! evaluation result u…  1 h 11 min
-  run-evaluation-not-re…  ! evaluation not ready  1 h 4 min
-  run-worker-exited-une…  ! worker exited, not …  57 min
-  run-worker-stale-hear…  ! worker silent (stal…  50 min
-  run-waiting-dependency  ~ waiting for a depen…  28 min
-  run-pool-held           ~ pool on hold          21 min
-  run-waiting-pool-slot   ~ waiting for a pool …  14 min
-  run-unknown             ! reason unknown        unknown
+  ┌───────────────────────────────┬────────────────────────┐
+  │ Run                           │ Why                    │
+  ├───────────────────────────────┼────────────────────────┤
+  │ run-blocked-approval          │ ~ awaiting approval (… │
+  │ run-not-admitted              │ ~ not admitted yet     │
+  │ run-cancellation-pending      │ ! cancellation pending │
+  │ run-unresolved-effect         │ ! effect outcome unce… │
+  │ run-evaluation-unknown        │ ! evaluation result u… │
+  │ run-evaluation-not-ready      │ ! evaluation not ready │
+  │ run-worker-exited-unevaluated │ ! worker exited, not … │
+  │ run-worker-stale-heartbeat    │ ! worker silent (stal… │
+  │ run-waiting-dependency        │ ~ waiting for a depen… │
+  │ run-pool-held                 │ ~ pool on hold         │
+  │ run-waiting-pool-slot         │ ~ waiting for a pool … │
+  │ run-unknown                   │ ! reason unknown       │
+  └───────────────────────────────┴────────────────────────┘
 
 Failed Runs and where they first failed (2)
-  Run               First failure              Last activity
-  run-broken        ✗ build: ✗ [unit-budget]…  25 min ago
-  run-broken-quiet  ✗ build: first failing l…  35 min ago
+  ┌──────────────────┬─────────────────────────────────────┐
+  │ Run              │ First failure                       │
+  ├──────────────────┼─────────────────────────────────────┤
+  │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfa… │
+  │ run-broken-quiet │ ✗ build: first failing line not re… │
+  └──────────────────┴─────────────────────────────────────┘
 
 Workers running now (2)
-  Run/Task                    State    Heartbeat     Process
-  run-blocked-approval/build  On hold  1 s           running
-  On hold (you)
-  run-blocked-approval/lint   On hold  ⚠ 1 min 35 …  running
-  On hold (system)
+  ┌───────────────────────┬─────────┬────────────┬─────────┐
+  │ Run/Task              │ State   │ Heartbeat  │ Process │
+  ├───────────────────────┼─────────┼────────────┼─────────┤
+  │ run-blocked-approval… │ On hold │ 1 s        │ running │
+  │ On hold (you)                                          │
+  │ run-blocked-approval… │ On hold │ ! 1 min 3… │ running │
+  │ On hold (system)                                       │
+  └───────────────────────┴─────────┴────────────┴─────────┘
 Expired approvals: 1 (history; no decision available).
 
 ── Runs ────────────────────────────────────────────────────
-  Run                            State
-  run-broken                     Stopped
-  run-broken-quiet               Stopped
-  run-dog-1                      Running
-  run-not-admitted               On hold (system)
-  run-done                       Done
-  run-cancellation-pending       On hold (system)
-  run-unresolved-effect          On hold (system)
-  run-evaluation-unknown         On hold (system)
-  run-evaluation-not-ready       Checking
-  run-worker-exited-unevaluated  Checking
-  run-worker-stale-heartbeat     On hold (system)
-  run-worker-running             Running
-  run-blocked-approval           On hold (you)
-  run-waiting-dependency         Queued
-  run-pool-held                  On hold (operator)
-  run-waiting-pool-slot          Queued
-  run-none                       Queued
-  run-stopped                    Stopped
-  run-unknown                    On hold (system)
+  ┌───────────────────────────────┬────────────────────┐
+  │ Run                           │ State              │
+  ├───────────────────────────────┼────────────────────┤
+  │ run-broken                    │ Stopped            │
+  │ run-broken-quiet              │ Stopped            │
+  │ run-dog-1                     │ Running            │
+  │ run-not-admitted              │ On hold (system)   │
+  │ run-done                      │ Done               │
+  │ run-cancellation-pending      │ On hold (system)   │
+  │ run-unresolved-effect         │ On hold (system)   │
+  │ run-evaluation-unknown        │ On hold (system)   │
+  │ run-evaluation-not-ready      │ Checking           │
+  │ run-worker-exited-unevaluated │ Checking           │
+  │ run-worker-stale-heartbeat    │ On hold (system)   │
+  │ run-worker-running            │ Running            │
+  │ run-blocked-approval          │ On hold (you)      │
+  │ run-waiting-dependency        │ Queued             │
+  │ run-pool-held                 │ On hold (operator) │
+  │ run-waiting-pool-slot         │ Queued             │
+  │ run-none                      │ Queued             │
+  │ run-stopped                   │ Stopped            │
+  │ run-unknown                   │ On hold (system)   │
+  └───────────────────────────────┴────────────────────┘
 run-pool-held  ·  Waiting on operator · reason: pool on hold
 · since: 2026-10-02 09:08:34Z · deadline: unknown · next:
 Inspect the pool
@@ -97,14 +112,17 @@ run-unknown  ·  Waiting on system · reason: reason unknown ·
 since: unknown · deadline: unknown · next: Inspect the Run
 
 ── Workers ─────────────────────────────────────────────────
-  Run/Task                    State    Heartbeat    Process
-  run-blocked-approval/build  On hold  1 s          running
-  On hold (you)
-  run-broken/build            Stopped  —            exited 1
-  run-blocked-approval/lint   On hold  ⚠ 1 min 35…  running
-  On hold (system)
-  run-blocked-approval/pack   On hold  released     missing
-  On hold (system)
+  ┌──────────────────────┬─────────┬────────────┬──────────┐
+  │ Run/Task             │ State   │ Heartbeat  │ Process  │
+  ├──────────────────────┼─────────┼────────────┼──────────┤
+  │ run-blocked-approva… │ On hold │ 1 s        │ running  │
+  │ On hold (you)                                          │
+  │ run-broken/build     │ Stopped │ —          │ exited 1 │
+  │ run-blocked-approva… │ On hold │ ! 1 min 3… │ running  │
+  │ On hold (system)                                       │
+  │ run-blocked-approva… │ On hold │ released   │ missing  │
+  │ On hold (system)                                       │
+  └──────────────────────┴─────────┴────────────┴──────────┘
 
 On hold (you)
 Waiting on you · reason: awaiting approval (appr-0001) ·
@@ -141,7 +159,7 @@ worker
 Worker run-blocked-approval/lint · attempt ed5a5613-attempt
 · gen 1 · claude · install current
 Doing now: running · src/app.ts — apply patch
-Heartbeat ⚠ 1 min 35 s (stale) · process running · pid 4242
+Heartbeat ! 1 min 35 s (stale) · process running · pid 4242
 · handle ctr-lint
 Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
 0.4321 USD · 1 tool errors
@@ -168,90 +186,124 @@ Custody released: the container and the attempt directory
 are gone; the patch was retained.
 
 ── Approvals ───────────────────────────────────────────────
-  Subject                       Waiting     Expires
-  operation: Push branch lane…  3 h 12 min  expires in 45 m…
-  operation: you may not see …  10 min      unknown
+  ┌───────────────────────────────────────────┬────────────┐
+  │ Subject                                   │ Waiting    │
+  ├───────────────────────────────────────────┼────────────┤
+  │ operation: Push branch lane/monitor to o… │ 3 h 12 min │
+  │ operation: you may not see the summary    │ 10 min     │
+  └───────────────────────────────────────────┴────────────┘
 Expired approvals: 1 (history; no decision available).
 
 ── Pools ───────────────────────────────────────────────────
-  Pool     Usage                 Hold                Install
-  default  4 in use / 4          no                  current
-  gpu      0 in use / 1          ⚠ held by owner@l…  current
-  ci       2 in use / unlimited  no                  current
-  default  1 in use / 2          no                  dogfood
+  ┌─────────┬──────────────────────┬─────────────┬─────────┐
+  │ Pool    │ Usage                │ Hold        │ Install │
+  ├─────────┼──────────────────────┼─────────────┼─────────┤
+  │ default │ 4 in use / 4         │ no          │ current │
+  │ gpu     │ 0 in use / 1         │ ! held by … │ current │
+  │ ci      │ 2 in use / unlimited │ no          │ current │
+  │ default │ 1 in use / 2         │ no          │ dogfood │
+  └─────────┴──────────────────────┴─────────────┴─────────┘
 
 ── Installs ────────────────────────────────────────────────
-Install current · available
-Path /home/owner/projects/deckent-next
-Scopes: scope-a
-service running (pid 31337) · instance svc-01
-build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · source
-tree ffffffffffff
-ledger v44
-18 Runs · 4 workers · 2 approvals · 3 pools
-⚠ scope scope-x could not be read (LEDGER_LOCKED)
+  ● deckent-next (current)   RUNNING   ! 1 warning(s)
+  ┌───────────┬────────────────────────────────────────────┐
+  │ Status    │ ✓ Service running · ✓ Ledger v44           │
+  │ ! Warning │ scope scope-x could not be read            │
+  │           │ (LEDGER_LOCKED)                            │
+  ├───────────┼────────────────────────────────────────────┤
+  │ Workload  │ 18 run(s) · 4 worker(s) · 2 approval(s)    │
+  │           │ waiting · 3 pool(s)                        │
+  │ Scope     │ scope-a                                    │
+  │ Folder    │ /srv/owner/projects/deckent-next           │
+  ├───────────┼────────────────────────────────────────────┤
+  │ Build     │ build b0e66d92c0ff · source tree           │
+  │           │ ffffffffffff · built 2026-10-02 08:00:00Z  │
+  │ Service   │ pid 31337 · instance svc-01                │
+  └───────────┴────────────────────────────────────────────┘
 
-Install dogfood · available
-Path /home/owner/deckent-dogfood
-Scopes: scope-dog
-service running (pid 2001) · instance svc-02
-build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source
-tree ffffffffffff
-ledger v43
-1 Runs · 0 workers · 1 approvals · 1 pools
-⚠ the ledger is version 43, older than this build: newer
-fields may be empty
-⚠ future-code:abc
-⚠ approvals of scope scope-dog are hidden: you may not see
-them
-Note: only the most recent finished workers are shown; 5
-older ones are hidden
+  ● dogfood   RUNNING   ! 3 warning(s)
+  ┌───────────┬────────────────────────────────────────────┐
+  │ Status    │ ✓ Service running · ! Ledger v43 (older    │
+  │           │ than this build)                           │
+  │ ! Warning │ the ledger is version 43, older than this  │
+  │           │ build: newer fields may be empty           │
+  │ ! Warning │ future-code:abc                            │
+  │ ! Warning │ approvals of scope scope-dog are hidden:   │
+  │           │ you may not see them                       │
+  │ ○ Note    │ only the most recent finished workers are  │
+  │           │ shown; 5 older ones are hidden             │
+  ├───────────┼────────────────────────────────────────────┤
+  │ Workload  │ 1 run(s) · 0 worker(s) · 1 approval(s)     │
+  │           │ waiting · 1 pool(s)                        │
+  │ Scope     │ scope-dog                                  │
+  │ Folder    │ /srv/owner/deckent-dogfood                 │
+  ├───────────┼────────────────────────────────────────────┤
+  │ Build     │ build 76582f9f0000 · source tree           │
+  │           │ ffffffffffff · built 2026-10-01 22:15:00Z  │
+  │ Service   │ pid 2001 · instance svc-02                 │
+  └───────────┴────────────────────────────────────────────┘
 
-Install remote-lab · unavailable
-Path /mnt/lab/deckent
-Scopes: —
-no service record · instance —
-build unknown · source tree —
-ledger version unknown
-0 Runs · 0 workers · 0 approvals · 0 pools
-⚠ the ledger could not be read (LEDGER_LOCKED)
-⚠ service state could not be read (LOCAL_RUNTIME_DENIED)
+  ○ remote-lab   UNREACHABLE   ! 2 warning(s)
+  ┌───────────┬────────────────────────────────────────────┐
+  │ Status    │ ○ No service record · ! Ledger not read    │
+  │ ! Warning │ the ledger could not be read               │
+  │           │ (LEDGER_LOCKED)                            │
+  │ ! Warning │ service state could not be read            │
+  │           │ (LOCAL_RUNTIME_DENIED)                     │
+  ├───────────┼────────────────────────────────────────────┤
+  │ Workload  │ 0 run(s) · 0 worker(s) · 0 approval(s)     │
+  │           │ waiting · 0 pool(s)                        │
+  │ Scope     │ —                                          │
+  │ Folder    │ /mnt/lab/deckent                           │
+  ├───────────┼────────────────────────────────────────────┤
+  │ Build     │ build unknown                              │
+  └───────────┴────────────────────────────────────────────┘
 
 ── Map ─────────────────────────────────────────────────────
-current · /home/owner/projects/deckent-next
-Config layers (each later layer overrides the earlier ones):
-  1. built-in defaults — built in — sets: layout,
-inspection, approvals
-  2. global (user) — /home/owner/.deckent/config.json —
-sets: language
-  3. project —
-/home/owner/projects/deckent-next/.deckent/config.json —
-sets: layout, terminal, inspection
-  4. environment variables — no file — sets: none
-Execution registry: 3 profile(s), 2 task kind(s)
-  task kind coding → profile coding-default@3 (docker)
-  task kind review → profile review (docker)
-  legacy-shell@1 (host) — no task kind uses it
-Model catalog: 3 model(s), 0 invocable now
-  ○ subscription / model-alpha-2 (Model readiness cannot be
-verified (MODEL_INVOCATION_UNAVAILABLE). Choose another
-model in /model or reconnect it with a supported protocol in
-/provider.)
-  ○ subscription / model-alpha-1 (Model readiness cannot be
-verified (MODEL_INVOCATION_UNAVAILABLE). Choose another
-model in /model or reconnect it with a supported protocol in
-/provider.)
-  ○ local-vllm / qwen-local-v6 (Model readiness cannot be
-verified (MODEL_INVOCATION_UNAVAILABLE). Choose another
-model in /model or reconnect it with a supported protocol in
-/provider.)
-Policy: 12 grant(s) (operation 5, effect 4, secret 3) · 2
-separation-of-duties rule(s)
+current · /srv/owner/projects/deckent-next
+Settings layers (a later layer overrides the earlier ones)
+  ┌───┬──────────────────────┬──────────────┬──────────────┐
+  │ # │ Layer                │ File         │ Sections it… │
+  ├───┼──────────────────────┼──────────────┼──────────────┤
+  │ 1 │ built-in defaults    │ built in     │ layout, ins… │
+  │ 2 │ global (user)        │ …config.json │ language     │
+  │ 3 │ project              │ …config.json │ layout, ter… │
+  │ 4 │ environment variabl… │ no file      │ none         │
+  └───┴──────────────────────┴──────────────┴──────────────┘
+Task kinds, their profiles and runners (2 kind(s), 3
+profile(s))
+  ┌───────────┬──────────────────┬────────┐
+  │ Task kind │ Profile          │ Runner │
+  ├───────────┼──────────────────┼────────┤
+  │ coding    │ coding-default@3 │ docker │
+  │ review    │ review           │ docker │
+  └───────────┴──────────────────┴────────┘
+  ○ legacy-shell@1 (host) — no task kind uses it
+Models: 3 declared, 0 invocable now
+  ┌─────────────────┬───────────────┬────────────┬─────────┐
+  │ State           │ Model         │ Channel    │ Billing │
+  ├─────────────────┼───────────────┼────────────┼─────────┤
+  │ ! not invocable │ model-alpha-2 │ subscript… │ —       │
+  │ ! not invocable │ model-alpha-1 │ subscript… │ —       │
+  │ ! not invocable │ qwen-local-v6 │ local-vllm │ —       │
+  └─────────────────┴───────────────┴────────────┴─────────┘
+  → 3 model(s): Model readiness cannot be verified
+(MODEL_INVOCATION_UNAVAILABLE). Choose another model in
+/model or reconnect it with a supported protocol in
+/provider.
+Permissions: 12 rule(s) · 2 separation-of-duties rule(s)
+  ┌────────────────┬───────┬────────────────┐
+  │ Group          │ Rules │ Resource kinds │
+  ├────────────────┼───────┼────────────────┤
+  │ Execution      │ 5     │ operation 5    │
+  │ Administration │ 3     │ secret 3       │
+  │ Other          │ 4     │ effect 4       │
+  └────────────────┴───────┴────────────────┘
   Permission modes: owner@local: standart, ci@local:
 full-auto
-Memory: none yet — waits for the MEMORY card
+○ Memory: none yet — waits for the MEMORY card
 
-dogfood · /home/owner/deckent-dogfood
+dogfood · /srv/owner/deckent-dogfood
   No map was read for this install.
 
 remote-lab · /mnt/lab/deckent

@@ -5,7 +5,9 @@ import { t, type Locale } from '#platform/index.js';
  * keeps its second part in the detail). An `info:` prefix makes it a neutral note (never a ⚠ warning, never counted as a problem). An unknown
  * code stays visible as itself, so a new code from the data lane is never hidden.
  */
-export interface MonitorDiagnostic { readonly code: string; readonly note: boolean; readonly text: string }
+export interface MonitorDiagnostic { readonly code: string; readonly note: boolean; readonly text: string;
+  /** The next step a person can take, only where one real command answers it (PB-MON-UX "→ Yapılacak"); absent otherwise, never invented. */
+  readonly action?: string }
 
 export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnostic {
   const note = raw.startsWith('info:'), body = note ? raw.slice(5) : raw, at = body.indexOf(':');
@@ -46,6 +48,10 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'attempt-files-unavailable': () => t('monitor.diagnostic.attemptFilesUnavailable', { detail: detail.includes(':') ? detail.slice(0, detail.lastIndexOf(':')) : detail,
       code: detail.includes(':') ? ` (${detail.slice(detail.lastIndexOf(':') + 1)})` : '' }, locale),
   };
-  return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body };
+  const actions: Readonly<Record<string, () => string>> = {
+    'runs-truncated': () => t('monitor.action.runsTruncated', {}, locale),
+    'image-refresh-failed': () => t('monitor.action.imageRefreshFailed', {}, locale),
+  };
+  return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body, ...(Object.hasOwn(actions, code) ? { action: actions[code]!() } : {}) };
 }
 export const describeDiagnostics = (codes: readonly string[], locale: Locale) => codes.map(code => describeDiagnostic(code, locale));
