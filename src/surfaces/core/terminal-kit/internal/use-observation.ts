@@ -103,9 +103,13 @@ export function useSurfacePushFeed(
       if (stopped || controller.signal.aborted || !heartbeatMs || !session.allowedKinds().includes('worker') || !workersRef.current?.active()) return;
       timer = setTimeout(() => { void synchronize(['worker'], controller.signal).catch(() => {}); }, heartbeatMs);
     };
-    // Push invalidations and live sidecars share one serialized, authorized snapshot reader.
+    // Push invalidations and live sidecars share one serialized, authorized snapshot reader. The heartbeat is armed only when the
+    // chain drains: armed after an intermediate read, it fired during a queued read slower than heartbeatMs and re-queued itself,
+    // a zero-gap snapshot read loop for as long as a worker stayed active.
+    let latest = 0;
     const synchronize: SurfaceRefresh = (kinds, signal) => {
       clearHeartbeat();
+      const token = ++latest;
       const result = pending.then(async () => {
         if (stopped || signal.aborted) return [];
         const allowed = kinds.filter(kind => session.allowedKinds().includes(kind));
@@ -115,7 +119,8 @@ export function useSurfacePushFeed(
           state: openSurfacePush(), wait: surfaceWait('refuse-scope', pace) });
         return denied;
       });
-      pending = result.then(schedule, schedule);
+      const drained = () => { if (token === latest) schedule(); };
+      pending = result.then(drained, drained);
       return result;
     };
     const run = async () => {

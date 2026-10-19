@@ -119,13 +119,16 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
   const f = await fixture(false); await f.startLiveWorker();
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  let held = false, holdNext = true, inFlight = 0, maximum = 0, runPublished = false;
+  let held = false, holdNext = true, inFlight = 0, maximum = 0, runPublished = false, slow = false;
+  const starts: number[] = [], ends: number[] = [];
   const read = vi.fn(async (kinds: Parameters<NonNullable<typeof f.ports.readSurfaceSnapshot>>[0], signal: AbortSignal) => {
-    inFlight++; maximum = Math.max(maximum, inFlight);
+    inFlight++; maximum = Math.max(maximum, inFlight); starts.push(performance.now());
     try {
       if (holdNext && kinds.join(',') === 'worker') { holdNext = false; held = true; await gate; }
+      // PB-TEST-MARGIN: after release every read is slower than the fixture's 100 ms heartbeat, like a loaded host.
+      if (slow) await settle(150);
       return await f.ports.readSurfaceSnapshot!(kinds, signal);
-    } finally { inFlight--; }
+    } finally { inFlight--; ends.push(performance.now()); }
   });
   async function* followEvents(signal: AbortSignal) {
     for await (const event of f.follow(signal)) { if ('kind' in event && event.kind === 'run') runPublished = true; yield event; }
@@ -137,9 +140,14 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
     const before = read.mock.calls.length;
     f.advanceRun(2); await until(() => runPublished, 'real producer Run invalidation');
     await settle(150); expect(read).toHaveBeenCalledTimes(before); expect(maximum).toBe(1);
-    release();
+    slow = true; release();
     await until(() => read.mock.calls.some(call => call[0].join(',') === 'run,worker') && inFlight === 0, 'queued invalidation settles');
     expect(maximum).toBe(1);
+    // The heartbeat is armed only once the queue drains: the next heartbeat read starts a heartbeat after the last read ended, never
+    // back-to-back. (Armed after the held read, it fired during the slower queued read and re-queued itself without a gap.)
+    const drained = starts.length;
+    await until(() => starts.length > drained, 'next heartbeat read');
+    expect(starts[drained]! - ends[drained - 1]!).toBeGreaterThanOrEqual(50);
     // FIRST-TEST-FIXES (760c906e): the watch frame takes no focus; /watch-stop closes it and stops the watch.
     await type(view.stdin, '/watch-stop\r'); await until(() => view.stdout.text.includes('Workers window closed'), '/watch-stop closes the window and stops the watch'); await settle(150);
     const stopped = read.mock.calls.length;
