@@ -47,13 +47,15 @@ export async function hostLocale(argv: readonly string[], root: string, env: Nod
   try { configLanguage = await loadConfigLanguage(root, { env }); } catch { /* unreadable or invalid config: the environment chain decides */ }
   return resolveCliLocale({ flag, env, configLanguage });
 }
+/** The long-running commands whose SIGINT/SIGTERM cancel the call (besides `runtime serve`); a cli-grouped-help test pins each name to the catalog. */
+export const SIGNAL_COMMANDS: readonly (readonly [string, string?])[] = Object.freeze([['do'], ['workers', 'watch'], ['decide', 'ask'],
+  ['task', 'integration-deliver'], ['task', 'integration-adopt'], ['task', 'integration-rollback']]);
 /** INIT-D7: the installation's `cli.agentEnvironment`, read like the language (presentation only); unreadable or invalid → the kit default. */
 export const hostAgentEnvironment = (root: string, env: NodeJS.ProcessEnv = process.env) => loadConfigAgentEnvironment(root, { env }).catch(() => undefined);
 export async function main(argv: readonly string[] = process.argv.slice(2), serviceEntry?: string) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
   const [locale, agentEnvironment] = await Promise.all([hostLocale(argv, root), hostAgentEnvironment(root)]);
-  const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
-  const handlesSignals = isRuntimeServe || argv[0] === 'do' || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask') || (argv[0] === 'task' && ['integration-deliver', 'integration-adopt', 'integration-rollback'].includes(argv[1] ?? ''));
+  const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve', handlesSignals = isRuntimeServe || SIGNAL_COMMANDS.some(([family, action]) => argv[0] === family && (action === undefined || argv[1] === action));
   const controller = new AbortController();
   const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view, locale, process.stdin, process.stderr,
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal: controller.signal }));

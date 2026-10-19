@@ -42,7 +42,7 @@ function refuse(spec: CliCommandSpec, argv: readonly string[], missing: readonly
   const locale = flag >= 0 || !context?.locale ? resolveLocale(flag >= 0 ? argv[flag + 1] : undefined, env) : context.locale;
   context?.onLocale?.(locale);
   const actions = live(spec).map(child => child.children?.length ? `${child.name} ${live(child).map(item => item.name).join('|')}` : child.name);
-  return ErrorRegistry.createError('CLI_USAGE', { params: { command: `${CLI_NAME} ${spec.name}`, usage: [
+  return ErrorRegistry.createError('CLI_ARGUMENT_MISSING', { params: { command: `${CLI_NAME} ${spec.name}`, usage: [
     t('cli.help.bare.missing', { argument: missing.map(item => placeholders(item, locale)).join(', ') }, locale),
     ...(actions.length ? [t('cli.help.bare.actions', { actions: actions.join(' | ') }, locale)] : []),
     t('cli.help.bare.details', { command: spec.name }, locale)].join('\n') } });
@@ -138,9 +138,8 @@ const bareNote = (spec: CliCommandSpec, locale: Locale) => spec.bare && spec.bar
   ? ' ' + t('cli.help.top.withoutAction', { action: spec.bare.read }, locale) : '';
 
 /** The main help: surfaces, every command with its actions and argument synopsis, then options (owner 2026-10-19: 100–150 lines).
- * `_all` is retired (no hidden tier); it stays only while `cli/internal/entry.ts` still passes it (delta L-HELP-catalog.md §1). */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retired parameter kept for the unchanged caller until the lead's join.
-export function renderTopHelp(locale: Locale = resolveLocale(), _all = false, catalog: readonly CliCommandSpec[] = CLI_CATALOG): string {
+ * There is no hidden tier: `--help --all` is tolerated and prints this same help. */
+export function renderTopHelp(locale: Locale = resolveLocale(), catalog: readonly CliCommandSpec[] = CLI_CATALOG): string {
   return [t('cli.help', { name: 'deckent' }, locale), '', message('cli.help.top.surfaces', locale), '', message('cli.help.top.commands', locale),
     ...HELP_GROUPS.flatMap(group => {
       const commands = catalog.filter(item => item.group === group && !item.planned);

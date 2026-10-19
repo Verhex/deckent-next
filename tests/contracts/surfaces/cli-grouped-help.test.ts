@@ -77,7 +77,7 @@ it.each(['en', 'tr'] as const)('shows every command, its actions and synopsis in
 
 it('derives placement from registration metadata rather than a renderer command list', async () => {
   const added = { ...CLI_CATALOG[0], name: 'new-command', group: 'work' as const };
-  const output = renderTopHelp('tr', false, [...CLI_CATALOG, added]);
+  const output = renderTopHelp('tr', [...CLI_CATALOG, added]);
   expect(output.indexOf('  new-command')).toBeGreaterThan(output.indexOf('İş yürütme:'));
   expect(output.indexOf('  new-command')).toBeLessThan(output.indexOf('Modeller:'));
   const calls: string[][] = [];
@@ -214,6 +214,8 @@ it('passes an action word to its handler unchanged and refuses a bare family by 
   const context = { root: mkdtempSync(join(tmpdir(), 'deckent-cli-gate-')), env: { NO_COLOR: '1', DECKENT_LANG: 'en' }, stdout: { write: () => undefined }, stderr: { write: (text: string) => { errors += text; } } };
   expect(await main(['backup', '--json'], context)).toBe(2);
   expect(errors).toContain('Missing argument: <action>.');
+  // J1b lead decision: a typed CLI_ARGUMENT_MISSING (usage category, exit 2), not the generic CLI_USAGE "Invalid … for …".
+  expect(JSON.parse(errors)).toMatchObject({ code: 'CLI_ARGUMENT_MISSING' }); expect(errors).toContain('Incomplete command: deckent backup.'); expect(errors).not.toContain('CLI_USAGE');
   expect(errors).toContain('Actions: create | verify | restore');
   expect(errors).toContain('Details: deckent backup --help');
 });
@@ -226,7 +228,7 @@ it('keeps exactly the reviewed planned names out of dispatch and help until thei
     const [family, child] = name.split(' ') as [string, string];
     const spec = CLI_CATALOG.find(command => command.name === family)! as CliCommandSpec;
     expect(CLI_COMMANDS.map(command => command.path.join(' '))).not.toContain(name);
-    expect(renderTopHelp('en', false, [spec])).not.toMatch(new RegExp(`[ |]${child}(?=[ |\\n]|$)`));
+    expect(renderTopHelp('en', [spec])).not.toMatch(new RegExp(`[ |]${child}(?=[ |\\n]|$)`));
     expect(renderCommandHelp(CLI_COMMANDS.find(command => command.path.join(' ') === family)!, 'en')).not.toMatch(new RegExp(`^  ${child} `, 'm'));
   }
   let errors = '';
@@ -270,4 +272,18 @@ it.each(['en', 'tr'] as const)('names the missing argument for every family with
     expect(errors, spec.name).toContain(missing);
     expect(errors, spec.name).toContain(`deckent ${spec.name} --help`);
   }
+});
+
+it('J1b: the composition signal list and the usage echo read the one catalog (no hand-kept action inventory drifts from help)', async () => {
+  const { SIGNAL_COMMANDS } = await import('#composition/core/cli/index.js');
+  const { cliUsage } = await import('#surfaces/core/cli-kit/internal/usage.js');
+  for (const [family, action] of [...SIGNAL_COMMANDS, ['runtime', 'serve'] as const]) {
+    expect(CLI_CATALOG.some(spec => spec.name === family), family).toBe(true);
+    if (action !== undefined) expect(hasCliAction(family as Parameters<typeof hasCliAction>[0], action), `${family} ${action}`).toBe(true);
+  }
+  // A catalog action is echoed in the usage error; any other word never is (only protocol names reach diagnostics).
+  expect(cliUsage('task', 'integration-adopt', 'en').params).toMatchObject({ command: 'deckent task integration-adopt' });
+  expect(cliUsage('run', 'cancel', 'en').params).toMatchObject({ command: 'deckent run cancel' });
+  expect(cliUsage('run', 'secret-value', 'en').params).toMatchObject({ command: 'deckent run' });
+  expect(cliUsage('run', 'list', 'en').params).toMatchObject({ command: 'deckent run' }); // planned, not yet an action
 });

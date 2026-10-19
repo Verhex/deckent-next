@@ -69,8 +69,9 @@ output, never initializes). Details and registered children are exposed by `deck
 Bare behaviour is catalog metadata (`bare`): a reviewed read action runs once its required flags are present
 (`audit`→`verify`, `pool`/`policy`→`status`, `identity`→`profiles`, `mcp`/`secret`→`list`, `runtime`→`describe`,
 `workers --scope <id>`→`list`); `handler` families act on their own; any other family lists its actions and names
-the missing argument as `CLI_USAGE` (exit 2). A default never mutates. Handler action words and catalog actions are
-kept equal by a source test in both directions; `planned` entries (`run list`, `policy scopes`) are reserved names,
+the missing argument as the typed `CLI_ARGUMENT_MISSING` (exit 2). A default never mutates. Handler action words and catalog
+actions are kept equal by a source test in both directions; the usage echo (`cliUsage`) and the composition signal list
+(`SIGNAL_COMMANDS`) read or are pinned to the same catalog; `planned` entries (`run list`, `policy scopes`) are reserved names,
 neither registered nor shown, until their slice implements them.
 Canonical help outputs have bilingual goldens and an 80-display-column gate, and every registration's
 group, summary and detail must exist in both locales. New actions register metadata and localized details

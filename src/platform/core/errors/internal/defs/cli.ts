@@ -8,4 +8,6 @@ export const cliErrors: ErrorDefinitions = Object.freeze({
   CLI_ID_AMBIGUOUS: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_ID_AMBIGUOUS', p, l) }) },
   CLI_ID_TOO_SHORT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_ID_TOO_SHORT', p, l) }) },
   CLI_ID_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.CLI_ID_UNKNOWN', p, l) }) },
+  // L-HELP (J1b lead decision): a family called without its action or required argument; names what is missing and the actions, exit 2.
+  CLI_ARGUMENT_MISSING: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_ARGUMENT_MISSING', p, l) }) },
 });

@@ -34,7 +34,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
 export function dispatch(argv: readonly string[]): { readonly output: string; readonly code: ExitCode } {
   const [command] = argv;
   const common = { name: PACKAGE_NAME, version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` };
-  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined), argv.includes('--all')), code: 0 };
+  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined)), code: 0 };
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
