@@ -110,7 +110,7 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   // One choice needs no question; the preview card still shows it.
   const ask = async (title: string, options: readonly CliCardOption[]) => options.length === 1 ? options[0]!.id : await askCliCard({ title, options }, io) ?? undefined;
   const missing = (flag: string, choices: readonly string[]) => ErrorRegistry.createError('CLI_CODING_TEMPLATE_CHOICE_MISSING',
-    { params: { flag, values: choices.length ? choices.join(', ') : '-' }, locale });
+    { params: { flag, values: choices.length ? choices.join(', ') : t('clisetup.coding.noChoices', {}, locale) }, locale });
   let provider = values.get('--provider');
   if (!provider && !person) throw missing('--provider <id>', providers);
   if (!provider) {
