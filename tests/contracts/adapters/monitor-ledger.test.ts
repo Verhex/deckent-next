@@ -207,3 +207,36 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
   expect((await read(f.path, 1)).diagnostics).toContain('info:approvals-truncated');
 });
 });
+
+describe.skipIf(process.platform === 'win32')('monitor ledger reader scope (M-VIS, PB-POOL-VIS)', () => {
+  it('indexes scope and pool ids only; a scoped read loads only admitted scopes and visible pools, so rows outside them are never read', async () => {
+    const f = await fixture(); const capacity = { executionSlots: 2, inFlightSlots: 3 };
+    await f.store.createExecutionPool({ schemaVersion: 1, poolId: 'q', capacity });
+    await f.store.createRun({ commandId: 'create-r4', actor, identity: { scopeId: 's2', runId: 'r4', layoutRevision: 'layout' }, graph: graph(['z']), execution: fixtureExecution(graph(['z'])),
+      now: 4500, policy: { schemaVersion: 2, poolId: 'q', capacity, ordering: ['z'] } });
+    f.store.close();
+    // Corrupt only rows outside the scoped read: Run r4 (scope s2, pool q) and pool q. A read that touches them reports them.
+    const writer = new DatabaseSync(f.path);
+    writer.exec(`UPDATE runs SET snapshot='{"broken":true}' WHERE run_id='r4'; UPDATE execution_pools SET policy='{"broken":true}' WHERE pool_id='q'`); writer.close();
+    const { indexMonitorLedger } = await import('#adapters/core/monitor-ledger/index.js');
+    expect(await indexMonitorLedger(f.path, { busyTimeoutMs: 100 })).toEqual({ ledgerVersion: CURRENT_LEDGER_VERSION, scopeIds: ['s', 's2'], poolIds: ['p', 'q'] });
+    const whole = await read(f.path);
+    expect(whole.diagnostics).toEqual(expect.arrayContaining(['run-corrupt:s2/r4', 'pool-occupancy-corrupt:q', 'pool-corrupt:q']));
+    const before = await files(f.path);
+    const scoped = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 10, scope: { scopeIds: ['s'], poolIds: ['p'] } });
+    expect(await files(f.path)).toEqual(before);
+    expect(scoped.diagnostics).toEqual([]);
+    expect(scoped.scopeIds).toEqual(['s']);
+    expect(scoped.runs.map(run => run.snapshot.identity.runId).sort()).toEqual(['r1', 'r3']);
+    // The visible pool keeps its installation-wide occupancy and hold; the hidden pool is not in the answer at all.
+    expect(scoped.pools).toEqual(whole.pools.filter(pool => pool.poolId === 'p'));
+    expect(JSON.stringify(scoped)).not.toMatch(/"q"|r4|"s2"/);
+    // A pool counts every Run bound to it, whatever its scope: s2's viewer of pool p sees s's occupancy (a count, no Run of s).
+    const other = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 10, scope: { scopeIds: ['s2'], poolIds: ['p'] } });
+    expect(other.runs.map(run => run.snapshot.identity.runId)).toEqual(['r2']); expect(other.diagnostics).toEqual(['run-corrupt:s2/r4']);
+    expect(other.pools).toEqual(scoped.pools);
+    // Nothing admitted: no Run, approval or pool is read.
+    expect(await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 10, scope: { scopeIds: [], poolIds: [] } }))
+      .toMatchObject({ scopeIds: [], runs: [], approvals: [], pools: [], diagnostics: [] });
+  });
+});

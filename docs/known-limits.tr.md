@@ -265,6 +265,14 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 - **Masaüstü uygulaması, web paneli ve uzak HTTP API yok.** Terminali, `deckent` komutunu, MCP'yi ya da SDK'yı kullanın.
   `deckent monitor` salt okunur canlı bir görünümdür. Masaüstü beta sonrası için planlı.
+- **Monitor yalnız inceleme izniniz olan havuzları gösterir** (`pool inspect`); diğer havuzlar tek bir sayı olarak görünür
+  ("Diğer işler: N havuz size gösterilmiyor"), adı, kapasitesi ve tutanı gösterilmez. *Etki:* görebildiğiniz bir Run, inceleyemediğiniz
+  bir havuzda bekliyorsa havuz bekleme nedeni görünmez. MCP aktörünün ilk kurulum kurallarında `pool inspect` yoktur; MCP
+  üzerinden `inspect_monitor` yalnız bu sayıyı gösterir. *Yol:* bir yöneticiden o havuz için `pool inspect` isteyin;
+  `deckent pool status` aynı kararı kullanır.
+- **Boşta duran etkileşimli `deckent monitor` CPU kullanmaya devam eder,** çünkü her yenilemede her şeyi yeniden okur
+  (`inspection.workers.heartbeatMs`, varsayılan 2 sn). Run ve kapsam sayısıyla artar. *Yol:* `p` ile duraklatın,
+  `inspection.workers.heartbeatMs` değerini büyütün ya da `deckent monitor --once` kullanın.
 - **SDK hâlâ ham yazıcıları da dışa aktarır,** yönetilenlerin yanında; sonraki sürümlü bir SDK sözleşmesinin yalnız
   yönetilenleri bırakması hedeflenir.
 

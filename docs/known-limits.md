@@ -264,6 +264,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 - **There is no Desktop app, no Dashboard and no remote HTTP API.** Use the terminal, the `deckent` command, MCP or the SDK.
   `deckent monitor` is a read-only live view. The Desktop is planned after the beta.
+- **The monitor shows only the pools you may inspect** (`pool inspect`); other pools appear as one count ("Other work: N
+  pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
+  shows no pool-wait reason. The MCP actor's first-run rules include no `pool inspect`, so `inspect_monitor` over MCP shows only
+  that count. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
+- **An idle interactive `deckent monitor` keeps using CPU** because it re-reads everything on every refresh
+  (`inspection.workers.heartbeatMs`, default 2 s). It grows with the number of Runs and scopes. *Workaround:* press `p` to
+  pause it, raise `inspection.workers.heartbeatMs`, or use `deckent monitor --once`.
 - **The SDK still exports raw writers** next to the managed ones; a later versioned SDK contract is meant to keep only the
   managed ones.
 

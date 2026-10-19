@@ -2526,7 +2526,8 @@
         "src/composition/core/toolchains",
         "src/engine/core/config",
         "src/composition/core/root",
-        "src/composition/core/model-invocation"
+        "src/composition/core/model-invocation",
+        "src/engine/core/policy"
       ],
       "plan": "MONITOR"
     },

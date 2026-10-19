@@ -133,6 +133,8 @@ export interface MonitorInstall {
   readonly service: MonitorService | null; readonly ledgerVersion: number | null;
   readonly runs: readonly MonitorRun[]; readonly workers: readonly MonitorWorker[];
   readonly approvals: readonly MonitorApproval[]; readonly pools: readonly MonitorPool[];
+  /** M-VIS (additive): pools of this install the viewer may not `pool inspect` — a count only; no id, capacity, occupancy or holder. Absent = 0. */
+  readonly hiddenPools?: number;
   /** Typed codes for what could not be read (never thrown to the surface); rendered as a visible warning. MONITOR v1.1 convention
    * (additive): a code starting with `info:` is informational (a bound, a cap, an older ledger, ledger-only facts) and not a problem;
    * every other code is a problem. Worker observations use the same prefix in their own diagnostics (e.g. `info:ledger-only`). */

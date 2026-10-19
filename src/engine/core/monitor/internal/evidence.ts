@@ -80,6 +80,10 @@ export interface MonitorLedgerReading {
   /** MONITOR v1.1 (optional): what feeds what in the install (config layers, registry, model catalog, policy summary, memory). */
   readonly map?: MonitorMap | null;
 }
+/** M-VIS (PB-POOL-VIS): ids only — which scopes (Runs, current approvals) and pools a ledger names. Reading it loads no Run, occupancy or holder. */
+export interface MonitorLedgerIndex { readonly ledgerVersion: number; readonly scopeIds: readonly string[]; readonly poolIds: readonly string[] }
+/** What the scoped ledger read may load: Runs, receipts and approvals of `scopeIds`; pool rows and occupancy of `poolIds`. */
+export interface MonitorReadScope { readonly scopeIds: readonly string[]; readonly poolIds: readonly string[] }
 /** One observed installation: `current` or a configured `next-project` observation source. */
 export interface MonitorTarget { readonly id: string; readonly path: string }
 export interface MonitorScopeObservation {
@@ -91,8 +95,13 @@ export interface MonitorScopeObservation {
 }
 /** Ports the composition binds to adapters. Every method may reject; the application turns rejections into diagnostics. */
 export interface MonitorPorts {
-  /** Recorded output and worker events are read only for attempts the adapter's read-output gate admits. */
-  readLedger(target: MonitorTarget): Promise<MonitorLedgerReading>;
+  /** M-VIS: the ledger's scope and pool ids, read before any admission decision; nothing scoped is loaded here. */
+  indexLedger(target: MonitorTarget): Promise<MonitorLedgerIndex>;
+  /** Recorded output and worker events are read only for attempts the adapter's read-output gate admits. Reads only `scope`
+   * (admitted scopes, visible pools); the application still filters the answer, so a broader adapter answer never widens the view. */
+  readLedger(target: MonitorTarget, scope: MonitorReadScope): Promise<MonitorLedgerReading>;
+  /** M-VIS: the viewer's `pool inspect` decision for one pool over `scopeIds` (admitted scopes); true only on an allow. A rejection hides the pool. */
+  observePool(target: MonitorTarget, poolId: string, scopeIds: readonly string[]): Promise<boolean>;
   /** Hydrate only shown workers, after admitted scopes and the finished-worker limit. Must use the captured ledger snapshot and read-output gate. */
   readShown?(target: MonitorTarget, identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading>;
   /** Rejects with a coded error; `LOCAL_RUNTIME_UNAVAILABLE` means no service is listening. */

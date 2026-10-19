@@ -4,12 +4,12 @@ import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, 
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
 import { sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests } from '#engine/index.js';
+import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
 import { emptyWorkerContent, readMonitorWorkerContent } from './worker-content.js';
-import { scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
+import { indexMonitorLedger, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
 import { authorizeMonitorDelivery } from './receipt-observation.js';
 import limits from './display-limits.json' with { type: 'json' };
 
@@ -25,10 +25,10 @@ const recent = (events: readonly { readonly atMs: number | null; readonly event:
  * only exact selected identities pass through read-output, then artifact/sidecar reads outside the transaction.
  * No product files, state or policy are created or healed. */
 export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }, retained?: RunSnapshot,
-  expected?: { revision: number; layoutRevision: string }) {
+  expected?: { revision: number; layoutRevision: string }, scope?: MonitorReadScope) {
   const layout = config.productLayout;
   const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
-    { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}) }, retained);
+    { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}), ...(scope ? { scope } : {}) }, retained);
   // Reject stale/future result views before any output decision or read, including receipt observations.
   const scoped = expected ? { ...scan.reading, runs: scan.reading.runs.filter(value => value.snapshot.revision === expected.revision
     && value.snapshot.identity.layoutRevision === expected.layoutRevision) } : scan.reading;
@@ -62,6 +62,10 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     })) }));
     return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
   } };
+}
+/** M-VIS: the ledger's scope and pool ids (no Run, occupancy or holder), read before the monitor decides admission. */
+export async function indexMonitorInstall(config: ResolvedConfig): Promise<MonitorLedgerIndex> {
+  return indexMonitorLedger(await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
 }
 /** Metadata only. Artifact reads are explicitly deferred until the application selects its visible worker set. */
 export async function readMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>) {
