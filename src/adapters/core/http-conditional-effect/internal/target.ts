@@ -27,6 +27,11 @@ export class HttpConditionalEffectTarget implements EffectTarget {
   constructor(input: unknown) { this.options = httpConditionalEffectOptionsSchema.parse(input); this.kind = this.options.kind; }
   identity() { const url = new URL(this.options.baseUrl); return `${this.options.kind}@${url.origin}${url.pathname.replace(/\/+$/, '')}`; }
   private url(path: string) { return new URL(`${this.options.baseUrl.replace(/\/+$/, '')}/${path}`); }
+  /** A `.`/`..` id (kept, like `%2e`, as a dot segment) would normalise outside `records/`: refused before any request (SEC F38). */
+  private record(id: string, suffix = '') {
+    if (id === '.' || id === '..') throw new EffectTargetError('EFFECT_TARGET_REJECTED');
+    return this.url(`records/${encodeURIComponent(id)}${suffix}`);
+  }
   private send(method: 'GET' | 'POST', url: URL, headers: Record<string, string>, body?: string): Promise<Response> {
     const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
     return new Promise((resolve, reject) => {
@@ -55,7 +60,8 @@ export class HttpConditionalEffectTarget implements EffectTarget {
   }
   async observe(target: EffectTargetRef) {
     let response: Response;
-    try { response = await this.send('GET', this.url(`records/${encodeURIComponent(target.id)}`), {}); }
+    const url = this.record(target.id);
+    try { response = await this.send('GET', url, {}); }
     catch (error) { throw new EffectTargetError('EFFECT_TARGET_UNKNOWN', { cause: error }); }
     if (response.status === 404) return { version: null };
     if (response.status !== 200) throw new EffectTargetError('EFFECT_TARGET_UNKNOWN');
@@ -66,8 +72,9 @@ export class HttpConditionalEffectTarget implements EffectTarget {
     const headers: Record<string, string> = { 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(body)), 'idempotency-key': request.idempotencyKey };
     if (request.expectedVersion !== null) headers['if-match'] = request.expectedVersion;
     let response: Response;
+    const url = this.record(request.target.id, '/operations');
     // Any transport failure may have reached the service: the outcome is unknown, never assumed absent.
-    try { response = await this.send('POST', this.url(`records/${encodeURIComponent(request.target.id)}/operations`), headers, body); }
+    try { response = await this.send('POST', url, headers, body); }
     catch (error) { throw new EffectTargetError('EFFECT_TARGET_UNKNOWN', { cause: error }); }
     if (response.status >= 200 && response.status < 300) return { version: this.version(response.headers) };
     if (response.status === 412) throw new EffectTargetError('EFFECT_TARGET_PRECONDITION');
