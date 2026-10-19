@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import config from './ci-test-config.json' with { type: 'json' };
 
-export const SHARDS = 8;
+if (!Number.isSafeInteger(config.shards) || config.shards < 1 || !Number.isSafeInteger(config.maxForks) || config.maxForks < 1) throw new Error('Invalid CI test configuration');
+export const SHARDS = config.shards;
+export const MAX_FORKS = config.maxForks;
 export function fileIdentity(path) { return path.replaceAll('\\', '/'); }
 export function inventoryDigest(files) {
   return createHash('sha256').update(JSON.stringify([...files].sort())).digest('hex');

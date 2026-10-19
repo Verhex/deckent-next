@@ -27,7 +27,7 @@ test('duration allocation keeps known and new files exactly once and starts with
 });
 test('aggregate accepts exact coverage and preserves actual skip counts', () => {
   const r = receipts(); r[0].files[0].counts.skipped = 1;
-  assert.deepEqual(validateShards(inventory, r, identity).counts, { passed: 16, failed: 0, skipped: 1, pending: 0 });
+  assert.deepEqual(validateShards(inventory, r, identity).counts, { passed: inventory.length * 2, failed: 0, skipped: 1, pending: 0 });
 });
 for (const [name, damage] of [
   ['missing shard', r => r.pop()], ['duplicate shard', r => { r[1].index = 1; }],

@@ -28,7 +28,12 @@ checks added in W5-INSTALL-FLOW; it does not change doctor or weaken its nonzero
 
 **CI-SPEED amendment (owner approved 2026-10-06; isolated author candidate, hosted acceptance pending).**
 The required Ubuntu Node24/26 check names stay unchanged for PR/integration verification. Each Node builds once,
-then all Vitest files run in eight duration-balanced shards with normal fork/file isolation and four workers per runner.
+then all Vitest files run in duration-balanced shards with normal fork/file isolation. `scripts/ci-test-config.json`
+owns shard/fork capacity; the prepare job exports the same configuration used by partitioning and complete-coverage validation.
+CI-STABILITY (owner 2026-10-19 author candidate): 16 shards and two forks per runner retain 32 test forks per Node version
+while leaving CPU/memory headroom for each test's real CLI/MCP/Docker children. The prior four-fork hosted run
+39269323564 measured 175.54–266.28 s per Vitest shard; those complete 1011-file timings refresh the scheduling weights.
+The test and job timeouts are unchanged; fresh hosted stability and elapsed-time measurements remain separate proof.
 The complete inventory comes from Vitest itself, not a changed-file filter. New files always enter the partition.
 The required collector rejects missing/duplicate shards or files, wrong SHA/Node/run/attempt, failed/cancelled/pending
 execution, collection/unhandled errors and missing native/host/smoke success. Native binaries and dist are bound to
@@ -75,6 +80,13 @@ Sources checked 2026-10-06: [checkout v7](https://github.com/actions/checkout/re
 [GitHub check runs](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference).
 Author proof and scope: external `proof/CI-SPEED-2026-10-06/`. The following dated notes are historical where
 this amendment changes workflow scheduling or local landing requirements.
+
+CI-STABILITY fixture lifecycle (2026-10-19): fixture owners using `startTestRuntimeService` explicitly join tracked
+services before closing stores or removing roots; the imported afterEach remains a fallback, since Vitest's stack order
+runs it after the caller's cleanup. The project-identity first-publication fixture uses the production atomic JSON writer:
+a raw `writeFile` exposed a partial record to the unlocked reader, which correctly refused it. Existing assertions,
+security refusals, test names and timeouts stay unchanged. External evidence and exact hosted revisions:
+`proof/CI-STABILITY-2026-10-19/REPORT.md`; author checks do not establish independent acceptance.
 
 CI-FULL, CI-FIX, SOCKET-PUBLICATION, CI-WINDOWS-MACOS (moved from ARCHITECTURE.md Packages 2026-10-05).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1327–1406; text below is verbatim.
