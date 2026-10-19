@@ -139,8 +139,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Project MCP trust needs a global root outside the project.** When `DECKENT_GLOBAL_HOME` (or, without it, `DECKENT_HOME`)
   points inside the project, project and local servers show `trust-store-unavailable` and never start. *Workaround:* point
   `DECKENT_GLOBAL_HOME` outside the project.
-- **`--yes` still approves a new project MCP server without a card.** Only a record from before alpha.48 needs the card.
-  *Workaround:* approve project servers in a terminal and read the card.
+- **Trusting an MCP server needs a person at a terminal.** `deckent mcp approve` and `deckent mcp add` to a local or user scope
+  show their card only on a real terminal; from a pipe, CI or an AI tool they are refused (`MCP_APPROVAL_NEEDS_TERMINAL`), and
+  `--yes` no longer skips the card. *Workaround:* add the server with `--no-approve` from a script; it asks on first use.
+- **`deckent mcp import` takes every server of the chosen client.** On a terminal you pick the client; picking single servers is
+  not offered yet. Imported servers stay untrusted. *Workaround:* `deckent mcp remove <name>` after the import.
 - **MCP servers over OAuth are not supported.** Streamable HTTP servers work without OAuth. *Workaround:* use a local stdio server or an
   HTTP server that does not need OAuth.
 

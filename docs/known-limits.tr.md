@@ -139,8 +139,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Proje MCP güveni proje dışında bir genel kök ister.** `DECKENT_GLOBAL_HOME` (yoksa `DECKENT_HOME`) projenin içini
   gösterirse proje ve yerel sunucular `trust-store-unavailable` gösterir ve hiç başlamaz. *Yol:* `DECKENT_GLOBAL_HOME`'u
   projenin dışına yöneltin.
-- **`--yes` yeni bir proje MCP sunucusunu hâlâ kartsız onaylar.** Kart yalnız alpha.48'den önceki bir kayıt için zorunludur.
-  *Yol:* proje sunucularını terminalde, kartı okuyarak onaylayın.
+- **Bir MCP sunucusuna güvenmek terminaldeki bir kişiyi ister.** `deckent mcp approve` ve yerel ya da kullanıcı kapsamına
+  `deckent mcp add` kartını yalnız gerçek bir terminalde gösterir; pipe, CI ya da bir yapay zekâ aracından reddedilir
+  (`MCP_APPROVAL_NEEDS_TERMINAL`) ve `--yes` artık kartı atlamaz. *Yol:* betikten sunucuyu `--no-approve` ile ekleyin; ilk kullanımda sorar.
+- **`deckent mcp import` seçilen istemcinin bütün sunucularını alır.** Terminalde istemciyi seçersiniz; tek tek sunucu seçimi
+  henüz yok. İçe aktarılanlar güvenilmeden kalır. *Yol:* içe aktarmadan sonra `deckent mcp remove <ad>`.
 - **OAuth ile MCP sunucuları desteklenmiyor.** Streamable HTTP sunucuları OAuth olmadan çalışır. *Yol:* yerel bir stdio sunucusu ya da
   OAuth gerektirmeyen bir HTTP sunucusu kullanın.
 

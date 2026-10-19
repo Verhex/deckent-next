@@ -265,6 +265,22 @@ anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api, openai-compatible,
 tarifesi olmayan uzak model reddedilir ve nedeniyle kilitli görünür. `terminal.defaultModel` (kullanıcı katmanı)
 terminalin varsayılanıdır; `/model` oturum sabitlemesi önce gelir, sonra projede yazılmış referans.
 
+Kişi için (C-MODELS, owner CLI incelemesi 2026-10-19): argümansız `deckent models`, scope'un worker kataloğunu tek tabloda gösterir
+(model, kanal, durum, effort; emekli model günüyle; `models.retirementWarningDays` içinde, varsayılan 15, emekli olacak açık model için
+uyarı); `--declared` bağlı sağlayıcıların beyanını (sohbet kataloğu) listeler ve o listenin JSON biçimidir (`models --declared --json`);
+`models --json` katalog incelemesidir. Terminalde uzun bayrakları olmadan `models activate|deactivate`, `models catalog activate|deactivate`
+ve `models connect` scope'u, sağlayıcıyı ya da kanalı ve tam model kimliğini (takma ad asla) sorar, bağ özetini ve revizyonları kendisi
+okur ve scope'lu kartla onaylatır; yapay zekâ araçları için uzun biçimler değişmedi. `--input` olmadan `models spending` scope'un API
+bütçesini (sınır, kullanılan, ayrılan, kalan) gösterir.
+
+MCP ve kimlik: `deckent mcp` / `mcp list` bir tablodur (bekleyenler önce, sonraki adımlarıyla) ve hiçbir şeyi başlatmaz; `--check`
+yalnız güvenilir sunucuları başlatır. Her güven kararı (`mcp approve`, yerel ya da kullanıcı kapsamına `mcp add`) bir kişinin
+terminalindeki karttır; terminal dışında reddedilir (`MCP_APPROVAL_NEEDS_TERMINAL`) ve `--yes` artık kartı atlamaz (owner A48-D5/D6).
+Argümansız `deckent identity` (katalog deltası bekliyor: o zamana dek `identity profiles`) seçili profili — ya da
+`deckent config set identity.profile` ile nasıl seçileceğini —, kişileri ve rol bağlamalarını söyler; profil seçilmemişken
+`identity preview` `IDENTITY_PROFILE_NOT_SELECTED` bildirir; terminalde `identity distribute --scope <id> [--apply]` ok tuşlu kartlarla
+ve önizleme kartıyla seçilir.
+
 Harcama: ücretli çağrılar uygulanabilir en pahalı yayımlanmış kademeyi rezerve eder ve sağlayıcının döndürdüğü kullanım ile
 sabitlenmiş tarifenin çarpımından kesinleşir (`measured-tariff`). Kapsamın ilk bütçesi `deckent models create-budget
 --scope <id> --usd <n>` (ya da bütçe penceresi: `/provider`'ın ilk satırı) ile açılır, `revise-budget [--unfreeze]` ile değişir; son kullanımı
