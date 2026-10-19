@@ -55,6 +55,11 @@ describe('Installs: status and next step first, developer details last', () => {
       expect(pools).not.toContain('│'); expect(pools).toContain(count); expect(installsOf(text, locale)).toContain(count);
     }
   });
+  it('a note with a real next step carries it too (the ledger reports a cut Run list as a note)', () => {
+    const text = installsOf(surface.renderMonitorText(one({ ...n1Like, diagnostics: ['info:runs-truncated:200'] }), { locale: 'tr', width: 120, ascii: false }), 'tr');
+    expect(text.indexOf('○ Not')).toBeGreaterThan(-1); expect(text.indexOf('○ Not')).toBeLessThan(text.indexOf('→ Yapılacak'));
+    expect(text).toContain('deckent inventory --scope <kapsam>');
+  });
   it('a refused scope is a count, never a name (MON-SCOPE-NAMES)', () => {
     const viewer: MonitorInstall = { ...n1Like, diagnostics: ['scopes-denied:2'] };
     const en = surface.renderMonitorText(one(viewer), { locale: 'en', width: 140, ascii: false });
@@ -87,7 +92,8 @@ describe('Config tab: changed settings by section, a shows all, unread flagged',
     description: `${key} description`, schema: {}, binding: bound ? { state: 'bound' as const, consumers: ['x'] } : { state: 'declared-only' as const, reason: 'fixture' },
     apply: 'restart' as const, redacted: false });
   const view = { schemaVersion: 1 as const, layer: 'project' as const, digest: null,
-    fields: [field('projectName', 'project'), field('max_workers', 'global'), field('backup', 'default'), field('mcp', 'default', false), field('brand_new_field', 'env')] };
+    fields: [field('projectName', 'project'), field('max_workers', 'global'), field('backup', 'default'), field('mcp', 'default', false), field('brand_new_field', 'env'),
+      field('inspection.workers.maxEntries', 'project')] };
   const texts = (blocks: ReturnType<typeof surface.configMonitorBlocks>) => surface.flattenBlocks(blocks, 120, '…').map(entry => surface.lineText(entry.line)).join('\n');
   it('every declared config field has a section and a human name', () => {
     expect(configMonitorFieldKeys()).toEqual(expect.arrayContaining(Object.keys(CONFIG_FIELDS)));
@@ -95,9 +101,11 @@ describe('Config tab: changed settings by section, a shows all, unread flagged',
   for (const locale of ['en', 'tr'] as const) it(`changed only by default, all with a (${locale})`, () => {
     const changed = texts(surface.configMonitorBlocks(view, locale, { all: false, warn: '!' }));
     expect(changed).toContain(locale === 'en' ? 'Worker ceiling (max_workers)' : 'İşçi tavanı (max_workers)');
-    expect(changed).toContain('brand_new_field description (brand_new_field)');
+    // A section the view does not know is still headed (by its key) and sorts last; a nested key shows whole under its section's name.
+    expect(changed).toMatch(/├─ brand_new_field ─/u); expect(changed.indexOf('├─ brand_new_field')).toBeGreaterThan(changed.indexOf('(max_workers)'));
+    expect(changed).toMatch(locale === 'en' ? /├─ Inspection and monitor ─[^\n]*\n[^\n]*inspection\.workers\.maxEntries/u : /├─ İnceleme ve izleme ─[^\n]*\n[^\n]*inspection\.workers\.maxEntries/u);
     expect(changed).not.toContain('(backup)'); expect(changed).not.toContain('(mcp)');
-    expect(changed).toContain(locale === 'en' ? 'Work and execution' : 'İş ve yürütme');
+    expect(changed).toMatch(locale === 'en' ? /├─ Worker ceiling ─/u : /├─ İşçi tavanı ─/u);
     expect(changed).toContain(locale === 'en' ? '1 setting(s) declared but read by no component' : '1 ayar tanımlı ama hiçbir bileşen okumuyor');
     const all = texts(surface.configMonitorBlocks(view, locale, { all: true, warn: '!' }));
     expect(all).toContain('(backup)'); expect(all).toContain(locale === 'en' ? '! not read' : '! okunmuyor');
@@ -113,7 +121,7 @@ describe('Config tab: changed settings by section, a shows all, unread flagged',
       for (let i = 0; i < 100 && !frame.includes('Stuck or waiting'); i++) await new Promise(resolve => setTimeout(resolve, 10));
       await press('8');
       expect(frame).toContain('(max_workers)'); expect(frame).not.toContain('(backup)'); expect(frame).toContain('a all/changed');
-      await press('a'); expect(frame).toContain('(backup)'); expect(frame).toContain('Showing all 5 settings');
+      await press('a'); expect(frame).toContain('(backup)'); expect(frame).toContain('Showing all 6 settings');
       await press('/'); await press('backup'); await press('\r');
       expect(frame).toContain('(backup)'); expect(frame).not.toContain('(max_workers)');
       await press('\u001b'); await press('a'); expect(frame).not.toContain('(backup)');

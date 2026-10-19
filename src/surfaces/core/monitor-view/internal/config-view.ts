@@ -4,11 +4,11 @@ import { renderConfigExplanation, renderConfigInspection, configValueWord } from
 import { span, type MonitorBlock, type MonitorColumn, type MonitorRow } from './layout.js';
 export type ConfigMonitorInspection = Awaited<ReturnType<ConfigApplication['inspect']>>;
 type Field = ConfigMonitorInspection['fields'][number];
-type Section = 'general' | 'work' | 'service' | 'security' | 'storage' | 'interface' | 'other';
-const SECTIONS: readonly Section[] = ['general', 'work', 'service', 'security', 'storage', 'interface', 'other'];
+type Section = 'general' | 'work' | 'service' | 'security' | 'storage' | 'interface';
+const SECTIONS: readonly Section[] = ['general', 'work', 'service', 'security', 'storage', 'interface'];
 export interface ConfigViewOptions { readonly all: boolean; readonly warn: string }
 
-/** Section and short human name of every config field the monitor knows (PB-MON-UX); a field added later shows under "other" with its description. */
+/** Reading order and short human name of every top-level config field (PB-MON-UX); a field added later sorts last under its own key. */
 function fieldWords(locale: Locale): Readonly<Record<string, readonly [Section, string]>> {
   return {
     projectName: ['general', t('monitor.config.name.projectName', {}, locale)], language: ['general', t('monitor.config.name.language', {}, locale)],
@@ -30,37 +30,35 @@ function fieldWords(locale: Locale): Readonly<Record<string, readonly [Section, 
     inspection: ['interface', t('monitor.config.name.inspection', {}, locale)],
   };
 }
-function sectionName(section: Section, locale: Locale): string {
-  const names: Record<Section, string> = { general: t('monitor.config.section.general', {}, locale), work: t('monitor.config.section.work', {}, locale),
-    service: t('monitor.config.section.service', {}, locale), security: t('monitor.config.section.security', {}, locale), storage: t('monitor.config.section.storage', {}, locale),
-    interface: t('monitor.config.section.interface', {}, locale), other: t('monitor.config.section.other', {}, locale) };
-  return names[section];
-}
 /** The config field keys this view names (tests prove every declared field has a section and a name). */
 export const configMonitorFieldKeys = (): readonly string[] => Object.keys(fieldWords('en'));
 
 const col = (header: string, priority: number, min: number, max: number): MonitorColumn => ({ header, priority, min, max });
 /**
- * The monitor's Config tab (PB-MON-UX): the current project's settings grouped into named sections, each row a human name with its key.
- * By default only settings that differ from the default (any non-default source); `all` shows every setting. A setting declared but read by
- * no component is flagged. Rows and details come from the same `inspect` truth as the CLI and terminal `/config`.
+ * The monitor's Config tab (PB-MON-UX): the current project's settings under the human name of their section (the top-level field: `inspection`
+ * → "Inspection and monitor"), sections in a fixed reading order, each row showing its full key. By default only settings that differ from the
+ * default (any non-default source); `all` shows every setting. A setting declared but read by no component is flagged. Rows and details come
+ * from the same `inspect` truth as the CLI and terminal `/config`.
  */
 export function configMonitorBlocks(view: ConfigMonitorInspection, locale: Locale, options: ConfigViewOptions = { all: false, warn: '!' }): readonly MonitorBlock[] {
-  const words = fieldWords(locale), sectionOf = (field: Field): Section => words[field.key]?.[0] ?? 'other';
+  const words = fieldWords(locale), top = (field: Field) => field.key.split('.')[0]!;
+  const order = (field: Field) => { const known = words[top(field)]; return known ? SECTIONS.indexOf(known[0]) : SECTIONS.length; };
+  // A section a later field adds without a name here still gets its own heading: its key.
+  const heading = (field: Field) => words[top(field)]?.[1] ?? top(field);
   const changed = view.fields.filter(field => field.source !== 'default'), shown = options.all ? view.fields : changed;
   const unread = view.fields.filter(field => field.binding.state !== 'bound').length;
   const source = (field: Field) => ({ default: t('monitor.config.source.default', {}, locale), global: t('monitor.config.source.global', {}, locale),
     project: t('monitor.config.source.project', {}, locale), env: t('monitor.config.source.env', {}, locale) })[field.source];
-  const ordered = [...shown].sort((a, b) => SECTIONS.indexOf(sectionOf(a)) - SECTIONS.indexOf(sectionOf(b)) || a.key.localeCompare(b.key));
-  const sections = new Map(view.fields.map(field => [`config:${field.key}`, sectionName(sectionOf(field), locale)]));
+  const ordered = [...shown].sort((a, b) => order(a) - order(b) || top(a).localeCompare(top(b)) || a.key.localeCompare(b.key));
+  const sections = new Map(view.fields.map(field => [`config:${field.key}`, heading(field)]));
   const rows = ordered.map((field): MonitorRow => {
     const rendered = renderConfigInspection({ ...view, fields: [field] }, locale, 80).split('\n').at(-1) ?? '';
     const bound = field.binding.state === 'bound';
-    return { key: `config:${field.key}`, cells: [span(`${words[field.key]?.[1] ?? field.description} (${field.key})`, bound ? undefined : 'warning'),
+    return { key: `config:${field.key}`, cells: [span(field.key === top(field) && words[field.key] ? `${words[field.key]![1]} (${field.key})` : field.key, bound ? undefined : 'warning'),
       span(configValueWord(field.value, field.redacted, locale), field.source === 'default' ? 'muted' : undefined), span(source(field), 'muted'),
       bound ? span(field.apply === 'live' ? t('monitor.config.apply.live', {}, locale) : t('monitor.config.apply.restart', {}, locale))
         : span(`${options.warn} ${t('monitor.config.unreadFlag', {}, locale)}`, 'warning')],
-    facets: { kind: sections.get(`config:${field.key}`)!.toLowerCase() }, sort: { name: field.key }, signature: rendered,
+    facets: { kind: heading(field).toLowerCase() }, sort: { name: field.key }, signature: rendered,
     detail: () => renderConfigExplanation(field, locale).split('\n').map(line => [span(line)]) };
   });
   return [
@@ -69,7 +67,7 @@ export function configMonitorBlocks(view: ConfigMonitorInspection, locale: Local
       : t('monitor.config.changed', { shown: changed.length, total: view.fields.length }, locale), 'muted')] },
     ...(unread ? [{ kind: 'line' as const, line: [span(`${options.warn} ${t('monitor.config.unread', { count: unread }, locale)}`, 'warning')] }] : []),
     { kind: 'table', empty: t('monitor.config.none', {}, locale), group: row => sections.get(row.key) ?? '',
-      columns: [col(t('monitor.config.col.setting', {}, locale), 0, 20, 56), col(t('monitor.config.col.value', {}, locale), 1, 8, 40),
+      columns: [col(t('monitor.config.col.setting', {}, locale), 0, 20, 44), col(t('monitor.config.col.value', {}, locale), 1, 8, 36),
         col(t('monitor.config.col.source', {}, locale), 3, 7, 18), col(t('monitor.config.col.apply', {}, locale), 2, 8, 20)], rows },
   ];
 }

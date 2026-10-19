@@ -66,7 +66,8 @@ export function installsBlocks(w: Words, installs: readonly MonitorInstall[]): M
     const pending = install.approvals.filter(approval => approval.status === undefined || approval.status === 'pending').length;
     const problems = w.warnings(install).flatMap(item => [entry(`${marks.warn} ${t('monitor.card.warning', {}, locale)}`, item.text, 'warning'),
       ...(item.action ? [entry(`${marks.next} ${t('monitor.card.action', {}, locale)}`, item.action, 'info')] : [])]);
-    const notes = w.notes(install).filter(item => !IMAGE.has(item.code)).map(item => entry(`${marks.off} ${t('monitor.card.note', {}, locale)}`, item.text, 'muted'));
+    const notes = w.notes(install).filter(item => !IMAGE.has(item.code)).flatMap(item => [entry(`${marks.off} ${t('monitor.card.note', {}, locale)}`, item.text, 'muted'),
+      ...(item.action ? [entry(`${marks.next} ${t('monitor.card.action', {}, locale)}`, item.action, 'info')] : [])]);
     const workload = [span(t('monitor.card.workloadValue', { runs: install.runs.length, workers: install.workers.length, approvals: pending, pools: install.pools.length }, locale)),
       ...(install.hiddenPools ? [span(`${sep}${t('monitor.card.hiddenPools', { count: install.hiddenPools }, locale)}`, 'muted')] : [])];
     const service = install.service?.processId || install.service?.instanceId
