@@ -43,3 +43,17 @@ it('says in words what the person lacks (TR), and refuses a wrong template or --
   expect(await main(['policy', 'upgrade', '--template', 'v5', '--scope', 'scope', '--expect', 'x'], ctx)).toBe(2);
   expect(await main(['policy', 'upgrade', '--template', 'v5', '--scope', 'scope', '--apply', '--rollback'], ctx)).toBe(2);
 });
+
+// J3 (MON-NAMES item 3): a fresh first-run install has no upgrade to roll back; missing archive history is a refusal — neither is "not a first-run policy".
+it.each([
+  ['en', 'Nothing to roll back: this policy came with the installation', 'Rollback refused: the earlier versions of this policy are not in the authority archive'],
+  ['tr', 'Geri alınacak bir şey yok: bu policy kurulumla geldi', 'Geri alma reddedildi: bu policy\'nin önceki sürümleri yetki arşivinde yok'],
+] as const)('words a fresh-install rollback and a rollback without archived history with the next step (%s)', async (locale, fresh, refused) => {
+  const installed = context({ ...PREVIEW, status: 'nothing-to-roll-back', revision: 'first-run-template-v13+first-run-template-v13-bindings', summary: null, reason: 'installed-with-template', conflicts: [] });
+  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--rollback', '--lang', locale], installed.ctx)).toBe(0);
+  expect(installed.out.join('')).toContain(fresh); expect(installed.out.join('')).toContain('deckent policy status --scope scope');
+  const missing = context({ ...PREVIEW, status: 'unavailable', revision: 'a-x+b', summary: null, reason: 'history-unavailable', conflicts: [] });
+  expect(await main(['policy', 'upgrade', '--template', 'current', '--scope', 'scope', '--rollback', '--lang', locale], missing.ctx)).toBe(0);
+  expect(missing.out.join('')).toContain(refused); expect(missing.out.join('')).toContain('deckent policy status --scope scope');
+  for (const out of [installed.out, missing.out]) expect(out.join('')).not.toMatch(/not a first-run policy|ilk kurulum policy'si değil/u);
+});

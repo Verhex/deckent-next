@@ -106,7 +106,10 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
     const head = view.status === 'preview' ? t('cli.policy.upgrade.preview', { revision: view.revision, scope: scopeId }, locale)
       : view.status === 'upgraded' ? t('cli.policy.upgrade.upgraded', { scope: scopeId }, locale) : view.status === 'current' ? t('cli.policy.upgrade.current', {}, locale)
       : view.status === 'refused' ? t('cli.policy.upgrade.refused', {}, locale) : view.status === 'conflict' ? t('cli.policy.upgrade.conflict', { revision: view.revision }, locale)
-      : view.status === 'rolled-back' ? t('cli.policy.upgrade.rolledBack', { ids: view.reason ?? '-' }, locale) : view.status === 'nothing-to-roll-back' ? t('cli.policy.upgrade.nothing', {}, locale)
+      : view.status === 'rolled-back' ? t('cli.policy.upgrade.rolledBack', { ids: view.reason ?? '-' }, locale)
+      // J3: a fresh first-run install has no upgrade to undo; a rollback without archived history is refused — neither is "not a first-run policy".
+      : view.status === 'nothing-to-roll-back' ? view.reason === 'installed-with-template' ? t('cli.policy.upgrade.installed', { scope: scopeId }, locale) : t('cli.policy.upgrade.nothing', {}, locale)
+      : view.reason === 'history-unavailable' ? t('cli.policy.upgrade.historyMissing', { scope: scopeId }, locale)
       : t('cli.policy.upgrade.unavailable', { reason: upgradeReason(view.reason, locale) }, locale);
     // A preview that would be refused says so before anything is tried.
     const lacking = missing(view), lack = view.status === 'preview' && lacking.length ? [t('cli.policy.upgrade.wouldRefuse', {}, locale), ...lacking] : view.status === 'refused' ? lacking : [];
@@ -116,5 +119,4 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
 
 /** The engine's reason id for an unavailable first-run upgrade, in words (`not-first-run` → "elle kurulmuş politika"); an unknown id stays visible. */
 const upgradeReason = (reason: string | null, locale: Locale) => reason === 'not-first-run' ? t('cli.policy.upgrade.reason.notFirstRun', {}, locale)
-  : reason === 'not-this-person' ? t('cli.policy.upgrade.reason.notThisPerson', {}, locale) : reason === 'invalid' ? t('cli.policy.upgrade.reason.invalid', {}, locale)
-  : reason === 'history-unavailable' ? t('cli.policy.upgrade.reason.historyUnavailable', {}, locale) : reason ?? '-';
+  : reason === 'not-this-person' ? t('cli.policy.upgrade.reason.notThisPerson', {}, locale) : reason === 'invalid' ? t('cli.policy.upgrade.reason.invalid', {}, locale) : reason ?? '-';
