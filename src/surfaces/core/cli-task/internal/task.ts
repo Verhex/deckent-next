@@ -1,7 +1,7 @@
 import { queueCommand } from '#surfaces/core/delivery-queue/index.js';
 import { inspectTask } from './task-inspect.js';
 import { cliUsage, hasCliAction } from '#surfaces/core/cli-kit/index.js';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, resolveLocale, t, terminalSafeText, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runLifecycleCommandSchema, taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
 import type { WorkspaceAdoptionApplication, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch, PatchScope } from '#engine/index.js';
@@ -26,6 +26,13 @@ function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) 
 import type { TaskCommandContext } from './context.js';
 import { patchStat, resolveLatestAttempt } from '#surfaces/core/cli-terminal/index.js';
 import { notAcceptedLabel, renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
+/**
+ * SEC-5S F1: a worker-written file body reaches the owner's terminal only through `terminalSafeText`, line by line. A carriage return
+ * inside a line, which would have overwritten it, becomes a visible continuation that keeps the diff marker (' ', '-', '+') of the
+ * line it is part of. One CR at the end of a line is its CRLF ending (the next byte is the line break), not an overwrite: it is dropped.
+ */
+const safeDiff = (body: string) => body.split('\n').map(line => terminalSafeText(line.endsWith('\r') ? line.slice(0, -1) : line).split('\n')
+  .join(`\n${[' ', '+', '-'].includes(line[0] ?? '') ? line[0] : ''}`)).join('\n');
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
@@ -180,13 +187,15 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
     const heading = (data: typeof result) => t('cli.task.patch.heading', { task: identity.taskId, count: data.patch.changes.length }, locale);
     const notice = t('cli.task.patch.notice', {}, locale);
     if (action === 'patch-prepare' || json) {
-      emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
+      // JSON.stringify escapes C0 controls but leaves C1 (e.g. U+009B CSI) raw; worker-written bodies reach the terminal only safe (SEC-5S F1).
+      emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText([
         heading(data), scopeLine(data.scope, locale), ...data.patch.changes.map(change => JSON.stringify(change)), notice,
-      ].join('\n') }); return;
+      ].join('\n')) }); return;
     }
     if (!context.renderUnifiedDiff) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const render = context.renderUnifiedDiff;
-    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
+    // Paths may carry C1 controls (the path schema refuses C0 and DEL only), so the whole human view is made terminal-safe too.
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText((() => {
       if (stat) {
         // The same per-file count the terminal delivery window shows (TESLIM-PENCERESI).
         const counted = patchStat(data.patch.changes, render);
@@ -204,8 +213,8 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
         const mode = modeChanged ? `mode ${change.before!.mode} -> ${change.after!.mode} ${change.path}` : '';
         return { body, mode };
       });
-      return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [section.body, section.mode].filter(Boolean)), notice].join('\n');
-    } }); return;
+      return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [safeDiff(section.body), section.mode].filter(Boolean)), notice].join('\n');
+    })()) }); return;
   }
   if (action === 'execute') {
     if (!context.executeTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

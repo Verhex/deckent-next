@@ -1,5 +1,5 @@
 import { renderAcceptanceLine } from '#surfaces/core/monitor/index.js';
-import { emit, ErrorRegistry, t, type Locale } from '#platform/index.js';
+import { emit, ErrorRegistry, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { runQuerySchema } from '#engine/index.js';
 import type { TaskCommandContext } from './context.js';
 /** Local read surface of the existing Run operation: no worker execution or new runtime protocol. */
@@ -17,12 +17,13 @@ export async function inspectTask(values: ReadonlyMap<string, string>, context: 
     reconciling: t('cli.run.inspect.states.reconciling', {}, locale), skipped: t('cli.run.inspect.states.skipped', {}, locale),
     'awaiting-decision': t('cli.run.inspect.states.awaitingDecision', {}, locale) };
   emit({ schemaVersion: 1 as const, runId, task, models: (result.models ?? []).filter(value => value.taskId === taskId) }, {
-    json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
+    // SEC-5S sweep: config-exclusion paths come from the worker tree (any text up to 4096 chars); the human view reaches the terminal only safe.
+    json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText([
       t('cli.run.inspect.task', { task: data.task.id, kind: data.task.kind }, locale),
       t('cli.run.inspect.stateLabel', { phase: phases[data.task.phase] }, locale),
       ...(data.task.custodyDisposition ? [data.task.custodyDisposition === 'released' ? t('task.custody.released', {}, locale) : t('task.custody.hold-manual', {}, locale)] : []),
       ...(data.task.acceptance ? [renderAcceptanceLine(data.task.acceptance, locale)] : []),
       ...(data.task.handoffs ?? []).map(receipt => (receipt.kind === 'workspace-started-from-patch' ? t('cli.run.inspect.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale) : t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))),
       ...(data.task.configExclusions ? [t('cli.run.inspect.configExcluded', { count: data.task.configExclusions.count }, locale), ...data.task.configExclusions.entries.map(entry => t('cli.run.inspect.configExcludedEntry', { path: entry.path, rule: entry.rule, by: entry.by }, locale))] : []),
-    ].join('\n') });
+    ].join('\n')) });
 }
