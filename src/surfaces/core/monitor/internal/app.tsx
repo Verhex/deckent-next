@@ -1,10 +1,9 @@
-import { configMonitorBlocks, type ConfigMonitorInspection } from './config-view.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
 import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import type { MonitorSnapshot } from '#engine/index.js';
-import { clipLine, flattenBlocks, lineText, span, type MonitorFlatLine, type MonitorLine, type MonitorRow } from './layout.js';
+import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
 import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
 import { wrapDetail } from './text.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
@@ -84,7 +83,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const [detailOffset, setDetailOffset] = useState(0);
   const [help, setHelp] = useState(false);
   const [controls, setControls] = useState<MonitorControls>(NO_CONTROLS);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(false), [configAll, setConfigAll] = useState(false); // `a` on Config: view state only, the read never changes
   const [clock, setClock] = useState(() => now());
   const alive = useRef(true), inFlight = useRef(false);
 
@@ -117,19 +116,19 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
 
   const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii) : null, [ascii, filters, locale, snapshot]);
   const current = tabs[tab]!;
-  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale) : configFailure
+  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : configFailure
     ? [{ kind: 'line' as const, line: [span(t('config.surface.unavailable', {}, locale), 'warning')] }, { kind: 'line' as const, line: [span(configFailure, 'error')] }]
     : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
-    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configFailure, configView, controls, current, locale, received, view]);
-  const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis), [blocks, ellipsis, width]);
+    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configAll, configFailure, configView, controls, current, locale, received, view]);
+  const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis, ascii), [ascii, blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
   const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
   const detailRow = detail === null ? null : flat.find(line => line.row?.key === detail)?.row ?? null;
 
-  // Header: title + snapshot age (neutral when fresh, ⚠ after 2 intervals, ✗ after 5) + the active filter; then one line per install.
+  // Header: title + snapshot age (neutral when fresh, ! after 2 intervals, ✗ after 5) + the active filter; then one line per install.
   const age = received ? Math.max(0, clock - received.at) : 0, sep = ` ${ascii ? '|' : '·'} `;
   const ageSpans = !received || age <= 2 * intervalMs ? [] : [span(sep),
-    span(`${age > 5 * intervalMs ? (ascii ? 'x' : '✗') : (ascii ? '!' : '⚠')} ${t('monitor.live.stale', { age: durationText(age, locale) }, locale)}`, age > 5 * intervalMs ? 'error' : 'warning')];
+    span(`${age > 5 * intervalMs ? (ascii ? 'x' : '✗') : '!'} ${t('monitor.live.stale', { age: durationText(age, locale) }, locale)}`, age > 5 * intervalMs ? 'error' : 'warning')];
   const filterSpans = controls.filter ? [span(sep), span(t('monitor.filter.active', { filter: controls.filter }, locale), 'accent')] : [];
   const header: MonitorLine[] = view ? view.header.map((line, index) => clipLine(index ? line : [...line, ...ageSpans, ...filterSpans], width, ellipsis))
     : [[span(t('monitor.title', {}, locale), 'strong')]];
@@ -137,7 +136,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const lastRead = received ? clockText(received.at).slice(11) : '—';
   const sortWord = (key: 'age' | 'state' | 'name') => key === 'age' ? t('monitor.sort.age', {}, locale) : key === 'state' ? t('monitor.sort.state', {}, locale) : t('monitor.sort.name', {}, locale);
   const status: MonitorLine = editing ? [span(`/${controls.filter}${ascii ? '_' : '▏'}`, 'accent'), span(`  ${t('monitor.filter.hint', {}, locale)}`, 'muted')]
-    : failure ? [span(`${ascii ? '!' : '⚠'} ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
+    : failure ? [span(`! ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
       : paused ? [span(t('monitor.live.paused', {}, locale), 'warning')]
         : [span(t('monitor.live.every', { every: durationText(intervalMs, locale), time: snapshot ? clockText(snapshot.observedAt) : '—' }, locale), 'muted'),
           ...(controls.sort ? [span(`  ${t('monitor.sort.active', { key: sortWord(controls.sort.key) }, locale)}`, 'muted')] : []),
@@ -164,7 +163,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (help) return;
     if (input === '/') { setEditing(true); setDetail(null); return; }
     if (input === 'r') { void refresh(); return; }
-    if (input === 'p') { setPaused(value => !value); return; }
+    if (input === 'p' || (input === 'a' && current === 'config')) { if (input === 'p') setPaused(value => !value); else { setConfigAll(value => !value); move(-items.length); } return; }
     if (input === 's') { setControls(value => { const next = cycle(SORT_CYCLE, value.sort?.key ?? null); return { ...value, sort: next ? { key: next, reverse: false } : null }; }); return; }
     if (input === 'S') { setControls(value => ({ ...value, sort: { key: value.sort?.key ?? 'age', reverse: !(value.sort?.reverse ?? false) } })); return; }
     if (input === 'g') { setControls(value => ({ ...value, group: cycle(GROUP_CYCLE, value.group) })); return; }
@@ -215,7 +214,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     ...shown.map(line => ({ line, selected: colored && detail === null && !help && (line[0]?.text.startsWith(pointer) ?? false) })),
     { line: clipLine(status, width, ellipsis) },
     // While reads fail the key hint gives way to the typed reason (one line, the layout height never changes).
-    { line: clipLine(failure && !editing ? [span(failure.text, 'error')] : [span(t('monitor.live.hint', {}, locale), 'muted')], width, ellipsis) }];
+    { line: clipLine(failure && !editing ? [span(failure.text, 'error')] : [span(current === 'config' ? t('monitor.config.hint', {}, locale) : t('monitor.live.hint', {}, locale), 'muted')], width, ellipsis) }];
   return (
     <Box flexDirection="column" width={width}>
       {lines.map((entry, index) => (

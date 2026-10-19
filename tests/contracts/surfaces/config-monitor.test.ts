@@ -8,7 +8,7 @@ const view = { schemaVersion: 1 as const, digest: null, layer: 'project' as cons
 it('config tab rows and detail use one inspect truth, in Turkish too', () => {
   const blocks = configMonitorBlocks(view, 'tr'); const table = blocks.find(block => block.kind === 'table');
   expect(table?.kind).toBe('table'); if (table?.kind !== 'table') return;
-  expect(table.rows[0]?.cells.map(cell => cell.text).join(' ')).toContain('bağlı');
+  expect(table.rows[0]?.cells.map(cell => cell.text).join(' ')).toBe('İşçi tavanı (max_workers) 2 genel (kullanıcı) yeniden başlatınca');
   expect(table.rows[0]?.detail().flatMap(line => line.map(cell => cell.text)).join('\n')).toContain('max_workers');
 });
 it('monitor --config uses shared application without creating monitor runtime or reading workers', async () => {

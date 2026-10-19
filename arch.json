@@ -2534,6 +2534,7 @@
     "src/surfaces/core/monitor": {
       "dependencies": [
         "src/engine/core/monitor",
+        "src/surfaces/core/monitor-view",
         "src/surfaces/core/cli-kit",
         "src/platform/core/errors",
         "src/platform/core/output",
@@ -2546,10 +2547,8 @@
         "src/engine/core/worker-observation",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/config",
-        "src/engine/core/config",
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
-        "src/engine/core/model-invocation",
         "src/engine/core/resource-observation",
         "src/domain/core/work-cost"
       ],
@@ -3272,7 +3271,15 @@
       "plan": "INSTALLATION"
     },
     "src/surfaces/core/monitor-view": {
-      "dependencies": [],
+      "dependencies": [
+        "src/engine/core/monitor",
+        "src/engine/core/config",
+        "src/engine/core/model-invocation",
+        "src/surfaces/core/config",
+        "src/surfaces/core/terminal-render",
+        "src/platform/core/i18n",
+        "src/platform/core/output"
+      ],
       "plan": "MONITOR"
     },
     "src/adapters/core/mcp-trust": {
@@ -4269,61 +4276,6 @@
           "file": "tests/fixtures/agent-turn/compaction-response-975da614.json",
           "count": 1,
           "reason": "Captured model response quotes the developer checkout path; redact the fixture to a neutral root and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/frame-full-tr-120.txt",
-          "count": 1,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/snapshots.ts",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-empty-en.txt",
-          "count": 3,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-empty-tr.txt",
-          "count": 3,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-en-120.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-en-60.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-en-80.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-tr-120.txt",
-          "count": 7,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-tr-60.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-tr-80.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-long-en-60.txt",
-          "count": 2,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
         }
       ]
     },

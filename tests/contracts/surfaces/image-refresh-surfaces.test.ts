@@ -16,6 +16,9 @@ it('WORKER-AUTO-REFRESH monitor: updating and current are notes, a failed refres
   expect(describeDiagnostic('info:image-updating', 'en')).toMatchObject({ note: true, text: expect.stringContaining('updated in the background') });
   expect(describeDiagnostic('info:image-updating', 'tr')).toMatchObject({ note: true, text: expect.stringContaining('arka planda') });
   expect(describeDiagnostic('info:image-current:r5-20261006', 'en')).toMatchObject({ note: true, text: expect.stringContaining('r5-20261006') });
+  // N1 2026-10-19: no recorded version reads as a whole sentence, never with empty parentheses.
+  for (const locale of ['en', 'tr'] as const) expect(describeDiagnostic('info:image-current', locale)).toMatchObject({ note: true, text: expect.not.stringMatching(/\(\s*\)/) });
+  expect(describeDiagnostic('info:image-current', 'tr').text).toBe('İşçi imajı güncel');
   expect(describeDiagnostic('image-refresh-failed:WORKER_IMAGE_BUILD_FAILED', 'en')).toMatchObject({ note: false, text: expect.stringContaining('WORKER_IMAGE_BUILD_FAILED') });
   expect(describeDiagnostic('image-refresh-failed:WORKER_IMAGE_BUILD_FAILED', 'tr')).toMatchObject({ note: false, text: expect.stringContaining('önceki imaj') });
 });
@@ -30,6 +33,7 @@ it('the monitor snapshot carries the refresh as typed diagnostics, nothing for u
   };
   expect(await snapshot(async () => ({ status: 'updating', reason: null, imageVersion: null }))).toContain('info:image-updating');
   expect(await snapshot(async () => ({ status: 'current', reason: null, imageVersion: 'r5-20261006' }))).toContain('info:image-current:r5-20261006');
+  expect((await snapshot(async () => ({ status: 'current', reason: null, imageVersion: null }))).filter(code => code.includes('image'))).toEqual(['info:image-current']);
   expect(await snapshot(async () => ({ status: 'failed', reason: 'REFRESH_EXPIRED', imageVersion: null }))).toContain('image-refresh-failed:REFRESH_EXPIRED');
   expect((await snapshot(async () => ({ status: 'unknown', reason: null, imageVersion: null }))).filter(code => code.includes('image'))).toEqual([]);
   expect((await snapshot()).filter(code => code.includes('image'))).toEqual([]);

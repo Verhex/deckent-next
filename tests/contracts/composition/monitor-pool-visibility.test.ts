@@ -81,8 +81,9 @@ describe('monitor pool visibility (M-VIS)', () => {
     expect(viewer).toMatchObject({ status: 'available', scopeIds: ['s'], pools: [], hiddenPools: 2 });
     expect(viewer.runs.map(run => run.runId).sort()).toEqual(['r-secret', 'r-seen']);
     const text = JSON.stringify(viewer);
-    // (A refused scope is still named by the existing `scope-denied:<id>` diagnostic; pools never are.)
-    for (const secret of [SEEN, SECRET, HOLDER, 'r-other']) expect(text).not.toContain(secret);
+    // MON-SCOPE-NAMES: a refused scope is a count (`scopes-denied:1`), never named; pools never are either.
+    for (const secret of [SEEN, SECRET, HOLDER, 'r-other', OTHER_SCOPE]) expect(text).not.toContain(secret);
+    expect(viewer.diagnostics).toContain('scopes-denied:1');
     // An admitted Run in a hidden pool shows no pool wait (it would name the pool).
     for (const run of viewer.runs) expect(JSON.stringify(run.blocker ?? null)).not.toMatch(/pool/);
   });
@@ -93,12 +94,12 @@ describe('monitor pool visibility (M-VIS)', () => {
     const surface = await loadMonitorSurface(), snapshot = { schemaVersion: 1 as const, observedAt: 40_000, control: 'observe-only' as const, sourcesRead: ['current'], installs: [viewer] };
     for (const [locale, words] of [['en', 'Other work: 1 pool(s) not shown to you'], ['tr', 'Diğer işler: 1 havuz size gösterilmiyor']] as const) {
       const text = surface.renderMonitorText(snapshot, { locale, width: 400, ascii: true });
-      expect(text).toContain(words); expect(text).toContain(SEEN); expect(text).not.toContain(SECRET);
+      expect(text).toContain(words); expect(text).toContain(SEEN); expect(text).not.toContain(SECRET); expect(text).not.toContain(OTHER_SCOPE);
     }
     expect(viewer.pools).toMatchObject([{ poolId: SEEN, capacity: 5, inFlight: 1, held: false, heldBy: null }]); expect(viewer.pools).toHaveLength(1);
     expect(viewer.hiddenPools).toBe(2 - 1);
     const text = JSON.stringify(viewer);
-    for (const secret of [SECRET, HOLDER, 'r-other']) expect(text).not.toContain(secret);
+    for (const secret of [SECRET, HOLDER, 'r-other', OTHER_SCOPE]) expect(text).not.toContain(secret);
     expect(viewer.diagnostics.some(code => /pool/.test(code))).toBe(false);
   });
 
@@ -107,7 +108,7 @@ describe('monitor pool visibility (M-VIS)', () => {
     const writer = new DatabaseSync(f.ledger);
     writer.exec(`UPDATE runs SET snapshot='{"broken":true}' WHERE run_id='r-other'; UPDATE execution_pools SET policy='{"broken":true}' WHERE pool_id='${SECRET}'`); writer.close();
     const viewer = await f.viewer([SEEN]);
-    expect(viewer.diagnostics.filter(code => !code.startsWith('info:'))).toEqual([`scope-denied:${OTHER_SCOPE}`]);
+    expect(viewer.diagnostics.filter(code => !code.startsWith('info:'))).toEqual(['scopes-denied:1']);
     expect(JSON.stringify(viewer)).not.toContain(SECRET);
     const admin = await f.viewer('all', ['s', OTHER_SCOPE]);
     expect(admin.diagnostics).toEqual(expect.arrayContaining([`run-corrupt:${OTHER_SCOPE}/r-other`, `pool-corrupt:${SECRET}`]));

@@ -1,72 +1,87 @@
 Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
-● current · servis çalışıyor (pid 31337) · build kaydı var (2026-10-02 08:00:00…
-● dogfood · servis çalışıyor (pid 2001) · build kaydı var (2026-10-01 22:15:00Z…
-○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2…
+● deckent-next (current) · ÇALIŞIYOR · ! 1 uyarı · /srv/owner/projects/deckent-…
+● dogfood · ÇALIŞIYOR · ! 3 uyarı · /srv/owner/deckent-dogfood
+○ remote-lab · ERİŞİLEMİYOR · ! 2 uyarı · /mnt/lab/deckent
 
 ── Özet ────────────────────────────────────────────────────────────────────────
 İş: 3 sırada · 2 çalışıyor · 2 kontrolde · 8 beklemede · 1 tamam · 3 durdu
-⚠ current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
-⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş
+! current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
+! dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş
 görünebilir; future-code:abc; scope-dog kapsamının onayları gizli: görme izniniz
 yok
-⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu
+! remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu
 okunamadı (LOCAL_RUNTIME_DENIED)
 dogfood notu: biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
 Sizi bekleyen (2)
-  Konu                                           Bekliyor    Süre sonu
-  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor
-  operation: özet görme izniniz yok              10 dk       bilinmiyor
+  ┌────────────────────────────────────────────┬────────────┬──────────────────┐
+  │ Konu                                       │ Bekliyor   │ Süre sonu        │
+  ├────────────────────────────────────────────┼────────────┼──────────────────┤
+  │ operation: Push branch lane/monitor to or… │ 3 sa 12 dk │ 45 dk sonra dol… │
+  │ operation: özet görme izniniz yok          │ 10 dk      │ bilinmiyor       │
+  └────────────────────────────────────────────┴────────────┴──────────────────┘
 
 Takılı ya da bekleyen, en eskisi önce (12)
-  İş kimliği                     Görev  Neden                        Ne zamandır
-  run-blocked-approval           build  ~ onay bekliyor (appr-0001)  3 sa 12 dk
-  run-not-admitted               build  ~ henüz kabul edilmedi       1 sa 33 dk
-  run-cancellation-pending       build  ! iptal bekleniyor           1 sa 26 dk
-  run-unresolved-effect          build  ! etki sonucu belirsiz       1 sa 19 dk
-  run-evaluation-unknown         build  ! değerlendirme sonucu bel…  1 sa 11 dk
-  run-evaluation-not-ready       build  ! değerlendirme hazır değil  1 sa 4 dk
-  run-worker-exited-unevaluated  build  ! işçi bitti, değerlendiri…  57 dk
-  run-worker-stale-heartbeat     build  ! işçi sessiz (heartbeat e…  50 dk
-  run-waiting-dependency         build  ~ bağımlılığını bekliyor     28 dk
-  run-pool-held                  build  ~ havuz bekletiliyor         21 dk
-  run-waiting-pool-slot          build  ~ havuzda yer bekliyor       14 dk
-  run-unknown                    build  ! neden bilinmiyor           bilinmiyor
+  ┌─────────────────────────────┬───────┬────────────────────────┬─────────────┐
+  │ İş kimliği                  │ Görev │ Neden                  │ Ne zamandır │
+  ├─────────────────────────────┼───────┼────────────────────────┼─────────────┤
+  │ run-blocked-approval        │ build │ ~ onay bekliyor (appr… │ 3 sa 12 dk  │
+  │ run-not-admitted            │ build │ ~ henüz kabul edilmedi │ 1 sa 33 dk  │
+  │ run-cancellation-pending    │ build │ ! iptal bekleniyor     │ 1 sa 26 dk  │
+  │ run-unresolved-effect       │ build │ ! etki sonucu belirsiz │ 1 sa 19 dk  │
+  │ run-evaluation-unknown      │ build │ ! değerlendirme sonuc… │ 1 sa 11 dk  │
+  │ run-evaluation-not-ready    │ build │ ! değerlendirme hazır… │ 1 sa 4 dk   │
+  │ run-worker-exited-unevalua… │ build │ ! işçi bitti, değerle… │ 57 dk       │
+  │ run-worker-stale-heartbeat  │ build │ ! işçi sessiz (heartb… │ 50 dk       │
+  │ run-waiting-dependency      │ build │ ~ bağımlılığını bekli… │ 28 dk       │
+  │ run-pool-held               │ build │ ~ havuz bekletiliyor   │ 21 dk       │
+  │ run-waiting-pool-slot       │ build │ ~ havuzda yer bekliyor │ 14 dk       │
+  │ run-unknown                 │ build │ ! neden bilinmiyor     │ bilinmiyor  │
+  └─────────────────────────────┴───────┴────────────────────────┴─────────────┘
 
 Başarısız işler ve ilk hata yeri (2)
-  İş kimliği        İlk hata                      Son etkinlik  Kapsam   Kurulum
-  run-broken        ✗ build: ✗ [unit-budget] sr…  25 dk önce    scope-a  current
-  run-broken-quiet  ✗ build: ilk hata satırı ka…  35 dk önce    scope-a  current
+  ┌──────────────────┬────────────────────────────────┬──────────────┬─────────┐
+  │ İş kimliği       │ İlk hata                       │ Son etkinlik │ Kurulum │
+  ├──────────────────┼────────────────────────────────┼──────────────┼─────────┤
+  │ run-broken       │ ✗ build: ✗ [unit-budget] src/… │ 25 dk önce   │ current │
+  │ run-broken-quiet │ ✗ build: ilk hata satırı kayı… │ 35 dk önce   │ current │
+  └──────────────────┴────────────────────────────────┴──────────────┴─────────┘
 
 Şu an çalışan işçiler (2)
-  İş/Görev                    Durum      Heartbeat…  Süreç      Sağlayıcı/model
-  run-blocked-approval/build  Beklemede  1 sn        çalışıyor  claude/model-al…
-  Beklemede (sen bekleniyor)
-  run-blocked-approval/lint   Beklemede  ⚠ 1 dk 35…  çalışıyor  claude/model-al…
-  Beklemede (sistem bekleniyor)
+  ┌────────────────────────────┬───────────┬─────────────────────┬───────────┐
+  │ İş/Görev                   │ Durum     │ Heartbeat yaşı      │ Süreç     │
+  ├────────────────────────────┼───────────┼─────────────────────┼───────────┤
+  │ run-blocked-approval/build │ Beklemede │ 1 sn                │ çalışıyor │
+  │ Beklemede (sen bekleniyor)                                               │
+  │ run-blocked-approval/lint  │ Beklemede │ ! 1 dk 35 sn (eski) │ çalışıyor │
+  │ Beklemede (sistem bekleniyor)                                            │
+  └────────────────────────────┴───────────┴─────────────────────┴───────────┘
 Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
 
 ── İşler ───────────────────────────────────────────────────────────────────────
-  İş kimliği              Durum               Engel                   Süre
-  run-broken              Durdu               —                       ≈ 15 dk
-  run-broken-quiet        Durdu               —                       bilinmiyor
-  run-dog-1               Çalışıyor           işçi çalışıyor          sürüyor
-  run-not-admitted        Beklemede (sistem…  henüz kabul edilmedi    sürüyor
-  run-done                Tamam               —                       1 sa 10 dk
-  run-cancellation-pend…  Beklemede (sistem…  iptal bekleniyor        sürüyor
-  run-unresolved-effect   Beklemede (sistem…  etki sonucu belirsiz    sürüyor
-  run-evaluation-unknown  Beklemede (sistem…  değerlendirme sonucu …  sürüyor
-  run-evaluation-not-re…  Kontrolde           değerlendirme hazır d…  sürüyor
-  run-worker-exited-une…  Kontrolde           işçi bitti, değerlend…  sürüyor
-  run-worker-stale-hear…  Beklemede (sistem…  işçi sessiz (heartbea…  sürüyor
-  run-worker-running      Çalışıyor           işçi çalışıyor          sürüyor
-  run-blocked-approval    Beklemede (sen be…  onay bekliyor (appr-0…  sürüyor
-  run-waiting-dependency  Sırada              bağımlılığını bekliyor  sürüyor
-  run-pool-held           Beklemede (operat…  havuz bekletiliyor      sürüyor
-  run-waiting-pool-slot   Sırada              havuzda yer bekliyor    sürüyor
-  run-none                Sırada              normal ilerliyor        sürüyor
-  run-stopped             Durdu               —                       bilinmiyor
-  run-unknown             Beklemede (sistem…  neden bilinmiyor        sürüyor
+  ┌──────────────────────────────┬────────────────────┬────────────────────────┐
+  │ İş kimliği                   │ Durum              │ Engel                  │
+  ├──────────────────────────────┼────────────────────┼────────────────────────┤
+  │ run-broken                   │ Durdu              │ —                      │
+  │ run-broken-quiet             │ Durdu              │ —                      │
+  │ run-dog-1                    │ Çalışıyor          │ işçi çalışıyor         │
+  │ run-not-admitted             │ Beklemede (sistem… │ henüz kabul edilmedi   │
+  │ run-done                     │ Tamam              │ —                      │
+  │ run-cancellation-pending     │ Beklemede (sistem… │ iptal bekleniyor       │
+  │ run-unresolved-effect        │ Beklemede (sistem… │ etki sonucu belirsiz   │
+  │ run-evaluation-unknown       │ Beklemede (sistem… │ değerlendirme sonucu … │
+  │ run-evaluation-not-ready     │ Kontrolde          │ değerlendirme hazır d… │
+  │ run-worker-exited-unevaluat… │ Kontrolde          │ işçi bitti, değerlend… │
+  │ run-worker-stale-heartbeat   │ Beklemede (sistem… │ işçi sessiz (heartbea… │
+  │ run-worker-running           │ Çalışıyor          │ işçi çalışıyor         │
+  │ run-blocked-approval         │ Beklemede (sen be… │ onay bekliyor (appr-0… │
+  │ run-waiting-dependency       │ Sırada             │ bağımlılığını bekliyor │
+  │ run-pool-held                │ Beklemede (operat… │ havuz bekletiliyor     │
+  │ run-waiting-pool-slot        │ Sırada             │ havuzda yer bekliyor   │
+  │ run-none                     │ Sırada             │ normal ilerliyor       │
+  │ run-stopped                  │ Durdu              │ —                      │
+  │ run-unknown                  │ Beklemede (sistem… │ neden bilinmiyor       │
+  └──────────────────────────────┴────────────────────┴────────────────────────┘
 run-pool-held  ·  operatör bekleniyor · neden: havuz bekletiliyor · başlangıç:
 2026-10-02 09:08:34Z · son tarih: bilinmiyor · sonraki: Havuzu incele
 run-blocked-approval  ·  sen bekleniyor · neden: onay bekliyor (appr-0001) ·
@@ -91,14 +106,17 @@ run-unknown  ·  sistem bekleniyor · neden: neden bilinmiyor · başlangıç:
 bilinmiyor · son tarih: bilinmiyor · sonraki: İş ayrıntılarını incele
 
 ── İşçiler ─────────────────────────────────────────────────────────────────────
-  İş/Görev                    Durum      Heartbeat…  Süreç      Sağlayıcı/model
-  run-blocked-approval/build  Beklemede  1 sn        çalışıyor  claude/model-al…
-  Beklemede (sen bekleniyor)
-  run-broken/build            Durdu      —           çıktı 1    claude/model-al…
-  run-blocked-approval/lint   Beklemede  ⚠ 1 dk 35…  çalışıyor  claude/model-al…
-  Beklemede (sistem bekleniyor)
-  run-blocked-approval/pack   Beklemede  bırakıldı   kayıp      claude/model-al…
-  Beklemede (sistem bekleniyor)
+  ┌────────────────────────────┬───────────┬─────────────────────┬───────────┐
+  │ İş/Görev                   │ Durum     │ Heartbeat yaşı      │ Süreç     │
+  ├────────────────────────────┼───────────┼─────────────────────┼───────────┤
+  │ run-blocked-approval/build │ Beklemede │ 1 sn                │ çalışıyor │
+  │ Beklemede (sen bekleniyor)                                               │
+  │ run-broken/build           │ Durdu     │ —                   │ çıktı 1   │
+  │ run-blocked-approval/lint  │ Beklemede │ ! 1 dk 35 sn (eski) │ çalışıyor │
+  │ Beklemede (sistem bekleniyor)                                            │
+  │ run-blocked-approval/pack  │ Beklemede │ bırakıldı           │ kayıp     │
+  │ Beklemede (sistem bekleniyor)                                            │
+  └────────────────────────────┴───────────┴─────────────────────┴───────────┘
 
 Beklemede (sen bekleniyor)
 sen bekleniyor · neden: onay bekliyor (appr-0001) · başlangıç: 2026-10-02
@@ -128,7 +146,7 @@ sistem bekleniyor · neden: işçi sessiz (heartbeat eski) · başlangıç: bili
 İşçi run-blocked-approval/lint · deneme ed5a5613-attempt · nesil 1 · claude ·
 kurulum current
 Şu an: çalıştırıyor · src/app.ts — apply patch
-Heartbeat ⚠ 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 · tanıtıcı ctr-lint
+Heartbeat ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 · tanıtıcı ctr-lint
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0.4321 USD · 1
 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar:
@@ -152,79 +170,112 @@ mühürlenmedi]
 Gözetim bırakıldı: konteyner ve deneme dizini kaldırıldı; yama saklandı.
 
 ── Onaylar ─────────────────────────────────────────────────────────────────────
-  Konu                                    Bekliyor    Süre sonu         Güvence
-  operation: Push branch lane/monitor t…  3 sa 12 dk  45 dk sonra dol…  local-os
-  operation: özet görme izniniz yok       10 dk       bilinmiyor        local-os
+  ┌─────────────────────────────────┬────────────┬──────────────────┬──────────┐
+  │ Konu                            │ Bekliyor   │ Süre sonu        │ Güvence  │
+  ├─────────────────────────────────┼────────────┼──────────────────┼──────────┤
+  │ operation: Push branch lane/mo… │ 3 sa 12 dk │ 45 dk sonra dol… │ local-os │
+  │ operation: özet görme izniniz … │ 10 dk      │ bilinmiyor       │ local-os │
+  └─────────────────────────────────┴────────────┴──────────────────┴──────────┘
 Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
 
 ── Havuzlar ────────────────────────────────────────────────────────────────────
-  Havuz    Doluluk            Bekletme                   Kurulum
-  default  4 dolu / 4         yok                        current
-  gpu      0 dolu / 1         ⚠ bekletiyor: owner@local  current
-  ci       2 dolu / sınırsız  yok                        current
-  default  1 dolu / 2         yok                        dogfood
+  ┌─────────┬───────────────────┬───────────────────────────┬─────────┐
+  │ Havuz   │ Doluluk           │ Bekletme                  │ Kurulum │
+  ├─────────┼───────────────────┼───────────────────────────┼─────────┤
+  │ default │ 4 dolu / 4        │ yok                       │ current │
+  │ gpu     │ 0 dolu / 1        │ ! bekletiyor: owner@local │ current │
+  │ ci      │ 2 dolu / sınırsız │ yok                       │ current │
+  │ default │ 1 dolu / 2        │ yok                       │ dogfood │
+  └─────────┴───────────────────┴───────────────────────────┴─────────┘
 
 ── Kurulumlar ──────────────────────────────────────────────────────────────────
-Kurulum current · erişilebilir
-Yol /home/owner/projects/deckent-next
-Kapsamlar: scope-a
-servis çalışıyor (pid 31337) · örnek svc-01
-build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · kaynak ağacı ffffffffffff
-ledger sürüm 44
-18 iş · 4 işçi · 2 onay · 3 havuz
-⚠ scope-x kapsamı okunamadı (LEDGER_LOCKED)
+  ● deckent-next (current)   ÇALIŞIYOR   ! 1 uyarı
+  ┌─────────┬──────────────────────────────────────────────────────────────────┐
+  │ Durum   │ ✓ Servis açık · ✓ Defter v44                                     │
+  │ ! Uyarı │ scope-x kapsamı okunamadı (LEDGER_LOCKED)                        │
+  ├─────────┼──────────────────────────────────────────────────────────────────┤
+  │ İş yükü │ 18 iş · 4 işçi · 2 onay bekliyor · 3 havuz                       │
+  │ Kapsam  │ scope-a                                                          │
+  │ Klasör  │ /srv/owner/projects/deckent-next                                 │
+  ├─────────┼──────────────────────────────────────────────────────────────────┤
+  │ Sürüm   │ derleme b0e66d92c0ff · kaynak ağacı ffffffffffff · 2026-10-02    │
+  │         │ 08:00:00Z derlendi                                               │
+  │ Servis  │ pid 31337 · örnek svc-01                                         │
+  └─────────┴──────────────────────────────────────────────────────────────────┘
 
-Kurulum dogfood · erişilebilir
-Yol /home/owner/deckent-dogfood
-Kapsamlar: scope-dog
-servis çalışıyor (pid 2001) · örnek svc-02
-build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · kaynak ağacı ffffffffffff
-ledger sürüm 43
-1 iş · 0 işçi · 1 onay · 1 havuz
-⚠ ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir
-⚠ future-code:abc
-⚠ scope-dog kapsamının onayları gizli: görme izniniz yok
-Not: biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli
+  ● dogfood   ÇALIŞIYOR   ! 3 uyarı
+  ┌─────────┬──────────────────────────────────────────────────────────────────┐
+  │ Durum   │ ✓ Servis açık · ! Defter v43 (bu derlemeden eski)                │
+  │ ! Uyarı │ ledger sürüm 43, bu derlemeden eski: yeni alanlar boş            │
+  │         │ görünebilir                                                      │
+  │ ! Uyarı │ future-code:abc                                                  │
+  │ ! Uyarı │ scope-dog kapsamının onayları gizli: görme izniniz yok           │
+  │ ○ Not   │ biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli  │
+  ├─────────┼──────────────────────────────────────────────────────────────────┤
+  │ İş yükü │ 1 iş · 0 işçi · 1 onay bekliyor · 1 havuz                        │
+  │ Kapsam  │ scope-dog                                                        │
+  │ Klasör  │ /srv/owner/deckent-dogfood                                       │
+  ├─────────┼──────────────────────────────────────────────────────────────────┤
+  │ Sürüm   │ derleme 76582f9f0000 · kaynak ağacı ffffffffffff · 2026-10-01    │
+  │         │ 22:15:00Z derlendi                                               │
+  │ Servis  │ pid 2001 · örnek svc-02                                          │
+  └─────────┴──────────────────────────────────────────────────────────────────┘
 
-Kurulum remote-lab · erişilemiyor
-Yol /mnt/lab/deckent
-Kapsamlar: —
-servis kaydı yok · örnek —
-build bilinmiyor · kaynak ağacı —
-ledger sürümü bilinmiyor
-0 iş · 0 işçi · 0 onay · 0 havuz
-⚠ ledger okunamadı (LEDGER_LOCKED)
-⚠ servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
+  ○ remote-lab   ERİŞİLEMİYOR   ! 2 uyarı
+  ┌─────────┬────────────────────────────────────────────────┐
+  │ Durum   │ ○ Servis kaydı yok · ! Defter okunamadı        │
+  │ ! Uyarı │ ledger okunamadı (LEDGER_LOCKED)               │
+  │ ! Uyarı │ servis durumu okunamadı (LOCAL_RUNTIME_DENIED) │
+  ├─────────┼────────────────────────────────────────────────┤
+  │ İş yükü │ 0 iş · 0 işçi · 0 onay bekliyor · 0 havuz      │
+  │ Kapsam  │ —                                              │
+  │ Klasör  │ /mnt/lab/deckent                               │
+  ├─────────┼────────────────────────────────────────────────┤
+  │ Sürüm   │ build bilinmiyor                               │
+  └─────────┴────────────────────────────────────────────────┘
 
 ── Harita ──────────────────────────────────────────────────────────────────────
-current · /home/owner/projects/deckent-next
-Yapılandırma katmanları (sonraki katman öncekileri ezer):
-  1. yerleşik varsayılanlar — yerleşik — belirlediği bölümler: layout,
-inspection, approvals
-  2. genel (kullanıcı) — /home/owner/.deckent/config.json — belirlediği
-bölümler: language
-  3. proje — /home/owner/projects/deckent-next/.deckent/config.json —
-belirlediği bölümler: layout, terminal, inspection
-  4. ortam değişkenleri — dosya yok — belirlediği bölümler: yok
-Yürütme kaydı: 3 profil, 2 görev türü
-  coding görevi → coding-default@3 profili (docker)
-  review görevi → review profili (docker)
-  legacy-shell@1 (host) — hiçbir görev türü kullanmıyor
-Model kataloğu: 3 model, 0 şimdi çağrılabilir
-  ○ subscription / model-alpha-2 (Modelin hazır olduğu doğrulanamıyor
-(MODEL_INVOCATION_UNAVAILABLE). /model ile başka bir model seçin veya /provider
-ile desteklenen protokolü kullanarak yeniden bağlayın.)
-  ○ subscription / model-alpha-1 (Modelin hazır olduğu doğrulanamıyor
-(MODEL_INVOCATION_UNAVAILABLE). /model ile başka bir model seçin veya /provider
-ile desteklenen protokolü kullanarak yeniden bağlayın.)
-  ○ local-vllm / qwen-local-v6 (Modelin hazır olduğu doğrulanamıyor
-(MODEL_INVOCATION_UNAVAILABLE). /model ile başka bir model seçin veya /provider
-ile desteklenen protokolü kullanarak yeniden bağlayın.)
-Politika: 12 izin (operation 5, effect 4, secret 3) · 2 görev ayrılığı kuralı
+current · /srv/owner/projects/deckent-next
+Ayar katmanları (sonraki katman öncekileri ezer)
+  ┌───┬────────────────────────┬───────────────┬───────────────────────────────┐
+  │ # │ Katman                 │ Dosya         │ Belirlediği bölümler          │
+  ├───┼────────────────────────┼───────────────┼───────────────────────────────┤
+  │ 1 │ yerleşik varsayılanlar │ yerleşik      │ layout, inspection, approvals │
+  │ 2 │ genel (kullanıcı)      │ …/config.json │ language                      │
+  │ 3 │ proje                  │ …/config.json │ layout, terminal, inspection  │
+  │ 4 │ ortam değişkenleri     │ dosya yok     │ yok                           │
+  └───┴────────────────────────┴───────────────┴───────────────────────────────┘
+Görev türleri, profilleri ve çalıştırıcıları (2 tür, 3 profil)
+  ┌────────────┬──────────────────┬─────────────┐
+  │ Görev türü │ Profil           │ Çalıştırıcı │
+  ├────────────┼──────────────────┼─────────────┤
+  │ coding     │ coding-default@3 │ docker      │
+  │ review     │ review           │ docker      │
+  └────────────┴──────────────────┴─────────────┘
+  ○ legacy-shell@1 (host) — hiçbir görev türü kullanmıyor
+Modeller: 3 tanımlı, 0 şimdi çağrılabilir
+  ┌──────────────┬───────────────┬──────────────┬────────┬────────────┐
+  │ Durum        │ Model kimliği │ Kanal        │ Kapsam │ Faturalama │
+  ├──────────────┼───────────────┼──────────────┼────────┼────────────┤
+  │ ! çağrılamaz │ model-alpha-2 │ subscription │ —      │ —          │
+  │ ! çağrılamaz │ model-alpha-1 │ subscription │ —      │ —          │
+  │ ! çağrılamaz │ qwen-local-v6 │ local-vllm   │ —      │ —          │
+  └──────────────┴───────────────┴──────────────┴────────┴────────────┘
+  → 3 model: Modelin hazır olduğu doğrulanamıyor (MODEL_INVOCATION_UNAVAILABLE).
+/model ile başka bir model seçin veya /provider ile desteklenen protokolü
+kullanarak yeniden bağlayın.
+İzinler: 12 kural · 2 görev ayrılığı kuralı
+  ┌────────────┬───────┬────────────────┐
+  │ Grup       │ Kural │ Kaynak türleri │
+  ├────────────┼───────┼────────────────┤
+  │ Çalıştırma │ 5     │ operation 5    │
+  │ Yönetim    │ 3     │ secret 3       │
+  │ Diğer      │ 4     │ effect 4       │
+  └────────────┴───────┴────────────────┘
   İzin kipleri: owner@local: standart, ci@local: full-auto
-Bellek: yok — MEMORY kartı bekleniyor
+○ Bellek: yok — MEMORY kartı bekleniyor
 
-dogfood · /home/owner/deckent-dogfood
+dogfood · /srv/owner/deckent-dogfood
   Bu kurulum için harita okunmadı.
 
 remote-lab · /mnt/lab/deckent

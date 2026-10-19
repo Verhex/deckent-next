@@ -63,7 +63,10 @@ it('masks token content and URL passwords through the real application in all co
     for (const json of [false, true]) {
       output.length = 0; await monitorCommand(['monitor', '--config', '--once', '--lang', locale, ...(json ? ['--json'] : [])], ctx); assertMasked(output.join(''));
     }
-    const blocks = configMonitorBlocks(await app.inspect(), locale);
+    // PB-MON-UX: the tab opens on changed settings only (none here, so nothing to leak); `a` shows every field, masked.
+    const changedOnly = JSON.stringify(configMonitorBlocks(await app.inspect(), locale));
+    for (const canary of passwords) expect(changedOnly).not.toContain(canary);
+    const blocks = configMonitorBlocks(await app.inspect(), locale, { all: true, warn: '!' });
     assertMasked(JSON.stringify(blocks));
     for (const block of blocks) if (block.kind === 'table') for (const row of block.rows) for (const canary of passwords) expect(JSON.stringify(row.detail())).not.toContain(canary);
   }
