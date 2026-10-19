@@ -119,6 +119,16 @@ describe('information windows on the real workline (SW-1)', () => {
     expect(infoModelText(text)).toEqual(expect.arrayContaining(['  - DOCTOR-TEXT-1', 'The structured report could not be read; this is the doctor text.']));
   });
 
+  it('/doctor names the I-S7 pool state in words (registry present, pool not set up yet), never the raw status', async () => {
+    const root = await project();
+    const report = { schemaVersion: 2, scope: 'kernel', platform: 'linux', status: 'ready', host: { cpuCores: 8, totalMemMB: 16000, recommendedMaxWorkers: 4 },
+      company: { companyId: 'default' }, principal: { id: 'host:1000' }, poolReadiness: { status: 'missing', code: 'RUN_POOL_REQUIRED', drift: null }, shellRealm: null };
+    const ports = admin(root, {}, { doctorReport: async sink => { sink.write(`${JSON.stringify(report)}\n`); } });
+    const text = infoModelText((await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model).join('\n');
+    expect(text).toContain('configured, not set up yet');
+    expect(text).not.toMatch(/\bmissing\b/u);
+  });
+
   it('the real `deckent doctor --json` command feeds the structured window (not the text fallback)', async () => {
     const root = await project(), env = { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') };
     const ports = admin(root, {}, { doctor: sink => runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: sink, stderr: sink }),
