@@ -322,12 +322,12 @@ requests from servers (no elicitation/sampling/roots handler; an `input_required
 (the list is re-read each turn),
 signed server bundles. The tool list is read with all its pages (SDK 2.2.0 follows `nextCursor`; at most 16 pages and 512 tools, more is
 `too-many-tools`; pins apply over every page). Trust decisions (owner 2026-09-28, `db5121d`): adding a local/user server is its trust
-decision (cards, or `--yes`; `--no-approve` skips); a project entry is decided on its first use. Cards come in two phases — `launch`
+decision (its card on a real terminal, where `--yes` no longer skips the card; off a terminal the CLI refuses with `MCP_APPROVAL_NEEDS_TERMINAL`, owner A48-D5/D6; `--no-approve` skips and the server asks on first use); a project entry is decided on its first use. Cards come in two phases — `launch`
 (definition as written, variables set/unset, env names, realm; nothing runs before yes) and `tools` (started in its realm; live tools with
 digests; yes pins them); no records `declined` for that definition; an unanswered card records nothing. User trust lives beside the
 personal registry (`<global root>/mcp-trust.json`) and holds in every project; project/local trust in the global root's project directory.
 A record left in the alpha.47 place (`<data root>/integrations/mcp-trust.json`) is never trust: its server is `pending-approval` with reason
-`trust-moved`, re-approved once on its card (owner A48-D6; `approve` with `--yes` is refused, `MCP_TRUST_NEEDS_CARD`, nothing written). The
+`trust-moved`, re-approved once on its card (owner A48-D6; `deckent mcp approve` shows the card on a terminal even with `--yes`, and off a terminal the CLI refuses with `MCP_APPROVAL_NEEDS_TERMINAL`; `MCP_TRUST_NEEDS_CARD` is the adapter's guard that refuses an unattended migration approval, nothing written). The
 card is one field per line (each argument its own line; escapes removed, line breaks shown), a tool description one bounded line. Trust and registry
 writes run in the config write lock (`withConfigWriteLock`). Every change (trust, decline, reset, revoke, reconnect) is a sealed `mcp-trust`
 audit event written first. The turn asks first-use cards on the C12 approval path as an `agent-tool-call` subject with the reserved tool
