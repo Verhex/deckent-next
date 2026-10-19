@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "docker": {
+    "memoryBytes": 2147483648,
+    "pids": 512,
+    "cpus": 1,
+    "logMaxSizeKiB": 2048,
+    "logMaxFiles": 2,
+    "tmpBytes": 1073741824,
+    "deadlineMs": 1200000,
+    "controlTimeoutMs": 15000,
+    "outputBytes": 1048576
+  },
+  "git": {
+    "timeoutMs": 180000
+  }
+}

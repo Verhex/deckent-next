@@ -33,6 +33,7 @@
   "cli.init.pool.unavailable": "Pool {pool} is unavailable ({reason}); nothing was written. Check admission configuration and the existing installation ledger, then run deckent init pool --scope {scope} --preview.",
   "cli.init.registry.preview": "First registry preview; no registry or configuration was written. Re-run the same command with --apply after review.",
   "cli.init.registry.applied": "First admission registry created. Next: deckent init pool --scope <id> --preview, then --apply.",
+  "cli.init.registry.current": "The first admission registry already exists and matches this request; nothing was written. Next: deckent init pool --scope <id> --preview, then --apply.",
   "setup.stage.environment": "Environment",
   "setup.stage.language": "Language",
   "setup.stage.folder": "Folder and scope",

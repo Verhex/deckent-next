@@ -33,6 +33,7 @@
   "cli.init.pool.unavailable": "Havuz {pool} kullanılamıyor ({reason}); hiçbir şey yazılmadı. admission yapılandırmasını ve mevcut kurulum ledger kaydını kontrol edin, ardından deckent init pool --scope {scope} --preview çalıştırın.",
   "cli.init.registry.preview": "İlk registry önizlemesi; registry veya config yazılmadı. İnceledikten sonra aynı komutu --apply ile çalıştırın.",
   "cli.init.registry.applied": "İlk admission registry oluşturuldu. Sıradaki: deckent init pool --scope <id> --preview, ardından --apply.",
+  "cli.init.registry.current": "İlk admission registry zaten var ve bu istekle aynı; hiçbir şey yazılmadı. Sıradaki: deckent init pool --scope <id> --preview, ardından --apply.",
   "setup.stage.environment": "Ortam",
   "setup.stage.language": "Dil",
   "setup.stage.folder": "Klasör ve kapsam",

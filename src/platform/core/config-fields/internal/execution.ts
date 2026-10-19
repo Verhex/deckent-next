@@ -2,17 +2,22 @@ import { z } from 'zod';
 import quotaDefaults from './quota-policy.json' with { type: 'json' };
 import stallDefaults from './stall-policy.json' with { type: 'json' };
 import scanAdmission from './secret-gate-admission.json' with { type: 'json' };
-/** Required runtime capability settings; install/config composition supplies policy values. */
+import executionDefaults from './execution-defaults.json' with { type: 'json' };
+/** Runtime capability settings. The machine-specific values (`executable`, `imageId`, `gitExecutable`) stay required; the limits default to
+ * execution-defaults.json (I-S6, 2026-10-19: the per-worker limits the live installation and the README first-job path used on 2026-10-13).
+ * They are operator-adjustable starting values for one worker, not measured optima or product ceilings; set any of them to override. */
+const docker = executionDefaults.docker;
 export const DOCKER_EXECUTION_SETTINGS = z.object({
   executable: z.string().min(1), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  memoryBytes: z.number().int().positive().safe(), pids: z.number().int().positive(), cpus: z.number().positive().finite(),
-  logMaxSizeKiB: z.number().int().positive().safe(), logMaxFiles: z.number().int().positive().safe(),
-  tmpBytes: z.number().int().positive().safe(), deadlineMs: z.number().int().positive().max(2_147_483_647),
-  controlTimeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe(),
+  memoryBytes: z.number().int().positive().safe().default(docker.memoryBytes), pids: z.number().int().positive().default(docker.pids),
+  cpus: z.number().positive().finite().default(docker.cpus),
+  logMaxSizeKiB: z.number().int().positive().safe().default(docker.logMaxSizeKiB), logMaxFiles: z.number().int().positive().safe().default(docker.logMaxFiles),
+  tmpBytes: z.number().int().positive().safe().default(docker.tmpBytes), deadlineMs: z.number().int().positive().max(2_147_483_647).default(docker.deadlineMs),
+  controlTimeoutMs: z.number().int().positive().max(2_147_483_647).default(docker.controlTimeoutMs), outputBytes: z.number().int().positive().safe().default(docker.outputBytes),
 }).strict();
 /** outputBytes bounds one Git listing/blob read; the default fits repositories with tens of thousands of tracked paths. */
 export const GIT_EXECUTION_SETTINGS = z.object({ gitExecutable: z.string().min(1),
-  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe().default(4_194_304),
+  timeoutMs: z.number().int().positive().max(2_147_483_647).default(executionDefaults.git.timeoutMs), outputBytes: z.number().int().positive().safe().default(4_194_304),
   deliveryIdentity: z.object({ authorName: z.string().trim().min(1).max(256).refine(value => ![...value].some(char => char === '<' || char === '>' || char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)), authorEmail: z.string().email().max(256) }).strict().optional(), }).strict();
 /** Branches an operator allows `integration-adopt` to move. Empty (default) refuses every adoption; a listed branch must
  * exist and must not be checked out in any worktree when adopted. Business policy data, not a grant: policy still applies. */
