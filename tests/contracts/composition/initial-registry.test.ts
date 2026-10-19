@@ -175,6 +175,10 @@ it('renders EN/TR through init registry and emits the real preview/apply contrac
   }
   output = ''; expect(await main([...args, '--apply', '--json'], context), error).toBe(0); expect(JSON.parse(output).status).toBe('applied');
   output = ''; expect(await main([...args, '--apply', '--json'], context), error).toBe(0); expect(JSON.parse(output)).toMatchObject({ status: 'current', write: null });
+  // I-S6 J1 delta: a person sees "already exists, nothing written" for `current`, never "created".
+  for (const [locale, said, never] of [['en', 'already exists and matches this request', 'registry created'], ['tr', 'zaten var ve bu istekle aynı', 'registry oluşturuldu']] as const) {
+    output = ''; expect(await main([...args, '--apply', '--lang', locale], context), error).toBe(0); expect(output).toContain(said); expect(output).not.toContain(never);
+  }
   const different = args.map(value => value === '3' ? '4' : value);
   output = ''; error = ''; expect(await main([...different, '--apply', '--lang', 'tr'], context)).toBe(78); expect(error).toContain('deckent coding template');
 });

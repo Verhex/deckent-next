@@ -23,5 +23,5 @@ export async function initRegistryCommand(argv: readonly string[], context: Inst
   emit({ schemaVersion: result.schemaVersion, status: result.status, profile: result.profile, kind: result.kind,
     registry: result.registry, expect: result.expect, write: result.write }, { json: flags.has('--json'),
     ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}),
-    render: value => `${value.status === 'preview' ? t('cli.init.registry.preview', {}, locale) : t('cli.init.registry.applied', {}, locale)}\n${JSON.stringify(value, null, 2)}` });
+    render: value => `${value.status === 'preview' ? t('cli.init.registry.preview', {}, locale) : value.status === 'current' ? t('cli.init.registry.current', {}, locale) : t('cli.init.registry.applied', {}, locale)}\n${JSON.stringify(value, null, 2)}` });
 }

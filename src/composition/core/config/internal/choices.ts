@@ -8,7 +8,7 @@ import { modelInvocabilityText, IdentityProfileRegistry, installationOwnScopes, 
 import { executionRegistrySchema, policySchema } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { discoverConfigRecordFiles, readConfigRecordFile, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
-import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, inspectProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import type { ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/index.js';
 /** Each inspection gets a fresh snapshot. No source grants write authority; ConfigApplication still admits the chosen value. */
 export function configuredConfigChoiceSources(root: string, options: ConfigLoadOptions): ConfigChoiceSourcePort {
@@ -45,7 +45,7 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     if (source === 'task-kinds') { const registry = executionRegistrySchema.safeParse(config.admission?.registry); return registry.success ? values(registry.data.kinds.map(kind => kind.kind)) : []; }
     if (source === 'identity-profiles') {
       const selection = config['identity'] as { packages?: readonly unknown[] } | undefined;
-      return new IdentityProfileRegistry(selection?.packages).list().map((entry, i) => ({ id: `r${i}`, label: entry.labels?.[config.language] ?? entry.definition.id, value: { id: entry.definition.id, version: entry.definition.version }, detail: `${entry.definition.id} · v${entry.definition.version}` }));
+      return new IdentityProfileRegistry(selection?.packages).list().map((entry, i) => ({ id: `r${i}`, label: entry.labels?.[resolveLocale(undefined, env, config.language)] ?? entry.definition.id, value: { id: entry.definition.id, version: entry.definition.version }, detail: `${entry.definition.id} · v${entry.definition.version}` }));
     }
     if (source === 'serving-profiles') { const serving = config['inference_serving'] as { profiles?: readonly { id: string }[] } | undefined; return values(serving?.profiles?.map(profile => profile.id) ?? []); }
     if (source === 'scopes') {
@@ -59,8 +59,8 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     if (source === 'models') {
       const reading = await inspectConfiguredInvocableModels(root, scopeId, options);
       return reading.models.map(model => ({ id: JSON.stringify(model.reference), label: model.label, value: model.reference,
-        detail: `${model.reference.providerId} · ${modelInvocabilityText(model.availability, config.language)}`,
-        ...(!model.availability.invocable ? { blocked: modelInvocabilityText(model.availability, config.language) } : {}) }));
+        detail: `${model.reference.providerId} · ${modelInvocabilityText(model.availability, resolveLocale(undefined, env, config.language))}`,
+        ...(!model.availability.invocable ? { blocked: modelInvocabilityText(model.availability, resolveLocale(undefined, env, config.language)) } : {}) }));
     }
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
     if (source === 'companies') return values([context.config.company.id]); // Policy/membership pins this installation to one company; no foreign enumeration.
